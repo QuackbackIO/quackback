@@ -71,9 +71,40 @@ const configSchema = z.object({
   port: envInt.default(3000),
 
   // Database
-  databaseUrl: z.string().min(1),
+  //
+  // Optional because a pooled fleet has no fleet-wide database: the tenant
+  // middleware resolves one per request from the Host header. `config.databaseUrl`
+  // throws rather than returning undefined so the ~5 single-tenant callers keep
+  // their `string` type and a pooled misuse is loud.
+  databaseUrl: z.string().min(1).optional(),
   dbPoolMax: envInt.pipe(z.number().int().min(1).max(100)).optional(),
   dbIdleTimeout: envInt.pipe(z.number().int().min(1).max(3600)).default(20),
+
+  // Tenancy (SAAS-HOSTING-STACK.md §6)
+  //
+  // `single` is byte-for-byte today's behaviour: one process, one DATABASE_URL.
+  // `pooled` makes the `db` proxy resolve per request and refuse to serve
+  // without an explicit tenant scope.
+  tenancyMode: z.enum(['single', 'pooled']).default('single'),
+  /** Control-plane Postgres holding cp_tenant_registry / cp_tenant_hostnames. */
+  controlDatabaseUrl: z.string().min(1).optional(),
+  /**
+   * Connections per tenant pool. Small on purpose: a pooled instance holds N
+   * tenant pools, and the Neon pooler multiplexes anyway.
+   */
+  tenantPoolMax: envInt.pipe(z.number().int().min(1).max(20)).default(3),
+  /**
+   * Seconds a tenant pool may sit idle before it is closed. Must stay below
+   * BOTH Neon's suspend timeout (300s default) and Railway's 10-minute
+   * outbound-traffic sleep window, or an idle tenant costs compute forever.
+   */
+  tenantPoolIdleSeconds: envInt.pipe(z.number().int().min(5).max(600)).default(45),
+  /** LRU cap on live tenant pools per instance. */
+  tenantPoolMaxEntries: envInt.pipe(z.number().int().min(1).max(500)).default(50),
+  /** TTL for the in-process hostname → tenant record cache, milliseconds. */
+  tenantRegistryTtlMs: envInt.pipe(z.number().int().min(0).max(600_000)).default(30_000),
+  /** Neon API key used to dereference `neon+role://` credential refs. */
+  neonApiKey: z.string().optional(),
 
   // Auth
   secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
@@ -126,6 +157,31 @@ const configSchema = z.object({
   // Telemetry (optional)
   disableTelemetry: envBoolean,
 })
+  .superRefine((cfg, ctx) => {
+    // Exactly one database story per mode. A pooled fleet with a stray
+    // DATABASE_URL is the dangerous shape — a missing tenant scope would
+    // silently connect somewhere real — so pooled mode refuses to boot with one.
+    if (cfg.tenancyMode === 'single' && !cfg.databaseUrl) {
+      ctx.addIssue({ code: 'custom', path: ['databaseUrl'], message: 'DATABASE_URL is required' })
+    }
+    if (cfg.tenancyMode === 'pooled') {
+      if (!cfg.controlDatabaseUrl) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['controlDatabaseUrl'],
+          message: 'QUACKBACK_CONTROL_DATABASE_URL is required when QUACKBACK_TENANCY=pooled',
+        })
+      }
+      if (cfg.databaseUrl) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['databaseUrl'],
+          message:
+            'DATABASE_URL must be unset when QUACKBACK_TENANCY=pooled — the database is resolved per request',
+        })
+      }
+    }
+  })
 
 type Config = z.infer<typeof configSchema>
 
@@ -144,9 +200,18 @@ function buildConfigFromEnv(): unknown {
     port: env('PORT'),
 
     // Database
-    databaseUrl: process.env.DATABASE_URL,
+    databaseUrl: env('DATABASE_URL'),
     dbPoolMax: env('DB_POOL_MAX'),
     dbIdleTimeout: env('DB_IDLE_TIMEOUT'),
+
+    // Tenancy
+    tenancyMode: env('QUACKBACK_TENANCY'),
+    controlDatabaseUrl: env('QUACKBACK_CONTROL_DATABASE_URL'),
+    tenantPoolMax: env('TENANT_POOL_MAX'),
+    tenantPoolIdleSeconds: env('TENANT_POOL_IDLE_SECONDS'),
+    tenantPoolMaxEntries: env('TENANT_POOL_MAX_ENTRIES'),
+    tenantRegistryTtlMs: env('TENANT_REGISTRY_TTL_MS'),
+    neonApiKey: env('NEON_API_KEY'),
 
     // Auth
     secretKey: process.env.SECRET_KEY,
@@ -255,8 +320,43 @@ export const config = {
   get port() {
     return loadConfig().port
   },
+  /**
+   * The fleet-wide database. Throws under pooled tenancy, where there is no
+   * such thing — every caller must go through the request's tenant scope.
+   */
   get databaseUrl() {
-    return loadConfig().databaseUrl
+    const url = loadConfig().databaseUrl
+    if (!url) {
+      throw new Error(
+        'DATABASE_URL is not configured. Under QUACKBACK_TENANCY=pooled the database is ' +
+          'resolved per request from the tenant registry; use the tenant scope instead.'
+      )
+    }
+    return url
+  },
+  get tenancyMode() {
+    return loadConfig().tenancyMode
+  },
+  get isPooledTenancy() {
+    return loadConfig().tenancyMode === 'pooled'
+  },
+  get controlDatabaseUrl() {
+    return loadConfig().controlDatabaseUrl
+  },
+  get tenantPoolMax() {
+    return loadConfig().tenantPoolMax
+  },
+  get tenantPoolIdleSeconds() {
+    return loadConfig().tenantPoolIdleSeconds
+  },
+  get tenantPoolMaxEntries() {
+    return loadConfig().tenantPoolMaxEntries
+  },
+  get tenantRegistryTtlMs() {
+    return loadConfig().tenantRegistryTtlMs
+  },
+  get neonApiKey() {
+    return loadConfig().neonApiKey
   },
   get dbPoolMax() {
     const configured = loadConfig().dbPoolMax

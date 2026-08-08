@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { config } from '@/lib/server/config'
 import { db, sql, getMigrationStatus } from '@/lib/server/db'
+import { getControlSql } from '@/lib/server/tenancy/registry'
 import { getQueueRedis } from '@/lib/server/queue/redis-config'
 import { getWorkerBootStatus } from '@/lib/server/queue/worker-registry'
 import { getProcessRole } from '@/lib/server/queue/role'
@@ -44,6 +46,15 @@ async function runCheck(name: string, check: () => Promise<void>): Promise<Check
 }
 
 async function checkDb(): Promise<void> {
+  // Under pooled tenancy the probe carries no tenant, so there is no "the"
+  // database to ping. What the fleet's readiness actually depends on is the
+  // control store — without it no hostname resolves at all. Probing a tenant
+  // would also be actively harmful: it would wake a suspended Neon compute
+  // every few seconds, defeating the idle-cost model the pooling exists for.
+  if (config.isPooledTenancy) {
+    await getControlSql()`SELECT 1`
+    return
+  }
   await db.execute(sql`SELECT 1`)
 }
 
@@ -63,6 +74,13 @@ export function resetReadinessCache(): void {
 }
 
 async function checkMigrations(): Promise<void> {
+  // Fleet readiness stops asserting anything about tenant schemas under pooled
+  // tenancy, per SAAS-HOSTING-STACK.md §10.5. The memo below is actively
+  // misleading there: it caches "migrations OK" forever after the first tenant
+  // it happened to see, so the probe goes blind during exactly the rolling
+  // migration it exists to catch. A tenant mid-migration must degrade alone —
+  // that is the per-tenant `MIN_SCHEMA_VERSION` gate's job, not the probe's.
+  if (config.isPooledTenancy) return
   if (migrationsKnownUpToDate) return
   const status = await getMigrationStatus(db)
   if (!status.upToDate) throw new MigrationsBehind()

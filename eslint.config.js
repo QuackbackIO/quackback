@@ -9,6 +9,11 @@ const dbReexportFiles = [
   '**/src/lib/server/db.ts',
   '**/src/lib/shared/db-types.ts',
   '**/scripts/**',
+  // The tenancy module is the layer that BUILDS `Database` handles — it is what
+  // `db.ts` resolves through under pooled tenancy, so it necessarily imports the
+  // client factory the rest of the app is kept away from.
+  '**/src/lib/server/tenancy/pool-cache.ts',
+  '**/src/lib/server/tenancy/tenant-context.ts',
 ]
 
 // `no-restricted-imports` fragments, shared because flat config REPLACES a

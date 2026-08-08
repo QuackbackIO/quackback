@@ -5,7 +5,7 @@
 import { logger } from '@/lib/server/logger'
 import { closeAllWorkers, initAllWorkers } from './queue/worker-registry'
 import { getProcessRole, shouldRunWorkers } from './queue/role'
-import { validateRuntimeConfig } from './config'
+import { config, validateRuntimeConfig } from './config'
 
 const log = logger.child({ component: 'startup' })
 
@@ -116,16 +116,47 @@ export function logStartupBanner(): void {
   // One-time in-place data backfills (idempotent, advisory-locked). Runs the
   // custom-oidc → identity_provider migration that needs SECRET_KEY to decrypt
   // its credential and so can't live in the SQL migration bundle.
-  import('@/lib/server/auth/backfill-custom-oidc-provider')
-    .then(({ runStartupBackfills }) => runStartupBackfills())
-    .catch((err) => log.error({ err }, 'failed to run startup backfills'))
+  //
+  // Per-database work, so under pooled tenancy it runs once per tenant — but
+  // only on a replica that already runs background work. A fleet-wide backfill
+  // on every web boot would open a connection to every tenant database and wake
+  // every suspended compute, which is precisely the cost the pooling exists to
+  // avoid; one-shot per-database work belongs with the migrator role. The
+  // backfill is idempotent and advisory-locked, which is what makes fanning it
+  // out safe rather than merely convenient.
+  if (config.isPooledTenancy && !shouldRunWorkers()) {
+    log.info('pooled tenancy on a web replica — startup backfills are left to the worker tier')
+  } else {
+    Promise.all([
+      import('@/lib/server/auth/backfill-custom-oidc-provider'),
+      import('@/lib/server/tenancy/fleet'),
+    ])
+      .then(([{ runStartupBackfills }, { runFleetPass }]) =>
+        runFleetPass('sweep', () => runStartupBackfills())
+      )
+      .catch((err) => log.error({ err }, 'failed to run startup backfills'))
+  }
 
   // Quackback config file watcher — reconciles managed fields from
   // /etc/quackback/config.yaml on every change. No-op when the file
   // is absent (self-host default).
-  import('@/lib/server/config-file')
-    .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
-    .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
+  //
+  // Deliberately NOT started under pooled tenancy. The mechanism is a single
+  // file at a single path with no tenant parameter anywhere in `ReconcileDeps`,
+  // and you cannot mount N files at one path — so it has to be replaced by a
+  // tenant-keyed entrypoint behind an authenticated control-plane route, not
+  // adapted. Starting it here would reconcile whichever tenant the fleet pass
+  // happened to visit with one file's contents (SAAS-HOSTING-STACK.md §8).
+  if (config.isPooledTenancy) {
+    log.info(
+      'pooled tenancy — the /etc/quackback/config.yaml watcher is not started; ' +
+        'per-tenant config arrives through the control plane'
+    )
+  } else {
+    import('@/lib/server/config-file')
+      .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
+      .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
+  }
 
   // Background processing is role-gated: QUACKBACK_ROLE=web replicas serve
   // HTTP and enqueue only, so scaling them never scales queue consumption.
@@ -152,17 +183,39 @@ export function logStartupBanner(): void {
  * replicas stay safe.
  */
 function startBackgroundProcessing(): void {
-  // Boot every eagerly-initialized queue worker from the registry. Each init
-  // is isolated: one failure is logged without blocking the rest.
-  initAllWorkers()
+  // The queue tier and the outbox relay do NOT run under pooled tenancy, and
+  // this refusal is deliberate rather than unfinished work.
+  //
+  // A BullMQ job carries no tenant, so every processor would resolve `db` with
+  // no scope and throw on its first query — a per-job failure is a far worse
+  // signal than one loud refusal at boot. The relay is worse still: it needs a
+  // session-mode connection for `LISTEN` and `pg_advisory_lock`, and a
+  // transaction pooler drops the registration in proportion to contention, so a
+  // single-client smoke test passes while a busy fleet silently stops receiving
+  // wakes. Both need per-tenant direct connections on a separate always-warm
+  // tier (SAAS-HOSTING-STACK.md §7.3), which is a different piece of work.
+  //
+  // The periodic sweepers below DO run: they funnel through `withSweepLock`,
+  // which fans a tick out across the fleet with a real tenant scope each time.
+  if (config.isPooledTenancy) {
+    log.warn(
+      'pooled tenancy — queue workers and the outbox relay are NOT started. ' +
+        'They require per-tenant session-mode connections on a dedicated tier; ' +
+        'events will accumulate in each tenant outbox until that tier runs.'
+    )
+  } else {
+    // Boot every eagerly-initialized queue worker from the registry. Each init
+    // is isolated: one failure is logged without blocking the rest.
+    initAllWorkers()
 
-  // Durable event outbox relay (EVENTING-V2 WO-3). Leader-elected, so multiple
-  // worker replicas stay safe. Post-cutover (WO-18) the outbox is the SOLE
-  // delivery path, so the relay always runs here — the only gate is
-  // QUACKBACK_ROLE (worker/all), enforced inside startOutboxRelay().
-  import('./events/relay')
-    .then(({ startOutboxRelay }) => startOutboxRelay())
-    .catch((err) => log.error({ err }, 'failed to start outbox relay'))
+    // Durable event outbox relay (EVENTING-V2 WO-3). Leader-elected, so multiple
+    // worker replicas stay safe. Post-cutover (WO-18) the outbox is the SOLE
+    // delivery path, so the relay always runs here — the only gate is
+    // QUACKBACK_ROLE (worker/all), enforced inside startOutboxRelay().
+    import('./events/relay')
+      .then(({ startOutboxRelay }) => startOutboxRelay())
+      .catch((err) => log.error({ err }, 'failed to start outbox relay'))
+  }
 
   // Audit-log retention sweep + expired portal/team invite sweep.
   // Daily maintenance runs under a cross-instance lock so only one

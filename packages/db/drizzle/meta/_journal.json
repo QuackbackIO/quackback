@@ -1583,6 +1583,13 @@
       "tag": "0248_changelog_entry_segments",
       "breakpoints": true,
       "idx": 225
+    },
+    {
+      "version": "7",
+      "when": 1785700000009,
+      "tag": "0251_settings_cloud_tenant_id",
+      "breakpoints": true,
+      "idx": 228
     }
   ]
 }

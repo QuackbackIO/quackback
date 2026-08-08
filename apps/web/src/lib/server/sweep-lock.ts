@@ -25,9 +25,12 @@
  *    lapses.
  */
 import { sql } from 'drizzle-orm'
+import { config } from '@/lib/server/config'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
+import { runFleetPass } from '@/lib/server/tenancy/fleet'
+import { getTenantScope } from '@/lib/server/tenancy/tenant-context'
 
 const log = logger.child({ component: 'sweep-lock' })
 
@@ -43,6 +46,29 @@ const log = logger.child({ component: 'sweep-lock' })
  *                 TTL lapses. See module header for mutex vs. claim mode.
  */
 export async function withSweepLock(
+  name: string,
+  ttlMs: number,
+  fn: () => Promise<void>,
+  opts?: { keepUntilExpiry?: boolean }
+): Promise<void> {
+  // Under pooled tenancy a sweeper tick has no tenant, and `db` refuses to
+  // resolve without one. Fan the tick out across the fleet here rather than at
+  // each of the ten call sites: every scheduled sweeper in `startup.ts` and the
+  // telemetry claim already funnel through this function, so one seam scopes
+  // all of them, and no caller changes.
+  //
+  // The lock itself needs no tenant segment. `sweep_lock` lives in the tenant's
+  // OWN database, so once `db` is scoped the lock is already per-tenant — which
+  // is exactly the semantics wanted: two tenants must sweep independently, and
+  // two replicas must not sweep the same tenant concurrently.
+  if (config.isPooledTenancy && !getTenantScope()) {
+    await runFleetPass('sweep', () => acquireAndRun(name, ttlMs, fn, opts))
+    return
+  }
+  await acquireAndRun(name, ttlMs, fn, opts)
+}
+
+async function acquireAndRun(
   name: string,
   ttlMs: number,
   fn: () => Promise<void>,
