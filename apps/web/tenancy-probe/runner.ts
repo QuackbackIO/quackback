@@ -8,9 +8,10 @@
  */
 
 import { createTripwire } from './tripwire'
-import { createTenantHttp } from './http'
+import { createTenantHttp, type FetchLike } from './http'
 import { runPreflight, type PreflightStep } from './preflight'
 import { ALL_PROBES } from './probes'
+import { publicMarkers } from './types'
 import type {
   Capability,
   Probe,
@@ -19,6 +20,7 @@ import type {
   ProbeLogger,
   ProbeReport,
   ProbeResult,
+  TenantDb,
   TenantHandle,
   Verdict,
 } from './types'
@@ -32,6 +34,25 @@ const CAPABILITY_HINTS: Record<Capability, string> = {
   'api-key': 'pass --alpha-api-key and --bravo-api-key',
   'widget-secret':
     'pass --alpha-widget-secret and --bravo-widget-secret, or supply --alpha-db/--bravo-db',
+}
+
+/**
+ * Seams for validating the suite against a deliberately broken fleet.
+ *
+ * The critic's finding that justified these: three defects survived because the
+ * sensitivity tests exercised individual probes rather than the real
+ * `runSuite → report → exit code` path, and two probes were never imported by a
+ * test at all. Injecting the transport and the database factory lets
+ * `__tests__/end-to-end.test.ts` drive the whole path against a planted leak,
+ * which is the only way a defect in the runner's own verdict assembly can be
+ * caught.
+ *
+ * Production supplies neither; the defaults are the real `fetch` and a real
+ * Postgres connection.
+ */
+export interface RunDeps {
+  fetchImpl?: FetchLike
+  createDb?: (slot: 'alpha' | 'bravo', connectionString: string) => TenantDb
 }
 
 export interface RunOutput {
@@ -54,14 +75,15 @@ function truncate(value: unknown, max = 2000): string {
 export async function runSuite(
   config: ProbeConfig,
   log: ProbeLogger,
-  probes: Probe[] = ALL_PROBES
+  probes: Probe[] = ALL_PROBES,
+  deps: RunDeps = {}
 ): Promise<RunOutput> {
   const startedAt = new Date()
 
   const emptyMarkers = (slot: 'alpha' | 'bravo') => ({ slot, canary: '', ids: {} }) as const
   const tripwire = createTripwire(emptyMarkers('alpha'), emptyMarkers('bravo'))
 
-  const preflight = await runPreflight(config, tripwire, log)
+  const preflight = await runPreflight(config, tripwire, log, deps)
   const { alpha, bravo } = preflight
 
   // The vocabulary only exists after the fixture is known; install it now so
@@ -86,6 +108,7 @@ export async function runSuite(
         baseUrl: handle.baseUrl,
         tripwire,
         defaultTimeoutMs: config.requestTimeoutMs,
+        fetchImpl: deps.fetchImpl,
       })
     },
   }
@@ -190,8 +213,13 @@ export async function runSuite(
     targets: { alpha: config.alphaUrl, bravo: config.bravoUrl },
     capabilities: [...preflight.capabilities],
     missingCapabilities: preflight.missing,
-    markers: { alpha: alpha.markers, bravo: bravo.markers },
+    // `publicMarkers` strips credential markers. The widget signing secret is a
+    // marker the tripwire scans for, and it must not travel in an artifact that
+    // gets attached to tickets.
+    markers: { alpha: publicMarkers(alpha.markers), bravo: publicMarkers(bravo.markers) },
     verdict: allPass ? 'PASS' : 'FAIL',
+    partial: filteredOut.length > 0,
+    filteredOut,
     counts,
     tripwireHits: tripwire.hits(),
     probes: results,

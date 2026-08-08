@@ -55,13 +55,25 @@ export type Capability =
 /**
  * A single checked assertion inside a probe.
  *
- * `positive` controls prove the mechanism works within a tenant. `negative`
- * controls are the adversarial attempt. `invariant` checks are configuration
- * facts that must hold for the negative control to mean anything (for example:
- * the two tenants must not share a storage secret).
+ * The four kinds exist so that one shared rule — `decide()` in `probes/helpers.ts`
+ * — can map controls to a verdict for every probe. Classifying a control is
+ * therefore the whole of a probe's verdict logic; there is no per-probe filter
+ * that can quietly drop a signal from the decision.
+ *
+ * - `positive`   the mechanism works within its own tenant. Failure → ERROR,
+ *                because a refusal from the other tenant proves nothing until
+ *                the attempt is known to be capable of succeeding.
+ * - `negative`   the adversarial cross-tenant attempt. Failure → LEAK.
+ * - `invariant`  a configuration fact whose violation IS a cross-tenant
+ *                capability (a shared storage secret, one principal id serving
+ *                both tenants). Failure → LEAK. These are causes, not context.
+ * - `visibility` the probe's ability to observe at all (a scan that truncated,
+ *                a surface that cannot discriminate). Failure → ERROR, never a
+ *                pass: "I could not see" and "there was nothing to see" must
+ *                never produce the same verdict.
  */
 export interface ControlOutcome {
-  kind: 'positive' | 'negative' | 'invariant'
+  kind: 'positive' | 'negative' | 'invariant' | 'visibility'
   label: string
   ok: boolean
   detail: string
@@ -124,6 +136,19 @@ export interface TenantMarkers {
   canary: string
   /** Runtime-discovered ids unique to this tenant (workspace, user, principal, board, post). */
   ids: Record<string, string>
+  /**
+   * Markers that are themselves credentials — the widget signing secret, for
+   * instance. Scanned by the tripwire exactly like `ids`, because a secret
+   * appearing in a response is a serious leak, but NEVER serialized into the
+   * report and always redacted in evidence. A report file is an artifact people
+   * paste into tickets and chat.
+   */
+  sensitive?: Record<string, string>
+}
+
+/** The report-safe view of a marker set: sensitive values removed entirely. */
+export function publicMarkers(markers: TenantMarkers): TenantMarkers {
+  return { slot: markers.slot, canary: markers.canary, ids: { ...markers.ids } }
 }
 
 /** A recorded request/response pair. */
@@ -147,12 +172,15 @@ export interface TripwireHit {
   /** The tenant the marker belongs to. */
   markerOwner: TenantSlot
   markerName: string
+  /** The matched value, or `<redacted>` when the marker is itself a credential. */
   marker: string
   method: string
   url: string
   status: number
-  /** A short window of the response around the marker, for the report. */
+  /** A short window of the response around the marker, with any secret masked. */
   excerpt: string
+  /** True when the marker was a credential and its value has been withheld. */
+  redacted: boolean
 }
 
 /** Everything a probe is handed. */
@@ -293,6 +321,15 @@ export interface ProbeReport {
   missingCapabilities: Capability[]
   markers: { alpha: TenantMarkers; bravo: TenantMarkers }
   verdict: 'PASS' | 'FAIL'
+  /**
+   * True when `--only` excluded probes. A filtered run is not an isolation
+   * verdict, and the machine-readable report has to say so on its own — a
+   * consumer reading `verdict: "PASS"` must not have to also parse the human
+   * summary to learn that six probes never ran.
+   */
+  partial: boolean
+  /** Probe ids excluded by `--only`. Empty on a full run. */
+  filteredOut: string[]
   counts: Record<Verdict, number>
   /** Every tripwire hit seen anywhere in the run, including outside probes. */
   tripwireHits: TripwireHit[]

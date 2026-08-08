@@ -176,9 +176,17 @@ export function createTenantHttp(options: TenantHttpOptions): TenantHttp {
       throw new TransportError(options.slot, url, err)
     }
 
-    if (!init.omitCookies) {
-      jar.absorb(readSetCookie(response.headers))
-    }
+    // Absorption is unconditional, and `omitCookies` governs SENDING only.
+    //
+    // These were one flag once, and it made the whole magic-link/OTP family
+    // structurally incapable of executing: a redemption request must present no
+    // cookies (it is testing a bare credential) but must capture the session
+    // cookie a successful redemption issues. Sharing the flag meant the
+    // resulting session was never observed, `sessionEstablished` was always
+    // false, and the probe reported ERROR against a server that had in fact
+    // minted a session — including a server leaking one across tenants.
+    // A browser sends conditionally and always stores; so does this.
+    jar.absorb(readSetCookie(response.headers))
 
     const exchange: Exchange = {
       tenant: options.slot,

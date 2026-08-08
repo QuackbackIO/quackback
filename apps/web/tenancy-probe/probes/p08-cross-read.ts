@@ -14,9 +14,15 @@
  * totally broken one. Only the ids separate them.
  */
 
-import { scanForMarker, describeHits, type ScanHit } from '../db-scan'
+import {
+  scanForMarker,
+  describeHits,
+  scanCoverage,
+  type ScanHit,
+  type ScanResult,
+} from '../db-scan'
 import { markerSearchForms } from '../db'
-import { control, describeResponse, error, leak, markersPresent, pass } from './helpers'
+import { control, decide, describeResponse, error, markersPresent } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext } from '../types'
 import { FIXTURE } from '../fixtures'
 
@@ -138,12 +144,12 @@ export const p08CrossRead: Probe = {
         ...Object.values(alpha.markers.ids).flatMap(markerSearchForms),
       ]
       const hits: ScanHit[] = []
-      let truncated = false
+      const results: ScanResult[] = []
       for (const marker of markers) {
         if (marker.length < 8) continue
         const result = await scanForMarker(bravo.db, marker)
         hits.push(...result.hits)
-        truncated ||= result.truncated
+        results.push(result)
       }
       controls.push(
         control(
@@ -155,48 +161,22 @@ export const p08CrossRead: Probe = {
             : `ALPHA'S DATA FOUND IN BRAVO: ${describeHits(hits)}`
         )
       )
-      if (truncated) {
-        controls.push(
-          control(
-            'invariant',
-            'the schema scan completed without truncation',
-            false,
-            'the column-scan ceiling was reached, so a clean database result is not conclusive'
-          )
-        )
-      }
+      controls.push(scanCoverage(results))
       evidence.databaseScanHits = hits
-    } else {
-      controls.push(
-        control(
-          'invariant',
-          'row-level scan of bravo’s database',
-          true,
-          'not performed (no database URL); the HTTP surfaces above were still checked'
-        )
-      )
     }
 
-    const failed = controls.filter((c) => c.kind !== 'positive' && !c.ok)
-    if (failed.length > 0) {
-      return leak({
-        attempted,
-        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason:
-          'bravo returned or stored data belonging to alpha. Because the two tenants collide on every ' +
-          'human-readable field, this would be invisible to any check that did not compare ids.',
-        controls,
-        evidence,
-      })
-    }
-
-    return pass({
+    return decide({
       attempted,
-      observed:
-        `bravo's search for the colliding title returned only bravo's rows; alpha's canary matched ` +
-        `nothing on bravo's public surfaces${bravo.db ? ' or anywhere in its database' : ''}`,
-      reason: 'no row, id or canary belonging to alpha is reachable from bravo',
       controls,
+      leakReason:
+        'bravo returned or stored data belonging to alpha. Because the two tenants collide on every ' +
+        'human-readable field, this would be invisible to any check that did not compare ids.',
+      onPass: {
+        observed:
+          `bravo's search for the colliding title returned only bravo's rows; alpha's canary matched ` +
+          `nothing on bravo's public surfaces${bravo.db ? ' or anywhere in its database' : ''}`,
+        reason: 'no row, id or canary belonging to alpha is reachable from bravo',
+      },
       evidence,
     })
   },

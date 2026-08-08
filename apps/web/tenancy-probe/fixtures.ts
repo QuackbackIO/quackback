@@ -22,7 +22,7 @@ import type {
   TenantMarkers,
   TenantSlot,
 } from './types'
-import { ASSISTANT_PRINCIPAL_SQL, SETTINGS_ROW_SQL, typeId } from './db'
+import { ASSISTANT_PRINCIPAL_SQL, SETTINGS_ROW_SQL, typeId, type SettingsRow } from './db'
 
 /** Stable, colliding fixture identity. Do not make these unique per tenant. */
 export const FIXTURE = {
@@ -184,16 +184,38 @@ export async function provisionFixture(
     }
   }
 
+  // Read the fixture back from the server rather than reporting the constants
+  // we asked for. The collision gate downstream compares these two tenants'
+  // values against each other; if they are filled in from `FIXTURE`, the gate
+  // compares a constant to itself and reports a perfect collision no matter
+  // what the servers actually stored. Two tenants holding "Dark mode (alpha)"
+  // and "Dark mode (bravo)" must fail the gate, not pass it.
+  const readBack = await handle.http.request(`/api/v1/posts/${post.id}`, { headers: auth })
+  const stored = readBack.json<ApiEnvelope<ApiPost>>()?.data
+  if (!readBack.ok || !stored?.title) {
+    throw new ProvisioningError(
+      slot,
+      `could not read the probe post back from the server (GET /api/v1/posts/${post.id} returned ` +
+        `${readBack.status}), so the fixture's real stored values are unknown and the collision gate ` +
+        `would be comparing this harness's own constants to themselves`
+    )
+  }
+
+  const boards2 = await handle.http.request('/api/v1/boards', { headers: auth })
+  const storedBoard = (boards2.json<ApiEnvelope<ApiBoard[]>>()?.data ?? []).find(
+    (b) => b.id === board.id
+  )
+
   return {
     workspaceName: '',
     adminEmail: config.adminEmail,
     adminUserId: '',
     adminPrincipalId: '',
     boardId: board.id,
-    boardSlug: FIXTURE.boardSlug,
-    boardTitle: board.name,
-    postId: post.id,
-    postTitle: FIXTURE.postTitle,
+    boardSlug: storedBoard?.slug ?? board.slug,
+    boardTitle: storedBoard?.name ?? board.name,
+    postId: stored.id,
+    postTitle: stored.title,
     postBody: fixturePostBody(slot),
   }
 }
@@ -229,13 +251,6 @@ export async function teardownFixture(
   return { removed, failed }
 }
 
-interface SettingsRow {
-  id: string
-  slug: string
-  name: string
-  widget_secret: string | null
-}
-
 /**
  * Assemble the tripwire marker vocabulary for one tenant.
  *
@@ -245,6 +260,7 @@ interface SettingsRow {
  */
 export async function discoverMarkers(handle: TenantHandle): Promise<TenantMarkers> {
   const ids: Record<string, string> = {}
+  const sensitive: Record<string, string> = {}
 
   if (handle.fixture?.boardId) ids.boardId = handle.fixture.boardId
   if (handle.fixture?.postId) ids.postId = handle.fixture.postId
@@ -256,10 +272,16 @@ export async function discoverMarkers(handle: TenantHandle): Promise<TenantMarke
     if (settings) {
       const workspaceId = typeId('workspace', settings.id)
       if (workspaceId) ids.workspaceId = workspaceId
-      // The widget secret is a credential, not a marker — scanning response
-      // bodies for it would be a useful leak check in its own right, and it is
-      // exactly the kind of value that must never appear in a response.
-      if (settings.widget_secret) ids.widgetSecret = settings.widget_secret
+      // The name and slug are what a leaked settings blob actually carries —
+      // `/api/widget/config.json` has no identifier in it at all and the portal
+      // document carries the name. Preflight drops either of these if the two
+      // tenants share it, since a shared value cannot attribute a leak.
+      if (settings.name) ids.workspaceName = settings.name
+      if (settings.slug) ids.workspaceSlug = settings.slug
+      // Scanned like any other marker — a signing secret in a response body is
+      // among the worst findings available — but held in `sensitive` so it is
+      // redacted in hits and never serialized into the report.
+      if (settings.widget_secret) sensitive.widgetSecret = settings.widget_secret
     }
     const [assistant] = await handle.db.query<{ id: string }>(ASSISTANT_PRINCIPAL_SQL)
     if (assistant) {
@@ -268,7 +290,7 @@ export async function discoverMarkers(handle: TenantHandle): Promise<TenantMarke
     }
   }
 
-  return { slot: handle.slot, canary: CANARY[handle.slot], ids }
+  return { slot: handle.slot, canary: CANARY[handle.slot], ids, sensitive }
 }
 
 export interface CollisionCheck {
@@ -323,11 +345,18 @@ export function verifyCollisions(alpha: TenantHandle, bravo: TenantHandle): Coll
     problems.push('canary strings are identical; a leak could not be attributed to a tenant')
   }
 
-  for (const [name, value] of Object.entries(alpha.markers.ids)) {
-    if (bravo.markers.ids[name] === value) {
-      problems.push(`marker "${name}" is identical across tenants ("${value}")`)
-    }
-  }
+  // Deliberately NOT a blanket "every marker must differ" check.
+  //
+  // The fixture ids above are the setup contract: if those match, the two URLs
+  // are one database and nothing downstream means anything. But `markers.ids`
+  // also carries values DISCOVERED from the running tenants — the assistant
+  // service principal id, the workspace name — and those being identical is a
+  // FINDING, not a setup error. Failing preflight on them turned a genuine
+  // cross-tenant condition (one assistant principal serving both tenants, the
+  // §4.1 hazard P09 exists for) into "preflight failed", which reports as
+  // ERROR/exit 1 instead of LEAK/exit 2 and buries the probe that would have
+  // named it. Shared discovered markers are pruned from the tripwire vocabulary
+  // in preflight instead, and left for their owning probe to adjudicate.
 
   return { ok: problems.length === 0, colliding, problems }
 }

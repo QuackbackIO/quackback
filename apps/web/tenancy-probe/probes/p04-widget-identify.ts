@@ -14,7 +14,7 @@
  */
 
 import { mintWidgetIdentityToken } from '../crypto'
-import { blocked, control, describeResponse, error, leak, pass } from './helpers'
+import { blocked, control, decide, describeResponse, error } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, ProbeResponse } from '../types'
 
 /** Colliding end-user identity. Not the admin: identify refuses team principals. */
@@ -160,26 +160,19 @@ export const p04WidgetIdentify: Probe = {
       )
     )
 
-    const failed = controls.filter((c) => c.kind !== 'positive' && !c.ok)
-    if (failed.length > 0) {
-      return leak({
-        attempted,
-        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason:
-          'widget identity crossed the tenant boundary. Anyone able to mint a token for one tenant ' +
-          'can impersonate the identically-addressed end user in the other.',
-        controls,
-      })
-    }
-
-    return pass({
+    return decide({
       attempted,
-      observed:
-        'each tenant minted a session only for a token signed with its own secret, and neither ' +
-        'resolved the other’s widget session token',
-      reason:
-        'widget identity is bound to the per-workspace widget secret and its own session rows',
       controls,
+      leakReason:
+        'widget identity crossed the tenant boundary. Anyone able to mint a token for one tenant ' +
+        'can impersonate the identically-addressed end user in the other.',
+      onPass: {
+        observed:
+          'each tenant minted a session only for a token signed with its own secret, and neither ' +
+          'resolved the other’s widget session token',
+        reason:
+          'widget identity is bound to the per-workspace widget secret and its own session rows',
+      },
       evidence: { visitor: VISITOR_EMAIL, alphaWidgetUserId: ownBody.user?.id },
     })
   },

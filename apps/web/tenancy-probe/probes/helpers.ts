@@ -64,6 +64,73 @@ export function blocked(args: {
 }
 
 /**
+ * Map a probe's controls to a verdict. Every probe uses this; none implements
+ * its own filter.
+ *
+ * The reason it is centralized: an earlier version of this suite decided each
+ * probe's verdict with a local `controls.filter(c => c.kind === 'negative' && !c.ok)`.
+ * That silently dropped failed `invariant` controls from the decision, so a
+ * probe could observe the exact configuration fact that constitutes a
+ * cross-tenant capability, record it, print it, and still return PASS. One
+ * shared rule means a control cannot be recorded but not counted — classifying
+ * it IS the verdict logic.
+ *
+ * Precedence is deliberate. LEAK outranks ERROR: if a cross-tenant observation
+ * was actually made, that is evidence regardless of what else went wrong, and
+ * downgrading it to "could not run" would lose the finding.
+ */
+export function decide(args: {
+  attempted: string
+  controls: ControlOutcome[]
+  /** Used when every control holds. */
+  onPass: { observed: string; reason: string }
+  /** Prefix for the LEAK reason; the failing controls are appended. */
+  leakReason: string
+  evidence?: Record<string, unknown>
+}): ProbeOutcome {
+  const failed = args.controls.filter((c) => !c.ok)
+  const leaking = failed.filter((c) => c.kind === 'negative' || c.kind === 'invariant')
+  const blind = failed.filter((c) => c.kind === 'positive' || c.kind === 'visibility')
+
+  if (leaking.length > 0) {
+    return {
+      verdict: 'LEAK',
+      attempted: args.attempted,
+      observed: leaking.map((c) => `${c.label}: ${c.detail}`).join(' | '),
+      reason:
+        args.leakReason +
+        (blind.length > 0
+          ? ` (note: ${blind.length} control(s) also failed to establish visibility, so the leak may be wider than reported)`
+          : ''),
+      controls: args.controls,
+      evidence: args.evidence,
+    }
+  }
+
+  if (blind.length > 0) {
+    return {
+      verdict: 'ERROR',
+      attempted: args.attempted,
+      observed: blind.map((c) => `${c.label}: ${c.detail}`).join(' | '),
+      reason:
+        'the probe could not establish that it was capable of seeing a leak, so its silence is not ' +
+        'evidence of isolation. Fix the failing control(s) above and re-run.',
+      controls: args.controls,
+      evidence: args.evidence,
+    }
+  }
+
+  return {
+    verdict: 'PASS',
+    attempted: args.attempted,
+    observed: args.onPass.observed,
+    reason: args.onPass.reason,
+    controls: args.controls,
+    evidence: args.evidence,
+  }
+}
+
+/**
  * A probe fails closed only if the positive control held. This wraps the common
  * shape: "the mechanism works inside its own tenant, and refused across."
  */

@@ -13,7 +13,7 @@
  * it takes twenty minutes provides no protection at all.
  */
 
-import type { TenantDb } from './types'
+import type { ControlOutcome, TenantDb } from './types'
 
 /**
  * Tables a cross-tenant write would plausibly land in: content, the event
@@ -28,7 +28,7 @@ export const SCAN_TABLES = [
   'conversations',
   'conversation_messages',
   'assistant_involvements',
-  'notifications',
+  'in_app_notifications',
   'hook_deliveries',
   'import_runs',
   'export_runs',
@@ -53,6 +53,16 @@ export interface ScanResult {
   tablesScanned: number
   /** True when the ceiling truncated the scan; a clean result is then not conclusive. */
   truncated: boolean
+  /**
+   * Requested tables `information_schema` did not know about.
+   *
+   * A misspelled table name narrows the scan in complete silence — the query
+   * simply returns no columns for it — so a clean result would cover less than
+   * it claims. `SCAN_TABLES` is additionally pinned against the real Drizzle
+   * schema in `__tests__/scan-tables.test.ts`, but a deployment can still be
+   * behind on migrations, so this is reported at runtime too.
+   */
+  missingTables: string[]
 }
 
 interface ColumnRow {
@@ -86,6 +96,9 @@ export async function scanForMarker(
     [tables as unknown as string[]]
   )
 
+  const found = new Set(columns.map((c) => c.table_name))
+  const missingTables = tables.filter((t) => !found.has(t))
+
   const hits: ScanHit[] = []
   const seenTables = new Set<string>()
   let scanned = 0
@@ -97,6 +110,7 @@ export async function scanForMarker(
         columnsScanned: scanned,
         tablesScanned: seenTables.size,
         truncated: true,
+        missingTables,
       }
     }
     scanned++
@@ -123,10 +137,47 @@ export async function scanForMarker(
     }
   }
 
-  return { hits, columnsScanned: scanned, tablesScanned: seenTables.size, truncated: false }
+  return {
+    hits,
+    columnsScanned: scanned,
+    tablesScanned: seenTables.size,
+    truncated: false,
+    missingTables,
+  }
 }
 
 export function describeHits(hits: ScanHit[]): string {
   if (hits.length === 0) return 'no rows matched'
   return hits.map((h) => `${h.table}.${h.column}`).join(', ')
+}
+
+/**
+ * Tables the static fixture itself occupies.
+ *
+ * A visibility guard that asks "did this write produce derived rows?" must not
+ * be satisfiable by rows the fixture already put there — see the comment in
+ * `probes/p07-background-job.ts`.
+ */
+export const FIXTURE_TABLES = new Set(['posts', 'boards'])
+
+/**
+ * One `visibility` control summarising whether a set of scans actually covered
+ * what they claim. Failure maps to ERROR, never to a pass: a scan that
+ * truncated or silently skipped tables saw less than the probe reports.
+ */
+export function scanCoverage(results: ScanResult[]): ControlOutcome {
+  const truncated = results.some((r) => r.truncated)
+  const missing = [...new Set(results.flatMap((r) => r.missingTables))]
+  const ok = !truncated && missing.length === 0
+  const problems: string[] = []
+  if (truncated) problems.push('the column-scan ceiling was reached')
+  if (missing.length > 0) problems.push(`tables absent from the schema: ${missing.join(', ')}`)
+  return {
+    kind: 'visibility',
+    label: 'the row-level scan covered every requested table',
+    ok,
+    detail: ok
+      ? `covered ${results[0]?.tablesScanned ?? 0} table(s) with no truncation`
+      : `${problems.join('; ')} — a clean result is therefore not conclusive`,
+  }
 }

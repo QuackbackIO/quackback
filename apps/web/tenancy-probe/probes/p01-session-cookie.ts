@@ -16,11 +16,10 @@
 
 import {
   control,
+  decide,
   describeResponse,
   error,
-  leak,
   markersPresent,
-  pass,
   requirePositiveControl,
 } from './helpers'
 import type { Probe, ProbeContext, TenantHandle } from '../types'
@@ -156,30 +155,23 @@ export const p01SessionCookie: Probe = {
     )
     evidence.bravoAdminDocMarkers = alphaMarkersInDoc
 
-    const failures = controls.filter((c) => c.kind === 'negative' && !c.ok)
-    if (failures.length > 0) {
-      const identityNote =
-        cookieUser && cookieUser === ownUser
-          ? " and the identity returned is alpha's own user id, so bravo served alpha's database"
-          : cookieUser
-            ? ` and the identity returned (${cookieUser}) belongs to bravo, so a credential minted by alpha authenticated a different tenant's account — the colliding admin address made it look correct`
-            : ''
-      return leak({
-        attempted,
-        observed: failures.map((f) => `${f.label}: ${f.detail}`).join(' | '),
-        reason: `a credential issued by alpha was honoured by bravo${identityNote}`,
-        controls,
-        evidence,
-      })
-    }
+    const identityNote =
+      cookieUser && cookieUser === ownUser
+        ? " and the identity returned is alpha's own user id, so bravo served alpha's database"
+        : cookieUser
+          ? ` and the identity returned (${cookieUser}) belongs to bravo, so a credential minted by alpha authenticated a different tenant's account — the colliding admin address made it look correct`
+          : ''
 
-    return pass({
+    return decide({
       attempted,
-      observed:
-        `bravo refused all three presentations (cookie: ${describeResponse(cookieRes, 80)}; ` +
-        `bearer: ${bearerUser === null ? 'no session' : bearerUser}; document: no alpha markers)`,
-      reason: 'alpha-issued session credentials authenticate on alpha and nowhere else',
       controls,
+      leakReason: `a credential issued by alpha was honoured by bravo${identityNote}`,
+      onPass: {
+        observed:
+          `bravo refused all three presentations (cookie: ${describeResponse(cookieRes, 80)}; ` +
+          `bearer: ${bearerUser === null ? 'no session' : bearerUser}; document: no alpha markers)`,
+        reason: 'alpha-issued session credentials authenticate on alpha and nowhere else',
+      },
       evidence,
     })
   },

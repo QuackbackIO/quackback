@@ -18,9 +18,16 @@
  * all, the probe is blind and says so instead of passing.
  */
 
-import { scanForMarker, describeHits, type ScanHit } from '../db-scan'
+import {
+  scanForMarker,
+  describeHits,
+  scanCoverage,
+  FIXTURE_TABLES,
+  type ScanHit,
+  type ScanResult,
+} from '../db-scan'
 import { markerSearchForms } from '../db'
-import { blocked, control, describeResponse, error, leak, pass } from './helpers'
+import { blocked, control, decide, describeResponse, error } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
 
 /** How long to let queues and the outbox relay settle before scanning. */
@@ -30,18 +37,20 @@ async function settle(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function scanAll(
-  handle: TenantHandle,
-  markers: string[]
-): Promise<{ hits: ScanHit[]; truncated: boolean }> {
+interface AggregateScan {
+  hits: ScanHit[]
+  results: ScanResult[]
+}
+
+async function scanAll(handle: TenantHandle, markers: string[]): Promise<AggregateScan> {
   const hits: ScanHit[] = []
-  let truncated = false
+  const results: ScanResult[] = []
   for (const marker of markers) {
     const result = await scanForMarker(handle.db!, marker)
     hits.push(...result.hits)
-    truncated ||= result.truncated
+    results.push(result)
   }
-  return { hits, truncated }
+  return { hits, results }
 }
 
 export const p07BackgroundJob: Probe = {
@@ -103,11 +112,18 @@ export const p07BackgroundJob: Probe = {
     }
     await settle(SETTLE_MS)
 
-    const markers = [...markerSearchForms(postId), alpha.markers.canary]
-
     // --- positive control: the write is observable at all -------------------
-    const ownScan = await scanAll(alpha, markers)
-    const derived = ownScan.hits.filter((h) => h.table !== 'posts')
+    //
+    // Scanned by POST ID ONLY, with the tables the fixture itself occupies
+    // excluded. An earlier version also scanned for the canary and counted any
+    // non-`posts` hit as a derived row — but the fixture writes that canary
+    // into `boards.description`, so `boards` satisfied the guard and the probe
+    // returned PASS against a deployment with background processing switched
+    // off entirely. A visibility guard has to be satisfied by the write under
+    // test, never by fixture data that was already sitting there.
+    const postIdForms = markerSearchForms(postId)
+    const ownScan = await scanAll(alpha, postIdForms)
+    const derived = ownScan.hits.filter((h) => !FIXTURE_TABLES.has(h.table))
     controls.push(
       control(
         'positive',
@@ -115,14 +131,14 @@ export const p07BackgroundJob: Probe = {
         derived.length > 0,
         derived.length > 0
           ? `derived rows in ${describeHits(derived)}`
-          : `only the posts row itself matched (${describeHits(ownScan.hits)}) — no background side ` +
-              `effect is observable, so a clean scan of bravo would prove nothing`
+          : `the post id appeared only in the fixture's own tables (${describeHits(ownScan.hits) || 'nothing'}) — ` +
+              `no background side effect is observable, so a clean scan of bravo would prove nothing`
       )
     )
     if (derived.length === 0) {
       return error({
         attempted,
-        observed: `alpha scan matched ${describeHits(ownScan.hits) || 'nothing'}`,
+        observed: `alpha scan matched ${describeHits(ownScan.hits) || 'nothing'} outside the fixture tables`,
         reason:
           'the write produced no observable derived rows in its own database within the settle window, ' +
           'so this probe is blind: an absence of rows in bravo would be equally explained by there ' +
@@ -132,6 +148,9 @@ export const p07BackgroundJob: Probe = {
     }
 
     // --- negative: nothing of alpha's reached bravo -------------------------
+    // Deliberately wider than the visibility scan above: any trace of alpha, by
+    // id or by canary, is a finding wherever it landed.
+    const markers = [...postIdForms, alpha.markers.canary]
     const foreignScan = await scanAll(bravo, markers)
     controls.push(
       control(
@@ -144,36 +163,18 @@ export const p07BackgroundJob: Probe = {
       )
     )
 
-    if (foreignScan.truncated || ownScan.truncated) {
-      controls.push(
-        control(
-          'invariant',
-          'the schema scan completed without truncation',
-          false,
-          'the column-scan ceiling was reached, so a clean result is not conclusive'
-        )
-      )
-    }
+    controls.push(scanCoverage([...ownScan.results, ...foreignScan.results]))
 
-    const failed = controls.filter((c) => c.kind !== 'positive' && !c.ok)
-    if (failed.length > 0) {
-      return leak({
-        attempted,
-        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason:
-          'background work driven by one tenant left rows in the other tenant’s database, or the scan ' +
-          'could not be completed. Under a shared worker tier this is silent — the write succeeds and ' +
-          'nothing errors.',
-        controls,
-        evidence: { postId, hits: foreignScan.hits },
-      })
-    }
-
-    return pass({
+    return decide({
       attempted,
-      observed: `alpha gained derived rows in ${describeHits(derived)}; bravo matched nothing`,
-      reason: 'the background work driven on alpha wrote only to alpha’s database',
       controls,
+      leakReason:
+        'background work driven by one tenant left rows in the other tenant’s database. Under a ' +
+        'shared worker tier this is silent — the write succeeds and nothing errors.',
+      onPass: {
+        observed: `alpha gained derived rows in ${describeHits(derived)}; bravo matched nothing`,
+        reason: 'the background work driven on alpha wrote only to alpha’s database',
+      },
       evidence: { postId, derivedTables: [...new Set(derived.map((h) => h.table))] },
     })
   },

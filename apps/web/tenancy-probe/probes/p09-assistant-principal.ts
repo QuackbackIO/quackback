@@ -16,8 +16,14 @@
  */
 
 import { ASSISTANT_PRINCIPAL_SQL, markerSearchForms, typeId } from '../db'
-import { scanForMarker, describeHits, type ScanHit } from '../db-scan'
-import { blocked, control, leak, pass } from './helpers'
+import {
+  scanForMarker,
+  describeHits,
+  scanCoverage,
+  type ScanHit,
+  type ScanResult,
+} from '../db-scan'
+import { blocked, control, decide } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
 
 async function assistantPrincipalId(handle: TenantHandle): Promise<string | null> {
@@ -91,11 +97,11 @@ export const p09AssistantPrincipal: Probe = {
     ] as const) {
       const forms = markerSearchForms(id)
       const hits: ScanHit[] = []
-      let truncated = false
+      const results: ScanResult[] = []
       for (const form of forms) {
         const result = await scanForMarker(foreign.db!, form)
         hits.push(...result.hits)
-        truncated ||= result.truncated
+        results.push(result)
       }
       // The foreign tenant's own `principal` table legitimately contains its own
       // assistant row; a hit there for the OTHER tenant's id is what matters, and
@@ -110,37 +116,20 @@ export const p09AssistantPrincipal: Probe = {
             : `FOUND IN ${foreign.slot.toUpperCase()}: ${describeHits(hits)}`
         )
       )
-      if (truncated) {
-        controls.push(
-          control(
-            'invariant',
-            `the scan of ${foreign.slot}'s schema completed without truncation`,
-            false,
-            'the column-scan ceiling was reached, so a clean result is not conclusive'
-          )
-        )
-      }
+      controls.push(scanCoverage(results))
     }
 
-    const failed = controls.filter((c) => !c.ok)
-    if (failed.length > 0) {
-      return leak({
-        attempted,
-        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason:
-          'one tenant’s assistant service principal is referenced by, or indistinguishable from, the ' +
-          'other’s. Every assistant reply, involvement and workflow action attributed through it is ' +
-          'attributed across the tenant boundary.',
-        controls,
-        evidence: { alphaAssistantPrincipalId: alphaId, bravoAssistantPrincipalId: bravoId },
-      })
-    }
-
-    return pass({
+    return decide({
       attempted,
-      observed: `alpha ${alphaId} and bravo ${bravoId} are distinct and neither appears in the other's database`,
-      reason: 'assistant attribution is confined to the tenant that owns the principal row',
       controls,
+      leakReason:
+        'one tenant’s assistant service principal is referenced by, or indistinguishable from, the ' +
+        'other’s. Every assistant reply, involvement and workflow action attributed through it is ' +
+        'attributed across the tenant boundary.',
+      onPass: {
+        observed: `alpha ${alphaId} and bravo ${bravoId} are distinct and neither appears in the other's database`,
+        reason: 'assistant attribution is confined to the tenant that owns the principal row',
+      },
       evidence: { alphaAssistantPrincipalId: alphaId, bravoAssistantPrincipalId: bravoId },
     })
   },

@@ -24,6 +24,8 @@ function report(over: Partial<ProbeReport> = {}): ProbeReport {
       bravo: { slot: 'bravo', canary: 'b', ids: {} },
     },
     verdict: 'PASS',
+    partial: false,
+    filteredOut: [],
     counts: { PASS: 9, LEAK: 0, ERROR: 0, BLOCKED: 0 },
     tripwireHits: [],
     probes: [],

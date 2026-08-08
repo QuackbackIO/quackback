@@ -20,8 +20,7 @@ import { p05ApiKey } from '../probes/p05-api-key'
 import { p06SettingsCache } from '../probes/p06-settings-cache'
 import { p08CrossRead } from '../probes/p08-cross-read'
 import { p09AssistantPrincipal } from '../probes/p09-assistant-principal'
-import { FakeFleet, baseConfig, fakeDb, makeContext } from './fake-fleet'
-import { ASSISTANT_PRINCIPAL_SQL } from '../db'
+import { FakeFleet, baseConfig, createFakeDb, makeContext } from './fake-fleet'
 import type { ProbeOutcome } from '../types'
 
 function failedNegatives(outcome: ProbeOutcome): string[] {
@@ -119,17 +118,33 @@ describe('P05 API key', () => {
 
 describe('P06 settings and branding cache', () => {
   it('passes when each tenant serves its own settings blob', async () => {
-    const outcome = await p06SettingsCache.run(makeContext(new FakeFleet()))
+    const outcome = await p06SettingsCache.run(
+      makeContext(new FakeFleet(), undefined, { withDb: true })
+    )
     expect(outcome.verdict).toBe('PASS')
   })
 
-  it('reports ERROR, not PASS, when both tenants are byte-identical and the probe is blind', async () => {
+  it('reports LEAK when bravo serves alphas cached settings', async () => {
+    // The leaking surfaces carry NO workspace id and NO slug — only the theme
+    // colour and the workspace name. An earlier version searched for the id and
+    // the slug, found neither, and reported PASS on exactly this fleet.
     const fleet = new FakeFleet({ sharedSettingsCache: true })
-    const outcome = await p06SettingsCache.run(makeContext(fleet))
-    // A shared cache makes every surface identical, which the probe must report
-    // as an inability to see rather than as isolation.
-    expect(outcome.verdict).toBe('ERROR')
-    expect(outcome.reason).toContain('blind')
+    const outcome = await p06SettingsCache.run(makeContext(fleet, undefined, { withDb: true }))
+    expect(outcome.verdict).toBe('LEAK')
+    expect(failedNegatives(outcome).length).toBeGreaterThan(0)
+    expect(outcome.observed).toContain('FOREIGN IDENTITY SERVED')
+  })
+
+  it('is not fooled by a per-request nonce in the document', async () => {
+    const fleet = new FakeFleet({ perRequestNonce: true })
+    const outcome = await p06SettingsCache.run(makeContext(fleet, undefined, { withDb: true }))
+    expect(outcome.verdict).toBe('PASS')
+  })
+
+  it('reports BLOCKED without database access rather than guessing', async () => {
+    const outcome = await p06SettingsCache.run(makeContext(new FakeFleet()))
+    expect(outcome.verdict).toBe('BLOCKED')
+    expect(outcome.reason).toContain('--alpha-db')
   })
 })
 
@@ -157,40 +172,53 @@ describe('P08 cross-tenant read', () => {
 })
 
 describe('P09 assistant service principal', () => {
+  function ctxWithPrincipals(alphaUuid: string | null, bravoUuid: string | null) {
+    const fleet = new FakeFleet()
+    const ctx = makeContext(fleet)
+    ctx.alpha.db = createFakeDb('alpha', { assistantPrincipalUuid: alphaUuid })
+    ctx.bravo.db = createFakeDb('bravo', { assistantPrincipalUuid: bravoUuid })
+    return ctx
+  }
+
   const ALPHA_PRINCIPAL_UUID = '018f0000-0000-7000-8000-0000000000a1'
   const BRAVO_PRINCIPAL_UUID = '018f0000-0000-7000-8000-0000000000b2'
 
   it('passes when the two assistant principals are distinct and unreferenced', async () => {
-    const ctx = makeContext(new FakeFleet())
-    ctx.alpha.db = fakeDb('alpha', {
-      [ASSISTANT_PRINCIPAL_SQL.trim().split('\n')[1].trim()]: [{ id: ALPHA_PRINCIPAL_UUID }],
-      'information_schema.columns': [],
-    })
-    ctx.bravo.db = fakeDb('bravo', {
-      [ASSISTANT_PRINCIPAL_SQL.trim().split('\n')[1].trim()]: [{ id: BRAVO_PRINCIPAL_UUID }],
-      'information_schema.columns': [],
-    })
-    const outcome = await p09AssistantPrincipal.run(ctx)
+    const outcome = await p09AssistantPrincipal.run(
+      ctxWithPrincipals(ALPHA_PRINCIPAL_UUID, BRAVO_PRINCIPAL_UUID)
+    )
     expect(outcome.verdict).toBe('PASS')
   })
 
   it('reports BLOCKED, not PASS, when an assistant principal has never been provisioned', async () => {
-    const ctx = makeContext(new FakeFleet())
-    ctx.alpha.db = fakeDb('alpha', { 'information_schema.columns': [] })
-    ctx.bravo.db = fakeDb('bravo', { 'information_schema.columns': [] })
-    const outcome = await p09AssistantPrincipal.run(ctx)
+    const outcome = await p09AssistantPrincipal.run(ctxWithPrincipals(null, BRAVO_PRINCIPAL_UUID))
     expect(outcome.verdict).toBe('BLOCKED')
     expect(outcome.reason).toContain('provisioned lazily')
   })
 
   it('reports LEAK when both tenants share one assistant principal id', async () => {
-    const ctx = makeContext(new FakeFleet())
-    const shared = [{ id: ALPHA_PRINCIPAL_UUID }]
-    const key = ASSISTANT_PRINCIPAL_SQL.trim().split('\n')[1].trim()
-    ctx.alpha.db = fakeDb('alpha', { [key]: shared, 'information_schema.columns': [] })
-    ctx.bravo.db = fakeDb('bravo', { [key]: shared, 'information_schema.columns': [] })
-    const outcome = await p09AssistantPrincipal.run(ctx)
+    const outcome = await p09AssistantPrincipal.run(
+      ctxWithPrincipals(ALPHA_PRINCIPAL_UUID, ALPHA_PRINCIPAL_UUID)
+    )
     expect(outcome.verdict).toBe('LEAK')
     expect(outcome.reason).toContain('assistant service principal')
+  })
+
+  it('reports ERROR when the row scan could not cover the schema', async () => {
+    // A misspelled or missing table narrows the scan in silence; a clean result
+    // from a narrowed scan must never read as isolation.
+    const fleet = new FakeFleet()
+    const ctx = makeContext(fleet)
+    ctx.alpha.db = createFakeDb('alpha', {
+      assistantPrincipalUuid: ALPHA_PRINCIPAL_UUID,
+      omitTables: ['conversation_messages', 'assistant_involvements'],
+    })
+    ctx.bravo.db = createFakeDb('bravo', {
+      assistantPrincipalUuid: BRAVO_PRINCIPAL_UUID,
+      omitTables: ['conversation_messages', 'assistant_involvements'],
+    })
+    const outcome = await p09AssistantPrincipal.run(ctx)
+    expect(outcome.verdict).toBe('ERROR')
+    expect(outcome.observed).toContain('conversation_messages')
   })
 })

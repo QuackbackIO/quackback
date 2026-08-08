@@ -22,6 +22,24 @@ same run. Without that, an unreachable host, a revoked key or a typo'd URL all
 score as perfect isolation. When a positive control fails the probe reports
 `ERROR` and says so — it never reports `PASS`.
 
+**One shared rule turns controls into verdicts.** Every check a probe makes is
+classified, and `decide()` in `probes/helpers.ts` maps the classification to the
+verdict for all nine probes:
+
+| Kind         | Meaning                                                      | Failure becomes |
+| ------------ | ------------------------------------------------------------ | --------------- |
+| `positive`   | the mechanism works inside its own tenant                    | `ERROR`         |
+| `negative`   | the adversarial cross-tenant attempt                         | `LEAK`          |
+| `invariant`  | a config fact whose violation _is_ a cross-tenant capability | `LEAK`          |
+| `visibility` | the probe's ability to observe at all                        | `ERROR`         |
+
+This is centralized deliberately. An earlier version let each probe pick its own
+failing controls with a local filter, and one of those filters dropped
+`invariant` failures from the decision — so a probe could observe a shared
+secret, record it, print it, and still return `PASS`. Classifying a control is
+now the whole of a probe's verdict logic; there is no filter that can record a
+signal without counting it.
+
 **Every response is scanned for the other tenant's markers.** Probes assert on
 what they attacked; the tripwire catches what the probe author did not think to
 check. Its vocabulary is per-tenant canary strings plus tenant-unique TypeIDs,
@@ -89,6 +107,15 @@ and a leak stays legible when the JSON is piped away.
 `LEAK` or an `ERROR` pass, and the blocked probes are still listed first in the
 summary.
 
+`--only` restricts the run to named probes. A filtered run sets `partial: true`
+and lists `filteredOut` in the JSON, so a consumer reading `verdict: "PASS"`
+never has to parse the human summary to learn that six probes did not run.
+
+The report never contains a credential. The widget signing secret is a marker
+the tripwire scans for — a signing secret appearing in a response body is among
+the worst findings available — but it is held separately from the reportable
+markers, redacted in any hit, and stripped from the JSON.
+
 `--teardown` removes the fixture from both tenants.
 
 ### Inputs and what they unlock
@@ -127,6 +154,19 @@ sensitive rather than ceremonial.
 attempting any cross-redemption.** Otherwise "bravo refused alpha's token" is
 explained by "bravo has no such row" — the trivial case. With a live row present
 for that exact address, bravo must refuse a token it did not itself mint.
+
+**P06 derives its vocabulary from what each tenant has stored, not from what
+the probe expects to find.** An earlier version searched served responses for
+the workspace slug and the workspace TypeID and could not see a settings-cache
+leak at all, because neither string is present in what leaks:
+`/api/widget/config.json` carries theme colours, tabs and flags and no
+identifier whatsoever, and the portal document carries the workspace _name_. The
+probe now reads `name`, `slug`, id, `branding_config`, `custom_css`,
+`portal_config` and `widget_config` from each tenant's settings row, reduces
+them to the tokens **exclusive** to one tenant, and asserts neither host ever
+serves the other's. Stability across the interleave is measured on those tokens
+rather than on raw bytes, so a CSP nonce or a timestamp cannot manufacture a
+false `LEAK`.
 
 **P03 uses the same object key against both tenants.** A signature is bound to
 its key, so signing alpha's key and presenting it for bravo's key would be
@@ -192,11 +232,27 @@ the server's construction ever changes, the minted token would be malformed,
 every cross-tenant attempt would be refused for the wrong reason, and the probe
 would report a false `PASS`. This makes that drift break `bun run test` instead.
 
+`__tests__/end-to-end.test.ts` drives the real `runSuite → report → exit code`
+path against a planted fleet, rather than calling `probe.run()` directly. This
+is the file that matters most, and it exists because probe-level tests were not
+enough: three defects survived an earlier sensitivity pass — P02 could never
+execute at all, P07's blind guard was satisfied by fixture data, and P06 reported
+`PASS` on the leak it was written to catch — and two of those probes were never
+imported by a test. Every case here asserts on the report and the exit code,
+including that a clean run and a leaking run do not produce identical output,
+and that a per-request nonce does not manufacture a `LEAK`.
+
 `__tests__/tripwire.test.ts` covers both tripwire failure modes: missing a real
 marker, and flagging the harness's own echo. It also pins `markerSearchForms`,
 which expands a TypeID into its uuid form — entity ids are `uuid` columns in
 Postgres, so a database scan for the TypeID string alone matches nothing and
 would always look clean.
+
+`__tests__/scan-tables.test.ts` pins `SCAN_TABLES` against the real Drizzle
+schema. A misspelled table name narrows every row-level scan in complete
+silence; the list carried `notifications`, which does not exist. At runtime
+`scanCoverage` additionally fails a `visibility` control when
+`information_schema` does not recognise a requested table.
 
 ## Layout
 
@@ -216,6 +272,9 @@ runner.ts       orchestration, capability gating, verdict assembly
 report.ts       JSON and human rendering
 ```
 
-There is deliberately no root `package.json` script: this is not part of
-`bun run test`'s job (it needs two live deployments), and adding one is a
-one-line change if that becomes the preferred entry point.
+The harness is type-checked by `bun run typecheck`, which chains its own
+`tsconfig.json` after the app's — the app config includes only `src/**`, so
+without that chain this directory would never be type-checked at all.
+
+There is deliberately no root script for _running_ the probe: it needs two live
+deployments, so it does not belong in `bun run test`.

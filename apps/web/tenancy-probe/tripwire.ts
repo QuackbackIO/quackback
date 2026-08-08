@@ -47,20 +47,32 @@ interface VocabularyEntry {
   owner: TenantSlot
   name: string
   value: string
+  /** The value is itself a credential and must never reach the report. */
+  sensitive: boolean
 }
 
 function buildVocabulary(markers: TenantMarkers): VocabularyEntry[] {
   const out: VocabularyEntry[] = []
   if (markers.canary.length >= MIN_MARKER_LENGTH) {
-    out.push({ owner: markers.slot, name: 'canary', value: markers.canary })
+    out.push({ owner: markers.slot, name: 'canary', value: markers.canary, sensitive: false })
   }
   for (const [name, value] of Object.entries(markers.ids)) {
     if (typeof value === 'string' && value.length >= MIN_MARKER_LENGTH) {
-      out.push({ owner: markers.slot, name, value })
+      out.push({ owner: markers.slot, name, value, sensitive: false })
+    }
+  }
+  // Credentials are scanned exactly like ids — a widget signing secret turning
+  // up in a response is among the worst things this suite could find — but the
+  // value is withheld from the hit, because a report file gets pasted around.
+  for (const [name, value] of Object.entries(markers.sensitive ?? {})) {
+    if (typeof value === 'string' && value.length >= MIN_MARKER_LENGTH) {
+      out.push({ owner: markers.slot, name, value, sensitive: true })
     }
   }
   return out
 }
+
+const REDACTED = '<redacted>'
 
 /**
  * Build the recorder. Both tenants' marker sets are supplied; a response served
@@ -91,15 +103,17 @@ export function createTripwire(alpha: TenantMarkers, bravo: TenantMarkers): Trip
       for (const entry of foreignVocabulary) {
         if (!exchange.responseText.includes(entry.value)) continue
         if (sent.includes(entry.value)) continue
+        const excerpt = excerptAround(exchange.responseText, entry.value)
         found.push({
           servedBy: exchange.tenant,
           markerOwner: entry.owner,
           markerName: entry.name,
-          marker: entry.value,
+          marker: entry.sensitive ? REDACTED : entry.value,
           method: exchange.method,
           url: exchange.url,
           status: exchange.status,
-          excerpt: excerptAround(exchange.responseText, entry.value),
+          excerpt: entry.sensitive ? excerpt.split(entry.value).join(REDACTED) : excerpt,
+          redacted: entry.sensitive,
         })
       }
 

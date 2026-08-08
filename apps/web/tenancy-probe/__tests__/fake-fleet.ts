@@ -16,6 +16,7 @@ import { createHmac } from 'node:crypto'
 import { createTenantHttp, type FetchLike } from '../http'
 import { createTripwire } from '../tripwire'
 import type {
+  Capability,
   ProbeConfig,
   ProbeContext,
   ProbeLogger,
@@ -25,6 +26,9 @@ import type {
   TripwireRecorder,
 } from '../types'
 import { CANARY, FIXTURE, fixturePostBody } from '../fixtures'
+import { SCAN_TABLES } from '../db-scan'
+import { fixtureBoardDescription } from '../fixtures'
+import { toUuid } from '@quackback/ids'
 
 export interface FleetLeaks {
   /** Either tenant honours the other's session cookie / bearer token. */
@@ -41,12 +45,35 @@ export interface FleetLeaks {
   sharedSettingsCache?: boolean
   /** Nothing responds at all. */
   offline?: boolean
+  /** The portal document carries a fresh nonce on every request. */
+  perRequestNonce?: boolean
+  /** Background processing is switched off: a write produces no derived rows. */
+  noBackgroundProcessing?: boolean
+  /** Both tenants' assistant work is attributed to one shared principal id. */
+  sharedAssistantPrincipal?: boolean
+}
+
+export interface FakeSettings {
+  id: string
+  slug: string
+  name: string
+  widget_secret: string | null
+  feature_flags: string | null
+  branding_config: string | null
+  custom_css: string | null
+  portal_config: string | null
+  widget_config: string | null
+  auth_config_version: number
 }
 
 export interface FakeTenant {
   slot: TenantSlot
   origin: string
   workspaceSlug: string
+  workspaceName: string
+  themeColor: string
+  settingsUuid: string
+  assistantPrincipalUuid: string
   canary: string
   boardId: string
   postId: string
@@ -82,11 +109,33 @@ const TENANT_IDS: Record<
   },
 }
 
+const TENANT_IDENTITY: Record<
+  TenantSlot,
+  { name: string; theme: string; uuid: string; principalUuid: string }
+> = {
+  alpha: {
+    name: 'Alpha Workspace',
+    theme: '#aa1122',
+    uuid: '018f0000-0000-7000-8000-0000000000a1',
+    principalUuid: '018f0000-0000-7000-8000-0000000000c1',
+  },
+  bravo: {
+    name: 'Bravo Workspace',
+    theme: '#22bb44',
+    uuid: '018f0000-0000-7000-8000-0000000000b2',
+    principalUuid: '018f0000-0000-7000-8000-0000000000d2',
+  },
+}
+
 function makeTenant(slot: TenantSlot): FakeTenant {
   return {
     slot,
     origin: `https://${slot}.probe.test`,
     workspaceSlug: `${slot}-workspace`,
+    workspaceName: TENANT_IDENTITY[slot].name,
+    themeColor: TENANT_IDENTITY[slot].theme,
+    settingsUuid: TENANT_IDENTITY[slot].uuid,
+    assistantPrincipalUuid: TENANT_IDENTITY[slot].principalUuid,
     canary: CANARY[slot],
     ...TENANT_IDS[slot],
     sessionToken: `sess-${slot}-token`,
@@ -95,6 +144,33 @@ function makeTenant(slot: TenantSlot): FakeTenant {
     widgetSecret: `wgt_${slot.padEnd(64, '0')}`,
   }
 }
+
+/**
+ * The stored settings row for a tenant.
+ *
+ * Deliberately shaped like the critic's leak: the identity lives in `name`,
+ * `slug` and the branding colour. `/api/widget/config.json` publishes only the
+ * colour, and the portal document publishes only the name — neither carries the
+ * workspace id or slug, which is precisely why a probe that searched for those
+ * two strings could not see this leak at all.
+ */
+export function fakeSettings(t: FakeTenant): FakeSettings {
+  return {
+    id: t.settingsUuid,
+    slug: t.workspaceSlug,
+    name: t.workspaceName,
+    widget_secret: t.widgetSecret,
+    feature_flags: '{}',
+    branding_config: JSON.stringify({ light: { primary: t.themeColor } }),
+    custom_css: `:root { --primary: ${t.themeColor}; }`,
+    portal_config: '{}',
+    widget_config: '{}',
+    auth_config_version: 0,
+  }
+}
+
+/** Colliding on purpose: both tenants' admin uses this address. */
+export const ADMIN_EMAIL = 'admin@example.com'
 
 const SHARED_STORAGE_SECRET = 's3-secret-shared-bucket'
 const SHARED_WIDGET_SECRET = `wgt_${'shared'.padEnd(64, '0')}`
@@ -131,7 +207,18 @@ export class FakeFleet {
   readonly alpha = makeTenant('alpha')
   readonly bravo = makeTenant('bravo')
 
+  /** Live magic-link tokens and sign-in OTPs, per tenant, as the DB would hold them. */
+  readonly liveMagicLinks = new Map<TenantSlot, string>()
+  readonly liveOtps = new Map<TenantSlot, string>()
+  private mintCounter = 1
+
   constructor(readonly leaks: FleetLeaks = {}) {}
+
+  private credentialOwner(store: Map<TenantSlot, string>, value: string): TenantSlot | null {
+    if (!value) return null
+    for (const [slot, held] of store) if (held === value) return slot
+    return null
+  }
 
   private tenantFor(origin: string): FakeTenant | null {
     if (origin === this.alpha.origin) return this.alpha
@@ -184,6 +271,55 @@ export class FakeFleet {
       })
     }
 
+    // ---- magic link and sign-in OTP ---------------------------------------
+    // Both credentials are minted per tenant and recorded so `createFakeDb` can
+    // serve them back out of the `verification` table, exactly as the real flow
+    // requires the probe to read them.
+    if (path === '/api/auth/sign-in/magic-link' && method === 'POST') {
+      this.liveMagicLinks.set(tenant.slot, `magic-${tenant.slot}-${this.mintCounter++}`)
+      return json({ status: true })
+    }
+
+    if (path === '/api/auth/magic-link/verify') {
+      const token = url.searchParams.get('token') ?? ''
+      const owner = this.credentialOwner(this.liveMagicLinks, token)
+      const accepted = owner && (owner === tenant.slot || Boolean(this.leaks.sharedSessionStore))
+      if (!accepted) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: '/auth/error?error=INVALID_TOKEN' },
+        })
+      }
+      this.liveMagicLinks.delete(owner)
+      const resolved =
+        this.leaks.sharedSessionStore && owner !== tenant.slot ? this.other(tenant) : tenant
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: '/',
+          'set-cookie': `better-auth.session_token=${resolved.sessionToken}.sig; Path=/; HttpOnly`,
+        },
+      })
+    }
+
+    if (path === '/api/auth/email-otp/send-verification-otp' && method === 'POST') {
+      this.liveOtps.set(tenant.slot, String(100000 + this.mintCounter++))
+      return json({ status: true })
+    }
+
+    if (path === '/api/auth/sign-in/email-otp' && method === 'POST') {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { otp?: string }
+      const owner = this.credentialOwner(this.liveOtps, body.otp ?? '')
+      const accepted = owner && (owner === tenant.slot || Boolean(this.leaks.sharedSessionStore))
+      if (!accepted) return json({ error: { code: 'INVALID_OTP' } }, 400)
+      this.liveOtps.delete(owner)
+      const resolved =
+        this.leaks.sharedSessionStore && owner !== tenant.slot ? this.other(tenant) : tenant
+      return json({ user: { id: resolved.adminUserId } }, 200, {
+        'set-cookie': `better-auth.session_token=${resolved.sessionToken}.sig; Path=/; HttpOnly`,
+      })
+    }
+
     if (path === '/api/auth/get-session') {
       const presented =
         /better-auth\.session_token=([^;]+)/.exec(cookie)?.[1]?.split('.')[0] ?? bearer
@@ -194,7 +330,10 @@ export class FakeFleet {
       // for the local identically-addressed admin.
       if (owner.slot !== tenant.slot && !this.leaks.sharedSessionStore) return json(null)
       const resolved = this.leaks.sharedSessionStore ? owner : tenant
-      return json({ session: { userId: resolved.adminUserId }, user: { id: resolved.adminUserId } })
+      return json({
+        session: { userId: resolved.adminUserId },
+        user: { id: resolved.adminUserId, email: ADMIN_EMAIL },
+      })
     }
 
     if (path === '/admin') {
@@ -247,6 +386,18 @@ export class FakeFleet {
       }
       if (path.startsWith('/api/v1/posts/') && method === 'PATCH') {
         return json({ data: { id: tenant.postId, title: FIXTURE.postTitle } })
+      }
+      if (path.startsWith('/api/v1/posts/') && method === 'GET') {
+        // The read-back the fixture uses so the collision gate compares stored
+        // values rather than this harness's own constants.
+        return json({
+          data: {
+            id: tenant.postId,
+            title: FIXTURE.postTitle,
+            content: fixturePostBody(tenant.slot),
+            boardId: tenant.boardId,
+          },
+        })
       }
       return json({ error: { code: 'NOT_FOUND', message: 'no such endpoint' } }, 404)
     }
@@ -302,20 +453,32 @@ export class FakeFleet {
     }
 
     if (path === '/api/widget/config.json') {
+      // Mirrors `lib/server/widget/public-config.ts`: theme, tabs and flags.
+      // No workspace id, no slug, no name — the exact shape that defeated an
+      // earlier version of P06, which searched only for the slug and the id.
       const source = this.leaks.sharedSettingsCache ? this.alpha : tenant
       return json({
         enabled: true,
-        workspace: source.workspaceSlug,
-        branding: { canary: source.canary },
+        theme: { lightPrimary: source.themeColor, themeMode: 'user', radius: '0.5rem' },
+        tabs: { feedback: true, changelog: true, help: true },
+        hmacRequired: false,
       })
     }
 
     // ---- portal ----------------------------------------------------------
     if (path === '/' || path.startsWith('/b/')) {
+      // The portal document carries the workspace NAME and nothing else that
+      // identifies the tenant — again matching the real app.
       const source = this.leaks.sharedSettingsCache ? this.alpha : tenant
       const extra = this.leaks.sharedSearchIndex ? ` ${this.other(tenant).canary}` : ''
+      // A per-request nonce, so the suite is held to the precision bar too: a
+      // varying byte must never on its own produce a LEAK.
+      const nonce = this.leaks.perRequestNonce
+        ? `<meta name="csp-nonce" content="${Math.random()}">`
+        : ''
       return new Response(
-        `<html><body>${source.workspaceSlug} ${source.canary}${extra}</body></html>`,
+        `<html><head>${nonce}<title>${source.workspaceName}</title></head>` +
+          `<body>${source.workspaceName}${extra}</body></html>`,
         { status: 200, headers: { 'content-type': 'text/html' } }
       )
     }
@@ -353,7 +516,81 @@ export class FakeFleet {
   }
 }
 
-/** A `TenantDb` backed by a fixed row set, for the database-dependent probes. */
+/**
+ * A `TenantDb` that answers the four query shapes the suite actually issues:
+ * the settings row, the assistant principal, the `information_schema` column
+ * listing, and the per-column `LIKE` scan.
+ *
+ * It reports every table in `SCAN_TABLES` as present, because a fake that
+ * silently omitted them would make `scanCoverage` fail and mask whatever the
+ * test was really about — the same class of narrowing that put `notifications`
+ * (really `in_app_notifications`) in the scan list unnoticed.
+ */
+export interface FakeDbOptions {
+  settings?: FakeSettings | null
+  assistantPrincipalUuid?: string | null
+  /** table -> rows, each row a column/value map, searched by the LIKE scan. */
+  rows?: Record<string, Array<Record<string, string>>>
+  /** Tables to omit from `information_schema`, for coverage tests. */
+  omitTables?: string[]
+  /** The live magic-link token this tenant most recently minted, if any. */
+  liveMagicLinkToken?: () => string | undefined
+  /** The live sign-in OTP this tenant most recently minted, if any. */
+  liveOtpCode?: () => string | undefined
+}
+
+export function createFakeDb(slot: TenantSlot, opts: FakeDbOptions = {}): TenantDb {
+  const rows = opts.rows ?? {}
+
+  return {
+    slot,
+    async query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+      if (sql.includes('information_schema.columns')) {
+        const omit = new Set(opts.omitTables ?? [])
+        const out: Array<{ table_name: string; column_name: string }> = []
+        for (const table of SCAN_TABLES) {
+          if (omit.has(table)) continue
+          const columns = new Set<string>(['id'])
+          for (const row of rows[table] ?? []) for (const c of Object.keys(row)) columns.add(c)
+          for (const column of columns) out.push({ table_name: table, column_name: column })
+        }
+        return out as T[]
+      }
+
+      // The `verification` table, which is the only place a magic-link token or
+      // sign-in OTP can be read from — they leave the real server by email.
+      if (sql.includes('FROM verification')) {
+        if (sql.includes('identifier NOT LIKE')) {
+          const token = opts.liveMagicLinkToken?.()
+          return (token ? [{ identifier: token, value: '{}' }] : []) as T[]
+        }
+        const code = opts.liveOtpCode?.()
+        return (code ? [{ value: `${code}:0` }] : []) as T[]
+      }
+
+      if (sql.includes('FROM settings')) {
+        return (opts.settings ? [opts.settings] : []) as T[]
+      }
+
+      if (sql.includes("type = 'service'")) {
+        return (opts.assistantPrincipalUuid ? [{ id: opts.assistantPrincipalUuid }] : []) as T[]
+      }
+
+      const scan = /FROM "([^"]+)"\s+WHERE "([^"]+)"::text LIKE/.exec(sql)
+      if (scan) {
+        const [, table, column] = scan
+        const needle = String(params[0] ?? '').replace(/^%|%$/g, '')
+        const hit = (rows[table] ?? []).find((r) => (r[column] ?? '').includes(needle))
+        return (hit ? [{ sample: hit[column] }] : []) as T[]
+      }
+
+      return [] as T[]
+    },
+    async close() {},
+  }
+}
+
+/** Legacy shim used by a couple of older cases: matches on a SQL substring. */
 export function fakeDb(
   slot: TenantSlot,
   rows: Record<string, Record<string, unknown>[]>
@@ -400,12 +637,43 @@ export interface TestContext extends ProbeContext {
   tripwire: TripwireRecorder
 }
 
-/** Build a `ProbeContext` wired to the fake fleet, with the fixture pre-populated. */
-export function makeContext(fleet: FakeFleet, config = baseConfig(fleet)): TestContext {
+/**
+ * The rows a healthy tenant would hold: its own fixture, plus a derived
+ * `post_activity` row standing in for the background work P07 looks for.
+ */
+export function defaultDbRows(fleet: FakeFleet, t: FakeTenant): NonNullable<FakeDbOptions['rows']> {
+  const postUuid = toUuid(t.postId)
+  const rows: NonNullable<FakeDbOptions['rows']> = {
+    posts: [{ id: postUuid, content: fixturePostBody(t.slot) }],
+    boards: [{ description: fixtureBoardDescription(t.slot) }],
+  }
+  if (!fleet.leaks.noBackgroundProcessing) {
+    rows.post_activity = [{ post_id: postUuid }]
+  }
+  return rows
+}
+
+/**
+ * Build a `ProbeContext` wired to the fake fleet, with the fixture pre-populated.
+ *
+ * `withDb` attaches a fake database per tenant, populated from the same
+ * `FakeFleet`, so the database-backed probes can run without a real Postgres.
+ */
+export function makeContext(
+  fleet: FakeFleet,
+  config = baseConfig(fleet),
+  opts: { withDb?: boolean; dbRows?: Partial<Record<TenantSlot, FakeDbOptions['rows']>> } = {}
+): TestContext {
   const markers = (t: FakeTenant) => ({
     slot: t.slot,
     canary: t.canary,
-    ids: { boardId: t.boardId, postId: t.postId, adminUserId: t.adminUserId },
+    ids: {
+      boardId: t.boardId,
+      postId: t.postId,
+      adminUserId: t.adminUserId,
+      workspaceName: t.workspaceName,
+      workspaceSlug: t.workspaceSlug,
+    },
   })
 
   const tripwire = createTripwire(markers(fleet.alpha), markers(fleet.bravo))
@@ -422,6 +690,15 @@ export function makeContext(fleet: FakeFleet, config = baseConfig(fleet)): TestC
       fetchImpl: fleet.fetch,
     }),
     adminCookies: `better-auth.session_token=${t.sessionToken}.sig`,
+    db: opts.withDb
+      ? createFakeDb(t.slot, {
+          settings: fakeSettings(t),
+          assistantPrincipalUuid: fleet.leaks.sharedAssistantPrincipal
+            ? fleet.alpha.assistantPrincipalUuid
+            : t.assistantPrincipalUuid,
+          rows: opts.dbRows?.[t.slot] ?? defaultDbRows(fleet, t),
+        })
+      : undefined,
     fixture: {
       workspaceName: t.workspaceSlug,
       adminEmail: config.adminEmail,
@@ -444,7 +721,14 @@ export function makeContext(fleet: FakeFleet, config = baseConfig(fleet)): TestC
     alpha,
     bravo,
     tripwire,
-    capabilities: new Set(['http', 'admin', 'api-key', 'storage-secret', 'widget-secret']),
+    capabilities: new Set<Capability>([
+      'http',
+      'admin',
+      'api-key',
+      'storage-secret',
+      'widget-secret',
+      ...(opts.withDb ? (['db'] as Capability[]) : []),
+    ]),
     log: silentLogger,
     newClient(handle: TenantHandle) {
       return createTenantHttp({

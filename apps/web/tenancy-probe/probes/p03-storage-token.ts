@@ -21,7 +21,7 @@
  */
 
 import { mintStorageReadSig } from '../crypto'
-import { blocked, control, describeResponse, error, leak, pass } from './helpers'
+import { blocked, control, decide, describeResponse, error } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, ProbeResponse } from '../types'
 
 /**
@@ -161,26 +161,18 @@ export const p03StorageToken: Probe = {
       )
     )
 
-    const failed = controls.filter((c) => c.kind !== 'positive' && !c.ok)
-    if (failed.length > 0) {
-      return leak({
-        attempted,
-        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason:
-          'a private-object read capability crossed the tenant boundary. Every private upload, export ' +
-          'and attachment URL in one tenant is readable from the other.',
-        controls,
-        evidence: { key: PRIVATE_KEY, secretsDiffer },
-      })
-    }
-
-    return pass({
+    return decide({
       attempted,
-      observed:
-        'alpha accepted only its own capability for the key and refused bravo’s with 403; bravo did the same',
-      reason:
-        'the read capability is bound to a per-tenant secret, so it does not transfer between tenants',
       controls,
+      leakReason:
+        'a private-object read capability crossed the tenant boundary. Every private upload, export ' +
+        'and attachment URL in one tenant is readable from the other.',
+      onPass: {
+        observed:
+          'alpha accepted only its own capability for the key and refused bravo’s with 403; bravo did the same',
+        reason:
+          'the read capability is bound to a per-tenant secret, so it does not transfer between tenants',
+      },
       evidence: { key: PRIVATE_KEY, secretsDiffer },
     })
   },

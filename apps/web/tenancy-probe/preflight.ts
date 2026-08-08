@@ -9,7 +9,7 @@
  * attached — never skipped, never passed.
  */
 
-import { createTenantHttp } from './http'
+import { createTenantHttp, type FetchLike } from './http'
 import { createTenantDb, typeId, SETTINGS_ROW_SQL } from './db'
 import { discoverMarkers, provisionFixture, verifyCollisions, CANARY } from './fixtures'
 import type {
@@ -66,7 +66,7 @@ export async function getSession(
 async function establishAdminSession(
   handle: TenantHandle,
   config: ProbeConfig
-): Promise<{ ok: boolean; detail: string; userId?: string }> {
+): Promise<{ ok: boolean; detail: string; userId?: string; email?: string }> {
   handle.http.clearCookies()
 
   const pw = await handle.http.request('/api/auth/sign-in/email', {
@@ -78,7 +78,12 @@ async function establishAdminSession(
     const session = await getSession(handle)
     const userId = session.body?.user?.id
     if (userId) {
-      return { ok: true, detail: `password sign-in as ${config.adminEmail}`, userId }
+      return {
+        ok: true,
+        detail: `password sign-in as ${config.adminEmail}`,
+        userId,
+        email: session.body?.user?.email,
+      }
     }
     return {
       ok: false,
@@ -110,7 +115,12 @@ async function establishAdminSession(
   const session = await getSession(handle)
   const userId = session.body?.user?.id
   if (!userId) return { ok: false, detail: 'magic-link fallback produced no user in get-session' }
-  return { ok: true, detail: `magic-link sign-in as ${config.adminEmail}`, userId }
+  return {
+    ok: true,
+    detail: `magic-link sign-in as ${config.adminEmail}`,
+    userId,
+    email: session.body?.user?.email,
+  }
 }
 
 function secretFor(slot: TenantSlot, config: ProbeConfig, kind: 'storage' | 'widget' | 'api') {
@@ -129,7 +139,8 @@ export interface PreflightOutput extends PreflightResult {
 export async function runPreflight(
   config: ProbeConfig,
   tripwire: TripwireRecorder,
-  log: ProbeLogger
+  log: ProbeLogger,
+  deps: { fetchImpl?: FetchLike; createDb?: typeof createTenantDb } = {}
 ): Promise<PreflightOutput> {
   const steps: PreflightStep[] = []
   const capabilities = new Set<Capability>()
@@ -143,6 +154,7 @@ export async function runPreflight(
       baseUrl,
       tripwire,
       defaultTimeoutMs: config.requestTimeoutMs,
+      fetchImpl: deps.fetchImpl,
     }),
   })
 
@@ -189,7 +201,7 @@ export async function runPreflight(
       const url = dbUrls[handle.slot]
       if (!url) continue
       try {
-        const db = createTenantDb(handle.slot, url)
+        const db = (deps.createDb ?? createTenantDb)(handle.slot, url)
         await db.query('SELECT 1')
         handle.db = db
         steps.push({ name: `database:${handle.slot}`, ok: true, detail: 'connected' })
@@ -255,6 +267,7 @@ export async function runPreflight(
   }
 
   // ---- 4. Admin sessions ---------------------------------------------------
+  const adminEmails: Partial<Record<TenantSlot, string>> = {}
   let adminOk = true
   for (const handle of both) {
     const result = await establishAdminSession(handle, config)
@@ -267,6 +280,10 @@ export async function runPreflight(
     if (result.userId) {
       handle.markers.ids.adminUserId = result.userId
     }
+    // The address the SERVER holds for this account, not the one we asked with.
+    // The collision gate compares the two tenants' values, and filling them in
+    // from our own flag would make it compare a constant to itself.
+    adminEmails[handle.slot] = result.email
   }
   if (adminOk) capabilities.add('admin')
 
@@ -343,6 +360,7 @@ export async function runPreflight(
     try {
       const fixture = await provisionFixture(handle, config)
       fixture.adminUserId = handle.markers.ids.adminUserId ?? ''
+      if (adminEmails[handle.slot]) fixture.adminEmail = adminEmails[handle.slot]!
       handle.fixture = fixture
       steps.push({
         name: `fixture:${handle.slot}`,
@@ -370,6 +388,32 @@ export async function runPreflight(
     const discovered = await discoverMarkers(handle)
     // Preserve ids learned earlier (the admin user id from sign-in).
     handle.markers.ids = { ...handle.markers.ids, ...discovered.ids }
+    handle.markers.sensitive = { ...handle.markers.sensitive, ...discovered.sensitive }
+  }
+
+  // Workspace name, slug and the assistant principal id are genuine identity
+  // markers — a leaked settings blob carries the name, not the id — but unlike
+  // a fixture TypeID they can be identical across two tenants. A shared value
+  // cannot attribute anything and would fire the tripwire against each tenant's
+  // own correct response, so non-exclusive markers are dropped from both. The
+  // fixture ids are exempt: `verifyCollisions` has already established those
+  // differ, because if they did not, the two URLs would be one database.
+  const shared: string[] = []
+  for (const [key, value] of Object.entries(alpha.markers.ids)) {
+    if (bravo.markers.ids[key] !== value) continue
+    delete alpha.markers.ids[key]
+    delete bravo.markers.ids[key]
+    shared.push(`${key}="${value}"`)
+  }
+  if (shared.length > 0) {
+    steps.push({
+      name: 'marker:shared-values-pruned',
+      ok: true,
+      detail:
+        `${shared.join(', ')} — identical across tenants, so dropped from the tripwire vocabulary. ` +
+        'A shared value cannot attribute a leak, and would otherwise fire against each tenant’s own ' +
+        'correct response. Whether sharing it is itself a finding is decided by the owning probe.',
+    })
   }
 
   const collision = verifyCollisions(alpha, bravo)

@@ -14,7 +14,7 @@
  * in response to alpha's credential.
  */
 
-import { blocked, control, describeResponse, error, leak, markersPresent, pass } from './helpers'
+import { blocked, control, decide, describeResponse, error, markersPresent } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext } from '../types'
 
 interface BoardsBody {
@@ -156,21 +156,14 @@ export const p05ApiKey: Probe = {
       )
     )
 
-    const failed = controls.filter((c) => c.kind !== 'positive' && !c.ok)
-    if (failed.length > 0) {
-      return leak({
-        attempted,
-        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason: 'a REST API credential issued by one tenant was honoured by the other',
-        controls,
-      })
-    }
-
-    return pass({
+    return decide({
       attempted,
-      observed: "each tenant answered the other's API key with 401 on every endpoint tried",
-      reason: 'API keys resolve only against the tenant database that issued them',
       controls,
+      leakReason: 'a REST API credential issued by one tenant was honoured by the other',
+      onPass: {
+        observed: "each tenant answered the other's API key with 401 on every endpoint tried",
+        reason: 'API keys resolve only against the tenant database that issued them',
+      },
     })
   },
 }
