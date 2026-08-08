@@ -304,10 +304,40 @@ correct on both, which is the control that proves nothing crossed.
 
 Delete by canary in SQL rather than relying on `--teardown` between orderings.
 
-**Plant the identity token where a public surface renders it.** `settings.name`
-is not enough — no judged surface renders it, so P06 reports `ERROR` (it could
-not see) rather than a verdict. The portal welcome-card headline
-(`settings.portal_config.welcomeCard.title`) is a surface it does judge.
+**P06 cannot see, and moving the identity token will not fix it.** Both
+hypotheses in an earlier draft of this file were wrong and each costs a full run
+to disprove — `settings.name` is not the problem and the portal welcome-card
+headline is not the answer. **`/` is unconditionally a 307, and the probe does
+not follow redirects**, so P06's only token-bearing judged surface always has an
+empty body regardless of where the token is planted. Fixing it means either
+giving the suite a non-redirecting judged surface or teaching it to follow the
+redirect; it is not a fixture task.
+
+Two fixture faults are worth knowing because they invalidate earlier P06
+attempts: `settings.portal_config` can end up holding **invalid JSON**
+(`{}{"welcomeCard":…}`) if it is written as
+`COALESCE(pc::jsonb,'{}') || obj::text` — `::text` binds tighter than `||`; and
+an empty `settings.setup_state` makes `__root.tsx` redirect every non-exempt
+path to `/onboarding`.
+
+**Two properties of the suite are weaker than its README claims.** Recorded here
+because they change how a run should be read; neither is fixed here, and neither
+should be fixed by anyone reading this file rather than by the suite's owner.
+
+- **A failing `invariant` can be downgraded rather than counted.** The README
+  says *"there is no filter that can record a signal without counting it"*, and
+  for P03 that is not true: it returns through an early `error()` that bypasses
+  `decide()`, so a control class the suite maps to `LEAK` surfaces as `ERROR` —
+  exit 1, not 2. **The same early-return shape appears in 7 of the 9 probes.** A
+  clean exit code is therefore weaker evidence than the README implies; read the
+  per-control detail.
+- **P03's inferred capability no longer exists.** It infers a cross-tenant read
+  from one shared storage secret, but `storageReadSig` now signs
+  `tenantBind('read|<key>')`, so a capability minted for one tenant does not
+  verify on another *even on a single shared secret*. The suite cannot see that,
+  and `crypto-drift.test.ts` cannot either, because it runs unscoped and
+  `tenantBind` preserves the unscoped message byte-for-byte — which is exactly
+  the property that keeps self-hosted installs unchanged.
 
 ### The surface the isolation probe cannot judge
 
@@ -339,6 +369,28 @@ that renders no identity is not a result. The check now reports `ERROR` rather
 than `PASS` whenever a host fails to serve its own marker.
 
 ---
+
+### Storage does not work under pooled tenancy
+
+Stated plainly rather than left as an inference from a stack trace: **every
+storage operation fails for a pooled tenant, and the reason is a single missing
+piece.** `resolveStorageCredentials()` throws whenever a tenant scope is active
+and no credential resolver has been registered, and it throws *before* the
+proxy cache is consulted — so `/api/storage/*` returns an error for every key,
+which is also why no cross-tenant cache hit could be produced there even though
+the underlying defect was real.
+
+**The attribution, precisely:**
+
+| Part | Whose |
+| --- | --- |
+| No resolver exists for the `openbao+kv://` credential ref the registry carries | **The per-tenant app-secret resolver piece.** Not closable here; see §7 for the six requirements the app has of it |
+| The two upload gates asked whether a bucket was *addressable*, not whether storage was *usable* | **Mine, fixed.** A tenant record always names a bucket, so the addressability question answers `true` while every upload throws. `isS3Configured()` keeps that meaning — `buildPublicUrl` needs a placement and no credentials, and a public asset URL must keep resolving for a tenant this process cannot dereference — and `isS3Usable()` is the new question the upload gates ask. A first attempt collapsed the two and three placement tests caught it |
+| The failure surfaces as an unhandled 500 rather than a typed refusal | **Mine, open.** It is a configuration state, not a crash. It is why P03 reports `expected 403 but got 500 — the probe cannot distinguish an accepted signature from a refused one`, so it costs a probe family its verdict on top of the feature |
+
+Until the resolver lands, a pooled fleet has no working uploads, no asset proxy
+and no presigned URLs. That is a larger statement than "P03 is blocked" and it
+belongs in front of anyone who reads this file.
 
 ## 5. Background subsystems
 

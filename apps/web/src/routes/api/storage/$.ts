@@ -83,7 +83,7 @@ const proxyCache = createProxyCache({
  * misconfiguration, only a key that appears in two buckets, which is exactly
  * what an import or a migration produces.
  */
-function proxyCacheKey(key: string): string {
+export function proxyCacheKey(key: string): string {
   return `${currentTenantNamespace()} ${key}`
 }
 

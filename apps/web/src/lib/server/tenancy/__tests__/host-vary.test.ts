@@ -48,17 +48,79 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
 }
 
 /**
- * A file "declares a public cache" if it emits `public, max-age=` or
- * `s-maxage=`. It "varies on Host" if a `Vary` value in the same file names
- * Host, or it builds its headers through the shared helper.
+ * Scanned **per response**, not per file.
+ *
+ * A file-level check is not good enough, and this is not a hypothetical: a
+ * scripted edit once put both `Vary` lines into a route's private-portal branch
+ * — which returns an empty body — while the main response, the one every
+ * crawler and CDN actually receives, got none. The file contained the string
+ * `Vary: 'Host'`, so a file-level regex passed it, and the guard reported green
+ * on a route that was live and wrong.
+ *
+ * So each `Cache-Control` occurrence is judged against the header object it
+ * sits in: walk out to the enclosing `{ … }` and require `Vary` (or the shared
+ * helper) *there*. The helper alone also counts, because it emits both keys
+ * together and cannot be split apart the way two hand-written lines can.
  */
-function scan(text: string): { cacheable: boolean; variesOnHost: boolean } {
-  const stripped = text.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
-  const cacheable = /public,\s*max-age=|s-maxage=/.test(stripped)
-  const variesOnHost =
-    /Vary['"]?\s*:\s*['"`][^'"`]*Host/i.test(stripped) ||
-    /publicTenantCacheHeaders\s*\(/.test(stripped)
-  return { cacheable, variesOnHost }
+export interface CacheableResponse {
+  /** 1-based line of the Cache-Control (or helper) occurrence. */
+  line: number
+  variesOnHost: boolean
+}
+
+function stripComments(text: string): string {
+  return text.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+}
+
+/** The `{ … }` object literal containing `index`, found by brace balance. */
+function enclosingObject(text: string, index: number): string {
+  let depth = 0
+  let start = -1
+  for (let i = index; i >= 0; i--) {
+    const ch = text[i]
+    if (ch === '}') depth++
+    else if (ch === '{') {
+      if (depth === 0) {
+        start = i
+        break
+      }
+      depth--
+    }
+  }
+  if (start < 0) return ''
+  depth = 0
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+  return text.slice(start)
+}
+
+export function scanResponses(text: string): CacheableResponse[] {
+  const stripped = stripComments(text)
+  const out: CacheableResponse[] = []
+  // The helper emits Cache-Control and Vary together, so it is its own witness.
+  const helper = /publicTenantCacheHeaders\s*\(/g
+  for (const m of stripped.matchAll(helper)) {
+    out.push({ line: lineOf(stripped, m.index ?? 0), variesOnHost: true })
+  }
+  const literal = /['"`]?Cache-Control['"`]?\s*:\s*[^,\n]*(?:public,\s*max-age=|s-maxage=)/gi
+  for (const m of stripped.matchAll(literal)) {
+    const obj = enclosingObject(stripped, m.index ?? 0)
+    out.push({
+      line: lineOf(stripped, m.index ?? 0),
+      variesOnHost: /Vary['"`]?\s*:\s*['"`][^'"`]*Host/i.test(obj),
+    })
+  }
+  return out
+}
+
+function lineOf(text: string, index: number): number {
+  return text.slice(0, index).split('\n').length
 }
 
 describe('publicly cacheable responses vary on Host', () => {
@@ -70,22 +132,62 @@ describe('publicly cacheable responses vary on Host', () => {
     expect(files.length).toBeGreaterThan(50)
   })
 
-  it('every cacheable route declares Vary: Host', () => {
+  it('every cacheable RESPONSE declares Vary: Host', () => {
     const offenders: string[] = []
     for (const file of files) {
       const rel = relative(ROUTES_DIR, file)
       if (ALLOWLIST.some((a) => a.file === rel)) continue
-      const { cacheable, variesOnHost } = scan(readFileSync(file, 'utf8'))
-      if (cacheable && !variesOnHost) offenders.push(rel)
+      for (const r of scanResponses(readFileSync(file, 'utf8'))) {
+        if (!r.variesOnHost) offenders.push(`${rel}:${r.line}`)
+      }
     }
     expect(offenders).toEqual([])
   })
 
-  it('actually finds the cacheable routes it is meant to be guarding', () => {
+  it('actually finds the cacheable responses it is meant to be guarding', () => {
     // The previous assertion passes trivially if the regex matches nothing.
-    // Pin the count so a change that stops detecting `public, max-age` is loud.
-    const cacheableCount = files.filter((f) => scan(readFileSync(f, 'utf8')).cacheable).length
-    expect(cacheableCount).toBeGreaterThanOrEqual(7)
+    // Pin the count so a change that stops detecting them is loud.
+    const total = files.reduce((n, f) => n + scanResponses(readFileSync(f, 'utf8')).length, 0)
+    expect(total).toBeGreaterThanOrEqual(10)
+  })
+})
+
+describe('the scanner judges each response, not each file', () => {
+  // The shape that got through: one branch carries Vary, the branch that serves
+  // the cacheable body does not. A file-level check sees the string and passes.
+  const MIXED = `
+    export const handler = async () => {
+      if (isPrivate) {
+        return new Response('', {
+          headers: { 'Cache-Control': 'public, max-age=3600', Vary: 'Host' },
+        })
+      }
+      return new Response(body, {
+        headers: { 'Cache-Control': 'public, max-age=3600' },
+      })
+    }
+  `
+
+  it('flags the response that omits Vary even when a sibling branch has it', () => {
+    const results = scanResponses(MIXED)
+    expect(results).toHaveLength(2)
+    expect(results.filter((r) => !r.variesOnHost)).toHaveLength(1)
+  })
+
+  it('passes a file where every cacheable response carries Vary', () => {
+    const ok = MIXED.replace(
+      "headers: { 'Cache-Control': 'public, max-age=3600' },",
+      "headers: { 'Cache-Control': 'public, max-age=3600', Vary: 'Host' },"
+    )
+    expect(scanResponses(ok).every((r) => r.variesOnHost)).toBe(true)
+  })
+
+  it('does not credit a Vary that sits in a different object in the same file', () => {
+    const decoy = `
+      const unrelated = { Vary: 'Host' }
+      const res = new Response(b, { headers: { 'Cache-Control': 'public, max-age=60' } })
+    `
+    expect(scanResponses(decoy).some((r) => !r.variesOnHost)).toBe(true)
   })
 })
 

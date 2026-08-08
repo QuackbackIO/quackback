@@ -148,12 +148,32 @@ function resolveStorageCredentials(): StorageCredentials {
 }
 
 /**
- * Check if S3 storage is configured. True whenever a bucket can be addressed —
- * credential resolution is a separate failure, reported where it happens.
+ * Whether a bucket can be *addressed*. Deliberately does NOT ask about
+ * credentials: `buildPublicUrl` needs a placement and nothing else, and a
+ * public asset URL must keep resolving for a tenant whose credentials this
+ * process cannot dereference.
  */
 export function isS3Configured(): boolean {
   if (getCurrentTenant()) return true
   return !!(config.s3Bucket && config.s3Region && config.s3AccessKeyId && config.s3SecretAccessKey)
+}
+
+/**
+ * Whether an operation that actually touches the bucket can be attempted.
+ *
+ * Addressability and usability are different questions, and under pooled
+ * tenancy they diverge: a tenant record always names a bucket, so
+ * {@link isS3Configured} is true while every upload throws, because the
+ * credential reference is an `openbao+kv://` ref no resolver has been
+ * registered for.
+ *
+ * Callers that gate an upload want this one. Both of them already handle
+ * "storage is off" by skipping, so asking the addressability question there
+ * turned a clean skip into an exception.
+ */
+export function isS3Usable(): boolean {
+  if (!isS3Configured()) return false
+  return getCurrentTenant() ? credentialResolver !== null : true
 }
 
 /**

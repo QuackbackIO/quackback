@@ -29,6 +29,7 @@ const {
   getStoragePlacement,
   getS3Config,
   isS3Configured,
+  isS3Usable,
   setStorageCredentialResolver,
 } = await import('../s3')
 const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
@@ -124,6 +125,25 @@ describe('placement', () => {
     setStorageCredentialResolver(null)
     expect(() => withTenant('tenant-alpha', () => getStoragePlacement())).not.toThrow()
     expect(withTenant('tenant-alpha', () => isS3Configured())).toBe(true)
+  })
+
+  it('is NOT usable without a resolver, even though the bucket is addressable', () => {
+    // Addressability and usability diverge under pooled tenancy, and conflating
+    // them is not academic: a tenant record always names a bucket, so the
+    // addressability question answers `true` while every upload throws. The two
+    // callers that gate an upload already skip cleanly on `false`, so the wrong
+    // question there turns a skip into an exception.
+    setStorageCredentialResolver(null)
+    expect(withTenant('tenant-alpha', () => isS3Usable())).toBe(false)
+    expect(withTenant('tenant-alpha', () => isS3Configured())).toBe(true)
+  })
+
+  it('becomes usable once a resolver is registered', () => {
+    // The positive control: without it, `isS3Usable` could return false
+    // unconditionally and the assertion above would still pass.
+    setStorageCredentialResolver(() => ({ accessKeyId: 'k', secretAccessKey: 's' }))
+    expect(withTenant('tenant-alpha', () => isS3Usable())).toBe(true)
+    setStorageCredentialResolver(null)
   })
 })
 

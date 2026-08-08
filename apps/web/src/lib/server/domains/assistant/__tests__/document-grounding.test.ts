@@ -30,6 +30,7 @@ vi.mock('@/lib/server/domains/ai/models', () => ({
 }))
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Configured: () => false,
+  isS3Usable: () => false,
   uploadObject: vi.fn(),
   generateStorageKey: vi.fn(),
 }))

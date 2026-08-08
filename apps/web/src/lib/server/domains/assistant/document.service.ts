@@ -16,7 +16,7 @@ import { db, assistantDocuments, eq, sql } from '@/lib/server/db'
 import type { AssistantDocumentId, PrincipalId } from '@quackback/ids'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
-import { isS3Configured, uploadObject, generateStorageKey } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadObject, generateStorageKey } from '@/lib/server/storage/s3'
 import { extractPdfText } from './pdf-text'
 import { extractDocxText } from './docx-text'
 import { logger } from '@/lib/server/logger'
@@ -96,7 +96,7 @@ export async function ingestAssistantDocument(input: IngestAssistantDocumentInpu
   }
 
   let storageKey: string | null = null
-  if (isS3Configured()) {
+  if (isS3Usable()) {
     storageKey = generateStorageKey('assistant-documents', input.fileName)
     await uploadObject(storageKey, Buffer.from(input.bytes), input.mimeType)
   }
