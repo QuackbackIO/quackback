@@ -279,6 +279,24 @@ suspend?") is answered yes — under `QUACKBACK_ROLE=web`, and only under it.
 
 ---
 
+### Running the isolation probe against this fleet
+
+`apps/web/tenancy-probe/` is the instrument this piece exists to satisfy. Two
+things about running it here are not obvious and cost a full run each:
+
+**Tear the fixture down between orderings.** The suite derives its canaries from
+the *slot* (`alpha`/`bravo`) while its fixture is find-or-create against a
+stable slug and therefore persists per *tenant*. Boards are never rewritten;
+posts are. So re-running with the tenant↔slot mapping swapped leaves each tenant
+holding the previous run's slot canary, and the suite reads that as the other
+tenant's data — in both directions, symmetrically, with nothing having crossed.
+Run `--teardown` between orderings, or the second ordering measures the first.
+
+**Plant the identity token where a public surface renders it.** `settings.name`
+is not enough — no judged surface renders it, so P06 reports `ERROR` (it could
+not see) rather than a verdict. The portal welcome-card headline
+(`settings.portal_config.welcomeCard.title`) is a surface it does judge.
+
 ### The surface the isolation probe cannot judge
 
 The Piece 1 probe suite's own README records `/api/widget/config.json` as
