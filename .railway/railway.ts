@@ -34,7 +34,10 @@ export default defineRailway(() => {
     // Schema work runs once per deploy on the direct endpoint: the migrator
     // takes a session-level advisory lock and issues CREATE INDEX CONCURRENTLY,
     // neither of which survives a transaction-mode pooler.
-    preDeployCommand: ['sh', '-c', 'DATABASE_URL="$DIRECT_DATABASE_URL" bun /app/migrate.mjs'],
+    //
+    // One shell string, not an argv array — the platform rejects argv form, and
+    // without the explicit `sh -c` the variable substitution is not expanded.
+    preDeployCommand: ['sh -c \'DATABASE_URL="$DIRECT_DATABASE_URL" bun /app/migrate.mjs\''],
 
     deploy: { restartPolicyType: 'ON_FAILURE', restartPolicyMaxRetries: 3 },
 
