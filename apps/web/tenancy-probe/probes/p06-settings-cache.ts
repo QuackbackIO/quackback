@@ -8,29 +8,53 @@
  * feature flags and auth configuration are served to tenant B. Unlike the
  * in-heap singletons, it survives a restart.
  *
- * ## Why this probe compares tokens rather than shapes
+ * ## Identity is planted, not derived
  *
- * An earlier version searched served responses for the workspace slug and the
- * workspace TypeID, and it could not see this leak at all. Neither string is
- * present in what actually leaks: `/api/widget/config.json` carries theme
- * colours, tabs and flags (`lib/server/widget/public-config.ts`) and no
- * identifier whatsoever, and the portal document carries the workspace *name*.
- * The probe was looking for a vocabulary the leak does not speak.
+ * The suite does not infer what makes a tenant distinguishable — it PLANTS it,
+ * exactly as it plants a per-tenant canary in post content. Each tenant's
+ * settings carry a probe-owned identity token (fixtures.ts `IDENTITY_TOKEN`,
+ * or the operator's own via --alpha-identity-token) stamped into a field a
+ * public surface renders, and preflight installs it as a tripwire marker.
+ * Three things follow by construction rather than by filtering:
  *
- * So the identity vocabulary is now derived from what each tenant has actually
- * STORED — name, slug, workspace id, and every distinctive leaf value in
- * `branding_config`, `custom_css`, `portal_config` and `widget_config` — and
- * reduced to the tokens that are EXCLUSIVE to one tenant. A token both tenants
- * share cannot attribute anything and is discarded.
+ *  - Admissibility is a property the suite CONTROLS. The token is distinctive,
+ *    appears in no UI chrome, and is never swallowed by a genericity filter —
+ *    a workspace named `Help Center` or `Acme` is as judgeable as any other.
+ *  - A foreign planted token on the wrong host needs no corroboration: it has
+ *    no innocent explanation, so its presence is a LEAK on its own.
+ *  - A PARTIAL identity leak fails by construction. One field crossing while
+ *    the host keeps rendering its own (bravo paints its own colour but renders
+ *    alpha's name) leaves the leaking surface carrying the foreign planted
+ *    token — the shape that defeated every derived-vocabulary defence, because
+ *    the leaked value was generic, the tripwire had dropped it, and the host
+ *    still showed an identity of its own.
+ *
+ * ## The visibility gate counts only what is observable
+ *
+ * The gate this probe enforces before it may PASS is: each host must be caught
+ * serving its OWN planted token on at least one judged surface. An earlier
+ * version gated on the number of stored tokens exclusive to each tenant — but
+ * those two tokens were the workspace TypeID, which appears in no public
+ * surface ever, and the brand colour, the one field that had not leaked. It
+ * certified the tenants distinguishable on a surface where they were not. Any
+ * admissibility rule built on stored values has that shape; this one is built
+ * on observed responses.
+ *
+ * ## The derived vocabulary is retained as a secondary layer
+ *
+ * Name, slug, workspace id and theme colours — reduced to exclusive,
+ * non-generic tokens — are still checked with own-identity corroboration, and
+ * still catch leaks on surfaces the planted token does not reach (the widget
+ * public config carries colours and no text). A leak observed here is evidence
+ * regardless of the planted layer; a PASS is not.
  *
  * ## Why stability is measured on tokens rather than bytes
  *
- * The earlier version also asserted that each tenant's response was
- * byte-identical across interleaved rounds. Any per-request-varying byte — a
- * CSP nonce, a timestamp, a streaming id — made that fail, so a perfectly
- * isolated fleet reported LEAK. Stability is now measured on the set of
- * identity tokens present, which a nonce cannot perturb and a swapped cache
- * entry cannot survive.
+ * Asserting byte-identical responses across interleaved rounds made any
+ * per-request-varying byte — a CSP nonce, a timestamp — report LEAK on a
+ * perfectly isolated fleet. Stability is measured on the set of identity
+ * tokens present, which a nonce cannot perturb and a swapped cache entry
+ * cannot survive.
  */
 
 import { control, describeResponse, blocked, decide } from './helpers'
@@ -47,17 +71,12 @@ const SETTINGS_SURFACES = [
 const INTERLEAVE_ROUNDS = 3
 
 /**
- * Every string that could identify this tenant in a served response.
- *
- * Only the name, the slug, the workspace id and the theme COLOURS are mined.
- * An earlier version walked every leaf of `portal_config` and `widget_config`
- * too, which contributed `paragraph`, `public`, `none` and the rest of the enum
- * vocabulary — none of which identifies anybody, all of which turned up in the
- * other tenant's ordinary output and produced exit 2 on correct fleets.
- *
- * Everything here is then passed through `admissibleTokens`, so greys,
- * near-universal colours, short strings, all-common-word names and anything
- * this suite's own fixture writes are dropped before they can accuse.
+ * Every string that could identify this tenant in a served response — the
+ * DERIVED (secondary) vocabulary. See the file header: the planted token is
+ * the primary identity and passes through no filter; everything here is
+ * heuristic and goes through `admissibleTokens`, so greys, near-universal
+ * colours, short strings, all-common-word names and anything this suite's own
+ * fixture writes are dropped before they can accuse.
  */
 function identityTokens(row: SettingsRow): Set<string> {
   const candidates: string[] = []
@@ -81,6 +100,10 @@ function present(body: string, tokens: string[]): string[] {
   return tokens.filter((t) => haystack.includes(t.toLowerCase()))
 }
 
+function hasToken(body: string, token: string): boolean {
+  return body.toLowerCase().includes(token.toLowerCase())
+}
+
 async function readSettings(handle: TenantHandle): Promise<SettingsRow | null> {
   const [row] = await handle.db!.query<SettingsRow>(SETTINGS_ROW_SQL)
   return row ?? null
@@ -91,9 +114,10 @@ export const p06SettingsCache: Probe = {
   name: 'settings-branding-flag-cache-cross-tenant',
   family: 'cache',
   proves:
-    'No settings-derived public surface serves one tenant’s stored identity — name, slug, workspace ' +
-    'id, branding, theme colours or portal configuration — under the other tenant’s hostname, and ' +
-    'each tenant’s own identity stays put across interleaved reads.',
+    'No settings-derived public surface serves one tenant’s planted identity token — or its stored ' +
+    'name, slug, workspace id, branding or theme colours — under the other tenant’s hostname, each ' +
+    'host provably serves its own planted token on at least one judged surface, and each tenant’s ' +
+    'identity stays put across interleaved reads.',
   requires: ['http', 'db'],
   poolingCaveat:
     'The cache keys this targets (redis.ts CACHE_KEYS) are bare literals, so they collide only when ' +
@@ -104,9 +128,9 @@ export const p06SettingsCache: Probe = {
   async run(ctx: ProbeContext) {
     const { alpha, bravo } = ctx
     const attempted =
-      `derive each tenant's stored identity vocabulary from its settings row, then read ` +
-      `${SETTINGS_SURFACES.map((s) => s.path).join(' and ')} from both tenants ${INTERLEAVE_ROUNDS} ` +
-      `times alternating, checking that neither host ever serves the other's identity`
+      `read ${SETTINGS_SURFACES.map((s) => s.path).join(' and ')} from both tenants ` +
+      `${INTERLEAVE_ROUNDS} times alternating, checking that neither host ever serves the other's ` +
+      `planted identity token or stored identity, and that each host serves its own planted token`
 
     if (!alpha.db || !bravo.db) {
       return blocked({
@@ -148,34 +172,29 @@ export const p06SettingsCache: Probe = {
       })
     }
 
-    const alphaTokens = identityTokens(alphaRow)
-    const bravoTokens = identityTokens(bravoRow)
-    const alphaOnly = exclusive(alphaTokens, bravoTokens)
-    const bravoOnly = exclusive(bravoTokens, alphaTokens)
-    evidence.exclusiveTokenCounts = { alpha: alphaOnly.length, bravo: bravoOnly.length }
-
-    // --- visibility gate: the tenants must be distinguishable at all ---------
-    controls.push(
-      control(
-        'visibility',
-        'the two tenants store distinguishable settings',
-        alphaOnly.length > 0 && bravoOnly.length > 0,
-        alphaOnly.length > 0 && bravoOnly.length > 0
-          ? `alpha has ${alphaOnly.length} exclusive identity token(s), bravo has ${bravoOnly.length}`
-          : `alpha ${alphaOnly.length}, bravo ${bravoOnly.length} — the two tenants are configured ` +
-              `identically, so a cross-tenant cache serve would be indistinguishable from a correct ` +
-              `response. Give them different names, slugs or branding and re-run.`
+    // --- the planted identity vocabulary -------------------------------------
+    //
+    // Installed by preflight from --alpha-identity-token / the suite defaults.
+    // These are the tokens this probe judges on; they pass through no filter.
+    const planted = {
+      alpha: alpha.markers.ids.identityToken,
+      bravo: bravo.markers.ids.identityToken,
+    }
+    if (!planted.alpha || !planted.bravo) {
+      controls.push(
+        control(
+          'visibility',
+          'both tenants hold a planted identity token',
+          false,
+          `alpha: ${planted.alpha ? 'present' : 'MISSING'}, bravo: ${planted.bravo ? 'present' : 'MISSING'} — ` +
+            'preflight installs these from --alpha-identity-token / --bravo-identity-token or the suite ' +
+            'defaults; without them this probe would be back to inferring identity from stored values, ' +
+            'which can certify distinguishability it cannot observe'
+        )
       )
-    )
-
-    if (alphaOnly.length === 0 || bravoOnly.length === 0) {
       return decide({
         attempted,
         controls,
-        // Every early return here follows a failed `visibility` control, so
-        // `decide()` yields ERROR. The pass text is filled in anyway: if a
-        // future edit removed the guarding control, an empty PASS reason would
-        // be considerably worse than a slightly wrong one.
         leakReason: 'a settings-derived response crossed the tenant boundary',
         onPass: {
           observed: 'the probe returned before it could compare both tenants',
@@ -184,8 +203,22 @@ export const p06SettingsCache: Probe = {
         evidence,
       })
     }
+    const plantedAlpha = planted.alpha
+    const plantedBravo = planted.bravo
+
+    // --- the derived (secondary) vocabulary -----------------------------------
+    const alphaTokens = identityTokens(alphaRow)
+    const bravoTokens = identityTokens(bravoRow)
+    const alphaOnly = exclusive(alphaTokens, bravoTokens)
+    const bravoOnly = exclusive(bravoTokens, alphaTokens)
+    // Recorded for transparency only. An earlier version GATED on these counts,
+    // which certified the tenants distinguishable on tokens (the workspace
+    // TypeID, an unleaked colour) that no judged surface necessarily carries.
+    // The gate below counts observed responses instead.
+    evidence.exclusiveTokenCounts = { alpha: alphaOnly.length, bravo: bravoOnly.length }
 
     let discriminatingSurfaces = 0
+    const plantedSurfaces: { alpha: string[]; bravo: string[] } = { alpha: [], bravo: [] }
 
     for (const surface of SETTINGS_SURFACES) {
       const rounds: Array<{ alphaBody: string; bravoBody: string }> = []
@@ -213,25 +246,82 @@ export const p06SettingsCache: Probe = {
         rounds.push({ alphaBody: a.text, bravoBody: b.text })
       }
 
-      const ownOnAlpha = rounds.map((r) => present(r.alphaBody, alphaOnly).join(','))
-      const ownOnBravo = rounds.map((r) => present(r.bravoBody, bravoOnly).join(','))
-      const foreignOnAlpha = present(rounds[0].alphaBody, bravoOnly)
-      const foreignOnBravo = present(rounds[0].bravoBody, alphaOnly)
+      // Own identity = derived own tokens + the planted token. The union is
+      // what stability is measured on, and what corroboration asks after: a
+      // host showing ANY of its own identity is rendering itself, so foreign
+      // derived tokens alongside it are incidental overlap.
+      const ownOnAlpha = rounds.map((r) =>
+        [
+          ...present(r.alphaBody, alphaOnly),
+          ...(hasToken(r.alphaBody, plantedAlpha) ? ['<planted>'] : []),
+        ].join(',')
+      )
+      const ownOnBravo = rounds.map((r) =>
+        [
+          ...present(r.bravoBody, bravoOnly),
+          ...(hasToken(r.bravoBody, plantedBravo) ? ['<planted>'] : []),
+        ].join(',')
+      )
+      // Foreign presence is checked across EVERY round, not just the first: a
+      // cache entry swapped mid-interleave must not escape by leaking late.
+      const foreignOnAlpha = [...new Set(rounds.flatMap((r) => present(r.alphaBody, bravoOnly)))]
+      const foreignOnBravo = [...new Set(rounds.flatMap((r) => present(r.bravoBody, alphaOnly)))]
+
+      const foreignPlantedOnAlpha = rounds.some((r) => hasToken(r.alphaBody, plantedBravo))
+      const foreignPlantedOnBravo = rounds.some((r) => hasToken(r.bravoBody, plantedAlpha))
+      if (rounds.some((r) => hasToken(r.alphaBody, plantedAlpha))) {
+        plantedSurfaces.alpha.push(surface.path)
+      }
+      if (rounds.some((r) => hasToken(r.bravoBody, plantedBravo))) {
+        plantedSurfaces.bravo.push(surface.path)
+      }
 
       const discriminating = ownOnAlpha[0].length > 0 || ownOnBravo[0].length > 0
       if (discriminating) discriminatingSurfaces++
 
-      // --- the leak check ----------------------------------------------------
+      // --- the planted-token leak check, one control per direction -----------
       //
-      // A foreign token only accuses when the host serving it shows NONE of its
-      // own identity on this surface. That is the difference between "bravo is
-      // serving alpha's cached blob" and "bravo rendered its own page, which
-      // happens to contain a word that is also in alpha's settings".
+      // A planted token on the wrong host has no innocent explanation — it is
+      // probe-owned, appears in no chrome, and passes through no filter — so
+      // its presence accuses on its own, with no corroboration requirement.
+      // This is the control a partial identity leak cannot escape: the leaking
+      // surface carries the foreign planted token while missing the host's own.
+      controls.push(
+        control(
+          'negative',
+          `alpha's planted identity token → bravo (${surface.label})`,
+          !foreignPlantedOnBravo,
+          foreignPlantedOnBravo
+            ? `BRAVO SERVED ALPHA'S PLANTED TOKEN "${plantedAlpha}" — alpha's settings blob crossed ` +
+                'the tenant boundary on this surface'
+            : 'never served',
+          'a-to-b',
+          `planted-identity:${surface.path}`
+        )
+      )
+      controls.push(
+        control(
+          'negative',
+          `bravo's planted identity token → alpha (${surface.label})`,
+          !foreignPlantedOnAlpha,
+          foreignPlantedOnAlpha
+            ? `ALPHA SERVED BRAVO'S PLANTED TOKEN "${plantedBravo}" — bravo's settings blob crossed ` +
+                'the tenant boundary on this surface'
+            : 'never served',
+          'b-to-a',
+          `planted-identity:${surface.path}`
+        )
+      )
+
+      // --- the derived-vocabulary leak check -----------------------------------
       //
-      // Byte comparison cannot make this distinction: a per-request nonce makes
-      // a leaking response differ from the original, and an incidental overlap
-      // makes a correct response contain a foreign token. Asking whose identity
-      // the host is actually presenting is unaffected by both.
+      // A foreign derived token only accuses when the host serving it shows
+      // NONE of its own identity on this surface. That is the difference
+      // between "bravo is serving alpha's cached blob" and "bravo rendered its
+      // own page, which happens to contain a word that is also in alpha's
+      // settings". Byte comparison cannot make this distinction: a per-request
+      // nonce makes a leaking response differ from the original, and an
+      // incidental overlap makes a correct response contain a foreign token.
       const bravoServesAlphaInstead = foreignOnBravo.length > 0 && ownOnBravo[0].length === 0
       const alphaServesBravoInstead = foreignOnAlpha.length > 0 && ownOnAlpha[0].length === 0
       const incidental = [
@@ -271,8 +361,8 @@ export const p06SettingsCache: Probe = {
       )
 
       // --- the cache-swap check: identity must not move between rounds -------
-      // Measured on identity tokens, never on bytes, so a nonce or timestamp
-      // cannot manufacture a failure.
+      // Measured on identity tokens (planted included), never on bytes, so a
+      // nonce or timestamp cannot manufacture a failure.
       if (discriminating) {
         const alphaStable = ownOnAlpha.every((set) => set === ownOnAlpha[0])
         const bravoStable = ownOnBravo.every((set) => set === ownOnBravo[0])
@@ -296,19 +386,39 @@ export const p06SettingsCache: Probe = {
         bravoOwnTokensFound: ownOnBravo[0] ? ownOnBravo[0].split(',').length : 0,
         foreignOnAlpha,
         foreignOnBravo,
+        foreignPlantedOnAlpha,
+        foreignPlantedOnBravo,
       }
     }
 
-    // --- visibility gate: at least one surface must actually carry identity --
+    evidence.plantedSurfaces = plantedSurfaces
+    evidence.discriminatingSurfaces = discriminatingSurfaces
+
+    // --- visibility gate: each host must be caught serving its OWN token -----
+    //
+    // This is the only admissibility rule the probe enforces, and it counts
+    // observed responses, not stored values. Until a host provably serves its
+    // own planted token on a judged surface, a PASS would certify
+    // distinguishability the suite cannot observe — the exact failure the
+    // planted-token mechanism exists to remove.
+    const alphaPlantedVisible = plantedSurfaces.alpha.length > 0
+    const bravoPlantedVisible = plantedSurfaces.bravo.length > 0
     controls.push(
       control(
         'visibility',
-        'at least one settings surface carries a tenant’s own identity',
-        discriminatingSurfaces > 0,
-        discriminatingSurfaces > 0
-          ? `${discriminatingSurfaces} of ${SETTINGS_SURFACES.length} surface(s) are identity-bearing`
-          : 'no surface carried any stored identity token, so none of them could reveal a cross-tenant ' +
-              'serve. This probe saw nothing and proves nothing.'
+        'each host serves its own planted identity token on at least one judged surface',
+        alphaPlantedVisible && bravoPlantedVisible,
+        alphaPlantedVisible && bravoPlantedVisible
+          ? `alpha's token observed on ${plantedSurfaces.alpha.join(', ')}; bravo's on ${plantedSurfaces.bravo.join(', ')}`
+          : (!alphaPlantedVisible
+              ? `alpha never served its own token "${plantedAlpha}" on any judged surface. `
+              : '') +
+              (!bravoPlantedVisible
+                ? `bravo never served its own token "${plantedBravo}" on any judged surface. `
+                : '') +
+              'Plant the token into a settings-derived field a public surface renders (the workspace ' +
+              'name, or the portal welcome-card headline), or pass --alpha-identity-token / ' +
+              '--bravo-identity-token with the token that was planted, and re-run.'
       )
     )
 
@@ -316,12 +426,14 @@ export const p06SettingsCache: Probe = {
       attempted,
       controls,
       leakReason:
-        'a settings-derived response carried the other tenant’s stored identity, or a tenant’s own ' +
-        'identity moved between interleaved reads — the signature of a cache keyed without a tenant segment',
+        'a settings-derived response carried the other tenant’s planted identity token or stored ' +
+        'identity, or a tenant’s own identity moved between interleaved reads — the signature of a ' +
+        'cache keyed without a tenant segment',
       onPass: {
         observed:
-          `${discriminatingSurfaces} identity-bearing surface(s); each host served only its own stored ` +
-          `identity and held it across ${INTERLEAVE_ROUNDS} interleaved rounds`,
+          `each host served its own planted identity token (${plantedSurfaces.alpha.length + plantedSurfaces.bravo.length} ` +
+          `token-bearing surface reading(s)) and only its own stored identity, held across ` +
+          `${INTERLEAVE_ROUNDS} interleaved rounds`,
         reason:
           'settings, branding and configuration reads did not cross tenants under interleaved load',
       },

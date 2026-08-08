@@ -91,6 +91,20 @@ export interface ControlOutcome {
    * `both` is for a control that evaluates both directions in one check.
    */
   direction?: 'a-to-b' | 'b-to-a' | 'both'
+  /**
+   * Which cross-tenant attempt this control is one direction of.
+   *
+   * Required on every `negative` control whose direction is `a-to-b` or
+   * `b-to-a`, and asserted per attempt by `__tests__/end-to-end.test.ts`: the
+   * controls sharing an attemptId must cover BOTH directions between them. The
+   * probe-aggregate check that came before this could not stop a fresh
+   * one-directional control landing in an already-symmetric probe — the union
+   * of directions still covered both, and the asymmetric attempt sailed through.
+   *
+   * `both`-direction controls need no attemptId: they evaluate the pair in one
+   * check by construction.
+   */
+  attemptId?: string
 }
 
 /** What a probe returns. The runner turns exceptions into `ERROR` itself. */
@@ -312,6 +326,16 @@ export interface ProbeConfig {
   bravoApiKey?: string
   alphaWidgetSecret?: string
   bravoWidgetSecret?: string
+  /**
+   * The per-tenant identity token planted into a settings-derived field that a
+   * public surface renders (the workspace name, or the portal welcome-card
+   * headline). P06 judges tenant identity on these tokens and nothing else it
+   * has to infer; when unset, the suite-owned defaults in `fixtures.ts`
+   * (`IDENTITY_TOKEN`) are assumed — pass these flags when the operator planted
+   * a custom token instead.
+   */
+  alphaIdentityToken?: string
+  bravoIdentityToken?: string
   /** Exit 0 even when probes are BLOCKED. Never makes a LEAK or ERROR pass. */
   allowBlocked: boolean
   /** Write the JSON report here instead of stdout. */

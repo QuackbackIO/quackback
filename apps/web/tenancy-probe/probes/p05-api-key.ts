@@ -122,7 +122,14 @@ export const p05ApiKey: Probe = {
       crossDetail = `HTTP ${crossAtoB.status}, expected 401: ${describeResponse(crossAtoB, 200)}`
     }
     controls.push(
-      control('negative', "alpha's key → bravo GET /api/v1/boards", crossOk, crossDetail, 'a-to-b')
+      control(
+        'negative',
+        "alpha's key → bravo GET /api/v1/boards",
+        crossOk,
+        crossDetail,
+        'a-to-b',
+        'api-key-boards-listing'
+      )
     )
 
     // --- negative: the reverse direction ------------------------------------
@@ -138,7 +145,8 @@ export const p05ApiKey: Probe = {
         crossBtoA.status === 401
           ? 'refused with 401'
           : `HTTP ${crossBtoA.status}, expected 401: ${describeResponse(crossBtoA, 200)}`,
-        'b-to-a'
+        'b-to-a',
+        'api-key-boards-listing'
       )
     )
 
@@ -166,7 +174,8 @@ export const p05ApiKey: Probe = {
             : returnedForeignPost
               ? `returned ${fromSlot.toUpperCase()}'s fixture post ${from.fixture?.postId}`
               : `HTTP ${search.status} with ${results.length} result(s), expected 401`,
-          dirFrom(fromSlot)
+          dirFrom(fromSlot),
+          'api-key-canary-search'
         )
       )
     }

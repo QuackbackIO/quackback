@@ -11,8 +11,15 @@
 
 import { createTenantHttp, type FetchLike } from './http'
 import { createTenantDb, typeId, SETTINGS_ROW_SQL } from './db'
-import { discoverMarkers, provisionFixture, verifyCollisions, CANARY } from './fixtures'
+import {
+  discoverMarkers,
+  identityTokenFor,
+  provisionFixture,
+  verifyCollisions,
+  CANARY,
+} from './fixtures'
 import { isGenericToken } from './vocabulary'
+import { MIN_MARKER_LENGTH } from './tripwire'
 import type {
   Capability,
   ProbeConfig,
@@ -340,7 +347,69 @@ export async function runPreflight(
     }
   }
 
-  // ---- 6. Fixture ----------------------------------------------------------
+  // ---- 6. Planted identity tokens ------------------------------------------
+  //
+  // P06 judges tenant identity on tokens the suite controls, not on values it
+  // infers from stored settings — any admissibility rule built on stored values
+  // can certify the tenants distinguishable on a surface where they are not
+  // (the workspace TypeID appears in no public surface, ever). The tokens are
+  // planted by the operator into a settings-derived field a public surface
+  // renders; the suite validates the vocabulary here and verifies observability
+  // in P06. A bad vocabulary makes every downstream identity verdict
+  // meaningless, so this is a hard gate, in the same class as same-origin.
+  const identityTokens: Record<TenantSlot, string> = {
+    alpha: identityTokenFor('alpha', config),
+    bravo: identityTokenFor('bravo', config),
+  }
+  const tokenProblems: string[] = []
+  for (const slot of ['alpha', 'bravo'] as TenantSlot[]) {
+    const token = identityTokens[slot]
+    if (token.length < MIN_MARKER_LENGTH) {
+      tokenProblems.push(
+        `${slot} token "${token}" is shorter than ${MIN_MARKER_LENGTH} characters — the tripwire ` +
+          'would ignore it and attribution would silently degrade'
+      )
+    }
+    if (isGenericToken(token)) {
+      tokenProblems.push(
+        `${slot} token "${token}" is generic — it can appear in the other tenant's own output, ` +
+          'so it cannot accuse. Use the suite default or another distinctive string.'
+      )
+    }
+  }
+  if (identityTokens.alpha === identityTokens.bravo) {
+    tokenProblems.push(
+      `both tenants were given the SAME token ("${identityTokens.alpha}") — a leak could not be ` +
+        'attributed to a tenant'
+    )
+  } else if (
+    identityTokens.alpha.toLowerCase().includes(identityTokens.bravo.toLowerCase()) ||
+    identityTokens.bravo.toLowerCase().includes(identityTokens.alpha.toLowerCase())
+  ) {
+    tokenProblems.push(
+      'one token is a substring of the other — substring matching would misattribute'
+    )
+  }
+  steps.push({
+    name: 'identity-tokens',
+    ok: tokenProblems.length === 0,
+    detail:
+      tokenProblems.length === 0
+        ? `alpha "${identityTokens.alpha}", bravo "${identityTokens.bravo}" — distinct, ` +
+          'non-generic, long enough to accuse'
+        : tokenProblems.join('; '),
+  })
+  if (tokenProblems.length > 0) {
+    return finish(
+      steps,
+      capabilities,
+      alpha,
+      bravo,
+      `the planted identity token vocabulary is unusable: ${tokenProblems.join('; ')}`
+    )
+  }
+
+  // ---- 7. Fixture ----------------------------------------------------------
   if (!capabilities.has('api-key')) {
     steps.push({
       name: 'fixture',
@@ -384,7 +453,7 @@ export async function runPreflight(
     }
   }
 
-  // ---- 7. Markers and the collision gate -----------------------------------
+  // ---- 8. Markers and the collision gate -----------------------------------
   for (const handle of both) {
     const discovered = await discoverMarkers(handle)
     // Preserve ids learned earlier (the admin user id from sign-in).
@@ -438,6 +507,16 @@ export async function runPreflight(
         'A shared value cannot attribute a leak, and would otherwise fire against each tenant’s own ' +
         'correct response. Whether sharing it is itself a finding is decided by the owning probe.',
     })
+  }
+
+  // The planted identity tokens are installed AFTER both prunings above: the
+  // `identity-tokens` gate has already proven them distinct, non-generic and
+  // non-substring, so they can never be dropped — and they must never be,
+  // because they are the vocabulary P06 judges on and the tripwire's strongest
+  // marker. The operator planted each into a settings-derived field its host
+  // renders publicly; P06 verifies that observability rather than assuming it.
+  for (const handle of both) {
+    handle.markers.ids.identityToken = identityTokens[handle.slot]
   }
 
   const collision = verifyCollisions(alpha, bravo)

@@ -16,9 +16,17 @@ export function control(
   label: string,
   ok: boolean,
   detail: string,
-  direction?: ControlOutcome['direction']
+  direction?: ControlOutcome['direction'],
+  attemptId?: string
 ): ControlOutcome {
-  return { kind, label, ok, detail, ...(direction ? { direction } : {}) }
+  return {
+    kind,
+    label,
+    ok,
+    detail,
+    ...(direction ? { direction } : {}),
+    ...(attemptId ? { attemptId } : {}),
+  }
 }
 
 /** Direction helper for the `from → to` loops every cross-tenant probe uses. */

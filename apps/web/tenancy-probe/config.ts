@@ -38,6 +38,14 @@ Fixture identity (must be IDENTICAL for both tenants — the collision is the po
   --admin-email <email>      Default: admin@example.com               (env PROBE_ADMIN_EMAIL)
   --admin-password <pw>      Default: password                        (env PROBE_ADMIN_PASSWORD)
 
+Planted identity (must DIFFER per tenant — the suite judges tenant identity on these)
+  --alpha-identity-token <s> Token planted in alpha's settings        (env ALPHA_IDENTITY_TOKEN)
+  --bravo-identity-token <s> Token planted in bravo's settings        (env BRAVO_IDENTITY_TOKEN)
+                             Defaults: the suite-owned qbprobeidentityalpha / qbprobeidentitybravo.
+                             Plant the token into a settings-derived field a public surface renders
+                             (the workspace name, or the portal welcome-card headline), then run.
+                             Pass these flags only when a custom token was planted instead.
+
 Output and behaviour
   --json-out <path>          Write the JSON report to a file instead of stdout
   --only <id,id>             Run only these probe ids (e.g. P01,P08)
@@ -141,6 +149,8 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     bravoStorageSecret: flags.get('bravo-storage-secret') ?? env.BRAVO_S3_SECRET_ACCESS_KEY,
     alphaWidgetSecret: flags.get('alpha-widget-secret') ?? env.ALPHA_WIDGET_SECRET,
     bravoWidgetSecret: flags.get('bravo-widget-secret') ?? env.BRAVO_WIDGET_SECRET,
+    alphaIdentityToken: flags.get('alpha-identity-token') ?? env.ALPHA_IDENTITY_TOKEN,
+    bravoIdentityToken: flags.get('bravo-identity-token') ?? env.BRAVO_IDENTITY_TOKEN,
     allowBlocked: bare.has('allow-blocked'),
     jsonOut: flags.get('json-out'),
     only: only && only.length > 0 ? only : undefined,
@@ -160,6 +170,8 @@ const KNOWN_FLAGS = new Set([
   'bravo-storage-secret',
   'alpha-widget-secret',
   'bravo-widget-secret',
+  'alpha-identity-token',
+  'bravo-identity-token',
   'admin-email',
   'admin-password',
   'json-out',

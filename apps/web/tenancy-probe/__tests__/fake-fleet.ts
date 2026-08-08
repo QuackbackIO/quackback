@@ -25,7 +25,7 @@ import type {
   TenantSlot,
   TripwireRecorder,
 } from '../types'
-import { CANARY, FIXTURE, fixturePostBody } from '../fixtures'
+import { CANARY, FIXTURE, IDENTITY_TOKEN, fixturePostBody } from '../fixtures'
 import { SCAN_TABLES } from '../db-scan'
 import { fixtureBoardDescription } from '../fixtures'
 import { toUuid } from '@quackback/ids'
@@ -43,6 +43,20 @@ export interface FleetLeaks {
   sharedWidgetSecret?: boolean
   /** Both tenants serve the same cached settings blob. */
   sharedSettingsCache?: boolean
+  /**
+   * A PARTIAL identity leak: the portal document serves alpha's cached name and
+   * planted headline, while the widget config keeps serving each tenant's own
+   * theme colour. The round-4 plant — every derived-vocabulary defence missed
+   * it, because the leaked name was generic, the tripwire had dropped the same
+   * generic name, and the host still rendered an identity of its own.
+   */
+  partialIdentityLeak?: boolean
+  /**
+   * Not a leak — a MISCONFIGURATION: the operator never planted the identity
+   * token into anything the portal renders. P06 must report ERROR (it cannot
+   * certify distinguishability it cannot observe), never PASS.
+   */
+  omitPlantedToken?: boolean
   /** Nothing responds at all. */
   offline?: boolean
   /** The portal document carries a fresh nonce on every request. */
@@ -89,6 +103,12 @@ export interface FakeTenant {
   workspaceName: string
   themeColor: string
   customCss: string | null
+  /**
+   * The planted per-tenant identity token, standing in for one the operator
+   * stamped into a settings-derived field (here: the portal welcome-card
+   * headline in `portal_config`, rendered by the portal document).
+   */
+  identityToken: string
   settingsUuid: string
   assistantPrincipalUuid: string
   canary: string
@@ -152,6 +172,7 @@ function makeTenant(slot: TenantSlot): FakeTenant {
     workspaceName: TENANT_IDENTITY[slot].name,
     themeColor: TENANT_IDENTITY[slot].theme,
     customCss: null,
+    identityToken: IDENTITY_TOKEN[slot],
     settingsUuid: TENANT_IDENTITY[slot].uuid,
     assistantPrincipalUuid: TENANT_IDENTITY[slot].principalUuid,
     canary: CANARY[slot],
@@ -181,7 +202,10 @@ export function fakeSettings(t: FakeTenant): FakeSettings {
     feature_flags: '{}',
     branding_config: JSON.stringify({ light: { primary: t.themeColor } }),
     custom_css: t.customCss ?? `:root { --primary: ${t.themeColor}; }`,
-    portal_config: '{}',
+    // The planted token lives here, mirroring the operator stamping it into the
+    // portal welcome-card headline — a settings-derived field the portal
+    // document renders.
+    portal_config: JSON.stringify({ welcomeCard: { title: t.identityToken } }),
     widget_config: '{}',
     auth_config_version: 0,
   }
@@ -529,9 +553,15 @@ export class FakeFleet {
 
     // ---- portal ----------------------------------------------------------
     if (path === '/' || path.startsWith('/b/')) {
-      // The portal document carries the workspace NAME and nothing else that
-      // identifies the tenant — again matching the real app.
-      const source = this.leaks.sharedSettingsCache ? this.alpha : tenant
+      // The portal document carries the workspace NAME and the planted portal
+      // headline — matching the real app, which renders the name and the
+      // welcome-card title from portal_config and no other tenant identifier.
+      // A full shared cache serves alpha's whole blob; a PARTIAL leak serves
+      // alpha's name and headline while the widget config keeps each tenant's
+      // own colour.
+      const source =
+        this.leaks.sharedSettingsCache || this.leaks.partialIdentityLeak ? this.alpha : tenant
+      const headline = this.leaks.omitPlantedToken ? '' : ` ${source.identityToken}`
       const extra = this.leaks.sharedSearchIndex ? ` ${this.other(tenant).canary}` : ''
       // A per-request nonce, so the suite is held to the precision bar too: a
       // varying byte must never on its own produce a LEAK.
@@ -540,7 +570,7 @@ export class FakeFleet {
         : ''
       return new Response(
         `<html><head>${nonce}<title>${source.workspaceName}</title></head>` +
-          `<body>${source.workspaceName}${extra}</body></html>`,
+          `<body>${source.workspaceName}${headline}${extra}</body></html>`,
         { status: 200, headers: { 'content-type': 'text/html' } }
       )
     }
@@ -735,6 +765,12 @@ export function makeContext(
       adminUserId: t.adminUserId,
       workspaceName: t.workspaceName,
       workspaceSlug: t.workspaceSlug,
+      // Preflight installs this from the config (operator's token) falling back
+      // to the suite default; mirror that here so probe-level tests see the
+      // same marker vocabulary as an end-to-end run.
+      identityToken:
+        (t.slot === 'alpha' ? config.alphaIdentityToken : config.bravoIdentityToken) ??
+        t.identityToken,
     },
   })
 

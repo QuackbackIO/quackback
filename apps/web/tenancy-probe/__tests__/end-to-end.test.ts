@@ -284,6 +284,63 @@ describe('correct fleets that must NOT be accused', () => {
   })
 })
 
+describe('partial identity leak on generically-named tenants (round 4)', () => {
+  // The plant that stayed green in round 3: TENANT_SETTINGS collides while the
+  // branding cache does not, so bravo renders alpha's NAME while painting its
+  // OWN colour. Both names are built entirely from common product words, so the
+  // genericity filter swallowed the leaked value, preflight dropped it from the
+  // tripwire vocabulary, and own-identity corroboration masked what was left.
+  // The planted identity token fails this shape by construction: the leaking
+  // surface carries the foreign planted token while missing the host's own.
+  const genericNames: Partial<Record<TenantSlot, FleetIdentity>> = {
+    alpha: { name: 'Help Center' },
+    bravo: { name: 'Support Portal' },
+  }
+
+  it('is caught, named, and exits 2', async () => {
+    const { report, exit } = await run({ partialIdentityLeak: true }, {}, ALL_PROBES, genericNames)
+    const p06 = probe(report, 'P06')
+    expect(p06.verdict).toBe('LEAK')
+    expect(p06.observed).toContain("BRAVO SERVED ALPHA'S PLANTED TOKEN")
+    expect(report.verdict).toBe('FAIL')
+    expect(exit).toBe(2)
+  })
+
+  it('fires the tripwire on the planted marker even though the leaked name is generic', async () => {
+    // The generic name was dropped from the tripwire vocabulary; the planted
+    // token is installed unconditionally, so the backstop sees this leak too.
+    const { report } = await run({ partialIdentityLeak: true }, {}, ALL_PROBES, genericNames)
+    expect(
+      report.tripwireHits.some(
+        (h) =>
+          h.markerName === 'identityToken' && h.markerOwner === 'alpha' && h.servedBy === 'bravo'
+      )
+    ).toBe(true)
+  })
+
+  it('keeps the same generically-named fleet green when nothing leaks', async () => {
+    const { report, exit } = await run({}, {}, ALL_PROBES, genericNames)
+    expect(probe(report, 'P06').verdict).toBe('PASS')
+    expect(report.counts.LEAK).toBe(0)
+    expect(report.tripwireHits).toEqual([])
+    expect(exit).toBe(0)
+  })
+
+  it('reports ERROR, not PASS, when the planted token is not observable on any surface', async () => {
+    // The visibility gate counts observed responses, not stored values: until
+    // each host is caught serving its own planted token, a PASS would certify
+    // distinguishability the suite cannot see — the exact failure (the
+    // workspace TypeID plus the one unleaked colour counted as "exclusive
+    // tokens") that made the round-3 gate worthless.
+    const { report, exit } = await run({ omitPlantedToken: true })
+    const p06 = probe(report, 'P06')
+    expect(p06.verdict).toBe('ERROR')
+    expect(p06.observed).toContain('planted identity token')
+    expect(report.counts.LEAK).toBe(0)
+    expect(exit).toBe(1)
+  })
+})
+
 describe('shared credential stash, both polarities', () => {
   // Which tenant's value survives an email-keyed stash collision is a coin
   // flip. An earlier P02 attempted only alpha's-OTP-on-bravo, so a
@@ -340,6 +397,40 @@ describe('directional symmetry', () => {
         `${p.id} (${p.name}) covers only ${[...covered].join(', ')}: ` +
           negatives.map((c) => `${c.label} [${c.direction}]`).join(' | ')
       ).toBe(true)
+    }
+  })
+
+  it('pairs every single-direction attempt with its reverse, per attempt', async () => {
+    // The aggregate check above is necessary but not sufficient: a fresh
+    // one-directional control landing in an already-symmetric probe leaves the
+    // union covering both directions, and the asymmetric attempt sails through.
+    // So every `a-to-b` / `b-to-a` negative control declares which attempt it is
+    // one direction of (`attemptId`), and each attempt must cover BOTH
+    // directions between its controls.
+    const { report } = await run({})
+    for (const p of report.probes) {
+      const singles = p.controls.filter(
+        (c) => c.kind === 'negative' && (c.direction === 'a-to-b' || c.direction === 'b-to-a')
+      )
+      const byAttempt = new Map<string, Set<string>>()
+      for (const c of singles) {
+        expect(
+          c.attemptId,
+          `${p.id} control "${c.label}" [${c.direction}] declares no attemptId — a one-directional ` +
+            'attempt without its reverse is exactly the defect the direction guard exists to ' +
+            'catch; pass one to control()'
+        ).toBeDefined()
+        const directions = byAttempt.get(c.attemptId!) ?? new Set<string>()
+        directions.add(c.direction!)
+        byAttempt.set(c.attemptId!, directions)
+      }
+      for (const [attemptId, directions] of byAttempt) {
+        expect(
+          directions.has('a-to-b') && directions.has('b-to-a'),
+          `${p.id} (${p.name}) attempt "${attemptId}" covers only ${[...directions].join(', ')} — ` +
+            "detection would depend on which tenant's value happens to survive"
+        ).toBe(true)
+      }
     }
   })
 })

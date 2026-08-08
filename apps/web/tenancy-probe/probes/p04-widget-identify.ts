@@ -124,7 +124,8 @@ export const p04WidgetIdentify: Probe = {
         crossAtoBBody
           ? `SESSION MINTED for user ${crossAtoBBody.user?.id} — bravo accepted a token alpha signed`
           : `refused: ${describeResponse(crossAtoB, 160)}`,
-        'a-to-b'
+        'a-to-b',
+        'widget-identify-token'
       )
     )
 
@@ -138,7 +139,8 @@ export const p04WidgetIdentify: Probe = {
         crossBtoABody
           ? `SESSION MINTED for user ${crossBtoABody.user?.id} — alpha accepted a token bravo signed`
           : `refused: ${describeResponse(crossBtoA, 160)}`,
-        'b-to-a'
+        'b-to-a',
+        'widget-identify-token'
       )
     )
 
@@ -177,7 +179,8 @@ export const p04WidgetIdentify: Probe = {
           replayedUser
             ? `RESOLVED to user ${replayedUser.id} on ${toSlot}`
             : `refused: ${describeResponse(replay, 160)}`,
-          dirFrom(fromSlot)
+          dirFrom(fromSlot),
+          'widget-session-replay'
         )
       )
     }

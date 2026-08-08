@@ -135,6 +135,25 @@ describe('P06 settings and branding cache', () => {
     expect(outcome.observed).toContain('FOREIGN IDENTITY SERVED')
   })
 
+  it('reports LEAK on a partial identity leak that leaves the host rendering its own colour', async () => {
+    // The round-4 shape: the portal serves alpha's cached name and headline
+    // while the widget config keeps bravo's own colour. Every defence built on
+    // derived vocabulary missed it; the planted token does not.
+    const fleet = new FakeFleet({ partialIdentityLeak: true })
+    const outcome = await p06SettingsCache.run(makeContext(fleet, undefined, { withDb: true }))
+    expect(outcome.verdict).toBe('LEAK')
+    expect(failedNegatives(outcome)).toContain(
+      "alpha's planted identity token → bravo (portal document)"
+    )
+  })
+
+  it('reports ERROR, not PASS, when the planted token is not observable', async () => {
+    const fleet = new FakeFleet({ omitPlantedToken: true })
+    const outcome = await p06SettingsCache.run(makeContext(fleet, undefined, { withDb: true }))
+    expect(outcome.verdict).toBe('ERROR')
+    expect(outcome.observed).toContain('planted identity token')
+  })
+
   it('is not fooled by a per-request nonce in the document', async () => {
     const fleet = new FakeFleet({ perRequestNonce: true })
     const outcome = await p06SettingsCache.run(makeContext(fleet, undefined, { withDb: true }))

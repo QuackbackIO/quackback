@@ -150,7 +150,8 @@ export const p03StorageToken: Probe = {
         accepted(crossAtoB)
           ? `ACCEPTED (${describeResponse(crossAtoB, 160)}) — bravo honoured a capability alpha signed`
           : 'refused with 403',
-        'a-to-b'
+        'a-to-b',
+        'storage-read-capability'
       )
     )
 
@@ -163,7 +164,8 @@ export const p03StorageToken: Probe = {
         accepted(crossBtoA)
           ? `ACCEPTED (${describeResponse(crossBtoA, 160)}) — alpha honoured a capability bravo signed`
           : 'refused with 403',
-        'b-to-a'
+        'b-to-a',
+        'storage-read-capability'
       )
     )
 

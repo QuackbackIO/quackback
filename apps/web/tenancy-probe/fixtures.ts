@@ -54,6 +54,38 @@ export function fixturePostBody(slot: TenantSlot): string {
   return `Tenant isolation probe fixture. Canary ${CANARY[slot]}. This text must never be visible from the other tenant.`
 }
 
+/**
+ * The suite-owned per-tenant identity tokens.
+ *
+ * P06 does not infer what makes a tenant distinguishable — the suite PLANTS it.
+ * One of these strings is stamped into a settings-derived field that a public
+ * surface renders (the workspace name, or the portal welcome-card headline in
+ * `portal_config`), so each host provably serves its own token and provably
+ * never serves the other's. A partial identity leak — one field crossing while
+ * the host keeps rendering its own — then fails by construction, because the
+ * leaking surface carries the foreign planted token while missing the host's
+ * own. No genericity filter is applied to these tokens: they are probe-owned,
+ * like the canaries, and appear in no UI chrome anywhere.
+ *
+ * There is deliberately no auto-stamp: the app exposes no writable settings
+ * endpoint (settings mutations are TanStack server functions behind the admin
+ * UI, not addressable URLs), so the operator plants the token and the suite
+ * verifies observability rather than assuming it. Pass
+ * `--alpha-identity-token` / `--bravo-identity-token` when a custom token was
+ * planted instead of these defaults.
+ */
+export const IDENTITY_TOKEN: Record<TenantSlot, string> = {
+  alpha: 'qbprobeidentityalpha',
+  bravo: 'qbprobeidentitybravo',
+}
+
+/** The planted identity token in force for a tenant: operator's if given, else the default. */
+export function identityTokenFor(slot: TenantSlot, config: ProbeConfig): string {
+  return slot === 'alpha'
+    ? (config.alphaIdentityToken ?? IDENTITY_TOKEN.alpha)
+    : (config.bravoIdentityToken ?? IDENTITY_TOKEN.bravo)
+}
+
 /** Thrown when the fixture could not be established. Always a run failure. */
 export class ProvisioningError extends Error {
   constructor(

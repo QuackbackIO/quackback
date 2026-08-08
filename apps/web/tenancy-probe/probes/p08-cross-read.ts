@@ -79,31 +79,41 @@ export const p08CrossRead: Probe = {
       })
     }
 
-    // --- negative: the colliding title on bravo -----------------------------
-    const crossSearch = await bravo.http.request(searchPath(FIXTURE.postTitle), {
-      omitCookies: true,
-      expectsForeignMarkers: false,
-    })
-    const crossPosts = crossSearch.json<WidgetSearchBody>()?.data?.posts ?? []
-    const alphaIds = new Set(
-      [alpha.fixture?.postId, alpha.fixture?.boardId].filter(Boolean) as string[]
-    )
-    const foreignResults = crossPosts.filter(
-      (p) => alphaIds.has(p.id) || (p.board?.id && alphaIds.has(p.board.id))
-    )
-    const bravoFoundOwn = crossPosts.some((p) => p.id === bravo.fixture?.postId)
-    controls.push(
-      control(
-        'negative',
-        `bravo search for the colliding title "${FIXTURE.postTitle}" returns only bravo's rows`,
-        foreignResults.length === 0,
-        foreignResults.length === 0
-          ? `${crossPosts.length} result(s), all bravo's${bravoFoundOwn ? " (including bravo's own fixture post)" : ''}`
-          : `ALPHA'S ROWS RETURNED: ${foreignResults.map((p) => p.id).join(', ')}`,
-        'a-to-b'
+    // --- negative: the colliding title on BOTH hosts -------------------------
+    //
+    // Both directions, like every other cross-tenant attempt in this suite.
+    // This check was once bravo-only: an asymmetric leak — one tenant's index
+    // poisoning the other's results but not the reverse — would have sailed
+    // through, hidden by the probe's other symmetric checks.
+    for (const [fromSlot, from, to] of [
+      ['alpha', alpha, bravo],
+      ['bravo', bravo, alpha],
+    ] as const) {
+      const crossSearch = await to.http.request(searchPath(FIXTURE.postTitle), {
+        omitCookies: true,
+      })
+      const crossPosts = crossSearch.json<WidgetSearchBody>()?.data?.posts ?? []
+      const foreignIds = new Set(
+        [from.fixture?.postId, from.fixture?.boardId].filter(Boolean) as string[]
       )
-    )
-    evidence.bravoSearchResultIds = crossPosts.map((p) => p.id)
+      const foreignResults = crossPosts.filter(
+        (p) => foreignIds.has(p.id) || (p.board?.id && foreignIds.has(p.board.id))
+      )
+      const foundOwn = crossPosts.some((p) => p.id === to.fixture?.postId)
+      controls.push(
+        control(
+          'negative',
+          `${to.slot} search for the colliding title "${FIXTURE.postTitle}" returns only ${to.slot}'s rows`,
+          foreignResults.length === 0,
+          foreignResults.length === 0
+            ? `${crossPosts.length} result(s), all ${to.slot}'s${foundOwn ? ` (including ${to.slot}'s own fixture post)` : ''}`
+            : `${fromSlot.toUpperCase()}'S ROWS RETURNED: ${foreignResults.map((p) => p.id).join(', ')}`,
+          dirFrom(fromSlot),
+          'colliding-title-search'
+        )
+      )
+      evidence[`${to.slot}SearchResultIds`] = crossPosts.map((p) => p.id)
+    }
 
     // --- negative: each tenant's canary searched on the other ---------------
     for (const [fromSlot, from, to] of [
@@ -123,7 +133,8 @@ export const p08CrossRead: Probe = {
           canaryPosts.length === 0
             ? 'no results'
             : `RETURNED ${canaryPosts.length} result(s): ${canaryPosts.map((p) => p.id).join(', ')}`,
-          dirFrom(fromSlot)
+          dirFrom(fromSlot),
+          'canary-search'
         )
       )
     }
@@ -144,7 +155,8 @@ export const p08CrossRead: Probe = {
             found.length === 0
               ? `HTTP ${doc.status}, clean`
               : `HTTP ${doc.status}, ${fromSlot.toUpperCase()} MARKERS PRESENT: ${found.join(', ')}`,
-            dirFrom(fromSlot)
+            dirFrom(fromSlot),
+            `portal-document-markers:${path}`
           )
         )
       }
@@ -176,7 +188,8 @@ export const p08CrossRead: Probe = {
             hits.length === 0
               ? `scanned ${markers.length} marker form(s), no rows matched`
               : `${fromSlot.toUpperCase()}'S DATA FOUND IN ${to.slot.toUpperCase()}: ${describeHits(hits)}`,
-            dirFrom(fromSlot)
+            dirFrom(fromSlot),
+            'database-marker-scan'
           )
         )
         evidence[`databaseScanHits:${to.slot}`] = hits

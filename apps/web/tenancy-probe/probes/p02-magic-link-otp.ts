@@ -94,7 +94,8 @@ export const p02MagicLinkOtp: Probe = {
         crossAtoB.sessionEstablished
           ? `SESSION ESTABLISHED for user ${crossAtoB.userId}`
           : `refused: ${crossAtoB.detail}`,
-        'a-to-b'
+        'a-to-b',
+        'magic-link-cross-redemption'
       )
     )
 
@@ -109,7 +110,8 @@ export const p02MagicLinkOtp: Probe = {
         crossBtoA.sessionEstablished
           ? `SESSION ESTABLISHED for user ${crossBtoA.userId}`
           : `refused: ${crossBtoA.detail}`,
-        'b-to-a'
+        'b-to-a',
+        'magic-link-cross-redemption'
       )
     )
 
@@ -182,7 +184,8 @@ export const p02MagicLinkOtp: Probe = {
                 ? 'session established, but both tenants minted the SAME six-digit code, so this is inconclusive — re-run'
                 : `SESSION ESTABLISHED for user ${cross.userId}`
               : `refused: ${cross.detail}`,
-            dirFrom(fromSlot)
+            dirFrom(fromSlot),
+            'otp-cross-redemption'
           )
         )
       }

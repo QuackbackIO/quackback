@@ -114,7 +114,8 @@ export const p09AssistantPrincipal: Probe = {
           hits.length === 0
             ? `searched ${forms.length} id form(s) across the content and attribution tables, no rows matched`
             : `FOUND IN ${foreign.slot.toUpperCase()}: ${describeHits(hits)}`,
-          dirFrom(owner)
+          dirFrom(owner),
+          'assistant-principal-cross-scan'
         )
       )
       controls.push(scanCoverage(results))

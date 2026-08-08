@@ -181,7 +181,8 @@ export const p07BackgroundJob: Probe = {
           foreignScan.hits.length === 0
             ? 'no rows matched in any scanned table'
             : `${ownerSlot.toUpperCase()}'S DATA FOUND IN ${other.slot.toUpperCase()}: ${describeHits(foreignScan.hits)}`,
-          dirFrom(ownerSlot)
+          dirFrom(ownerSlot),
+          'derived-row-cross-scan'
         )
       )
     }

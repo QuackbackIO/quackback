@@ -111,7 +111,8 @@ export const p01SessionCookie: Probe = {
             `${fromSlot} cookie → ${toSlot}`,
             false,
             `no admin session on ${fromSlot}`,
-            dirFrom(fromSlot)
+            dirFrom(fromSlot),
+            'session-cookie-replay'
           )
         )
         continue
@@ -132,7 +133,8 @@ export const p01SessionCookie: Probe = {
           seenUser === null
             ? `refused: ${describeResponse(cookieRes, 120)}`
             : `AUTHENTICATED as user ${seenUser}`,
-          dirFrom(fromSlot)
+          dirFrom(fromSlot),
+          'session-cookie-replay'
         )
       )
       evidence[`${toSlot}CookieResponse`] = describeResponse(cookieRes, 400)
@@ -153,7 +155,8 @@ export const p01SessionCookie: Probe = {
             seenBearer === null
               ? `refused: ${describeResponse(bearerRes, 120)}`
               : `AUTHENTICATED as user ${seenBearer}`,
-            dirFrom(fromSlot)
+            dirFrom(fromSlot),
+            'session-raw-bearer'
           )
         )
       } else {
@@ -163,7 +166,8 @@ export const p01SessionCookie: Probe = {
             `${fromSlot}'s raw session token → ${toSlot} as Bearer`,
             false,
             'could not extract a raw session token from the cookie jar',
-            dirFrom(fromSlot)
+            dirFrom(fromSlot),
+            'session-raw-bearer'
           )
         )
       }
@@ -183,7 +187,8 @@ export const p01SessionCookie: Probe = {
           foreignMarkers.length === 0
             ? `HTTP ${docRes.status}, no ${fromSlot} markers in the document`
             : `HTTP ${docRes.status}, ${fromSlot.toUpperCase()} MARKERS PRESENT: ${foreignMarkers.join(', ')}`,
-          dirFrom(fromSlot)
+          dirFrom(fromSlot),
+          'session-ssr-document'
         )
       )
       evidence[`${toSlot}AdminDocMarkers`] = foreignMarkers
