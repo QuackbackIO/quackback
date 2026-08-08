@@ -380,6 +380,17 @@ that looks correct.
   fleet-level `SECRET_KEY` — which does not silently corrupt or forge anything
   (AES-GCM fails closed) but does mean per-tenant encrypted material is not yet
   separated. This must close before the pooled fleet serves anything real.
+
+  **What the app requires of whoever closes it**, so the seam is not guessed at:
+
+  | Requirement | Why |
+  | --- | --- |
+  | One resolver, injected — not imported | `setStorageCredentialResolver()` is the existing seam; the app must stay free of a vault client so a process that serves no cloud tenant needs no vault credentials, exactly as `readNeonRolePassword` is injected today. |
+  | Resolve `appSecretsRef` **atomically with** `databaseUrl` | §4.3. They are already one record read once, and that is what makes a mix-up inexpressible. A resolver that fetches the secret on a later, separate call reintroduces the window. |
+  | Return the whole bundle, not one key | `appSecretsRef` names `SECRET_KEY`, `ADMIN_API_TOKEN`, `QUACKBACK_CP_INTERNAL_TOKEN` and the S3 keys together. Splitting them into per-key fetches multiplies the failure modes and the latency on the pool-checkout path. |
+  | Fail closed, and fail **loudly** | A `SECRET_KEY` mix-up does not corrupt or forge — AES-GCM's auth tag fails to verify — but it makes integration OAuth tokens, webhook signing secrets and custom-action headers *permanently unrecoverable* until the right key returns, with no alarm beyond scattered per-call errors. The resolver must refuse rather than substitute, and the refusal must reach the pool cache so the tenant stops being served. |
+  | Cache per tenant with a short TTL, and re-resolve on failure | Same shape as `neon-credentials.ts`: a burst of pool creations must not fan out into N vault reads, and a rotation must be picked up without an operator action. |
+  | Never widen `openbao+kv://`'s target policy | The scheme blocks traversal but has **no namespace confinement** today, so `openbao+kv://secret/platform/ai` is in-policy by the artifact's own rules. Tighten that *before* a resolver ships, not after — a resolver is what makes it reachable. |
 - **`MIN_SCHEMA_VERSION`.** §10.5 asks for a per-tenant schema gate in the same
   pass as the fingerprint, reading `tenant_schema_state`. That table belongs to
   the migrator piece; the hook point is `evaluateTenantIdentity`'s caller, which
