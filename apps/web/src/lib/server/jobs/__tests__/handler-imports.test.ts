@@ -38,11 +38,16 @@
  * **That makes the boundary a cross-piece contract rather than a self-contained
  * guarantee, so name where the other half lives:**
  * `lib/server/policy/module-state/` — the §4.4 scanner — owns every
- * module-scope mutable-state site under `lib/server/**`, reconciled against a
- * checked-in ledger. It is a *source* scan, so load order is irrelevant to it:
- * it sees a captured singleton whether the module was imported at prime time,
- * at call time, or never. This test's boundary is only safe while that scanner
- * keeps covering those modules.
+ * module-scope mutable-state site *it can see* under `lib/server/**`, reconciled
+ * against a checked-in ledger, with its recall limits recorded in that module's
+ * README. It is a *source* scan, so load order is irrelevant to it: it sees a
+ * captured singleton whether the module was imported at prime time, at call
+ * time, or never.
+ *
+ * **This test's boundary is therefore sound to exactly the degree that scanner's
+ * recall is** — not absolutely. And one gap is invisible from its ledger:
+ * `walkSourceFiles` skips `__tests__` and `*.test.ts`, so a captured singleton
+ * in a server-side test helper is outside the contract entirely.
  *
  * A source scan is the right instrument because the property is about *when* a
  * module loads, which no runtime assertion in this process can observe after the

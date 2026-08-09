@@ -318,11 +318,22 @@ imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
   captured scope-dependent state at its top level.
 
   **That other half is `lib/server/policy/module-state/`**, the §4.4 scanner,
-  which owns every module-scope mutable-state site under `lib/server/**` against
-  a checked-in ledger. Being a source scan, load order is irrelevant to it — it
-  sees a captured singleton whether the module loaded at prime time, at call
-  time, or never. This piece's boundary is sound only while that scanner keeps
-  covering those modules.
+  which owns every module-scope mutable-state site it can see under
+  `lib/server/**`, against a checked-in ledger, **with its recall limits recorded
+  in that module's README**. Being a source scan, load order is irrelevant to it
+  — it sees a captured singleton whether the module loaded at prime time, at call
+  time, or never. That property is the reason coverage genuinely lives elsewhere
+  rather than nowhere.
+
+  **So state the dependency honestly: this piece's boundary is sound to exactly
+  the degree that scanner's recall is.** It is the reason this piece declined to
+  deepen its own scan, so a reader who later doubts the scanner needs to be able
+  to find the limit rather than discover it. One gap is worth naming here because
+  it is invisible from the ledger: `walkSourceFiles` skips `__tests__`,
+  `node_modules`, `dist` and any `*.test.ts`, so a captured singleton in a
+  server-side **test helper** is outside the contract entirely. Correct to skip —
+  a test helper is not shipped — but not covered, and nobody should assume
+  otherwise.
 
   A memo miss still resolves and logs — but that path only covers the wrapper,
   so the scan is what actually holds the property.
