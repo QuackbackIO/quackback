@@ -9,7 +9,7 @@ const { incrementBuckets, bucketRetryAfter } = vi.hoisted(() => ({
   incrementBuckets: vi.fn(),
   bucketRetryAfter: vi.fn().mockResolvedValue(42),
 }))
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({ incrementBuckets, bucketRetryAfter }))
+vi.mock('@/lib/server/utils/rate-bucket', () => ({ incrementBuckets, bucketRetryAfter }))
 
 import { checkAnonMintRateLimit, checkWidgetIdentifyRateLimit } from '../widget-rate-limit'
 

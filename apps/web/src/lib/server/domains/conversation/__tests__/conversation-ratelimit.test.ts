@@ -8,7 +8,7 @@ import type { PrincipalId } from '@quackback/ids'
 const incrementBucket = vi.fn()
 const bucketRetryAfter = vi.fn((..._args: unknown[]) => Promise.resolve(30))
 
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => incrementBucket(...args),
   bucketRetryAfter: (...args: unknown[]) => bucketRetryAfter(...args),
 }))

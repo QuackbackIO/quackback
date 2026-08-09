@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockIncrementBuckets = vi.fn()
 const mockBucketRetryAfter = vi.fn()
 
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBuckets: (...args: unknown[]) => mockIncrementBuckets(...args),
   bucketRetryAfter: (...args: unknown[]) => mockBucketRetryAfter(...args),
 }))

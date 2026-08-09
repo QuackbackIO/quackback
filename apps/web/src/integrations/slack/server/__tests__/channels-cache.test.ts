@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockCacheGet = vi.fn()
 const mockCacheSet = vi.fn()
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: (...args: unknown[]) => mockCacheGet(...args),
   cacheSet: (...args: unknown[]) => mockCacheSet(...args),
   CACHE_KEYS: {

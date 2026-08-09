@@ -7,7 +7,7 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
 const mockIncrementBucket = vi.fn()
 const mockBucketRetryAfter = vi.fn()
 
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => mockIncrementBucket(...args),
   bucketRetryAfter: (...args: unknown[]) => mockBucketRetryAfter(...args),
 }))

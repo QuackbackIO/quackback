@@ -237,11 +237,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     file: 'apps/web/src/lib/server/realtime/pubsub.ts',
     name: 'listeners',
     category: 'tenant-scoped-key',
-    keyedBy: 'tenantKey',
+    keyedBy: 'registryKey',
     reason:
-      'Keyed by the WIRE channel name, which tenantKey() namespaces. Keyed by the logical name it ' +
-      "would hand one workspace's inbox stream another workspace's messages on a bus with no " +
-      'authorization layer of its own.',
+      'Keyed by registryKey(currentTenantNamespace(), channel), captured at subscribe time while the ' +
+      'request scope that named the tenant is still open — an SSE stream outlives that scope by ' +
+      "minutes. Keyed by the logical channel alone it would hand one workspace's inbox stream " +
+      "another workspace's messages on a bus with no authorization layer of its own.",
   },
   {
     file: 'apps/web/src/lib/server/tenancy/neon-credentials.ts',
@@ -704,19 +705,25 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/realtime/pubsub.ts',
-    name: 'subscriber',
-    category: 'process-lifetime',
+    name: 'connections',
+    category: 'tenant-scoped-key',
+    keyedBy: 'currentTenantNamespace',
     reason:
-      'The shared Redis subscriber connection. One socket per process by design; every channel on it ' +
-      'is tenant-namespaced.',
+      "One dedicated LISTEN connection per tenant, to that tenant's own database on its DIRECT DSN " +
+      '(a pooled DSN registers the LISTEN and delivers nothing — §7.3, measured). A shared handle ' +
+      "would put every tenant's realtime traffic on one socket and one database. Deliberately NOT a " +
+      'TenantKeyedCache: that class evicts, and evicting here closes a socket out from under live ' +
+      'SSE streams. Bounded instead by ref-counted release when a tenant loses its last subscriber.',
   },
   {
-    file: 'apps/web/src/lib/server/redis.ts',
-    name: 'client',
-    category: 'process-lifetime',
+    file: 'apps/web/src/lib/server/realtime/pubsub.ts',
+    name: 'opening',
+    category: 'tenant-scoped-key',
+    keyedBy: 'currentTenantNamespace',
     reason:
-      'The shared application Redis connection handle. Every key written through it is namespaced by ' +
-      'tenantKey().',
+      'In-flight connection opens, so N concurrent subscribes for one tenant share one connection ' +
+      'instead of racing to open N. Holds a promise for the same key as `connections` and is deleted ' +
+      'the moment that promise settles, so it can never outlive the entry it is standing in for.',
   },
   {
     file: 'apps/web/src/lib/server/startup.ts',

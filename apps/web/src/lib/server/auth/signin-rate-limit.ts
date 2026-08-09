@@ -15,7 +15,7 @@ import {
   bucketRetryAfter,
   incrementBuckets,
   type RateBucketSpec,
-} from '@/lib/server/utils/redis-rate-bucket'
+} from '@/lib/server/utils/rate-bucket'
 
 export interface SignInRateLimitResult {
   allowed: boolean

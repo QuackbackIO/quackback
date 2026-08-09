@@ -102,21 +102,14 @@ export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler
 // =============================================================================
 
 /**
- * Per-domain Redis rate-limit (SET-NX-EX, 10s window). Throws when
+ * Per-domain rate-limit (set-if-absent, 10s window). Throws when
  * throttled. Keyed on tenant+domain so admins can verify multiple
  * pending domains in parallel without throttling each other.
  */
 async function assertVerifyDomainRateLimit(tenantId: string, domainId: string): Promise<void> {
-  const { getRedis } = await import('@/lib/server/redis')
-  const { tenantKey } = await import('@/lib/server/tenancy/tenant-keyed')
-  const took = await getRedis().set(
-    tenantKey(`verify-domain:${tenantId}:${domainId}`),
-    '1',
-    'EX',
-    10,
-    'NX'
-  )
-  if (took !== 'OK') {
+  const { kvSetNx } = await import('@/lib/server/kv/pg-kv')
+  const took = await kvSetNx(`verify-domain:${tenantId}:${domainId}`, 1, 10)
+  if (!took) {
     throw new ConflictError(
       'VERIFY_RATE_LIMITED',
       'Slow down — wait a few seconds before retrying.'

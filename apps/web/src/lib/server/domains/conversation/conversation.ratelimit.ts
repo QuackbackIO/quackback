@@ -4,7 +4,7 @@
  * never blocks legitimate messaging. Agent (team) actions are not throttled here.
  */
 import type { PrincipalId } from '@quackback/ids'
-import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/redis-rate-bucket'
+import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/rate-bucket'
 
 // Generous enough for fast back-and-forth typing, tight enough to stop a script
 // from flooding writes, conversation creation, and offline-notification fanout.

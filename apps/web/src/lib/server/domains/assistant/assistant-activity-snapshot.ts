@@ -14,7 +14,7 @@
  * Best-effort throughout, via the shared cache helpers: a Redis failure must
  * never fail the turn or the stream.
  */
-import { cacheGet, cacheSet, cacheDel } from '@/lib/server/redis'
+import { cacheGet, cacheSet, cacheDel } from '@/lib/server/cache'
 import type { ConversationId } from '@quackback/ids'
 
 /** Comfortably longer than the gap between activity publishes in a live turn;

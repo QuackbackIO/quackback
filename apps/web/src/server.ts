@@ -11,13 +11,12 @@ import { logStartupBanner } from '@/lib/server/startup'
 if (process.env.QUACKBACK_BUILD !== '1') {
   Promise.all([
     import('@/lib/server/db').then(({ db, sql }) => db.execute(sql`SELECT 1`)),
-    import('@/lib/server/redis').then(({ cacheGet }) => cacheGet('__warmup__')),
     import('@/lib/server/auth/index'),
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
   ]).catch(() => {
-    // Pool initialization happens inside getDatabase()/getRedis(); if the
+    // Pool initialization happens inside getDatabase(); if the
     // first probe fails the next real query will retry from cold.
   })
 }

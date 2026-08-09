@@ -33,7 +33,7 @@ vi.mock('@/lib/server/auth', () => ({
   resetAuth: vi.fn(),
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),

@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto'
 import { safeFetch, SsrfError, TimeoutError } from './ssrf-guard'
 import { sniffImageMime, ALLOWED_REHOST_MIMES, canonicalizeImageMime } from './magic-bytes'
 import { uploadImageBuffer } from '@/lib/server/storage/s3'
-import { cacheGet, cacheSet } from '@/lib/server/redis'
+import { cacheGet, cacheSet } from '@/lib/server/cache'
 import { parseOpenGraph } from './og-parse'
 
 export interface LinkPreview {

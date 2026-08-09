@@ -11,7 +11,7 @@ import {
   bucketRetryAfter,
   incrementBucket,
   type RateBucketSpec,
-} from '@/lib/server/utils/redis-rate-bucket'
+} from '@/lib/server/utils/rate-bucket'
 import { isIP } from 'node:net'
 import { config } from '@/lib/server/config'
 import { getRequestIP } from '@tanstack/react-start/server'

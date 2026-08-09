@@ -16,7 +16,7 @@ vi.mock('@/lib/server/db', async () =>
   (await import('@/lib/server/__tests__/principal-merge-db-mock')).mockDbModule()
 )
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheDel: vi.fn(),
   CACHE_KEYS: { PRINCIPAL_BY_USER: (id: string) => `principal:user:${id}` },
 }))

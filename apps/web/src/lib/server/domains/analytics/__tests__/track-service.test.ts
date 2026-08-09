@@ -24,7 +24,7 @@ vi.mock('@/lib/server/domains/workflows/dispatcher', () => ({
 }))
 
 const mockIncrementBucket = vi.fn()
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: mockIncrementBucket,
 }))
 

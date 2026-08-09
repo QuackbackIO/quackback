@@ -48,7 +48,7 @@ const hoisted = vi.hoisted(() => ({
   safeFetch: vi.fn(),
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: hoisted.cacheGet,
   cacheSet: hoisted.cacheSet,
   cacheDel: hoisted.cacheDel,

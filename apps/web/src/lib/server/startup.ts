@@ -274,6 +274,26 @@ function startBackgroundProcessing(): void {
     initAllWorkers()
   }
 
+  // Space reclamation for the tables that replaced Redis (kv_store, rate_bucket,
+  // kv_set_member, presence_stream, realtime_overflow).
+  //
+  // Hourly rather than daily because rate buckets churn per request: a busy
+  // install writes one row per limiter per window, and a day's worth of spent
+  // windows is a lot of dead tuples for the planner to walk. Nothing here is
+  // load-bearing — every read filters on expiry, so a missed sweep costs disk
+  // rather than correctness (see `kv/sweep.ts`).
+  Promise.all([import('./kv/sweep'), import('@/lib/server/sweep-lock')])
+    .then(([{ sweepExpiredKv }, { withSweepLock }]) => {
+      const ONE_HOUR = 60 * 60 * 1000
+      const runKvSweep = () =>
+        withSweepLock('kv_sweep', ONE_HOUR, async () => {
+          await sweepExpiredKv().catch((err) => log.error({ err }, 'kv sweep failed'))
+        })
+      setTimeout(() => void runKvSweep(), 45_000)
+      setInterval(() => void runKvSweep(), ONE_HOUR)
+    })
+    .catch((err) => log.error({ err }, 'failed to init kv sweep'))
+
   // Audit-log retention sweep + expired portal/team invite sweep.
   // Daily maintenance runs under a cross-instance lock so only one
   // replica executes per tick in multi-instance deployments.
