@@ -3,9 +3,8 @@
  * Build-time constants are injected via Vite `define`; runtime info is read at call time.
  */
 import { logger } from '@/lib/server/logger'
-import { assertProcessRoleConfigured, getProcessRole, shouldRunWorkers } from './queue/role'
+import { getProcessRole, shouldRunWorkers } from './queue/role'
 import { config, validateRuntimeConfig } from './config'
-import { assertSchemaFloorConfigured } from './fleet/schema-floor'
 
 const log = logger.child({ component: 'startup' })
 
@@ -102,21 +101,6 @@ export function logStartupBanner(): void {
     },
     'server started'
   )
-
-  // MIN_SCHEMA_VERSION is read lazily on pool checkout, so an unresolvable
-  // value would otherwise surface as every tenant refusing to serve — with the
-  // wrong log line — long after the deploy went green. Resolve it once, here,
-  // where a failure is a boot failure. Synchronous and before anything else
-  // starts, because a process that cannot resolve its own serving floor should
-  // not go on to open connections with it.
-  assertSchemaFloorConfigured()
-
-  // An unrecognised QUACKBACK_ROLE used to fall back to `all`, which boots
-  // BullMQ, the job tier and the outbox relay — so a typo produced exactly the
-  // topology pooled tenancy forbids, on a replica whose manifest said otherwise.
-  // The parser now fails closed to `web`; this makes the mistake visible instead
-  // of merely harmless.
-  assertProcessRoleConfigured()
 
   // Surface half-configured AI loudly instead of failing silently (see #180).
   import('@/lib/server/domains/ai/config')

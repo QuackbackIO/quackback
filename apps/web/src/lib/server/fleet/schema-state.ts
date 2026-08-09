@@ -399,6 +399,81 @@ export async function ensureSchemaStateRow(input: {
   return getExecuteRows(result).length > 0
 }
 
+/**
+ * Why a named tenant was not claimed.
+ *
+ * `run --tenant X` claiming nothing is ambiguous in a way that matters: it
+ * happens when the tenant is already current (success), when it is blocked
+ * (deliberate), when another migrator holds it (transient), and when nobody
+ * ever enrolled it (a real gap). Reporting `claimed=0` and exiting 0 for all
+ * four turns *"migrate this tenant now"* — which is what provisioning calls —
+ * into a silent, successful-looking no-op.
+ *
+ * Read AFTER a claim attempt returns nothing, so it explains a fact rather than
+ * predicting one; a pre-check would race the claim it is describing.
+ */
+export type UnclaimedReason =
+  | { kind: 'no_intent_row'; detail: string }
+  | { kind: 'blocked'; detail: string }
+  | { kind: 'already_current'; detail: string }
+  | { kind: 'held_by_another'; detail: string }
+  | { kind: 'terminal'; detail: string }
+  | { kind: 'not_due'; detail: string }
+  | { kind: 'unknown'; detail: string }
+
+export async function explainUnclaimed(tenantId: string): Promise<UnclaimedReason> {
+  const rows = await listSchemaState()
+  const row = rows.find((r) => r.tenantId === tenantId)
+  if (!row) {
+    return {
+      kind: 'no_intent_row',
+      detail:
+        `${tenantId} has no row in ${SCHEMA_STATE_TABLE}, so the reconciler cannot see it. ` +
+        'Run `enrol` (fleet-wide) or insert intent for this tenant. Note that a tenant absent ' +
+        'from this table is invisible to a rollout, which is how "fleet complete" gets reported ' +
+        'having skipped one.',
+    }
+  }
+  if (row.status === 'blocked') {
+    return {
+      kind: 'blocked',
+      detail:
+        `${tenantId} is blocked and will not be claimed by anything: ` +
+        `${row.lastError ?? '(no reason recorded)'}. Lift it deliberately; a target bump ` +
+        'will not.',
+    }
+  }
+  if (row.status === 'running') {
+    return {
+      kind: 'held_by_another',
+      detail:
+        `${tenantId} is leased by ${row.lockedBy ?? 'another migrator'} until ` +
+        `${row.lockedUntil?.toISOString() ?? 'unknown'}. Wait for it, or for the reaper.`,
+    }
+  }
+  if (row.currentVersion !== null && row.currentVersion >= row.targetVersion) {
+    return {
+      kind: 'already_current',
+      detail: `${tenantId} is already at its target (${row.targetVersion}); nothing to do.`,
+    }
+  }
+  if (row.status === 'failed') {
+    return {
+      kind: 'terminal',
+      detail:
+        `${tenantId} has exhausted its attempts (${row.attempts}/${row.maxAttempts}) and is ` +
+        `terminal: ${row.lastError ?? '(no reason recorded)'}. Raise the target, or fix the ` +
+        'cause; it will not be retried on its own.',
+    }
+  }
+  return {
+    kind: 'not_due',
+    detail:
+      `${tenantId} is ${row.status} but was not claimable on this pass — most likely its ` +
+      'run_at is in the future after a backoff. Retry shortly.',
+  }
+}
+
 /** Take a tenant out of claiming entirely — a halted rollout, an investigation. */
 export async function blockTenant(tenantId: string, reason: string): Promise<boolean> {
   const result = await controlDb().execute(sql`

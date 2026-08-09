@@ -282,18 +282,23 @@ therefore a demo of the _gate_, not of the hazard.
 
 ### The gate, both directions
 
-`p10-old` is a database migrated against a journal trimmed at `0248` — a
+`p10-old2` is a database migrated against a journal trimmed at `0248` — a
 genuinely old lineage, not a doctored ledger.
 
 ```
 MIN_SCHEMA_VERSION unset
-  p10-old  -> 200   neon-t1 -> 200   neon-t4 -> 200
+  p10-old2 -> 200   neon-t1 -> 200   neon-t4 -> 200
 
 MIN_SCHEMA_VERSION=0251
-  p10-old  -> 503 retry-after=30  "This workspace is being updated…"
+  p10-old2 -> 503 retry-after=30  "This workspace is being updated…"
   neon-t1  -> 200
   neon-t4  -> 200      <- carries 0252, which this build has never heard of
 ```
+
+(An earlier `p10-old` played this role and was destroyed by a later
+`run --concurrency 6` — the fixture was reconciled forward by the very thing it
+existed to be behind. Its replacement is held out of the rollout by a `blocked`
+intent row rather than by a note asking people not to migrate it.)
 
 The gate-off row is the control: without it, a 503 would be equally consistent
 with the tenant being broken for some unrelated reason.
@@ -405,6 +410,43 @@ Exit codes are the contract, because a `deploy.cronSchedule` service is judged o
 them: `0` all claimed tenants reconciled or already current · `1` at least one
 failed, halt and read · `2` the invocation was wrong.
 
+### Configuration is validated at boot, and a bad value exits
+
+`MIN_SCHEMA_VERSION` and `QUACKBACK_ROLE` are checked by
+`lib/server/boot-config.ts`, called as the **first statement of `server.ts`** —
+above the eager DB/Redis warmup, so the refusal happens before any socket is
+opened. That ordering is asserted on the source, because no unit test of either
+function can see it.
+
+**It exits non-zero rather than throwing**, and the difference is not stylistic.
+A throw at that point happens during ESM evaluation of the server entry, Node
+caches the module-evaluation error, and every route 500s forever —
+`/api/health/live` included, so a supervisor watching liveness sees a process
+that is up and answering. Measured in that state: the process kept its socket
+open and made **7,417 connection attempts** to the database it had just declared
+itself unfit to serve. On a pooled fleet each of those wakes a tenant's Neon
+compute, so one mistyped variable becomes a fleet-wide cost problem.
+
+Measured after the change, with the good-config row as the control:
+
+```
+MIN_SCHEMA_VERSION=9999   exit=1  REFUSING TO START   control-DB transactions during boot: 0
+QUACKBACK_ROLE=banana     exit=1  REFUSING TO START   control-DB transactions during boot: 0
+MIN_SCHEMA_VERSION=0251   runs on to logStartupBanner()  control-DB transactions during boot: 3
+```
+
+There is deliberately **no readiness check** for either variable: after the boot
+assert, a process serving requests cannot have bad configuration, so a check for
+it would be unreachable code that reads as coverage. An earlier revision had
+one, reachable only from a test harness that skipped the boot path.
+
+**In `vite dev` the picture is different and worth knowing.** The SSR
+environment runs in a separate runner process, so the exit kills the runner and
+vite restarts it — a crash loop rather than a clean exit, with vite answering
+`500 socket hang up`. That response is 1.2 KB and contains none of the offending
+value; the previous behaviour returned a 66 KB HTML error page carrying it six
+times.
+
 ### Environment
 
 | Variable                         | Meaning                                                                                                                   |
@@ -505,7 +547,30 @@ claimed, which is the correct outcome and needs an operator, not a longer retry.
 - **Replay a data-mutating migration onto a database with a non-empty ledger**,
   without an explicit `--allow-mutating-replay`.
 
-## 9. Known limits
+## 9. Gates, and one that is red for reasons that predate this
+
+`bun run db:check-drift` reports **4 drift statements** on this branch:
+
+```
+ALTER TABLE "job_queue" DROP CONSTRAINT "job_queue_status_check";
+ALTER TABLE "job_queue" DROP CONSTRAINT "job_queue_max_attempts_check";
+ALTER TABLE "job_queue" DROP CONSTRAINT "job_queue_lease_shape_check";
+ALTER TABLE "settings" DROP COLUMN "cloud_tenant_id";
+```
+
+All four are raw-SQL-owned objects absent from the Drizzle TS schema —
+`settings.cloud_tenant_id` from `0251` and the three `job_queue` CHECKs from
+`0253` — and they reproduce **byte-identical** on the branch that introduced
+them, with none of this piece's code present.
+
+**The attribution is scoped to those four statements and not to the full
+output.** The rest of the output does differ here: this branch passes
+`{ concurrentIndexes: false, verify: false }` from `check-drift.ts` and sets
+`onnotice: () => {}` on the migrate connection, so roughly 109 `NOTICE` lines
+that appear on the older branch do not appear on this one. Those are ours. The
+drift is not.
+
+## 10. Known limits
 
 - **The replay classifier cannot see inside a `DO $$ … $$` block**, so it calls
   every one of them `mutates`. That is the conservative direction and it costs a

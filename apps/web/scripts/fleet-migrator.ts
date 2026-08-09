@@ -30,7 +30,12 @@ import {
   requireTenant,
   runReconcilePass,
 } from '@/lib/server/fleet/migrator'
-import { blockTenant, listSchemaState, setTargetVersion } from '@/lib/server/fleet/schema-state'
+import {
+  blockTenant,
+  explainUnclaimed,
+  listSchemaState,
+  setTargetVersion,
+} from '@/lib/server/fleet/schema-state'
 import { closeControlSql } from '@/lib/server/tenancy/registry'
 
 type Command = 'run' | 'status' | 'enrol' | 'set-target' | 'block' | 'plan'
@@ -201,6 +206,14 @@ async function main(): Promise<number> {
       allowMutatingReplay: opts['allow-mutating-replay'] === true,
     })
     printPass(result)
+    if (result.claimed === 0) {
+      // `claimed=0` on a NAMED tenant is not a success. Provisioning calls this
+      // to migrate one tenant now; reporting nothing and exiting 0 is how that
+      // becomes a silent no-op that looks like it worked.
+      const why = await explainUnclaimed(opts.tenant as string)
+      console.log(`  NOT CLAIMED [${why.kind}] ${why.detail}`)
+      return why.kind === 'already_current' ? 0 : 1
+    }
     return result.failed > 0 ? 1 : 0
   }
 
