@@ -13,10 +13,12 @@
  * `QUACKBACK_ROLE=worker`. One shared, always-warm worker tier runs the queues,
  * relay and sweeps for every tenant."
  *
- * So the role is free again and the refusal moved to the noun it was always
- * about: `queue/create-worker.ts` refuses to construct a BullMQ `Worker` under
- * pooled tenancy, whatever the role. That property is pinned in
- * `queue/__tests__/worker-scope-detach.test.ts`.
+ * So the role is free again, and the refusal moved to the noun it was always
+ * about. It first became a seam that would not construct a `Worker` under
+ * pooled tenancy; now that the queues it guarded run on the Postgres job tier,
+ * it is the stricter and simpler property that no file under `apps/web/src`
+ * imports the queue package at all — you cannot construct a `Worker` without
+ * importing it. Pinned in `policy/no-bullmq/__tests__/no-bullmq.test.ts`.
  *
  * What is asserted here is the **permitted** matrix, not just the forbidden
  * one. A test that only lists refusals cannot notice that everything is
