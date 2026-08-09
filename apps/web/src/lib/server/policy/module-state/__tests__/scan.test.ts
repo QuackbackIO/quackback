@@ -21,6 +21,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { extractSites, mutatesBinding, type StateSite } from '../scan'
+import { readsRealTenancyMode } from '../check'
 import * as ts from 'typescript'
 
 function sites(source: string): StateSite[] {
@@ -288,5 +289,49 @@ describe('mutatesBinding', () => {
 
   it('does not treat a mutation of a DIFFERENT binding as a mutation', () => {
     expect(mutatesBinding(parse(`other.set('k', 1)`), 'x')).toBe(false)
+  })
+})
+
+describe('the refuses-pooled claim cannot be certified by mention', () => {
+  // The first version of this check was `text.includes('isPooledTenancy')`, and
+  // the first attack on it worked: swap the import for a local
+  // `const isPooledTenancy = (): boolean => false` and the string is still
+  // there while the guard is gone. Certification by mention, the same shape as
+  // Piece 5's "unconditional witness" helper.
+  const guarded = `
+    import { isPooledTenancy } from '@/lib/server/tenancy/mode'
+    export function start() { if (isPooledTenancy()) return }
+  `
+  const viaConfig = `
+    import { config } from '@/lib/server/config'
+    export function start() { if (config.isPooledTenancy) return }
+  `
+  const shadowed = `
+    const isPooledTenancy = (): boolean => false
+    export function start() { if (isPooledTenancy()) return }
+  `
+  const mentionOnly = `
+    // isPooledTenancy is handled elsewhere
+    export function start() { return 'isPooledTenancy' }
+  `
+
+  it('accepts a real import from tenancy/mode', () => {
+    expect(readsRealTenancyMode(guarded, 'probe.ts')).toBe(true)
+  })
+  it('accepts the config read', () => {
+    expect(readsRealTenancyMode(viaConfig, 'probe.ts')).toBe(true)
+  })
+  it('rejects a local declaration shadowing the name', () => {
+    expect(readsRealTenancyMode(shadowed, 'probe.ts')).toBe(false)
+  })
+  it('rejects a mention in a comment or a string', () => {
+    expect(readsRealTenancyMode(mentionOnly, 'probe.ts')).toBe(false)
+  })
+  it('rejects an import of the same name from somewhere else', () => {
+    const elsewhere = `
+      import { isPooledTenancy } from './my-own-helpers'
+      export function start() { if (isPooledTenancy()) return }
+    `
+    expect(readsRealTenancyMode(elsewhere, 'probe.ts')).toBe(false)
   })
 })

@@ -6,10 +6,75 @@
  * things: an unledgered site, a stale entry, or a category the source
  * contradicts.
  */
+import * as ts from 'typescript'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { scanRoots, siteId, type ScanRoot, type StateSite } from './scan'
 import { MODULE_STATE_LEDGER, type LedgerEntry, type StateCategory } from './ledger'
+
+/**
+ * Does this file consult the REAL tenancy mode?
+ *
+ * A substring test for `isPooledTenancy` is certification by mention, and this
+ * one was defeated on the first attempt: replacing the import with a local
+ * `const isPooledTenancy = (): boolean => false` left the string in the file
+ * and the check green while the guard was gone. That is the same shape as
+ * Piece 5's "unconditional witness" — a helper whose mere name counts as
+ * evidence.
+ *
+ * So the claim is tested structurally: an import of `isPooledTenancy` from the
+ * tenancy mode module, or a `config.isPooledTenancy` read, AND no local
+ * declaration of that name shadowing it.
+ *
+ * What this still does not prove is that the guard covers the SITE. That claim
+ * lives where it can actually be observed — `__tests__/singletons-not-shared.ts`
+ * asserts the relay does not attempt leadership under pooled tenancy and that
+ * the readiness probe never reads the migration status. The scanner's job here
+ * is to stop the mechanism disappearing quietly, not to re-derive behaviour.
+ */
+export function readsRealTenancyMode(text: string, fileName: string): boolean {
+  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
+  let imported = false
+  let configRead = false
+  let locallyDeclared = false
+
+  for (const stmt of sf.statements) {
+    if (
+      ts.isImportDeclaration(stmt) &&
+      ts.isStringLiteral(stmt.moduleSpecifier) &&
+      /tenancy\/mode$/.test(stmt.moduleSpecifier.text.split('?')[0]) &&
+      stmt.importClause?.namedBindings &&
+      ts.isNamedImports(stmt.importClause.namedBindings)
+    ) {
+      for (const el of stmt.importClause.namedBindings.elements) {
+        if ((el.propertyName ?? el.name).text === 'isPooledTenancy') imported = true
+      }
+    }
+    if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === 'isPooledTenancy') {
+      locallyDeclared = true
+    }
+    if (ts.isVariableStatement(stmt)) {
+      for (const d of stmt.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && d.name.text === 'isPooledTenancy') locallyDeclared = true
+      }
+    }
+  }
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'isPooledTenancy' &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'config'
+    ) {
+      configRead = true
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+
+  return (imported || configRead) && !locallyDeclared
+}
 
 /**
  * What "server code" means for this scanner.
@@ -129,13 +194,14 @@ export function checkModuleState(repoRoot: string): CheckResult {
         })
       }
     }
-    if (entry.category === 'refuses-pooled' && !read(site.file).includes('isPooledTenancy')) {
+    if (entry.category === 'refuses-pooled' && !readsRealTenancyMode(read(site.file), site.file)) {
       findings.push({
         kind: 'miscategorised',
         id,
         detail:
-          `declared 'refuses-pooled' but ${site.file} never reads 'isPooledTenancy', so nothing ` +
-          `stops it running under pooled tenancy.`,
+          `declared 'refuses-pooled' but ${site.file} does not import 'isPooledTenancy' from ` +
+          `tenancy/mode (or read 'config.isPooledTenancy'), or shadows it with a local ` +
+          `declaration — so nothing stops it running under pooled tenancy.`,
       })
     }
   }
