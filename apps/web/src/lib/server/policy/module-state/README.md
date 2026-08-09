@@ -4,14 +4,14 @@ The §4.4 scanner. A third source-scanning policy invariant beside `dep-graph`
 and `authz-matrix`, with the same shape: derive from the tree, reconcile against
 a checked-in golden, fail CI on any difference.
 
-| file | what it is |
-| --- | --- |
-| `scan.ts` | finds every module-scope mutable-state site, via the TypeScript AST |
-| `ledger.ts` | the decision record: one entry per site, with a category and a reason |
-| `check.ts` | reconciles the two, and tests the categories it can test |
-| `MODULE-STATE.md` | generated golden snapshot |
-| `__tests__/scan.test.ts` | the adversarial corpus — what the scanner must and must not see |
-| `__tests__/module-state.test.ts` | the gate itself |
+| file                             | what it is                                                            |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `scan.ts`                        | finds every module-scope mutable-state site, via the TypeScript AST   |
+| `ledger.ts`                      | the decision record: one entry per site, with a category and a reason |
+| `check.ts`                       | reconciles the two, and tests the categories it can test              |
+| `MODULE-STATE.md`                | generated golden snapshot                                             |
+| `__tests__/scan.test.ts`         | the adversarial corpus — what the scanner must and must not see       |
+| `__tests__/module-state.test.ts` | the gate itself                                                       |
 
 ## Why this exists rather than "we fixed the twenty"
 
@@ -19,8 +19,8 @@ Module-scope mutable state is what survives a request. In a pooled process that
 also means it survives a **tenant**, so every such site is either tenant-keyed,
 holds nothing tenant-derived, or is a cross-tenant capability nobody wrote down.
 `SAAS-HOSTING-STACK.md` §4.4 rates this control above the twenty fixes it
-accompanies, and the reasoning is one line: *"without it, singleton twenty-one
-lands three weeks after twenty is fixed."*
+accompanies, and the reasoning is one line: _"without it, singleton twenty-one
+lands three weeks after twenty is fixed."_
 
 The scanner earned that billing on its first run. It found
 `auth/resolved-claims-stash.ts`, which is not on §4's hand-written list and is
@@ -33,31 +33,31 @@ workspaces, feeding role provisioning.
 Five shapes, because a rule that only knows about top-level `let` is trivially
 routed around.
 
-| kind | shape |
-| --- | --- |
-| `binding` | module-scope `let` / `var` |
-| `container` | module-scope `const` bound to a mutable container **that is actually mutated** |
-| `factory` | module-scope `const` bound to a call of a function — local **or imported from a scanned module** — that closes over mutable state |
-| `instance` | module-scope `new X(...)`, unless `X` is an enumerated value type |
-| `class-static` | a mutable `static` field on a module-scope class **or class expression** |
-| `global-assign` | assignment to `globalThis.x` / `global.x` |
+| kind            | shape                                                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `binding`       | module-scope `let` / `var`                                                                                                        |
+| `container`     | module-scope `const` bound to a mutable container **that is actually mutated**                                                    |
+| `factory`       | module-scope `const` bound to a call of a function — local **or imported from a scanned module** — that closes over mutable state |
+| `instance`      | module-scope `new X(...)`, unless `X` is an enumerated value type                                                                 |
+| `class-static`  | a mutable `static` field on a module-scope class **or class expression**                                                          |
+| `global-assign` | assignment to `globalThis.x` / `global.x`                                                                                         |
 
 ### Six bypasses, found by attacking round 1
 
 Every one of these produced **no site** in the first version, and three were
 then planted as a real file in server code with the gate still green — one
 containing §4.1's top-listed hazard verbatim. They are pinned in
-`__tests__/scan.test.ts` under *"bypasses found by attacking the first version
-of this scanner"*.
+`__tests__/scan.test.ts` under _"bypasses found by attacking the first version
+of this scanner"_.
 
-| shape | why it slipped |
-| --- | --- |
+| shape                                                       | why it slipped                                                                           |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `Object.freeze({ m: new Map() })`, written via `X.m.set(…)` | freezing is shallow, and the mutation matcher only knew identifiers, not property chains |
-| `const c = new Lru()` (local class holding a `Map`) | `new` was only a site for `Map`/`Set` |
-| `const s = makeStash()` where `makeStash` is **imported** | the callee was resolved from `sf.statements` only |
-| `const R = class { static seen = new Map() }` | the class-static rule matched declarations, not expressions |
-| `const alias = backing; alias.set(…)` | `backing` read as never-written, so it was suppressed as frozen |
-| `Object.assign(state, …)` as the only write | nothing about it looks like `x.y = …` |
+| `const c = new Lru()` (local class holding a `Map`)         | `new` was only a site for `Map`/`Set`                                                    |
+| `const s = makeStash()` where `makeStash` is **imported**   | the callee was resolved from `sf.statements` only                                        |
+| `const R = class { static seen = new Map() }`               | the class-static rule matched declarations, not expressions                              |
+| `const alias = backing; alias.set(…)`                       | `backing` read as never-written, so it was suppressed as frozen                          |
+| `Object.assign(state, …)` as the only write                 | nothing about it looks like `x.y = …`                                                    |
 
 The `Object.freeze` one is the sharpest, because it is the exact class the
 suppression story rests on: 80 of 97 constructed containers are dropped as
@@ -90,14 +90,14 @@ The cheap way to defeat a ledger is to write the reassuring word next to the
 dangerous code. Three of the six categories are therefore checked against the
 source.
 
-| category | meaning | verified? |
-| --- | --- | --- |
-| `tenant-keyed` | partitioned by the active tenant | **yes** — initializer must be `new TenantKeyedCache` |
-| `tenant-scoped-key` | keyed by something that already identifies one tenant | **yes** — `keyedBy` must name a token present in the file |
-| `refuses-pooled` | only correct single-tenant, and the code refuses to run pooled | **yes** — must import `isPooledTenancy` from `tenancy/mode` (or read `config.isPooledTenancy`), unshadowed |
-| `content-addressed` | the value is a function of the key, so a cross-tenant hit is byte-identical to a recompute | no |
-| `fleet-wide` | holds only values identical for every tenant | no |
-| `process-lifetime` | a latch, a timer, a connection handle | no |
+| category            | meaning                                                                                    | verified?                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `tenant-keyed`      | partitioned by the active tenant                                                           | **yes** — initializer must be `new TenantKeyedCache`                                                       |
+| `tenant-scoped-key` | keyed by something that already identifies one tenant                                      | **yes** — `keyedBy` must name a token present in the file                                                  |
+| `refuses-pooled`    | only correct single-tenant, and the code refuses to run pooled                             | **yes** — must import `isPooledTenancy` from `tenancy/mode` (or read `config.isPooledTenancy`), unshadowed |
+| `content-addressed` | the value is a function of the key, so a cross-tenant hit is byte-identical to a recompute | no                                                                                                         |
+| `fleet-wide`        | holds only values identical for every tenant                                               | no                                                                                                         |
+| `process-lifetime`  | a latch, a timer, a connection handle                                                      | no                                                                                                         |
 
 `refuses-pooled` started as `text.includes('isPooledTenancy')` and was defeated
 on the first attack: swapping the import for a local
@@ -106,7 +106,7 @@ the check green while the guard is gone. Certification by mention, the same
 shape as Piece 5's unconditional-witness helper. It is now structural, with five
 cases pinning it — including an import of the same name from a different module.
 
-What the check still does not prove is that the guard covers the *site*. That
+What the check still does not prove is that the guard covers the _site_. That
 claim lives where it can be observed: `__tests__/singletons-not-shared.test.ts`
 asserts the relay does not attempt leadership under pooled tenancy and the
 readiness probe never reads the migration status.
