@@ -222,10 +222,12 @@ describe('one workspace cannot spend another workspace’s retry budget', () => 
     expect(published('tenant-alpha', id)).toBe(true)
   })
 
-  it('prunes only the active workspace’s spent counters', async () => {
-    // The prune drops keys below the smallest still-unpublished id. Across the
-    // fleet it must not touch a neighbour's, so alpha keeps its progress while
-    // bravo drains an entirely different id range.
+  it('a neighbour draining a different id range does not reset this one’s counters', async () => {
+    // Named for what it actually pins. An earlier version of this case was
+    // titled "prunes only the active workspace's spent counters" and asserted
+    // the same thing — but a broken prune leaves counters ALONE, so the
+    // assertion held either way. It pins `clearTenant`, not the prune; the
+    // prune has its own case below.
     const id = freshId()
     seed('tenant-alpha', id)
     for (let i = 0; i < 3; i++) {
@@ -238,5 +240,38 @@ describe('one workspace cannot spend another workspace’s retry budget', () => 
 
     await withTenant('tenant-alpha', () => drainOnce({ maxStrictResolveAttempts: 3 }))
     expect(published('tenant-alpha', id)).toBe(true)
+  })
+
+  it('prunes counters for rows the leader has moved past', async () => {
+    // The prune's only effect is on memory, which is why the case above could
+    // not see it. It becomes observable when an id is REUSED: a leader change
+    // abandons row N unpublished, the outbox moves on to a higher id, and a
+    // later row arrives carrying N again. With the prune, N starts from a clean
+    // budget; without it, N inherits the abandoned count and can degrade —
+    // dropping a healthy sink's targets on its first real attempt.
+    const low = freshId()
+    const high = low + 500n
+
+    seed('tenant-alpha', low)
+    for (let i = 0; i < 2; i++) {
+      await withTenant('tenant-alpha', () => drainOnce({ maxStrictResolveAttempts: 3 }))
+    }
+    // Precondition: the ledger really is carrying attempts for `low`.
+    expect(published('tenant-alpha', low), 'low must be unpublished with attempts banked').toBe(
+      false
+    )
+
+    // The leader moves past it: `low` is gone, `high` is the smallest unpublished id.
+    seed('tenant-alpha', high)
+    await withTenant('tenant-alpha', () => drainOnce({ maxStrictResolveAttempts: 3 }))
+
+    // `low` comes back. Two more strict passes must NOT be enough to degrade it.
+    hoisted.tables.set('tenant-alpha', [])
+    seed('tenant-alpha', low)
+    for (let i = 0; i < 2; i++) {
+      await withTenant('tenant-alpha', () => drainOnce({ maxStrictResolveAttempts: 3 }))
+    }
+
+    expect(published('tenant-alpha', low)).toBe(false)
   })
 })

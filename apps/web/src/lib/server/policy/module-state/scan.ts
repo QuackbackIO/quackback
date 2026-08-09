@@ -53,10 +53,16 @@
  */
 import * as ts from 'typescript'
 import { readFileSync } from 'node:fs'
-import { relative, sep } from 'node:path'
+import { relative, sep, posix as posixPath } from 'node:path'
 import { walkSourceFiles } from '../source-files'
 
-export type SiteKind = 'binding' | 'container' | 'factory' | 'class-static' | 'global-assign'
+export type SiteKind =
+  | 'binding'
+  | 'container'
+  | 'factory'
+  | 'instance'
+  | 'class-static'
+  | 'global-assign'
 
 export interface StateSite {
   /** Path relative to the repo root, posix-normalized. */
@@ -130,9 +136,70 @@ function isAssignment(token: ts.BinaryOperatorToken): boolean {
   return ASSIGNMENT_OPERATORS.has(token.kind)
 }
 
+/**
+ * `Object.*` helpers that mutate their FIRST argument.
+ *
+ * `Object.assign(state, …)` as a binding's only mutation left it invisible,
+ * because nothing about it looks like `state.x = …` or `state.set(…)`.
+ */
+const OBJECT_MUTATORS: ReadonlySet<string> = new Set([
+  'assign',
+  'defineProperty',
+  'defineProperties',
+  'setPrototypeOf',
+])
+
+/**
+ * `Object.freeze` / `Object.seal` wrappers are transparent to this scanner.
+ *
+ * Freezing is shallow. `Object.freeze({ tierLimits: new Map() })` is a frozen
+ * *reference* around a fully live `Map`, and `CACHES.tierLimits.set(…)` writes
+ * to it exactly as a bare `Map` would. Treating the wrapper as evidence of
+ * constness is the single most dangerous mistake available here, because the
+ * whole reason 80 of 97 containers are suppressed is "nothing writes to it" —
+ * and this is the spelling that makes a write look like a constant.
+ */
+function unwrapObjectWrapper(node: ts.Expression): ts.Expression {
+  const e = unwrap(node)
+  if (
+    ts.isCallExpression(e) &&
+    ts.isPropertyAccessExpression(e.expression) &&
+    ts.isIdentifier(e.expression.expression) &&
+    e.expression.expression.text === 'Object' &&
+    (e.expression.name.text === 'freeze' || e.expression.name.text === 'seal') &&
+    e.arguments.length > 0
+  ) {
+    return unwrapObjectWrapper(e.arguments[0])
+  }
+  return e
+}
+
+/**
+ * The identifier a property chain is rooted at: `a.b.c` → `a`, `a[k].d` → `a`.
+ *
+ * Matching only the immediate receiver misses every nested container — a `Map`
+ * one property deep inside a module-scope object is reached as
+ * `CACHES.tierLimits.set(…)`, whose receiver is `CACHES.tierLimits`, not an
+ * identifier at all.
+ */
+function rootIdentifier(node: ts.Expression): string | null {
+  let cur: ts.Expression = unwrapObjectWrapper(node)
+  for (;;) {
+    if (ts.isIdentifier(cur)) return cur.text
+    if (ts.isPropertyAccessExpression(cur) || ts.isElementAccessExpression(cur)) {
+      cur = unwrapObjectWrapper(cur.expression)
+      continue
+    }
+    return null
+  }
+}
+
 function posix(p: string): string {
   return p.split(sep).join('/')
 }
+
+const posixJoin = (...parts: string[]): string => posixPath.normalize(posixPath.join(...parts))
+const posixDirname = (p: string): string => posixPath.dirname(p)
 
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
   const mods = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined
@@ -163,29 +230,64 @@ function boundNames(name: ts.BindingName, acc: string[] = []): string[] {
 
 function initializerLabel(init: ts.Expression | undefined): string | null {
   if (!init) return null
-  if (ts.isNewExpression(init) && ts.isIdentifier(init.expression)) return init.expression.text
-  if (ts.isArrayLiteralExpression(init)) return '[]'
-  if (ts.isObjectLiteralExpression(init)) return '{}'
-  if (ts.isCallExpression(init)) {
-    if (ts.isIdentifier(init.expression)) return `${init.expression.text}()`
+  const e = unwrapObjectWrapper(init)
+  if (ts.isNewExpression(e)) {
+    if (ts.isIdentifier(e.expression)) return `new ${e.expression.text}`
+    if (ts.isPropertyAccessExpression(e.expression)) return `new ${e.expression.name.text}`
+    return 'new'
+  }
+  if (ts.isArrayLiteralExpression(e)) return '[]'
+  if (ts.isObjectLiteralExpression(e)) return '{}'
+  if (ts.isClassExpression(e)) return 'class'
+  if (ts.isCallExpression(e)) {
+    if (ts.isIdentifier(e.expression)) return `${e.expression.text}()`
     return 'call()'
   }
-  if (ts.isParenthesizedExpression(init)) return initializerLabel(init.expression)
   return null
 }
 
 function isContainerInitializer(init: ts.Expression | undefined): boolean {
   if (!init) return false
-  if (ts.isParenthesizedExpression(init)) return isContainerInitializer(init.expression)
-  if (ts.isAsExpression(init) || ts.isTypeAssertionExpression(init)) {
-    return isContainerInitializer(init.expression)
-  }
-  if (ts.isArrayLiteralExpression(init) || ts.isObjectLiteralExpression(init)) return true
-  if (ts.isNewExpression(init) && ts.isIdentifier(init.expression)) {
-    return CONTAINER_CONSTRUCTORS.has(init.expression.text)
+  const e = unwrapObjectWrapper(init)
+  if (ts.isArrayLiteralExpression(e) || ts.isObjectLiteralExpression(e)) return true
+  if (ts.isNewExpression(e) && ts.isIdentifier(e.expression)) {
+    return CONTAINER_CONSTRUCTORS.has(e.expression.text)
   }
   return false
 }
+
+/**
+ * Constructors whose instances cannot carry state across requests.
+ *
+ * Deliberately tiny and enumerated. Everything else built with `new` at module
+ * scope becomes a ledgered site, because a scanner that only understands
+ * `new Map` misses `new Lru()`, `new AsyncLocalStorage()` and `new Proxy()` —
+ * and the first of those is the store that carries tenant identity.
+ *
+ * Each entry here is a value type: immutable after construction, or holding
+ * only its own constructor arguments. `Date` is absent on purpose; a
+ * module-scope `Date` is a captured boot timestamp, which is exactly the kind
+ * of thing worth one ledger line.
+ */
+const PURE_CONSTRUCTORS: ReadonlySet<string> = new Set([
+  'RegExp',
+  'Error',
+  'TypeError',
+  'RangeError',
+  'URL',
+  'URLSearchParams',
+  'TextEncoder',
+  'TextDecoder',
+  'Uint8Array',
+  'Uint16Array',
+  'Uint32Array',
+  'Int8Array',
+  'Int16Array',
+  'Int32Array',
+  'Float32Array',
+  'Float64Array',
+  'ArrayBuffer',
+])
 
 /** Unwrap `as const`, parens and type assertions to the underlying expression. */
 function unwrap(node: ts.Expression): ts.Expression {
@@ -206,10 +308,15 @@ function unwrap(node: ts.Expression): ts.Expression {
  * alternative — resolving symbols — needs a full type-checker pass over the
  * tree on every CI run.
  */
-export function mutatesBinding(root: ts.Node, name: string): boolean {
+export function mutatesBinding(
+  root: ts.Node,
+  name: string,
+  aliases: ReadonlySet<string> = new Set()
+): boolean {
+  const names = new Set([name, ...aliases])
   return mutatesTarget(root, (e) => {
-    const u = unwrap(e)
-    return ts.isIdentifier(u) && u.text === name
+    const rootName = rootIdentifier(e)
+    return rootName !== null && names.has(rootName)
   })
 }
 
@@ -239,12 +346,27 @@ function mutatesTarget(root: ts.Node, isTarget: (e: ts.Expression) => boolean): 
   let found = false
   const visit = (node: ts.Node): void => {
     if (found) return
-    // x.set(…) / x.push(…) / x.delete(…)
+    // x.set(…) / x.push(…) / x.delete(…), at any property depth:
+    // `CACHES.tierLimits.set(…)` writes to a Map one level inside a frozen
+    // wrapper, and its receiver is a property access rather than an identifier.
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
       MUTATING_METHODS.has(node.expression.name.text) &&
       isTarget(node.expression.expression)
+    ) {
+      found = true
+      return
+    }
+    // Object.assign(x, …) / Object.defineProperty(x, …)
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === 'Object' &&
+      OBJECT_MUTATORS.has(node.expression.name.text) &&
+      node.arguments.length > 0 &&
+      isTarget(node.arguments[0])
     ) {
       found = true
       return
@@ -404,18 +526,89 @@ function bodyHoldsMutableState(fn: ts.Node): boolean {
   return found
 }
 
-/** Local function/arrow declarations in a file, by name. */
-function localFunctions(sf: ts.SourceFile): Map<string, ts.Node> {
+/**
+ * Callable declarations in a file, by name: functions, arrows and classes.
+ *
+ * Classes are included because `new Lru()` is the same hazard as `makeStash()`
+ * wearing different syntax — an instance whose fields hold live containers.
+ */
+function localCallables(sf: ts.SourceFile): Map<string, ts.Node> {
   const out = new Map<string, ts.Node>()
   for (const stmt of sf.statements) {
     if (ts.isFunctionDeclaration(stmt) && stmt.name && stmt.body) {
+      out.set(stmt.name.text, stmt)
+    } else if (ts.isClassDeclaration(stmt) && stmt.name) {
       out.set(stmt.name.text, stmt)
     } else if (ts.isVariableStatement(stmt)) {
       for (const d of stmt.declarationList.declarations) {
         if (!d.initializer || !ts.isIdentifier(d.name)) continue
         const init = unwrap(d.initializer)
-        if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) out.set(d.name.text, init)
+        if (ts.isArrowFunction(init) || ts.isFunctionExpression(init) || ts.isClassExpression(init))
+          out.set(d.name.text, init)
       }
+    }
+  }
+  return out
+}
+
+/**
+ * Does a CLASS hold mutable instance or static state?
+ *
+ * A field initialised to a container, or any `this.x = …` in the body, means an
+ * instance of it is a live store. `new Lru()` at module scope is then module
+ * state under a different spelling.
+ */
+function classHoldsMutableState(node: ts.Node): boolean {
+  if (!ts.isClassDeclaration(node) && !ts.isClassExpression(node)) return false
+  for (const member of node.members) {
+    if (ts.isPropertyDeclaration(member) && isContainerInitializer(member.initializer)) return true
+    if (ts.isPropertyDeclaration(member) && !member.initializer && member.type) {
+      // `private entries!: Map<…>` — declared, assigned in the constructor.
+      const text = member.type.getText(node.getSourceFile())
+      if (/\b(Map|Set|WeakMap|WeakSet|TenantKeyedCache)\b/.test(text)) return true
+    }
+  }
+  let assignsThis = false
+  const visit = (n: ts.Node): void => {
+    if (assignsThis) return
+    if (ts.isBinaryExpression(n) && isAssignment(n.operatorToken)) {
+      const lhs = unwrap(n.left)
+      if (ts.isPropertyAccessExpression(lhs) && lhs.expression.kind === ts.SyntaxKind.ThisKeyword) {
+        assignsThis = true
+        return
+      }
+    }
+    ts.forEachChild(n, visit)
+  }
+  ts.forEachChild(node, visit)
+  return assignsThis
+}
+
+/** Does this callable, whatever its kind, hold state an instance could carry? */
+function callableHoldsMutableState(node: ts.Node): boolean {
+  if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+    return classHoldsMutableState(node)
+  }
+  return bodyHoldsMutableState(node) && returnsStateCarrier(node)
+}
+
+/**
+ * Module-scope aliases: `const alias = backing`.
+ *
+ * `alias.set(…)` is a write to `backing`, and without following the alias the
+ * backing container reads as a frozen constant and disappears from the ledger.
+ */
+function moduleAliases(sf: ts.SourceFile): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue
+    for (const d of stmt.declarationList.declarations) {
+      if (!d.initializer || !ts.isIdentifier(d.name)) continue
+      const init = unwrapObjectWrapper(d.initializer)
+      if (!ts.isIdentifier(init)) continue
+      const list = out.get(init.text) ?? []
+      list.push(d.name.text)
+      out.set(init.text, list)
     }
   }
   return out
@@ -460,7 +653,8 @@ function topLevelStatements(sf: ts.SourceFile): ts.Statement[] {
 export function extractSites(
   relPath: string,
   text: string,
-  mutatedElsewhere: (name: string) => boolean = () => false
+  mutatedElsewhere: (name: string) => boolean = () => false,
+  resolveImported?: (localName: string) => ts.Node | undefined
 ): StateSite[] {
   const sf = ts.createSourceFile(
     relPath,
@@ -472,7 +666,8 @@ export function extractSites(
   const sites: StateSite[] = []
   const lineOf = (node: ts.Node): number =>
     sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1
-  const locals = localFunctions(sf)
+  const locals = localCallables(sf)
+  const aliases = moduleAliases(sf)
 
   for (const stmt of topLevelStatements(sf)) {
     if (isAmbient(stmt, relPath)) continue
@@ -501,7 +696,8 @@ export function extractSites(
             // the ~45 §4 counts as safe. The scanner decides this from the
             // source rather than from a label, so mislabelling cannot hide a
             // write, and adding one turns the constant into a ledgered site.
-            if (!mutatesBinding(sf, name) && !(exported && mutatedElsewhere(name))) continue
+            const alias = new Set(aliases.get(name) ?? [])
+            if (!mutatesBinding(sf, name, alias) && !(exported && mutatedElsewhere(name))) continue
             sites.push({
               file: relPath,
               name,
@@ -513,14 +709,77 @@ export function extractSites(
           }
           continue
         }
+        const init = d.initializer ? unwrapObjectWrapper(d.initializer) : undefined
+        if (!init) continue
+
+        // `const R = class { static seen = new Map() }` — a class EXPRESSION is
+        // a class declaration that a `const` is hiding, statics and all.
+        if (ts.isClassExpression(init)) {
+          const owner = names[0] ?? '(anonymous)'
+          for (const member of init.members) {
+            if (!ts.isPropertyDeclaration(member)) continue
+            if (!hasModifier(member, ts.SyntaxKind.StaticKeyword)) continue
+            if (!ts.isIdentifier(member.name)) continue
+            if (!mutatesStaticMember(sf, owner, member.name.text)) continue
+            sites.push({
+              file: relPath,
+              name: `${owner}.${member.name.text}`,
+              kind: 'class-static',
+              line: lineOf(member),
+              exported,
+              initializer: initializerLabel(member.initializer),
+            })
+          }
+          continue
+        }
+
+        // `const cache = new Lru()` / `new AsyncLocalStorage()` / `new Proxy()`.
+        // Anything constructed at module scope is an instance that outlives a
+        // request, so it is a site unless its constructor is a known value type.
+        if (ts.isNewExpression(init)) {
+          const ctor = unwrap(init.expression)
+          const ctorName = ts.isIdentifier(ctor) ? ctor.text : null
+          if (ctorName !== null && PURE_CONSTRUCTORS.has(ctorName)) continue
+          // `new Intl.DateTimeFormat(…)` / `new Intl.DisplayNames(…)`. Every
+          // `Intl` constructor produces an immutable formatter configured
+          // entirely by its arguments — the same value type as `new RegExp`,
+          // reached through a namespace rather than a bare identifier.
+          if (
+            ts.isPropertyAccessExpression(ctor) &&
+            ts.isIdentifier(ctor.expression) &&
+            ctor.expression.text === 'Intl'
+          )
+            continue
+          for (const name of names) {
+            sites.push({
+              file: relPath,
+              name,
+              kind: 'instance',
+              line: lineOf(d),
+              exported,
+              initializer: initializerLabel(d.initializer),
+            })
+          }
+          continue
+        }
+
         // `const x = makeThing()` where makeThing closes over mutable state.
-        const init = d.initializer ? unwrap(d.initializer) : undefined
-        if (init && ts.isCallExpression(init)) {
+        // The callee may be declared here, or imported from another scanned
+        // module — `makeStash` is one file-move away from being invisible, and
+        // it holds §4.1's top-listed hazard.
+        if (ts.isCallExpression(init)) {
           const callee = unwrap(init.expression)
           let target: ts.Node | undefined
-          if (ts.isIdentifier(callee)) target = locals.get(callee.text)
-          else if (ts.isArrowFunction(callee) || ts.isFunctionExpression(callee)) target = callee
-          if (target && bodyHoldsMutableState(target) && returnsStateCarrier(target)) {
+          if (ts.isIdentifier(callee)) {
+            target = locals.get(callee.text) ?? resolveImported?.(callee.text)
+          } else if (
+            ts.isArrowFunction(callee) ||
+            ts.isFunctionExpression(callee) ||
+            ts.isClassExpression(callee)
+          ) {
+            target = callee
+          }
+          if (target && callableHoldsMutableState(target)) {
             for (const name of names) {
               sites.push({
                 file: relPath,
@@ -633,8 +892,83 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
   const mutatedByAnImporter = (name: string): boolean =>
     parsed.some((p) => p.imported.has(name) && mutatesBinding(p.sf, name))
 
+  /**
+   * Resolve `import { makeStash } from './x'` to the declaration in `./x`.
+   *
+   * Without this, a factory is analysable only while it happens to sit in the
+   * same file as its call. `magicLinkStash` and `otpStash` — §4.1's top-listed
+   * hazard — are seen today purely because `makeStash` is local to
+   * `auth/index.ts`; moving it to a helper module would have made both
+   * disappear from the scan with nothing failing.
+   *
+   * First-party only. A specifier that leaves the scanned tree cannot be
+   * analysed, which is why `new` is treated as a site on its own rather than
+   * relying on knowing what the constructor does.
+   */
+  const byRelPath = new Map(parsed.map((p) => [p.rel, p]))
+  const resolveModule = (
+    fromRel: string,
+    specifier: string
+  ): (typeof parsed)[number] | undefined => {
+    const spec = specifier.split('?')[0]
+    let target: string | null = null
+    if (spec.startsWith('@/')) target = posixJoin('apps/web/src', spec.slice(2))
+    else if (spec.startsWith('./') || spec.startsWith('../'))
+      target = posixJoin(posixDirname(fromRel), spec)
+    if (target === null) return undefined
+    for (const candidate of [`${target}.ts`, `${target}/index.ts`, target]) {
+      const hit = byRelPath.get(candidate)
+      if (hit) return hit
+    }
+    return undefined
+  }
+
+  const exportedDeclaration = (
+    mod: (typeof parsed)[number],
+    exportName: string
+  ): ts.Node | undefined => {
+    for (const stmt of mod.sf.statements) {
+      if (!hasModifier(stmt, ts.SyntaxKind.ExportKeyword)) continue
+      if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === exportName && stmt.body) return stmt
+      if (ts.isClassDeclaration(stmt) && stmt.name?.text === exportName) return stmt
+      if (ts.isVariableStatement(stmt)) {
+        for (const d of stmt.declarationList.declarations) {
+          if (!ts.isIdentifier(d.name) || d.name.text !== exportName || !d.initializer) continue
+          const init = unwrap(d.initializer)
+          if (
+            ts.isArrowFunction(init) ||
+            ts.isFunctionExpression(init) ||
+            ts.isClassExpression(init)
+          )
+            return init
+        }
+      }
+    }
+    return undefined
+  }
+
+  /** localName -> the imported declaration, for one importing file. */
+  const importedDeclarations = (file: (typeof parsed)[number]): Map<string, ts.Node> => {
+    const out = new Map<string, ts.Node>()
+    for (const stmt of file.sf.statements) {
+      if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue
+      const bindings = stmt.importClause?.namedBindings
+      if (!bindings || !ts.isNamedImports(bindings)) continue
+      const mod = resolveModule(file.rel, stmt.moduleSpecifier.text)
+      if (!mod) continue
+      for (const el of bindings.elements) {
+        const decl = exportedDeclaration(mod, (el.propertyName ?? el.name).text)
+        if (decl) out.set(el.name.text, decl)
+      }
+    }
+    return out
+  }
+
   const all: StateSite[] = []
-  for (const f of files) all.push(...extractSites(f.rel, f.text, mutatedByAnImporter))
+  for (const f of parsed) {
+    const imported = importedDeclarations(f)
+    all.push(...extractSites(f.rel, f.text, mutatedByAnImporter, (n) => imported.get(n)))
+  }
 
   return all.sort((a, b) => a.file.localeCompare(b.file) || a.name.localeCompare(b.name))
 }

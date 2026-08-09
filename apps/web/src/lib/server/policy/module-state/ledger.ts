@@ -79,9 +79,11 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'authInstances',
     category: 'tenant-keyed',
     reason:
-      "A built better-auth instance closes over one workspace's database adapter, OAuth providers, " +
-      'trusted origins and base URL. Shared, every tenant authenticates against whichever one built ' +
-      'it.',
+      "A built better-auth instance closes over one workspace's database adapter and its registered " +
+      'OAuth/OIDC providers, which are read from that workspace rows. Shared, every tenant ' +
+      'authenticates against whichever one built it. Note what this does NOT cover: auth/index.ts ' +
+      'reads `config.baseUrl` and `process.env.TRUSTED_ORIGINS`, both process-wide, so partitioning ' +
+      'the instance does not make those per-tenant. See the config.ts entry.',
   },
   {
     file: 'apps/web/src/lib/server/auth/index.ts',
@@ -408,11 +410,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
     file: 'apps/web/src/lib/server/config.ts',
     name: '_config',
-    category: 'fleet-wide',
+    category: 'process-lifetime',
     reason:
-      'The parsed process configuration. Under pooled tenancy the schema REFUSES the per-tenant ' +
-      'variables (DATABASE_URL must be unset), so what remains is fleet-wide by validation rather ' +
-      'than by convention.',
+      'The parsed process configuration. NOT fleet-wide, which an earlier version of this entry ' +
+      'claimed: the pooled schema refuses exactly one per-tenant variable (DATABASE_URL), while ' +
+      'BASE_URL stays REQUIRED and is per-tenant by this branch own registry contract, deriving ' +
+      'cookie domain and secure flags, trusted origins, email links and every absolute asset URL. ' +
+      'Of the ~56 config.baseUrl readers exactly one consults the tenant record, so on the pooled ' +
+      'fleet both tenants render the same __QUACKBACK_URL__. Host-derived BASE_URL is ' +
+      'SAAS-HOSTING-STACK.md section 9 work and is deliberately NOT done here; this entry exists so ' +
+      'the gap is written down rather than implied to be closed.',
   },
   {
     file: 'apps/web/src/lib/server/domains/ai/config.ts',
@@ -452,8 +459,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'smtpTransporter',
     category: 'fleet-wide',
     reason:
-      'Built from EMAIL_SMTP_HOST/PORT/USER/PASS. A transport, not an identity: the per-tenant part ' +
-      'of email is the From address, which is read per send rather than baked into the transport.',
+      'Built from EMAIL_SMTP_HOST/PORT/USER/PASS. A transport, not an identity, so the client ' +
+      'itself is fleet-wide. Say the rest plainly: the per-tenant part of email is the From ' +
+      'address, and it is BROKEN under pooling - getEmailFrom() reads process.env.EMAIL_FROM per ' +
+      'send, the registry carries a per-tenant email.from, and NOTHING repo-wide reads it, so every ' +
+      'tenant mail goes out from one address. Not this singleton fault and not fixed here (it is ' +
+      'section 8 config resolution, not section 4 process state) - recorded so the next reader is ' +
+      'not reassured by a transport that was never the problem.',
   },
   {
     file: 'apps/web/src/lib/server/domains/analytics/analytics-queue.ts',
@@ -665,8 +677,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: '_initialized',
     category: 'process-lifetime',
     reason:
-      'Log-once latch for the bootstrap path. Holds a boolean that has never been true for one ' +
-      'tenant and false for another; the worst shared effect is one missing log line after a boot.',
+      'A once-per-process latch gating telemetry startup, and process-lifetime is exactly what it ' +
+      'should mean. An earlier version of this entry said the worst shared effect was a missing log ' +
+      'line; that was wrong. The latch is fine - the WORK it gated was not, because the timer it ' +
+      'arms is scheduled inside a request and AsyncLocalStorage carried that request tenant scope ' +
+      'into it, into startTelemetry and into its hourly interval for the life of the pod. ' +
+      'withSweepLock fans out only when no scope is active, so the first tenant to render a page ' +
+      'owned the fleet telemetry: an hourly claim in ITS database and an unlocked ' +
+      'read-modify-write of ITS settings.metadata, the write section 3 names as able to drop the ' +
+      'fingerprint stamp. Fixed by detaching with runWithoutLogContext; pinned by ' +
+      '__tests__/background-work-armed-in-request.test.ts.',
   },
   {
     file: 'apps/web/src/lib/server/functions/recovery-codes-consume.ts',
@@ -782,5 +802,52 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Memoizes whether ?rtl=1 was set on the page URL. Browser-side debug affordance; on the server ' +
       'it evaluates to false because there is no window.',
+  },
+  {
+    file: 'apps/web/src/lib/server/db.ts',
+    name: 'db',
+    category: 'tenant-scoped-key',
+    keyedBy: 'getScopedDatabase',
+    reason:
+      'The Proxy that 537 files import. It holds no connection of its own: the get trap calls ' +
+      'getDatabase() on every property access, which returns the ACTIVE tenant scope handle and ' +
+      'throws under pooled tenancy when there is none. The instance is shared precisely so the ' +
+      'resolution behind it does not have to be.',
+  },
+  {
+    file: 'packages/logger/src/context.ts',
+    name: 'storage',
+    category: 'process-lifetime',
+    reason:
+      'The AsyncLocalStorage that CARRIES tenant identity, so it is the one instance that must be ' +
+      'shared: one store per process is what lets the web app, @quackback/db and @quackback/email ' +
+      'read the same request scope. Partitioning it by tenant would be circular, since the store is ' +
+      'how the tenant is known. What it holds is per-async-context, never process-global.',
+  },
+  {
+    file: 'apps/web/src/lib/server/markdown-tiptap.ts',
+    name: 'manager',
+    category: 'process-lifetime',
+    reason:
+      'A MarkdownManager built once from the static SERVER_EXTENSIONS schema. Its configuration is ' +
+      'a compile-time constant; no workspace value reaches it, and parse/serialize take their input ' +
+      'as arguments and retain nothing.',
+  },
+  {
+    file: 'apps/web/src/lib/server/markdown-tiptap.ts',
+    name: 'commentManager',
+    category: 'process-lifetime',
+    reason:
+      'The comment-schema sibling of manager, built from a second static extension list for the ' +
+      'narrower node set comments allow. Same argument: static configuration, no retained input.',
+  },
+  {
+    file: 'apps/web/src/lib/server/content/email-html-to-content.ts',
+    name: 'turndown',
+    category: 'process-lifetime',
+    reason:
+      'A TurndownService configured with three literal style options (atx headings, fenced code, ' +
+      'dash bullets). Rules are registered at construction from constants and conversion is a pure ' +
+      'function of the HTML passed in, so a shared instance returns what a fresh one would.',
   },
 ]

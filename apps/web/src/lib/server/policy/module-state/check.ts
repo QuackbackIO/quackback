@@ -167,7 +167,7 @@ export function checkModuleState(repoRoot: string): CheckResult {
     if (!VERIFIED.has(entry.category)) continue
 
     if (entry.category === 'tenant-keyed' && site.kind !== 'factory') {
-      if (site.initializer !== 'TenantKeyedCache') {
+      if (site.initializer !== 'new TenantKeyedCache') {
         findings.push({
           kind: 'miscategorised',
           id,

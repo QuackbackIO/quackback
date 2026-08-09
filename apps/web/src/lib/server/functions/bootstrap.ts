@@ -7,6 +7,7 @@ import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { runWithoutLogContext } from '@/lib/server/log-context'
 
 const log = logger.child({ component: 'bootstrap' })
 
@@ -152,13 +153,31 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     _initialized = true
 
     // Delay telemetry to let the DB connection initialize
-    setTimeout(async () => {
-      try {
-        const { startTelemetry } = await import('@/lib/server/telemetry')
-        await startTelemetry()
-      } catch {
-        // Silent failure -- telemetry must never affect the application
-      }
+    setTimeout(() => {
+      // Detached from the request that happened to arm it.
+      //
+      // AsyncLocalStorage carries the arming request's store into this timer,
+      // into `startTelemetry`, and into the hourly `setInterval` it arms — for
+      // the life of the process. Under pooled tenancy that store carries the
+      // TENANT SCOPE, and `withSweepLock` fans a tick across the fleet only
+      // when no scope is active. So without this, whichever tenant rendered the
+      // pod's first page would own the fleet's telemetry forever: the hourly
+      // claim would take the lock in *its* database, no other tenant would ever
+      // be pinged, and `telemetry/instance-id.ts` would keep issuing an
+      // unlocked read-modify-write of *its* `settings.metadata` — the write
+      // SAAS-HOSTING-STACK.md §3 names as able to drop the fingerprint stamp.
+      //
+      // `_initialized` itself is fine shared: it is a once-per-process latch,
+      // and process-lifetime is exactly what it should mean. The bug was that
+      // the work it gates inherited a request's identity.
+      void runWithoutLogContext(async () => {
+        try {
+          const { startTelemetry } = await import('@/lib/server/telemetry')
+          await startTelemetry()
+        } catch {
+          // Silent failure -- telemetry must never affect the application
+        }
+      })
     }, 10_000)
   }
 

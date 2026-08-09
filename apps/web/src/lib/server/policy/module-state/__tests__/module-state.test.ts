@@ -9,11 +9,12 @@
  * "without it, singleton twenty-one lands three weeks after twenty is fixed."
  */
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkModuleState, renderLedgerDoc, serverRoots } from '../check'
 import { MODULE_STATE_LEDGER } from '../ledger'
-import { countModuleScopeContainers, siteId } from '../scan'
+import { countModuleScopeContainers, scanRoots, siteId } from '../scan'
 import { walkSourceFiles } from '../../source-files'
 
 const SRC_ROOT = join(__dirname, '../../../../..') // apps/web/src
@@ -163,5 +164,58 @@ describe('MODULE-STATE.md', () => {
   it('matches the tree', () => {
     const golden = readFileSync(join(__dirname, '..', 'MODULE-STATE.md'), 'utf8')
     expect(renderLedgerDoc(result) + '\n').toBe(golden)
+  })
+})
+
+describe('cross-file factory resolution', () => {
+  it('sees a factory imported from another scanned module', () => {
+    // `magicLinkStash` and `otpStash` — §4.1's top-listed hazard — are visible
+    // today only because `makeStash` happens to sit in the same file as its
+    // call. Moving it to a helper module would have removed both from the scan
+    // with nothing failing, which is one refactor away, not a hypothetical.
+    const dir = mkdtempSync(join(tmpdir(), 'module-state-xfile-'))
+    try {
+      mkdirSync(join(dir, 'mod'))
+      writeFileSync(
+        join(dir, 'mod', 'stash-helper.ts'),
+        `export function makeStash<T>() {
+           const m = new Map<string, T>()
+           return {
+             set(k: string, v: T) { m.set(k.toLowerCase(), v) },
+             take(k: string) { const v = m.get(k.toLowerCase()); m.delete(k.toLowerCase()); return v },
+           }
+         }\n`
+      )
+      writeFileSync(
+        join(dir, 'mod', 'consumer.ts'),
+        `import { makeStash } from './stash-helper'
+         const magicLinkStash = makeStash<string>()
+         export const store = (email: string, t: string) => magicLinkStash.set(email, t)\n`
+      )
+
+      const sites = scanRoots(dir, [{ dir: join(dir, 'mod'), label: 'mod' }])
+      expect(sites.map((s) => `${s.kind}:${s.name}`)).toContain('factory:magicLinkStash')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not flag a factory whose imported callee holds nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'module-state-xfile-'))
+    try {
+      mkdirSync(join(dir, 'mod'))
+      writeFileSync(
+        join(dir, 'mod', 'pure-helper.ts'),
+        `export function banner(n: number) { let out = ''; for (let i = 0; i < n; i++) out += 'x'; return out }\n`
+      )
+      writeFileSync(
+        join(dir, 'mod', 'consumer.ts'),
+        `import { banner } from './pure-helper'\nexport const BANNER = banner(3)\n`
+      )
+
+      expect(scanRoots(dir, [{ dir: join(dir, 'mod'), label: 'mod' }])).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

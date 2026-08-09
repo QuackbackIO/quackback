@@ -37,9 +37,38 @@ routed around.
 | --- | --- |
 | `binding` | module-scope `let` / `var` |
 | `container` | module-scope `const` bound to a mutable container **that is actually mutated** |
-| `factory` | module-scope `const` bound to a call of a local function that closes over mutable state |
-| `class-static` | a mutable `static` field on a module-scope class |
+| `factory` | module-scope `const` bound to a call of a function — local **or imported from a scanned module** — that closes over mutable state |
+| `instance` | module-scope `new X(...)`, unless `X` is an enumerated value type |
+| `class-static` | a mutable `static` field on a module-scope class **or class expression** |
 | `global-assign` | assignment to `globalThis.x` / `global.x` |
+
+### Six bypasses, found by attacking round 1
+
+Every one of these produced **no site** in the first version, and three were
+then planted as a real file in server code with the gate still green — one
+containing §4.1's top-listed hazard verbatim. They are pinned in
+`__tests__/scan.test.ts` under *"bypasses found by attacking the first version
+of this scanner"*.
+
+| shape | why it slipped |
+| --- | --- |
+| `Object.freeze({ m: new Map() })`, written via `X.m.set(…)` | freezing is shallow, and the mutation matcher only knew identifiers, not property chains |
+| `const c = new Lru()` (local class holding a `Map`) | `new` was only a site for `Map`/`Set` |
+| `const s = makeStash()` where `makeStash` is **imported** | the callee was resolved from `sf.statements` only |
+| `const R = class { static seen = new Map() }` | the class-static rule matched declarations, not expressions |
+| `const alias = backing; alias.set(…)` | `backing` read as never-written, so it was suppressed as frozen |
+| `Object.assign(state, …)` as the only write | nothing about it looks like `x.y = …` |
+
+The `Object.freeze` one is the sharpest, because it is the exact class the
+suppression story rests on: 80 of 97 constructed containers are dropped as
+"nothing writes to it", and this is the spelling that makes a write look like a
+constant.
+
+`new X(...)` becoming a site on its own is what closes the second row without
+needing to know what a constructor does. It costs five ledger lines — including
+`AsyncLocalStorage`, the store that carries tenant identity, and the `db`
+`Proxy` — and the exemption list (`PURE_CONSTRUCTORS`, plus any `Intl.*`) is
+short, enumerated, and restricted to types that cannot carry state.
 
 ### The ~45 frozen constants are not reported at all
 

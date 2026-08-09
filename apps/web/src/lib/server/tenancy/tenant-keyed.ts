@@ -70,11 +70,30 @@ export class TenantKeyedCache<V> {
 
   constructor(private readonly maxEntries = 5_000) {}
 
+  /**
+   * The namespace/key separator, named once.
+   *
+   * It was spelled inline in three methods, and two of them said `\u0000` while
+   * `tenantKeys()` said a space -- so `tenantKeys()` matched nothing, the
+   * relay's retry-ledger prune silently stopped pruning, and the test covering
+   * it asserted a negative that held either way. A literal three methods must
+   * agree on is a drift waiting to happen; there is now one spelling, and
+   * `prefix()` is the only thing that builds from it.
+   *
+   * NUL because it cannot occur in a tenant id or in any key composed here, so
+   * no two (namespace, key) pairs can compose to the same string. Written as an
+   * escape rather than embedded as a raw byte: a literal NUL compiles fine but
+   * is invisible in a diff and eaten by most greps.
+   */
+  private static readonly SEPARATOR = '\u0000'
+
+  /** Everything before the key, for the active tenant. */
+  private prefix(): string {
+    return `${currentTenantNamespace()}${TenantKeyedCache.SEPARATOR}`
+  }
+
   private compose(key: string): string {
-    // NUL as the separator, spelled as an escape rather than embedded as a
-    // raw byte: a literal NUL in source survives compilation fine but is
-    // invisible in a diff and eaten by most greps.
-    return `${currentTenantNamespace()}\u0000${key}`
+    return `${this.prefix()}${key}`
   }
 
   get(key: string): V | undefined {
@@ -118,7 +137,7 @@ export class TenantKeyedCache<V> {
    * and that walks every tenant.
    */
   tenantKeys(): string[] {
-    const prefix = `${currentTenantNamespace()} `
+    const prefix = this.prefix()
     const out: string[] = []
     for (const key of this.entries.keys()) {
       if (key.startsWith(prefix)) out.push(key.slice(prefix.length))
@@ -128,7 +147,7 @@ export class TenantKeyedCache<V> {
 
   /** Forget everything for the active tenant. */
   clearTenant(): void {
-    const prefix = `${currentTenantNamespace()}\u0000`
+    const prefix = this.prefix()
     for (const key of [...this.entries.keys()]) {
       if (key.startsWith(prefix)) this.entries.delete(key)
     }

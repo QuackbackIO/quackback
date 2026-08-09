@@ -356,3 +356,97 @@ describe('the refuses-pooled claim cannot be certified by mention', () => {
     expect(readsRealTenancyMode(elsewhere, 'probe.ts')).toBe(false)
   })
 })
+
+describe('bypasses found by attacking the first version of this scanner', () => {
+  // Six shapes passed straight through the round-1 scanner, and three of them
+  // were then planted as a real file in server code with the gate still green —
+  // one containing, verbatim, §4.1's top-listed hazard (a magic-link stash keyed
+  // only by lowercased email). Each is pinned here by the exact spelling that
+  // worked.
+
+  it('sees a Map inside an Object.freeze wrapper', () => {
+    // The worst of the six: freezing is SHALLOW, so this is a frozen reference
+    // around a fully live Map — and "nothing writes to it" is the rule that
+    // suppresses 80 of 97 containers.
+    const src = `
+      const CACHES = Object.freeze({ tierLimits: new Map<string, number>() })
+      export function put(k: string) { CACHES.tierLimits.set(k, 1) }
+    `
+    expect(names(src)).toEqual(['CACHES'])
+  })
+
+  it('sees a module-scope instance of a local class holding a Map', () => {
+    const src = `
+      class Lru {
+        private entries = new Map<string, number>()
+        put(k: string) { this.entries.set(k, 1) }
+      }
+      const cache = new Lru()
+      export const put = (k: string) => cache.put(k)
+    `
+    expect(names(src)).toEqual(['cache'])
+  })
+
+  it('sees static state on a class EXPRESSION', () => {
+    const src = `
+      const R = class { static seen = new Map<string, number>() }
+      export function mark(k: string) { R.seen.set(k, 1) }
+    `
+    expect(names(src)).toEqual(['R.seen'])
+  })
+
+  it('sees a container mutated only through an alias', () => {
+    const src = `
+      const backing = new Map<string, number>()
+      const alias = backing
+      export function put(k: string) { alias.set(k, 1) }
+    `
+    expect(names(src)).toEqual(['backing'])
+  })
+
+  it('sees Object.assign as a mutation', () => {
+    const src = `
+      const state: Record<string, number> = {}
+      export function merge(p: Record<string, number>) { Object.assign(state, p) }
+    `
+    expect(names(src)).toEqual(['state'])
+  })
+
+  it('sees a module-scope `new` of any constructor it cannot vouch for', () => {
+    // `new AsyncLocalStorage()` is the store that carries tenant identity and
+    // `new Proxy()` is the db handle; a scanner that only knows `new Map` has
+    // neither in its ledger at all.
+    expect(
+      names(`import { AsyncLocalStorage } from 'node:async_hooks'
+      const storage = new AsyncLocalStorage<{ a: string }>()
+      export const get = () => storage.getStore()`)
+    ).toEqual(['storage'])
+    expect(
+      names(`const db = new Proxy({}, { get: () => 1 })
+      export const x = db`)
+    ).toEqual(['db'])
+  })
+
+  it('still does not flag value types built with `new`', () => {
+    // The precision half. Widening `new` to a site is only affordable because
+    // the exemptions are a short enumerated list of things that cannot carry
+    // state, rather than a guess about what a constructor does.
+    for (const src of [
+      `const RE = new RegExp('a+', 'g')\nexport const m = (s: string) => RE.test(s)`,
+      `const E = new Error('boom')\nexport const e = () => E`,
+      `const U = new URL('https://example.com')\nexport const u = () => U.href`,
+      `const F = new Intl.DateTimeFormat('en-US', { month: 'short' })\nexport const f = (d: Date) => F.format(d)`,
+      `const N = new Intl.DisplayNames(['en'], { type: 'region' })\nexport const n = (c: string) => N.of(c)`,
+    ]) {
+      expect(names(src), src.split('\n')[0]).toEqual([])
+    }
+  })
+
+  it('still does not flag a frozen object with no live container inside', () => {
+    const src = `
+      const CFG = Object.freeze({ retries: 3, timeoutMs: 1000 })
+      export const r = () => CFG.retries
+    `
+    expect(names(src)).toEqual([])
+  })
+})

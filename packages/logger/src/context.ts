@@ -45,3 +45,21 @@ export function setLogContext(partial: Partial<LogContext>): void {
   const store = storage.getStore()
   if (store) Object.assign(store, partial)
 }
+
+/**
+ * Run `fn` with NO ambient context, whatever is active at the call site.
+ *
+ * For process-lifetime work that happens to be *armed* from inside a request:
+ * a `setTimeout` scheduled while serving a page inherits that request's store,
+ * and so does everything the timer starts — including any `setInterval` it
+ * arms, for the life of the process.
+ *
+ * That is not a logging nuisance. Under pooled tenancy the store also carries
+ * the tenant scope, so background work armed from a request silently runs
+ * forever as whichever tenant happened to be first. Detaching is the only thing
+ * that makes such work fleet-wide again, and it has to happen at the boundary
+ * where the work is scheduled rather than inside every consumer.
+ */
+export function runWithoutLogContext<T>(fn: () => T): T {
+  return storage.exit(fn)
+}

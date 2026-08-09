@@ -5,4 +5,10 @@
  *
  * Server-only: the underlying module imports node:async_hooks.
  */
-export { getLogContext, runWithLogContext, setLogContext, type LogContext } from '@quackback/logger'
+export {
+  getLogContext,
+  runWithLogContext,
+  runWithoutLogContext,
+  setLogContext,
+  type LogContext,
+} from '@quackback/logger'
