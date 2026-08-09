@@ -17,7 +17,11 @@ import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
 import { activeSecretKey } from '@/lib/server/secret-key'
 import { logger } from '@/lib/server/logger'
-import { getTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import {
+  getCurrentTenant,
+  getTenantScope,
+  runWithTenantScope,
+} from '@/lib/server/tenancy/tenant-context'
 import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
@@ -351,8 +355,29 @@ async function createAuth() {
     trustedProviders.push(provider.id)
   }
 
-  // BASE_URL is required for auth callbacks and redirects
+  // BASE_URL is required for auth callbacks and redirects. Under pooled
+  // tenancy `config.baseUrl` is the tenant's own pinned origin, and this
+  // instance is cached per tenant, so the callback origin and the cookie
+  // `secure` flag below follow the hostname the request arrived on.
   const baseURL = config.baseUrl
+
+  // Origin allowlist. better-auth rejects an auth-protected POST whose Origin
+  // is absent from this list — closed but invisibly, which is why §8 calls
+  // TRUSTED_ORIGINS load-bearing.
+  //
+  // Under pooled tenancy the list is the tenant's own hostnames and nothing
+  // else. The process-wide TRUSTED_ORIGINS is a fleet value: honouring it here
+  // would make one tenant's origin trusted on every other tenant, which is a
+  // cross-tenant weakening of exactly the check that exists to prevent one.
+  const currentTenant = getCurrentTenant()
+  const trustedOrigins = currentTenant
+    ? [baseURL, ...currentTenant.routing.hostnames.map((h) => `${new URL(baseURL).protocol}//${h}`)]
+    : [
+        baseURL,
+        ...(process.env.TRUSTED_ORIGINS?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) ?? []),
+      ]
 
   // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
   // to keep the createAuth() module-loading dependency graph clean.
@@ -414,15 +439,11 @@ async function createAuth() {
     // Base URL for auth callbacks and redirects
     baseURL,
 
-    // Trusted origins for CORS/CSRF protection.
-    // TRUSTED_ORIGINS (comma-separated) adds extra origins — useful for dev/test
-    // environments where BASE_URL differs from the browser origin (e.g. ngrok + localhost).
-    trustedOrigins: [
-      baseURL,
-      ...(process.env.TRUSTED_ORIGINS?.split(',')
-        .map((s) => s.trim())
-        .filter(Boolean) ?? []),
-    ],
+    // Trusted origins for CORS/CSRF protection. Built above: TRUSTED_ORIGINS
+    // (comma-separated) adds extra origins on a single-tenant install — useful
+    // for dev/test where BASE_URL differs from the browser origin (e.g. ngrok +
+    // localhost) — and a pooled tenant gets its own hostnames instead.
+    trustedOrigins,
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and

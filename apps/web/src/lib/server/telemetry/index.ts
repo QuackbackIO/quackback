@@ -42,13 +42,19 @@ async function claimPing(): Promise<void> {
   }
 }
 
-export async function startTelemetry(): Promise<void> {
+/**
+ * @param opts.once - claim the ping and return, arming no interval. A Railway
+ *   cron service is itself the schedule, and a process that armed an hourly
+ *   timer would never exit — the one thing a cron service must do.
+ */
+export async function startTelemetry(opts: { once?: boolean } = {}): Promise<void> {
   try {
     if (!isTelemetryEnabled()) return
 
     log.info('anonymous usage statistics enabled; disable with DISABLE_TELEMETRY=true')
 
     await claimPing()
+    if (opts.once) return
     setInterval(() => void claimPing(), ONE_HOUR)
   } catch {
     // Silent failure — telemetry must never affect application functionality

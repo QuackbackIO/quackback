@@ -12,8 +12,20 @@
 
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
+import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
 
 const log = logger.child({ component: 'config' })
+
+/**
+ * A hostname that is a pattern rather than a host.
+ *
+ * `deploy/railway-template.yml` sets `BASE_URL: https://${{RAILWAY_PUBLIC_DOMAIN}}`,
+ * and the moment a wildcard custom domain is attached that variable becomes the
+ * literal string `*.example.com` (SAAS-HOSTING-STACK.md §9). `new URL()` accepts
+ * it, so nothing downstream complains — it just produces email links, asset URLs
+ * and cookie attributes for a host that does not exist.
+ */
+const WILDCARD_HOST_RE = /[*?]/
 
 // =============================================================================
 // Schema Helpers
@@ -171,6 +183,22 @@ const configSchema = z.object({
   disableTelemetry: envBoolean,
 })
   .superRefine((cfg, ctx) => {
+    // A wildcard is a routing pattern, never an origin. Refused in every mode:
+    // there is no deployment in which `https://*.example.com` is a usable base
+    // URL, and the symptom of accepting one is a dead link in a customer's
+    // inbox rather than an error anyone sees (SAAS-HOSTING-STACK.md §9).
+    if (WILDCARD_HOST_RE.test(cfg.baseUrl)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['baseUrl'],
+        message:
+          `BASE_URL is ${cfg.baseUrl}, which is a wildcard pattern rather than an origin. ` +
+          'Once a wildcard custom domain is attached, RAILWAY_PUBLIC_DOMAIN becomes ' +
+          '`*.example.com`; under QUACKBACK_TENANCY=pooled the per-request origin comes ' +
+          'from the tenant record, so set BASE_URL to a real fleet hostname.',
+      })
+    }
+
     // Exactly one database story per mode. A pooled fleet with a stray
     // DATABASE_URL is the dangerous shape — a missing tenant scope would
     // silently connect somewhere real — so pooled mode refuses to boot with one.
@@ -328,8 +356,28 @@ export const config = {
   get nodeEnv() {
     return loadConfig().nodeEnv
   },
+  /**
+   * The origin this request belongs to.
+   *
+   * Under pooled tenancy the fleet has no single origin: one process serves
+   * many hostnames, and `BASE_URL` is the platform's own domain. Every absolute
+   * URL the app produces resolves from here — email links, asset URLs,
+   * `__QUACKBACK_URL__` in the widget SDK, OAuth callbacks, the MCP resource
+   * metadata — as do better-auth's `trustedOrigins` and the cookie `secure`
+   * flag. So a fleet-wide value means **every tenant emails links to another
+   * tenant's hostname** (SAAS-HOSTING-STACK.md §9).
+   *
+   * The tenant record's `routing.baseUrl` is the answer, and it is already
+   * pinned to the tenant's primary hostname and validated to carry no path,
+   * query or wildcard. Resolving it here rather than at ~56 call sites is
+   * deliberate: a per-call-site fix is a list that goes stale on the next
+   * absolute URL anyone writes.
+   *
+   * Outside a tenant scope (single-tenant installs, boot, fleet paths) this is
+   * `BASE_URL` exactly as before.
+   */
   get baseUrl() {
-    return loadConfig().baseUrl
+    return getCurrentTenant()?.routing.baseUrl ?? loadConfig().baseUrl
   },
   get port() {
     return loadConfig().port

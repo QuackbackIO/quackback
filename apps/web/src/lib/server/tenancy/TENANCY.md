@@ -528,10 +528,84 @@ would turn one bad record into a fleet-wide outage of every sweeper.
 | Subsystem | Why not now |
 | --- | --- |
 | **The 15 BullMQ workers** | A job carries no tenant, so every processor would resolve `db` with no scope and throw on its first query. A per-job failure is a far worse signal than one loud refusal at boot, so the tier does not start under pooled tenancy and says so. Per-tenant job routing belongs with the Postgres-queue work |
-| **The outbox relay** | Needs a session-mode connection for `LISTEN` and `pg_advisory_lock`. Through a transaction pooler the registration is lost *in proportion to contention*, so a single-client smoke test passes while a busy fleet silently stops receiving wakes. It needs per-tenant **direct** connections on a separate always-warm tier (§7.3) — and note the corollary: that tier holds its connections open by design, so it must never share a compute with tenants you expect to suspend |
+| **The outbox relay** | ✅ **Now runs**, on its own tier — see §5.1. (The sentence that used to sit here said `LISTEN` is lost *in proportion to contention*, so a single-client smoke test would pass on a pooler. That is wrong — see §5.1.) |
 | **The `config.yaml` file watcher** | One file at one path, and `ReconcileDeps` has no tenant parameter anywhere. You cannot mount N files at one path, so the trigger must be *replaced* by a tenant-keyed entrypoint behind an authenticated control-plane route, not adapted (§8). Started under `single`, skipped under `pooled` with a log |
 | **CLI backfill scripts** | Every one except `create-ci-api-key.ts` already builds its own `postgres()` from an explicit `DATABASE_URL`, so they are unaffected. `create-ci-api-key.ts` is the one on the proxy and needs a `--tenant` flag before it is used against a pooled fleet |
 | **`bootstrap.ts`'s 10-second telemetry timer** | Starts a process-lifetime loop from inside the first HTTP request, so the timer fires after the request scope is gone. It lands in `withSweepLock` and is therefore scoped, but the shape — escaping a request scope via `setTimeout` — is worth removing rather than relying on |
+
+### 5.1 The worker tier
+
+`events/relay-tier.ts`, started by `startup.ts` under `QUACKBACK_ROLE=worker` (or
+`all`). One loop per tenant on that tenant's **direct**, session-mode endpoint,
+each holding a `LISTEN outbox_wake` doorbell, a leadership lease row in the
+tenant's own database and a one-connection pool. `events/RELAY.md` is the whole
+account; what belongs here is the tenancy half.
+
+**`LISTEN` through the pooler is impossible, not merely unreliable.** An earlier
+reading of §7.3 — the one still quoted in the table above until now — said the
+registration is lost _in proportion to contention_, so that a single-client smoke
+test would pass on a pooler. That reading came from `pg_listening_channels()`,
+the catalogue view since proved inverted. Measured by **delivery**: pooled
+**0/1 across 16 runs**, 0/6, 0/10; direct 1/1, 6/6, 10/10. So "the relay must run
+direct" rests on a hard impossibility at one idle client, which is a stronger
+foundation than the probabilistic one this file previously claimed.
+
+**The corollary is a running cost, and it is why this is a separate service.** A
+loop holds two session-mode sockets with `idle_timeout: 0` and asks for its lease
+at least once per poll interval, and a ~1 Hz query is measured to hold a Neon
+compute awake indefinitely. This tier therefore **keeps every tenant's compute
+awake, deliberately**, and must never share a compute with tenants you expect to
+suspend. The pool cache's eviction story is for the _web_ tier and does not apply
+here. That is the whole reason `quackback-worker` is its own service rather than
+a role on the pooled tier: the pooled tier's idle-cost model survives only if
+nothing in that process holds a connection open.
+
+### 5.2 The scheduled sweeps run on cron services, not on the worker
+
+Every sweep in `startup.ts` funnels through `withSweepLock`, which under pooled
+tenancy fans the tick out across the whole fleet. So a sweep's interval is the
+rate at which every suspended compute is woken:
+
+| Timer                                        | Interval | Against a ~337 s suspend timeout   |
+| -------------------------------------------- | -------- | ---------------------------------- |
+| changelog / status / maintenance reconcilers | 5 min    | **no tenant ever suspends**        |
+| billing reconcile                            | 15 min   | every tenant woken four times an hour |
+| summary + merge sweeps                       | 30 min   | every tenant woken twice an hour   |
+| kv sweep, telemetry claim                    | 1 h      | every tenant woken hourly          |
+
+`startBackgroundProcessing()` therefore returns immediately after starting the
+relay when tenancy is pooled, and `cron/fleet-jobs.ts` holds the bodies so the
+`deploy.cronSchedule` services and the single-tenant schedule run the same code.
+The Postgres job tier and the boot-time partition ensure sit **above** that
+return, because both run under either tenancy mode — and so does the relay tier,
+which is the only always-attached thing a pooled worker holds.
+
+The cost, stated: the reconcilers go from 5-minutely, and the billing reconcile
+from 15-minutely, to hourly on a pooled fleet. They are backstops behind a
+synchronous publish, a delayed job and a provider webhook, so what lengthens is
+the recovery window after a dropped delivery. Nothing changes for a single-tenant
+install.
+
+There is no outbox backstop among the cron jobs. The relay tier holds an
+always-attached loop per tenant with a 1-second poll under the doorbell, so a
+lost NOTIFY costs a second rather than an hour, and a cron pass over every
+tenant's outbox would be a second drainer racing the leader lease.
+
+### 5.3 `BASE_URL` is the tenant's, not the fleet's
+
+`config.baseUrl` returns `getCurrentTenant()?.routing.baseUrl` whenever a tenant
+scope is active. One getter rather than ~56 call sites, because a per-call-site
+fix is a list that goes stale on the next absolute URL anyone writes. It reaches
+email links, asset URLs, `__QUACKBACK_URL__` in the widget SDK, OAuth callback
+redirects, the MCP resource metadata, better-auth's `baseURL` and the cookie
+`secure` flag. `trustedOrigins` becomes the tenant's own hostnames and stops
+honouring the process-wide `TRUSTED_ORIGINS`, which under pooling would make one
+tenant's origin trusted on every other.
+
+A wildcard `BASE_URL` is refused outright, in every tenancy mode: once a wildcard
+custom domain is attached `RAILWAY_PUBLIC_DOMAIN` is the literal string
+`*.example.com`, `new URL()` accepts it, and the only symptom is a dead link in a
+customer's inbox.
 
 ### Known rough edge
 

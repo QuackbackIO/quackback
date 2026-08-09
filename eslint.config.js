@@ -121,6 +121,12 @@ export default tseslint.config(
       '**/.agents/**',
       '**/.claude/**',
       '**/scratchpad/**',
+      // Edge Worker source. It runs on the platform's own runtime, not Node or
+      // the browser, so `fetch`/`Response`/`setTimeout` come from there and its
+      // handler signature has parameters it does not always use. Linting it with
+      // this project's environment reports six phantom errors and would teach
+      // the next person to silence them one by one.
+      'deploy/edge/**',
       '**/*.config.js',
       '**/*.config.mjs',
       '**/next-env.d.ts',
