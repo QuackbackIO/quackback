@@ -999,4 +999,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'through String.replace, which resets it. Holds no tenant value - the pattern is built from a ' +
       'compile-time token grammar.',
   },
+  {
+    file: 'apps/web/src/lib/server/queue/create-worker.ts',
+    name: 'refused',
+    category: 'process-lifetime',
+    reason:
+      'Queue names already warned about, so the pooled refusal logs once per queue rather than ' +
+      'once per enqueue. Keys are the fifteen compile-time queue-name constants, identical for ' +
+      'every tenant; the only shared effect is a suppressed duplicate log line. Caught by this ' +
+      'scanner on the commit that introduced it, which is the ratchet working on its own author.',
+  },
 ]

@@ -488,3 +488,76 @@ describe('a global-flagged RegExp is not a value type', () => {
     ).toEqual(['RE'])
   })
 })
+
+describe('initializer spellings that hid a factory', () => {
+  // Three more shapes, zero live instances in the tree — recall for the future,
+  // which is what §4.4 says the scanner is for. `unwrap()` handled parens,
+  // `as`, `satisfies` and `Object.freeze/seal` but not these.
+  const FACTORY = `
+    function makeStash() {
+      const m = new Map<string, string>()
+      return { set(k: string, v: string) { m.set(k, v) } }
+    }
+    async function makeAsyncStash() {
+      const m = new Map<string, string>()
+      return { set(k: string, v: string) { m.set(k, v) } }
+    }
+    function pure(n: number) { let o = ''; for (let i = 0; i < n; i++) o += 'x'; return o }
+  `
+
+  it('sees through top-level await — ordinary modern ESM', () => {
+    const src = `${FACTORY}
+      const s = await makeAsyncStash()
+      export const put = (k: string) => s.set(k, '1')`
+    expect(names(src)).toEqual(['s'])
+  })
+
+  it('sees through .call and .apply', () => {
+    for (const how of ['call', 'apply']) {
+      const src = `${FACTORY}
+        const s = makeStash.${how}(null)
+        export const put = (k: string) => s.set(k, '1')`
+      expect(names(src), how).toEqual(['s'])
+    }
+  })
+
+  it('sees through .bind, conservatively', () => {
+    // A bound factory is a function rather than a store, so this is one `()`
+    // short of state. Flagged anyway: the direction is safe and there are zero
+    // live instances, so the cost of being wrong here is a ledger line nobody
+    // will ever have to write.
+    const src = `${FACTORY}
+      const s = makeStash.bind(null)
+      export const use = () => s()`
+    expect(names(src)).toEqual(['s'])
+  })
+
+  it('judges both branches of a ternary initializer', () => {
+    const src = `${FACTORY}
+      declare const flag: boolean
+      const s = flag ? makeStash() : makeStash()
+      export const put = (k: string) => s.set(k, '1')`
+    expect(names(src)).toEqual(['s'])
+  })
+
+  it('flags a ternary where only ONE branch is a factory', () => {
+    const src = `${FACTORY}
+      declare const flag: boolean
+      const s = flag ? makeStash() : null
+      export const put = (k: string) => s?.set(k, '1')`
+    expect(names(src)).toEqual(['s'])
+  })
+
+  it('still ignores the same three spellings around a pure callee', () => {
+    // Precision: seeing through more wrappers must not turn every awaited or
+    // conditional initializer into a site.
+    const cases = [
+      `const B = await Promise.resolve(pure(3))\nexport const b = () => B`,
+      `declare const flag: boolean\nconst B = flag ? pure(1) : pure(2)\nexport const b = () => B`,
+      `const B = pure.call(null, 3)\nexport const b = () => B`,
+    ]
+    for (const tail of cases) {
+      expect(names(`${FACTORY}\n${tail}`), tail.split('\n')[0]).toEqual([])
+    }
+  })
+})

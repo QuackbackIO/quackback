@@ -216,3 +216,71 @@ describe('coverage: nothing constructs a Worker outside the seam', () => {
     expect(usingSeam).toBeGreaterThanOrEqual(15)
   })
 })
+
+describe('under pooled tenancy no BullMQ worker is constructed at all', () => {
+  // The refusal that used to live in the config schema as "pooled requires
+  // QUACKBACK_ROLE=web". That banned the role, and the role is exactly what the
+  // pooled job tier needs — the two guards composed into a fleet with no
+  // runnable configuration. It belongs here, on the noun it was about.
+  async function load(pooled: boolean) {
+    vi.resetModules()
+    vi.doMock('@/lib/server/tenancy/mode', () => ({
+      isPooledTenancy: () => pooled,
+      POOLED_TENANCY: 'pooled',
+    }))
+    vi.doMock('bullmq', async () => {
+      const { FakeWorker } = await import('./fake-bullmq')
+      return { Worker: FakeWorker }
+    })
+    const mod = await import('../create-worker')
+    mod.__resetQueueWorkerRefusals()
+    return mod
+  }
+
+  it('returns null under pooled tenancy', async () => {
+    const { createQueueWorker } = await load(true)
+    expect(createQueueWorker('q', async () => {}, {} as never)).toBeNull()
+  })
+
+  it('CONTROL: still constructs one under single tenancy', async () => {
+    // Without this, "returns null" would pass on a function that returns null
+    // unconditionally — and the fifteen queue modules would silently lose their
+    // consumers on every self-hosted install.
+    const { createQueueWorker } = await load(false)
+    expect(createQueueWorker('q', async () => {}, {} as never)).not.toBeNull()
+  })
+
+  it('refuses whatever the role says, because the role is not the question', async () => {
+    for (const role of ['web', 'worker', 'all']) {
+      process.env.QUACKBACK_ROLE = role
+      const { createQueueWorker } = await load(true)
+      expect(
+        createQueueWorker('q', async () => {}, {} as never),
+        role
+      ).toBeNull()
+    }
+    delete process.env.QUACKBACK_ROLE
+  })
+
+  it('logs the refusal once per queue, not once per call', async () => {
+    const lines: string[] = []
+    vi.resetModules()
+    vi.doMock('@/lib/server/tenancy/mode', () => ({
+      isPooledTenancy: () => true,
+      POOLED_TENANCY: 'pooled',
+    }))
+    vi.doMock('@/lib/server/logger', () => ({
+      logger: { child: () => ({ error: (_c: unknown, m: string) => lines.push(m) }) },
+    }))
+    const { createQueueWorker, __resetQueueWorkerRefusals } = await import('../create-worker')
+    __resetQueueWorkerRefusals()
+
+    createQueueWorker('alpha', async () => {}, {} as never)
+    createQueueWorker('alpha', async () => {}, {} as never)
+    createQueueWorker('bravo', async () => {}, {} as never)
+
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain('refusing to construct a BullMQ worker')
+    vi.resetModules()
+  })
+})

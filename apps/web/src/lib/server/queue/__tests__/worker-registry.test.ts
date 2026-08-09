@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import * as ts from 'typescript'
 import { walkSourceFiles } from '@/lib/server/policy/source-files'
 import {
   closeAllWorkers,
@@ -50,16 +51,70 @@ const WORKER_FACTORY_MODULES = ['queue/create-worker.ts']
 
 const SERVER_ROOT = path.resolve(__dirname, '../..')
 
+/**
+ * Does this source import bullmq, and does it construct a Worker?
+ *
+ * Parsed, not string-matched. `content.includes("from 'bullmq'")` misses
+ * `await import('bullmq')`, which is idiomatic throughout this repo —
+ * `startup.ts` and `bootstrap.ts` are full of it — so a sixteenth module could
+ * obtain BullMQ dynamically, construct an unwrapped `Worker`, and leave this
+ * seal 6/6 green. `new bull.Worker(...)` is the construction spelling that goes
+ * with it, and an identifier-only check does not see that either.
+ */
+export function classifyBullmqUsage(text: string): { imports: boolean; constructs: boolean } {
+  const sf = ts.createSourceFile('probe.ts', text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
+  let imports = false
+  let constructs = false
+
+  const visit = (node: ts.Node): void => {
+    // import … from 'bullmq'
+    if (
+      ts.isImportDeclaration(node) &&
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      node.moduleSpecifier.text === 'bullmq'
+    ) {
+      imports = true
+    }
+    // await import('bullmq')
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0 &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text === 'bullmq'
+    ) {
+      imports = true
+    }
+    // new Worker(…) or new bull.Worker(…)
+    if (ts.isNewExpression(node)) {
+      const ctor = node.expression
+      if (ts.isIdentifier(ctor) && ctor.text === 'Worker') constructs = true
+      if (ts.isPropertyAccessExpression(ctor) && ctor.name.text === 'Worker') constructs = true
+    }
+    // …or the seam, which is construction by another name.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'createQueueWorker'
+    ) {
+      constructs = true
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return { imports, constructs }
+}
+
 /** lib/server files importing bullmq, split by whether they construct a Worker. */
 function bullmqImporters(): { constructing: string[]; typeOnly: string[] } {
   const constructing: string[] = []
   const typeOnly: string[] = []
   for (const full of walkSourceFiles(SERVER_ROOT)) {
-    const content = fs.readFileSync(full, 'utf8')
-    if (!content.includes("from 'bullmq'")) continue
+    if (!full.endsWith('.ts')) continue
+    const { imports, constructs } = classifyBullmqUsage(fs.readFileSync(full, 'utf8'))
+    if (!imports) continue
     const rel = path.relative(SERVER_ROOT, full).split(path.sep).join('/')
     if (WORKER_FACTORY_MODULES.includes(rel)) continue
-    const constructs = content.includes('new Worker') || /\bcreateQueueWorker\s*[(<]/.test(content)
     ;(constructs ? constructing : typeOnly).push(rel)
   }
   return { constructing: constructing.sort(), typeOnly: typeOnly.sort() }
@@ -165,5 +220,65 @@ describe('initAllWorkers', () => {
     const status = getWorkerBootStatus()
     expect(status.pending).toBe(0)
     expect(status.total).toBe(2)
+  })
+})
+
+describe('the seal sees bullmq however it is obtained', () => {
+  // The static check worked — a direct sixteenth module turned it red. The hole
+  // was the classifier's `content.includes("from 'bullmq'")`: a module that
+  // obtains BullMQ dynamically constructs an unwrapped Worker and the seal
+  // stayed 6/6 green. `await import(…)` is idiomatic here, not exotic.
+  it('catches a dynamic import constructing through a namespace', () => {
+    const source = `
+      import { getQueueRedis } from '@/lib/server/queue/redis-config'
+      export async function sixteenth() {
+        const bull = await import('bullmq')
+        return new bull.Worker('critic-16th', async () => {}, { connection: getQueueRedis() })
+      }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: true })
+  })
+
+  it('catches a static import constructing directly', () => {
+    const source = `
+      import { Worker } from 'bullmq'
+      export const w = new Worker('q', async () => {}, {} as never)
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: true })
+  })
+
+  it('catches construction through the seam', () => {
+    const source = `
+      import { Queue } from 'bullmq'
+      import { createQueueWorker } from '@/lib/server/queue/create-worker'
+      export const w = createQueueWorker('q', async () => {}, {} as never)
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: true })
+  })
+
+  it('still classifies a type-only importer as type-only', () => {
+    // Precision: widening the import detector must not turn every bullmq
+    // mention into a construction site, or TYPE_ONLY_MODULES becomes unusable.
+    const source = `
+      import type { Job } from 'bullmq'
+      export function handle(job: Job): void { void job }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: false })
+  })
+
+  it('ignores a file that does not touch bullmq at all', () => {
+    const source = `
+      export const w = new Worker('q')
+      export async function f() { await import('ioredis') }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: true })
+  })
+
+  it('is not fooled by the string "bullmq" in a comment or literal', () => {
+    const source = `
+      // we deliberately avoid bullmq here: import { Worker } from 'bullmq'
+      export const note = "from 'bullmq'"
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: false })
   })
 })

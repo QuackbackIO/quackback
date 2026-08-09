@@ -307,15 +307,60 @@ function isPureRegExp(init: ts.NewExpression): boolean {
   return !/[gy]/.test(f.text)
 }
 
-/** Unwrap `as const`, parens and type assertions to the underlying expression. */
+/**
+ * Unwrap parens, `as`, `satisfies` and `await` to the underlying expression.
+ *
+ * `await` matters because top-level await on an async factory is ordinary
+ * modern ESM — `const stash = await makeStash()` is the same site as
+ * `const stash = makeStash()`, and without this the whole initializer is an
+ * `AwaitExpression` the scanner has no rule for.
+ */
 function unwrap(node: ts.Expression): ts.Expression {
   let cur: ts.Expression = node
   for (;;) {
     if (ts.isParenthesizedExpression(cur)) cur = cur.expression
     else if (ts.isAsExpression(cur) || ts.isTypeAssertionExpression(cur)) cur = cur.expression
     else if (ts.isSatisfiesExpression(cur)) cur = cur.expression
+    else if (ts.isAwaitExpression(cur)) cur = cur.expression
     else return cur
   }
+}
+
+/**
+ * The expressions a `const` could actually be bound to.
+ *
+ * A ternary initializer has two of them, and either branch can be the site:
+ * `const s = flag ? makeStash() : makeStash()` was invisible because the
+ * initializer is a `ConditionalExpression` and every rule looked past it for a
+ * call, a `new` or a container.
+ */
+function initializerBranches(init: ts.Expression): ts.Expression[] {
+  const e = unwrapObjectWrapper(init)
+  if (ts.isConditionalExpression(e)) {
+    return [...initializerBranches(e.whenTrue), ...initializerBranches(e.whenFalse)]
+  }
+  return [e]
+}
+
+/**
+ * The function a call actually invokes, seeing through `.call` / `.apply` /
+ * `.bind`.
+ *
+ * `makeStash.call(null)` invokes `makeStash`, but its callee is a property
+ * access, so a rule matching identifiers reports nothing. `.bind` is included
+ * conservatively: it produces a bound factory rather than a store, which is one
+ * `()` away, and there are zero live instances of any of the three so the cost
+ * of being wrong in this direction is a ledger line nobody will ever write.
+ */
+function throughReflectiveCall(callee: ts.Expression): ts.Expression {
+  const c = unwrap(callee)
+  if (
+    ts.isPropertyAccessExpression(c) &&
+    (c.name.text === 'call' || c.name.text === 'apply' || c.name.text === 'bind')
+  ) {
+    return unwrap(c.expression)
+  }
+  return c
 }
 
 /**
@@ -794,97 +839,103 @@ export function extractSites(
           }
           continue
         }
-        const init = d.initializer ? unwrapObjectWrapper(d.initializer) : undefined
-        if (!init) continue
-
-        // `const R = class { static seen = new Map() }` — a class EXPRESSION is
-        // a class declaration that a `const` is hiding, statics and all.
-        if (ts.isClassExpression(init)) {
-          const owner = names[0] ?? '(anonymous)'
-          for (const member of init.members) {
-            if (!ts.isPropertyDeclaration(member)) continue
-            if (!hasModifier(member, ts.SyntaxKind.StaticKeyword)) continue
-            if (!ts.isIdentifier(member.name)) continue
-            if (!mutatesStaticMember(sf, owner, member.name.text)) continue
-            sites.push({
-              file: relPath,
-              name: `${owner}.${member.name.text}`,
-              kind: 'class-static',
-              line: lineOf(member),
-              exported,
-              initializer: initializerLabel(member.initializer),
-            })
-          }
-          continue
-        }
-
-        // `const cache = new Lru()` / `new AsyncLocalStorage()` / `new Proxy()`.
-        // Anything constructed at module scope is an instance that outlives a
-        // request, so it is a site unless its constructor is a known value type.
-        if (ts.isNewExpression(init)) {
-          const ctor = unwrap(init.expression)
-          const ctorName = ts.isIdentifier(ctor) ? ctor.text : null
-          if (ctorName === 'RegExp' && isPureRegExp(init)) continue
-          if (ctorName !== null && PURE_CONSTRUCTORS.has(ctorName)) continue
-          // `new Intl.DateTimeFormat(…)` / `new Intl.DisplayNames(…)`. Every
-          // `Intl` constructor produces an immutable formatter configured
-          // entirely by its arguments — the same value type as `new RegExp`,
-          // reached through a namespace rather than a bare identifier.
-          if (
-            ts.isPropertyAccessExpression(ctor) &&
-            ts.isIdentifier(ctor.expression) &&
-            ctor.expression.text === 'Intl'
-          )
+        if (!d.initializer) continue
+        // A ternary is two candidate initializers; either branch can be the
+        // site, so each is judged on its own.
+        const branches = initializerBranches(d.initializer)
+        for (const init of branches) {
+          // `const R = class { static seen = new Map() }` — a class EXPRESSION is
+          // a class declaration that a `const` is hiding, statics and all.
+          if (ts.isClassExpression(init)) {
+            const owner = names[0] ?? '(anonymous)'
+            for (const member of init.members) {
+              if (!ts.isPropertyDeclaration(member)) continue
+              if (!hasModifier(member, ts.SyntaxKind.StaticKeyword)) continue
+              if (!ts.isIdentifier(member.name)) continue
+              if (!mutatesStaticMember(sf, owner, member.name.text)) continue
+              sites.push({
+                file: relPath,
+                name: `${owner}.${member.name.text}`,
+                kind: 'class-static',
+                line: lineOf(member),
+                exported,
+                initializer: initializerLabel(member.initializer),
+              })
+            }
             continue
-          for (const name of names) {
-            sites.push({
-              file: relPath,
-              name,
-              kind: 'instance',
-              line: lineOf(d),
-              exported,
-              initializer: initializerLabel(d.initializer),
-            })
           }
-          continue
-        }
 
-        // `const x = makeThing()` where makeThing closes over mutable state.
-        // The callee may be declared here, or imported from another scanned
-        // module — `makeStash` is one file-move away from being invisible, and
-        // it holds §4.1's top-listed hazard.
-        if (ts.isCallExpression(init)) {
-          const callee = unwrap(init.expression)
-          let target: ResolvedCallable | undefined
-          if (ts.isIdentifier(callee)) {
-            const local = locals.get(callee.text)
-            target = local ? { node: local, scope: relPath } : resolveImported?.(callee.text)
-          } else if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)) {
-            // `import * as F` then `F.makeStash()`. Registered by the resolver
-            // under the composed `ns.name`.
-            target = resolveImported?.(`${callee.expression.text}.${callee.name.text}`)
-          } else if (
-            ts.isArrowFunction(callee) ||
-            ts.isFunctionExpression(callee) ||
-            ts.isClassExpression(callee)
-          ) {
-            target = { node: callee, scope: relPath }
-          }
-          const resolveCallable = (n: string, scope: string): ResolvedCallable | undefined => {
-            if (scope !== relPath) return resolveInModule?.(n, scope)
-            const local = locals.get(n)
-            return local ? { node: local, scope: relPath } : resolveImported?.(n)
-          }
-          if (target && callableHoldsMutableState(target.node, target.scope, resolveCallable)) {
+          // `const cache = new Lru()` / `new AsyncLocalStorage()` / `new Proxy()`.
+          // Anything constructed at module scope is an instance that outlives a
+          // request, so it is a site unless its constructor is a known value type.
+          if (ts.isNewExpression(init)) {
+            const ctor = unwrap(init.expression)
+            const ctorName = ts.isIdentifier(ctor) ? ctor.text : null
+            if (ctorName === 'RegExp' && isPureRegExp(init)) continue
+            if (ctorName !== null && PURE_CONSTRUCTORS.has(ctorName)) continue
+            // `new Intl.DateTimeFormat(…)` / `new Intl.DisplayNames(…)`. Every
+            // `Intl` constructor produces an immutable formatter configured
+            // entirely by its arguments — the same value type as `new RegExp`,
+            // reached through a namespace rather than a bare identifier.
+            if (
+              ts.isPropertyAccessExpression(ctor) &&
+              ts.isIdentifier(ctor.expression) &&
+              ctor.expression.text === 'Intl'
+            )
+              continue
             for (const name of names) {
               sites.push({
                 file: relPath,
                 name,
-                kind: 'factory',
+                kind: 'instance',
                 line: lineOf(d),
                 exported,
                 initializer: initializerLabel(d.initializer),
               })
+            }
+            continue
+          }
+
+          // `const x = makeThing()` where makeThing closes over mutable state.
+          // The callee may be declared here, or imported from another scanned
+          // module — `makeStash` is one file-move away from being invisible, and
+          // it holds §4.1's top-listed hazard.
+          if (ts.isCallExpression(init)) {
+            const callee = throughReflectiveCall(init.expression)
+            let target: ResolvedCallable | undefined
+            if (ts.isIdentifier(callee)) {
+              const local = locals.get(callee.text)
+              target = local ? { node: local, scope: relPath } : resolveImported?.(callee.text)
+            } else if (
+              ts.isPropertyAccessExpression(callee) &&
+              ts.isIdentifier(callee.expression)
+            ) {
+              // `import * as F` then `F.makeStash()`. Registered by the resolver
+              // under the composed `ns.name`.
+              target = resolveImported?.(`${callee.expression.text}.${callee.name.text}`)
+            } else if (
+              ts.isArrowFunction(callee) ||
+              ts.isFunctionExpression(callee) ||
+              ts.isClassExpression(callee)
+            ) {
+              target = { node: callee, scope: relPath }
+            }
+            const resolveCallable = (n: string, scope: string): ResolvedCallable | undefined => {
+              if (scope !== relPath) return resolveInModule?.(n, scope)
+              const local = locals.get(n)
+              return local ? { node: local, scope: relPath } : resolveImported?.(n)
+            }
+            if (target && callableHoldsMutableState(target.node, target.scope, resolveCallable)) {
+              for (const name of names) {
+                sites.push({
+                  file: relPath,
+                  name,
+                  kind: 'factory',
+                  line: lineOf(d),
+                  exported,
+                  initializer: initializerLabel(d.initializer),
+                })
+              }
             }
           }
         }
