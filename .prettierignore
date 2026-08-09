@@ -7,3 +7,6 @@ apps/web/src/lib/server/policy/dep-graph/GRAPH.md
 
 # Generated module-scope-state snapshot — same file-snapshot contract as MATRIX.md.
 apps/web/src/lib/server/policy/module-state/MODULE-STATE.md
+
+# Generated migration-contract ledger — same file-snapshot contract as MATRIX.md.
+apps/web/src/lib/server/policy/migration-contract/CONTRACT.md
