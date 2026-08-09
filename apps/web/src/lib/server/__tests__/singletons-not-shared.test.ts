@@ -139,6 +139,11 @@ describe('the readiness memo cannot go blind under pooled tenancy', () => {
       vi.doMock('@/lib/server/queue/role', () => ({
         getProcessRole: () => 'web',
         shouldRunWorkers: () => false,
+        // The probe also asserts the role is one it recognises. Mocking the
+        // module means mocking everything it reads, or the check throws a
+        // TypeError and reports `failed` for a reason that is not the subject.
+        assertProcessRoleConfigured: () => {},
+        InvalidProcessRole: class InvalidProcessRole extends Error {},
       }))
       vi.doMock('@/lib/server/tenancy/registry', () => ({
         // Sync, returning the tagged-template `sql` — the shape the probe uses.

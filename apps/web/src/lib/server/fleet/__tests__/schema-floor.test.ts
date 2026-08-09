@@ -23,7 +23,9 @@ import {
 } from '@quackback/db/schema-version'
 import {
   __resetSchemaFloorMemo,
+  assertSchemaFloorConfigured,
   configuredSchemaFloor,
+  SCHEMA_FLOOR_MISCONFIGURED_CODE,
   TenantSchemaFloorRefusal,
 } from '../schema-floor'
 
@@ -106,6 +108,37 @@ describe('configuredSchemaFloor', () => {
     expect(() =>
       configuredSchemaFloor({ MIN_SCHEMA_VERSION: '0248-typo' } as NodeJS.ProcessEnv)
     ).toThrow(UnknownSchemaVersion)
+  })
+
+  it('the throw carries a code, so it is not mistaken for a fingerprint refusal', () => {
+    // Without this the error funnelled into `pool_unavailable` and the request
+    // path reported it as a wrong-database near-miss. Measured before the fix:
+    // MIN_SCHEMA_VERSION=9999 503'd every tenant under the cross-tenant alarm.
+    __resetSchemaFloorMemo()
+    try {
+      configuredSchemaFloor({ MIN_SCHEMA_VERSION: '9999' } as NodeJS.ProcessEnv)
+      throw new Error('expected a throw')
+    } catch (err) {
+      expect((err as { code?: string }).code).toBe(SCHEMA_FLOOR_MISCONFIGURED_CODE)
+    }
+  })
+})
+
+describe('assertSchemaFloorConfigured', () => {
+  it('refuses at boot rather than once per tenant at pool checkout', () => {
+    // The placement is the fix. Resolving lazily meant an unresolvable floor
+    // surfaced as every tenant failing, long after the deploy went green and
+    // with the readiness probe still reporting 200.
+    __resetSchemaFloorMemo()
+    expect(() =>
+      assertSchemaFloorConfigured({ MIN_SCHEMA_VERSION: 'nonsense' } as NodeJS.ProcessEnv)
+    ).toThrow(UnknownSchemaVersion)
+    __resetSchemaFloorMemo()
+    expect(() => assertSchemaFloorConfigured({} as NodeJS.ProcessEnv)).not.toThrow()
+    __resetSchemaFloorMemo()
+    expect(() =>
+      assertSchemaFloorConfigured({ MIN_SCHEMA_VERSION: '0248' } as NodeJS.ProcessEnv)
+    ).not.toThrow()
   })
 })
 

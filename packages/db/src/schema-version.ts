@@ -67,6 +67,14 @@ export function latestBundledVersion(): number {
 }
 
 export class UnknownSchemaVersion extends Error {
+  /**
+   * Carried so the refusal path can tell "this process is misconfigured" from
+   * "this database failed its identity check". Without it the error funnels
+   * into the generic `pool_unavailable` bucket and gets reported as a
+   * fingerprint refusal — the cross-tenant alarm — while the real fault is a
+   * typo in an environment variable.
+   */
+  readonly code = 'schema_floor_misconfigured'
   constructor(spec: string) {
     super(
       `MIN_SCHEMA_VERSION=${spec} names no bundled migration. Use a full tag ` +

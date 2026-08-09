@@ -58,6 +58,12 @@ import {
 /** Distinguishable from a fingerprint refusal, because it means something else. */
 export const SCHEMA_FLOOR_REFUSAL_CODE = 'schema_below_floor'
 
+/**
+ * A `MIN_SCHEMA_VERSION` this build cannot resolve. Distinct from both of the
+ * above: the tenant is fine, the process is not.
+ */
+export const SCHEMA_FLOOR_MISCONFIGURED_CODE = 'schema_floor_misconfigured'
+
 export class TenantSchemaFloorRefusal extends Error {
   readonly code = SCHEMA_FLOOR_REFUSAL_CODE
   readonly tenantId: string
@@ -104,6 +110,26 @@ export function configuredSchemaFloor(env: NodeJS.ProcessEnv = process.env): num
 /** Test seam. The memo is keyed on the raw value, but tests mutate env in place. */
 export function __resetSchemaFloorMemo(): void {
   floorMemo = null
+}
+
+/**
+ * Resolve the floor once, at boot, so a typo is a refusal to start rather than
+ * a fleet-wide outage discovered by customers.
+ *
+ * `configuredSchemaFloor` is otherwise read lazily on pool checkout, and that
+ * placement has a nasty property: an unresolvable value throws *per tenant*,
+ * inside the acquisition path, where it is indistinguishable from the tenant's
+ * own database failing. Measured before this existed: `MIN_SCHEMA_VERSION=9999`
+ * 503'd **every tenant including healthy ones**, logged the cross-tenant
+ * fingerprint alarm, and left the readiness probe green.
+ *
+ * Called from `startup.ts` and from the readiness probe. The probe deliberately
+ * asserts nothing about *tenant* schemas under pooled tenancy (§10.5) — but
+ * this is not a tenant schema, it is this process's own configuration, and a
+ * process that cannot resolve its own serving floor is not ready.
+ */
+export function assertSchemaFloorConfigured(env: NodeJS.ProcessEnv = process.env): void {
+  configuredSchemaFloor(env)
 }
 
 export { UnknownSchemaVersion }

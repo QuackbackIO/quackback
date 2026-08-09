@@ -24,6 +24,7 @@ import postgres from 'postgres'
 import { createDbFromSql } from '@quackback/db/client'
 import {
   __setControlDbForTests,
+  blockTenant,
   claimTenants,
   completeTenant,
   ensureSchemaStateRow,
@@ -339,6 +340,26 @@ describe('intent', () => {
     expect(row.status).toBe('running')
     expect(row.attempts).toBe(1)
     expect(row.targetVersion).toBe(TARGET + 5000)
+  })
+
+  it('setTargetVersion does NOT un-block a deliberately blocked tenant', async () => {
+    // A block is a human decision — a halted rollout, a tenant under
+    // investigation, a fixture somebody needs to stay behind. An earlier
+    // version reset `blocked` to `pending` on any target write, so a routine
+    // bump silently re-enrolled it AND cleared the reason recorded for the
+    // block. Both halves are asserted, because restoring only the status would
+    // leave the operator's note gone.
+    await register('halted')
+    await seed('halted')
+    await blockTenant('halted', 'under investigation')
+
+    await setTargetVersion({ targetVersion: TARGET + 5000 })
+
+    const row = (await listSchemaState())[0]!
+    expect(row.status).toBe('blocked')
+    expect(row.lastError).toBe('under investigation')
+    expect(row.targetVersion).toBe(TARGET + 5000)
+    expect(await claimTenants({ limit: 5, leaseMs: 60_000, workerId: 'w' })).toEqual([])
   })
 
   it('ensureSchemaStateRow never lowers an existing target', async () => {

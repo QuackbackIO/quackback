@@ -81,6 +81,64 @@ export type IdentityFailure =
   | 'secret_key_canary_missing'
   | 'secret_key_canary_mismatch'
 
+/**
+ * The codes that actually mean "this is the wrong database".
+ *
+ * `acquireTenantScope` funnels EVERY exception from pool checkout into one
+ * `refused` variant with a `code`, and the caller used to treat that variant as
+ * synonymous with a fingerprint refusal. It is not: a missing credential, an
+ * unreachable compute or a misconfigured `MIN_SCHEMA_VERSION` all arrive there
+ * too, and reporting one of those as a fingerprint failure pulls the alarm
+ * reserved for a cross-tenant near-miss — the one an operator is trained to
+ * read as a tenancy breach.
+ *
+ * So the fingerprint message is emitted only for codes on this list, and the
+ * list is checked against the union in both directions: `satisfies` catches a
+ * member that is not an `IdentityFailure`, and the exhaustiveness map below
+ * catches an `IdentityFailure` that is not a member. Adding a failure code
+ * without adding it here fails to compile.
+ */
+export const IDENTITY_FAILURE_CODES = [
+  'settings_row_missing',
+  'settings_not_singleton',
+  'stamp_missing',
+  'stamp_tenant_mismatch',
+  'workspace_id_mismatch',
+  'neon_identity_unavailable',
+  'neon_project_mismatch',
+  'neon_branch_mismatch',
+  'stamp_source_conflict',
+  // The secret-key canary is an identity check like the rest, asked of the key
+  // rather than of the row: a canary that this key cannot open, or that was
+  // never sealed at all, means nothing establishes that this database and this
+  // key belong to each other. Serving either would write new ciphertext under a
+  // key that may not read the old, which is the same wrong-but-plausible answer
+  // §3 is about.
+  'secret_key_canary_missing',
+  'secret_key_canary_mismatch',
+] as const satisfies readonly IdentityFailure[]
+
+/** Compile-time exhaustiveness: every `IdentityFailure` must appear above. */
+const _identityFailureCoverage: Record<IdentityFailure, true> = {
+  settings_row_missing: true,
+  settings_not_singleton: true,
+  stamp_missing: true,
+  stamp_tenant_mismatch: true,
+  workspace_id_mismatch: true,
+  neon_identity_unavailable: true,
+  neon_project_mismatch: true,
+  neon_branch_mismatch: true,
+  stamp_source_conflict: true,
+  secret_key_canary_missing: true,
+  secret_key_canary_mismatch: true,
+}
+void _identityFailureCoverage
+
+/** True when a refusal code means the database failed its identity check. */
+export function isIdentityFailureCode(code: string): code is IdentityFailure {
+  return (IDENTITY_FAILURE_CODES as readonly string[]).includes(code)
+}
+
 export type IdentityVerdict = { ok: true } | { ok: false; code: IdentityFailure; detail: string }
 
 /** Thrown by the pool cache when a tenant database fails its own fingerprint. */

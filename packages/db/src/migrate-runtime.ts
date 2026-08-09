@@ -44,11 +44,17 @@
  * - **`pg_advisory_lock` is where it breaks, and it breaks badly.** The lock is
  *   session-scoped, and a pooled client's "session" is a server connection the
  *   pooler keeps alive after the client disconnects. Measured: take the lock
- *   through the pooler, disconnect, and the lock is still held; a *second*
- *   pooled client then gets `pg_try_advisory_lock = true` for the same key, so
- *   it is not mutual exclusion either; and a client on the **direct** endpoint
- *   asking for that key blocks — verified by watching it die on a 10 s
- *   `lock_timeout` — until the stranded backend is terminated by hand.
+ *   through the pooler, disconnect, and the lock is still held; and a client on
+ *   the **direct** endpoint asking for that key blocks — verified by watching it
+ *   die on a 10 s `lock_timeout` until the stranded backend was terminated by
+ *   hand.
+ * - **The mutual-exclusion failure is non-deterministic, not total.** A second
+ *   pooled client got `pg_try_advisory_lock = true` for the held key — but
+ *   because the pooler routed it onto the *same backend*, where it re-entered
+ *   its own lock (hold count 2; the third unlock returned false). Forced onto a
+ *   fresh backend it correctly returned false. So the mutex fails open depending
+ *   on pool routing, which is worse than one that never works: it works in
+ *   testing.
  *
  * So a migrator run through the pooler does not merely lose its own
  * serialisation: it strands a lock that wedges every subsequent direct run of

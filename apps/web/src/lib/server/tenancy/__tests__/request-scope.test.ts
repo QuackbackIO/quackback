@@ -8,6 +8,7 @@
  * an information leak about another tenant's identifiers.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { IDENTITY_FAILURE_CODES } from '../fingerprint'
 
 const acquireScopeForHost = vi.fn()
 
@@ -157,6 +158,62 @@ describe('resolveTenantAndContinue', () => {
     expect(res.headers.get('retry-after')).toBeNull()
     expect(await res.text()).toContain('temporarily unavailable')
     expect(silentLog.error).toHaveBeenCalled()
+  })
+
+  it('a misconfigured MIN_SCHEMA_VERSION does not pull the cross-tenant alarm', async () => {
+    // The measured failure this replaces: `MIN_SCHEMA_VERSION=9999` threw
+    // UnknownSchemaVersion at pool checkout, which carried no `code`, so the
+    // resolver labelled it `pool_unavailable` and it fell through this branch's
+    // default into the fingerprint message — 503ing EVERY tenant, healthy ones
+    // included, under the alarm reserved for a wrong-database near-miss.
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'refused',
+      tenantId: 'inst_a',
+      code: 'schema_floor_misconfigured',
+      detail: 'MIN_SCHEMA_VERSION=9999 names no bundled migration',
+    })
+    const res = (await serve('t1.localhost')) as Response
+    expect(res.status).toBe(503)
+    const [, message] = silentLog.error.mock.calls.at(-1)!
+    expect(message).toContain('misconfigured')
+    expect(message).not.toContain('fingerprint')
+  })
+
+  it('a non-identity refusal is loud but is NOT reported as a fingerprint failure', async () => {
+    // Every exception from pool checkout arrives in this branch. A missing
+    // credential or an unreachable compute says nothing about WHICH database
+    // was reached, so it must not be logged as though it did.
+    for (const code of ['pool_unavailable', 'CONNECT_TIMEOUT', '28P01']) {
+      silentLog.error.mockClear()
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'refused',
+        tenantId: 'inst_a',
+        code,
+        detail: 'connection refused',
+      })
+      const res = (await serve('t1.localhost')) as Response
+      expect(res.status).toBe(503)
+      const [, message] = silentLog.error.mock.calls.at(-1)!
+      expect(message, `code ${code}`).not.toContain('fingerprint')
+      expect(message).toContain('could not open a verified connection')
+    }
+  })
+
+  it('every genuine identity failure DOES get the fingerprint message', async () => {
+    // The other half, so the test above cannot pass by the message never being
+    // emitted at all.
+    for (const code of IDENTITY_FAILURE_CODES) {
+      silentLog.error.mockClear()
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'refused',
+        tenantId: 'inst_a',
+        code,
+        detail: 'mismatch',
+      })
+      await serve('t1.localhost')
+      const [, message] = silentLog.error.mock.calls.at(-1)!
+      expect(message, `code ${code}`).toContain('fingerprint')
+    }
   })
 
   it('never marks a refusal cacheable', async () => {

@@ -83,10 +83,10 @@ async function boot(): Promise<{ refused: boolean; paths: string[] }> {
   }
 }
 
-const ROLES = ['web', 'worker', 'all', undefined] as const
+const ROLES = ['web', 'worker', 'all', 'migrator', undefined] as const
 
 describe('every role boots under pooled tenancy', () => {
-  // The four-row matrix, asserted as PERMITTED. `worker` is the one that
+  // The five-row matrix, asserted as PERMITTED. `worker` is the one that
   // matters: the pooled job tier only runs there, so refusing it left the
   // fleet with nothing that could drain a queue, run a sweep or hold the wake
   // listener.
@@ -148,14 +148,17 @@ describe('the database refusals the pooled mode DOES keep', () => {
 describe('the role vocabulary has one reader', () => {
   it('queue/role.ts is the only place QUACKBACK_ROLE is interpreted', async () => {
     // The config schema no longer parses it, so there is one reader and no
-    // second opinion to drift from. `catch`-style tolerance for a nonsense
-    // value lives there too.
+    // second opinion to drift from. Tolerance for a nonsense value lives there
+    // too — and it is fail-CLOSED: an unrecognised role resolves to `web` and
+    // starts nothing, rather than to `all`, which would start everything on a
+    // replica whose manifest said otherwise.
     const { getProcessRole, shouldRunWorkers } = await import('../queue/role')
     for (const [raw, role, workers] of [
       ['web', 'web', false],
       ['worker', 'worker', true],
       ['all', 'all', true],
-      ['nonsense', 'all', true],
+      ['migrator', 'migrator', false],
+      ['nonsense', 'web', false],
     ] as const) {
       process.env.QUACKBACK_ROLE = raw
       expect(getProcessRole(), raw).toBe(role)

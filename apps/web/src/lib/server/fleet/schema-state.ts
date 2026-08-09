@@ -322,6 +322,13 @@ export async function listSchemaState(cohort?: string): Promise<SchemaStateRow[]
  * makes a rollout resumable after a terminal failure — an operator raising the
  * target is asserting that the previous diagnosis has been addressed, which is
  * exactly the moment it is legitimate to clear it.
+ *
+ * **`blocked` is preserved, alongside `running`.** An earlier version reset it,
+ * which meant a routine target bump silently un-halted a tenant somebody had
+ * deliberately taken out of the rollout — and cleared the reason they recorded
+ * for doing it. A block is a human decision and only a human should lift it
+ * (`fleet-migrator block` / an explicit status change), so it survives every
+ * write on this path. Found while guarding a fixture against exactly this.
  */
 export async function setTargetVersion(input: {
   targetVersion: number
@@ -337,10 +344,10 @@ export async function setTargetVersion(input: {
   const result = await controlDb().execute(sql`
     UPDATE ${sql.identifier(SCHEMA_STATE_TABLE)}
     SET target_version = ${input.targetVersion},
-        status = CASE WHEN status = 'running' THEN status ELSE 'pending' END,
-        attempts = CASE WHEN status = 'running' THEN attempts ELSE 0 END,
+        status = CASE WHEN status IN ('running', 'blocked') THEN status ELSE 'pending' END,
+        attempts = CASE WHEN status IN ('running', 'blocked') THEN attempts ELSE 0 END,
         run_at = now(),
-        last_error = NULL
+        last_error = CASE WHEN status = 'blocked' THEN last_error ELSE NULL END
     WHERE ${scope}
     RETURNING tenant_id
   `)

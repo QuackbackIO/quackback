@@ -22,13 +22,19 @@
  * | `invalid` — a record exists but fails the contract | 503, alert | none |
  * | `refused` — the database is not the one the record named | 503, alert | one query |
  * | `refused[schema_below_floor]` — right database, schema too old for this build | 503 + `Retry-After`, warn | one query |
+ * | `refused[schema_floor_misconfigured]` — this process's own MIN_SCHEMA_VERSION is unresolvable | 503, alert | none |
+ * | `refused[*]` — credential, connectivity, anything else | 503, alert, NOT the fingerprint alarm | varies |
  *
  * Every one of them is a refusal to serve. None degrades to a default tenant,
  * because §3's failure mode is precisely that a wrong-but-plausible answer looks
  * correct all the way down.
  */
 import { logger } from '@/lib/server/logger'
-import { SCHEMA_FLOOR_REFUSAL_CODE } from '@/lib/server/fleet/schema-floor'
+import {
+  SCHEMA_FLOOR_MISCONFIGURED_CODE,
+  SCHEMA_FLOOR_REFUSAL_CODE,
+} from '@/lib/server/fleet/schema-floor'
+import { isIdentityFailureCode } from './fingerprint'
 import { acquireScopeForHost } from './resolver'
 import { runWithTenantScope } from './tenant-context'
 
@@ -102,16 +108,22 @@ export async function resolveTenantAndContinue<T>({
       )
       return refusal(503, 'This workspace is temporarily unavailable.')
 
-    case 'refused':
-      // Two different refusals share this branch and must not share a message.
-      // A fingerprint refusal means "this is the wrong database" and is a
-      // security event; a schema-floor refusal means "this is the right
-      // database, mid-rollout" and is expected, transient, and this tenant's
-      // alone. Collapsing them would put a routine rollout in the same alert
-      // stream as a cross-tenant near-miss.
-      if (acquisition.code === SCHEMA_FLOOR_REFUSAL_CODE) {
+    case 'refused': {
+      // EVERY exception from pool checkout arrives here with a `code`, and they
+      // do not mean the same thing. This branch used to end in the fingerprint
+      // message as its fallthrough, so a missing credential, an unreachable
+      // compute or a typo'd MIN_SCHEMA_VERSION all reported as a wrong-database
+      // near-miss — §3's cross-tenant alarm, the one an operator reads as a
+      // tenancy breach. Measured: `MIN_SCHEMA_VERSION=9999` 503'd every tenant,
+      // healthy ones included, under that message.
+      //
+      // So the fingerprint message is now emitted only for codes that ARE
+      // identity failures, and the list is compiler-checked against the union
+      // in both directions. There is no fallthrough into it.
+      const { tenantId, code, detail } = acquisition
+      if (code === SCHEMA_FLOOR_REFUSAL_CODE) {
         log.warn(
-          { tenantId: acquisition.tenantId, code: acquisition.code, detail: acquisition.detail },
+          { tenantId, code, detail },
           'tenant schema is below MIN_SCHEMA_VERSION — this workspace is updating'
         )
         return refusal(
@@ -122,10 +134,32 @@ export async function resolveTenantAndContinue<T>({
           { 'retry-after': '30' }
         )
       }
+      if (code === SCHEMA_FLOOR_MISCONFIGURED_CODE) {
+        // Not the tenant's fault and not survivable by waiting: this process
+        // cannot resolve its own serving floor, so it is refusing every tenant.
+        // Startup validation should have caught it; if this fires, it did not.
+        log.error(
+          { tenantId, code, detail },
+          'MIN_SCHEMA_VERSION does not name a bundled migration — this process is misconfigured ' +
+            'and is refusing every tenant'
+        )
+        return refusal(503, 'This workspace is temporarily unavailable.')
+      }
+      if (isIdentityFailureCode(code)) {
+        log.error(
+          { tenantId, code, detail },
+          'tenant database refused the fingerprint — refusing to serve'
+        )
+        return refusal(503, 'This workspace is temporarily unavailable.')
+      }
+      // Everything else: the connection could not be opened or verified for a
+      // reason that says nothing about which database it is. Loud, but not the
+      // cross-tenant alarm.
       log.error(
-        { tenantId: acquisition.tenantId, code: acquisition.code, detail: acquisition.detail },
-        'tenant database refused the fingerprint — refusing to serve'
+        { tenantId, code, detail },
+        'could not open a verified connection for this tenant — refusing to serve'
       )
       return refusal(503, 'This workspace is temporarily unavailable.')
+    }
   }
 }

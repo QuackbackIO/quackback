@@ -251,6 +251,35 @@ executor is never started and no index is rebuilt. A pass over an
 already-reconciled fleet costs one query per tenant, which is what keeps §10.7's
 cost model intact.
 
+### Why the gate exists at all
+
+Expand-only is necessary but **not sufficient**, and the demo below is of the
+mechanism rather than of the motivation, so here is the motivation. A database
+migrated to `0247`, against a build that ships `0248` (which adds
+`changelog_entries.segment_ids`, a column the TS schema knows about):
+
+```
+ledger: 225 rows
+
+1. WITHOUT the gate — this build issues its own column list:
+   findFirst() THREW: 42703 column "segment_ids" does not exist
+
+2. WITH the gate at MIN_SCHEMA_VERSION=0248:
+   evaluateSchemaFloor -> ok=false missing=["0248_changelog_entry_segments"]
+   ...refused before the query is ever issued
+
+3. CONTROL — the same query on a database that HAS 0248:
+   findFirst() SUCCEEDED
+```
+
+The control is what makes it evidence: without it, the throw in (1) would be
+equally consistent with a broken query.
+
+**Note that `0251` cannot demonstrate this**, and that is deliberate rather than
+lucky: its column is not in the TS schema, so nothing selects it and a pre-0251
+database serves fine with the gate off. The fixture in the next section is
+therefore a demo of the _gate_, not of the hazard.
+
 ### The gate, both directions
 
 `p10-old` is a database migrated against a journal trimmed at `0248` — a
@@ -273,26 +302,48 @@ Reproduce with `scripts/fleet-migrator.ts` and the runbook in §7.
 
 ### `0251` replayed against a database that already carries it
 
+The instrument is this, and it is written out so a reader can re-derive the
+digest rather than take four hex strings on trust — the earlier version of this
+section published the values without the expression, which made them decoration:
+
+```sql
+SELECT md5(t::text) FROM (SELECT
+   (SELECT md5(string_agg(s::text,'|')) FROM settings s)                       AS settings_rows,
+   (SELECT md5(string_agg(column_name||':'||data_type||':'||
+                          coalesce(column_default,'')||':'||is_nullable, '|'
+                          ORDER BY ordinal_position))
+      FROM information_schema.columns WHERE table_name='settings')             AS settings_cols,
+   (SELECT col_description('settings'::regclass, ordinal_position::int)
+      FROM information_schema.columns
+     WHERE table_name='settings' AND column_name='cloud_tenant_id')            AS col_comment,
+   (SELECT cloud_tenant_id FROM settings LIMIT 1)                              AS stamp
+) t
 ```
-BEFORE  md5(settings rows + column shape + column comment + stamp) = 12b94592431e2dfa36e002096931d17a
-        stamp = inst_gauntlet_neon_t1
+
+It covers all four things a replay of `0251` could plausibly disturb: the row
+data, the column's shape, the column's comment and the stamp itself.
+
+```
+BEFORE   digest D0                     stamp = inst_gauntlet_neon_t1
 psql -f 0251_settings_cloud_tenant_id.sql
-        NOTICE: column "cloud_tenant_id" of relation "settings" already exists, skipping
-AFTER   md5 = 12b94592431e2dfa36e002096931d17a          ← unchanged
-        stamp = inst_gauntlet_neon_t1
+         NOTICE: column "cloud_tenant_id" of relation "settings" already exists, skipping
+AFTER    digest D0   ← unchanged       stamp = inst_gauntlet_neon_t1
 ```
 
-With the control that makes the "unchanged" reading mean something:
+With the controls that make "unchanged" mean something:
 
 ```
-COMMENT ON COLUMN settings.cloud_tenant_id IS 'CONTROL'   → md5 792788a64b623c8539c1a7b525386b57
-replay 0251                                               → md5 12b94592431e2dfa36e002096931d17a
-UPDATE settings SET cloud_tenant_id = … || '_CONTROL'     → md5 5bab75777662142da4f90480e200ca9f
-restore                                                   → md5 12b94592431e2dfa36e002096931d17a
+COMMENT ON COLUMN settings.cloud_tenant_id IS 'CONTROL'   → digest CHANGES
+replay 0251                                               → digest returns to D0
+UPDATE settings SET cloud_tenant_id = … || '_CONTROL'     → digest CHANGES
+restore                                                   → digest returns to D0
 ```
 
 The instrument moves on a comment change and on a value change. It did not move
-on the replay.
+on the replay. (The literal digests are omitted deliberately: they are specific
+to one tenant's data at one moment, so a reader re-running this will get
+different values — what has to match is _before equals after_, and _control
+differs from both_.)
 
 ## 6. The compatibility gate
 
@@ -371,24 +422,40 @@ and refuses a DSN whose host looks like a transaction-mode pooler.
 **The usual justification for that is wrong, and the real one is worse.**
 Measured through Neon's pooled endpoint:
 
-|                                                  | pooled                                 | direct |
-| ------------------------------------------------ | -------------------------------------- | ------ |
-| `CREATE INDEX CONCURRENTLY`                      | **works**                              | works  |
-| `pg_advisory_lock` released on client disconnect | **no**                                 | yes    |
-| second client gets the same lock                 | **yes** (`pg_try_advisory_lock` → `t`) | no     |
-| a _direct_ client can then take that key         | **no — blocks**                        | —      |
+|                                                  | pooled                              | direct |
+| ------------------------------------------------ | ----------------------------------- | ------ |
+| `CREATE INDEX CONCURRENTLY`                      | **works**, and yields a valid index | works  |
+| `pg_advisory_lock` released on client disconnect | **no**                              | yes    |
+| second client gets the same lock                 | **depends on routing** — see below  | no     |
+| a _direct_ client can then take that key         | **no — blocks**                     | —      |
 
 CIC is one statement to the client; its multi-transaction dance happens
-server-side where the pooler cannot see it, so it passes through fine. The
-advisory lock is the casualty: a pooled client's "session" is a server
-connection the pooler keeps alive after the client has gone, so the lock
-survives disconnect, fails to exclude a second pooled client, **and then wedges
-the direct endpoint** — verified by watching a direct `pg_advisory_lock` die on
-a 10 s `lock_timeout` until the stranded backend was terminated by hand.
+server-side where the pooler cannot see it, so it passes through fine —
+including across a 22.8 s server-side wait for old snapshots. The advisory lock
+is the casualty: a pooled client's "session" is a server connection the pooler
+keeps alive after the client has gone, so the lock survives disconnect **and
+then wedges the direct endpoint** — verified by watching a direct
+`pg_advisory_lock` die on a 10 s `lock_timeout` until the stranded backend was
+terminated by hand.
 
-So a migrator run through the pooler does not merely lose its own
-serialisation; it strands a lock that blocks every subsequent direct run of the
-same tenant.
+**The middle row needs stating carefully, because the obvious reading of it is
+wrong.** A second pooled client asking for the held key got `t`, and the
+tempting conclusion — "the lock simply does not work through a pooler" — is not
+what happened. PgBouncer had routed that client onto the **same backend**, so it
+re-entered the lock it already held: hold count 2, and the third unlock returned
+`false`. Forced onto a _fresh_ backend, `pg_try_advisory_lock` correctly
+returned `false`.
+
+So the mutex does not fail cleanly. **It fails open non-deterministically,
+depending on which backend the pooler happens to hand you** — which is worse
+than a mutex that never works, because it works in testing. A migrator run
+through the pooler therefore loses its serialisation _sometimes_, and strands a
+lock that blocks every subsequent direct run of the same tenant _always_.
+
+**A related finding that reaches past this piece:** the pooler runs no session
+reset between clients. A `statement_timeout=7654ms` set by one client was read
+back by a _different_ client landing on the same backend. Any per-session `SET`
+through the pooled endpoint is shared state, not client state.
 
 It does **not** go through the tenant pool cache, for two reasons that are both
 correctness: the pool cache terminates at the _pooled_ endpoint, and it asserts
@@ -453,6 +520,17 @@ claimed, which is the correct outcome and needs an operator, not a longer retry.
   deliberately: the probe most people reach for is asking the catalogue whether
   a session is pooled, and catalogue answers about pooling have already produced
   one false green in this work.
+- **The control-plane side is the table and nothing else.** §10.3 assigns
+  `target_version` writing and rollout-status rendering to the CP; what shipped
+  there is migration `0049` alone, and the app's `fleet-migrator` CLI is
+  currently the only writer of intent. That is a real divergence from the
+  design, not an oversight of it: the CP is concurrently being rebuilt (its
+  Kubernetes path is being amputated), so building a rollout UI against the
+  shape that is being deleted would be work done twice. The contract the table
+  encodes — CP writes `target_version` and `cohort`, the app writes only
+  observations — is what the CP has to implement, and it is enforced by
+  `CHECK`s rather than by convention, so a CP writer cannot get it wrong
+  quietly.
 - **Neon-branch preflight (§10.8) is not built.** `plan` reports the replay set
   and its verdicts against the live database, which is the cheap half; dry-running
   a release against a branch of the largest and oldest tenant is not.

@@ -1,12 +1,21 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { db, sql, getMigrationStatus } from '@/lib/server/db'
+// `UnknownSchemaVersion` comes through the fleet module rather than straight
+// from `@quackback/db/*`: that package is reserved for the re-export layer, and
+// schema-floor.ts already re-exports it for exactly this reason.
+import { assertSchemaFloorConfigured, UnknownSchemaVersion } from '@/lib/server/fleet/schema-floor'
 // The mode is read from the environment rather than through `config`: the
 // readiness probe must not fail because some unrelated variable is missing —
 // that would report the process unhealthy for a reason it is not.
 import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import { getQueueRedis } from '@/lib/server/queue/redis-config'
 import { getJobTierStatus } from '@/lib/server/jobs/tier'
-import { getProcessRole, shouldRunWorkers } from '@/lib/server/queue/role'
+import {
+  assertProcessRoleConfigured,
+  getProcessRole,
+  InvalidProcessRole,
+  shouldRunWorkers,
+} from '@/lib/server/queue/role'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'health' })
@@ -17,7 +26,7 @@ const CHECK_TIMEOUT_MS = 3_000
 /** Public probe body: booleans and short codes only, never error detail. */
 interface CheckResult {
   ok: boolean
-  error?: 'failed' | 'timeout' | 'behind'
+  error?: 'failed' | 'timeout' | 'behind' | 'misconfigured'
 }
 
 class CheckTimeout extends Error {}
@@ -39,6 +48,14 @@ async function runCheck(name: string, check: () => Promise<void>): Promise<Check
   } catch (err) {
     if (err instanceof CheckTimeout) return { ok: false, error: 'timeout' }
     if (err instanceof MigrationsBehind) return { ok: false, error: 'behind' }
+    // A configuration fault is not a dependency fault, and the difference is
+    // the whole triage: `failed` sends someone to look at the database, which
+    // is fine and is not the problem. The code names the CLASS only — never the
+    // value — so an unauthenticated probe still leaks nothing.
+    if (err instanceof UnknownSchemaVersion || err instanceof InvalidProcessRole) {
+      log.error({ err, check: name }, 'readiness check failed: this process is misconfigured')
+      return { ok: false, error: 'misconfigured' }
+    }
     // Full detail goes to the log; the response carries a short code only.
     log.warn({ err, check: name }, 'readiness check failed')
     return { ok: false, error: 'failed' }
@@ -79,6 +96,23 @@ export function resetReadinessCache(): void {
   migrationsKnownUpToDate = false
 }
 
+/**
+ * The process's own serving floor, not any tenant's schema.
+ *
+ * `checkMigrations` deliberately asserts nothing about tenant schemas under
+ * pooled tenancy (§10.5), and that stays true. This is a different question:
+ * `MIN_SCHEMA_VERSION` naming no bundled migration means this replica will
+ * refuse **every** tenant, so it is not ready — and without this the failure is
+ * invisible to the probe and shows up as a fleet-wide outage with a green
+ * deploy.
+ */
+function checkSchemaFloor(): void {
+  assertSchemaFloorConfigured()
+  // Same class of fault, same reasoning: an unrecognised QUACKBACK_ROLE means
+  // this replica is not doing the job its deployment thinks it is.
+  assertProcessRoleConfigured()
+}
+
 async function checkMigrations(): Promise<void> {
   // Fleet readiness stops asserting anything about tenant schemas under pooled
   // tenancy, per SAAS-HOSTING-STACK.md §10.5. The memo below is actively
@@ -99,10 +133,11 @@ async function checkMigrations(): Promise<void> {
  * probe; a worker whose init failed does.
  */
 export async function handleReadinessProbe(): Promise<Response> {
-  const [dbCheck, redisCheck, migrationsCheck] = await Promise.all([
+  const [dbCheck, redisCheck, migrationsCheck, schemaFloorCheck] = await Promise.all([
     runCheck('db', checkDb),
     runCheck('redis', checkRedis),
     runCheck('migrations', checkMigrations),
+    runCheck('schema_floor', async () => checkSchemaFloor()),
   ])
   // Background work is now one tier rather than a registry of BullMQ workers,
   // so readiness reports the tier.
@@ -125,7 +160,8 @@ export async function handleReadinessProbe(): Promise<Response> {
     schemaMissing: tier.tenants.filter((t) => t.schemaMissing).length,
   }
 
-  const ready = dbCheck.ok && redisCheck.ok && migrationsCheck.ok && workersCheck.ok
+  const ready =
+    dbCheck.ok && redisCheck.ok && migrationsCheck.ok && schemaFloorCheck.ok && workersCheck.ok
   return Response.json(
     {
       status: ready ? 'ok' : 'unavailable',
@@ -134,6 +170,7 @@ export async function handleReadinessProbe(): Promise<Response> {
         db: dbCheck,
         redis: redisCheck,
         migrations: migrationsCheck,
+        schema_floor: schemaFloorCheck,
         workers: workersCheck,
       },
     },

@@ -18,6 +18,7 @@
  * the target.
  */
 import { config } from '@/lib/server/config'
+import { SCHEMA_FLOOR_REFUSAL_CODE } from '@/lib/server/fleet/schema-floor'
 import { logger } from '@/lib/server/logger'
 import { acquireTenantPool } from './pool-cache'
 import {
@@ -115,7 +116,13 @@ export async function acquireTenantScope(
   } catch (err) {
     const code = (err as { code?: string }).code ?? 'pool_unavailable'
     const detail = err instanceof Error ? err.message : String(err)
-    log.error({ tenantId: tenant.tenantId, code, err }, 'refusing to serve tenant')
+    // A tenant below the compatibility floor is the expected state during a
+    // rollout, not an incident: it is transient, it is that tenant's alone, and
+    // it resolves itself when the migrator reaches it. Logging it at `error`
+    // alongside genuine refusals means a routine fleet migration produces one
+    // error per request per tenant, which is how an alert channel gets muted.
+    const level = code === SCHEMA_FLOOR_REFUSAL_CODE ? 'warn' : 'error'
+    log[level]({ tenantId: tenant.tenantId, code, err }, 'refusing to serve tenant')
     return { kind: 'refused', tenantId: tenant.tenantId, code, detail }
   }
 }
