@@ -34,6 +34,8 @@ const hoisted = vi.hoisted(() => ({
   updateUsedFn: vi.fn(),
   setStub: vi.fn(),
   whereStub: vi.fn(),
+  incrementRateBucket: vi.fn(),
+  rateBucketRetryAfter: vi.fn(),
 }))
 
 vi.mock('@/lib/server/audit/log', () => ({
@@ -63,26 +65,16 @@ vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://acme.quackback.io' },
 }))
 
-// Stub Redis: the consume fn rate-limits via INCR + EXPIRE. We don't
-// care about the rate-limit branch in these tests — return a stable
-// "allowed" count and the helper's `count > limit` check stays
-// false.
-vi.mock('@/lib/server/redis', () => ({
-  getRedis: () => ({
-    multi: () => ({
-      incr: () => undefined,
-      expire: () => undefined,
-      exec: async () => [
-        [null, 1],
-        [null, 1],
-      ],
-    }),
-    ttl: async () => 300,
-  }),
-  cacheDel: vi.fn(),
-  cacheGet: vi.fn(),
-  cacheSet: vi.fn(),
-  CACHE_KEYS: {},
+// Stub the rate-bucket store. The consume fn rate-limits through
+// `utils/rate-bucket`, which is backed by the Postgres kv statements — so the
+// store to stub is `kv/pg-kv`, one level below the primitive. That keeps
+// `incrementBucket` and the handler's own `count > limit` threshold real, and
+// leaves only the round trip faked. Spread the original so the rest of the
+// module's exports stay available to anything else in the graph.
+vi.mock('@/lib/server/kv/pg-kv', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/kv/pg-kv')>()),
+  incrementRateBucket: hoisted.incrementRateBucket,
+  rateBucketRetryAfter: hoisted.rateBucketRetryAfter,
 }))
 
 // Stub email so the fire-and-forget alert doesn't try to load real
@@ -126,6 +118,10 @@ beforeEach(() => {
   })
   hoisted.findUser.mockResolvedValue(null)
   hoisted.findCodes.mockResolvedValue([])
+  // Inside the window by default, so only the test that is about throttling
+  // takes the throttled branch.
+  hoisted.incrementRateBucket.mockResolvedValue({ count: 1, retryAfterSeconds: 300 })
+  hoisted.rateBucketRetryAfter.mockResolvedValue(300)
   hoisted.verifyRecoveryCode.mockResolvedValue(false)
   hoisted.mintMagicLinkUrl.mockResolvedValue({
     url: 'https://acme.quackback.io/verify-magic-link?token=t',
@@ -233,60 +229,29 @@ describe('consumeRecoveryCodeFn', () => {
   })
 
   it('rate-limits and returns invalid_credentials when the per-IP+email window is exhausted', async () => {
-    // Reload the consume module with a redis mock that reports a
-    // count above the 5-per-5-min threshold. The handler then short-
+    // Report a count above the 5-per-5-min threshold. The handler then short-
     // circuits before any DB / scrypt work and returns rate_limited.
-    vi.resetModules()
-    vi.doMock('@/lib/server/redis', () => ({
-      getRedis: () => ({
-        multi: () => ({
-          incr: () => undefined,
-          expire: () => undefined,
-          exec: async () => [
-            [null, 99], // INCR result far above the limit
-            [null, 1],
-          ],
-        }),
-        ttl: async () => 300,
-      }),
-      cacheDel: vi.fn(),
-      cacheGet: vi.fn(),
-      cacheSet: vi.fn(),
-      CACHE_KEYS: {},
-    }))
+    hoisted.incrementRateBucket.mockResolvedValue({ count: 99, retryAfterSeconds: 300 })
 
-    // Re-import so the new redis mock is bound on this module's
-    // closure. Other vi.mock() calls at the top of the file remain
-    // in effect across the reset.
-    const reloadedHandlers: AnyHandler[] = []
-    vi.doMock('@tanstack/react-start', () => ({
-      createServerFn: () => {
-        const chain = {
-          validator() {
-            return chain
-          },
-          handler(fn: AnyHandler) {
-            reloadedHandlers.push(fn)
-            return chain
-          },
-        }
-        return chain
-      },
-    }))
-    await import('../recovery-codes-consume')
-    const reloaded = reloadedHandlers[0]
-
-    const result = (await reloaded({
+    const result = (await consumeRecoveryCode({
       data: { email: 'admin@example.com', code: 'ABCD-EFGH-JKMN' },
     })) as { ok: boolean; error?: string }
 
     expect(result).toEqual({ ok: false, error: 'rate_limited' })
-    // Audit row records the rate-limit reason for forensic tracing.
+    // Short-circuits ahead of the lookup: no DB read, no scrypt.
+    expect(hoisted.findUser).not.toHaveBeenCalled()
+    expect(hoisted.verifyRecoveryCode).not.toHaveBeenCalled()
+    // Audit row records the rate-limit reason, and the Retry-After the store
+    // reported, for forensic tracing.
     expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'auth.method.blocked',
         outcome: 'failure',
-        metadata: expect.objectContaining({ method: 'recovery_code', reason: 'rate_limited' }),
+        metadata: expect.objectContaining({
+          method: 'recovery_code',
+          reason: 'rate_limited',
+          retryAfter: 300,
+        }),
       })
     )
   })
