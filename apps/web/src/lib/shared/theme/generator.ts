@@ -61,8 +61,8 @@ const SHADOW_KEYS = new Set([
  * Outputs `:root { }` and `.dark { }` blocks with all expanded variables.
  */
 export function generateReadableCSS(
-  lightMinimal: MinimalThemeVariables,
-  darkMinimal: MinimalThemeVariables,
+  lightMinimal: Partial<MinimalThemeVariables>,
+  darkMinimal: Partial<MinimalThemeVariables>,
   themeMode?: ThemeMode
 ): string {
   const parts: string[] = []
@@ -166,13 +166,12 @@ export function normalizeFontSans(fontSans: string): string {
 export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
+  // Each half is expanded only when the config has one, so a workspace that
+  // branded a single mode keeps the other on the stylesheet defaults. Either
+  // half may be partial; expandTheme fills its gaps from the base palette.
   const themeMode = config.themeMode ?? 'user'
-  const lightVars = config.light
-    ? expandTheme(config.light as MinimalThemeVariables, { mode: 'light' })
-    : {}
-  const darkVars = config.dark
-    ? expandTheme(config.dark as MinimalThemeVariables, { mode: 'dark' })
-    : {}
+  const lightVars = config.light ? expandTheme(config.light, { mode: 'light' }) : {}
+  const darkVars = config.dark ? expandTheme(config.dark, { mode: 'dark' }) : {}
   if (lightVars.fontSans) lightVars.fontSans = normalizeFontSans(lightVars.fontSans)
   if (darkVars.fontSans) darkVars.fontSans = normalizeFontSans(darkVars.fontSans)
 

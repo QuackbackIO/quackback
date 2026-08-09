@@ -288,8 +288,11 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
       const lightParsed = parseCssToMinimal(parsed.light)
       const darkParsed = parseCssToMinimal(parsed.dark)
 
-      const lightMinimal: MinimalThemeVariables = { ...defaultLightMinimal, ...lightParsed }
-      const darkMinimal: MinimalThemeVariables = { ...defaultDarkMinimal, ...darkParsed }
+      const lightMinimal: Partial<MinimalThemeVariables> = {
+        ...defaultLightMinimal,
+        ...lightParsed,
+      }
+      const darkMinimal: Partial<MinimalThemeVariables> = { ...defaultDarkMinimal, ...darkParsed }
 
       const themeConfig: ThemeConfig = {
         themeMode,

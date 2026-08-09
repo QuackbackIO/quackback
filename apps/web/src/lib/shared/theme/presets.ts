@@ -1,6 +1,6 @@
 import type { ThemePreset } from './types'
 import type { MinimalThemeVariables } from './expand'
-import { expandTheme } from './expand'
+import { DEFAULT_DARK_BASE, DEFAULT_LIGHT_BASE, expandTheme } from './expand'
 
 // Each family here must be self-hosted in globals.css (and match the @fontsource
 // @font-face family name exactly), or the preset falls back to the generic stack.
@@ -47,34 +47,16 @@ function createPreset(config: MinimalPresetConfig): ThemePreset {
 }
 
 export const themePresets: Record<string, ThemePreset> = {
+  // The default preset is the palette expandTheme falls back to, so a workspace
+  // that picks it is choosing exactly what an unbranded workspace already gets.
   default: createPreset({
     name: 'Default',
     description: 'Clean and professional',
     color: '#FFD43B',
     font: FONTS.inter,
     radius: '0.625rem',
-    light: {
-      primary: 'oklch(0.886 0.176 86)',
-      background: 'oklch(1 0 0)',
-      foreground: 'oklch(0.145 0 0)',
-      card: 'oklch(1 0 0)',
-      muted: 'oklch(0.97 0 0)',
-      mutedForeground: 'oklch(0.556 0 0)',
-      border: 'oklch(0.922 0 0)',
-      destructive: 'oklch(0.577 0.245 27)',
-      success: 'oklch(0.696 0.149 163)',
-    },
-    dark: {
-      primary: 'oklch(0.886 0.176 86)',
-      background: 'oklch(0.145 0 0)',
-      foreground: 'oklch(0.985 0 0)',
-      card: 'oklch(0.17 0 0)',
-      muted: 'oklch(0.269 0 0)',
-      mutedForeground: 'oklch(0.708 0 0)',
-      border: 'oklch(0.269 0 0)',
-      destructive: 'oklch(0.396 0.141 25)',
-      success: 'oklch(0.696 0.149 163)',
-    },
+    light: DEFAULT_LIGHT_BASE,
+    dark: DEFAULT_DARK_BASE,
   }),
 
   minimal: createPreset({
