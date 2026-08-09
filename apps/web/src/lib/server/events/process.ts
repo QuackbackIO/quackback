@@ -94,9 +94,9 @@ export async function processEvent(event: EventData): Promise<void> {
 
   // EVENTING-V2 (WO-18 cutover): the durable outbox is the ONLY path. The event
   // is written transactionally (closing the commit-vs-enqueue loss window) and
-  // the leader relay resolves targets + enqueues onto {event-hooks} — the relay
-  // is the sole enqueuer. The legacy direct getHookTargets + addBulk path is
-  // deleted; there is no flag branch anymore.
+  // the leader relay resolves targets and enqueues onto the `events` queue: the
+  // relay is the sole enqueuer. The legacy direct getHookTargets + bulk-add path
+  // is deleted; there is no flag branch anymore.
   const { writeEventToOutbox } = await import('./outbox-dispatch')
   await writeEventToOutbox(event)
 }

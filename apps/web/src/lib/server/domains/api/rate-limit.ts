@@ -1,8 +1,8 @@
 /**
- * Redis-backed fixed-window rate limiter for API authentication, shared
- * across replicas. Built on the shared `redis-rate-bucket` primitive
- * (INCR + EXPIRE NX) so this limiter shares plumbing with the sign-in
- * limiters rather than re-implementing bucket bookkeeping.
+ * Fixed-window rate limiter for API authentication, shared across replicas
+ * because the buckets are rows. Built on the shared `utils/rate-bucket`
+ * primitive so this limiter shares plumbing with the sign-in limiters rather
+ * than re-implementing bucket bookkeeping.
  *
  * Forwarding headers are ignored unless TRUSTED_PROXY_HOPS is configured;
  * see getClientIp() below for the two resolution modes.

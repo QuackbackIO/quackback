@@ -2,11 +2,11 @@
  * Process role — controls whether this instance consumes background queues.
  *
  * QUACKBACK_ROLE=web     Serve HTTP only. Queue modules stay producer-only:
- *                        they can enqueue and register schedules, but never
- *                        construct a BullMQ Worker.
- * QUACKBACK_ROLE=worker  Run BullMQ workers + periodic sweepers. Still serves
- *                        HTTP (health probes work unchanged); just don't route
- *                        user traffic to it.
+ *                        they can enqueue and register schedules, but nothing
+ *                        claims a job.
+ * QUACKBACK_ROLE=worker  Run the job tier, the outbox relay and the periodic
+ *                        sweepers. Still serves HTTP (health probes work
+ *                        unchanged); just don't route user traffic to it.
  * QUACKBACK_ROLE=all     Both — the default, matching single-container
  *                        self-host deployments.
  * QUACKBACK_ROLE=migrator Reconcile tenant schemas toward the control plane's
@@ -35,9 +35,9 @@ export type ProcessRole = (typeof PROCESS_ROLES)[number]
  *
  * **Not `all`.** The old code warned and returned `all`, which is fail-OPEN
  * into the exact topology the design forbids: measured, `QUACKBACK_ROLE=banana`
- * — and `MIGRATOR`, and `Migrator` — booted BullMQ, the Postgres job tier and
- * the outbox relay together. A typo in a deployment manifest is not a licence
- * to run every background subsystem against every tenant.
+ * — and `MIGRATOR`, and `Migrator` — booted the Postgres job tier, the outbox
+ * relay and the sweepers together. A typo in a deployment manifest is not a
+ * licence to run every background subsystem against every tenant.
  *
  * `web` is the closed direction: it serves HTTP and starts nothing. A fleet
  * that briefly runs no background work is degraded and obvious; a fleet where
@@ -92,8 +92,9 @@ export class InvalidProcessRole extends Error {
   constructor(raw: string) {
     super(
       `QUACKBACK_ROLE='${raw}' is not one of ${PROCESS_ROLES.join(' | ')}. Refusing to start: ` +
-        'the previous behaviour was to fall back to `all`, which boots BullMQ, the job tier and ' +
-        'the outbox relay — so a typo silently produced the one topology pooled tenancy forbids.'
+        'the previous behaviour was to fall back to `all`, which boots the job tier, the outbox ' +
+        'relay and the sweepers — so a typo silently produced the one topology pooled tenancy ' +
+        'forbids.'
     )
     this.name = 'InvalidProcessRole'
   }
@@ -111,14 +112,14 @@ export function assertProcessRoleConfigured(env: NodeJS.ProcessEnv = process.env
 }
 
 /**
- * Whether this process should consume queues (BullMQ Workers) and run the
- * periodic sweepers wired in startup.ts.
+ * Whether this process should claim jobs and run the periodic sweepers wired in
+ * startup.ts.
  *
  * An allowlist rather than `!== 'web'`, and that is load-bearing: the old form
  * would have said *true* for every role added after it, so `migrator` would have
- * silently booted fifteen BullMQ workers and six sweepers alongside a fleet
- * migration. A negative test over an open set answers for values it has never
- * heard of.
+ * silently booted the job tier's fifteen queues and six sweepers alongside a
+ * fleet migration. A negative test over an open set answers for values it has
+ * never heard of.
  */
 export function shouldRunWorkers(): boolean {
   const role = getProcessRole()

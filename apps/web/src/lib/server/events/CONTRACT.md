@@ -83,8 +83,8 @@ downstream surface from one declaration:
 
 `emit(tx, def, …)` inside the mutation's transaction (atomic with the write), or
 `emitBestEffort(def, …)` for services with no surrounding tx (opens a short one,
-never throws). Never enqueue `{event-hooks}` directly — the relay is the sole
-enqueuer (CI-enforced by the enqueue gate).
+never throws). Never enqueue onto the `events` queue directly — the relay is the
+sole enqueuer (CI-enforced by the enqueue gate).
 
 ## 7. Sinks (a.k.a. "hooks") — one contract, one registration
 

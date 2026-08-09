@@ -250,30 +250,24 @@ ref and two more without `0256`, while the remaining tenants drained normally
 
 ## 8. Where a resolved hook job goes
 
-Under `QUACKBACK_TENANCY=single` the sink is unchanged: `enqueueHookJobsWithIds`,
-BullMQ `{event-hooks}`.
+One sink, under either tenancy mode: `enqueueHookJobsWithIds` writes the whole
+fan-out into the `events` queue on the **tenant's own Postgres job tier**. Same
+database as the outbox row it came from, `tenant_id` stamped from the ambient
+scope and asserted again by the claim, no routing decision to get wrong because
+there is no shared queue.
 
-Under pooled tenancy it cannot be. Read from live Redis rather than from code:
-fifteen BullMQ queues exist and **zero carry a tenant prefix**, while every
-_application_ Redis key does. One un-namespaced list would hold every tenant's
-hook payloads, and any consumer that ever attached would drain all tenants from
-one list with no tenant discriminator on the key. That queue is safe today **only
-because pooled startup skips the relay** — which is precisely what this piece
-removes. Starting the relay without moving the sink would have converted a durable
-per-tenant backlog into a fleet-shared surface.
+**One statement, whatever the fan-out**, and that is not a throughput detail. A
+crash between the enqueue and the publish stamp re-drains the row, which
+re-enqueues the same deterministic ids; a single
+`INSERT … ON CONFLICT (queue, dedupe_key) DO NOTHING` turns the whole repeat into
+a no-op, and it does so for duplicates *within* the batch too. A loop issuing one
+insert per target gives neither: it can be interrupted half-written, and it costs
+a round trip per target on the highest-volume queue in the process.
 
-So under pooled tenancy the relay writes into the **tenant's own Postgres job
-queue**: same database as the outbox row it came from, `tenant_id` stamped from
-the ambient scope and asserted again by the claim, no routing decision to get
-wrong because there is no shared queue.
-
-**`hook-enqueue.ts` is a shim with a known end date.** The queue-migration piece
-moves `events` off BullMQ for both tenancy modes, at which point
-`enqueueHookJobsWithIds` _is_ this Postgres write and the branch collapses to a
-single call. The queue name (`events`) and the dedupe key (the relay's
-deterministic job id) are chosen to match that destination exactly, so rows
-written by this shim are claimable by that piece's handler without translation, in
-either merge order.
+There is no longer a tenancy branch here. There was one, for as long as the sink
+under single tenancy was a queue this tier could not safely share; the queue
+migration removed the second sink, so the branch had nothing left to choose
+between.
 
 ## 9. Configuration
 

@@ -2,15 +2,15 @@
  * The job definition registry — one place that knows every queue, its handler,
  * and its retry policy.
  *
- * Same principle as `queue/worker-registry.ts`: one list drives boot, drain and
- * the readiness payload, so a queue cannot exist that the tier does not know how
- * to run or stop. Definitions are declared as data rather than discovered, and
- * `noRetry` is expressed here rather than at each enqueue site so the property
- * that matters most — `import` and `export` run at most once — is visible in one
- * screen instead of inferred from call sites.
+ * One list drives boot, drain and the readiness payload, so a queue cannot exist
+ * that the tier does not know how to run or stop. Definitions are declared as
+ * data rather than discovered, and `noRetry` is expressed here rather than at
+ * each enqueue site so the property that matters most — `import` and `export`
+ * run at most once — is visible in one screen instead of inferred from call
+ * sites.
  *
- * Handlers are dynamic imports for the same reason the BullMQ registry used
- * them: the underlying domain modules stay lazy until the tier actually runs.
+ * Handlers are dynamic imports so the underlying domain modules stay lazy until
+ * the tier actually runs.
  */
 import { HOOK_RETRY_ATTEMPTS, hookRetryDelayMs } from '@/lib/server/events/retry-schedule'
 import type { ClaimedJob } from './job-queue'

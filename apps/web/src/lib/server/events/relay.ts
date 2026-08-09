@@ -14,8 +14,8 @@
  * registry, enqueues one job per target with a DETERMINISTIC job id, then stamps
  * `published_at`. Enqueue happens BEFORE the publish stamp, so a crash mid-drain
  * re-drains the row and the deterministic job id makes the re-enqueue a no-op
- * (idempotent on the id under both sinks — see `hook-enqueue.ts` — plus
- * `hook_deliveries`): at-least-once emission, effectively-once delivery.
+ * (the whole fan-out is one `INSERT … ON CONFLICT (queue, dedupe_key) DO NOTHING`,
+ * plus `hook_deliveries`): at-least-once emission, effectively-once delivery.
  *
  * Reaction-loop guard: events whose `context.depth` exceeds MAX_DEPTH are NOT
  * fanned out (they'd be a workflow-caused-event cycle) but ARE marked published
@@ -24,7 +24,7 @@
 import crypto from 'crypto'
 import { db, events, eq, isNull, asc, type Transaction } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { enqueueHookJobs } from './hook-enqueue'
+import { enqueueHookJobsWithIds } from './process'
 import { resolveTargets } from './resolvers/registry'
 import type { DomainEvent, EventActorType } from './envelope'
 import type { HookTarget } from './hook-types'
@@ -127,14 +127,14 @@ const attemptKey = (id: bigint): string => id.toString()
 export async function drainOnce(
   opts: {
     batchSize?: number
-    enqueue?: typeof enqueueHookJobs
+    enqueue?: typeof enqueueHookJobsWithIds
     resolve?: (event: DomainEvent) => Promise<HookTarget[]>
     /** Override the strict-resolution retry budget (tests). */
     maxStrictResolveAttempts?: number
   } = {}
 ): Promise<DrainResult> {
   const batchSize = opts.batchSize ?? 100
-  const enqueue = opts.enqueue ?? enqueueHookJobs
+  const enqueue = opts.enqueue ?? enqueueHookJobsWithIds
   const resolve = opts.resolve ?? resolveTargets
   // Best-effort degradation only means something against the real multi-sink
   // registry; an injected resolver (tests) always runs strict.

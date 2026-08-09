@@ -11,8 +11,32 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
+/**
+ * The queue seam, for the "one statement per fan-out" case below. Only the two
+ * enqueue shapes are replaced: `enqueueJobs` is the bulk insert the relay is
+ * supposed to reach, `enqueueJob` is the per-row round trip it must not.
+ */
+const bulkInserts: Array<Array<{ queue: string; dedupeKey?: string | null; maxAttempts?: number }>> =
+  []
+const singleInserts: Array<{ queue: string }> = []
+
+vi.mock('@/lib/server/jobs/job-queue', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/jobs/job-queue')>()),
+  enqueueJobs: async (
+    inputs: Array<{ queue: string; dedupeKey?: string | null; maxAttempts?: number }>
+  ) => {
+    bulkInserts.push(inputs)
+    return { inserted: inputs.length, insertedDedupeKeys: [] }
+  },
+  enqueueJob: async (input: { queue: string }) => {
+    singleInserts.push(input)
+    return { jobId: 'job_test', inserted: true }
+  },
+}))
+
 import { db, events, eq, isNull } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
+import { HOOK_RETRY_ATTEMPTS } from '../retry-schedule'
 import { drainOnce } from '../relay'
 import { registerResolver, __resetResolversForTests } from '../resolvers/registry'
 import type { HookTarget } from '../hook-types'
@@ -216,4 +240,63 @@ describe('outbox relay drainOnce', () => {
       __resetResolversForTests()
     }
   })
+})
+
+describe('the sink a resolved fan-out actually reaches', () => {
+  const threeTargets = (marker: string) => async (event: DomainEvent) =>
+    event.entityId === marker
+      ? (['wh_a', 'wh_b', 'wh_c'].map((id) => ({
+          type: 'webhook',
+          target: { url: 'https://example.test/hook' },
+          config: { webhookId: id },
+          deliveryKey: id,
+        })) as HookTarget[])
+      : []
+
+  /**
+   * Drain one seeded row with the DEFAULT enqueue (no injected sink) under a
+   * given `QUACKBACK_TENANCY`.
+   *
+   * The mode is set deliberately even though nothing on this path reads it any
+   * more. It is the input the deleted tenancy branch read: that branch sent the
+   * pooled fan-out through a `for` loop of single inserts, so a test that never
+   * ran pooled would pass just as happily with the loop back in place.
+   */
+  async function drainUnder(tenancy: string) {
+    const marker = createId('post')
+    const before = process.env.QUACKBACK_TENANCY
+    bulkInserts.length = 0
+    singleInserts.length = 0
+    process.env.QUACKBACK_TENANCY = tenancy
+    try {
+      await seedEvent(marker)
+      await drainOnce({ resolve: threeTargets(marker) })
+    } finally {
+      if (before === undefined) delete process.env.QUACKBACK_TENANCY
+      else process.env.QUACKBACK_TENANCY = before
+    }
+    return { bulkInserts: [...bulkInserts], singleInserts: [...singleInserts] }
+  }
+
+  it.each(['single', 'pooled'])(
+    'writes the whole fan-out in ONE statement under %s tenancy',
+    async (tenancy) => {
+      const { bulkInserts: bulk, singleInserts: single } = await drainUnder(tenancy)
+
+      // One row, three targets, one insert. A per-target loop would be three
+      // round trips that a crash can interrupt half-written, which is exactly
+      // what stops a re-drain from being a no-op.
+      expect(bulk).toHaveLength(1)
+      expect(single).toEqual([])
+
+      expect(bulk[0]).toHaveLength(3)
+      expect(bulk[0].map((j) => j.queue)).toEqual(['events', 'events', 'events'])
+      expect(bulk[0].every((j) => j.maxAttempts === HOOK_RETRY_ATTEMPTS)).toBe(true)
+      // Deterministic keys are what `ON CONFLICT DO NOTHING` deduplicates on,
+      // and all three are distinct, so the batch is not silently collapsing.
+      const keys = bulk[0].map((j) => j.dedupeKey)
+      expect(new Set(keys).size).toBe(3)
+      expect(keys.every((k) => /^evt_[0-9a-z]{26}:webhook:[0-9a-f]{24}$/.test(k ?? ''))).toBe(true)
+    }
+  )
 })

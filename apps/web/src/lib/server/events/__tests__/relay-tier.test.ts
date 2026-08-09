@@ -1,13 +1,13 @@
 /**
- * The relay tier's fleet behaviour, and where its hook jobs land.
+ * The relay tier's fleet behaviour.
  *
- * Two properties live here rather than in the live harness, because both are
- * about what happens when something is WRONG and a live fleet where everything
- * works cannot show either of them:
+ * This property lives here rather than in the live harness because it is about
+ * what happens when something is WRONG, and a live fleet where everything works
+ * cannot show it: a tenant the tier refuses must cost that tenant its relay and
+ * nothing else.
  *
- * - a tenant the tier refuses must cost that tenant its relay and nothing else;
- * - under pooled tenancy a resolved hook job must not be written to the
- *   fleet-shared BullMQ lists, which carry no tenant prefix.
+ * Where a resolved hook job LANDS is pinned in `relay.test.ts`, against the real
+ * drain rather than against this file's stubs.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -176,52 +176,5 @@ describe('a tenant the tier refuses does not stop the fleet', () => {
     const run = await runTier({ tenants: [tenant('t-a'), tenant('t-b')] })
     expect(run.drainedFor).toEqual(['t-a', 't-b'])
     expect(run.schemaMissingFor).toEqual([])
-  })
-})
-
-describe('where a resolved hook job lands', () => {
-  async function enqueueUnder(pooled: boolean) {
-    vi.resetModules()
-    const bull: unknown[] = []
-    const pg: Array<{ queue: string; dedupeKey: string | null | undefined }> = []
-    vi.doMock('@/lib/server/tenancy/mode', () => ({
-      isPooledTenancy: () => pooled,
-      POOLED_TENANCY: 'pooled',
-    }))
-    vi.doMock('../process', () => ({
-      enqueueHookJobsWithIds: async (jobs: unknown[]) => {
-        bull.push(...jobs)
-      },
-    }))
-    vi.doMock('@/lib/server/jobs/job-queue', () => ({
-      enqueueJob: async (input: { queue: string; dedupeKey?: string | null }) => {
-        pg.push({ queue: input.queue, dedupeKey: input.dedupeKey })
-        return { jobId: 'job_1', inserted: true }
-      },
-    }))
-    const { enqueueHookJobs } = await import('../hook-enqueue')
-    await enqueueHookJobs([
-      {
-        name: 'post.created:webhook',
-        data: { hookType: 'webhook', event: {}, target: {}, config: {} },
-        jobId: 'evt_1:webhook:abc',
-      },
-    ])
-    vi.resetModules()
-    return { bull, pg }
-  }
-
-  it('pooled: into the tenant own Postgres queue, never the un-prefixed Redis lists', async () => {
-    const { bull, pg } = await enqueueUnder(true)
-    expect(bull).toEqual([])
-    expect(pg).toEqual([{ queue: 'events', dedupeKey: 'evt_1:webhook:abc' }])
-  })
-
-  it('single tenant: unchanged, straight to the BullMQ fan-out', async () => {
-    // The control. Without it "nothing reached BullMQ" above would also hold for
-    // a sink that reached nothing at all.
-    const { bull, pg } = await enqueueUnder(false)
-    expect(bull).toHaveLength(1)
-    expect(pg).toEqual([])
   })
 })

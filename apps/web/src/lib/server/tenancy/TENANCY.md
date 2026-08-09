@@ -517,6 +517,8 @@ guessing.
 | **Startup OIDC backfill** | `runFleetPass`, and **only on a replica that already runs background work** | A fleet-wide backfill on every web boot would open a connection to every tenant database and wake every suspended compute — precisely the cost the pooling exists to avoid |
 | **Readiness probe** | Probes the control store instead of a tenant database; stops asserting tenant schema state entirely | §10.5. The old `migrationsKnownUpToDate` memo is actively misleading under pooling: it caches "migrations OK" forever after the first tenant it saw, going blind during exactly the rolling migration it exists to catch. Probing a tenant would also wake a suspended compute every few seconds |
 | **Anything holding a tenant id** | `withTenantScopeById(tenantId, origin, fn)` | Throws rather than degrading — a caller that named a tenant and got a different one has no safe fallback |
+| **The 15 background queues** | `jobs/tier.ts` runs one loop per tenant and opens a real tenant scope around every claim; `claimJobs` then re-asserts the claimed row's `tenant_id` against that scope | Both of these were refusals until the queues moved. The old in-process consumers carried no tenant on a job, so every processor resolved `db` with no scope and threw on its first query. A queue is now a table in the tenant's own database, so there is no shared queue to route out of. `jobs/JOBS.md` |
+| **The outbox relay** | One loop per tenant on that tenant's own **direct**, session-mode endpoint, each with its own doorbell and leadership lease | §5.1, and `events/RELAY.md` for the whole tier |
 
 `runFleetPass` is serial on purpose: running per-tenant sweeps concurrently would
 wake every suspended compute at once. One tenant's failure never ends the pass —
@@ -527,8 +529,6 @@ would turn one bad record into a fleet-wide outage of every sweeper.
 
 | Subsystem | Why not now |
 | --- | --- |
-| **The 15 BullMQ workers** | A job carries no tenant, so every processor would resolve `db` with no scope and throw on its first query. A per-job failure is a far worse signal than one loud refusal at boot, so the tier does not start under pooled tenancy and says so. Per-tenant job routing belongs with the Postgres-queue work |
-| **The outbox relay** | ✅ **Now runs**, on its own tier — see §5.1. (The sentence that used to sit here said `LISTEN` is lost *in proportion to contention*, so a single-client smoke test would pass on a pooler. That is wrong — see §5.1.) |
 | **The `config.yaml` file watcher** | One file at one path, and `ReconcileDeps` has no tenant parameter anywhere. You cannot mount N files at one path, so the trigger must be *replaced* by a tenant-keyed entrypoint behind an authenticated control-plane route, not adapted (§8). Started under `single`, skipped under `pooled` with a log |
 | **CLI backfill scripts** | Every one except `create-ci-api-key.ts` already builds its own `postgres()` from an explicit `DATABASE_URL`, so they are unaffected. `create-ci-api-key.ts` is the one on the proxy and needs a `--tenant` flag before it is used against a pooled fleet |
 | **`bootstrap.ts`'s 10-second telemetry timer** | Starts a process-lifetime loop from inside the first HTTP request, so the timer fires after the request scope is gone. It lands in `withSweepLock` and is therefore scoped, but the shape — escaping a request scope via `setTimeout` — is worth removing rather than relying on |

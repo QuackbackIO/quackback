@@ -212,7 +212,7 @@ describe('Webhook Handler', () => {
     })
 
     // Delivery-time re-validation: a webhook disabled or soft-deleted between
-    // enqueue and delivery (or during BullMQ retries) must NOT fire.
+    // enqueue and delivery (or between retries) must NOT fire.
     it.each([
       ['disabled', { status: 'disabled' }],
       ['soft-deleted', { deletedAt: new Date() }],

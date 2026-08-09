@@ -451,7 +451,7 @@ times.
 
 | Variable                         | Meaning                                                                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `QUACKBACK_ROLE=migrator`        | serves nothing, runs no queues. `shouldRunWorkers()` is an allowlist, so this role starts neither BullMQ nor the sweepers |
+| `QUACKBACK_ROLE=migrator`        | serves nothing, runs no queues. `shouldRunWorkers()` is an allowlist, so this role starts neither the job tier nor the sweepers |
 | `QUACKBACK_TENANCY=pooled`       | required; the registry is the tenant source                                                                               |
 | `QUACKBACK_CONTROL_DATABASE_URL` | where `cp_tenant_schema_state` lives                                                                                      |
 | `MIN_SCHEMA_VERSION`             | the serving floor. Read by the **web** role, not by this one                                                              |

@@ -1,6 +1,6 @@
 /**
- * Per-endpoint rate-limiters for sign-in. Built on `redis-rate-bucket`
- * so they share INCR/EXPIRE-NX/TTL plumbing with `recovery-codes-consume`
+ * Per-endpoint rate-limiters for sign-in. Built on `utils/rate-bucket`
+ * so they share the fixed-window bucket plumbing with `recovery-codes-consume`
  * and any future limiters.
  *
  * Two shapes:
@@ -9,7 +9,7 @@
  *  - Magic-link send: 3/15min per (ip+email) + 20/15min per IP. Looser
  *    cap aimed at email-spam, not credential guessing.
  *
- * Fail open on Redis errors.
+ * Fail open when the bucket store errors.
  */
 import {
   bucketRetryAfter,
