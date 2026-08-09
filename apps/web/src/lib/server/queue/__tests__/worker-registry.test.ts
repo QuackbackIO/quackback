@@ -125,18 +125,28 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
  * proving where the class came from should never have been a precondition for
  * asking about it.
  */
-function bullmqImporters(): { constructing: string[]; typeOnly: string[] } {
+export function adjudicate(files: Array<{ rel: string; imports: boolean; constructs: boolean }>): {
+  constructing: string[]
+  typeOnly: string[]
+} {
   const constructing: string[] = []
   const typeOnly: string[] = []
-  for (const full of walkSourceFiles(SERVER_ROOT)) {
-    if (!full.endsWith('.ts')) continue
-    const { imports, constructs } = classifyBullmqUsage(fs.readFileSync(full, 'utf8'))
+  for (const { rel, imports, constructs } of files) {
     if (!imports && !constructs) continue
-    const rel = path.relative(SERVER_ROOT, full).split(path.sep).join('/')
     if (WORKER_FACTORY_MODULES.includes(rel)) continue
     ;(constructs ? constructing : typeOnly).push(rel)
   }
   return { constructing: constructing.sort(), typeOnly: typeOnly.sort() }
+}
+
+function bullmqImporters(): { constructing: string[]; typeOnly: string[] } {
+  const files: Array<{ rel: string; imports: boolean; constructs: boolean }> = []
+  for (const full of walkSourceFiles(SERVER_ROOT)) {
+    if (!full.endsWith('.ts')) continue
+    const rel = path.relative(SERVER_ROOT, full).split(path.sep).join('/')
+    files.push({ rel, ...classifyBullmqUsage(fs.readFileSync(full, 'utf8')) })
+  }
+  return adjudicate(files)
 }
 
 describe('worker registry seal', () => {
@@ -283,6 +293,38 @@ describe('the seal sees bullmq however it is obtained', () => {
       export function handle(job: Job): void { void job }
     `
     expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: false })
+  })
+
+  it('ADJUDICATION: a construction with no recognisable import is still listed', () => {
+    // The gate, separated from the classifier so it can be tested without a
+    // file on disk. The classifier assertion below says the computed-specifier
+    // spelling yields `{imports:false, constructs:true}` — that pins the
+    // CLASSIFIER. It says nothing about whether the seal then looks at such a
+    // file, and reverting the gate to `if (!imports) continue` left the whole
+    // suite green because the real tree contains no such file. This is the
+    // assertion that actually fails when the gate narrows.
+    expect(
+      adjudicate([{ rel: 'domains/export/computed.ts', imports: false, constructs: true }])
+    ).toEqual({ constructing: ['domains/export/computed.ts'], typeOnly: [] })
+  })
+
+  it('ADJUDICATION: a type-only importer is still listed as type-only', () => {
+    expect(
+      adjudicate([{ rel: 'events/handlers/email.ts', imports: true, constructs: false }])
+    ).toEqual({ constructing: [], typeOnly: ['events/handlers/email.ts'] })
+  })
+
+  it('ADJUDICATION: a file touching neither is not listed at all', () => {
+    expect(adjudicate([{ rel: 'db.ts', imports: false, constructs: false }])).toEqual({
+      constructing: [],
+      typeOnly: [],
+    })
+  })
+
+  it('ADJUDICATION: the seam is excluded even though it constructs', () => {
+    expect(
+      adjudicate([{ rel: 'queue/create-worker.ts', imports: true, constructs: true }])
+    ).toEqual({ constructing: [], typeOnly: [] })
   })
 
   it('reports a Worker construction even with no recognisable bullmq import', () => {
