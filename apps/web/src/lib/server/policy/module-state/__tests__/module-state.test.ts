@@ -9,11 +9,11 @@
  * "without it, singleton twenty-one lands three weeks after twenty is fixed."
  */
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkModuleState, renderLedgerDoc, serverRoots } from '../check'
 import { MODULE_STATE_LEDGER } from '../ledger'
-import { extractSites, siteId } from '../scan'
+import { countModuleScopeContainers, siteId } from '../scan'
 import { walkSourceFiles } from '../../source-files'
 
 const SRC_ROOT = join(__dirname, '../../../../..') // apps/web/src
@@ -107,32 +107,27 @@ describe('the scanner is looking at something', () => {
     }
   })
 
-  it('counts at least 45 frozen containers it deliberately suppressed', () => {
-    // The count §4 gives, measured rather than assumed: containers the scanner
-    // saw and declined to report because nothing writes to them.
-    let containers = 0
+  it('suppresses at least the ~45 frozen Set/Map constants §4 counts', () => {
+    // Measured, not assumed, and measured on the right population: module-scope
+    // `new Set` / `new Map` only. Counting every *container* would sweep in
+    // several hundred ordinary object and array literals, and a regex would
+    // count function-local ones — either would make this pass for the wrong
+    // reason while saying nothing about the claim.
+    const totals = { constructed: 0, constructedMutated: 0 }
     for (const root of serverRoots(REPO_ROOT)) {
-      const walk = (dir: string): string[] => {
-        const out: string[] = []
-        for (const e of readdirSync(dir, { withFileTypes: true })) {
-          if (e.name === '__tests__' || e.name === 'node_modules' || e.name === 'dist') continue
-          const p = join(dir, e.name)
-          if (e.isDirectory()) out.push(...walk(p))
-          else if (e.name.endsWith('.ts') && !e.name.includes('.test.')) out.push(p)
-        }
-        return out
-      }
-      for (const file of walk(root.dir)) {
-        const text = readFileSync(file, 'utf8')
-        // A container declaration the scanner did not turn into a site.
-        const declared =
-          /(?:^|\n)\s*(?:export\s+)?const\s+[A-Za-z_$][\w$]*[^=\n]*=\s*new (?:Map|Set|WeakMap|WeakSet)\b/g
-        const matches = text.match(declared) ?? []
-        const reported = extractSites(file, text).filter((s) => s.kind === 'container').length
-        containers += Math.max(0, matches.length - reported)
+      for (const file of walkSourceFiles(root.dir)) {
+        if (!file.endsWith('.ts')) continue
+        const counts = countModuleScopeContainers(file, readFileSync(file, 'utf8'))
+        totals.constructed += counts.constructed
+        totals.constructedMutated += counts.constructedMutated
       }
     }
-    expect(containers).toBeGreaterThanOrEqual(45)
+    const frozen = totals.constructed - totals.constructedMutated
+    expect(totals.constructed, 'the scan found no Set/Map declarations at all').toBeGreaterThan(45)
+    expect(frozen).toBeGreaterThanOrEqual(45)
+    // …and it does still report the mutated ones, so "suppressed" is a
+    // discrimination rather than a blanket exemption.
+    expect(totals.constructedMutated).toBeGreaterThan(0)
   })
 })
 

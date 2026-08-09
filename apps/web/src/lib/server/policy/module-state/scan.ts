@@ -35,10 +35,11 @@
  * ## Why frozen constants are not reported at all
  *
  * §4 counts "about 45 other module-scope `Set`/`Map` instances [that] are
- * frozen constants and are safe". They are not state — they are a lookup table
- * spelled with `new Set`. Reporting them would mean 45 ledger lines that say
- * nothing, and a ledger nobody reads is a ledger that gets a real entry
- * appended to it unnoticed.
+ * frozen constants and are safe". Measured here it is **80** of 97, so the
+ * spec undercounts by most of a factor of two — and that only sharpens the
+ * point. They are not state; they are a lookup table spelled with `new Set`.
+ * Reporting them would mean eighty ledger lines that say nothing, and a ledger
+ * nobody reads is a ledger that gets a real entry appended to it unnoticed.
  *
  * So a container is a *site* only if something mutates it. The scanner decides
  * that itself rather than believing a label: `.set(`/`.add(`/`.push(`/
@@ -641,4 +642,71 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
 /** Stable identity for ledger matching. A line number must never be part of it. */
 export function siteId(site: Pick<StateSite, 'file' | 'name'>): string {
   return `${site.file}#${site.name}`
+}
+
+export interface ContainerCounts {
+  /** Module-scope `const` bound to any container, including `{}` and `[]`. */
+  declared: number
+  /** …of which something writes to. */
+  mutated: number
+  /** Only `new Map` / `new Set` / `new WeakMap` / `new WeakSet`. */
+  constructed: number
+  /** …of which something writes to. */
+  constructedMutated: number
+}
+
+/**
+ * How many module-scope containers a file declares, and how many of those the
+ * scanner treats as state.
+ *
+ * §4 says "about 45 other module-scope `Set`/`Map` instances are frozen
+ * constants and are safe", and the test that pins the scanner does not flag
+ * them should measure that rather than approximate it.
+ *
+ * Two counting mistakes are already ruled out by the shape of this function,
+ * both of which made an earlier version of the number meaningless. A regex over
+ * the source counts function-local `const x = new Map()` as well, which inflated
+ * it by an order of magnitude. And counting every *container* rather than every
+ * constructed `Set`/`Map` sweeps in several hundred ordinary module-scope object
+ * and array literals, which is not what §4's sentence is about. `constructed`
+ * is the number that matches the claim.
+ */
+export function countModuleScopeContainers(relPath: string, text: string): ContainerCounts {
+  const sf = ts.createSourceFile(
+    relPath,
+    text,
+    ts.ScriptTarget.Latest,
+    false,
+    relPath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  )
+  const counts: ContainerCounts = {
+    declared: 0,
+    mutated: 0,
+    constructed: 0,
+    constructedMutated: 0,
+  }
+  for (const stmt of topLevelStatements(sf)) {
+    if (isAmbient(stmt, relPath)) continue
+    if (!ts.isVariableStatement(stmt)) continue
+    if (!(stmt.declarationList.flags & ts.NodeFlags.Const)) continue
+    for (const d of stmt.declarationList.declarations) {
+      if (!isContainerInitializer(d.initializer)) continue
+      const init = d.initializer ? unwrap(d.initializer) : undefined
+      const constructed =
+        init !== undefined &&
+        ts.isNewExpression(init) &&
+        ts.isIdentifier(init.expression) &&
+        init.expression.text !== 'TenantKeyedCache'
+      for (const name of boundNames(d.name)) {
+        const isMutated = mutatesBinding(sf, name)
+        counts.declared += 1
+        if (isMutated) counts.mutated += 1
+        if (constructed) {
+          counts.constructed += 1
+          if (isMutated) counts.constructedMutated += 1
+        }
+      }
+    }
+  }
+  return counts
 }
