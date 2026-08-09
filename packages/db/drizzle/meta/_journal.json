@@ -348,29 +348,29 @@
     {
       "idx": 49,
       "version": "7",
+      "when": 1777655280134,
+      "tag": "0052_otp_to_magic_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
       "when": 1777668617288,
       "tag": "0049_settings_tier_limits",
       "breakpoints": true
     },
     {
-      "idx": 50,
+      "idx": 51,
       "version": "7",
       "when": 1777669821603,
       "tag": "0050_api_keys_scopes",
       "breakpoints": true
     },
     {
-      "idx": 51,
+      "idx": 52,
       "version": "7",
       "when": 1777669821604,
       "tag": "0051_ai_usage_log_month_index",
-      "breakpoints": true
-    },
-    {
-      "idx": 52,
-      "version": "7",
-      "when": 1777655280134,
-      "tag": "0052_otp_to_magic_link",
       "breakpoints": true
     },
     {
@@ -1586,24 +1586,31 @@
     },
     {
       "version": "7",
+      "when": 1785700000007,
+      "tag": "0249_settings_cloud",
+      "breakpoints": true,
+      "idx": 226
+    },
+    {
+      "version": "7",
       "when": 1785700000009,
       "tag": "0251_settings_cloud_tenant_id",
       "breakpoints": true,
-      "idx": 228
+      "idx": 227
     },
     {
       "version": "7",
       "when": 1785700000010,
       "tag": "0252_settings_cloud_secret_canary",
       "breakpoints": true,
-      "idx": 229
+      "idx": 228
     },
     {
       "version": "7",
       "when": 1785700000012,
       "tag": "0253_job_queue",
       "breakpoints": true,
-      "idx": 230
+      "idx": 229
     }
   ]
 }

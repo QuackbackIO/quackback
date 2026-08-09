@@ -1,10 +1,16 @@
 import { computeManagedPaths } from './managed-paths'
 import type { QuackbackConfigSpec } from './schema'
 import {
+  cloudConfigEquivalent,
+  mergeCloudConfig,
+  type CloudConfigPatch,
+} from '@/lib/server/domains/settings/cloud/cloud.merge'
+import {
   DEFAULT_SETUP_STATE,
   getSetupState,
   normalizeOnboardingOutcome,
   type SetupState,
+  type StoredCloudConfig,
 } from '@/lib/shared/db-types'
 
 type ConfigWorkspace = NonNullable<QuackbackConfigSpec['workspace']>
@@ -15,6 +21,12 @@ export interface SettingsRow {
   slug: string
   setupState: string | null
   tierLimits: string | null
+  /**
+   * Current `settings.cloud` value. Optional so existing callers and test
+   * fixtures that predate the cloud block keep compiling; absent and null are
+   * treated identically (no cloud config).
+   */
+  cloud?: StoredCloudConfig | null
   managedFieldPaths: string[]
 }
 
@@ -24,6 +36,8 @@ export interface SettingsUpdate {
   /** Re-applied to the locked, latest setup state by production deps. */
   setupWorkspace?: ConfigWorkspace
   tierLimits?: string
+  /** Merged cloud block, written as jsonb (not a JSON string, unlike tierLimits). */
+  cloud?: StoredCloudConfig
   managedFieldPaths: string[]
 }
 
@@ -38,6 +52,7 @@ export interface SettingsInsert {
   slug: string
   setupState?: string
   tierLimits?: string
+  cloud?: StoredCloudConfig
   managedFieldPaths: string[]
 }
 
@@ -88,6 +103,10 @@ export async function reconcileFileIntoDb(
       slug: spec.workspace.slug,
       setupState,
       tierLimits: spec.tierLimits !== undefined ? JSON.stringify(spec.tierLimits) : undefined,
+      cloud:
+        spec.cloud !== undefined
+          ? mergeCloudConfig(null, toCloudPatch(spec.cloud), { writer: 'config' })
+          : undefined,
       managedFieldPaths: computeManagedPaths(spec),
     })
     await deps.invalidateSettingsCache()
@@ -116,6 +135,17 @@ export async function reconcileFileIntoDb(
     if (serialized !== current.tierLimits) update.tierLimits = serialized
   }
 
+  if (spec.cloud !== undefined) {
+    // Merged, not replaced: the file owns only what it declares, so a billing
+    // reference written by the other writer survives a reconcile that names
+    // just a plan. `cloudConfigEquivalent` ignores the write stamp so a
+    // steady-state file does not rewrite the row on every 30-second tick.
+    const merged = mergeCloudConfig(current.cloud ?? null, toCloudPatch(spec.cloud), {
+      writer: 'config',
+    })
+    if (!cloudConfigEquivalent(merged, current.cloud ?? null)) update.cloud = merged
+  }
+
   const pathsChanged = !arrayEquals(newPaths, current.managedFieldPaths)
   const hasFieldUpdates = Object.keys(update).length > 1 // > 1 because managedFieldPaths is always set
 
@@ -126,6 +156,20 @@ export async function reconcileFileIntoDb(
   await deps.updateSettings(update)
   await deps.invalidateSettingsCache()
   await deps.invalidateTierLimitsCache()
+}
+
+/**
+ * Config-file cloud block -> write patch. The two shapes are deliberately
+ * near-identical; this exists so the file's `undefined` (not declared, leave
+ * alone) survives into the merge rather than being flattened to a null.
+ */
+function toCloudPatch(cloud: NonNullable<QuackbackConfigSpec['cloud']>): CloudConfigPatch {
+  const patch: CloudConfigPatch = { enabled: cloud.enabled }
+  if (cloud.plan !== undefined) patch.plan = cloud.plan
+  if (cloud.entitlements !== undefined) patch.entitlements = cloud.entitlements
+  if (cloud.billing !== undefined) patch.billing = cloud.billing
+  if (cloud.upgradeUrl !== undefined) patch.upgradeUrl = cloud.upgradeUrl
+  return patch
 }
 
 export function mergeSetupState(

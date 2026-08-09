@@ -1,0 +1,11 @@
+-- Cloud configuration block: plan, entitlements and billing provider refs.
+--
+-- Expand-only and inert by default. The column is nullable with no default,
+-- so every existing row reads NULL, which resolves to the disabled config
+-- (enabled: false) — unlimited, no plan, no entitlement gating, no upsell.
+-- A code version that predates this column never reads it; a code version
+-- that postdates it treats a missing value and a NULL value identically.
+--
+-- Enforcement of numeric limits is unaffected: settings.tier_limits remains
+-- the sole input to getTierLimits().
+ALTER TABLE "settings" ADD COLUMN IF NOT EXISTS "cloud" jsonb;

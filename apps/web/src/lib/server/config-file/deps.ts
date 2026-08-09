@@ -22,6 +22,7 @@ export function makeReconcileDeps(): ReconcileDeps {
         slug: row.slug,
         setupState: row.setupState,
         tierLimits: row.tierLimits,
+        cloud: row.cloud ?? null,
         managedFieldPaths: (row.managedFieldPaths as string[] | null) ?? [],
       } satisfies SettingsRow
     },
@@ -72,6 +73,7 @@ export function makeReconcileDeps(): ReconcileDeps {
           createdAt: new Date(),
           setupState: insert.setupState,
           tierLimits: insert.tierLimits,
+          cloud: insert.cloud,
           managedFieldPaths: insert.managedFieldPaths,
           authConfigVersion: 1,
         })
