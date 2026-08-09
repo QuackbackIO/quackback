@@ -35,17 +35,23 @@ vi.mock('@/lib/server/tenancy/tenant-context', () => ({
   getCurrentTenant: () => (currentTenantId === null ? null : { tenantId: currentTenantId }),
 }))
 
-import { __setJobDefinitionsForTests } from '../definitions'
+import { TerminalJobError, __setJobDefinitionsForTests } from '../definitions'
 import { slotKey } from '../cron'
 import { claimJobs, enqueueJob, reapExpiredLeases } from '../job-queue'
 import {
+  awaitPool,
+  claimSpecsFor,
+  createJobPool,
   createScheduleState,
+  dispatchPass,
   drainOnce,
+  poolSize,
   resetJobHandlers,
   runJob,
   runMaintenanceTick,
   runScheduleTick,
   runnerConfig,
+  totalDeclaredConcurrency,
 } from '../runner'
 
 const created: string[] = []
@@ -373,5 +379,292 @@ describe('maintenance', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].status).toBe('failed')
     expect(rows[0].last_error).toMatch(/no attempts remaining/)
+  })
+})
+
+describe('the bounded pool', () => {
+  it('starts work and returns, so the caller can tick the schedule', async () => {
+    // This is the JOBS.md §10 hand-off. On a serial drain the caller does not
+    // come back until the batch finishes, and slots that elapse meanwhile are
+    // never enqueued at all — dropped, not delayed.
+    const q = queue('pool-nonblocking')
+    let released: (() => void) | null = null
+    const started = new Promise<void>((resolve) => {
+      __setJobDefinitionsForTests([
+        {
+          name: q,
+          maxAttempts: 1,
+          leaseMs: 30_000,
+          handler: async () => async () => {
+            resolve()
+            await new Promise<void>((r) => {
+              released = r
+            })
+          },
+        },
+      ])
+    })
+    await enqueueJob({ queue: q })
+
+    const pool = createJobPool()
+    const dispatchedAt = Date.now()
+    const result = await dispatchPass({ pool, config: CONFIG, run: runJob })
+    // The pass returned while the handler is still parked.
+    expect(result.claimed).toBe(1)
+    expect(Date.now() - dispatchedAt).toBeLessThan(2_000)
+    await started
+    expect(poolSize(pool)).toBe(1)
+
+    released!()
+    await awaitPool(pool)
+    expect(poolSize(pool)).toBe(0)
+    expect((await rowsFor(q))[0].status).toBe('succeeded')
+  })
+
+  it('asks each queue only for its free slots, and stops asking at capacity', () => {
+    const busy = 'pool-cap-busy'
+    __setJobDefinitionsForTests([
+      { name: busy, concurrency: 2, handler: async () => async () => {} },
+      { name: 'pool-cap-other', concurrency: 1, handler: async () => async () => {} },
+    ])
+    const pool = createJobPool()
+    expect(claimSpecsFor(pool, CONFIG).map((s) => [s.queue, s.limit])).toEqual([
+      [busy, 2],
+      ['pool-cap-other', 1],
+    ])
+
+    pool.inFlight.set(busy, 2)
+    expect(claimSpecsFor(pool, CONFIG).map((s) => s.queue)).toEqual(['pool-cap-other'])
+
+    pool.inFlight.set('pool-cap-other', 1)
+    expect(claimSpecsFor(pool, CONFIG)).toEqual([])
+  })
+
+  it('honours the tier-wide ceiling, which defaults to the sum of the parts', () => {
+    __setJobDefinitionsForTests([
+      { name: 'ceil-a', concurrency: 3, handler: async () => async () => {} },
+      { name: 'ceil-b', concurrency: 4, handler: async () => async () => {} },
+    ])
+    // The default binds nothing: it is exactly what the reference allowed.
+    expect(totalDeclaredConcurrency()).toBe(7)
+    const pool = createJobPool()
+    expect(
+      claimSpecsFor(pool, { ...CONFIG, maxConcurrency: 7 }).reduce((n, s) => n + s.limit, 0)
+    ).toBe(7)
+    // Lowered, it does bind.
+    expect(
+      claimSpecsFor(pool, { ...CONFIG, maxConcurrency: 5 }).reduce((n, s) => n + s.limit, 0)
+    ).toBe(5)
+  })
+
+  it('frees a slot when a job fails, not only when it succeeds', async () => {
+    const q = queue('pool-free-on-fail')
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 1,
+        handler: async () => async () => {
+          throw new Error('nope')
+        },
+      },
+    ])
+    await enqueueJob({ queue: q })
+    const pool = createJobPool()
+    await dispatchPass({ pool, config: CONFIG, run: runJob })
+    await awaitPool(pool)
+    expect(poolSize(pool)).toBe(0)
+  })
+})
+
+describe('terminal handler errors', () => {
+  it('fails the job on the spot, however many attempts remain', async () => {
+    const q = queue('terminal-handler')
+    let calls = 0
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 3,
+        retryBackoffMs: 0,
+        handler: async () => async () => {
+          calls += 1
+          throw new TerminalJobError('unknown hook type')
+        },
+      },
+    ])
+    await enqueueJob({ queue: q, maxAttempts: 3 })
+
+    expect((await drainOnce(CONFIG)).failed).toBe(1)
+    expect((await rowsFor(q))[0].status).toBe('failed')
+    // The control: an ordinary error on the same definition retries.
+    expect(calls).toBe(1)
+    expect(await drainOnce(CONFIG)).toMatchObject({ claimed: 0 })
+  })
+
+  it('retries an ordinary error on the same definition — the control', async () => {
+    const q = queue('terminal-control')
+    let calls = 0
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 3,
+        retryBackoffMs: 0,
+        handler: async () => async () => {
+          calls += 1
+          throw new Error('transient')
+        },
+      },
+    ])
+    await enqueueJob({ queue: q, maxAttempts: 3 })
+    expect((await drainOnce(CONFIG)).retrying).toBe(1)
+    expect((await rowsFor(q))[0].status).toBe('pending')
+    expect(calls).toBe(1)
+  })
+
+  it('treats a BullMQ-shaped UnrecoverableError as terminal too', async () => {
+    // Handlers moved off BullMQ still call into services that throw it.
+    const q = queue('terminal-unrecoverable')
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 3,
+        retryBackoffMs: 0,
+        handler: async () => async () => {
+          const err = new Error('deleted segment')
+          err.name = 'UnrecoverableError'
+          throw err
+        },
+      },
+    ])
+    await enqueueJob({ queue: q, maxAttempts: 3 })
+    expect((await drainOnce(CONFIG)).failed).toBe(1)
+    expect((await rowsFor(q))[0].status).toBe('failed')
+  })
+})
+
+describe('the failure hook', () => {
+  it('reports permanent only when the attempt was the last one', async () => {
+    const q = queue('onfailure')
+    const seen: boolean[] = []
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 2,
+        retryBackoffMs: 0,
+        handler: async () => async () => {
+          throw new Error('boom')
+        },
+        onFailure: async (_job, _err, permanent) => {
+          seen.push(permanent)
+        },
+      },
+    ])
+    await enqueueJob({ queue: q, maxAttempts: 2 })
+    await drainOnce(CONFIG)
+    await drainOnce(CONFIG)
+    // The webhook auto-disable counter rides on this distinction: counting the
+    // first (retryable) failure would disable a flaky endpoint after ~17 events
+    // instead of 50.
+    expect(seen).toEqual([false, true])
+  })
+
+  it('does not let a throwing hook change the job’s outcome', async () => {
+    const q = queue('onfailure-throws')
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 1,
+        handler: async () => async () => {
+          throw new Error('boom')
+        },
+        onFailure: async () => {
+          throw new Error('hook itself exploded')
+        },
+      },
+    ])
+    await enqueueJob({ queue: q })
+    expect((await drainOnce(CONFIG)).failed).toBe(1)
+    expect((await rowsFor(q))[0].status).toBe('failed')
+  })
+})
+
+describe('schedule gating and dynamic schedules', () => {
+  it('writes nothing while the cron gate is closed, and starts when it opens', async () => {
+    // `email-imap` uses this: an unconfigured mailbox must write no rows at all,
+    // not enqueue 1,440 no-ops a day whose handler returns immediately.
+    const q = queue('cron-gate')
+    let enabled = false
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        cron: '* * * * *',
+        maxAttempts: 1,
+        cronEnabled: async () => enabled,
+        handler: async () => async () => {},
+      },
+    ])
+    const state = createScheduleState()
+    const base = new Date('2026-03-01T10:00:30Z')
+    await runScheduleTick(state, base)
+    const closed = await runScheduleTick(state, new Date(base.getTime() + 120_000))
+    expect(closed.attempted).toBe(0)
+    expect(await rowsFor(q)).toHaveLength(0)
+
+    enabled = true
+    // Re-seeded on the first open tick (there is no state for it yet), then due.
+    await runScheduleTick(state, new Date(base.getTime() + 180_000))
+    const open = await runScheduleTick(state, new Date(base.getTime() + 240_000))
+    expect(open.attempted).toBe(1)
+    expect(await rowsFor(q)).toHaveLength(1)
+  })
+
+  it('treats a throwing gate as closed rather than as open', async () => {
+    const q = queue('cron-gate-throws')
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        cron: '* * * * *',
+        maxAttempts: 1,
+        cronEnabled: async () => {
+          throw new Error('cannot read config')
+        },
+        handler: async () => async () => {},
+      },
+    ])
+    const state = createScheduleState()
+    const base = new Date('2026-03-01T10:00:30Z')
+    await runScheduleTick(state, base)
+    expect((await runScheduleTick(state, new Date(base.getTime() + 120_000))).attempted).toBe(0)
+  })
+
+  it('gives every dynamic schedule its own slot, on one queue', async () => {
+    // `segment-evaluation`: many segments, one queue, each with its own cron.
+    // A dedupe key that did not separate them would let the first segment's
+    // slot spend every other segment's.
+    const q = queue('dynamic')
+    let schedules = [
+      { key: 'seg_a', cron: '* * * * *', payload: { segmentId: 'seg_a' } },
+      { key: 'seg_b', cron: '* * * * *', payload: { segmentId: 'seg_b' } },
+    ]
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 1,
+        dynamicSchedules: async () => schedules,
+        handler: async () => async () => {},
+      },
+    ])
+    const state = createScheduleState()
+    const base = new Date('2026-03-01T10:00:30Z')
+    await runScheduleTick(state, base)
+    const tick = await runScheduleTick(state, new Date(base.getTime() + 120_000))
+    expect(tick.attempted).toBe(2)
+    const rows = await rowsFor(q)
+    expect(rows.map((r) => r.payload.segmentId).sort()).toEqual(['seg_a', 'seg_b'])
+
+    // A schedule that goes away stops being ticked, and leaves no state behind.
+    schedules = [schedules[0]]
+    const after = await runScheduleTick(state, new Date(base.getTime() + 180_000))
+    expect(after.attempted).toBe(1)
+    expect(state.seen.has(`${q}:seg_b`)).toBe(false)
   })
 })

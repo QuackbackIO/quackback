@@ -274,8 +274,10 @@ uses.
 
 A BullMQ `Worker` constructed inside a request's tenant scope **inherits that
 scope for every job it ever processes** — the constructor captures the
-AsyncLocalStorage context, and seven queue modules arm lazily on first enqueue.
-Measured on the BullMQ side with real Redis.
+AsyncLocalStorage context, and the queue modules that armed lazily on first
+enqueue armed inside whatever request reached them first. Measured on the
+BullMQ side with real Redis. No such module remains; the import hazard below
+is what outlived them.
 
 This queue does not have that shape, and it is worth being precise about why
 rather than asserting it:
@@ -338,47 +340,136 @@ imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
   A memo miss still resolves and logs — but that path only covers the wrapper,
   so the scan is what actually holds the property.
 
-## 10. What runs here, and what does not yet
+## 10. What runs here
 
-On the Postgres queue: `anon-sweep`, `page-view-partitions`, `sla-breach-sweep`,
-`snooze-sweep`, `workflow-sweep`, `workflow-retention`, `analytics` — the seven
-§7.1 calls "already-solved shape". Their handlers are unchanged; only the queue
-mechanism moved out of each module and into one registry.
+**Every background queue in the process.** There is no second list and no
+BullMQ left: `definitions.ts` is the registry, and
+`__tests__/registry-doc.test.ts` fails if the table below drifts from it, so
+this is derived rather than restated. Counts are deliberately absent from the
+prose for the same reason — the last hand-written one ("seven queue modules")
+went stale the moment a queue moved.
 
-Still on BullMQ, so **Redis cannot be removed yet**: `events`,
-`segment-scheduler`, `help-center-translate`, `email-imap`, `workflow-dispatch`,
-`workflow-wait`, `import`, `export`. `queue/worker-registry.ts` remains their one
-list.
+<!-- QUEUE-TABLE:START — generated from JOB_DEFINITIONS; do not hand-edit -->
 
-Two of those eight are the reason this primitive was built the way it was.
-`import` and `export` are the at-most-once cases; when they move, they take
-`maxAttempts: 1` and the reaper's terminal branch is what preserves their
-semantics. Nothing else needs to change for them.
+| queue                   | cron          | concurrency | maxAttempts | lease |
+| ----------------------- | ------------- | ----------- | ----------- | ----- |
+| `anon-sweep`            | `0 3 * * *`   | 1           | 3           | 60s   |
+| `page-view-partitions`  | `30 2 * * *`  | 1           | 3           | 60s   |
+| `sla-breach-sweep`      | `* * * * *`   | 1           | 3           | 60s   |
+| `snooze-sweep`          | `* * * * *`   | 1           | 3           | 60s   |
+| `workflow-sweep`        | `*/5 * * * *` | 1           | 3           | 60s   |
+| `workflow-retention`    | `0 4 * * *`   | 1           | 3           | 60s   |
+| `analytics`             | `0 * * * *`   | 1           | 3           | 60s   |
+| `events`                | —             | 5           | 6           | 60s   |
+| `segment-evaluation`    | dynamic       | 2           | 3           | 60s   |
+| `help-center-translate` | —             | 1           | 3           | 120s  |
+| `email-imap`            | `* * * * *`   | 1           | 1           | 60s   |
+| `workflow-dispatch`     | —             | 1           | 3           | 60s   |
+| `workflow-wait`         | —             | 4           | 3           | 60s   |
+| `import`                | —             | 2           | 1           | 60s   |
+| `export`                | —             | 1           | 1           | 60s   |
 
-### Read this before moving the remaining eight
+<!-- QUEUE-TABLE:END -->
 
-**`drainOnce` is one serial loop over every queue, where the reference had seven
-independent workers.** A job that runs long blocks the loop from reaching its
-next schedule tick until the batch finishes.
+`import` and `export` are the reason this primitive was built the way it was.
+They are the at-most-once cases: they carry `maxAttempts: 1`, the claim spends
+it before the handler runs, and the reaper's terminal branch is what stops a
+process death from becoming a second import. Nothing else about them changed.
 
-**The slots that elapse during it are dropped, not delayed — and that distinction
-is the whole point of this note.** `latestSlotAtOrBefore` returns only the slot
-bracketing _now_, so when the loop finally reaches the tick it enqueues the
-current slot and the intervening ones are never enqueued at all. Under BullMQ the
-delayed entry lived in Redis and ran late. Observed live: a tenant whose loop sat
-inside a 125 s drain had its 11:10 slot **simply absent**, and took every slot
-after.
+### The serial drain is gone, and this is what replaced it
 
-That is negligible today: all seven sweeps are sub-second, and the serial shape
-is deliberate, because these run against a per-tenant database sized for one
-tenant's ordinary load. It stops being negligible with `help-center-translate`,
-which needs a **120 s lease** today. On this loop, one translation silently costs
-the per-minute `snooze-sweep` and `sla-breach-sweep` two runs each.
+The first cohort drained **serially**: claim a batch, run it to completion, then
+go round and tick the schedule. `latestSlotAtOrBefore` returns only the slot
+bracketing _now_, so slots that elapse while the loop is inside a long job are
+**dropped, not delayed** — under BullMQ the delayed entry lived in Redis and ran
+late. Observed live on the first cohort: a tenant whose loop sat inside a 125 s
+drain had its 11:10 slot **simply absent**, and took every slot after.
 
-Whoever takes that on needs a concurrency story before landing it — per-queue
-loops, a bounded worker pool over the claim, or a separate tier for the slow
-queues. Measured against the reference this is a regression in _delivery_, not
-just in latency, and it is much cheaper to decide than to discover.
+That was negligible while every sweep was sub-second. It stopped being
+negligible with `help-center-translate`, whose lease is 120 s.
+
+**The tier now runs a bounded worker pool.** `dispatchPass` claims what the pool
+has room for, starts it, and returns; the loop's next act is the schedule tick,
+so a running job never stands between a per-minute sweep and its slot. Three
+shapes were available and the other two were rejected for reasons worth keeping:
+
+- **Per-queue loops** multiply the poll traffic by the queue count against a
+  per-tenant database, and this tier already holds a connection per tenant open
+  by design (§7). One loop keeps one poll, one listener and one claim query per
+  pass whatever the queue count.
+- **A separate tier for the slow queues** splits the deployment on a property
+  ("slow") that is not stable — an AI call's duration is not a queue attribute —
+  and doubles the always-warm connection count.
+- **One undifferentiated pool** loses the reference's per-queue `concurrency`,
+  and one of those numbers is load-bearing: `workflow-dispatch` is 1 because it
+  is a global FIFO, not because it is slow. Two dispatch jobs in parallel
+  reorder a reply and a close on one conversation.
+
+So the cap is **per queue**, the claim asks for exactly the free slots each
+queue has (one `LATERAL` query), and each queue's rows are leased for that
+queue's own lease rather than the batch's longest.
+
+Measured, on a fixture where one queue holds a 120 s job while a per-minute
+schedule ticks alongside it (`scripts/job-concurrency-proof.ts`):
+
+| drain shape                 | slow-queue runs | per-minute slots enqueued |
+| --------------------------- | --------------- | ------------------------- |
+| serial (the first cohort's) | 1               | **2 of 4**                |
+| bounded pool (shipped)      | 1               | **3 of 3**                |
+
+The serial column is the control: it is the shipped loop with the pool awaited
+before it comes round again — literally what `drainOnce` did — and it reproduces
+the dropped slots rather than asserting them. The run refuses to report a
+result if the control does not lose a slot, because "no slots lost" is also
+what a harness that cannot see a lost slot would print.
+
+`JOB_MAX_CONCURRENCY` caps one tenant loop's total in-flight jobs. It defaults
+to the **sum of every definition's `concurrency`**, which is exactly what the
+reference allowed (one `Worker` per queue at its own concurrency), so the
+default binds nothing. It exists because a pooled process runs one loop per
+tenant, and an operator sizing connections cares about the product.
+
+### What the move fixed rather than preserved
+
+- **`workflow-dispatch`'s dedupe never worked.** The comment promised that
+  re-enqueuing an event deduped on `workflow-dispatch:${event.id}`. bullmq
+  rejects a custom id containing `:` unless it splits into exactly three parts,
+  and that key is two, so every enqueue threw `Custom Id cannot contain :` and
+  the trigger was retried to exhaustion. A `dedupe_key` column has no such rule.
+  (The same defect hit `workflow-wait:${runId}`, the legacy two-part key a run
+  parked before waits were sequence-keyed still used.)
+- **Redis held every tenant's payloads in one un-namespaced list per queue.**
+  `redis-config.ts` sets no key prefix and every queue name is a compile-time
+  constant, so any consumer that ever attached would drain all tenants from one
+  list with no tenant discriminator. The queue table lives in the tenant's own
+  database, and the claim asserts the row's stamp against the ambient scope.
+- **Readiness could not see a missing consumer.** `ok = failed === 0` over
+  eagerly-initialised workers reported `workers ok:true total:0` on a replica
+  that had constructed none, because a worker never built is not _failed_. A
+  worker-role process whose tier is not running is now unready, and the payload
+  reports how many tenant loops it is serving.
+- **`segment-evaluation`'s schedules stopped being a second copy.** They were
+  repeatable jobs written into Redis, which had to be _restored_ at boot in case
+  Redis had been cleared. They are now derived from `segments` rows on every
+  tick, so there is no scheduler state to lose and nothing to reconcile.
+
+### What is still Redis, and whose it is
+
+The queues are done; `bullmq` is imported by nothing under `apps/web/src`. Redis
+remains for the generic cache, rate limiting, pub/sub, presence, visitor hashing
+and link previews — roughly twenty call sites, and the single final cutover
+(§7.4) that removes them.
+
+**`email-imap` refuses to schedule under pooled tenancy** and says so at error.
+Its mailbox is process-wide configuration while the queue is per tenant, so
+scheduling it on every tenant's loop would have each tenant poll the _same_
+mailbox and ingest the same message into its own database. Not a regression: the
+BullMQ worker was never started under pooled tenancy either.
+
+**The outbox relay is still not started under pooled tenancy.** It needs a
+session-mode connection for `LISTEN` and `pg_advisory_lock` per tenant, which is
+the relay-tier piece's work. Its _enqueue_ is now this queue's, so what it needs
+is a per-tenant loop of exactly the shape `tier.ts` already runs.
 
 ## 11. Running the evidence
 
@@ -398,4 +489,16 @@ JOB_WAKE_DISABLED=1 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-lat
 # single-tenant and could not see a cross-tenant scheduler defect at all.
 env $(cat pooled.env) bun run scripts/job-tenant-proof.ts run --a <id> --b <id>
 env $(cat pooled.env) bun run scripts/job-tenant-proof.ts listen-endpoints
+
+# the eight migrated queues, on a real two-tenant fleet: real producers, the
+# real registry, both orderings, and a positive control that fails the run if
+# any queue produced no effect in either tenant
+env $(cat pooled.env) bun run scripts/job-eight-proof.ts run --a <id> --b <id>
+
+# what the serial drain cost, with the serial shape itself as the control
+DATABASE_URL=... bun run scripts/job-concurrency-proof.ts --work-seconds 130
+
+# the `events` queue's four properties: the custom retry curve, bulk dedupe,
+# cancelable delayed jobs, and webhook auto-disable — each with its control
+DATABASE_URL=... bun run scripts/job-events-proof.ts
 ```

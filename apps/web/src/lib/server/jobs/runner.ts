@@ -119,8 +119,9 @@ export function activeQueueNames(): string[] {
  * The reason this exists is a hazard measured on the BullMQ side of the house: a
  * `Worker` constructed inside a request's tenant scope inherits that scope for
  * every job it ever processes, because the scope is AsyncLocalStorage and the
- * constructor captured it. Seven queue modules arm lazily on first enqueue, so
- * that is not a theoretical shape.
+ * constructor captured it. It was not a theoretical shape — the queue modules
+ * that armed lazily on first enqueue armed inside whatever request reached them
+ * first. No such module is left, but the *import* hazard below outlives them.
  *
  * This queue does not have that shape — `tier.ts` opens a fresh
  * `withTenantScopeById(...)` around every pass, so a handler always runs inside

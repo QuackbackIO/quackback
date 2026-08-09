@@ -47,10 +47,13 @@ vi.mock('@/lib/server/tenancy/tenant-context', () => ({
 }))
 
 import {
+  cancelJob,
   claimJobs,
   completeJob,
   enqueueJob,
+  enqueueJobs,
   failJob,
+  findJobByDedupeKey,
   heartbeatJob,
   jobQueueDepth,
   pruneTerminalJobs,
@@ -458,5 +461,182 @@ describe('the lease-shape constraint', () => {
     await expect(
       testSql()`UPDATE job_queue SET status = 'pending' WHERE queue = ${q}`
     ).rejects.toThrow(/job_queue_lease_shape_check/)
+  })
+})
+
+describe('the per-queue claim cap', () => {
+  it('takes at most each queue’s own limit, in one pass', async () => {
+    // The reference gave each queue its own Worker with its own concurrency.
+    // A single LIMIT over a union of queues loses that: one queue's backlog
+    // fills the batch and the others starve.
+    const busy = queue('cap-busy')
+    const quiet = queue('cap-quiet')
+    for (let i = 0; i < 5; i++) await enqueueJob({ queue: busy, dedupeKey: `b${i}` })
+    for (let i = 0; i < 5; i++) await enqueueJob({ queue: quiet, dedupeKey: `q${i}` })
+
+    const claimed = await claimJobs({
+      specs: [
+        { queue: busy, limit: 1, leaseMs: LEASE },
+        { queue: quiet, limit: 3, leaseMs: LEASE },
+      ],
+    })
+    const byQueue = new Map<string, number>()
+    for (const job of claimed) byQueue.set(job.queue, (byQueue.get(job.queue) ?? 0) + 1)
+    expect(byQueue.get(busy)).toBe(1)
+    expect(byQueue.get(quiet)).toBe(3)
+  })
+
+  it('leases each queue’s rows for that queue’s own lease, not the batch’s longest', async () => {
+    // `help-center-translate` needs 120s. Applying that to a `snooze-sweep` row
+    // that happened to be claimed alongside it would make a dead worker's sweep
+    // unavailable for two minutes.
+    const slow = queue('lease-slow')
+    const fast = queue('lease-fast')
+    await enqueueJob({ queue: slow })
+    await enqueueJob({ queue: fast })
+
+    const before = Date.now()
+    const claimed = await claimJobs({
+      specs: [
+        { queue: slow, limit: 1, leaseMs: 120_000 },
+        { queue: fast, limit: 1, leaseMs: 10_000 },
+      ],
+    })
+    expect(claimed).toHaveLength(2)
+    const held = (name: string) =>
+      claimed.find((j) => j.queue === name)!.lockedUntil.getTime() - before
+    expect(held(slow)).toBeGreaterThan(100_000)
+    expect(held(fast)).toBeLessThan(30_000)
+  })
+
+  it('asks for nothing when every queue is at capacity', async () => {
+    const q = queue('cap-zero')
+    await enqueueJob({ queue: q })
+    expect(await claimJobs({ specs: [{ queue: q, limit: 0, leaseMs: LEASE }] })).toHaveLength(0)
+    expect((await rowsFor(q))[0].status).toBe('pending')
+  })
+})
+
+describe('terminal failure', () => {
+  it('fails a job outright even with attempts remaining', async () => {
+    const q = queue('terminal')
+    await enqueueJob({ queue: q, maxAttempts: 3 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    expect(await failJob(job, 'unknown hook', { terminal: true })).toBe('failed')
+    const [row] = await rowsFor(q)
+    expect(row.status).toBe('failed')
+    expect(row.attempts).toBe(1)
+    expect(row.max_attempts).toBe(3)
+  })
+
+  it('cannot make a spent job retryable', async () => {
+    // The flag is ANDed into the retry predicate, never substituted for it, so
+    // there is no value of `terminal` that puts an exhausted job back.
+    const q = queue('terminal-no-resurrect')
+    await enqueueJob({ queue: q, maxAttempts: 1 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    expect(await failJob(job, 'boom', { terminal: false })).toBe('failed')
+  })
+})
+
+describe('bulk enqueue', () => {
+  it('writes one row per input and reports what it wrote', async () => {
+    const q = queue('bulk')
+    const result = await enqueueJobs([
+      { queue: q, dedupeKey: 'a', payload: { n: 1 } },
+      { queue: q, dedupeKey: 'b', payload: { n: 2 } },
+    ])
+    expect(result.inserted).toBe(2)
+    expect(result.insertedDedupeKeys.sort()).toEqual(['a', 'b'])
+    expect(await rowsFor(q)).toHaveLength(2)
+  })
+
+  it('is a no-op on keys that already exist — the relay’s re-drain', async () => {
+    const q = queue('bulk-dedupe')
+    await enqueueJobs([{ queue: q, dedupeKey: 'k' }])
+    const again = await enqueueJobs([
+      { queue: q, dedupeKey: 'k' },
+      { queue: q, dedupeKey: 'k2' },
+    ])
+    expect(again.inserted).toBe(1)
+    expect(again.insertedDedupeKeys).toEqual(['k2'])
+    expect(await rowsFor(q)).toHaveLength(2)
+  })
+
+  it('deduplicates within a single call, not just against existing rows', async () => {
+    const q = queue('bulk-self-dedupe')
+    const result = await enqueueJobs([
+      { queue: q, dedupeKey: 'same' },
+      { queue: q, dedupeKey: 'same' },
+    ])
+    expect(result.inserted).toBe(1)
+    expect(await rowsFor(q)).toHaveLength(1)
+  })
+})
+
+describe('cancel and lookup', () => {
+  it('finds a job by its dedupe key, with its status', async () => {
+    const q = queue('lookup')
+    await enqueueJob({ queue: q, dedupeKey: 'wait-1' })
+    const found = await findJobByDedupeKey(q, 'wait-1')
+    expect(found?.status).toBe('pending')
+    expect(await findJobByDedupeKey(q, 'nope')).toBeNull()
+  })
+
+  it('removes a pending job and frees its key', async () => {
+    const q = queue('cancel')
+    await enqueueJob({ queue: q, dedupeKey: 'c' })
+    expect(await cancelJob(q, 'c')).toBe(1)
+    expect(await rowsFor(q)).toHaveLength(0)
+    expect((await enqueueJob({ queue: q, dedupeKey: 'c' })).inserted).toBe(true)
+  })
+
+  it('frees a key still held by a TERMINAL job', async () => {
+    // Under the reference `removeOnComplete` freed the id, so a caller that
+    // could not re-schedule a key it had already used would be a silent
+    // behaviour change — and the workflow sweeper depends on exactly this to
+    // give a parked run a fresh timer.
+    const q = queue('cancel-terminal')
+    await enqueueJob({ queue: q, dedupeKey: 't' })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    await completeJob(job)
+    expect((await enqueueJob({ queue: q, dedupeKey: 't' })).inserted).toBe(false)
+
+    expect(await cancelJob(q, 't')).toBe(1)
+    expect((await enqueueJob({ queue: q, dedupeKey: 't' })).inserted).toBe(true)
+  })
+
+  it('refuses to remove a RUNNING job — its lease is what adjudicates it', async () => {
+    const q = queue('cancel-running')
+    await enqueueJob({ queue: q, dedupeKey: 'r' })
+    await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    expect(await cancelJob(q, 'r')).toBe(0)
+    expect((await rowsFor(q))[0].status).toBe('running')
+  })
+})
+
+describe('per-queue retention', () => {
+  it('applies a queue’s own window, and its own per-status split', async () => {
+    // The reference kept `{event-hooks}` completions for a day and its failures
+    // for a month, so "did this webhook fire?" stays answerable after the
+    // successful traffic is gone.
+    const q = queue('retention-split')
+    await enqueueJob({ queue: q, dedupeKey: 'ok' })
+    const [okJob] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    await completeJob(okJob)
+    await enqueueJob({ queue: q, dedupeKey: 'bad', maxAttempts: 1 })
+    const [badJob] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    await failJob(badJob, 'nope')
+
+    await testSql()`
+      UPDATE job_queue SET finished_at = now() - interval '3 days' WHERE queue = ${q}
+    `
+    // One day for successes, thirty for failures: the success goes, the failure stays.
+    await pruneTerminalJobs(7 * 24 * 60 * 60 * 1000, {
+      [q]: { succeeded: 86_400_000, failed: 30 * 86_400_000 },
+    })
+
+    const rows = await rowsFor(q)
+    expect(rows.map((r) => r.status)).toEqual(['failed'])
   })
 })

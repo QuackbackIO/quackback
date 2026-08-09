@@ -99,7 +99,7 @@ async function child(): Promise<void> {
     }
   }
 
-  const [job] = await claimJobs({ queues: [queue], limit: 1, leaseMs })
+  const [job] = await claimJobs({ specs: [{ queue, limit: 1, leaseMs }] })
   if (!job) {
     say('nothing-to-claim')
     await s.end()
