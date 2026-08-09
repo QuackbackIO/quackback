@@ -257,7 +257,7 @@ ordering into an outage.
 ## 8. Configuration
 
 Read from `process.env` directly rather than through the zod config, matching
-`queue/role.ts`: these must work in any context, including a worker process that
+`process-role.ts`: these must work in any context, including a worker process that
 has not loaded the full application config.
 
 | Variable               | Default | Meaning                                                             |
@@ -439,9 +439,9 @@ tenant, and an operator sizing connections cares about the product.
   (The same defect hit `workflow-wait:${runId}`, the legacy two-part key a run
   parked before waits were sequence-keyed still used.)
 - **Redis held every tenant's payloads in one un-namespaced list per queue.**
-  `redis-config.ts` sets no key prefix and every queue name is a compile-time
-  constant, so any consumer that ever attached would drain all tenants from one
-  list with no tenant discriminator. The queue table lives in the tenant's own
+  Its shared connection set no key prefix and every queue name was a
+  compile-time constant, so any consumer that ever attached would drain all
+  tenants from one list with no tenant discriminator. The queue table lives in the tenant's own
   database, and the claim asserts the row's stamp against the ambient scope.
 - **Readiness could not see a missing consumer.** `ok = failed === 0` over
   eagerly-initialised workers reported `workers ok:true total:0` on a replica
@@ -490,12 +490,13 @@ environment with no S3 keys. Postgres queues have no per-consumer namespace,
 so any process pointed at the database is a consumer — which is the same
 property that makes the queue per-tenant, seen from the other side.
 
-### What is still Redis, and whose it is
+### Nothing is still Redis
 
-The queues are done; `bullmq` is imported by nothing under `apps/web/src`. Redis
-remains for the generic cache, rate limiting, pub/sub, presence, visitor hashing
-and link previews — roughly twenty call sites, and the single final cutover
-(§7.4) that removes them.
+The queues came here; the generic cache, rate limiting, pub/sub, presence,
+visitor hashing and link previews went to `kv/` (see `kv/KV.md`). §7.4's final
+cutover has since run: `ioredis` is no longer a dependency, `REDIS_URL` is no
+longer read, and no service provisions a Redis. `policy/no-bullmq/` keeps the
+queue package out.
 
 **`email-imap` refuses to schedule under pooled tenancy** and says so at error.
 Its mailbox is process-wide configuration while the queue is per tenant, so

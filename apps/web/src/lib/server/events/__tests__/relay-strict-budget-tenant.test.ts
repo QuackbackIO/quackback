@@ -89,7 +89,7 @@ vi.mock('@/lib/server/db', () => {
   }
 })
 
-vi.mock('@/lib/server/queue/role', () => ({ shouldRunWorkers: () => true }))
+vi.mock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
 vi.mock('../process', () => ({ enqueueHookJobsWithIds: async () => undefined }))
 
 const { drainOnce } = await import('../relay')

@@ -24,7 +24,7 @@
  * for why §9's "Railway Postgres for the control plane" did not survive contact
  * with region placement.
  */
-import { bucket, defineRailway, preserve, project, redis, service } from 'railway/iac'
+import { bucket, defineRailway, preserve, project, service } from 'railway/iac'
 
 /** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
  * is declared intent only — `plan` never diffs placement and `apply` never
@@ -32,11 +32,6 @@ import { bucket, defineRailway, preserve, project, redis, service } from 'railwa
 const REGION = 'us-east4-eqdc4a'
 
 export default defineRailway(() => {
-  // `config.ts` mandates `redisUrl` and the readiness probe pings it, so this
-  // service is not optional today — even though the application's own use of it
-  // has moved into each tenant's Postgres.
-  const cache = redis('Redis')
-
   // NOTE ON THE CONTROL DATABASE — §9 says Railway Postgres is "still the right
   // answer" for it: always active, small, co-located on the private network. It
   // was built that way here and then moved to Neon `us-east-1`, because Railway
@@ -101,8 +96,6 @@ export default defineRailway(() => {
     // tenancy there is no single database to migrate anyway: per-tenant schema
     // work belongs to the migrator role.
     SKIP_MIGRATIONS: 'true',
-
-    REDIS_URL: cache.env.REDIS_URL,
 
     // Fleet-level secrets, set out of band and never written to source.
     SECRET_KEY: preserve(),
@@ -193,6 +186,6 @@ export default defineRailway(() => {
   })
 
   return project('quackback-pooled-gauntlet', {
-    resources: [web, worker, cronDaily, cronHourly, sleeper, cache, uploads, ...tenantBuckets],
+    resources: [web, worker, cronDaily, cronHourly, sleeper, uploads, ...tenantBuckets],
   })
 })

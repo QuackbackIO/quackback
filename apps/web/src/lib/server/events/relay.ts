@@ -118,7 +118,7 @@ const attemptKey = (id: bigint): string => id.toString()
 /**
  * Drain one batch of unpublished events. Pure enough to unit-test: the enqueue
  * and resolve steps are injectable so the ordering/idempotency/depth-guard logic
- * can be verified against a live DB without standing up Redis.
+ * can be verified against a live DB without standing up the job tier.
  *
  * Per-row isolation: a row whose resolve/enqueue throws is left unpublished and
  * retried on a later pass, but it never blocks the rows behind it — one poison

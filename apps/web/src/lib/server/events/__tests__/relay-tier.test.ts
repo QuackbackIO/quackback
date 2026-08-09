@@ -49,7 +49,7 @@ async function runTier(opts: {
   const refuse = new Set(opts.refuse ?? [])
   const missing = new Set(opts.leaderTableMissingFor ?? [])
 
-  vi.doMock('@/lib/server/queue/role', () => ({ shouldRunWorkers: () => true }))
+  vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
   vi.doMock('@/lib/server/tenancy/mode', () => ({
     isPooledTenancy: () => true,
     POOLED_TENANCY: 'pooled',

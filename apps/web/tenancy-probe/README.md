@@ -265,8 +265,7 @@ signature is a clean 403 and an accepted one falls through to the object path.
 ## What is not fully exercisable today
 
 The pooled architecture does not exist yet. Today `alpha` and `bravo` are two
-separate processes, with separate `SECRET_KEY`s, separate Redis instances and
-separate databases. Several probes therefore pass today for a stronger reason
+separate processes, with separate `SECRET_KEY`s and separate databases. Several probes therefore pass today for a stronger reason
 than the one they are designed to test — the failure mode is not merely absent,
 it is unreachable.
 
@@ -278,7 +277,7 @@ health for pooled compute.
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **P01** | Two processes, two signing keys, two `session` tables — a refusal is over-determined. The real target is the memoised better-auth instance behind `_authConfigVersion` (`auth/index.ts:78`), a small monotonic per-tenant integer whose values can coincide. Only reachable once one process serves both tenants. |
 | **P02** | The in-process `magicLinkStash` / `otpStash` (`auth/index.ts:29-51`) are keyed by lowercased email alone. They can only collide inside one process. Today the probe exercises the database-backed `verification` path only.                                                                                       |
-| **P06** | `redis.ts` `CACHE_KEYS` are bare literals (`settings:tenant`, `auth:registered-providers`, …). They collide only when one Redis is shared. Today the probe confirms the surfaces are distinguishable and self-consistent — the collision itself is not yet reachable.                                             |
+| **P06** | The bare-literal `CACHE_KEYS` (`settings:tenant`, `auth:registered-providers`, …) that made this collide no longer share a namespace: the cache is `kv_store`, discriminated by the `tenant_id` column. The probe confirms the surfaces are distinguishable and self-consistent; the collision has no mechanism left to exercise. |
 | **P07** | Each tenant runs its own worker bound to one `DATABASE_URL`, so a job physically cannot reach the other database. Today the probe establishes the observation baseline and proves the scan can actually see derived rows.                                                                                         |
 | **P09** | `memoizedAssistantPrincipalId` (`assistant.orchestrator.ts:62`) is process-scoped and can only be poisoned once one process serves both tenants. Today the probe proves the two ids are distinct and unreferenced.                                                                                                |
 
@@ -291,9 +290,10 @@ Two further gaps, stated plainly:
 
 - **Presence signals are covered only at the row level.** P08 scans bravo's
   database for alpha's markers, which catches persisted presence, but it does not
-  open an SSE stream and watch for a cross-tenant presence event. The Redis
-  `AGENTS_ZSET = 'conversation:presence:agents'` key named in §7.4 is untenanted
-  and is not yet directly probed.
+  open an SSE stream and watch for a cross-tenant presence event. The untenanted
+  `AGENTS_ZSET = 'conversation:presence:agents'` key §7.4 named is gone —
+  presence is `presence_stream`, keyed on `tenant_id` with `is_agent` a column —
+  but the live SSE path is still not directly probed.
 - **P06 cannot see a cache that is shared but not observable.** It reads the
   public surfaces that settings feed; a cached value with no public projection
   (webhook rows, registered auth providers) is out of its reach over HTTP.

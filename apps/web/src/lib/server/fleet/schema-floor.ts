@@ -91,7 +91,7 @@ let floorMemo: { raw: string | undefined; value: number | null } | null = null
  * The configured floor, or null when the gate is off.
  *
  * Read from `process.env` directly rather than through the zod config, matching
- * `queue/role.ts` and `tenancy/mode.ts`: this runs on the pool-checkout path,
+ * `process-role.ts` and `tenancy/mode.ts`: this runs on the pool-checkout path,
  * and making it validate the whole application configuration would turn an
  * unrelated missing variable into a database error.
  *

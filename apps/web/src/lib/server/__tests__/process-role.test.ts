@@ -6,7 +6,7 @@ import {
   InvalidProcessRole,
   isMigratorRole,
   shouldRunWorkers,
-} from '../role'
+} from '../process-role'
 
 describe('getProcessRole', () => {
   afterEach(() => {

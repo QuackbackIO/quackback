@@ -14,7 +14,7 @@ const CACHE_TTL_SECONDS = 300 // 5 minutes
 
 /**
  * List all channels accessible to the bot.
- * Results are cached in Dragonfly for 5 minutes to avoid Slack API rate limits.
+ * Results are cached for 5 minutes to avoid Slack API rate limits.
  * Pass `force: true` to bypass the cache (e.g. refresh button).
  */
 export async function listSlackChannels(

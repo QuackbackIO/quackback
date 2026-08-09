@@ -9,7 +9,7 @@ import type { SessionId, UserId } from '@quackback/ids'
 import { isBillingConfigured } from '@/lib/server/domains/billing/billing.config'
 import { logger } from '@/lib/server/logger'
 import { runWithoutLogContext } from '@/lib/server/log-context'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
+import { shouldRunWorkers } from '@/lib/server/process-role'
 
 const log = logger.child({ component: 'bootstrap' })
 

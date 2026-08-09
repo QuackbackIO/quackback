@@ -5,7 +5,8 @@ import { db, integrations, integrationEventMappings, eq, and, sql } from '@/lib/
 import type { IntegrationId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
-// cacheDel/CACHE_KEYS are imported dynamically inside handlers to keep ioredis out of the client bundle
+// cacheDel/CACHE_KEYS are imported dynamically inside handlers to keep the
+// database stack out of the client bundle
 
 const log = logger.child({ component: 'integrations' })
 

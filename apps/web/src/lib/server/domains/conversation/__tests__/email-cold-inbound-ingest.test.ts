@@ -15,7 +15,6 @@ import type { TeamId } from '@quackback/ids'
 // absolute one unconditionally for this file's config load.
 process.env.BASE_URL = 'https://quackback.test'
 process.env.SECRET_KEY ||= 'x'.repeat(32)
-process.env.REDIS_URL ||= 'redis://localhost:6379'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {

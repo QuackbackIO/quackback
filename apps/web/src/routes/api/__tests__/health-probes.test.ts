@@ -8,11 +8,6 @@ vi.mock('@/lib/server/db', () => ({
   getMigrationStatus: (...a: unknown[]) => getMigrationStatus(...a),
 }))
 
-const ping = vi.fn()
-vi.mock('@/lib/server/queue/redis-config', () => ({
-  getQueueRedis: () => ({ ping: (...a: unknown[]) => ping(...a) }),
-}))
-
 // Background work is one tier now, not a registry of BullMQ workers.
 const getJobTierStatus = vi.fn()
 vi.mock('@/lib/server/jobs/tier', () => ({
@@ -26,7 +21,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   resetReadinessCache()
   execute.mockResolvedValue([])
-  ping.mockResolvedValue('PONG')
   getMigrationStatus.mockResolvedValue({ upToDate: true, bundledCount: 1, appliedCount: 1 })
   getJobTierStatus.mockReturnValue({
     running: true,
@@ -43,8 +37,12 @@ describe('GET /api/health/live', () => {
     const res = handleLivenessProbe()
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({ status: 'ok' })
+    // Liveness must answer from nothing: a dependency outage restarts a pod
+    // only if liveness reads the dependency, which is how a database blip
+    // turns into a cluster-wide restart loop.
     expect(execute).not.toHaveBeenCalled()
-    expect(ping).not.toHaveBeenCalled()
+    expect(getMigrationStatus).not.toHaveBeenCalled()
+    expect(getJobTierStatus).not.toHaveBeenCalled()
   })
 })
 
@@ -55,8 +53,11 @@ describe('GET /api/health/ready', () => {
     const body = await res.json()
     expect(body.status).toBe('ok')
     expect(body.checks.db).toEqual({ ok: true })
-    expect(body.checks.redis).toEqual({ ok: true })
     expect(body.checks.migrations).toEqual({ ok: true })
+    // The probe reports exactly the dependencies it checks. Pinned as a set so
+    // a check that stops being evaluated cannot keep a stale key in the body,
+    // and so a re-added dependency has to be asserted rather than appear.
+    expect(Object.keys(body.checks).sort()).toEqual(['db', 'migrations', 'workers'])
     expect(body.checks.workers).toEqual({
       ok: true,
       expected: true,
@@ -99,16 +100,22 @@ describe('GET /api/health/ready', () => {
   })
 
   it('degrades to 503 with error "timeout" when a dependency hangs', async () => {
+    // A hanging dependency is the case a probe exists for and the one it is
+    // worst at: without the per-check budget the request never answers, the
+    // orchestrator's own probe timeout fires, and the body that says WHICH
+    // dependency hung is never produced. This used to hang Redis; it hangs the
+    // database now, which is the dependency that actually exists.
     vi.useFakeTimers()
-    ping.mockImplementation(() => new Promise(() => {}))
+    execute.mockImplementation(() => new Promise(() => {}))
     const resPromise = handleReadinessProbe()
     await vi.advanceTimersByTimeAsync(3_000)
     const res = await resPromise
     expect(res.status).toBe(503)
     const body = await res.json()
-    expect(body.checks.redis).toEqual({ ok: false, error: 'timeout' })
-    // The other checks still report individually.
-    expect(body.checks.db).toEqual({ ok: true })
+    expect(body.checks.db).toEqual({ ok: false, error: 'timeout' })
+    // The other checks still report individually, so the body localises the
+    // fault instead of just saying "not ready".
+    expect(body.checks.migrations).toEqual({ ok: true })
   })
 
   it('returns 503 on a worker-role process whose job tier is not running', async () => {

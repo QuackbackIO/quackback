@@ -278,7 +278,7 @@ either merge order.
 ## 9. Configuration
 
 Read from `process.env` directly rather than through the zod config, matching
-`queue/role.ts` and the job tier: these must work in any context, including a
+`process-role.ts` and the job tier: these must work in any context, including a
 relay process that has not loaded the full application config.
 
 | Variable                  | Default | Meaning                                                        |

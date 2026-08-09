@@ -156,7 +156,7 @@ as a record of intent, not as something enforced.
 ## The fleet shape
 
 `.railway/railway.ts` describes five app services built from one image, plus
-Redis and the buckets. What separates them is **which connections they hold**:
+the buckets. What separates them is **which connections they hold**:
 
 | Service                            | `QUACKBACK_ROLE`                | Connections                                                                              | Sleeps                              |
 | ---------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- |

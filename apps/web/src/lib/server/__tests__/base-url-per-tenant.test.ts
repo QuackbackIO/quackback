@@ -15,7 +15,6 @@ function stubBaseEnv(): void {
   // Vitest leaks Vite's own `BASE_URL=/` into process.env, which is not a URL.
   vi.stubEnv('BASE_URL', 'https://fleet.example.com')
   vi.stubEnv('SECRET_KEY', 'a'.repeat(64))
-  vi.stubEnv('REDIS_URL', 'redis://localhost:6379')
 }
 
 /** A scope carrying only what `config.baseUrl` and the auth origin list read. */

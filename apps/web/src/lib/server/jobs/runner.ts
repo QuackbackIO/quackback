@@ -13,7 +13,7 @@
  * AI call can need far more.
  *
  * Configuration is read from `process.env` directly rather than through the zod
- * config, matching `queue/role.ts`: these knobs must work in any context,
+ * config, matching `process-role.ts`: these knobs must work in any context,
  * including a worker process that has not loaded the full application config.
  */
 import { logger } from '@/lib/server/logger'

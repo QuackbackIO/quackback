@@ -33,7 +33,7 @@
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
+import { shouldRunWorkers } from '@/lib/server/process-role'
 import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
 import { resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
 import { withTenantScopeById } from '@/lib/server/tenancy/fleet'

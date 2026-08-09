@@ -13,11 +13,10 @@
  * Runs inside a transaction that is rolled back so the shared test DB is clean.
  */
 
-// Satisfy the config schema (secretKey/baseUrl/redisUrl) the encryption + db
+// Satisfy the config schema (secretKey/baseUrl) the encryption + db
 // layers validate on first access (mirrors backfill-custom-oidc-provider.test).
 process.env.SECRET_KEY = 'test-secret-key-that-is-at-least-32-characters-long'
 process.env.BASE_URL = 'http://localhost:3000'
-process.env.REDIS_URL = 'redis://localhost:6379'
 
 import { describe, it, expect } from 'vitest'
 import {

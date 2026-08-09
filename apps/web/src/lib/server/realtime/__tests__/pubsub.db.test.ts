@@ -22,7 +22,6 @@ vi.stubEnv(
 )
 vi.stubEnv('BASE_URL', 'http://localhost:3000')
 vi.stubEnv('SECRET_KEY', 'test-secret-key-0123456789abcdef0123456789abcdef')
-vi.stubEnv('REDIS_URL', 'redis://localhost:6379')
 
 import {
   ensureKvSchema,

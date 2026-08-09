@@ -4,9 +4,8 @@ import { db, sql, getMigrationStatus } from '@/lib/server/db'
 // readiness probe must not fail because some unrelated variable is missing —
 // that would report the process unhealthy for a reason it is not.
 import { isPooledTenancy } from '@/lib/server/tenancy/mode'
-import { getQueueRedis } from '@/lib/server/queue/redis-config'
 import { getJobTierStatus } from '@/lib/server/jobs/tier'
-import { getProcessRole, shouldRunWorkers } from '@/lib/server/queue/role'
+import { getProcessRole, shouldRunWorkers } from '@/lib/server/process-role'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'health' })
@@ -64,10 +63,6 @@ async function checkDb(): Promise<void> {
   await db.execute(sql`SELECT 1`)
 }
 
-async function checkRedis(): Promise<void> {
-  await getQueueRedis().ping()
-}
-
 // The bundled journal is frozen at build time and applied rows only grow,
 // so a passing check can never regress in-process: cache the success and
 // keep querying only while behind (a pod flips ready once the migrator
@@ -108,11 +103,33 @@ async function checkMigrations(): Promise<void> {
  * Readiness probe: 200 when every dependency check passes, 503 with a
  * per-check breakdown otherwise. Workers still booting don't fail the
  * probe; a worker whose init failed does.
+ *
+ * ## Every check here names a dependency the process needs to serve
+ *
+ * There used to be a fourth, pinging Redis. It was removed with Redis itself,
+ * and the direction of that change is worth stating because dropping a
+ * conjunct from a health signal normally makes it weaker: this one asserted
+ * the reachability of a store no request path reads. The cache, the rate
+ * buckets, the presence sets and the queues are all tables in the tenant's own
+ * database now, so what used to be "is Redis up" is already covered by `db` —
+ * and the check could only ever have been a FALSE 503, taking a pod that was
+ * serving perfectly out of rotation because a store nothing reads was down.
+ *
+ * What remains, and what each one fails on:
+ *
+ *   db          the control store (pooled) or the single database — the thing
+ *               every request needs. Down or slow ⇒ 503.
+ *   migrations  single-tenant only: the applied ledger is behind the bundled
+ *               one, so this build's queries can hit columns that do not exist
+ *               yet ⇒ 503 `behind`. Pooled skips it deliberately (§10.5).
+ *   workers     a worker-role process that is not running the job tier ⇒ 503.
+ *
+ * A hung dependency still degrades rather than hangs: `runCheck` gives each one
+ * `CHECK_TIMEOUT_MS` and reports `timeout`.
  */
 export async function handleReadinessProbe(): Promise<Response> {
-  const [dbCheck, redisCheck, migrationsCheck] = await Promise.all([
+  const [dbCheck, migrationsCheck] = await Promise.all([
     runCheck('db', checkDb),
-    runCheck('redis', checkRedis),
     runCheck('migrations', checkMigrations),
   ])
   // Background work is now one tier rather than a registry of BullMQ workers,
@@ -136,14 +153,13 @@ export async function handleReadinessProbe(): Promise<Response> {
     schemaMissing: tier.tenants.filter((t) => t.schemaMissing).length,
   }
 
-  const ready = dbCheck.ok && redisCheck.ok && migrationsCheck.ok && workersCheck.ok
+  const ready = dbCheck.ok && migrationsCheck.ok && workersCheck.ok
   return Response.json(
     {
       status: ready ? 'ok' : 'unavailable',
       role: getProcessRole(),
       checks: {
         db: dbCheck,
-        redis: redisCheck,
         migrations: migrationsCheck,
         workers: workersCheck,
       },

@@ -3,8 +3,8 @@
  *
  * QUACKBACK_ROLE=web     Serve HTTP only. Queue modules stay producer-only:
  *                        they can enqueue and register schedules, but never
- *                        construct a BullMQ Worker.
- * QUACKBACK_ROLE=worker  Run BullMQ workers + periodic sweepers. Still serves
+ *                        run the job tier's consumer loops.
+ * QUACKBACK_ROLE=worker  Run the job tier + periodic sweepers. Still serves
  *                        HTTP (health probes work unchanged); just don't route
  *                        user traffic to it.
  * QUACKBACK_ROLE=all     Both — the default, matching single-container
@@ -92,8 +92,8 @@ export class InvalidProcessRole extends Error {
   constructor(raw: string) {
     super(
       `QUACKBACK_ROLE='${raw}' is not one of ${PROCESS_ROLES.join(' | ')}. Refusing to start: ` +
-        'the previous behaviour was to fall back to `all`, which boots BullMQ, the job tier and ' +
-        'the outbox relay — so a typo silently produced the one topology pooled tenancy forbids.'
+        'the previous behaviour was to fall back to `all`, which boots the job tier and the ' +
+        'outbox relay — so a typo silently produced the one topology pooled tenancy forbids.'
     )
     this.name = 'InvalidProcessRole'
   }
@@ -111,8 +111,8 @@ export function assertProcessRoleConfigured(env: NodeJS.ProcessEnv = process.env
 }
 
 /**
- * Whether this process should consume queues (BullMQ Workers) and run the
- * periodic sweepers wired in startup.ts.
+ * Whether this process should consume queues (the Postgres job tier) and run
+ * the periodic sweepers wired in startup.ts.
  *
  * An allowlist rather than `!== 'web'`, and that is load-bearing: the old form
  * would have said *true* for every role added after it, so `migrator` would have
