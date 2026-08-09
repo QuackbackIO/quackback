@@ -155,9 +155,20 @@ in a browser bundle lives in one user's tab.
   own rather than a judgement about what the constructor does. A plain _call_
   into a third-party module (`logger.child(...)`) is still not a site — there
   are hundreds of those and flagging them would drown the ledger.
+- **Two initializer spellings still miss**, with zero live instances of either:
+  `(0, makeStash)()` and `{ ...makeStash() }`. Recorded rather than chased —
+  each round's remainder has been narrower and further from real code, and
+  precision has stayed clean throughout.
 - **The three unverified categories are human claims.** The ledger makes them
   visible and reviewable; it does not make them true. That is what the reason
   field and the golden diff are for.
+- **A computed global key is not seen.** `globalThis[expr] = new Map()`, where
+  `expr` is anything but a string or template literal, produces no site. This is
+  a silent recall hole and it is deliberate: the site would have to be named
+  `globalThis.<unknown>`, which could never be reconciled against the ledger, so
+  the entry would be permanently either stale or unledgered — worse than a miss.
+  The literal forms (`globalThis.x`, `globalThis['x']`, ``globalThis[`x`]``)
+  all collapse to one site id and are covered.
 - **A factory whose state escapes through something other than a returned
   function or object is not seen.** The return-shape rule exists so that
   `findAppDir()` — a `let` walking up a directory tree, returning a string —

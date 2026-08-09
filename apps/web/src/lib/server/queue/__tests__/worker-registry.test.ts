@@ -76,6 +76,112 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
   const isBullmqSpecifier = (spec: string): boolean =>
     spec === 'bullmq' || spec.startsWith('bullmq/')
 
+  /**
+   * Where a name in this file came from.
+   *
+   * `constructs` used to be purely name-based, which was harmless only while a
+   * recognised bullmq import was a precondition for looking at the file at all.
+   * Dropping that precondition — needed to catch the computed specifier — made
+   * the NAME the whole test, so `node:worker_threads`, a `Worker` from any
+   * other package, and a locally declared `class Worker {}` were all reported
+   * as unadjudicated BullMQ construction.
+   *
+   * That direction matters more than its zero live exposure, because every
+   * remedy available to whoever tripped it degrades the seal: adding a
+   * worker_threads helper to WORKER_MODULES makes it a queue module that must
+   * gate on `shouldRunWorkers()`, adding it to TYPE_ONLY_MODULES asserts it is
+   * type-only when it demonstrably constructs, and widening an exclusion list
+   * erodes the chokepoint. A seal that false-positives gets disabled.
+   *
+   * So provenance decides, and the tie-break is deliberate: a name is only
+   * DISMISSED when the file demonstrably binds it to something that is not
+   * bullmq. An unresolvable binding — a dynamic `import()` of a computed
+   * specifier — stays flagged, which is exactly the spelling that hides an
+   * import while leaving the construction in plain sight.
+   */
+  type Origin = 'bullmq' | 'non-bullmq' | 'unresolvable' | 'local'
+  const origins = new Map<string, Origin>()
+
+  const specifierOrigin = (spec: string): Origin =>
+    isBullmqSpecifier(spec) ? 'bullmq' : 'non-bullmq'
+
+  /** The dynamic `import(...)` inside an initializer, if there is one. */
+  const dynamicImportOf = (expr: ts.Expression): ts.CallExpression | null => {
+    let found: ts.CallExpression | null = null
+    const walk = (n: ts.Node): void => {
+      if (found) return
+      if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        found = n
+        return
+      }
+      ts.forEachChild(n, walk)
+    }
+    walk(expr)
+    return found
+  }
+
+  for (const stmt of sf.statements) {
+    if (ts.isImportDeclaration(stmt) && ts.isStringLiteral(stmt.moduleSpecifier)) {
+      const origin = specifierOrigin(stmt.moduleSpecifier.text)
+      const clause = stmt.importClause
+      if (clause?.name) origins.set(clause.name.text, origin)
+      const bindings = clause?.namedBindings
+      if (bindings && ts.isNamespaceImport(bindings)) origins.set(bindings.name.text, origin)
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const el of bindings.elements) origins.set(el.name.text, origin)
+      }
+      continue
+    }
+    if (ts.isClassDeclaration(stmt) && stmt.name) {
+      origins.set(stmt.name.text, 'local')
+      continue
+    }
+    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+      origins.set(stmt.name.text, 'local')
+      continue
+    }
+    if (ts.isVariableStatement(stmt)) {
+      for (const d of stmt.declarationList.declarations) {
+        if (!ts.isIdentifier(d.name)) continue
+        if (!d.initializer) {
+          origins.set(d.name.text, 'local')
+          continue
+        }
+        const dyn = dynamicImportOf(d.initializer)
+        if (!dyn) {
+          origins.set(d.name.text, 'local')
+          continue
+        }
+        const arg = dyn.arguments[0]
+        origins.set(
+          d.name.text,
+          arg && ts.isStringLiteral(arg) ? specifierOrigin(arg.text) : 'unresolvable'
+        )
+      }
+    }
+  }
+
+  /** The identifier a `new X(...)` / `new a.b.Worker(...)` is rooted at. */
+  const rootName = (expr: ts.Expression): string | null => {
+    let cur: ts.Expression = expr
+    for (;;) {
+      if (ts.isParenthesizedExpression(cur)) cur = cur.expression
+      else if (ts.isAsExpression(cur) || ts.isTypeAssertionExpression(cur)) cur = cur.expression
+      else if (ts.isPropertyAccessExpression(cur)) cur = cur.expression
+      else if (ts.isElementAccessExpression(cur)) cur = cur.expression
+      else break
+    }
+    return ts.isIdentifier(cur) ? cur.text : null
+  }
+
+  /** Dismiss only what the file demonstrably binds to something else. */
+  const couldBeBullmq = (expr: ts.Expression): boolean => {
+    const root = rootName(expr)
+    if (root === null) return true
+    const origin = origins.get(root)
+    return origin !== 'local' && origin !== 'non-bullmq'
+  }
+
   const visit = (node: ts.Node): void => {
     // import … from 'bullmq' (or 'bullmq/…')
     if (
@@ -95,11 +201,18 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
     ) {
       imports = true
     }
-    // new Worker(…) or new bull.Worker(…)
+    // new Worker(…) or new bull.Worker(…), unless the name demonstrably came
+    // from somewhere that is not bullmq.
     if (ts.isNewExpression(node)) {
       const ctor = node.expression
-      if (ts.isIdentifier(ctor) && ctor.text === 'Worker') constructs = true
-      if (ts.isPropertyAccessExpression(ctor) && ctor.name.text === 'Worker') constructs = true
+      if (ts.isIdentifier(ctor) && ctor.text === 'Worker' && couldBeBullmq(ctor)) constructs = true
+      if (
+        ts.isPropertyAccessExpression(ctor) &&
+        ctor.name.text === 'Worker' &&
+        couldBeBullmq(ctor.expression)
+      ) {
+        constructs = true
+      }
     }
     // …or the seam, which is construction by another name.
     if (
@@ -329,7 +442,9 @@ describe('the seal sees bullmq however it is obtained', () => {
 
   it('reports a Worker construction even with no recognisable bullmq import', () => {
     // `constructs` alone is enough for the seal to demand adjudication, which
-    // is what closes the computed-specifier spelling above.
+    // is what closes the computed-specifier spelling above. Note the dynamic
+    // import here is of an unrelated package and binds nothing called Worker,
+    // so it neither excuses nor explains the construction.
     const source = `
       export const w = new Worker('q')
       export async function f() { await import('ioredis') }
@@ -371,6 +486,60 @@ describe('the seal sees bullmq however it is obtained', () => {
         return new bull.Worker('q', async () => {}, {} as never)
       }
     `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: true })
+  })
+
+  it('does NOT flag node:worker_threads', () => {
+    // The fix has two directions and this is the one that is easy to forget.
+    // Dropping the import precondition made the NAME the whole test, and
+    // `node:worker_threads` is an ordinary thing to reach for in server code.
+    // Every remedy available to whoever tripped this degrades the seal:
+    // WORKER_MODULES would make it a queue module that must gate on
+    // shouldRunWorkers(), TYPE_ONLY_MODULES would assert it is type-only when
+    // it demonstrably constructs, and an exclusion list erodes the chokepoint.
+    const source = `
+      import { Worker } from 'node:worker_threads'
+      export function spawn(script: string) { return new Worker(script, { eval: true }) }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: false })
+  })
+
+  it('does NOT flag a Worker reached through another package', () => {
+    const source = `
+      import * as sdk from 'ioredis'
+      export function make() { return new (sdk as unknown as { Worker: new (n: string) => object }).Worker('x') }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: false })
+  })
+
+  it('does NOT flag a locally declared class that happens to be called Worker', () => {
+    // The sharpest of the three: a file that never mentions bullmq, imports
+    // nothing at all, and instantiates its own class.
+    const source = `
+      class Worker { constructor(readonly name: string) {} }
+      export const w = new Worker('local')
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: false })
+  })
+
+  it('DOES flag a name it cannot resolve — dismissal requires evidence', () => {
+    // The tie-break. A name is dismissed only when the file demonstrably binds
+    // it to something that is not bullmq; an unresolvable binding stays
+    // flagged, which is precisely the computed-specifier spelling.
+    const source = `
+      const SPEC = 'bull' + 'mq'
+      export async function f() {
+        const bull = await import(SPEC)
+        return new bull.Worker('q', async () => {}, {} as never)
+      }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: true })
+  })
+
+  it('DOES flag a bare `new Worker(...)` with no binding in the file', () => {
+    // No import, no local declaration — nothing to dismiss it with, so it is
+    // still adjudicated rather than assumed innocent.
+    const source = `export const w = new Worker('q', async () => {}, {} as never)`
     expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: true })
   })
 
