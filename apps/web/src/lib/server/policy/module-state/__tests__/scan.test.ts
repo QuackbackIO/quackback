@@ -561,3 +561,50 @@ describe('initializer spellings that hid a factory', () => {
     }
   })
 })
+
+describe('assignment to a global, both spellings', () => {
+  // The ledger's only `global-assign` entry is `db.ts`'s `globalThis.__db`, so
+  // the bracket form is that entry's obvious variant rather than a
+  // hypothetical. Zero live instances of it today.
+  it('sees the property form', () => {
+    expect(names(`export function boot() { globalThis.__cache = new Map() }`)).toEqual([
+      'globalThis.__cache',
+    ])
+  })
+
+  it('sees the bracket form', () => {
+    expect(names(`export function boot() { globalThis['__cache'] = new Map() }`)).toEqual([
+      'globalThis.__cache',
+    ])
+  })
+
+  it('sees the bracket form on `global` too', () => {
+    expect(names('export function boot() { global[`__cache`] = new Map() }')).toEqual([
+      'global.__cache',
+    ])
+  })
+
+  it('names both spellings identically, so the ledger key is stable', () => {
+    // A site that changed id when someone swapped `.x` for `['x']` would read
+    // as one entry going stale and another appearing.
+    const dot = names(`export function a() { globalThis.__db = {} as never }`)
+    const bracket = names(`export function a() { globalThis['__db'] = {} as never }`)
+    expect(dot).toEqual(bracket)
+  })
+
+  it('ignores a computed key it cannot read', () => {
+    // Precision: an unreadable key would produce a site with no stable name,
+    // which is worse than a miss because the ledger could never match it.
+    expect(
+      names(`declare const k: string
+      export function boot() { globalThis[k] = new Map() }`)
+    ).toEqual([])
+  })
+
+  it('ignores assignment to a non-global object', () => {
+    expect(
+      names(`declare const cfg: Record<string, unknown>
+      export function boot() { cfg['__cache'] = new Map() }`)
+    ).toEqual([])
+  })
+})

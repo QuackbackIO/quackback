@@ -973,18 +973,37 @@ export function extractSites(
   const visitGlobals = (node: ts.Node): void => {
     if (ts.isBinaryExpression(node) && isAssignment(node.operatorToken)) {
       const lhs = unwrap(node.left)
+      // Both spellings. `globalThis.__db = …` is the one this tree uses, and
+      // `globalThis['__db'] = …` is its obvious variant rather than a
+      // hypothetical — a property-access-only rule reports nothing for it.
+      let owner: string | null = null
+      let key: string | null = null
       if (ts.isPropertyAccessExpression(lhs)) {
         const obj = unwrap(lhs.expression)
-        if (ts.isIdentifier(obj) && (obj.text === 'globalThis' || obj.text === 'global')) {
-          sites.push({
-            file: relPath,
-            name: `${obj.text}.${lhs.name.text}`,
-            kind: 'global-assign',
-            line: lineOf(lhs),
-            exported: false,
-            initializer: null,
-          })
+        if (ts.isIdentifier(obj)) {
+          owner = obj.text
+          key = lhs.name.text
         }
+      } else if (ts.isElementAccessExpression(lhs)) {
+        const obj = unwrap(lhs.expression)
+        const arg = unwrap(lhs.argumentExpression)
+        if (
+          ts.isIdentifier(obj) &&
+          (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))
+        ) {
+          owner = obj.text
+          key = arg.text
+        }
+      }
+      if (owner !== null && key !== null && (owner === 'globalThis' || owner === 'global')) {
+        sites.push({
+          file: relPath,
+          name: `${owner}.${key}`,
+          kind: 'global-assign',
+          line: lineOf(lhs),
+          exported: false,
+          initializer: null,
+        })
       }
     }
     ts.forEachChild(node, visitGlobals)

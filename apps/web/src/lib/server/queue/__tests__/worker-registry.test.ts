@@ -66,22 +66,32 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
   let imports = false
   let constructs = false
 
+  /**
+   * `bullmq` itself, or anything beneath it.
+   *
+   * Exact equality missed a deep path — `from 'bullmq/dist/esm/classes/worker'`
+   * resolves the same package and constructs a live, unwrapped `Worker`, one
+   * import line away from the modules that already exist.
+   */
+  const isBullmqSpecifier = (spec: string): boolean =>
+    spec === 'bullmq' || spec.startsWith('bullmq/')
+
   const visit = (node: ts.Node): void => {
-    // import … from 'bullmq'
+    // import … from 'bullmq' (or 'bullmq/…')
     if (
       ts.isImportDeclaration(node) &&
       ts.isStringLiteral(node.moduleSpecifier) &&
-      node.moduleSpecifier.text === 'bullmq'
+      isBullmqSpecifier(node.moduleSpecifier.text)
     ) {
       imports = true
     }
-    // await import('bullmq')
+    // await import('bullmq') / import('bullmq/…')
     if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
       node.arguments.length > 0 &&
       ts.isStringLiteral(node.arguments[0]) &&
-      node.arguments[0].text === 'bullmq'
+      isBullmqSpecifier(node.arguments[0].text)
     ) {
       imports = true
     }
@@ -105,14 +115,23 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
   return { imports, constructs }
 }
 
-/** lib/server files importing bullmq, split by whether they construct a Worker. */
+/**
+ * lib/server files touching bullmq, split by whether they construct a Worker.
+ *
+ * A file is adjudicated if it imports bullmq **or** constructs a `Worker` at
+ * all. Requiring a recognised import let a computed specifier
+ * (`const SPEC = 'bull' + 'mq'`) hide the import while the construction stayed
+ * in plain sight — and construction is the thing the seal is actually about, so
+ * proving where the class came from should never have been a precondition for
+ * asking about it.
+ */
 function bullmqImporters(): { constructing: string[]; typeOnly: string[] } {
   const constructing: string[] = []
   const typeOnly: string[] = []
   for (const full of walkSourceFiles(SERVER_ROOT)) {
     if (!full.endsWith('.ts')) continue
     const { imports, constructs } = classifyBullmqUsage(fs.readFileSync(full, 'utf8'))
-    if (!imports) continue
+    if (!imports && !constructs) continue
     const rel = path.relative(SERVER_ROOT, full).split(path.sep).join('/')
     if (WORKER_FACTORY_MODULES.includes(rel)) continue
     ;(constructs ? constructing : typeOnly).push(rel)
@@ -266,10 +285,49 @@ describe('the seal sees bullmq however it is obtained', () => {
     expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: false })
   })
 
-  it('ignores a file that does not touch bullmq at all', () => {
+  it('reports a Worker construction even with no recognisable bullmq import', () => {
+    // `constructs` alone is enough for the seal to demand adjudication, which
+    // is what closes the computed-specifier spelling above.
     const source = `
       export const w = new Worker('q')
       export async function f() { await import('ioredis') }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: true })
+  })
+
+  it('ignores a file that touches neither', () => {
+    // The precision floor for widening the gate to `imports || constructs`:
+    // an ordinary server module must still be invisible to the seal.
+    const source = `
+      import { db } from '@/lib/server/db'
+      export const count = async () => (await db.select()).length
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: false })
+  })
+
+  it('catches a deep path into the package', () => {
+    // The one that mattered: exact-equality on the specifier missed
+    // `bullmq/dist/esm/classes/worker`, which resolves the same package and
+    // constructs a live, unwrapped Worker. One import line away from the
+    // fifteen modules that already exist.
+    const source = `
+      import { Worker } from 'bullmq/dist/esm/classes/worker'
+      export const w = new Worker('q', async () => {}, {} as never)
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: true })
+  })
+
+  it('catches a computed specifier by the construction it cannot hide', () => {
+    // `const SPEC = 'bull' + 'mq'` defeats every specifier rule, so the import
+    // is genuinely invisible — `imports` is false and stays false. What is not
+    // invisible is `new bull.Worker(...)`, and the seal adjudicates on either,
+    // so the file is still forced into a list.
+    const source = `
+      const SPEC = 'bull' + 'mq'
+      export async function sixteenth() {
+        const bull = await import(SPEC)
+        return new bull.Worker('q', async () => {}, {} as never)
+      }
     `
     expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: true })
   })
