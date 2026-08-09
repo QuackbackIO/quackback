@@ -299,51 +299,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'has.',
   },
   {
-    file: 'apps/web/src/lib/server/events/relay.ts',
-    name: 'draining',
-    category: 'refuses-pooled',
-    reason:
-      'Leader-election and timer state for a relay that drains exactly ONE database. ' +
-      'startOutboxRelay() refuses under pooled tenancy rather than electing itself leader of ' +
-      'whichever database the process happens to hold; the per-tenant relay tier is §7.3 work.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay.ts',
-    name: 'leadership',
-    category: 'refuses-pooled',
-    reason:
-      'Leader-election and timer state for a relay that drains exactly ONE database. ' +
-      'startOutboxRelay() refuses under pooled tenancy rather than electing itself leader of ' +
-      'whichever database the process happens to hold; the per-tenant relay tier is §7.3 work.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay.ts',
-    name: 'pollTimer',
-    category: 'refuses-pooled',
-    reason:
-      'Leader-election and timer state for a relay that drains exactly ONE database. ' +
-      'startOutboxRelay() refuses under pooled tenancy rather than electing itself leader of ' +
-      'whichever database the process happens to hold; the per-tenant relay tier is §7.3 work.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay.ts',
-    name: 'retryTimer',
-    category: 'refuses-pooled',
-    reason:
-      'Leader-election and timer state for a relay that drains exactly ONE database. ' +
-      'startOutboxRelay() refuses under pooled tenancy rather than electing itself leader of ' +
-      'whichever database the process happens to hold; the per-tenant relay tier is §7.3 work.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay.ts',
-    name: 'running',
-    category: 'refuses-pooled',
-    reason:
-      'Leader-election and timer state for a relay that drains exactly ONE database. ' +
-      'startOutboxRelay() refuses under pooled tenancy rather than electing itself leader of ' +
-      'whichever database the process happens to hold; the per-tenant relay tier is §7.3 work.',
-  },
-  {
     file: 'apps/web/src/routes/api/health.ready.ts',
     name: 'migrationsKnownUpToDate',
     category: 'refuses-pooled',
@@ -948,6 +903,67 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The interval handle that re-reads the active tenant list so loops appear and disappear ' +
       'with the fleet. One timer per process by construction; the tenant dimension lives in the ' +
       'loops it maintains, not in the handle.',
+  },
+  {
+    file: 'apps/web/src/lib/server/events/relay-leader.ts',
+    name: 'ownerMemo',
+    category: 'process-lifetime',
+    owner: 'Piece 9 (saas/relay-tier)',
+    reason:
+      'This process s identity as a relay owner, composed once from hostname, pid and a random ' +
+      'suffix. Identifying the PROCESS is exactly what it is for, and it must NOT carry a ' +
+      'tenant: the lease renewal branch is owner = me, so two tenants sharing one owner string ' +
+      'is correct and two processes sharing one is what the random suffix prevents. A ' +
+      'per-tenant owner would make the lease unable to answer "which replica leads this tenant".',
+  },
+  {
+    file: 'apps/web/src/lib/server/events/relay-tier.ts',
+    name: 'loops',
+    category: 'tenant-scoped-key',
+    keyedBy: 'tenant.tenantId',
+    owner: 'Piece 9 (saas/relay-tier)',
+    reason:
+      'One outbox-drain loop per tenant, keyed by tenant id. Each loop owns its own direct ' +
+      'session-mode connection, its own LISTEN outbox_wake doorbell and its own leadership ' +
+      'lease in that tenant s own database, all held in the loop s closure rather than here. ' +
+      'The per-tenant partition IS the design: the five module-scope variables this replaced ' +
+      '(running, leadership, pollTimer, retryTimer, draining) each described ONE database, so ' +
+      'in a process serving many they would have elected a leader for whichever database the ' +
+      'process happened to hold and delivered nothing for the rest.',
+  },
+  {
+    file: 'apps/web/src/lib/server/events/relay-tier.ts',
+    name: 'stats',
+    category: 'tenant-scoped-key',
+    keyedBy: 'opts.tenantId',
+    owner: 'Piece 9 (saas/relay-tier)',
+    reason:
+      'Per-tenant relay counters (passes, drained, enqueued, wakes, leadership fence, ' +
+      'end-to-end lag samples) keyed by tenant id, for diagnostics and the wake-latency ' +
+      'measurement. Shared, one tenant s throughput and one tenant s leadership state would be ' +
+      'reported as another s, and the lag ring would mix two fleets worth of samples into one ' +
+      'percentile.',
+  },
+  {
+    file: 'apps/web/src/lib/server/events/relay-tier.ts',
+    name: 'running',
+    category: 'process-lifetime',
+    owner: 'Piece 9 (saas/relay-tier)',
+    reason:
+      'Start-once latch for the relay tier, the same shape as the job tier s. Holds a boolean ' +
+      'that is a fact about this process, and startRelayTier() returns early on it so a second ' +
+      'call cannot double-start the loops. It carries no tenant dimension: the tenant dimension ' +
+      'lives in loops, which this only gates.',
+  },
+  {
+    file: 'apps/web/src/lib/server/events/relay-tier.ts',
+    name: 'refreshTimer',
+    category: 'process-lifetime',
+    owner: 'Piece 9 (saas/relay-tier)',
+    reason:
+      'The interval handle that re-reads the active tenant list so relay loops appear and ' +
+      'disappear with the fleet. One timer per process by construction; the tenant dimension ' +
+      'lives in the loops it maintains, not in the handle.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/runner.ts',

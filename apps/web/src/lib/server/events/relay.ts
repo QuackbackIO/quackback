@@ -1,14 +1,21 @@
 /**
- * Outbox relay (EVENTING-V2 WO-3) — the worker-role process that drains the
- * `events` outbox into the existing `{event-hooks}` BullMQ fan-out.
+ * Outbox relay (EVENTING-V2 WO-3) — draining the `events` outbox into the hook
+ * fan-out.
  *
- * Flow: a committed `emit()` fires `pg_notify('outbox_wake')`; the leader relay
- * (one per instance, advisory-lock elected) wakes, reads unpublished rows in
- * `id` order, resolves targets via the resolver registry, enqueues one job per
- * target with a DETERMINISTIC job id, then stamps `published_at`. Enqueue
- * happens BEFORE the publish stamp, so a crash mid-drain re-drains the row and
- * the deterministic job id makes the re-enqueue a no-op (BullMQ dedupe +
- * `hook_deliveries`) — at-least-once emission, effectively-once delivery.
+ * This file owns what a drain IS: read order, the reaction-loop depth ceiling,
+ * the strict-resolution retry budget, and at-least-once emission. Where the
+ * drain RUNS — one loop per tenant, on direct session-mode connections, elected
+ * by a lease rather than an advisory lock — is `relay-tier.ts`
+ * (SAAS-HOSTING-STACK.md §7.3).
+ *
+ * Flow: a committed `emit()` fires `pg_notify('outbox_wake')`; the tenant's
+ * leader loop (one per database, elected by the lease in `relay-leader.ts`)
+ * wakes, reads unpublished rows in `id` order, resolves targets via the resolver
+ * registry, enqueues one job per target with a DETERMINISTIC job id, then stamps
+ * `published_at`. Enqueue happens BEFORE the publish stamp, so a crash mid-drain
+ * re-drains the row and the deterministic job id makes the re-enqueue a no-op
+ * (idempotent on the id under both sinks — see `hook-enqueue.ts` — plus
+ * `hook_deliveries`): at-least-once emission, effectively-once delivery.
  *
  * Reaction-loop guard: events whose `context.depth` exceeds MAX_DEPTH are NOT
  * fanned out (they'd be a workflow-caused-event cycle) but ARE marked published
@@ -16,17 +23,13 @@
  */
 import crypto from 'crypto'
 import { db, events, eq, isNull, asc, type Transaction } from '@/lib/server/db'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { logger } from '@/lib/server/logger'
-import { enqueueHookJobsWithIds } from './process'
+import { enqueueHookJobs } from './hook-enqueue'
 import { resolveTargets } from './resolvers/registry'
-import { registerAllResolvers } from './resolvers'
-import { tryAcquireRelayLeadership, type RelayLeadership } from './relay-lock'
 import type { DomainEvent, EventActorType } from './envelope'
 import type { HookTarget } from './hook-types'
 import { toLegacyEvent } from './to-legacy-event'
 import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
-import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import type { EvtId } from '@quackback/ids'
 
 const log = logger.child({ component: 'outbox-relay' })
@@ -72,6 +75,18 @@ export interface DrainResult {
   skipped: number
   /** Rows left unpublished this pass because resolve/enqueue threw (retried next tick). */
   failed: number
+  /**
+   * Per row published this pass: this process's clock at publish minus the
+   * row's `occurred_at`.
+   *
+   * This is the relay's end-to-end latency, and it is deliberately measured
+   * here rather than by whatever started the relay. A harness that times its own
+   * `setTimeout`, or that stops the clock when a NOTIFY arrives rather than when
+   * the row is actually published, reports the instrument instead of the system.
+   * Every row published contributes a sample, whether its doorbell fired or the
+   * poll floor caught it, so the two are on one scale.
+   */
+  lagMsSamples: number[]
 }
 
 /**
@@ -112,14 +127,14 @@ const attemptKey = (id: bigint): string => id.toString()
 export async function drainOnce(
   opts: {
     batchSize?: number
-    enqueue?: typeof enqueueHookJobsWithIds
+    enqueue?: typeof enqueueHookJobs
     resolve?: (event: DomainEvent) => Promise<HookTarget[]>
     /** Override the strict-resolution retry budget (tests). */
     maxStrictResolveAttempts?: number
   } = {}
 ): Promise<DrainResult> {
   const batchSize = opts.batchSize ?? 100
-  const enqueue = opts.enqueue ?? enqueueHookJobsWithIds
+  const enqueue = opts.enqueue ?? enqueueHookJobs
   const resolve = opts.resolve ?? resolveTargets
   // Best-effort degradation only means something against the real multi-sink
   // registry; an injected resolver (tests) always runs strict.
@@ -151,6 +166,7 @@ export async function drainOnce(
   let enqueued = 0
   let skipped = 0
   let failed = 0
+  const lagMsSamples: number[] = []
 
   for (const row of rows) {
     const event = hydrateEvent(row)
@@ -166,6 +182,7 @@ export async function drainOnce(
         'reaction-loop depth ceiling hit — event marked published without fan-out'
       )
       await markPublished(row.id)
+      lagMsSamples.push(Math.max(0, Date.now() - row.occurredAt.getTime()))
       skipped++
       continue
     }
@@ -193,6 +210,7 @@ export async function drainOnce(
         enqueued += jobs.length
       }
       await markPublished(row.id)
+      lagMsSamples.push(Math.max(0, Date.now() - row.occurredAt.getTime()))
       strictAttempts.delete(attemptKey(row.id))
       if (degraded) {
         log.error(
@@ -212,7 +230,7 @@ export async function drainOnce(
     }
   }
 
-  return { drained: rows.length, enqueued, skipped, failed }
+  return { drained: rows.length, enqueued, skipped, failed, lagMsSamples }
 }
 
 /** Age (seconds) of the oldest unpublished event — the "did it fire?" gauge. */
@@ -228,105 +246,24 @@ export async function relayLagSeconds(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
-// Leader loop
+// Where the loop went
 // ---------------------------------------------------------------------------
-
-let running = false
-let leadership: RelayLeadership | null = null
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let retryTimer: ReturnType<typeof setTimeout> | null = null
-let draining = false
-
-async function drainLoop(): Promise<void> {
-  if (draining) return
-  draining = true
-  try {
-    let res: DrainResult
-    do {
-      res = await drainOnce()
-      // Keep going only while a pass makes progress. If every remaining row
-      // failed (res.failed === res.drained), stop and let the 1s poll retry —
-      // otherwise a persistently failing row would hot-spin this loop.
-    } while (running && res.drained > 0 && res.failed < res.drained)
-  } catch (err) {
-    log.error({ err }, 'outbox drain tick failed')
-  } finally {
-    draining = false
-  }
-}
-
-/**
- * Start the relay. Worker-role only, so calling it on a web replica is a no-op.
- * Post-cutover (WO-18) the outbox is the sole delivery path — there is no flag
- * to gate it, so a worker-role process ALWAYS runs the relay. Acquires
- * leadership; a non-leader retries periodically so it takes over if the leader
- * dies.
- */
-export async function startOutboxRelay(): Promise<void> {
-  if (running) return
-  if (!shouldRunWorkers()) {
-    log.info('QUACKBACK_ROLE=web — outbox relay not started')
-    return
-  }
-  // The relay is a single-database subsystem end to end: `leadership`,
-  // `pollTimer` and the LISTEN registration below all belong to ONE database,
-  // and `tryAcquireRelayLeadership` opens its connection from
-  // `config.databaseUrl`, which does not exist under pooled tenancy. Fanning
-  // the relay out across the fleet is SAAS-HOSTING-STACK.md §7.3's job (direct,
-  // session-mode connections, physically separate from the pooled web tier).
-  //
-  // Refuse here rather than let it try. Without this the relay enters a silent
-  // 15-second failure loop: `attemptLeadership` catches the throw, logs, and
-  // reschedules itself forever, so no tenant's outbox is ever drained and the
-  // only evidence is a repeating error nobody reads as "eventing is off".
-  if (isPooledTenancy()) {
-    log.error(
-      'QUACKBACK_TENANCY=pooled — outbox relay not started. The relay drains ONE ' +
-        'database and has no fleet fan-out yet; starting it would elect a leader ' +
-        'for whichever database the process happens to hold. No events will be ' +
-        'delivered until the per-tenant relay tier exists.'
-    )
-    return
-  }
-  // Ensure every sink resolver is registered before we drain anything.
-  registerAllResolvers()
-  running = true
-  await attemptLeadership()
-}
-
-async function attemptLeadership(): Promise<void> {
-  if (!running) return
-  try {
-    leadership = await tryAcquireRelayLeadership()
-  } catch (err) {
-    log.error({ err }, 'failed to attempt relay leadership')
-  }
-  if (!leadership) {
-    // Another instance leads; retry so we take over if it dies.
-    retryTimer = setTimeout(() => void attemptLeadership(), 15_000)
-    retryTimer.unref?.()
-    return
-  }
-  // LISTEN doorbell: wake immediately on a committed emit().
-  await leadership.sql
-    .listen('outbox_wake', () => void drainLoop())
-    .catch((err) => log.error({ err }, 'failed to LISTEN outbox_wake'))
-  // Poll fallback covers a missed NOTIFY (e.g. crash before LISTEN attached).
-  pollTimer = setInterval(() => void drainLoop(), 1000)
-  pollTimer.unref?.()
-  void drainLoop() // drain any backlog on takeover
-  log.info('outbox relay started (leader)')
-}
-
-/** Stop the relay and release leadership. Called from graceful shutdown + tests. */
-export async function stopOutboxRelay(): Promise<void> {
-  running = false
-  if (pollTimer) clearInterval(pollTimer)
-  if (retryTimer) clearTimeout(retryTimer)
-  pollTimer = null
-  retryTimer = null
-  if (leadership) {
-    await leadership.release()
-    leadership = null
-  }
-}
+//
+// The leader loop used to live here: five module-scope variables (`running`,
+// `leadership`, `pollTimer`, `retryTimer`, `draining`) describing ONE database's
+// relay, plus a session-level `pg_advisory_lock` on a dedicated connection.
+//
+// That shape cannot serve a fleet. Every one of those five is a fact about a
+// single database, so in a process holding many they would elect a leader for
+// whichever database the process happened to hold and silently deliver nothing
+// for the rest — which is why the pooled branch refused to start at all rather
+// than run a 15-second retry loop that delivered nothing.
+//
+// `relay-tier.ts` replaces it with one loop per tenant, each owning its own
+// direct connection, its own doorbell, its own lease and its own counters in a
+// closure. There is no shared object left to key wrongly. The state that
+// remains in this file is `strictAttempts`, which is tenant-keyed because
+// `events.id` is a per-database bigserial.
+//
+// See `RELAY.md` for the whole tier, and `relay-leader.ts` for why the advisory
+// lock was replaced by a lease row.

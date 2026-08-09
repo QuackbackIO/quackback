@@ -13,8 +13,8 @@
  * Two consequences run through this file:
  *
  * 1. The connection is built from the tenant's **direct** DSN, not from the pool
- *    cache. It is the same shape `events/relay-lock.ts` already uses for the
- *    relay's session-level advisory lock.
+ *    cache. It is the same shape `events/relay-tier.ts` uses for the outbox
+ *    relay's own doorbell, which shares this module.
  * 2. **A listener is only ever verified by round-tripping a real NOTIFY.**
  *    `verifyWake()` below sends one and waits for it. Nothing in this module
  *    asks the catalogue whether it is registered, and nothing should.
@@ -31,6 +31,9 @@ const log = logger.child({ component: 'job-wake' })
 /** Channel name. Must match the trigger in migration 0253. */
 export const JOB_WAKE_CHANNEL = 'quackback_job_wake'
 
+/** `application_name` on every doorbell connection. Diagnostics, not behaviour. */
+export const WAKE_APPLICATION_NAME = 'quackback-wake-listener'
+
 export interface WakeListener {
   /** Release the LISTEN and close the dedicated connection. */
   close(): Promise<void>
@@ -46,6 +49,16 @@ export interface WakeListener {
 export interface OpenWakeListenerInput {
   /** Direct (session-mode) DSN. A pooled DSN will register and never deliver. */
   directUrl: string
+  /**
+   * Channel to LISTEN on. Defaults to the job queue's.
+   *
+   * Parameterised because the outbox relay tier needs exactly this doorbell on
+   * `outbox_wake` — same direct-connection requirement, same verify-by-round-trip
+   * rule, same poll floor behind it. One implementation with a channel argument
+   * is a smaller surface than two copies of it, and a copy is where the
+   * `pg_listening_channels()` shortcut would reappear.
+   */
+  channel?: string
   /** Resolved per connection, so a rotated credential is picked up on reconnect. */
   password?: () => Promise<string>
   /** Called on every notify, with the queue name the trigger sent. */
@@ -55,23 +68,28 @@ export interface OpenWakeListenerInput {
 }
 
 export async function openWakeListener(input: OpenWakeListenerInput): Promise<WakeListener> {
+  const channel = input.channel ?? JOB_WAKE_CHANNEL
   const sql = postgres(input.directUrl, {
     max: 1,
     // A doorbell that closes itself when idle is not a doorbell.
     idle_timeout: 0,
     connect_timeout: 15,
+    // Named so an operator can see the doorbells in `pg_stat_activity` and tell
+    // them apart from query traffic. A connection that exists only to wait is
+    // otherwise indistinguishable from one that is stuck.
+    connection: { application_name: WAKE_APPLICATION_NAME },
     ...(input.password ? { password: input.password } : {}),
     onnotice: () => {},
   })
 
   const verifyWaiters = new Set<(payload: string) => void>()
 
-  await sql.listen(JOB_WAKE_CHANNEL, (payload) => {
+  await sql.listen(channel, (payload) => {
     for (const waiter of verifyWaiters) waiter(payload)
     input.onWake(payload)
   })
 
-  log.info({ tenant: input.label }, 'job wake listener attached (direct, session mode)')
+  log.info({ tenant: input.label, channel }, 'wake listener attached (direct, session mode)')
 
   return {
     async close() {
@@ -102,15 +120,15 @@ export async function openWakeListener(input: OpenWakeListenerInput): Promise<Wa
         onnotice: () => {},
       })
       try {
-        await sender`SELECT pg_notify(${JOB_WAKE_CHANNEL}, ${probe})`
+        await sender`SELECT pg_notify(${channel}, ${probe})`
       } finally {
         await sender.end({ timeout: 5 }).catch(() => {})
       }
       const ok = await delivered
       if (!ok) {
         log.error(
-          { tenant: input.label },
-          'job wake listener did NOT receive its own probe notify — the queue is running on ' +
+          { tenant: input.label, channel },
+          'wake listener did NOT receive its own probe notify — the queue is running on ' +
             'the poll fallback only. A pooled DSN produces exactly this: the registration is ' +
             'accepted and nothing is ever delivered.'
         )

@@ -139,7 +139,7 @@ not on the one that does. (The mechanism is connection multiplexing:
 not share with the query asking the question.) So:
 
 - the listener is built from the tenant's **direct** DSN, never from the pool
-  cache — the same shape `events/relay-lock.ts` already uses;
+  cache — the same shape `events/relay-tier.ts` uses for the outbox relay;
 - `WakeListener.verify()` sends a real NOTIFY from a _second_ connection and
   waits for it. Nothing here asks the catalogue whether it is registered, and
   nothing should.
