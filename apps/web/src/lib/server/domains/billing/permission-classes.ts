@@ -63,32 +63,28 @@ export const SUPPORT_SURFACE_CATEGORIES: readonly PermissionCategory[] = [
  * Permissions that act on the support surface but are filed under another
  * category, so the category derivation alone would miss them.
  *
- * A named, reviewable exception list rather than a widened category rule.
- * Today it holds one entry:
+ * A named, reviewable exception list rather than a widened category rule. Both
+ * entries are AI permissions filed under `ai` that nonetheless act on the
+ * support surface:
  *
  * - `copilot.use` — *"Use the agent-facing Copilot assistant in the inbox"*.
- *   Categorised under `ai`, but it is an agent tool operating inside a
- *   conversation, and it spends real money doing so. Treating it as a support
- *   action is a judgement call and is flagged as such in BILLING.md.
- *
- * `assistant.manage` is **not** here, and that is an open question rather than
- * a settled call — it is with the operator, because it moves money. Both sides:
- *
- * - *Leave it off.* Configuring how the AI agent behaves is workspace
- *   administration in the same class as `settings.manage`. It is reached from
- *   the automation settings area, not from the inbox.
- * - *Put it on.* The inclusion rule used for `sla.manage`, `routing.manage`
- *   and `workflow.manage` is "none touches a single conversation directly,
- *   but each decides what happens to every conversation" — and
- *   `assistant.manage` gates the agent's persona, guidance, custom actions and
- *   knowledge, which is what every customer is automatically told. As it
- *   stands this file calls *using* Copilot a support write and *configuring*
- *   it not one, which is hard to defend as a distinction.
- *
- * Moving it is one line here plus the classification below; the tests name the
- * cases that would change.
+ *   An agent tool operating inside a conversation, and it **spends metered AI
+ *   budget** doing so. A seat that can consume the workspace's AI spend is not
+ *   what the lite rate is for.
+ * - `assistant.manage` — *"Manage AI assistant behavior, guidance, and action
+ *   controls"*. Settled by the operator after being raised as an open
+ *   question. It gates the agent's persona, guidance, custom actions and
+ *   knowledge — what every customer is automatically told — and it gates the
+ *   Copilot configuration surface. The inclusion rule already applied to
+ *   `sla.manage`, `routing.manage` and `workflow.manage` decides it: none of
+ *   those touches a single conversation directly, but each decides what
+ *   happens to every conversation. Keeping it out would have left this module
+ *   calling *using* Copilot a support write and *configuring* it not one.
  */
-export const SUPPORT_SURFACE_EXTRAS: readonly PermissionKey[] = [PERMISSIONS.COPILOT_USE]
+export const SUPPORT_SURFACE_EXTRAS: readonly PermissionKey[] = [
+  PERMISSIONS.COPILOT_USE,
+  PERMISSIONS.ASSISTANT_MANAGE,
+]
 
 /** Every permission on the customer-support surface, derived from the catalogue. */
 export const SUPPORT_SURFACE_PERMISSIONS: readonly PermissionKey[] = [
@@ -127,6 +123,9 @@ export const SUPPORT_READ_PERMISSIONS: readonly PermissionKey[] = [
  *   any reading that is not purely literal.
  * - `copilot.use` is a **write**: an agent tool that acts inside a thread and
  *   spends AI budget doing it.
+ * - `assistant.manage` is a **write**: it decides what the AI agent says to
+ *   every customer, which is the strongest form of "decides what happens to
+ *   every conversation" in the catalogue.
  */
 export const SUPPORT_WRITE_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.CONVERSATION_REPLY,
@@ -151,6 +150,7 @@ export const SUPPORT_WRITE_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.WORKFLOW_MANAGE,
   PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
   PERMISSIONS.COPILOT_USE,
+  PERMISSIONS.ASSISTANT_MANAGE,
 ]
 
 /** Every classified support-surface key, for the totality assertion in the tests. */

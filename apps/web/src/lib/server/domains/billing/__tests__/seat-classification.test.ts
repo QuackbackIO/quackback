@@ -52,6 +52,23 @@ describe('classifySeat', () => {
     expect(classifySeat(set(keys))).toEqual({ lite: false, copilotEligible: false })
   })
 
+  it('classes an AI operations role as full', () => {
+    // The discriminating case for the operator's decision on
+    // `assistant.manage`. This role can read the inbox and configure what the
+    // AI agent says to every customer, and nothing else — so it is lite unless
+    // `assistant.manage` is classed a support write. Removing it from either
+    // the extras list or the write list turns this red.
+    expect(
+      classifySeat(
+        set([
+          PERMISSIONS.CONVERSATION_VIEW,
+          PERMISSIONS.TICKET_VIEW,
+          PERMISSIONS.ASSISTANT_MANAGE,
+        ])
+      )
+    ).toEqual({ lite: false, copilotEligible: false })
+  })
+
   it('classes a support operations manager as full even without replying', () => {
     // Never touches a conversation directly, decides what happens to all of
     // them. Full by the documented borderline rule.

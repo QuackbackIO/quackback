@@ -73,6 +73,7 @@ describe('the customer-support surface', () => {
       PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
       // Filed under `ai`, pulled in by the explicit extras list.
       PERMISSIONS.COPILOT_USE,
+      PERMISSIONS.ASSISTANT_MANAGE,
     ]) {
       expect({ key, onSurface: surface.has(key) }).toEqual({ key, onSurface: true })
     }
@@ -124,9 +125,12 @@ describe('seat permission classification', () => {
     expect(write.has(PERMISSIONS.COPILOT_USE)).toBe(true)
   })
 
-  it('does not treat configuring the AI agent as a support action', () => {
-    // Deliberately outside the extras list: workspace configuration, in the
-    // same class as settings.manage, rather than an action on a conversation.
-    expect(SUPPORT_SURFACE_PERMISSIONS).not.toContain(PERMISSIONS.ASSISTANT_MANAGE)
+  it('treats configuring the AI agent as a support action', () => {
+    // Operator decision. It reaches the surface only through the extras list —
+    // its catalogue category is `ai` — so this fails if the entry is dropped,
+    // which is the change that would silently move people to the lite rate.
+    expect(SUPPORT_SURFACE_EXTRAS).toContain(PERMISSIONS.ASSISTANT_MANAGE)
+    expect(SUPPORT_SURFACE_PERMISSIONS).toContain(PERMISSIONS.ASSISTANT_MANAGE)
+    expect(SUPPORT_WRITE_PERMISSIONS).toContain(PERMISSIONS.ASSISTANT_MANAGE)
   })
 })

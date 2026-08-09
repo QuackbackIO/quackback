@@ -71,6 +71,28 @@ export interface BillingOverview {
   paymentMethod: BillingPaymentMethod | null
   /** True once a subscription exists, so the UI can offer manage vs buy. */
   hasSubscription: boolean
+  /**
+   * Set when the subscription carries line items whose price is in no plan in
+   * the catalogue — a repricing that has not been reconciled.
+   *
+   * Surfaced rather than left in logs because the failure is invisible to the
+   * only party who can fix it: a repricing fires across the whole book at
+   * once, and nobody watches a per-tenant pod's warn stream. While it is set,
+   * seat *creation* is paused (updates continue), and if the plan itself could
+   * not be resolved the previously stored plan is being held rather than
+   * downgraded.
+   *
+   * Counts only. No item id and no price id: those are provider references,
+   * and `no-client-leak.db.test.ts` asserts none reaches the client.
+   */
+  catalogueDrift: {
+    /** Licensed items the catalogue cannot account for. Seat creation is paused. */
+    unaccountedLicensedItems: number
+    /** Metered items likewise. These do not pause anything. */
+    unaccountedMeteredItems: number
+    /** True when the subscription's prices resolve to no plan at all. */
+    planUnresolvable: boolean
+  } | null
   /** Only present in the provider's own dashboard sense; never an id. */
   livemode: boolean
 }
@@ -84,7 +106,9 @@ export interface BillingOverview {
  * The page needs to *show* a plan and a card, not to *address* the provider —
  * every action that needs an identifier resolves it server-side.
  */
-export async function getBillingOverview(): Promise<BillingOverview | null> {
+export async function getBillingOverview(
+  deps: { client?: BillingProviderClient } = {}
+): Promise<BillingOverview | null> {
   const config = getBillingConfig()
   if (!config) return null
 
@@ -98,9 +122,10 @@ export async function getBillingOverview(): Promise<BillingOverview | null> {
   let invoices: BillingInvoice[] = []
   let paymentMethod: BillingPaymentMethod | null = null
   let cancelAtPeriodEnd = false
+  let catalogueDrift: BillingOverview['catalogueDrift'] = null
 
   if (stored) {
-    const client = makeProviderClient(config)
+    const client = deps.client ?? makeProviderClient(config)
     // Provider reads are best-effort: an outage must degrade the page to
     // "plan and seats, no invoice history" rather than break it. This is a
     // commercial surface, and the same failure direction §8.1 argues for.
@@ -136,6 +161,17 @@ export async function getBillingOverview(): Promise<BillingOverview | null> {
     }
     if (subscriptionResult.status === 'fulfilled') {
       cancelAtPeriodEnd = subscriptionResult.value.cancel_at_period_end === true
+      // Recomputed from the same snapshot mapping the sync uses, so the page
+      // cannot claim a healthy catalogue while the sync is refusing to create.
+      const snapshot = toSnapshot(subscriptionResult.value, config, new Date())
+      const unaccounted = snapshot.unaccountedItems
+      if (unaccounted.length > 0) {
+        catalogueDrift = {
+          unaccountedLicensedItems: unaccounted.filter((item) => item.licensed).length,
+          unaccountedMeteredItems: unaccounted.filter((item) => !item.licensed).length,
+          planUnresolvable: snapshot.plan === null,
+        }
+      }
     }
   }
 
@@ -164,6 +200,7 @@ export async function getBillingOverview(): Promise<BillingOverview | null> {
     invoices,
     paymentMethod,
     hasSubscription: stored !== null,
+    catalogueDrift,
     livemode: config.livemode,
   }
 }

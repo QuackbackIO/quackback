@@ -29,7 +29,7 @@
 
 import { and, billingSubscriptionState, db, eq, lt, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { writeCloudConfig } from '../settings/cloud/cloud.service'
+import { getCloudConfig, writeCloudConfig } from '../settings/cloud/cloud.service'
 import { writeTierLimits } from '../settings/tier-limits.write'
 import type { BillingStatus, CloudBilling } from '../settings/cloud/cloud.types'
 import type { PlanId } from '../settings/cloud/cloud.types'
@@ -216,6 +216,11 @@ export function effectivePlan(snapshot: SubscriptionSnapshot | null): PlanId {
 export interface ApplyResult {
   /** The plan now stored. */
   plan: PlanId
+  /**
+   * True when the plan could not be resolved from the subscription's prices
+   * and the previously stored plan was kept rather than falling to Free.
+   */
+  planHeld: boolean
   cloudChanged: boolean
   limitsChanged: boolean
   /** True when the snapshot was refused as older than the applied one. */
@@ -262,10 +267,16 @@ export async function applySubscription(
       { subscriptionRef: snapshot.subscriptionRef, fetchedAt: snapshot.fetchedAt },
       'refusing an older subscription snapshot; a newer one is already applied'
     )
-    return { plan: effectivePlan(snapshot), cloudChanged: false, limitsChanged: false, stale: true }
+    return {
+      plan: effectivePlan(snapshot),
+      planHeld: false,
+      cloudChanged: false,
+      limitsChanged: false,
+      stale: true,
+    }
   }
 
-  const plan = effectivePlan(snapshot)
+  const { plan, planHeld } = await resolvePlanToApply(snapshot)
 
   // `customerRef` is present in the patch only when there IS a snapshot. The
   // key is omitted rather than set to null on the empty path, because
@@ -310,10 +321,63 @@ export async function applySubscription(
 
   return {
     plan,
+    planHeld,
     cloudChanged: cloud.changed,
     limitsChanged: limitsResult.changed,
     stale: false,
   }
+}
+
+/**
+ * The plan to write, which is `effectivePlan()` except in one case.
+ *
+ * ## Holding the last known plan
+ *
+ * `planForPrice` resolves a subscription's plan by looking its prices up in
+ * the catalogue, so a subscription billing entirely under **retired** prices
+ * resolves to no plan at all. `effectivePlan()` then reads `null` as "not on
+ * a plan" and writes Free — and a paying customer loses every entitlement in
+ * the product on the next webhook, while still paying the old price at the
+ * provider.
+ *
+ * That is not exotic. A price's amount is immutable at the provider, so any
+ * repricing mints a new price object; the trigger is an ordinary commercial
+ * action, and it fires across the whole book at once.
+ *
+ * **The discriminator is whether anything is unaccounted, not whether the plan
+ * is null.** A genuine downgrade or cancellation also produces no plan, and
+ * falling to Free is exactly right there — the difference is that such a
+ * subscription's items all resolve. Only when the subscription carries a
+ * licensed item the catalogue cannot account for is `null` evidence of a stale
+ * catalogue rather than of a customer who stopped paying.
+ *
+ * Two further conditions keep the hold narrow. The status must still entitle
+ * the plan, so a cancellation is never held. And there must be a stored plan
+ * to hold — a workspace that never had one falls to Free as before.
+ */
+async function resolvePlanToApply(
+  snapshot: SubscriptionSnapshot | null
+): Promise<{ plan: PlanId; planHeld: boolean }> {
+  const resolved = effectivePlan(snapshot)
+  if (!snapshot) return { plan: resolved, planHeld: false }
+  if (snapshot.plan !== null) return { plan: resolved, planHeld: false }
+  if (!entitlesPlan(snapshot)) return { plan: resolved, planHeld: false }
+  if (!snapshot.unaccountedItems.some((item) => item.licensed)) {
+    return { plan: resolved, planHeld: false }
+  }
+
+  const current = await getCloudConfig()
+  if (!current.plan) return { plan: resolved, planHeld: false }
+
+  log.warn(
+    {
+      subscriptionRef: snapshot.subscriptionRef,
+      heldPlan: current.plan,
+      unaccountedItems: snapshot.unaccountedItems,
+    },
+    'subscription resolves to no plan but carries unaccounted licensed items; holding the last known plan rather than downgrading'
+  )
+  return { plan: current.plan, planHeld: true }
 }
 
 /**

@@ -727,6 +727,208 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     expect(row?.cloud).toMatchObject({ plan: 'free', billing: { status: 'canceled' } })
   })
 
+  it('holds the last known plan when a repricing makes it unresolvable', async () => {
+    // The most severe consequence of the same repricing trigger. A
+    // subscription billing entirely under retired prices resolves to no plan,
+    // and `null` used to read as "not on a plan" — so a paying customer lost
+    // every entitlement in the product on the next webhook while still paying
+    // the old price at the provider.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_on_pro',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+    invalidateTierLimitsCache()
+    // Precondition: the workspace really is on Pro before the repricing, or
+    // "still Pro afterwards" would prove nothing.
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+    await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
+
+    // Every price rotated. Nothing on the subscription resolves.
+    const rotated = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    rotated.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: {
+        data: [{ id: 'si_seat', quantity: 2, price: { id: 'price_pro_seat_v2' } }],
+      },
+    }))
+    await deliver(
+      {
+        id: 'evt_repriced',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      rotated
+    )
+    invalidateTierLimitsCache()
+
+    // Still Pro, and the gated feature still works.
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+    await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
+    expect(await getTierLimits()).toMatchObject({ maxBoards: 25 })
+  })
+
+  it('downgrades on a cancellation even when the catalogue has also drifted', async () => {
+    // The discriminating case for the status half of the hold, and the ONLY
+    // one that reaches it: the hold's early returns mean a subscription whose
+    // prices still resolve never consults the status at all. To exercise it
+    // the subscription must be unresolvable AND unaccounted AND cancelled —
+    // at which point holding would keep a cancelled customer entitled.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_pro_before_cancel',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+
+    const cancelledAndDrifted = makeStub(calls, 'canceled', { ...INITIAL_QUANTITIES })
+    cancelledAndDrifted.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'canceled',
+      current_period_end: 1_774_915_200,
+      items: { data: [{ id: 'si_seat', quantity: 2, price: { id: 'price_pro_seat_v2' } }] },
+    }))
+    await deliver(
+      {
+        id: 'evt_cancel_drifted',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      cancelledAndDrifted
+    )
+    invalidateTierLimitsCache()
+
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'free',
+    })
+    await expect(requireEntitlement('customDomain')).rejects.toBeInstanceOf(
+      EntitlementRequiredError
+    )
+  })
+
+  it('still downgrades on an ordinary cancellation, whose prices all resolve', async () => {
+    // Not a test of the hold — this subscription resolves, so the hold returns
+    // early without consulting anything. It pins the ordinary path so a future
+    // change to the hold cannot break the common case unnoticed.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_on_pro_2',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+
+    await deliver(
+      {
+        id: 'evt_cancelled',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'canceled', { ...INITIAL_QUANTITIES })
+    )
+    invalidateTierLimitsCache()
+
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'free',
+    })
+    await expect(requireEntitlement('customDomain')).rejects.toBeInstanceOf(
+      EntitlementRequiredError
+    )
+  })
+
+  it('surfaces catalogue drift on the billing page rather than only in logs', async () => {
+    // The frozen state is invisible to the only party who can fix it, so it
+    // has to be readable without a log stream. Counts only — an item id or a
+    // price id would be a provider reference reaching the client.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_drifted',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+
+    const drifted = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    drifted.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: {
+        data: [
+          { id: 'si_seat', quantity: 1, price: { id: 'price_pro_seat' } },
+          { id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite_retired' } },
+          {
+            id: 'si_usage',
+            price: { id: 'price_retired_usage', recurring: { usage_type: 'metered' } },
+          },
+        ],
+      },
+    }))
+
+    const { getBillingOverview } = await import('../billing.service')
+    const overview = await getBillingOverview({ client: drifted })
+    expect(overview?.catalogueDrift).toEqual({
+      unaccountedLicensedItems: 1,
+      unaccountedMeteredItems: 1,
+      // The seat price still resolves, so the plan is known.
+      planUnresolvable: false,
+    })
+  })
+
+  it('reports no catalogue drift when every price resolves', async () => {
+    // The negative, in a state where the negative could have been false: the
+    // same page, the same fetch path, a subscription whose prices are all in
+    // the catalogue.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_clean',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+    const { getBillingOverview } = await import('../billing.service')
+    const overview = await getBillingOverview({
+      client: makeStub(calls, 'active', { ...INITIAL_QUANTITIES }),
+    })
+    expect(overview?.catalogueDrift).toBeNull()
+  })
+
   it('refuses to write a plan the config file has pinned', async () => {
     // An operator pinning cloud.plan in /etc/quackback/config.yaml must beat
     // a webhook. Without this the file's declaration would last until the

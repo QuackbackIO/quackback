@@ -107,6 +107,7 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
             </p>
           )}
           <SeatSummary overview={overview} />
+          {overview.catalogueDrift && <CatalogueDriftNotice overview={overview} />}
         </div>
       </SettingsCard>
 
@@ -270,6 +271,35 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
           </div>
         </SettingsCard>
       )}
+    </div>
+  )
+}
+
+/**
+ * Shown when the subscription carries line items priced outside the plan
+ * catalogue — almost always a repricing that has not been reconciled.
+ *
+ * It matters on screen rather than in logs because the state is invisible to
+ * the only party who can fix it, and because two things silently change while
+ * it holds: new seats stop being added to the subscription, and a plan that
+ * cannot be resolved is held at its last known value instead of downgrading.
+ */
+function CatalogueDriftNotice({ overview }: { overview: BillingOverview }) {
+  const drift = overview.catalogueDrift
+  if (!drift) return null
+  const frozen = drift.unaccountedLicensedItems > 0
+  return (
+    <div className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
+      <p className="text-[13px] font-medium">Billing catalogue is out of step</p>
+      <p className="mt-0.5 text-[13px] text-muted-foreground">
+        This subscription has{' '}
+        {drift.unaccountedLicensedItems + drift.unaccountedMeteredItems} line item
+        {drift.unaccountedLicensedItems + drift.unaccountedMeteredItems === 1 ? '' : 's'} priced
+        outside the current plan catalogue.
+        {frozen && ' New seats are not being added to it until that is reconciled.'}
+        {drift.planUnresolvable &&
+          ' The plan shown above is the last known one, held rather than downgraded.'}
+      </p>
     </div>
   )
 }

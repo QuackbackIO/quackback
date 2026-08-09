@@ -230,16 +230,20 @@ Two judgement calls inside the surface, both reversible in one line:
   write, **`lite ⇒ !copilotEligible` is a theorem**, so billing the add-on on
   `seats.full` can never charge for someone ineligible. It is pinned by a test
   rather than left as a coincidence.
-- **`assistant.manage` does not — and that is an OPEN QUESTION with the
-  operator, not a settled call.** It moves money, so it is recorded here with
-  both sides rather than decided in code review:
+- **`assistant.manage` counts as a support write too.** *(Operator decision,
+  after being raised as an open question.)* The rule already applied to
+  `sla.manage`, `routing.manage` and `workflow.manage` decides it — *"none
+  touches a single conversation directly, but each decides what happens to
+  every conversation"* — and `assistant.manage` gates the agent's persona,
+  guidance, custom actions and knowledge, which is what every customer is
+  automatically told. It also gates the Copilot configuration surface, so
+  keeping it out would have left the module calling *using* Copilot a support
+  write and *configuring* it not one.
 
-  | Position | Argument |
-  | --- | --- |
-  | Leave it off (current) | Configuring the AI agent is workspace administration, in the same class as `settings.manage`. It is reached from the automation settings area, not the inbox. |
-  | Put it on | The rule used to include `sla.manage`, `routing.manage` and `workflow.manage` is *"none touches a single conversation directly, but each decides what happens to every conversation"* — and `assistant.manage` gates the agent's persona, guidance, custom actions and knowledge, which is what every customer is automatically told. As it stands the module calls *using* Copilot a support write and *configuring* it not one. |
-
-  Moving it is one entry in `SUPPORT_SURFACE_EXTRAS` plus its classification.
+  The discriminating case is an "AI operations" role holding inbox reads plus
+  `assistant.manage` and nothing else: it is a **full** seat, and there is a
+  test that goes red if the entry is removed from either the extras list or
+  the write list.
 
 ### One derivation, not two
 
@@ -272,7 +276,13 @@ the plan. Two consequences follow, both handled:
 - **A checkout could otherwise have no licensed line at all**, on a plan that
   sells no lite seat. So `billableQuantities` takes the plan's prices: **a plan
   with no lite price has no lite seats**, and counts every teammate as full.
-  There is no cheaper product to put them on.
+
+  *(Operator decision — recorded so it is not relitigated.* You cannot bill
+  someone at a rate that does not exist. The alternatives are free riders, or
+  refusing to let the person exist, and both are worse. The oddity — that the
+  same teammate can be a lite seat on one plan and a full seat on another — is
+  largely cosmetic, because a plan without a lite SKU is usually `free`, which
+  costs nothing.)*
 - **A seat class with a zero quantity at checkout has no subscription item**,
   and the sync used to skip any meter without one — so the first support agent
   hired by an all-lite workspace would never have been billed. The sync now
@@ -313,6 +323,48 @@ A metered item is marked `licensed: false` and does not block, since it carries
 no quantity and cannot become a second seat charge. An item whose `usage_type`
 the provider did not report is treated as licensed — guessing "metered" wrongly
 costs a duplicate charge, guessing "licensed" wrongly costs a skipped creation.
+
+### An unresolvable plan holds, it does not fall to Free
+
+The same repricing trigger has a worse consequence than a duplicate line.
+`planForPrice` resolves a subscription's plan from its prices, so a
+subscription billing entirely under retired prices resolves to **no plan** —
+and `null` used to read as "not on a plan", writing Free. A paying customer
+lost every entitlement in the product on the next webhook while still paying
+the old price at the provider.
+
+`applySubscription` now holds the last known plan instead, under three
+conditions, each of which keeps the hold narrow:
+
+1. the subscription resolves to no plan, **and**
+2. it carries a licensed item the catalogue cannot account for, **and**
+3. its status still entitles a plan, **and** there is a stored plan to hold.
+
+**The discriminator is (2), not (1).** A genuine downgrade or cancellation also
+yields no plan, and falling to Free is exactly right there — the difference is
+that such a subscription's items all resolve, so `null` is evidence about the
+customer rather than about the catalogue. Condition (3) is what stops a
+cancelled customer keeping their entitlements when *both* problems coincide,
+and it is the only reachable path to that branch: a subscription whose prices
+resolve returns before the status is ever consulted.
+
+### The frozen state is on the billing page, not only in logs
+
+`getBillingOverview()` reports `catalogueDrift` — how many licensed and metered
+items the catalogue cannot account for, and whether the plan is unresolvable —
+recomputed from the same snapshot mapping the sync uses, so the page cannot
+claim a healthy catalogue while the sync is refusing to create.
+
+It is surfaced rather than logged because the failure is **invisible to the
+only party who can fix it**: a repricing fires across the whole book at once,
+and nobody watches a per-tenant pod's warn stream. Counts only — no item id and
+no price id, because those are provider references and
+`no-client-leak.db.test.ts` asserts none reaches the client.
+
+Note what the freeze is and is not: it is a **deferral, not a loss**. Once the
+catalogue is back in step the blocked creation happens on the next sync, and
+because the creation branch never consults `syncedQuantities`, a stale record
+from the frozen period cannot poison it.
 
 ### Nothing is pushed to a subscription that does not entitle its plan
 
