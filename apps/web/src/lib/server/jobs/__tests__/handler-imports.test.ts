@@ -32,9 +32,17 @@
  * It does not, and cannot, guarantee that about the whole application's lazy
  * graph: a module imported at call time runs under whatever scope its caller
  * has, which for a request is the *correct* tenant. That only becomes a hazard
- * when such a module captures scope-dependent state at its top level — which is
- * the module-scope-state class the `lib/server/policy/` scanner owns, not this
- * one.
+ * when such a module captures scope-dependent state at its top level, and is
+ * then shared process-wide.
+ *
+ * **That makes the boundary a cross-piece contract rather than a self-contained
+ * guarantee, so name where the other half lives:**
+ * `lib/server/policy/module-state/` — the §4.4 scanner — owns every
+ * module-scope mutable-state site under `lib/server/**`, reconciled against a
+ * checked-in ledger. It is a *source* scan, so load order is irrelevant to it:
+ * it sees a captured singleton whether the module was imported at prime time,
+ * at call time, or never. This test's boundary is only safe while that scanner
+ * keeps covering those modules.
  *
  * A source scan is the right instrument because the property is about *when* a
  * module loads, which no runtime assertion in this process can observe after the

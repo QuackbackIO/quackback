@@ -303,7 +303,26 @@ imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
   every registered handler module and fails on a call-time `import(`. A source
   scan rather than a runtime assertion, because the property is about _when_ a
   module loaded and the module registry keeps no record of the scope it loaded
-  under.
+  under. `__tests__/priming.test.ts` pins the other half — that priming actually
+  runs — because the scan proves only that the modules _can_ be primed.
+
+  **The scan is one level deep, and the boundary is a cross-piece contract.** It
+  reads the seven wrapper files, not their graph. Deepening it was measured and
+  rejected: the modules those seven statically import carry 32 call-time imports
+  across 12 files (`settings.service` 24, `conversation.service` 6,
+  `pending-actions.service` 2) — ordinary lazy loading, none of it
+  queue-specific. So the guarantee is: **the wrappers and their static graph load
+  before any scope opens.** Deeper than that, a call-time import runs under
+  whatever scope its caller has, which for a request is the _correct_ tenant; the
+  hazard is only that the module is then shared process-wide, and only if it
+  captured scope-dependent state at its top level.
+
+  **That other half is `lib/server/policy/module-state/`**, the §4.4 scanner,
+  which owns every module-scope mutable-state site under `lib/server/**` against
+  a checked-in ledger. Being a source scan, load order is irrelevant to it — it
+  sees a captured singleton whether the module loaded at prime time, at call
+  time, or never. This piece's boundary is sound only while that scanner keeps
+  covering those modules.
 
   A memo miss still resolves and logs — but that path only covers the wrapper,
   so the scan is what actually holds the property.

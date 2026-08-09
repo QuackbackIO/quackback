@@ -154,7 +154,11 @@ describe('running a job does not import anything', () => {
 
     // Stamp and claim under the same tenant, or the claim's own tenant
     // assertion refuses the row and the handler is never reached — a fixture
-    // that never arrives at the branch it asserts about.
+    // that never arrives at the branch it asserts about. The guard below is for
+    // DIAGNOSIS, not detection: `runJob(undefined)` throws either way, so the
+    // broken fixture fails regardless. What the guard buys is that it fails as
+    // a named fixture fault rather than as a TypeError a future reader would
+    // plausibly "fix" with an optional chain.
     currentTenantId = 'inst_alpha'
     await enqueueJob({ queue: q, maxAttempts: 1 })
     const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: 30_000 })
