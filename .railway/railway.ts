@@ -97,6 +97,26 @@ export default defineRailway(() => {
     // work belongs to the migrator role.
     SKIP_MIGRATIONS: 'true',
 
+    // The compatibility gate (§10.5), and the reason it is not optional here.
+    // Unset, a tenant whose schema is older than this build does not degrade —
+    // it 500s at query time, because drizzle emits explicit column lists and
+    // `select …, "cloud", … from "settings"` throws where the column does not
+    // exist. Set, the same tenant is refused on pool checkout with a 503 and a
+    // `Retry-After`, alone, while every other tenant keeps serving.
+    //
+    // The value is the newest migration THIS build bundles, and that is the
+    // honest floor rather than a conservative one: the drizzle TS schema
+    // declares `settings.cloud`/`cloud_revision` (0249/0250), `job_queue`
+    // (0253), `outbox_relay_leader` (0256) and the five kv/presence tables
+    // (0257), so a tenant below any of them cannot be served by this image at
+    // all. Bump it with the bundle.
+    //
+    // A value naming no bundled migration is a refusal to start, not a floor of
+    // zero — `boot-config.ts` resolves it as the first statement of `server.ts`
+    // and exits 1. Declared on every app service because the check runs on pool
+    // checkout, which the worker and cron roles also perform.
+    MIN_SCHEMA_VERSION: '0257_pg_kv_presence_realtime',
+
     // Fleet-level secrets, set out of band and never written to source.
     SECRET_KEY: preserve(),
     NEON_API_KEY: preserve(),
