@@ -150,6 +150,11 @@ in a browser bundle lives in one user's tab.
   ledger line, never a missed site), and resolving symbols would mean a full
   type-checker pass on every CI run. Cross-file mutation is restricted to files
   that actually import the name.
+- **Factory resolution follows first-party imports only.** A callee from
+  `node_modules` cannot be analysed, which is why `new X(...)` is a site on its
+  own rather than a judgement about what the constructor does. A plain _call_
+  into a third-party module (`logger.child(...)`) is still not a site — there
+  are hundreds of those and flagging them would drown the ledger.
 - **The three unverified categories are human claims.** The ledger makes them
   visible and reviewable; it does not make them true. That is what the reason
   field and the golden diff are for.
