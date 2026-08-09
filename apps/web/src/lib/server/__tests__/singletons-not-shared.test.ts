@@ -173,7 +173,13 @@ describe('the relay refuses to run pooled rather than leading one database', () 
       isPooledTenancy: () => true,
       POOLED_TENANCY: 'pooled',
     }))
-    vi.doMock('@/lib/server/db', () => ({ db: {}, events: {}, eq: () => null, isNull: () => null, asc: () => null }))
+    vi.doMock('@/lib/server/db', () => ({
+      db: {},
+      events: {},
+      eq: () => null,
+      isNull: () => null,
+      asc: () => null,
+    }))
 
     const { startOutboxRelay } = await import('../events/relay')
     await startOutboxRelay()
@@ -201,7 +207,13 @@ describe('the relay refuses to run pooled rather than leading one database', () 
       isPooledTenancy: () => false,
       POOLED_TENANCY: 'pooled',
     }))
-    vi.doMock('@/lib/server/db', () => ({ db: {}, events: {}, eq: () => null, isNull: () => null, asc: () => null }))
+    vi.doMock('@/lib/server/db', () => ({
+      db: {},
+      events: {},
+      eq: () => null,
+      isNull: () => null,
+      asc: () => null,
+    }))
 
     const { startOutboxRelay, stopOutboxRelay } = await import('../events/relay')
     await startOutboxRelay()

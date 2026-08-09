@@ -79,7 +79,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'authInstances',
     category: 'tenant-keyed',
     reason:
-      'A built better-auth instance closes over one workspace\'s database adapter, OAuth providers, ' +
+      "A built better-auth instance closes over one workspace's database adapter, OAuth providers, " +
       'trusted origins and base URL. Shared, every tenant authenticates against whichever one built ' +
       'it.',
   },
@@ -104,7 +104,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'rateLimitCounters',
     category: 'tenant-keyed',
     reason:
-      'Backs better-auth\'s built-in limiter, whose own store is a module-scope Map keyed by ip+path ' +
+      "Backs better-auth's built-in limiter, whose own store is a module-scope Map keyed by ip+path " +
       'shared across every betterAuth() instance in a process.',
   },
   {
@@ -129,8 +129,8 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'memoizedAssistantPrincipalId',
     category: 'tenant-keyed',
     reason:
-      'Written as the author foreign key on every message the assistant sends, so one workspace\'s id ' +
-      'memoized process-wide is another workspace\'s rows pointing at a principal that does not exist ' +
+      "Written as the author foreign key on every message the assistant sends, so one workspace's id " +
+      "memoized process-wide is another workspace's rows pointing at a principal that does not exist " +
       'in its database.',
   },
   {
@@ -138,7 +138,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'cachedLimits',
     category: 'tenant-keyed',
     reason:
-      'The billing ceiling. Shared, whichever workspace is read first sets everyone\'s limits, and ' +
+      "The billing ceiling. Shared, whichever workspace is read first sets everyone's limits, and " +
       'nothing errors: the wrong number is simply believed.',
   },
   {
@@ -155,7 +155,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'liveAttributeKeysCache',
     category: 'tenant-keyed',
     reason:
-      'Attribute keys read out of one workspace\'s stored workflow graphs. Shared, one workspace\'s ' +
+      "Attribute keys read out of one workspace's stored workflow graphs. Shared, one workspace's " +
       'vocabulary decides which conversation attributes another re-classifies, spending its AI budget ' +
       'on keys its own workflows never branch on.',
   },
@@ -174,7 +174,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'tenant-keyed',
     reason:
       'events.id is a per-database bigserial, so two workspaces both have an event 5. Shared, one ' +
-      'workspace\'s ten failed resolutions spend another\'s retry budget and drop that event\'s ' +
+      "workspace's ten failed resolutions spend another's retry budget and drop that event's " +
       'targets on its first attempt.',
   },
   {
@@ -182,7 +182,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'cachedAssistantPrincipalId',
     category: 'tenant-keyed',
     reason:
-      'A principal id is a row in one workspace\'s database, so a shared memo flags a foreign id as ' +
+      "A principal id is a row in one workspace's database, so a shared memo flags a foreign id as " +
       '"this is the assistant" everywhere else, mislabelling human agents\' turns.',
   },
   {
@@ -190,8 +190,8 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'checkedAt',
     category: 'tenant-keyed',
     reason:
-      'The re-check clock for the memo above; shared, one workspace\'s check suppresses every other ' +
-      'workspace\'s.',
+      "The re-check clock for the memo above; shared, one workspace's check suppresses every other " +
+      "workspace's.",
   },
   {
     file: 'apps/web/src/lib/server/realtime/stream-connection-limit.ts',
@@ -200,7 +200,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Concurrency gauge. The GLOBAL cap stays shared on purpose (file descriptors are a property of ' +
       'the process), but the per-tenant and per-(tenant, IP) buckets are what stop one workspace ' +
-      'consuming the whole budget or one office IP\'s use of workspace A refusing its streams in ' +
+      "consuming the whole budget or one office IP's use of workspace A refusing its streams in " +
       'workspace B.',
   },
   {
@@ -209,9 +209,9 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'tenant-keyed',
     owner: 'Piece 18 (saas/tenant-secrets)',
     reason:
-      'The S3/R2 client. Shared, every tenant\'s uploads, presigned URLs and private reads resolve ' +
-      'against the first tenant\'s bucket, and succeed cleanly because R2 has no notion of tenant. ' +
-      'Partitioned by Piece 5; the CREDENTIALS each client is built with are Piece 18\'s.',
+      "The S3/R2 client. Shared, every tenant's uploads, presigned URLs and private reads resolve " +
+      "against the first tenant's bucket, and succeed cleanly because R2 has no notion of tenant. " +
+      "Partitioned by Piece 5; the CREDENTIALS each client is built with are Piece 18's.",
   },
   {
     file: 'apps/web/src/lib/server/sweep-lock.ts',
@@ -228,7 +228,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'tenant-keyed',
     reason:
       'The OAuth client registration budget is a per-workspace resource. Shared, one address exhausts ' +
-      'every workspace\'s allowance at once and a legitimate registration is refused because of ' +
+      "every workspace's allowance at once and a legitimate registration is refused because of " +
       'traffic aimed elsewhere.',
   },
   {
@@ -238,7 +238,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     keyedBy: 'tenantKey',
     reason:
       'Keyed by the WIRE channel name, which tenantKey() namespaces. Keyed by the logical name it ' +
-      'would hand one workspace\'s inbox stream another workspace\'s messages on a bus with no ' +
+      "would hand one workspace's inbox stream another workspace's messages on a bus with no " +
       'authorization layer of its own.',
   },
   {
@@ -247,7 +247,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'tenant-scoped-key',
     keyedBy: 'cacheKey',
     reason:
-      'Memoized role passwords keyed by project + branch + role, which identify one tenant\'s ' +
+      "Memoized role passwords keyed by project + branch + role, which identify one tenant's " +
       'database physically.',
   },
   {
@@ -283,8 +283,8 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'tenant-scoped-key',
     keyedBy: 'proxyCacheKey',
     reason:
-      'Holds file BYTES keyed by storage key. The bucket is the tenant boundary, so two tenants\' ' +
-      'keys share this heap the moment one process serves both, and a hit returns the other tenant\'s ' +
+      "Holds file BYTES keyed by storage key. The bucket is the tenant boundary, so two tenants' " +
+      "keys share this heap the moment one process serves both, and a hit returns the other tenant's " +
       'file with a 200.',
   },
   {
@@ -403,7 +403,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'content-addressed',
     reason:
       'Pre-compressed gzip/brotli variants keyed by the response body string itself, which already ' +
-      'bakes in the tenant\'s base URL and widget config.',
+      "bakes in the tenant's base URL and widget config.",
   },
   {
     file: 'apps/web/src/lib/server/config.ts',
@@ -436,7 +436,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'versionCache',
     category: 'fleet-wide',
     reason:
-      'The running build\'s own release version, checked against the public releases feed. One fleet ' +
+      "The running build's own release version, checked against the public releases feed. One fleet " +
       'runs one image.',
   },
   {
@@ -539,7 +539,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: '_dbSource',
     category: 'process-lifetime',
     reason:
-      'A stateless strategy object. Its get()/has() read the ACTIVE tenant\'s ' +
+      "A stateless strategy object. Its get()/has() read the ACTIVE tenant's " +
       'integration_platform_credentials rows through the db Proxy on every call; it caches nothing.',
   },
   {
@@ -617,7 +617,8 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     file: 'apps/web/src/lib/server/events/catalogue/define.ts',
     name: 'registry',
     category: 'process-lifetime',
-    reason: 'Event definitions registered at import from static declarations. Identical for every tenant.',
+    reason:
+      'Event definitions registered at import from static declarations. Identical for every tenant.',
   },
   {
     file: 'apps/web/src/lib/server/events/process.ts',
@@ -647,7 +648,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'resolvers',
     category: 'process-lifetime',
     reason:
-      'The registered sink resolver implementations. Stateless; each reads the active tenant\'s ' +
+      "The registered sink resolver implementations. Stateless; each reads the active tenant's " +
       'database when asked.',
   },
   {
@@ -685,7 +686,8 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     file: 'apps/web/src/lib/server/queue/role.ts',
     name: 'warnedInvalid',
     category: 'process-lifetime',
-    reason: 'Warn-once latch for an invalid QUACKBACK_ROLE, which is a process-level environment variable.',
+    reason:
+      'Warn-once latch for an invalid QUACKBACK_ROLE, which is a process-level environment variable.',
   },
   {
     file: 'apps/web/src/lib/server/queue/worker-registry.ts',
@@ -764,13 +766,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'The idle-eviction interval handle. One timer per process drives eviction across every ' +
-      'tenant\'s pool, which is the intent: eviction is what lets an idle tenant compute suspend.',
+      "tenant's pool, which is the intent: eviction is what lets an idle tenant compute suspend.",
   },
   {
     file: 'apps/web/src/lib/server/tenancy/registry.ts',
     name: 'controlSql',
     category: 'process-lifetime',
-    reason: 'The control-plane database connection handle. One control store per fleet by definition.',
+    reason:
+      'The control-plane database connection handle. One control store per fleet by definition.',
   },
   {
     file: 'apps/web/src/lib/shared/i18n.ts',
@@ -779,4 +782,5 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Memoizes whether ?rtl=1 was set on the page URL. Browser-side debug affordance; on the server ' +
       'it evaluates to false because there is no window.',
-  },]
+  },
+]

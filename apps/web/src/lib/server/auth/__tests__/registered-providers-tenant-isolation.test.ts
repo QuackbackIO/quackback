@@ -102,9 +102,8 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: async () => fixture().identityProviders,
 }))
 
-const { getRegisteredAuthProviders, getRegisteredOidcProviderIds } = await import(
-  '../registered-providers'
-)
+const { getRegisteredAuthProviders, getRegisteredOidcProviderIds } =
+  await import('../registered-providers')
 const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
 const { getCurrentTenant } = await import('@/lib/server/tenancy/tenant-context')
 
@@ -214,6 +213,8 @@ describe('the shared OIDC gate underneath it', () => {
     expect([...(await withTenant('tenant-alpha', () => getRegisteredOidcProviderIds()))]).toEqual([
       'alpha-workforce-idp',
     ])
-    expect([...(await withTenant('tenant-bravo', () => getRegisteredOidcProviderIds()))]).toEqual([])
+    expect([...(await withTenant('tenant-bravo', () => getRegisteredOidcProviderIds()))]).toEqual(
+      []
+    )
   })
 })

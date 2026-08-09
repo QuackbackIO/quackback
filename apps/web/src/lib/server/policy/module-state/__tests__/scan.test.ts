@@ -107,19 +107,23 @@ describe('declaration shapes that hide from a `let`-only rule', () => {
   })
 
   it('flags a const object mutated by a logical assignment operator', () => {
-    expect(names(`const state = { v: 0 }\nexport function f() { state.v ||= 1 }`)).toEqual(['state'])
+    expect(names(`const state = { v: 0 }\nexport function f() { state.v ||= 1 }`)).toEqual([
+      'state',
+    ])
   })
 
   it('flags a const object mutated by `delete`', () => {
     expect(
-      names(`const state: Record<string, number> = {}\nexport function f(k: string) { delete state[k] }`)
+      names(
+        `const state: Record<string, number> = {}\nexport function f(k: string) { delete state[k] }`
+      )
     ).toEqual(['state'])
   })
 
   it('flags a const array that is pushed to', () => {
-    expect(names(`const seen: string[] = []\nexport function add(x: string) { seen.push(x) }`)).toEqual(
-      ['seen']
-    )
+    expect(
+      names(`const seen: string[] = []\nexport function add(x: string) { seen.push(x) }`)
+    ).toEqual(['seen'])
   })
 
   it('flags state inside a factory called once at module scope', () => {
@@ -277,7 +281,24 @@ describe('mutatesBinding', () => {
     ts.createSourceFile('t.ts', src, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
 
   it('detects every assignment operator form', () => {
-    const ops = ['=', '+=', '-=', '*=', '/=', '%=', '**=', '<<=', '>>=', '>>>=', '&=', '|=', '^=', '&&=', '||=', '??=']
+    const ops = [
+      '=',
+      '+=',
+      '-=',
+      '*=',
+      '/=',
+      '%=',
+      '**=',
+      '<<=',
+      '>>=',
+      '>>>=',
+      '&=',
+      '|=',
+      '^=',
+      '&&=',
+      '||=',
+      '??=',
+    ]
     for (const op of ops) {
       expect(mutatesBinding(parse(`x.v ${op} 1`), 'x'), op).toBe(true)
     }

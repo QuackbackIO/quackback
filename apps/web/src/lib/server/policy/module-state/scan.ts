@@ -76,13 +76,7 @@ export interface StateSite {
 }
 
 /** Containers whose construction alone implies "this holds mutable entries". */
-const CONTAINER_CONSTRUCTORS = new Set([
-  'Map',
-  'Set',
-  'WeakMap',
-  'WeakSet',
-  'TenantKeyedCache',
-])
+const CONTAINER_CONSTRUCTORS = new Set(['Map', 'Set', 'WeakMap', 'WeakSet', 'TenantKeyedCache'])
 
 /** Property names whose invocation mutates the receiver. */
 const MUTATING_METHODS = new Set([

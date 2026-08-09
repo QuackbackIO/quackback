@@ -9,7 +9,7 @@
  * "without it, singleton twenty-one lands three weeks after twenty is fixed."
  */
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkModuleState, renderLedgerDoc, serverRoots } from '../check'
 import { MODULE_STATE_LEDGER } from '../ledger'
@@ -113,7 +113,6 @@ describe('the scanner is looking at something', () => {
     let containers = 0
     for (const root of serverRoots(REPO_ROOT)) {
       const walk = (dir: string): string[] => {
-        const { readdirSync } = require('node:fs') as typeof import('node:fs')
         const out: string[] = []
         for (const e of readdirSync(dir, { withFileTypes: true })) {
           if (e.name === '__tests__' || e.name === 'node_modules' || e.name === 'dist') continue
@@ -126,7 +125,8 @@ describe('the scanner is looking at something', () => {
       for (const file of walk(root.dir)) {
         const text = readFileSync(file, 'utf8')
         // A container declaration the scanner did not turn into a site.
-        const declared = /(?:^|\n)\s*(?:export\s+)?const\s+[A-Za-z_$][\w$]*[^=\n]*=\s*new (?:Map|Set|WeakMap|WeakSet)\b/g
+        const declared =
+          /(?:^|\n)\s*(?:export\s+)?const\s+[A-Za-z_$][\w$]*[^=\n]*=\s*new (?:Map|Set|WeakMap|WeakSet)\b/g
         const matches = text.match(declared) ?? []
         const reported = extractSites(file, text).filter((s) => s.kind === 'container').length
         containers += Math.max(0, matches.length - reported)
