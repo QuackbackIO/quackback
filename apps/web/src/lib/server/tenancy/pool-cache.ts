@@ -202,6 +202,18 @@ function createEntry(tenant: TenantDescriptor): PoolEntry {
   return entry
 }
 
+/**
+ * Dereference a tenant's database credential.
+ *
+ * Exported because the queue tier's `LISTEN` connections terminate at the
+ * **direct** endpoint rather than at the pooled one, so they are built outside
+ * this cache and still need the same credential — resolved by the same function
+ * so a rotation cannot be picked up by one path and missed by the other.
+ */
+export async function resolveTenantPassword(tenant: TenantDescriptor): Promise<string> {
+  return resolvePassword(tenant)
+}
+
 async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
   const ref = tenant.database.credentialRef
   const parsed = parseSecretRef(ref)

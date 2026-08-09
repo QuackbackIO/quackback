@@ -6,6 +6,15 @@
  * underlying modules stay lazy until boot or drain touches them. The seal
  * test in __tests__ pins the list against the modules that actually
  * construct a BullMQ Worker.
+ *
+ * **This list is shrinking.** The seven periodic sweeps that used to live here
+ * — `anon-sweep`, `page-view-partitions`, `sla-breach-sweep`, `snooze-sweep`,
+ * `workflow-sweep`, `workflow-retention`, `analytics` — now run on the Postgres
+ * job queue (`lib/server/jobs`), which is per-tenant by construction and needs
+ * no Redis. They are registered in `jobs/definitions.ts` and started by
+ * `jobs/tier.ts`; the same seal discipline applies there. The eight below are
+ * the remaining BullMQ workers, and Redis cannot be removed until they move too
+ * (SAAS-HOSTING-STACK.md §7.1, §7.4).
  */
 import { logger } from '@/lib/server/logger'
 
@@ -49,58 +58,6 @@ export const WORKER_REGISTRY: readonly WorkerEntry[] = [
       ),
   },
   {
-    name: 'analytics',
-    init: () =>
-      import('@/lib/server/domains/analytics/analytics-queue').then((m) => m.initAnalyticsWorker()),
-    close: () =>
-      import('@/lib/server/domains/analytics/analytics-queue').then((m) => m.closeAnalyticsQueue()),
-  },
-  {
-    name: 'anon-sweep',
-    init: () =>
-      import('@/lib/server/domains/principals/anon-sweep-queue').then((m) =>
-        m.initAnonSweepWorker()
-      ),
-    close: () =>
-      import('@/lib/server/domains/principals/anon-sweep-queue').then((m) =>
-        m.closeAnonSweepQueue()
-      ),
-  },
-  {
-    name: 'page-view-partitions',
-    init: () =>
-      import('@/lib/server/domains/analytics/partition-maintenance-queue').then((m) =>
-        m.initPageViewPartitionWorker()
-      ),
-    close: () =>
-      import('@/lib/server/domains/analytics/partition-maintenance-queue').then((m) =>
-        m.closePageViewPartitionQueue()
-      ),
-  },
-  {
-    // Per-minute SLA breach recorder for deadlines that pass with no event.
-    name: 'sla-breach-sweep',
-    init: () =>
-      import('@/lib/server/domains/sla/sla-breach-sweep-queue').then((m) =>
-        m.initSlaBreachSweepWorker()
-      ),
-    close: () =>
-      import('@/lib/server/domains/sla/sla-breach-sweep-queue').then((m) =>
-        m.closeSlaBreachSweepQueue()
-      ),
-  },
-  {
-    name: 'snooze-sweep',
-    init: () =>
-      import('@/lib/server/domains/conversation/snooze-sweep-queue').then((m) =>
-        m.initSnoozeSweepWorker()
-      ),
-    close: () =>
-      import('@/lib/server/domains/conversation/snooze-sweep-queue').then((m) =>
-        m.closeSnoozeSweepQueue()
-      ),
-  },
-  {
     // Inbound email poller (IMAP, Layer 1). Init no-ops unless configured.
     name: 'email-imap',
     init: () =>
@@ -139,32 +96,6 @@ export const WORKER_REGISTRY: readonly WorkerEntry[] = [
     close: () =>
       import('@/lib/server/domains/workflows/workflow-wait-queue').then((m) =>
         m.closeWorkflowWaitQueue()
-      ),
-  },
-  {
-    // Workflow run sweep (§4.6). Reconciles stale 'running' rows and
-    // 'waiting' rows whose durable timer went missing.
-    name: 'workflow-sweep',
-    init: () =>
-      import('@/lib/server/domains/workflows/workflow-sweep-queue').then((m) =>
-        m.initWorkflowSweepWorker()
-      ),
-    close: () =>
-      import('@/lib/server/domains/workflows/workflow-sweep-queue').then((m) =>
-        m.closeWorkflowSweepQueue()
-      ),
-  },
-  {
-    // Workflow run retention (§4.6 run retention). Daily compaction of old
-    // terminal runs' graph snapshots — see workflow-retention.ts.
-    name: 'workflow-retention',
-    init: () =>
-      import('@/lib/server/domains/workflows/workflow-retention-queue').then((m) =>
-        m.initWorkflowRetentionWorker()
-      ),
-    close: () =>
-      import('@/lib/server/domains/workflows/workflow-retention-queue').then((m) =>
-        m.closeWorkflowRetentionQueue()
       ),
   },
   {

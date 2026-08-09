@@ -1,116 +1,16 @@
 /**
- * Analytics queue -- hourly refresh of materialized stats.
+ * Analytics refresh — an hourly job that refreshes materialized stats.
+ *
+ * Runs on the Postgres job queue (`lib/server/jobs`). Schedule and retry policy
+ * live in `jobs/definitions.ts`.
  */
-
-import { Queue, Worker } from 'bullmq'
-import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
-import { logger } from '@/lib/server/logger'
 import { db, refreshVisitorAnalytics } from '@/lib/server/db'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { refreshAnalytics } from './analytics.service'
 
-const log = logger.child({ component: 'analytics-queue' })
-
-const QUEUE_NAME = '{analytics}'
-const CONCURRENCY = 1
-
-const DEFAULT_JOB_OPTS = {
-  attempts: 3,
-  backoff: { type: 'exponential' as const, delay: 2000 },
-  // Last 1000 completed (or 24h) — see process.ts for the rationale.
-  removeOnComplete: { count: 1000, age: 86400 },
-  removeOnFail: { age: 7 * 86400 },
-}
-
-interface AnalyticsJob {
-  type: 'refresh-analytics'
-}
-
-let initPromise: Promise<{
-  queue: Queue<AnalyticsJob>
-  worker: Worker<AnalyticsJob> | null
-}> | null = null
-
-async function initializeQueue() {
-  const connection = getQueueRedis()
-
-  const queue = new Queue<AnalyticsJob>(QUEUE_NAME, {
-    connection,
-    defaultJobOptions: DEFAULT_JOB_OPTS,
-  })
-
-  // Consumer side is role-gated: web-role replicas enqueue and register
-  // schedules but never construct a Worker (see queue/role.ts).
-  const worker = shouldRunWorkers()
-    ? new Worker<AnalyticsJob>(
-        QUEUE_NAME,
-        async (job) => {
-          if (job.data.type === 'refresh-analytics') {
-            await refreshAnalytics()
-            if (await isFeatureEnabled('visitorAnalytics')) {
-              await refreshVisitorAnalytics(db)
-            }
-          }
-        },
-        { connection, concurrency: CONCURRENCY }
-      )
-    : null
-
-  // Register hourly refresh as a repeatable job. Stable jobId so
-  // worker reboots dedupe on the same key instead of scheduling
-  // duplicate cron entries.
-  await queue.add(
-    'analytics:refresh',
-    { type: 'refresh-analytics' },
-    {
-      jobId: 'analytics:hourly-refresh',
-      repeat: { pattern: '0 * * * *' }, // Top of every hour
-      removeOnComplete: { count: 100 },
-      removeOnFail: { age: 7 * 86400 },
-    }
-  )
-
-  try {
-    await Promise.race([
-      queue.waitUntilReady(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
-      ),
-    ])
-  } catch (error) {
-    await queue.close().catch(() => {})
-    await worker?.close().catch(() => {})
-    throw error
+export async function runAnalyticsRefresh(): Promise<void> {
+  await refreshAnalytics()
+  if (await isFeatureEnabled('visitorAnalytics')) {
+    await refreshVisitorAnalytics(db)
   }
-
-  worker?.on('failed', (job, error) => {
-    if (!job) return
-    const isPermanent =
-      job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
-    const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    log.error({ err: error, status: prefix }, 'analytics job failed')
-  })
-
-  return { queue, worker }
-}
-
-/** Initialize the analytics queue worker eagerly (called from startup). */
-export async function initAnalyticsWorker(): Promise<void> {
-  if (!initPromise) {
-    initPromise = initializeQueue().catch((err) => {
-      initPromise = null
-      throw err
-    })
-  }
-  await initPromise
-  log.info('analytics worker initialized')
-}
-
-export async function closeAnalyticsQueue(): Promise<void> {
-  if (!initPromise) return
-  const { worker, queue } = await initPromise
-  initPromise = null
-  await worker?.close().catch(() => {})
-  await queue.close().catch(() => {})
 }

@@ -46,6 +46,13 @@ function wireGracefulShutdown(): void {
         // enqueue into a queue that is already draining.
         await import('./events/relay').then(({ stopOutboxRelay }) => stopOutboxRelay())
 
+        // Stop the Postgres job tier's loops and release its LISTEN
+        // connections. In-flight jobs are NOT cancelled: their leases simply
+        // lapse and the reaper adjudicates them on the next boot, which is the
+        // whole point of the lease — a job with no attempts left goes terminal
+        // rather than running a second time.
+        await import('./jobs/tier').then(({ stopJobTier }) => stopJobTier())
+
         // Drain every registered queue/worker. One list drives boot and
         // shutdown, so nothing can be booted but left undrained.
         await closeAllWorkers()
@@ -113,7 +120,9 @@ export function logStartupBanner(): void {
   // sweep that preceded it: it is a boot-time configuration warning, which is
   // not where anyone looks for a database query.
   if (config.isPooledTenancy && !shouldRunWorkers()) {
-    log.info('pooled tenancy on a web replica — integration config validation runs on the worker tier')
+    log.info(
+      'pooled tenancy on a web replica — integration config validation runs on the worker tier'
+    )
   } else {
     Promise.all([
       import('@/integrations/segment/server/user-sync'),
@@ -214,10 +223,33 @@ function startBackgroundProcessing(): void {
   //
   // The periodic sweepers below DO run: they funnel through `withSweepLock`,
   // which fans a tick out across the fleet with a real tenant scope each time.
+  // The Postgres job tier. Unlike BullMQ it runs under BOTH tenancy modes,
+  // because a job row lives in the tenant's own database and the tier opens a
+  // real tenant scope around every claim — the two properties whose absence is
+  // why the BullMQ tier below still refuses to start pooled.
+  import('./jobs/tier')
+    .then(({ startJobTier }) => startJobTier())
+    .catch((err) => log.error({ err }, 'failed to start the job tier'))
+
+  // Boot-time page_views partition ensure. This used to ride along inside the
+  // BullMQ queue's construction; it needs a real tenant scope now, so it runs as
+  // a fleet pass instead. It stays at boot rather than waiting for the 02:30
+  // slot because beacons are dropped while a day has no partition, and an
+  // instance that was down long enough to exhaust its week-ahead window would
+  // otherwise lose a day of them.
+  Promise.all([
+    import('./domains/analytics/partition-maintenance-queue'),
+    import('@/lib/server/tenancy/fleet'),
+  ])
+    .then(([{ ensurePageViewPartitionsAtBoot }, { runFleetPass }]) =>
+      runFleetPass('sweep', () => ensurePageViewPartitionsAtBoot())
+    )
+    .catch((err) => log.error({ err }, 'boot-time partition ensure failed'))
+
   if (config.isPooledTenancy) {
     log.warn(
-      'pooled tenancy — queue workers and the outbox relay are NOT started. ' +
-        'They require per-tenant session-mode connections on a dedicated tier; ' +
+      'pooled tenancy — the remaining BullMQ queue workers and the outbox relay are NOT ' +
+        'started. They require per-tenant session-mode connections on a dedicated tier; ' +
         'events will accumulate in each tenant outbox until that tier runs.'
     )
   } else {

@@ -15,18 +15,11 @@ import {
  * listing it here, so boot and drain can never drift apart again.
  */
 const WORKER_MODULES = [
-  'domains/analytics/analytics-queue.ts',
-  'domains/analytics/partition-maintenance-queue.ts',
   'domains/conversation/conversation.email-imap-queue.ts',
-  'domains/conversation/snooze-sweep-queue.ts',
   'domains/export/export-queue.ts',
   'domains/help-center/help-center-translate-queue.ts',
   'domains/import/import-queue.ts',
-  'domains/principals/anon-sweep-queue.ts',
-  'domains/sla/sla-breach-sweep-queue.ts',
   'domains/workflows/workflow-dispatch-queue.ts',
-  'domains/workflows/workflow-retention-queue.ts',
-  'domains/workflows/workflow-sweep-queue.ts',
   'domains/workflows/workflow-wait-queue.ts',
   'events/process.ts',
   'events/segment-scheduler.ts',
