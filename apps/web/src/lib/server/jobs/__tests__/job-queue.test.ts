@@ -464,6 +464,26 @@ describe('the lease-shape constraint', () => {
   })
 })
 
+describe('what a claimed row carries', () => {
+  it('hands the handler its dedupe key', async () => {
+    // Not decoration: for a relay-enqueued hook this key IS the deterministic
+    // `<eventId>:<sink>:<target>` id the reference passed into `hook.run` as
+    // `job.id`, and handlers dedupe their own side effects on it. A test that
+    // builds a ClaimedJob by hand cannot see this mapping break.
+    const q = queue('claim-dedupe-key')
+    await enqueueJob({ queue: q, dedupeKey: 'evt-1:webhook:abc' })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    expect(job.dedupeKey).toBe('evt-1:webhook:abc')
+  })
+
+  it('reports a null dedupe key for a row that has none', async () => {
+    const q = queue('claim-no-dedupe-key')
+    await enqueueJob({ queue: q })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    expect(job.dedupeKey).toBeNull()
+  })
+})
+
 describe('the per-queue claim cap', () => {
   it('takes at most each queue’s own limit, in one pass', async () => {
     // The reference gave each queue its own Worker with its own concurrency.
