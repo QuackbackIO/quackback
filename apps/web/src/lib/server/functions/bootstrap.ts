@@ -8,6 +8,7 @@ import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { runWithoutLogContext } from '@/lib/server/log-context'
+import { shouldRunWorkers } from '@/lib/server/queue/role'
 
 const log = logger.child({ component: 'bootstrap' })
 
@@ -148,8 +149,21 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     getRegisteredAuthProviders(),
   ])
 
-  // One-time initialization on first request
-  if (!_initialized) {
+  // One-time initialization on first request.
+  //
+  // Role-gated, and the gate is not cosmetic. Telemetry is default-on and this
+  // path had none, so a `role=web` replica walked every tenant in the registry
+  // once an hour — which is precisely what SAAS-HOSTING-STACK.md §1's
+  // scale-to-zero argument says a web replica does not do ("a QUACKBACK_ROLE=web
+  // replica runs none of them"), and what Piece 2 measured. Fixing the
+  // wrong-tenant problem by making the sweep fleet-wide widened its blast
+  // radius from one tenant's database to every tenant's, including on replicas
+  // that must stay silent to let their computes suspend.
+  //
+  // `shouldRunWorkers()` is the same predicate `startup.ts` gates the sweepers
+  // and the relay behind, so telemetry now lives on the same side of the split
+  // as the rest of the background work.
+  if (!_initialized && shouldRunWorkers()) {
     _initialized = true
 
     // Delay telemetry to let the DB connection initialize

@@ -15,6 +15,7 @@ import type { HookResult } from './hook-types'
 import type { EventData } from './types'
 import type { ConversationId, IntegrationId, TicketId, WebhookId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { createQueueWorker } from '@/lib/server/queue/create-worker'
 
 const log = logger.child({ component: 'event-process' })
 
@@ -82,7 +83,7 @@ async function initializeQueue() {
   // Consumer side is role-gated: web-role replicas enqueue and register
   // schedules but never construct a Worker (see queue/role.ts).
   const worker = shouldRunWorkers()
-    ? new Worker<HookJobData>(
+    ? createQueueWorker<HookJobData>(
         QUEUE_NAME,
         async (job) => {
           const { hookType, event, target, config: hookConfig } = job.data

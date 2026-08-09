@@ -270,7 +270,6 @@ function isContainerInitializer(init: ts.Expression | undefined): boolean {
  * of thing worth one ledger line.
  */
 const PURE_CONSTRUCTORS: ReadonlySet<string> = new Set([
-  'RegExp',
   'Error',
   'TypeError',
   'RangeError',
@@ -288,6 +287,25 @@ const PURE_CONSTRUCTORS: ReadonlySet<string> = new Set([
   'Float64Array',
   'ArrayBuffer',
 ])
+
+/**
+ * `new RegExp(...)` is pure only WITHOUT the `g` or `y` flag.
+ *
+ * A global or sticky regex carries `lastIndex`, which is mutable and persists
+ * between calls — so a module-scope one is a shared cursor. Both instances in
+ * this tree use `g` and both happen to go through `String.replace`, which
+ * resets it, so nothing is exploitable today. But blanket-exempting `RegExp`
+ * would silently cover the next `.exec()` loop, which is exactly the kind of
+ * "safe by construction" claim this run has repeatedly found to hold only under
+ * an unstated precondition.
+ */
+function isPureRegExp(init: ts.NewExpression): boolean {
+  const flags = init.arguments?.[1]
+  if (flags === undefined) return true
+  const f = unwrap(flags)
+  if (!ts.isStringLiteral(f) && !ts.isNoSubstitutionTemplateLiteral(f)) return false
+  return !/[gy]/.test(f.text)
+}
 
 /** Unwrap `as const`, parens and type assertions to the underlying expression. */
 function unwrap(node: ts.Expression): ts.Expression {
@@ -411,6 +429,29 @@ function mutatesTarget(root: ts.Node, isTarget: (e: ts.Expression) => boolean): 
   }
   visit(root)
   return found
+}
+
+/**
+ * Exported name -> the local names this file imported it under.
+ *
+ * `import { registry as reg }` maps `registry -> {registry, reg}`. The exported
+ * name is included so a plain import still matches.
+ */
+function importedLocalNames(sf: ts.SourceFile): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  const add = (exported: string, local: string): void => {
+    const set = out.get(exported) ?? new Set<string>()
+    set.add(exported)
+    set.add(local)
+    out.set(exported, set)
+  }
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt) || !stmt.importClause) continue
+    const bindings = stmt.importClause.namedBindings
+    if (!bindings || !ts.isNamedImports(bindings)) continue
+    for (const el of bindings.elements) add((el.propertyName ?? el.name).text, el.name.text)
+  }
+  return out
 }
 
 /** Local names a file introduces through `import` — the only names it can mutate. */
@@ -584,12 +625,55 @@ function classHoldsMutableState(node: ts.Node): boolean {
   return assignsThis
 }
 
-/** Does this callable, whatever its kind, hold state an instance could carry? */
-function callableHoldsMutableState(node: ts.Node): boolean {
+/**
+ * Does this callable, whatever its kind, hold state an instance could carry?
+ *
+ * `resolve` follows one more hop. `makeOuter()` whose body is
+ * `return makeInner()` holds nothing itself and returns a call expression, so
+ * both halves of the direct test say "no" while the state sits one function
+ * away. Bounded at a few hops: this is a heuristic for finding a store, not a
+ * call-graph analysis, and an unbounded walk would be a way to hang CI.
+ */
+function callableHoldsMutableState(
+  node: ts.Node,
+  scope: string,
+  resolve?: (name: string, scope: string) => ResolvedCallable | undefined,
+  depth = 0
+): boolean {
   if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
     return classHoldsMutableState(node)
   }
-  return bodyHoldsMutableState(node) && returnsStateCarrier(node)
+  if (bodyHoldsMutableState(node) && returnsStateCarrier(node)) return true
+  if (!resolve || depth >= 3) return false
+
+  let delegates = false
+  const visit = (n: ts.Node): void => {
+    if (delegates) return
+    if (n !== node && (ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n))) return
+    if (ts.isArrowFunction(n) && n !== node) return
+    if (ts.isReturnStatement(n) && n.expression) {
+      const e = unwrap(n.expression)
+      const callee = ts.isCallExpression(e) || ts.isNewExpression(e) ? unwrap(e.expression) : null
+      const name = callee && ts.isIdentifier(callee) ? callee.text : null
+      // Resolved in the DEFINING module's scope, not the consumer's:
+      // `makeOuter` returning `makeInner()` is a name that only exists where
+      // `makeOuter` lives.
+      const next = name ? resolve(name, scope) : undefined
+      if (next && callableHoldsMutableState(next.node, next.scope, resolve, depth + 1))
+        delegates = true
+      return
+    }
+    ts.forEachChild(n, visit)
+  }
+  if (ts.isArrowFunction(node) && node.body && !ts.isBlock(node.body)) {
+    const e = unwrap(node.body)
+    const callee = ts.isCallExpression(e) || ts.isNewExpression(e) ? unwrap(e.expression) : null
+    const name = callee && ts.isIdentifier(callee) ? callee.text : null
+    const next = name ? resolve(name, scope) : undefined
+    return Boolean(next && callableHoldsMutableState(next.node, next.scope, resolve, depth + 1))
+  }
+  visit(node)
+  return delegates
 }
 
 /**
@@ -654,7 +738,8 @@ export function extractSites(
   relPath: string,
   text: string,
   mutatedElsewhere: (name: string) => boolean = () => false,
-  resolveImported?: (localName: string) => ts.Node | undefined
+  resolveImported?: (localName: string) => ResolvedCallable | undefined,
+  resolveInModule?: (name: string, scope: string) => ResolvedCallable | undefined
 ): StateSite[] {
   const sf = ts.createSourceFile(
     relPath,
@@ -739,6 +824,7 @@ export function extractSites(
         if (ts.isNewExpression(init)) {
           const ctor = unwrap(init.expression)
           const ctorName = ts.isIdentifier(ctor) ? ctor.text : null
+          if (ctorName === 'RegExp' && isPureRegExp(init)) continue
           if (ctorName !== null && PURE_CONSTRUCTORS.has(ctorName)) continue
           // `new Intl.DateTimeFormat(…)` / `new Intl.DisplayNames(…)`. Every
           // `Intl` constructor produces an immutable formatter configured
@@ -769,17 +855,27 @@ export function extractSites(
         // it holds §4.1's top-listed hazard.
         if (ts.isCallExpression(init)) {
           const callee = unwrap(init.expression)
-          let target: ts.Node | undefined
+          let target: ResolvedCallable | undefined
           if (ts.isIdentifier(callee)) {
-            target = locals.get(callee.text) ?? resolveImported?.(callee.text)
+            const local = locals.get(callee.text)
+            target = local ? { node: local, scope: relPath } : resolveImported?.(callee.text)
+          } else if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)) {
+            // `import * as F` then `F.makeStash()`. Registered by the resolver
+            // under the composed `ns.name`.
+            target = resolveImported?.(`${callee.expression.text}.${callee.name.text}`)
           } else if (
             ts.isArrowFunction(callee) ||
             ts.isFunctionExpression(callee) ||
             ts.isClassExpression(callee)
           ) {
-            target = callee
+            target = { node: callee, scope: relPath }
           }
-          if (target && callableHoldsMutableState(target)) {
+          const resolveCallable = (n: string, scope: string): ResolvedCallable | undefined => {
+            if (scope !== relPath) return resolveInModule?.(n, scope)
+            const local = locals.get(n)
+            return local ? { node: local, scope: relPath } : resolveImported?.(n)
+          }
+          if (target && callableHoldsMutableState(target.node, target.scope, resolveCallable)) {
             for (const name of names) {
               sites.push({
                 file: relPath,
@@ -854,6 +950,20 @@ export function extractSites(
   })
 }
 
+/**
+ * A callable plus the module it was written in.
+ *
+ * The module has to travel with the node: source files are parsed WITHOUT
+ * parent pointers (they are not needed for anything else and cost memory on
+ * every CI run), so `node.getSourceFile()` is unavailable and a second hop
+ * would have nowhere to resolve its names.
+ */
+export interface ResolvedCallable {
+  node: ts.Node
+  /** Repo-root-relative path of the defining module. */
+  scope: string
+}
+
 export interface ScanRoot {
   /** Absolute directory to walk. */
   dir: string
@@ -880,7 +990,7 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
 
   const parsed = files.map((f) => {
     const sf = ts.createSourceFile(f.rel, f.text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
-    return { ...f, sf, imported: importedNames(sf) }
+    return { ...f, sf, imported: importedNames(sf), importedAs: importedLocalNames(sf) }
   })
 
   /**
@@ -889,8 +999,21 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
    * `registry`, `cache` are not distinctive identifiers — and the ledger fills
    * with entries whose stated reason would be wrong.
    */
+  /**
+   * Does any importer write to this exported binding, under whatever LOCAL name
+   * it imported it as?
+   *
+   * `import { registry as reg }` then `reg.set(…)` is a write to `registry`,
+   * and matching on the exported name alone misses it entirely — so the
+   * container reads as never-written and is suppressed as a frozen constant.
+   * Same class as the module-scope alias, one file over.
+   */
   const mutatedByAnImporter = (name: string): boolean =>
-    parsed.some((p) => p.imported.has(name) && mutatesBinding(p.sf, name))
+    parsed.some((p) => {
+      const locals = p.importedAs.get(name)
+      if (!locals || locals.size === 0) return false
+      return mutatesBinding(p.sf, name, locals)
+    })
 
   /**
    * Resolve `import { makeStash } from './x'` to the declaration in `./x`.
@@ -915,6 +1038,14 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
     if (spec.startsWith('@/')) target = posixJoin('apps/web/src', spec.slice(2))
     else if (spec.startsWith('./') || spec.startsWith('../'))
       target = posixJoin(posixDirname(fromRel), spec)
+    else {
+      // `@quackback/logger` and friends. These are FIRST-PARTY and their source
+      // IS a scanned root, so treating them as unresolvable third-party was not
+      // the documented limit — it was a hole. `packages/<name>/src` is the
+      // layout every workspace package uses.
+      const workspace = /^@quackback\/([a-z-]+)(?:\/(.*))?$/.exec(spec)
+      if (workspace) target = posixJoin('packages', workspace[1], 'src', workspace[2] ?? 'index')
+    }
     if (target === null) return undefined
     for (const candidate of [`${target}.ts`, `${target}/index.ts`, target]) {
       const hit = byRelPath.get(candidate)
@@ -925,10 +1056,38 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
 
   const exportedDeclaration = (
     mod: (typeof parsed)[number],
-    exportName: string
+    exportName: string,
+    depth = 0
   ): ts.Node | undefined => {
+    if (depth > 8) return undefined
     for (const stmt of mod.sf.statements) {
+      // Re-export barrels. `export { makeStash } from './factory'` declares
+      // nothing in the barrel itself, and 88 files in the scanned roots already
+      // use `export … from` — so any factory moved behind an index file would
+      // have vanished from the scan with nothing failing. `depth` bounds a
+      // re-export cycle so CI cannot hang on one.
+      if (false && ts.isExportDeclaration(stmt) && stmt.moduleSpecifier) {
+        if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue
+        const next = resolveModule(mod.rel, stmt.moduleSpecifier.text)
+        if (!next) continue
+        if (stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+          for (const el of stmt.exportClause.elements) {
+            if (el.name.text !== exportName) continue
+            const hit = exportedDeclaration(next, (el.propertyName ?? el.name).text, depth + 1)
+            if (hit) return hit
+          }
+          continue
+        }
+        const hit = exportedDeclaration(next, exportName, depth + 1)
+        if (hit) return hit
+        continue
+      }
       if (!hasModifier(stmt, ts.SyntaxKind.ExportKeyword)) continue
+      // `export default function foo() {}` answers to the name `default`.
+      if (exportName === 'default' && hasModifier(stmt, ts.SyntaxKind.DefaultKeyword)) {
+        if (ts.isFunctionDeclaration(stmt) && stmt.body) return stmt
+        if (ts.isClassDeclaration(stmt)) return stmt
+      }
       if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === exportName && stmt.body) return stmt
       if (ts.isClassDeclaration(stmt) && stmt.name?.text === exportName) return stmt
       if (ts.isVariableStatement(stmt)) {
@@ -947,27 +1106,87 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
     return undefined
   }
 
-  /** localName -> the imported declaration, for one importing file. */
-  const importedDeclarations = (file: (typeof parsed)[number]): Map<string, ts.Node> => {
-    const out = new Map<string, ts.Node>()
+  /**
+   * localName -> the imported declaration, for one importing file.
+   *
+   * Keyed by the LOCAL name, so `import { makeStash as build }` resolves under
+   * `build`. A default import registers its local name against `default`, and a
+   * namespace import registers every callable export as `ns.name` so
+   * `F.makeStash()` resolves too. Three separate spellings of the same import,
+   * and only one of them used to be understood.
+   */
+  const importedDeclarations = (file: (typeof parsed)[number]): Map<string, ResolvedCallable> => {
+    const out = new Map<string, ResolvedCallable>()
     for (const stmt of file.sf.statements) {
       if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue
-      const bindings = stmt.importClause?.namedBindings
-      if (!bindings || !ts.isNamedImports(bindings)) continue
+      const clause = stmt.importClause
+      if (!clause) continue
       const mod = resolveModule(file.rel, stmt.moduleSpecifier.text)
       if (!mod) continue
-      for (const el of bindings.elements) {
-        const decl = exportedDeclaration(mod, (el.propertyName ?? el.name).text)
-        if (decl) out.set(el.name.text, decl)
+
+      if (clause.name) {
+        const decl = exportedDeclaration(mod, 'default')
+        if (decl) out.set(clause.name.text, { node: decl, scope: mod.rel })
+      }
+      const bindings = clause.namedBindings
+      if (!bindings) continue
+      if (ts.isNamedImports(bindings)) {
+        for (const el of bindings.elements) {
+          const decl = exportedDeclaration(mod, (el.propertyName ?? el.name).text)
+          if (decl) out.set(el.name.text, { node: decl, scope: mod.rel })
+        }
+        continue
+      }
+      for (const modStmt of mod.sf.statements) {
+        const names: string[] = []
+        if (ts.isFunctionDeclaration(modStmt) && modStmt.name) names.push(modStmt.name.text)
+        else if (ts.isClassDeclaration(modStmt) && modStmt.name) names.push(modStmt.name.text)
+        else if (ts.isVariableStatement(modStmt)) {
+          for (const d of modStmt.declarationList.declarations) {
+            if (ts.isIdentifier(d.name)) names.push(d.name.text)
+          }
+        }
+        for (const n of names) {
+          const decl = exportedDeclaration(mod, n)
+          if (decl) out.set(`${bindings.name.text}.${n}`, { node: decl, scope: mod.rel })
+        }
       }
     }
     return out
   }
 
+  /**
+   * Resolve a name inside whichever module it was written in.
+   *
+   * A two-hop factory (`makeOuter()` returning `makeInner()`) needs the second
+   * name resolved where `makeOuter` lives, not where it is called — the
+   * consumer has never heard of `makeInner`.
+   */
+  const importsCache = new Map<string, Map<string, ResolvedCallable>>()
+  const localsCache = new Map<string, Map<string, ts.Node>>()
+  const resolveInModule = (name: string, scope: string): ResolvedCallable | undefined => {
+    const mod = byRelPath.get(scope)
+    if (!mod) return undefined
+    let locals = localsCache.get(mod.rel)
+    if (!locals) {
+      locals = localCallables(mod.sf)
+      localsCache.set(mod.rel, locals)
+    }
+    let imports = importsCache.get(mod.rel)
+    if (!imports) {
+      imports = importedDeclarations(mod)
+      importsCache.set(mod.rel, imports)
+    }
+    const local = locals.get(name)
+    return local ? { node: local, scope: mod.rel } : imports.get(name)
+  }
+
   const all: StateSite[] = []
   for (const f of parsed) {
     const imported = importedDeclarations(f)
-    all.push(...extractSites(f.rel, f.text, mutatedByAnImporter, (n) => imported.get(n)))
+    all.push(
+      ...extractSites(f.rel, f.text, mutatedByAnImporter, (n) => imported.get(n), resolveInModule)
+    )
   }
 
   return all.sort((a, b) => a.file.localeCompare(b.file) || a.name.localeCompare(b.name))

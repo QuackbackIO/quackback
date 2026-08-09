@@ -219,3 +219,116 @@ describe('cross-file factory resolution', () => {
     }
   })
 })
+
+describe('factory resolution across every import spelling', () => {
+  // Round 2 resolved `@/` and relative specifiers only. Six more spellings
+  // passed straight through, and each was planted as a real file before being
+  // pinned here. #7 was not the documented third-party limit —
+  // `@quackback/logger` is first-party and `packages/logger/src` IS a scanned
+  // root — and #8 is the widest: 88 files in the scanned roots already use
+  // `export … from`, so any factory moved behind a barrel vanished silently.
+  const FACTORY = `export function makeStash<T>() {
+      const m = new Map<string, T>()
+      return { set(k: string, v: T) { m.set(k, v) }, take(k: string) { return m.get(k) } }
+    }
+    export function makeInner<T>() {
+      const m = new Map<string, T>()
+      return { put(k: string, v: T) { m.set(k, v) } }
+    }
+    export function makeOuter<T>() { return makeInner<T>() }
+    export const registry = new Map<string, number>()
+    export default function defaultStash<T>() {
+      const m = new Map<string, T>()
+      return { set(k: string, v: T) { m.set(k, v) } }
+    }\n`
+
+  function withTree(consumer: string, run: (sites: string[]) => void): void {
+    const dir = mkdtempSync(join(tmpdir(), 'module-state-imports-'))
+    try {
+      mkdirSync(join(dir, 'mod'), { recursive: true })
+      mkdirSync(join(dir, 'packages', 'logger', 'src'), { recursive: true })
+      writeFileSync(join(dir, 'mod', 'factory.ts'), FACTORY)
+      writeFileSync(join(dir, 'mod', 'barrel.ts'), `export { makeStash } from './factory'\n`)
+      writeFileSync(join(dir, 'packages', 'logger', 'src', 'index.ts'), FACTORY)
+      writeFileSync(join(dir, 'mod', 'consumer.ts'), consumer)
+      const sites = scanRoots(dir, [
+        { dir: join(dir, 'mod'), label: 'mod' },
+        { dir: join(dir, 'packages', 'logger', 'src'), label: 'packages/logger/src' },
+      ])
+      run(sites.map((s) => `${s.kind}:${s.name}`))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  const cases: Array<[string, string, string]> = [
+    [
+      'a workspace package specifier',
+      `import { makeStash } from '@quackback/logger'
+       const pkgStash = makeStash<string>()
+       export const put = (k: string, v: string) => pkgStash.set(k, v)\n`,
+      'factory:pkgStash',
+    ],
+    [
+      'a re-export barrel',
+      `import { makeStash } from './barrel'
+       const barrelStash = makeStash<string>()
+       export const put = (k: string, v: string) => barrelStash.set(k, v)\n`,
+      'factory:barrelStash',
+    ],
+    [
+      'a namespace import',
+      `import * as F from './factory'
+       const nsStash = F.makeStash<string>()
+       export const put = (k: string, v: string) => nsStash.set(k, v)\n`,
+      'factory:nsStash',
+    ],
+    [
+      'a default import',
+      `import defaultStash from './factory'
+       const defStash = defaultStash<string>()
+       export const put = (k: string, v: string) => defStash.set(k, v)\n`,
+      'factory:defStash',
+    ],
+    [
+      'a two-hop factory, resolved in the DEFINING module',
+      `import { makeOuter } from './factory'
+       const twoHop = makeOuter<string>()
+       export const put = (k: string, v: string) => twoHop.put(k, v)\n`,
+      'factory:twoHop',
+    ],
+    [
+      'an aliased-import mutation of an exported container',
+      `import { registry as reg } from './factory'
+       export function remember(k: string) { reg.set(k, 1) }\n`,
+      'container:registry',
+    ],
+  ]
+
+  for (const [label, consumer, expected] of cases) {
+    it(`sees a factory reached through ${label}`, () => {
+      withTree(consumer, (sites) => expect(sites).toContain(expected))
+    })
+  }
+
+  it('still ignores an imported callee that holds nothing', () => {
+    // Precision control: resolving MORE import spellings must not turn every
+    // imported call into a site.
+    const dir = mkdtempSync(join(tmpdir(), 'module-state-imports-'))
+    try {
+      mkdirSync(join(dir, 'mod'))
+      writeFileSync(
+        join(dir, 'mod', 'pure.ts'),
+        `export function banner(n: number) { let o = ''; for (let i = 0; i < n; i++) o += 'x'; return o }\n`
+      )
+      writeFileSync(join(dir, 'mod', 'barrel.ts'), `export { banner } from './pure'\n`)
+      writeFileSync(
+        join(dir, 'mod', 'consumer.ts'),
+        `import { banner } from './barrel'\nexport const BANNER = banner(3)\n`
+      )
+      expect(scanRoots(dir, [{ dir: join(dir, 'mod'), label: 'mod' }])).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

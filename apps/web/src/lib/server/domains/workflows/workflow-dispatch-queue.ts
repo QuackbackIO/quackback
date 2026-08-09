@@ -26,6 +26,7 @@ import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-
 import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { logger } from '@/lib/server/logger'
 import type { EventData } from '@/lib/server/events/types'
+import { createQueueWorker } from '@/lib/server/queue/create-worker'
 
 const log = logger.child({ component: 'workflow-dispatch-queue' })
 
@@ -75,7 +76,7 @@ async function initializeQueue() {
   // Consumer side is role-gated: web-role replicas enqueue and register
   // schedules but never construct a Worker (see queue/role.ts).
   const worker = shouldRunWorkers()
-    ? new Worker<WorkflowDispatchJob>(
+    ? createQueueWorker<WorkflowDispatchJob>(
         QUEUE_NAME,
         async (job) => {
           // Dynamic import keeps this queue module (and its bullmq construction,

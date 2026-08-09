@@ -16,6 +16,7 @@ import { shouldRunWorkers } from '@/lib/server/queue/role'
 import type { SegmentId } from '@quackback/ids'
 import type { EvaluationSchedule } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { createQueueWorker } from '@/lib/server/queue/create-worker'
 
 const log = logger.child({ component: 'segment-scheduler' })
 
@@ -76,7 +77,7 @@ async function initializeQueue() {
   // Consumer side is role-gated: web-role replicas enqueue and register
   // schedules but never construct a Worker (see queue/role.ts).
   const worker = shouldRunWorkers()
-    ? new Worker<SegmentEvalJobData>(
+    ? createQueueWorker<SegmentEvalJobData>(
         QUEUE_NAME,
         async (job) => {
           const { segmentId } = job.data

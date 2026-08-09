@@ -1,0 +1,197 @@
+/**
+ * A BullMQ `Worker` must not inherit the scope of whoever armed it.
+ *
+ * A Worker's `run()` loop starts synchronously inside its constructor, so the
+ * AsyncLocalStorage context alive at construction becomes the context for every
+ * job it ever processes. That store is where `getCurrentTenant()` lives, so a
+ * processor reading `db` gets the ARMING tenant's database — for every tenant's
+ * jobs, forever, with nothing erroring.
+ *
+ * Seven queue modules arm lazily on first enqueue and four have no eager init
+ * hook at all, while `middleware/request-scope.ts` runs every request inside
+ * `runWithTenantScope`. So the arming is request-reachable, and the pooled
+ * refusal in `startup.ts` removes only the SAFE (eager, unscoped) path.
+ *
+ * Three layers are checked here, because each covers a different way the
+ * property could come back:
+ *
+ * 1. the constructor really does capture its context (the leak is real);
+ * 2. `createQueueWorker` does not (the mechanism);
+ * 3. **no queue module calls `new Worker` directly** (the coverage) — a new
+ *    queue added next month is the whole reason §4.4 exists.
+ */
+import { describe, it, expect } from 'vitest'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import * as ts from 'typescript'
+import { walkSourceFiles } from '@/lib/server/policy/source-files'
+import { runWithoutLogContext } from '@/lib/server/log-context'
+
+const SERVER_ROOT = join(__dirname, '../..')
+
+/**
+ * A queue that a consumer loop awaits, the way BullMQ's `run()` awaits Redis.
+ *
+ * The mechanism matters and a simpler model gets it wrong: AsyncLocalStorage
+ * resolves at CALL time, so a plain closure created inside a scope and invoked
+ * later sees nothing. The leak is not closure capture — it is that the run
+ * loop's `await` continuations stay rooted in the context the loop was STARTED
+ * in. Modelling it with a bare callback array made the first version of this
+ * file assert the opposite of the truth, and it failed loudly rather than
+ * quietly, which is the only reason it is worth writing down.
+ */
+function channel<T>() {
+  const items: T[] = []
+  let wake: (() => void) | null = null
+  return {
+    push(v: T) {
+      items.push(v)
+      wake?.()
+      wake = null
+    },
+    async take(): Promise<T> {
+      for (;;) {
+        const next = items.shift()
+        if (next !== undefined) return next
+        await new Promise<void>((r) => (wake = r))
+      }
+    },
+  }
+}
+
+/** Start a consumer loop; resolves once it has processed `count` jobs. */
+function startConsumer(
+  jobs: ReturnType<typeof channel<string>>,
+  scopeOf: () => string,
+  seen: string[],
+  count: number
+): Promise<void> {
+  return new Promise<void>((done) => {
+    void (async () => {
+      for (let i = 0; i < count; i++) {
+        const job = await jobs.take()
+        seen.push(`${job}:${scopeOf()}`)
+      }
+      done()
+    })()
+  })
+}
+
+describe('the leak this seam removes is real', () => {
+  it('a run loop STARTED inside a scope keeps it for every job, from any scope', async () => {
+    // The measured BullMQ result, reproduced without BullMQ:
+    //   Worker constructed inside als.run({tenant:'TENANT-A'})
+    //   jobs added from TENANT-B and TENANT-C
+    //   -> both processed with scopeSeenByProcessor = TENANT-A
+    const als = new AsyncLocalStorage<{ tenant: string }>()
+    const scopeOf = () => als.getStore()?.tenant ?? 'none'
+    const jobs = channel<string>()
+    const seen: string[] = []
+
+    const finished = als.run({ tenant: 'TENANT-A' }, () => startConsumer(jobs, scopeOf, seen, 2))
+    als.run({ tenant: 'TENANT-B' }, () => jobs.push('B-job'))
+    als.run({ tenant: 'TENANT-C' }, () => jobs.push('C-job'))
+    await finished
+
+    expect(seen).toEqual(['B-job:TENANT-A', 'C-job:TENANT-A'])
+  })
+
+  it('…and starting the same loop detached leaves it with no scope at all', async () => {
+    const als = new AsyncLocalStorage<{ tenant: string }>()
+    const scopeOf = () => als.getStore()?.tenant ?? 'none'
+    const jobs = channel<string>()
+    const seen: string[] = []
+
+    const finished = als.run({ tenant: 'TENANT-A' }, () =>
+      // `als.exit` is what `runWithoutLogContext` does to the logger store.
+      als.exit(() => startConsumer(jobs, scopeOf, seen, 2))
+    )
+    als.run({ tenant: 'TENANT-B' }, () => jobs.push('B-job'))
+    als.run({ tenant: 'TENANT-C' }, () => jobs.push('C-job'))
+    await finished
+
+    // No tenant at all, rather than the wrong one. A processor that reaches
+    // `db` under pooled tenancy then throws TenantScopeMissingError — the job
+    // fails loudly and retries instead of succeeding against a stranger.
+    expect(seen).toEqual(['B-job:none', 'C-job:none'])
+  })
+})
+
+describe('createQueueWorker detaches the REAL tenant store', () => {
+  it('CONTROL: a loop started inside a request scope processes as that tenant', async () => {
+    const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
+    const { getCurrentTenant } = await import('@/lib/server/tenancy/tenant-context')
+    const scopeOf = () => getCurrentTenant()?.tenantId ?? 'none'
+    const jobs = channel<string>()
+    const seen: string[] = []
+
+    const finished = withTenant('tenant-alpha', () => startConsumer(jobs, scopeOf, seen, 1))
+    withTenant('tenant-bravo', () => jobs.push('bravo-job'))
+    await finished
+
+    // This is the defect, on the production store: bravo's job, alpha's
+    // database. Without this case the assertion below could pass on a store
+    // that simply never propagates.
+    expect(seen).toEqual(['bravo-job:tenant-alpha'])
+  })
+
+  it('started through the seam, it processes with no tenant', async () => {
+    const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
+    const { getCurrentTenant } = await import('@/lib/server/tenancy/tenant-context')
+    const scopeOf = () => getCurrentTenant()?.tenantId ?? 'none'
+    const jobs = channel<string>()
+    const seen: string[] = []
+
+    const finished = withTenant('tenant-alpha', () =>
+      // Exactly what `createQueueWorker` does around `new Worker(...)`.
+      runWithoutLogContext(() => startConsumer(jobs, scopeOf, seen, 1))
+    )
+    withTenant('tenant-bravo', () => jobs.push('bravo-job'))
+    await finished
+
+    expect(seen).toEqual(['bravo-job:none'])
+  })
+})
+
+/** Every `new Worker(` in server source, by file. */
+function directWorkerConstructions(): string[] {
+  const offenders: string[] = []
+  for (const file of walkSourceFiles(SERVER_ROOT)) {
+    if (!file.endsWith('.ts')) continue
+    if (file.endsWith('create-worker.ts')) continue
+    const text = readFileSync(file, 'utf8')
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isNewExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'Worker'
+      ) {
+        offenders.push(file.slice(file.indexOf('lib/server')))
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+  }
+  return offenders
+}
+
+describe('coverage: nothing constructs a Worker outside the seam', () => {
+  it('finds no direct `new Worker(...)` in server code', () => {
+    // The fifteen queue modules go through `createQueueWorker`. This is what
+    // stops the sixteenth from quietly reintroducing the inheritance — the
+    // mechanism tests above would stay green while a new queue leaked.
+    expect(directWorkerConstructions()).toEqual([])
+  })
+
+  it('is looking at something: the queue modules are in scope and use the seam', () => {
+    // A source scan that scanned nothing would satisfy the assertion above.
+    let usingSeam = 0
+    for (const file of walkSourceFiles(SERVER_ROOT)) {
+      if (!file.endsWith('.ts')) continue
+      if (/\bcreateQueueWorker\s*[(<]/.test(readFileSync(file, 'utf8'))) usingSeam += 1
+    }
+    expect(usingSeam).toBeGreaterThanOrEqual(15)
+  })
+})

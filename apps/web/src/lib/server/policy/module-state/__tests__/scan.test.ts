@@ -432,7 +432,10 @@ describe('bypasses found by attacking the first version of this scanner', () => 
     // the exemptions are a short enumerated list of things that cannot carry
     // state, rather than a guess about what a constructor does.
     for (const src of [
-      `const RE = new RegExp('a+', 'g')\nexport const m = (s: string) => RE.test(s)`,
+      // Unflagged only — a `g`/`y` regex carries lastIndex and IS a site. See
+      // the dedicated block below; round 2 had this case asserting the wrong
+      // thing, which is what a blanket `RegExp` exemption bought.
+      `const RE = new RegExp('a+')\nexport const m = (s: string) => RE.test(s)`,
       `const E = new Error('boom')\nexport const e = () => E`,
       `const U = new URL('https://example.com')\nexport const u = () => U.href`,
       `const F = new Intl.DateTimeFormat('en-US', { month: 'short' })\nexport const f = (d: Date) => F.format(d)`,
@@ -448,5 +451,40 @@ describe('bypasses found by attacking the first version of this scanner', () => 
       export const r = () => CFG.retries
     `
     expect(names(src)).toEqual([])
+  })
+})
+
+describe('a global-flagged RegExp is not a value type', () => {
+  // `RegExp` was in PURE_CONSTRUCTORS. With `g` or `y` it carries `lastIndex`,
+  // which is mutable and persists between calls — so a module-scope one is a
+  // shared cursor. Both instances in this tree use `g`; both happen to go
+  // through String.replace, which resets it, so nothing is exploitable today.
+  // The exemption would have silently covered the next `.exec()` loop.
+  it('flags a `g`-flagged RegExp', () => {
+    expect(
+      names(`const RE = new RegExp('a+', 'g')\nexport const m = (s: string) => RE.exec(s)`)
+    ).toEqual(['RE'])
+  })
+  it('flags a `y`-flagged RegExp', () => {
+    expect(
+      names(`const RE = new RegExp('a+', 'gy')\nexport const m = (s: string) => RE.exec(s)`)
+    ).toEqual(['RE'])
+  })
+  it('still ignores an unflagged one', () => {
+    expect(
+      names(`const RE = new RegExp('a+')\nexport const m = (s: string) => RE.test(s)`)
+    ).toEqual([])
+  })
+  it('still ignores one with only case-insensitive flags', () => {
+    expect(
+      names(`const RE = new RegExp('a+', 'i')\nexport const m = (s: string) => RE.test(s)`)
+    ).toEqual([])
+  })
+  it('flags one whose flags it cannot read, rather than assuming', () => {
+    expect(
+      names(
+        `const F = 'g'\nconst RE = new RegExp('a+', F)\nexport const m = (s: string) => RE.exec(s)`
+      )
+    ).toEqual(['RE'])
   })
 })

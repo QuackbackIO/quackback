@@ -20,6 +20,9 @@
  * rather than of AsyncLocalStorage not propagating in the first place.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import * as ts from 'typescript'
 
 const hoisted = vi.hoisted(() => ({
   fleetPasses: 0,
@@ -159,5 +162,71 @@ describe('single-tenant behaviour is untouched', () => {
 
     expect(hoisted.fleetPasses).toBe(0)
     expect(tenantsTouched()).toEqual([null])
+  })
+})
+
+describe('the production call site, not just the mechanism', () => {
+  // The round-2 version of this file tested `runWithoutLogContext` in isolation
+  // and the ledger claimed bootstrap.ts was "pinned by" it. It was not:
+  // reverting the wrapper at bootstrap.ts — its only production caller
+  // repo-wide — left this suite 6/6 green, because nothing here imported the
+  // module it claimed to pin. Asserting on the mechanism and naming a call site
+  // is the eighteenth could-not-have-failed shape in this run.
+  //
+  // Read the source and assert the shape, the way `policy/` scanners do. A
+  // behavioural test would have to stand up `createServerOnlyFn` plus five
+  // dynamic imports to reach ten lines; this reaches them exactly.
+  const source = readFileSync(join(__dirname, '../functions/bootstrap.ts'), 'utf8')
+  const sf = ts.createSourceFile('bootstrap.ts', source, ts.ScriptTarget.Latest, false)
+
+  /** The `setTimeout(...)` call that arms telemetry, as an AST node. */
+  function telemetryTimer(): ts.CallExpression | null {
+    let found: ts.CallExpression | null = null
+    const visit = (node: ts.Node): void => {
+      if (found) return
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'setTimeout' &&
+        node.getText(sf).includes('startTelemetry')
+      ) {
+        found = node
+        return
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+    return found
+  }
+
+  it('finds the telemetry timer at all', () => {
+    // If bootstrap.ts stops arming telemetry this way, the two assertions below
+    // would pass vacuously. This is what stops that.
+    expect(telemetryTimer()).not.toBeNull()
+  })
+
+  it('arms it through runWithoutLogContext', () => {
+    expect(telemetryTimer()!.getText(sf)).toContain('runWithoutLogContext')
+  })
+
+  it('gates it behind shouldRunWorkers, so a role=web replica stays silent', () => {
+    // §1's scale-to-zero argument is that "a QUACKBACK_ROLE=web replica runs
+    // none of them". Detaching the scope made the sweep fleet-wide, which is
+    // right in direction but would have had every web replica walking every
+    // tenant hourly — a wider blast radius than the bug it fixed.
+    let guarded = false
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isIfStatement(node) &&
+        node.expression.getText(sf).includes('shouldRunWorkers()') &&
+        node.expression.getText(sf).includes('_initialized') &&
+        node.thenStatement.getText(sf).includes('startTelemetry')
+      ) {
+        guarded = true
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+    expect(guarded).toBe(true)
   })
 })

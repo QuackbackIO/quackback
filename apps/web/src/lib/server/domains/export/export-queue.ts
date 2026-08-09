@@ -12,6 +12,7 @@ import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-
 import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { logger } from '@/lib/server/logger'
 import type { WorkspaceExportJobData } from './export-run-processor'
+import { createQueueWorker } from '@/lib/server/queue/create-worker'
 
 const log = logger.child({ component: 'export-queue' })
 
@@ -50,7 +51,7 @@ async function initializeQueue() {
   // Consumer side is role-gated: web-role replicas enqueue but never
   // construct a Worker (see queue/role.ts).
   const worker = shouldRunWorkers()
-    ? new Worker<WorkspaceExportJobData>(
+    ? createQueueWorker<WorkspaceExportJobData>(
         QUEUE_NAME,
         async (job) => {
           const { runWorkspaceExportJob } = await import('./export-run-processor')

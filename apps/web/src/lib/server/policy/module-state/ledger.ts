@@ -473,8 +473,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/analytics/partition-maintenance-queue.ts',
@@ -482,8 +490,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/api/openapi.ts',
@@ -499,8 +515,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/conversation/routing/routing.registry.ts',
@@ -516,8 +540,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/export/export-queue.ts',
@@ -525,8 +557,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/help-center/help-center-translate-queue.ts',
@@ -534,8 +574,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/import/import-queue.ts',
@@ -543,8 +591,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/platform-credentials/platform-credential.service.ts',
@@ -568,8 +624,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/sla/sla-breach-sweep-queue.ts',
@@ -577,8 +641,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/dispatcher.guards.ts',
@@ -595,8 +667,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/workflow-retention-queue.ts',
@@ -604,8 +684,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/workflow-sweep-queue.ts',
@@ -613,8 +701,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/workflow-wait-queue.ts',
@@ -622,8 +718,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/events/catalogue/define.ts',
@@ -638,14 +742,27 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/events/registry.ts',
     name: 'builtinHooks',
     category: 'process-lifetime',
-    reason: 'Built-in hook handler implementations, registered at import. Stateless.',
+    reason:
+      'Built-in hook handler implementations. NOT merely registered at import and NOT stateless: ' +
+      'registerHook() is an exported mutator and getHook() writes a resolved handler back into the ' +
+      'map, so it changes at runtime. The category still holds because the VALUES are ' +
+      'tenant-agnostic module functions - every workspace resolves the same handler for the same ' +
+      'hook type - but "stateless" was the wrong reason for a right answer.',
   },
   {
     file: 'apps/web/src/lib/server/events/resolvers/index.ts',
@@ -669,8 +786,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. Holds connection ' +
-      'objects, never tenant rows.',
+      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
+      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
+      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
+      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
+      'the async context alive at construction for every job it ever handles - and seven of these ' +
+      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
+      "been welded onto the processor and every tenant's jobs would have run against that one " +
+      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
+      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
+      'and fails loudly on db rather than silently succeeding somewhere wrong.',
   },
   {
     file: 'apps/web/src/lib/server/functions/bootstrap.ts',
@@ -829,9 +954,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'manager',
     category: 'process-lifetime',
     reason:
-      'A MarkdownManager built once from the static SERVER_EXTENSIONS schema. Its configuration is ' +
-      'a compile-time constant; no workspace value reaches it, and parse/serialize take their input ' +
-      'as arguments and retain nothing.',
+      'A MarkdownManager built once from the static SERVER_EXTENSIONS schema. No workspace value ' +
+      'reaches it and parse/serialize retain nothing. Be precise about what IS shared, though: ' +
+      'constructing a MarkdownManager calls setOptions on the module-global `marked` singleton, so ' +
+      'commentManager below leaves ITS gfm/breaks options as the process-wide default. Both are ' +
+      'compile-time constants applied at module load and identical for every tenant, which is why ' +
+      'the category stands, but "static configuration, no shared effect" would be wrong.',
   },
   {
     file: 'apps/web/src/lib/server/markdown-tiptap.ts',
@@ -839,7 +967,9 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       'The comment-schema sibling of manager, built from a second static extension list for the ' +
-      'narrower node set comments allow. Same argument: static configuration, no retained input.',
+      'narrower node set comments allow. It is the later of the two to construct, so its ' +
+      'markedOptions win on the shared `marked` singleton - deterministically, at module load, ' +
+      'identically for every tenant. Static values, one global side effect, no tenant dimension.',
   },
   {
     file: 'apps/web/src/lib/server/content/email-html-to-content.ts',
@@ -849,5 +979,24 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'A TurndownService configured with three literal style options (atx headings, fenced code, ' +
       'dash bullets). Rules are registered at construction from constants and conversion is a pure ' +
       'function of the HTML passed in, so a shared instance returns what a fresh one would.',
+  },
+  {
+    file: 'apps/web/src/lib/server/auth/sso-test-callback.ts',
+    name: 'SCRIPT_BREAKERS',
+    category: 'process-lifetime',
+    reason:
+      'A global-flagged RegExp, so it carries a mutable lastIndex and is not the value type a bare ' +
+      'new RegExp looks like. Safe here only because its single use is String.replace, which resets ' +
+      'lastIndex on every call; an .exec() loop over the same instance would interleave across ' +
+      'requests. Ledgered rather than exempted so the next use of it is a visible diff.',
+  },
+  {
+    file: 'apps/web/src/lib/shared/workflows/interpolate.ts',
+    name: 'TOKEN_PATTERN',
+    category: 'process-lifetime',
+    reason:
+      'The same shape as SCRIPT_BREAKERS: a g-flagged RegExp with a mutable lastIndex, used once ' +
+      'through String.replace, which resets it. Holds no tenant value - the pattern is built from a ' +
+      'compile-time token grammar.',
   },
 ]
