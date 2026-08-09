@@ -4,14 +4,18 @@
  * the same realtime/inbox updates a manual reopen does.
  *
  * Runs on the Postgres job queue (`lib/server/jobs`). Schedule and retry policy
- * live in `jobs/definitions.ts`.
+ * live in `jobs/definitions.ts`. Every collaborator is imported statically so
+ * `primeJobHandlers()` loads it outside any tenant scope — see
+ * sla-breach-sweep-queue.ts for why that matters.
  */
 import { logger } from '@/lib/server/logger'
+import { finalizeStaleAssistantInvolvements } from '@/lib/server/domains/assistant'
+import { sweepAndNotifyExpiredPendingActions } from '@/lib/server/domains/assistant/pending-actions.service'
+import { sweepDueSnoozedConversations } from './conversation.service'
 
 const log = logger.child({ component: 'snooze-sweep' })
 
 export async function runSnoozeSweep(): Promise<void> {
-  const { sweepDueSnoozedConversations } = await import('./conversation.service')
   const result = await sweepDueSnoozedConversations()
   if (result.woken > 0) {
     log.debug({ woken: result.woken }, 'snooze-sweep run complete')
@@ -21,7 +25,6 @@ export async function runSnoozeSweep(): Promise<void> {
   // gone quiet (assumed resolution). Best-effort: an assistant sweep failure
   // must not fail the snooze wake.
   try {
-    const { finalizeStaleAssistantInvolvements } = await import('@/lib/server/domains/assistant')
     const { resolved } = await finalizeStaleAssistantInvolvements()
     if (resolved > 0) {
       log.debug({ resolved }, 'assistant assumed-resolution sweep complete')
@@ -34,8 +37,6 @@ export async function runSnoozeSweep(): Promise<void> {
   // know the request timed out rather than leaving them hanging. Best-effort,
   // same as the involvement sweep above.
   try {
-    const { sweepAndNotifyExpiredPendingActions } =
-      await import('@/lib/server/domains/assistant/pending-actions.service')
     const expired = await sweepAndNotifyExpiredPendingActions()
     if (expired.length > 0) {
       log.debug({ expired: expired.length }, 'assistant pending-action expiry sweep complete')

@@ -10,17 +10,25 @@
  *
  * Runs on the Postgres job queue (`lib/server/jobs`). Schedule and retry policy
  * live in `jobs/definitions.ts`.
+ *
+ * The sweep modules are imported STATICALLY. They used to be `await import(...)`
+ * inside the handler, which is a scope hazard rather than a style choice: the
+ * tier opens a tenant scope around every pass, so a call-time import runs the
+ * imported module's top level under whichever tenant happened to trigger it
+ * first. `primeJobHandlers()` loads this module before any scope is open, and
+ * static imports are what make that cover the modules the work actually lives
+ * in. `__tests__/handler-imports.test.ts` keeps it that way.
  */
 import { logger } from '@/lib/server/logger'
+import { sweepOverdueSlaBreaches } from './sla.sweep'
+import { sweepOverdueTicketSlaBreaches } from './ticket-sla.sweep'
 
 const log = logger.child({ component: 'sla-breach-sweep' })
 
 export async function runSlaBreachSweep(): Promise<void> {
-  const { sweepOverdueSlaBreaches } = await import('./sla.sweep')
   const result = await sweepOverdueSlaBreaches()
   // The ticket-anchored TTR twin — same per-minute tick, same exactly-once
   // marker discipline on its own stamp.
-  const { sweepOverdueTicketSlaBreaches } = await import('./ticket-sla.sweep')
   const ticketResult = await sweepOverdueTicketSlaBreaches()
   if (result.recorded > 0 || ticketResult.recorded > 0) {
     log.debug(

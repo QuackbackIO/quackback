@@ -181,20 +181,33 @@ describe('the schedule tick', () => {
       // index. Production gives each tenant its own database and both insert.
       // What must hold either way is that each scheduler DECIDED the slot was
       // due — which is exactly what shared state destroys.
+      //
+      // Asserted as an exact count rather than for truthiness. Reading it as a
+      // boolean leaves the whole guard hanging on a counter nothing pins: an
+      // `attempted` hardcoded to 1 passed this file, and passed it even with the
+      // shared-state defect restored underneath.
       currentTenantId = 'tenant-alpha'
-      if ((await runScheduleTick(alpha, minute(m))).attempted) {
-        alphaKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
-      }
+      const a = await runScheduleTick(alpha, minute(m))
+      expect(a.attempted, `alpha attempted at minute ${m}`).toBe(1)
+      alphaKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
+
       currentTenantId = 'tenant-bravo'
-      if ((await runScheduleTick(bravo, minute(m))).attempted) {
-        bravoKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
-      }
+      const b = await runScheduleTick(bravo, minute(m))
+      expect(b.attempted, `bravo attempted at minute ${m}`).toBe(1)
+      bravoKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
     }
+
+    // The other pole, and the reason the count is asserted at all: a tick with
+    // no new slot due must attempt NOTHING. Without this, `attempted` could be
+    // any always-truthy value and the guard above would still pass.
+    currentTenantId = 'tenant-alpha'
+    expect((await runScheduleTick(alpha, minute(3))).attempted).toBe(0)
+    currentTenantId = 'tenant-bravo'
+    expect((await runScheduleTick(bravo, minute(3))).attempted).toBe(0)
     currentTenantId = null
 
     // Each scheduler saw all three slots. With shared state the second caller of
-    // each minute finds the counter already advanced and never attempts, so one
-    // of these arrays comes back empty.
+    // each minute finds the counter already advanced and never attempts.
     const expected = [1, 2, 3].map((m) => slotKey(q, new Date(2026, 7, 9, 14, m)))
     expect(alphaKeys).toEqual(expected)
     expect(bravoKeys).toEqual(expected)

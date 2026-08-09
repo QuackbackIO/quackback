@@ -223,8 +223,17 @@ The tests assert slots per **local calendar day** — 23 on the spring-forward d
 window with arbitrary bounds cannot state that property.
 
 A schedule whose wall-clock time does not occur on the spring-forward day (02:30)
-still does not run that day. That is what cron does, and the boot-time partition
-ensure covers the one schedule it affects.
+still does not run that day.
+
+Two things about that residual are worth stating precisely, because the obvious
+justifications for it are both wrong. **It is not "what cron does"** — Vixie cron
+explicitly runs fixed-time jobs from the skipped interval right after the jump.
+It _is_ what the reference does: BullMQ on cron-parser, which is the behaviour
+this piece is held to. **And the boot-time partition ensure does not cover it**,
+because that only fires at boot and a long-lived process crossing the transition
+never boots. What actually makes it harmless is that `ensurePageViewPartitions`
+builds a **week ahead**, so a missed day costs one of seven days of runway and
+the next day's run restores it.
 
 ## 7. Shape of the tier
 
@@ -280,8 +289,24 @@ rather than asserting it:
 - **Handler modules are imported once at tier start, before any scope is open**
   (`primeJobHandlers()`). That closes the quieter version of the same risk: a
   dynamic `import()` executed inside a tenant scope would run the module's top
-  level under that tenant's connection. A miss on the memo still resolves, but
-  logs, because a miss in a running tier means exactly that is happening.
+  level under that tenant's connection.
+
+  **That guarantee reaches exactly as far as the static import graph, and an
+  earlier version of this document overstated it.** Priming loads the seven
+  handler _wrapper_ modules; three of them deferred their sweep modules to call
+  time, which is inside the per-pass tenant scope — and `resolveHandler`'s
+  warning could not see it, because it only guards the outer import. Proven on
+  the pooled fleet with a top-level probe in `sla.sweep.ts`: `(module not
+imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
+
+  Those imports are now static, and `__tests__/handler-imports.test.ts` scans
+  every registered handler module and fails on a call-time `import(`. A source
+  scan rather than a runtime assertion, because the property is about _when_ a
+  module loaded and the module registry keeps no record of the scope it loaded
+  under.
+
+  A memo miss still resolves and logs — but that path only covers the wrapper,
+  so the scan is what actually holds the property.
 
 ## 10. What runs here, and what does not yet
 
@@ -300,6 +325,24 @@ Two of those eight are the reason this primitive was built the way it was.
 `maxAttempts: 1` and the reaper's terminal branch is what preserves their
 semantics. Nothing else needs to change for them.
 
+### Read this before moving the remaining eight
+
+**`drainOnce` is one serial loop over every queue, where the reference had seven
+independent workers.** A job that runs long therefore delays _cron slots on every
+other queue for that tenant_ — the loop cannot reach its next schedule tick until
+the current batch finishes.
+
+That is negligible today: all seven sweeps are sub-second, and the serial shape
+is deliberate, because these run against a per-tenant database sized for one
+tenant's ordinary load. It stops being negligible with `help-center-translate`,
+which needs a **120 s lease** today. On this loop, one translation blocks the
+per-minute `snooze-sweep` and `sla-breach-sweep` for its whole duration.
+
+Whoever takes that on needs a concurrency story before landing it — per-queue
+loops, a bounded worker pool over the claim, or a separate tier for the slow
+queues. Measured against the reference this would be a regression, and it is much
+cheaper to decide than to discover.
+
 ## 11. Running the evidence
 
 ```bash
@@ -313,7 +356,9 @@ DATABASE_URL=... bun run scripts/job-lease-proof.ts long-lease --work-seconds 18
 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
 JOB_WAKE_DISABLED=1 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
 
-# the tenant boundary, on a real pooled fleet
+# the tenant boundary and the per-tenant scheduler, on a real pooled fleet.
+# This is the only harness with a cron schedule — job-lease-proof.ts is
+# single-tenant and could not see a cross-tenant scheduler defect at all.
 env $(cat pooled.env) bun run scripts/job-tenant-proof.ts run --a <id> --b <id>
 env $(cat pooled.env) bun run scripts/job-tenant-proof.ts listen-endpoints
 ```
