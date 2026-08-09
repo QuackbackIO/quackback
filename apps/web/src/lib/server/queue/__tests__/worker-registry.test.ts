@@ -120,46 +120,66 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
     return found
   }
 
+  /**
+   * Record an origin, never downgrading a flagged one.
+   *
+   * Two scopes can bind the same name — `const bull = await import('bullmq')`
+   * in one function and `const bull = await import('ioredis')` in another — and
+   * last-write-wins would let the innocent one excuse the other. Evidence that
+   * a name COULD be bullmq is not erased by evidence that some other binding of
+   * it is not.
+   */
+  const recordOrigin = (name: string, origin: Origin): void => {
+    const existing = origins.get(name)
+    if (existing === 'bullmq' || existing === 'unresolvable') return
+    origins.set(name, origin)
+  }
+
+  /**
+   * Bindings are collected from the WHOLE file, not just its top level.
+   *
+   * `const bull = await import(...)` lives inside a function in every idiomatic
+   * spelling — the queue modules all dynamic-import that way. A top-level-only
+   * sweep left such a name with no recorded origin at all, which happens to
+   * flag it, so the "unresolvable stays flagged" case passed for entirely the
+   * wrong reason and could not fail when that rule was inverted.
+   */
+  const collectBindings = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      if (!node.initializer) {
+        recordOrigin(node.name.text, 'local')
+      } else {
+        const dyn = dynamicImportOf(node.initializer)
+        if (!dyn) {
+          recordOrigin(node.name.text, 'local')
+        } else {
+          const arg = dyn.arguments[0]
+          recordOrigin(
+            node.name.text,
+            arg && ts.isStringLiteral(arg) ? specifierOrigin(arg.text) : 'unresolvable'
+          )
+        }
+      }
+    }
+    if (ts.isClassDeclaration(node) && node.name) recordOrigin(node.name.text, 'local')
+    if (ts.isFunctionDeclaration(node) && node.name) recordOrigin(node.name.text, 'local')
+    ts.forEachChild(node, collectBindings)
+  }
+
   for (const stmt of sf.statements) {
     if (ts.isImportDeclaration(stmt) && ts.isStringLiteral(stmt.moduleSpecifier)) {
       const origin = specifierOrigin(stmt.moduleSpecifier.text)
       const clause = stmt.importClause
-      if (clause?.name) origins.set(clause.name.text, origin)
+      if (clause?.name) recordOrigin(clause.name.text, origin)
       const bindings = clause?.namedBindings
-      if (bindings && ts.isNamespaceImport(bindings)) origins.set(bindings.name.text, origin)
+      if (bindings && ts.isNamespaceImport(bindings)) recordOrigin(bindings.name.text, origin)
       if (bindings && ts.isNamedImports(bindings)) {
-        for (const el of bindings.elements) origins.set(el.name.text, origin)
+        for (const el of bindings.elements) recordOrigin(el.name.text, origin)
       }
       continue
-    }
-    if (ts.isClassDeclaration(stmt) && stmt.name) {
-      origins.set(stmt.name.text, 'local')
-      continue
-    }
-    if (ts.isFunctionDeclaration(stmt) && stmt.name) {
-      origins.set(stmt.name.text, 'local')
-      continue
-    }
-    if (ts.isVariableStatement(stmt)) {
-      for (const d of stmt.declarationList.declarations) {
-        if (!ts.isIdentifier(d.name)) continue
-        if (!d.initializer) {
-          origins.set(d.name.text, 'local')
-          continue
-        }
-        const dyn = dynamicImportOf(d.initializer)
-        if (!dyn) {
-          origins.set(d.name.text, 'local')
-          continue
-        }
-        const arg = dyn.arguments[0]
-        origins.set(
-          d.name.text,
-          arg && ts.isStringLiteral(arg) ? specifierOrigin(arg.text) : 'unresolvable'
-        )
-      }
     }
   }
+  collectBindings(sf)
 
   /** The identifier a `new X(...)` / `new a.b.Worker(...)` is rooted at. */
   const rootName = (expr: ts.Expression): string | null => {
