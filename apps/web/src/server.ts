@@ -10,7 +10,7 @@ import { logStartupBanner } from '@/lib/server/startup'
 // so every route 500s forever while the process stays up and keeps dialling.
 assertBootConfigurationOrExit()
 
-// Cold-start optimization: eagerly warm DB + Redis connections AND preload
+// Cold-start optimization: eagerly warm the database connections AND preload
 // the modules that bootstrap.ts dynamically imports on first SSR. The
 // underlying TCP+TLS handshakes happen in parallel with Bun's module load
 // + Knative's pod-readiness propagation, so by the time the first request

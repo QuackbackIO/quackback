@@ -44,7 +44,6 @@ vi.mock('@/lib/server/logger', () => ({
 const BASE_ENV = {
   BASE_URL: 'http://localhost:3000',
   SECRET_KEY: 'x'.repeat(48),
-  REDIS_URL: 'redis://localhost:6379',
 }
 
 let saved: NodeJS.ProcessEnv
@@ -146,13 +145,13 @@ describe('the database refusals the pooled mode DOES keep', () => {
 })
 
 describe('the role vocabulary has one reader', () => {
-  it('queue/role.ts is the only place QUACKBACK_ROLE is interpreted', async () => {
+  it('process-role.ts is the only place QUACKBACK_ROLE is interpreted', async () => {
     // The config schema no longer parses it, so there is one reader and no
     // second opinion to drift from. Tolerance for a nonsense value lives there
     // too — and it is fail-CLOSED: an unrecognised role resolves to `web` and
     // starts nothing, rather than to `all`, which would start everything on a
     // replica whose manifest said otherwise.
-    const { getProcessRole, shouldRunWorkers } = await import('../queue/role')
+    const { getProcessRole, shouldRunWorkers } = await import('../process-role')
     for (const [raw, role, workers] of [
       ['web', 'web', false],
       ['worker', 'worker', true],

@@ -455,7 +455,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'warnedPooled',
     category: 'process-lifetime',
     reason:
-      'Warn-once latch for the pooled IMAP refusal, and the exact analogue of queue/role.ts ' +
+      'Warn-once latch for the pooled IMAP refusal, and the exact analogue of process-role.ts ' +
       'warnedInvalid: what it holds is a fact about the PROCESS, and what sharing it costs is one ' +
       'suppressed duplicate log line. IMAP credentials are read from process.env, so the condition ' +
       'the latch describes has no tenant dimension to get wrong. What the latch is not is the ' +
@@ -557,13 +557,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'spends the same cost as the matching one. No tenant value is an input.',
   },
   {
-    file: 'apps/web/src/lib/server/queue/redis-config.ts',
-    name: '_shared',
-    category: 'process-lifetime',
-    reason: 'The shared ioredis connection handle for BullMQ. A connection, not a cache.',
-  },
-  {
-    file: 'apps/web/src/lib/server/queue/role.ts',
+    file: 'apps/web/src/lib/server/process-role.ts',
     name: 'warnedInvalid',
     category: 'process-lifetime',
     reason:

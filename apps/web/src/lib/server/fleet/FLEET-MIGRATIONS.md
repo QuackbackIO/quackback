@@ -414,7 +414,7 @@ failed, halt and read · `2` the invocation was wrong.
 
 `MIN_SCHEMA_VERSION` and `QUACKBACK_ROLE` are checked by
 `lib/server/boot-config.ts`, called as the **first statement of `server.ts`** —
-above the eager DB/Redis warmup, so the refusal happens before any socket is
+above the eager database warmup, so the refusal happens before any socket is
 opened. That ordering is asserted on the source, because no unit test of either
 function can see it.
 

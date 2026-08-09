@@ -1,12 +1,19 @@
 /**
  * P06 — a cached settings / branding / feature-flag read for alpha served to bravo.
  *
- * SAAS-HOSTING-STACK.md §4.1 rates this the most certain of the singleton
- * hazards: `redis.ts:34-53` keys the settings, webhook, auth-provider and
- * platform-credential caches on bare literals — `TENANT_SETTINGS = 'settings:tenant'`
- * and friends. The moment one Redis is shared, tenant A's settings, branding,
- * feature flags and auth configuration are served to tenant B. Unlike the
- * in-heap singletons, it survives a restart.
+ * SAAS-HOSTING-STACK.md §4.1 rated this the most certain of the singleton
+ * hazards: the settings, webhook, auth-provider and platform-credential caches
+ * were keyed on bare literals — `TENANT_SETTINGS = 'settings:tenant'` and
+ * friends — in one shared Redis, so tenant A's settings, branding, feature flags
+ * and auth configuration could be served to tenant B, and unlike the in-heap
+ * singletons it survived a restart.
+ *
+ * That mechanism is gone rather than merely dormant: the cache is `kv_store` in
+ * the tenant's own database, and the discriminator is `tenant_id`, the leading
+ * column of the primary key (`cache.ts`, `kv/pg-kv.ts`, `kv/KV.md`). A key
+ * column cannot be bypassed by concatenation the way a string prefix could.
+ * What this probe still earns is the other half: that each host serves its own
+ * identity, and holds it under interleaved reads.
  *
  * ## Identity is planted, not derived
  *
@@ -120,10 +127,11 @@ export const p06SettingsCache: Probe = {
     'identity stays put across interleaved reads.',
   requires: ['http', 'db'],
   poolingCaveat:
-    'The cache keys this targets (redis.ts CACHE_KEYS) are bare literals, so they collide only when ' +
-    'one Redis is shared between tenants. Two separate deployments each have their own Redis, so a ' +
-    'PASS today confirms the surfaces carry the right identity and hold it under interleaved load — ' +
-    'it cannot yet exercise the shared-key collision itself.',
+    'The shared-key collision this was designed around no longer has a mechanism: the cache is ' +
+    'kv_store in the tenant own database, discriminated by the tenant_id column rather than by a ' +
+    'string prefix. A PASS confirms the surfaces carry the right identity and hold it under ' +
+    'interleaved load; it does not exercise a cross-tenant cache read, because there is no longer ' +
+    'a shared namespace for one to occur in.',
 
   async run(ctx: ProbeContext) {
     const { alpha, bravo } = ctx

@@ -17,7 +17,6 @@ import { isPooledTenancy } from '../mode'
 function stubValidEnvFor(tenancy: string | undefined): void {
   vi.stubEnv('BASE_URL', 'http://localhost:3000')
   vi.stubEnv('SECRET_KEY', 'a'.repeat(64))
-  vi.stubEnv('REDIS_URL', 'redis://localhost:6379')
   if (tenancy === undefined) vi.stubEnv('QUACKBACK_TENANCY', '')
   else vi.stubEnv('QUACKBACK_TENANCY', tenancy)
   // Each mode requires the opposite database story.
@@ -73,7 +72,6 @@ describe('isPooledTenancy', () => {
     vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
     vi.stubEnv('SECRET_KEY', '')
     vi.stubEnv('BASE_URL', '')
-    vi.stubEnv('REDIS_URL', '')
     expect(() => isPooledTenancy()).not.toThrow()
     expect(isPooledTenancy()).toBe(true)
 

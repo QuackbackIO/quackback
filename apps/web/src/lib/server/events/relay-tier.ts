@@ -50,7 +50,7 @@ import { config } from '@/lib/server/config'
 import { db as ambientDb, type Database } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
+import { shouldRunWorkers } from '@/lib/server/process-role'
 import { openWakeListener, type WakeListener } from '@/lib/server/jobs/wake'
 import { warnIfPooled } from './direct-session'
 import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
@@ -102,7 +102,7 @@ function envInt(name: string, fallback: number): number {
 
 /**
  * Read from `process.env` directly rather than through the zod config, matching
- * `queue/role.ts` and the job tier: these must work in any context, including a
+ * `process-role.ts` and the job tier: these must work in any context, including a
  * relay process that has not loaded the full application config.
  */
 export function relayTierConfig(): RelayTierConfig {

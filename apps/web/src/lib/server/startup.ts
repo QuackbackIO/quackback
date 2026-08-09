@@ -3,7 +3,7 @@
  * Build-time constants are injected via Vite `define`; runtime info is read at call time.
  */
 import { logger } from '@/lib/server/logger'
-import { getProcessRole, shouldRunWorkers } from './queue/role'
+import { getProcessRole, shouldRunWorkers } from './process-role'
 import { config, validateRuntimeConfig } from './config'
 
 const log = logger.child({ component: 'startup' })
@@ -12,7 +12,7 @@ let _logged = false
 let _shutdownWired = false
 
 /**
- * Wire SIGTERM/SIGINT to drain the job tier and close the remaining Redis
+ * Wire SIGTERM/SIGINT to drain the job tier and close the remaining Postgres
  * connections cleanly. A job left mid-flight is not lost — its lease lapses and
  * the reaper adjudicates it — but draining avoids abandoning work that was
  * seconds from finishing, and avoids double-billing an AI call.
@@ -56,10 +56,6 @@ function wireGracefulShutdown(): void {
         // Drain the conversation pub/sub subscriber connection before the
         // shared client closes — it's a separate long-lived socket.
         await import('./realtime/pubsub').then(({ closeSubscriber }) => closeSubscriber())
-
-        // After all queues + workers have closed, quit the shared
-        // IORedis client so we don't leave a half-open socket behind.
-        await import('./queue/redis-config').then(({ closeQueueRedis }) => closeQueueRedis())
 
         clearTimeout(forceExit)
         log.info('shutdown complete')

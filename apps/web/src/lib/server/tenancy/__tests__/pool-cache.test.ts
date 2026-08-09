@@ -98,7 +98,6 @@ function descriptor(id: string, revision = 1) {
 async function loadCache() {
   vi.stubEnv('BASE_URL', 'http://localhost:3000')
   vi.stubEnv('SECRET_KEY', 'a'.repeat(64))
-  vi.stubEnv('REDIS_URL', 'redis://localhost:6379')
   vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
   vi.stubEnv('DATABASE_URL', '')
   vi.stubEnv('QUACKBACK_CONTROL_DATABASE_URL', 'postgresql://u@localhost:5432/control')

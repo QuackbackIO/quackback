@@ -78,14 +78,14 @@ async function reset() {
   await $`docker compose down --remove-orphans --volumes`.quiet().nothrow()
 
   // Force remove containers if they still exist
-  await $`docker rm -f quackback-db quackback-minio quackback-dragonfly`.quiet().nothrow()
+  await $`docker rm -f quackback-db quackback-minio`.quiet().nothrow()
 
   // Wait for ports to be released
   console.log('Waiting for ports to be released...')
   await Bun.sleep(2000)
 
   // Clear any other containers occupying our ports
-  for (const port of [5432, 9000, 9001, 6379]) {
+  for (const port of [5432, 9000, 9001]) {
     const result = await $`docker ps --format '{{.ID}} {{.Names}}' --filter publish=${port}`
       .quiet()
       .nothrow()
@@ -103,7 +103,7 @@ async function reset() {
 
   // Recreate all containers
   console.log('Starting fresh containers...')
-  await $`docker compose up -d postgres minio minio-init dragonfly`
+  await $`docker compose up -d postgres minio minio-init`
 
   // Give containers a moment to initialize
   console.log('Waiting for containers to initialize...')
@@ -144,13 +144,6 @@ async function reset() {
     process.exit(1)
   }
   console.log('✓ MinIO is ready')
-
-  // Wait for Dragonfly
-  if (!(await waitForHealthy('quackback-dragonfly', 30))) {
-    console.error('\n❌ Dragonfly did not become healthy in time')
-    process.exit(1)
-  }
-  console.log('✓ Dragonfly is ready')
 
   console.log('\n✅ Reset complete!')
   console.log('')

@@ -64,7 +64,7 @@ export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
 
 /**
  * Fetch available Slack channels for the connected workspace.
- * Pass `{ data: { force: true } }` to bypass the Dragonfly cache.
+ * Pass `{ data: { force: true } }` to bypass the cache.
  */
 const fetchSlackChannelsSchema = z.object({ force: z.boolean().optional().default(false) })
 type FetchSlackChannelsInput = z.infer<typeof fetchSlackChannelsSchema>

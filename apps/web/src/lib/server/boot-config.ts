@@ -35,7 +35,7 @@
  */
 import { logger } from '@/lib/server/logger'
 import { assertSchemaFloorConfigured } from '@/lib/server/fleet/schema-floor'
-import { assertProcessRoleConfigured } from '@/lib/server/queue/role'
+import { assertProcessRoleConfigured } from '@/lib/server/process-role'
 
 const log = logger.child({ component: 'boot-config' })
 

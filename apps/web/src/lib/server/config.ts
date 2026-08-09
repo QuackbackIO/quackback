@@ -137,8 +137,6 @@ const configSchema = z.object({
   // and restores strict single-use rotation. See auth/refresh-grace.ts.
   oauthRefreshGraceSeconds: envInt.default(7 * 24 * 60 * 60),
 
-  // Redis (BullMQ background jobs)
-  redisUrl: z.string().min(1),
   trustedProxyHops: envInt.pipe(z.number().int().min(0).max(10)).default(0),
 
   // Email (all optional)
@@ -259,8 +257,6 @@ function buildConfigFromEnv(): unknown {
     secretKey: process.env.SECRET_KEY,
     oauthRefreshGraceSeconds: env('OAUTH_REFRESH_GRACE_SECONDS'),
 
-    // Redis
-    redisUrl: process.env.REDIS_URL,
     trustedProxyHops: env('TRUSTED_PROXY_HOPS'),
 
     // Email
@@ -438,10 +434,6 @@ export const config = {
     return loadConfig().oauthRefreshGraceSeconds
   },
 
-  // Redis
-  get redisUrl() {
-    return loadConfig().redisUrl
-  },
   get trustedProxyHops() {
     return loadConfig().trustedProxyHops
   },

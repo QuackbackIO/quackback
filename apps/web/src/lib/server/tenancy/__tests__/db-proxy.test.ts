@@ -31,7 +31,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 function stubBaseEnv(): void {
   vi.stubEnv('BASE_URL', 'http://localhost:3000')
   vi.stubEnv('SECRET_KEY', 'a'.repeat(64))
-  vi.stubEnv('REDIS_URL', 'redis://localhost:6379')
 }
 
 /** A stand-in for a Drizzle handle that records what `this` was at call time. */

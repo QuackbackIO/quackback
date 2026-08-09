@@ -18,16 +18,6 @@ services:
       POSTGRES_PASSWORD: ${{secret(32)}}
     networking: private
 
-  dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
-    # BullMQ requires cluster_mode=emulated + lock_on_hashtags for Lua script compatibility.
-    # Queue names use hashtags (e.g. {event-hooks}) to pin keys to a single thread.
-    # See: https://www.dragonflydb.io/docs/integrations/bullmq
-    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
-    volumes:
-      - mount: /data
-    networking: private
-
   bucket:
     type: bucket
     # Railway-provided S3-compatible object storage
@@ -44,7 +34,6 @@ services:
     networking: public
     env:
       DATABASE_URL: postgresql://quackback:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/quackback
-      REDIS_URL: redis://${{dragonfly.RAILWAY_PRIVATE_DOMAIN}}:6379
       SECRET_KEY: ${{secret(64)}}
       BASE_URL: https://${{RAILWAY_PUBLIC_DOMAIN}}
       PORT: '3000'

@@ -31,7 +31,7 @@ try {
         auth_config_version = auth_config_version + 1
     WHERE id = ${id}`
 
-  await bustTenantSettings()
+  await bustTenantSettings(sql)
 
   console.log(JSON.stringify({ magicLink: true }))
   await sql.end()

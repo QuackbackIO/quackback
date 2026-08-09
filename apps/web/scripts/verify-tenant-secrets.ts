@@ -11,7 +11,7 @@
  *     QUACKBACK_TENANCY=pooled \
  *     QUACKBACK_CONTROL_DATABASE_URL=… \
  *     QUACKBACK_FLEET_ROOT_KEY=… \
- *     NEON_API_KEY=… SECRET_KEY=… BASE_URL=… REDIS_URL=… \
+ *     NEON_API_KEY=… SECRET_KEY=… BASE_URL=… \
  *     bun run apps/web/scripts/verify-tenant-secrets.ts a.example b.example
  *
  * Nothing tenant-specific is present. If the tenant's `SECRET_KEY` and storage
