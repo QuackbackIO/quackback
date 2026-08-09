@@ -480,9 +480,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/analytics/partition-maintenance-queue.ts',
@@ -497,9 +500,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/api/openapi.ts',
@@ -522,9 +528,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/conversation/routing/routing.registry.ts',
@@ -547,9 +556,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/export/export-queue.ts',
@@ -564,9 +576,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/help-center/help-center-translate-queue.ts',
@@ -581,9 +596,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/import/import-queue.ts',
@@ -598,9 +616,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/platform-credentials/platform-credential.service.ts',
@@ -631,9 +652,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/sla/sla-breach-sweep-queue.ts',
@@ -648,9 +672,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/dispatcher.guards.ts',
@@ -674,9 +701,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/workflow-retention-queue.ts',
@@ -691,9 +721,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/workflow-sweep-queue.ts',
@@ -708,9 +741,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/workflow-wait-queue.ts',
@@ -725,9 +761,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/events/catalogue/define.ts',
@@ -749,9 +788,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/events/registry.ts',
@@ -793,9 +835,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the async context alive at construction for every job it ever handles - and seven of these ' +
       "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
       "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed on two layers: config refuses to boot pooled unless QUACKBACK_ROLE=web, and ' +
-      'queue/create-worker.ts constructs every Worker detached so one built anyway inherits nothing ' +
-      'and fails loudly on db rather than silently succeeding somewhere wrong.',
+      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
+      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
+      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
+      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
+      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
+      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/functions/bootstrap.ts',
