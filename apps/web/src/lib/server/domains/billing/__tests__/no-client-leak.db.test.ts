@@ -73,6 +73,7 @@ const SECRETS = {
   subscriptionRef: 'sub_leakcheck',
   seatPrice: 'price_leakcheck_seat',
   outcomePrice: 'price_leakcheck_outcome',
+  retiredPrice: 'price_leakcheck_retired',
 }
 
 const CATALOGUE = {
@@ -92,7 +93,17 @@ function stub(): BillingProviderClient {
       customer: SECRETS.customerRef,
       status: 'active',
       current_period_end: 1_774_915_200,
-      items: { data: [{ id: 'si_1', quantity: 3, price: { id: SECRETS.seatPrice } }] },
+      items: {
+        data: [
+          { id: 'si_1', quantity: 3, price: { id: SECRETS.seatPrice } },
+          // A retired price, so `catalogueDrift` is actually POPULATED. Without
+          // it the field is `{status:'ok'}`, the drift branch never runs, and
+          // the leak assertions below sweep a shape that was never built —
+          // which is precisely the "prose claim nothing checks" this module
+          // refuses everywhere else.
+          { id: 'si_retired', quantity: 3, price: { id: SECRETS.retiredPrice } },
+        ],
+      },
     })),
     listInvoices: vi.fn(async () => [
       {
@@ -210,6 +221,11 @@ describe.skipIf(!fixture.available)('billing references never reach the client',
     const overview = await getBillingOverview()
     expect(overview).not.toBeNull()
 
+    // Precondition: the drift branch really did populate. A `status:'ok'`
+    // here would mean the sweep below never sees the fields it claims to
+    // guard.
+    expect(overview!.catalogueDrift).toMatchObject({ status: 'drifted' })
+
     expect(
       leaks(overview, [
         SECRETS.apiKey,
@@ -218,6 +234,7 @@ describe.skipIf(!fixture.available)('billing references never reach the client',
         SECRETS.subscriptionRef,
         SECRETS.seatPrice,
         SECRETS.outcomePrice,
+        SECRETS.retiredPrice,
         'price_leakcheck_free',
       ])
     ).toEqual([])

@@ -107,7 +107,7 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
             </p>
           )}
           <SeatSummary overview={overview} />
-          {overview.catalogueDrift && <CatalogueDriftNotice overview={overview} />}
+          <CatalogueDriftNotice drift={overview.catalogueDrift} />
         </div>
       </SettingsCard>
 
@@ -284,18 +284,31 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
  * it holds: new seats stop being added to the subscription, and a plan that
  * cannot be resolved is held at its last known value instead of downgrading.
  */
-function CatalogueDriftNotice({ overview }: { overview: BillingOverview }) {
-  const drift = overview.catalogueDrift
-  if (!drift) return null
+function CatalogueDriftNotice({ drift }: { drift: BillingOverview['catalogueDrift'] }) {
+  // No subscription, or a healthy one: nothing to say. `unknown` is NOT
+  // silence — that is the whole reason it is a separate state.
+  if (!drift || drift.status === 'ok') return null
+
+  if (drift.status === 'unknown') {
+    return (
+      <div className="w-full rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
+        <p className="text-[13px] font-medium">Billing catalogue could not be checked</p>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">
+          The billing provider could not be reached, so whether this subscription is priced
+          against the current plan catalogue is unknown. Try again shortly.
+        </p>
+      </div>
+    )
+  }
+
+  const total = drift.unaccountedLicensedItems + drift.unaccountedMeteredItems
   const frozen = drift.unaccountedLicensedItems > 0
   return (
     <div className="w-full rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
       <p className="text-[13px] font-medium">Billing catalogue is out of step</p>
       <p className="mt-0.5 text-[13px] text-muted-foreground">
-        This subscription has{' '}
-        {drift.unaccountedLicensedItems + drift.unaccountedMeteredItems} line item
-        {drift.unaccountedLicensedItems + drift.unaccountedMeteredItems === 1 ? '' : 's'} priced
-        outside the current plan catalogue.
+        This subscription has {total} line item{total === 1 ? '' : 's'} priced outside the current
+        plan catalogue.
         {frozen && ' New seats are not being added to it until that is reconciled.'}
         {drift.planUnresolvable &&
           ' The plan shown above is the last known one, held rather than downgraded.'}

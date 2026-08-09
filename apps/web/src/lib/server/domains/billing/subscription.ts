@@ -29,7 +29,9 @@
 
 import { and, billingSubscriptionState, db, eq, lt, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { getCloudConfig, writeCloudConfig } from '../settings/cloud/cloud.service'
+import { resolveCloudConfig, writeCloudConfig } from '../settings/cloud/cloud.service'
+import { requireSettings } from '../settings/settings.helpers'
+import type { StoredCloudConfig } from '@/lib/shared/db-types'
 import { writeTierLimits } from '../settings/tier-limits.write'
 import type { BillingStatus, CloudBilling } from '../settings/cloud/cloud.types'
 import type { PlanId } from '../settings/cloud/cloud.types'
@@ -366,7 +368,21 @@ async function resolvePlanToApply(
     return { plan: resolved, planHeld: false }
   }
 
-  const current = await getCloudConfig()
+  // Read the stored plan through the STRICT path, not `getCloudConfig()`.
+  //
+  // `getCloudConfig()` fails open: a settings-read error resolves to the
+  // disabled config, whose plan is null — which here would read as "no plan to
+  // hold" and downgrade the customer to Free. That is the exact outcome this
+  // function exists to prevent, reached through a different door, and it
+  // became reachable the moment this path acquired a settings read.
+  //
+  // Failing open is right for an entitlement *check*: it gates commerce, and
+  // denying during an outage costs availability. It is wrong here, because
+  // this decides what the customer is charged. So the read is allowed to
+  // throw — the webhook handler releases its claim and answers 500, and the
+  // provider redelivers once the read works again.
+  const row = await requireSettings()
+  const current = resolveCloudConfig((row.cloud ?? null) as StoredCloudConfig | null)
   if (!current.plan) return { plan: resolved, planHeld: false }
 
   log.warn(

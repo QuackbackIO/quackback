@@ -40,10 +40,24 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 // Redis-backed cache invalidation. Not what this file is about; the settings
 // read below is redirected at the database so the real resolve/gate path runs.
-vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.helpers')>()),
-  invalidateSettingsCache: vi.fn(async () => {}),
-}))
+/**
+ * Lets one test make the settings read fail. Only the plan-hold path reads
+ * settings through this helper, so breaking it isolates that read.
+ */
+const settingsRead = vi.hoisted(() => ({ failWith: null as Error | null }))
+
+vi.mock('@/lib/server/domains/settings/settings.helpers', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/server/domains/settings/settings.helpers')>()
+  return {
+    ...actual,
+    invalidateSettingsCache: vi.fn(async () => {}),
+    requireSettings: vi.fn(async () => {
+      if (settingsRead.failWith) throw settingsRead.failWith
+      return actual.requireSettings()
+    }),
+  }
+})
 
 vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal) => {
   const actual =
@@ -90,6 +104,8 @@ const fixture = await createDbTestFixture({
 const WEBHOOK_SECRET = 'whsec_upgrade_e2e'
 const CATALOGUE = {
   free: { seat: 'price_free_seat', limits: { maxBoards: 2 } },
+  // Present so a genuine plan CHANGE can be distinguished from the hold.
+  business: { seat: 'price_biz_seat', limits: { maxBoards: 100 } },
   pro: {
     seat: 'price_pro_seat',
     liteSeat: 'price_pro_lite',
@@ -201,6 +217,7 @@ afterEach(async () => {
   delete process.env.BILLING_PRICES
   resetBillingConfigCache()
   invalidateTierLimitsCache()
+  settingsRead.failWith = null
   vi.clearAllMocks()
 })
 
@@ -901,11 +918,38 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     const { getBillingOverview } = await import('../billing.service')
     const overview = await getBillingOverview({ client: drifted })
     expect(overview?.catalogueDrift).toEqual({
+      status: 'drifted',
       unaccountedLicensedItems: 1,
       unaccountedMeteredItems: 1,
       // The seat price still resolves, so the plan is known.
       planUnresolvable: false,
     })
+  })
+
+  it('reports drift as unknown when the provider cannot be reached', async () => {
+    // "Could not check" must not render as "checked, all fine" — and a
+    // provider outage is exactly when someone opens the billing page.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_before_outage',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+
+    const broken = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    broken.getSubscription = vi.fn(async () => {
+      throw new Error('provider unavailable')
+    })
+    const { getBillingOverview } = await import('../billing.service')
+    const overview = await getBillingOverview({ client: broken })
+
+    expect(overview?.catalogueDrift).toEqual({ status: 'unknown' })
+    // The rest of the page still renders — the read is best-effort.
+    expect(overview?.plan).toBe('pro')
   })
 
   it('reports no catalogue drift when every price resolves', async () => {
@@ -926,7 +970,208 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     const overview = await getBillingOverview({
       client: makeStub(calls, 'active', { ...INITIAL_QUANTITIES }),
     })
-    expect(overview?.catalogueDrift).toBeNull()
+    expect(overview?.catalogueDrift).toEqual({ status: 'ok' })
+  })
+
+  it('applies a plan CHANGE even when the subscription also carries a retired item', async () => {
+    // The `snapshot.plan !== null` guard. Its absence is a live money bug
+    // rather than a coverage gap: a subscription that resolves to a NEW plan
+    // while carrying one retired item would write the STORED plan instead, so
+    // an upgrade the customer has already paid for is silently ignored.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_pro_first',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+
+    // Upgrades to Business. One line is still on a retired price, so the
+    // subscription is simultaneously resolvable AND drifted.
+    const upgraded = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    upgraded.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: {
+        data: [
+          { id: 'si_seat', quantity: 2, price: { id: 'price_biz_seat' } },
+          { id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite_retired' } },
+        ],
+      },
+    }))
+    await deliver(
+      {
+        id: 'evt_upgraded',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      upgraded
+    )
+    invalidateTierLimitsCache()
+
+    // Business, not the stored Pro. The hold must never outrank a plan the
+    // subscription actually resolves to.
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'business',
+    })
+    expect(await getTierLimits()).toMatchObject({ maxBoards: 100 })
+  })
+
+  it('falls to Free when nothing is unaccounted, however the plan became null', async () => {
+    // The `unaccountedItems.some(licensed)` guard — the discriminator this
+    // module rests on: "is anything unaccounted", not "is the plan null".
+    //
+    // Reaching it needs a subscription that resolves to no plan while nothing
+    // LICENSED is unaccounted. A retired METERED price does exactly that: it
+    // is unaccounted, so the plan is null, but it carries no quantity and
+    // cannot be a seat, so it must not trigger the hold.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_pro_before_metered',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+
+    const meteredOnly = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    meteredOnly.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: {
+        data: [
+          {
+            id: 'si_usage',
+            price: { id: 'price_retired_usage', recurring: { usage_type: 'metered' } },
+          },
+        ],
+      },
+    }))
+    await deliver(
+      {
+        id: 'evt_metered_only',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      meteredOnly
+    )
+    invalidateTierLimitsCache()
+
+    // No licensed seat line survives, so there is nothing to hold on behalf
+    // of: the customer is no longer buying seats and Free is correct.
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'free',
+    })
+  })
+
+  it('falls to Free when there is no stored plan to hold', async () => {
+    // The `!current.plan` guard. A workspace that never had a plan has nothing
+    // to hold, and the hold must not write a null plan into the column.
+    await testDb.update(settings).set({ cloud: null })
+
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    const drifted = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    drifted.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: { data: [{ id: 'si_seat', quantity: 2, price: { id: 'price_pro_seat_v2' } }] },
+    }))
+    await deliver(
+      {
+        id: 'evt_no_stored_plan',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      drifted
+    )
+
+    const cloud = await testDb.query.settings.findFirst().then((r) => r?.cloud)
+    // Free, and specifically not null — a null plan with cloud enabled denies
+    // every entitlement, which is worse than the downgrade it replaces.
+    expect(cloud).toMatchObject({ enabled: true, plan: 'free' })
+  })
+
+  it('retries rather than downgrading when the settings read fails mid-drift', async () => {
+    // The hold reads the stored plan. `getCloudConfig()` fails OPEN — a
+    // settings-read error resolves to the disabled config, whose plan is null,
+    // which here would read as "nothing to hold" and downgrade the customer to
+    // Free. That is the very outcome the hold exists to prevent, reached
+    // through a different door, and it became reachable when this path
+    // acquired a settings read.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_pro_before_blip',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    )
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+
+    const drifted = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    drifted.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: { data: [{ id: 'si_seat', quantity: 2, price: { id: 'price_pro_seat_v2' } }] },
+    }))
+
+    settingsRead.failWith = new Error('settings read unavailable')
+    const result = await deliver(
+      {
+        id: 'evt_blip',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      drifted
+    )
+
+    // 500 so the provider redelivers, and the plan is untouched — not Free.
+    expect(result).toEqual({ status: 500, body: { error: 'handler_failed' } })
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
+
+    // And the retry, once the read works, holds Pro as intended.
+    settingsRead.failWith = null
+    await deliver(
+      {
+        id: 'evt_blip',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      drifted
+    )
+    expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
+      plan: 'pro',
+    })
   })
 
   it('refuses to write a plan the config file has pinned', async () => {

@@ -144,6 +144,16 @@ The practical consequence: `ensureCustomer()` stamps before checkout on every
 tenant this module serves, so the adoption path exists for robustness rather
 than as a routine flow.
 
+> **A seat-definition change is a silent invoice change on deploy.** Any
+> existing workspace with an AI-operations custom role — inbox reads plus
+> `assistant.manage`, and no other support-side write — moves from lite to
+> full on the next sync, which pushes new quantities and prorates. Nobody is
+> asked. That is intended and moot under new-tenants-only, because no existing
+> workspace is billed by this module at all. **If that cutover ever widens,
+> the widening must account for it**: any change to
+> `SUPPORT_WRITE_PERMISSIONS` or `SUPPORT_SURFACE_EXTRAS` reprices the
+> installed base at the moment it ships.
+
 > **Hazard, not a workaround.** Seeding `cloud.billing.customerRef` through
 > `config.yaml` looks like a way to hand this module a pre-made customer. It
 > is not: declaring `cloud.billing` makes it a managed path, after which
@@ -340,6 +350,14 @@ conditions, each of which keeps the hold narrow:
 2. it carries a licensed item the catalogue cannot account for, **and**
 3. its status still entitles a plan, **and** there is a stored plan to hold.
 
+The stored plan is read through `requireSettings()`, deliberately **not**
+`getCloudConfig()`. That helper fails *open* — a settings-read error resolves
+to the disabled config, whose plan is null, which here would read as "nothing
+to hold" and downgrade the customer to Free through a different door. Failing
+open is right for an entitlement *check*, which gates commerce; it is wrong
+where the read decides what someone is charged. So the read may throw, the
+webhook releases its claim and answers 500, and the provider redelivers.
+
 **The discriminator is (2), not (1).** A genuine downgrade or cancellation also
 yields no plan, and falling to Free is exactly right there — the difference is
 that such a subscription's items all resolve, so `null` is evidence about the
@@ -350,10 +368,21 @@ resolve returns before the status is ever consulted.
 
 ### The frozen state is on the billing page, not only in logs
 
-`getBillingOverview()` reports `catalogueDrift` — how many licensed and metered
-items the catalogue cannot account for, and whether the plan is unresolvable —
-recomputed from the same snapshot mapping the sync uses, so the page cannot
-claim a healthy catalogue while the sync is refusing to create.
+`getBillingOverview()` reports `catalogueDrift`, recomputed from the same
+snapshot mapping the sync uses so the page cannot claim a healthy catalogue
+while the sync is refusing to create. It has **three** states, not two:
+
+| state | meaning |
+| --- | --- |
+| `ok` | fetched, and every price is in the catalogue |
+| `drifted` | fetched, with counts of unaccounted licensed and metered items and whether the plan is unresolvable |
+| `unknown` | the provider could not be reached, so drift **cannot be determined** |
+
+`unknown` exists because the check needs a provider fetch and an outage is
+exactly when someone opens this page. Collapsing it into "no drift" would make
+*"could not check"* render identically to *"checked, all fine"* — the wrong
+direction for a warning surface, and there is no persisted record to fall back
+on. (`null` is reserved for "this workspace has no subscription".)
 
 It is surfaced rather than logged because the failure is **invisible to the
 only party who can fix it**: a repricing fires across the whole book at once,

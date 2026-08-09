@@ -50,6 +50,20 @@ export interface BillingPaymentMethod {
   expYear: number
 }
 
+/** See `BillingOverview.catalogueDrift`. `null` there means "no subscription". */
+export type CatalogueDriftState =
+  | { status: 'ok' }
+  | { status: 'unknown' }
+  | {
+      status: 'drifted'
+      /** Licensed items the catalogue cannot account for. Seat creation is paused. */
+      unaccountedLicensedItems: number
+      /** Metered items likewise. These do not pause anything. */
+      unaccountedMeteredItems: number
+      /** True when the subscription's prices resolve to no plan at all. */
+      planUnresolvable: boolean
+    }
+
 export interface BillingOverview {
   /**
    * Which plans this deployment sells, cheapest first.
@@ -72,27 +86,27 @@ export interface BillingOverview {
   /** True once a subscription exists, so the UI can offer manage vs buy. */
   hasSubscription: boolean
   /**
-   * Set when the subscription carries line items whose price is in no plan in
+   * Whether the subscription carries line items whose price is in no plan in
    * the catalogue — a repricing that has not been reconciled.
    *
    * Surfaced rather than left in logs because the failure is invisible to the
    * only party who can fix it: a repricing fires across the whole book at
-   * once, and nobody watches a per-tenant pod's warn stream. While it is set,
-   * seat *creation* is paused (updates continue), and if the plan itself could
-   * not be resolved the previously stored plan is being held rather than
-   * downgraded.
+   * once, and nobody watches a per-tenant pod's warn stream. While it is
+   * `drifted`, seat *creation* is paused (updates continue), and if the plan
+   * itself could not be resolved the previously stored plan is being held
+   * rather than downgraded.
+   *
+   * `unknown` is a distinct state on purpose. The check needs a provider
+   * fetch, and an outage is exactly when someone opens this page — reporting
+   * "no drift" then would mean **"could not check" rendering identically to
+   * "checked, all fine"**, which is the wrong direction for a warning
+   * surface. There is no persisted record to fall back on, so the honest
+   * answer is that the state is not known.
    *
    * Counts only. No item id and no price id: those are provider references,
    * and `no-client-leak.db.test.ts` asserts none reaches the client.
    */
-  catalogueDrift: {
-    /** Licensed items the catalogue cannot account for. Seat creation is paused. */
-    unaccountedLicensedItems: number
-    /** Metered items likewise. These do not pause anything. */
-    unaccountedMeteredItems: number
-    /** True when the subscription's prices resolve to no plan at all. */
-    planUnresolvable: boolean
-  } | null
+  catalogueDrift: CatalogueDriftState | null
   /** Only present in the provider's own dashboard sense; never an id. */
   livemode: boolean
 }
@@ -122,6 +136,8 @@ export async function getBillingOverview(
   let invoices: BillingInvoice[] = []
   let paymentMethod: BillingPaymentMethod | null = null
   let cancelAtPeriodEnd = false
+  // Defaults to `unknown` once a subscription exists: it is only downgraded to
+  // `ok` by a fetch that actually succeeded and found nothing.
   let catalogueDrift: BillingOverview['catalogueDrift'] = null
 
   if (stored) {
@@ -165,13 +181,21 @@ export async function getBillingOverview(
       // cannot claim a healthy catalogue while the sync is refusing to create.
       const snapshot = toSnapshot(subscriptionResult.value, config, new Date())
       const unaccounted = snapshot.unaccountedItems
-      if (unaccounted.length > 0) {
-        catalogueDrift = {
-          unaccountedLicensedItems: unaccounted.filter((item) => item.licensed).length,
-          unaccountedMeteredItems: unaccounted.filter((item) => !item.licensed).length,
-          planUnresolvable: snapshot.plan === null,
-        }
-      }
+      catalogueDrift =
+        unaccounted.length === 0
+          ? { status: 'ok' }
+          : {
+              status: 'drifted',
+              unaccountedLicensedItems: unaccounted.filter((item) => item.licensed).length,
+              unaccountedMeteredItems: unaccounted.filter((item) => !item.licensed).length,
+              planUnresolvable: snapshot.plan === null,
+            }
+    } else {
+      // The fetch failed, so drift genuinely cannot be determined. Saying so
+      // is the point: silence here would read as "all fine" during exactly the
+      // outage that makes the page worth opening.
+      catalogueDrift = { status: 'unknown' }
+      log.warn({ err: subscriptionResult.reason }, 'catalogue drift could not be determined')
     }
   }
 
