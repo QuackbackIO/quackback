@@ -1,5 +1,11 @@
 /**
- * Every registered handler module must load its whole graph statically.
+ * No registered handler module defers a module to call time.
+ *
+ * **Read the title literally — it is one level deep, and it used to overclaim.**
+ * This scan reads exactly the seven wrapper files named by `JOB_DEFINITIONS`. A
+ * call-time `import()` one level below, inside `sla.sweep.ts`, kept this file
+ * green while that module's top level ran under a tenant scope on the pooled
+ * fleet.
  *
  * `primeJobHandlers()` imports each handler module once at tier start, before
  * any tenant scope is open, so no module executes its top level under one
@@ -14,10 +20,27 @@
  * `inst_gauntlet_alpha` after the tier ran the sweep — the module's top level
  * executed under a tenant scope, with no warning possible.
  *
+ * Deepening it was measured and rejected rather than skipped. The modules these
+ * seven statically import include `conversation.service` (6 call-time imports),
+ * `pending-actions.service` (2) and `settings.service` (24) — ordinary lazy
+ * loading throughout the app, none of it queue-specific. A scan that flagged
+ * those would either fail on day one or need an allowlist that grows forever,
+ * and neither is a guard.
+ *
+ * So the boundary is stated rather than blurred. **The queue guarantees the
+ * handler wrappers and their static graph are loaded before any scope opens.**
+ * It does not, and cannot, guarantee that about the whole application's lazy
+ * graph: a module imported at call time runs under whatever scope its caller
+ * has, which for a request is the *correct* tenant. That only becomes a hazard
+ * when such a module captures scope-dependent state at its top level — which is
+ * the module-scope-state class the `lib/server/policy/` scanner owns, not this
+ * one.
+ *
  * A source scan is the right instrument because the property is about *when* a
  * module loads, which no runtime assertion in this process can observe after the
  * fact: once a module is in the registry there is no record of the scope it was
- * imported under.
+ * imported under. `priming.test.ts` pins the other half — that priming actually
+ * runs.
  */
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
@@ -47,7 +70,7 @@ function handlerModules(): Array<{ queue: string; file: string }> {
   return out
 }
 
-describe('handler modules load their whole graph statically', () => {
+describe('registered handler modules defer nothing to call time', () => {
   const modules = handlerModules()
 
   it('finds a real file for every registered queue', () => {
@@ -58,6 +81,15 @@ describe('handler modules load their whole graph statically', () => {
     for (const m of modules) {
       expect(fs.existsSync(m.file), `${m.queue} -> ${m.file}`).toBe(true)
     }
+    // And every queue resolved to a DIFFERENT file. The derivation reads the
+    // first `import('...')` after each `name:` marker, so a handler written
+    // without one silently reuses the next definition's specifier: `existsSync`
+    // still passes, one module gets scanned twice and one not at all.
+    expect(
+      new Set(modules.map((m) => m.file)).size,
+      `two queues derived the same handler file — the derivation has drifted:\n` +
+        modules.map((m) => `  ${m.queue} -> ${path.relative(SERVER_ROOT, m.file)}`).join('\n')
+    ).toBe(modules.length)
   })
 
   it.each(handlerModules())('$queue has no call-time import', ({ file }) => {

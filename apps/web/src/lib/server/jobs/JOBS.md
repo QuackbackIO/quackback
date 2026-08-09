@@ -328,20 +328,27 @@ semantics. Nothing else needs to change for them.
 ### Read this before moving the remaining eight
 
 **`drainOnce` is one serial loop over every queue, where the reference had seven
-independent workers.** A job that runs long therefore delays _cron slots on every
-other queue for that tenant_ — the loop cannot reach its next schedule tick until
-the current batch finishes.
+independent workers.** A job that runs long blocks the loop from reaching its
+next schedule tick until the batch finishes.
+
+**The slots that elapse during it are dropped, not delayed — and that distinction
+is the whole point of this note.** `latestSlotAtOrBefore` returns only the slot
+bracketing _now_, so when the loop finally reaches the tick it enqueues the
+current slot and the intervening ones are never enqueued at all. Under BullMQ the
+delayed entry lived in Redis and ran late. Observed live: a tenant whose loop sat
+inside a 125 s drain had its 11:10 slot **simply absent**, and took every slot
+after.
 
 That is negligible today: all seven sweeps are sub-second, and the serial shape
 is deliberate, because these run against a per-tenant database sized for one
 tenant's ordinary load. It stops being negligible with `help-center-translate`,
-which needs a **120 s lease** today. On this loop, one translation blocks the
-per-minute `snooze-sweep` and `sla-breach-sweep` for its whole duration.
+which needs a **120 s lease** today. On this loop, one translation silently costs
+the per-minute `snooze-sweep` and `sla-breach-sweep` two runs each.
 
 Whoever takes that on needs a concurrency story before landing it — per-queue
 loops, a bounded worker pool over the claim, or a separate tier for the slow
-queues. Measured against the reference this would be a regression, and it is much
-cheaper to decide than to discover.
+queues. Measured against the reference this is a regression in _delivery_, not
+just in latency, and it is much cheaper to decide than to discover.
 
 ## 11. Running the evidence
 
