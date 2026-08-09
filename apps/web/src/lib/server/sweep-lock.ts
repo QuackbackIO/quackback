@@ -31,6 +31,7 @@ import { logger } from '@/lib/server/logger'
 import { runFleetPass } from '@/lib/server/tenancy/fleet'
 import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import { getTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
 
 const log = logger.child({ component: 'sweep-lock' })
 
@@ -111,4 +112,43 @@ async function acquireAndRun(
     // else: leave the row in place — it doubles as a "ran recently" marker
     // until its TTL expires, per claim mode above.
   }
+}
+
+/**
+ * The in-process half of the same guard, partitioned by tenant.
+ *
+ * `withSweepLock` stops two *replicas* sweeping one tenant. A sweeper also
+ * needs to stop *itself* re-entering — the long AI sweeps overlap their own
+ * schedule (`startup.ts` fires each at boot and again every 30 minutes, and a
+ * fleet pass over N tenants is serial), so a second tick can begin while the
+ * first is still working.
+ *
+ * That guard used to be a module-scope `let _sweepInProgress`, which is
+ * correct only while a process serves one tenant. Under pooling, `runFleetPass`
+ * walks the fleet through the same function: with a shared boolean the first
+ * tenant to start the sweep suppresses it for **every other tenant** for as
+ * long as it runs, and the suppression is invisible — the sweep simply returns,
+ * nothing is logged, and the only symptom is that some workspaces' summaries
+ * silently stop refreshing.
+ *
+ * Keyed per tenant and per sweep name, so two sweeps never share a latch either.
+ */
+const inFlightSweeps = new TenantKeyedCache<true>(4_096)
+
+export async function withTenantSweepReentrancyGuard(
+  name: string,
+  fn: () => Promise<void>
+): Promise<void> {
+  if (inFlightSweeps.has(name)) return
+  inFlightSweeps.set(name, true)
+  try {
+    await fn()
+  } finally {
+    inFlightSweeps.delete(name)
+  }
+}
+
+/** Test seam: forget the active tenant's in-flight latches. */
+export function __resetSweepReentrancyForTenant(): void {
+  inFlightSweeps.clearTenant()
 }

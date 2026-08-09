@@ -25,6 +25,8 @@ import { tryAcquireRelayLeadership, type RelayLeadership } from './relay-lock'
 import type { DomainEvent, EventActorType } from './envelope'
 import type { HookTarget } from './hook-types'
 import { toLegacyEvent } from './to-legacy-event'
+import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import type { EvtId } from '@quackback/ids'
 
 const log = logger.child({ component: 'outbox-relay' })
@@ -83,7 +85,20 @@ export interface DrainResult {
  * a row's count (more strict retries, never fewer).
  */
 export const MAX_STRICT_RESOLVE_ATTEMPTS = 10
-const strictAttempts = new Map<bigint, number>()
+
+/**
+ * Per tenant, because `events.id` is a per-database bigserial.
+ *
+ * Two workspaces both have an event 5, and they are not the same row. Shared,
+ * one workspace's ten failed resolutions spend another workspace's retry budget
+ * for an unrelated event, which then degrades to best-effort resolution and
+ * **drops that event's targets** on its first attempt. The budget exists
+ * precisely so that does not happen without ten tries first.
+ */
+const strictAttempts = new TenantKeyedCache<number>(20_000)
+
+/** Keys are bigints; the cache is string-keyed, so name the conversion once. */
+const attemptKey = (id: bigint): string => id.toString()
 
 /**
  * Drain one batch of unpublished events. Pure enough to unit-test: the enqueue
@@ -121,12 +136,16 @@ export async function drainOnce(
   // Rows drain in ascending id order, so every retry-ledger key below the
   // smallest still-unpublished id belongs to a row some leader already
   // published — prune them so leadership churn can't leak entries.
+  //
+  // Both branches address only the ACTIVE tenant's ledger. A fleet-wide
+  // `clear()` here would reset every other workspace's retry budgets because
+  // this one happened to have an empty outbox.
   if (rows.length > 0) {
-    for (const key of strictAttempts.keys()) {
-      if (key < rows[0].id) strictAttempts.delete(key)
+    for (const key of strictAttempts.tenantKeys()) {
+      if (BigInt(key) < rows[0].id) strictAttempts.delete(key)
     }
   } else {
-    strictAttempts.clear()
+    strictAttempts.clearTenant()
   }
 
   let enqueued = 0
@@ -152,7 +171,7 @@ export async function drainOnce(
     }
 
     try {
-      const attempts = strictAttempts.get(row.id) ?? 0
+      const attempts = strictAttempts.get(attemptKey(row.id)) ?? 0
       const degraded = attempts >= maxAttempts
       // Past the strict budget the failure is deterministic, not transient:
       // fall back to best-effort so healthy sinks still deliver instead of the
@@ -174,7 +193,7 @@ export async function drainOnce(
         enqueued += jobs.length
       }
       await markPublished(row.id)
-      strictAttempts.delete(row.id)
+      strictAttempts.delete(attemptKey(row.id))
       if (degraded) {
         log.error(
           { event_id: event.eventId, type: event.type, attempts },
@@ -182,8 +201,8 @@ export async function drainOnce(
         )
       }
     } catch (err) {
-      const attempts = (strictAttempts.get(row.id) ?? 0) + 1
-      strictAttempts.set(row.id, attempts)
+      const attempts = (strictAttempts.get(attemptKey(row.id)) ?? 0) + 1
+      strictAttempts.set(attemptKey(row.id), attempts)
       failed++
       log.error(
         { err, event_id: event.eventId, type: event.type, attempts },
@@ -247,6 +266,26 @@ export async function startOutboxRelay(): Promise<void> {
   if (running) return
   if (!shouldRunWorkers()) {
     log.info('QUACKBACK_ROLE=web — outbox relay not started')
+    return
+  }
+  // The relay is a single-database subsystem end to end: `leadership`,
+  // `pollTimer` and the LISTEN registration below all belong to ONE database,
+  // and `tryAcquireRelayLeadership` opens its connection from
+  // `config.databaseUrl`, which does not exist under pooled tenancy. Fanning
+  // the relay out across the fleet is SAAS-HOSTING-STACK.md §7.3's job (direct,
+  // session-mode connections, physically separate from the pooled web tier).
+  //
+  // Refuse here rather than let it try. Without this the relay enters a silent
+  // 15-second failure loop: `attemptLeadership` catches the throw, logs, and
+  // reschedules itself forever, so no tenant's outbox is ever drained and the
+  // only evidence is a repeating error nobody reads as "eventing is off".
+  if (isPooledTenancy()) {
+    log.error(
+      'QUACKBACK_TENANCY=pooled — outbox relay not started. The relay drains ONE ' +
+        'database and has no fleet fan-out yet; starting it would elect a leader ' +
+        'for whichever database the process happens to hold. No events will be ' +
+        'delivered until the per-tenant relay tier exists.'
+    )
     return
   }
   // Ensure every sink resolver is registered before we drain anything.
