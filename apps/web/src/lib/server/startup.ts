@@ -42,9 +42,11 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        // Stop the relay before closing BullMQ/Redis so a final poll cannot
-        // enqueue into a queue that is already draining.
-        await import('./events/relay').then(({ stopOutboxRelay }) => stopOutboxRelay())
+        // Stop the relay before closing the queue so a final poll cannot enqueue
+        // into a queue that is already draining. Each tenant loop releases its
+        // leadership lease on the way out, so a surviving replica takes over
+        // immediately instead of waiting out the TTL.
+        await import('./events/relay-tier').then(({ stopRelayTier }) => stopRelayTier())
 
         // Stop the Postgres job tier's loops and release its LISTEN
         // connections. In-flight jobs are NOT cancelled: their leases simply
@@ -209,17 +211,17 @@ export function logStartupBanner(): void {
  * replicas stay safe.
  */
 function startBackgroundProcessing(): void {
-  // The queue tier and the outbox relay do NOT run under pooled tenancy, and
-  // this refusal is deliberate rather than unfinished work.
+  // The BullMQ tier does NOT run under pooled tenancy, and that refusal is
+  // deliberate rather than unfinished work: a BullMQ job carries no tenant, so
+  // every processor would resolve `db` with no scope and throw on its first
+  // query — a per-job failure is a far worse signal than one loud refusal at
+  // boot.
   //
-  // A BullMQ job carries no tenant, so every processor would resolve `db` with
-  // no scope and throw on its first query — a per-job failure is a far worse
-  // signal than one loud refusal at boot. The relay is worse still: it needs a
-  // session-mode connection for `LISTEN` and `pg_advisory_lock`, and a
-  // transaction pooler drops the registration in proportion to contention, so a
-  // single-client smoke test passes while a busy fleet silently stops receiving
-  // wakes. Both need per-tenant direct connections on a separate always-warm
-  // tier (SAAS-HOSTING-STACK.md §7.3), which is a different piece of work.
+  // The outbox relay used to be refused for a related but distinct reason, and
+  // it no longer is. It needs session-mode connections for `LISTEN` and for its
+  // leadership, which a transaction pooler cannot give it; it now gets them from
+  // its own per-tenant tier (SAAS-HOSTING-STACK.md §7.3) rather than from the
+  // pool cache, so it runs under both tenancy modes.
   //
   // The periodic sweepers below DO run: they funnel through `withSweepLock`,
   // which fans a tick out across the fleet with a real tenant scope each time.
@@ -246,13 +248,23 @@ function startBackgroundProcessing(): void {
     )
     .catch((err) => log.error({ err }, 'boot-time partition ensure failed'))
 
+  // Durable event outbox relay (EVENTING-V2 WO-3), on the per-tenant tier
+  // (SAAS-HOSTING-STACK.md §7.3). Runs under BOTH tenancy modes: one loop per
+  // tenant on that tenant's own direct, session-mode connection, elected by a
+  // lease row rather than a session advisory lock. Post-cutover (WO-18) the
+  // outbox is the SOLE delivery path, so the relay always runs here — the only
+  // gate is QUACKBACK_ROLE (worker/all), enforced inside startRelayTier().
+  import('./events/relay-tier')
+    .then(({ startRelayTier }) => startRelayTier())
+    .catch((err) => log.error({ err }, 'failed to start the outbox relay tier'))
+
   if (config.isPooledTenancy) {
     log.warn(
-      'pooled tenancy — the EAGER queue-worker boot and the outbox relay are not started here. ' +
-        'They require per-tenant session-mode connections on a dedicated tier; ' +
-        'events will accumulate in each tenant outbox until that tier runs. ' +
-        'Note this is not a guarantee on its own: four of the remaining queue modules arm ' +
-        'lazily on first enqueue, so the eager skip here does not cover them. What does is ' +
+      'pooled tenancy — the EAGER BullMQ queue-worker boot is not started here. The outbox ' +
+        'relay DOES run, on the per-tenant tier; its hook jobs land in each tenant own ' +
+        'Postgres job queue rather than in the fleet-shared Redis lists, which carry no ' +
+        'tenant prefix. Note the eager skip is not a guarantee on its own: four of the ' +
+        'remaining queue modules arm lazily on first enqueue. What does guarantee it is ' +
         'queue/create-worker.ts, which refuses to construct a BullMQ worker under pooled ' +
         'tenancy whatever the role.'
     )
@@ -260,14 +272,6 @@ function startBackgroundProcessing(): void {
     // Boot every eagerly-initialized queue worker from the registry. Each init
     // is isolated: one failure is logged without blocking the rest.
     initAllWorkers()
-
-    // Durable event outbox relay (EVENTING-V2 WO-3). Leader-elected, so multiple
-    // worker replicas stay safe. Post-cutover (WO-18) the outbox is the SOLE
-    // delivery path, so the relay always runs here — the only gate is
-    // QUACKBACK_ROLE (worker/all), enforced inside startOutboxRelay().
-    import('./events/relay')
-      .then(({ startOutboxRelay }) => startOutboxRelay())
-      .catch((err) => log.error({ err }, 'failed to start outbox relay'))
   }
 
   // Audit-log retention sweep + expired portal/team invite sweep.

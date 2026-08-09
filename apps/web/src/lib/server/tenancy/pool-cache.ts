@@ -194,7 +194,7 @@ function createEntry(tenant: TenantDescriptor): PoolEntry {
     db,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
-    verification: verify(tenant, sql),
+    verification: verifyTenantDatabase(tenant, sql),
   }
   // A rejected verification promise with no attached handler would surface as an
   // unhandled rejection before the first `await` reaches it.
@@ -232,18 +232,14 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
       return value
     }
     case 'openbao+static-role':
-      throw new Error(
-        `${redactRef(ref)} needs an OpenBao reader; this process has none configured`
-      )
+      throw new Error(`${redactRef(ref)} needs an OpenBao reader; this process has none configured`)
     case 'openbao+kv':
     case 'derived+hkdf':
     case 'sealed+aead':
       // All three name an APPLICATION secret. A database password is issued by a
       // provider or a vault and is never a value this system chooses, so a
       // derived one would be a plausible-looking string that no server accepts.
-      throw new Error(
-        `${parsed.scheme}:// refs hold application secrets, not database credentials`
-      )
+      throw new Error(`${parsed.scheme}:// refs hold application secrets, not database credentials`)
   }
 }
 
@@ -254,8 +250,13 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
  * refusal that later resolves itself is a rotation mid-flight, and leaving a
  * stale password memoised would make the retry fail for a second, unrelated
  * reason.
+ *
+ * Shared by the request pool cache and by `openTenantDirectPool` below, so the
+ * pooled and direct paths cannot disagree about whether a database really is the
+ * tenant the registry named. A second copy of a fail-closed identity check is a
+ * second copy that can drift open.
  */
-async function verify(
+async function verifyTenantDatabase(
   tenant: TenantDescriptor,
   sql: postgres.Sql
 ): Promise<ResolvedTenantSecrets> {
@@ -327,6 +328,67 @@ async function enforceCap(keepTenantId: string): Promise<void> {
     }
     if (victim === null) return
     await evict(victim, 'lru')
+  }
+}
+
+/**
+ * A tenant's own **direct** (session-mode) pool, outside this cache.
+ *
+ * The outbox relay tier needs three things this cache cannot give it: the
+ * *direct* endpoint (a transaction pooler accepts a `LISTEN` and delivers
+ * nothing, and a session advisory lock is worse than useless through one), a
+ * connection that is never evicted by request-traffic LRU pressure, and a
+ * lifetime it controls. So it opens its own — but through this module, because
+ * this is the layer that builds `Database` handles and, more importantly,
+ * because the §3 assertion must be the *same* assertion. A second copy of a
+ * fail-closed identity check is a second copy that can drift open.
+ *
+ * Deliberately NOT registered in `pools`: this handle is not a request pool, it
+ * must not be handed to a request, and it must not be counted in the eviction
+ * metric that measures whether idle tenants can suspend. §6's corollary is that
+ * the tier holding it must never share a compute with tenants you expect to
+ * suspend, and keeping it out of that counter is what keeps the counter honest.
+ *
+ * Throws on refusal, exactly as `acquireTenantPool` does. The caller decides
+ * what a refused tenant costs; for the relay tier it costs that tenant its relay
+ * and nothing else.
+ */
+export interface DirectTenantPool {
+  sql: postgres.Sql
+  db: Database
+  secrets: ResolvedTenantSecrets
+  close(): Promise<void>
+}
+
+export async function openTenantDirectPool(
+  tenant: TenantDescriptor,
+  opts: { max?: number } = {}
+): Promise<DirectTenantPool> {
+  const sql = postgres(tenant.database.directUrl, {
+    max: opts.max ?? 1,
+    // An always-warm tier: letting the connection lapse would pay a reconnect on
+    // every wake, and the whole point of the doorbell is that work starts now.
+    idle_timeout: 0,
+    connect_timeout: 15,
+    prepare: true,
+    password: () => resolvePassword(tenant),
+    onnotice: () => {},
+  })
+  try {
+    const secrets = await verifyTenantDatabase(tenant, sql)
+    return {
+      sql,
+      db: createDbFromSql(sql),
+      secrets,
+      close: () =>
+        sql
+          .end({ timeout: 5 })
+          .then(() => undefined)
+          .catch(() => undefined),
+    }
+  } catch (err) {
+    await sql.end({ timeout: 5 }).catch(() => {})
+    throw err
   }
 }
 

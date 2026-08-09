@@ -158,68 +158,102 @@ describe('the readiness memo cannot go blind under pooled tenancy', () => {
   })
 })
 
-describe('the relay refuses to run pooled rather than leading one database', () => {
-  it('does not attempt leadership under pooled tenancy', async () => {
-    vi.resetModules()
-    const attempts: number[] = []
-    vi.doMock('../events/relay-lock', () => ({
-      tryAcquireRelayLeadership: async () => {
-        attempts.push(1)
-        return null
-      },
-    }))
-    vi.doMock('@/lib/server/queue/role', () => ({ shouldRunWorkers: () => true }))
-    vi.doMock('@/lib/server/tenancy/mode', () => ({
-      isPooledTenancy: () => true,
-      POOLED_TENANCY: 'pooled',
-    }))
-    vi.doMock('@/lib/server/db', () => ({
-      db: {},
-      events: {},
-      eq: () => null,
-      isNull: () => null,
-      asc: () => null,
-    }))
+describe('the relay is per tenant, not one leader for whichever database this process holds', () => {
+  // What this replaces. Piece 4 pinned that `startOutboxRelay()` REFUSED under
+  // pooled tenancy, because its five module-scope variables (`running`,
+  // `leadership`, `pollTimer`, `retryTimer`, `draining`) and its session-level
+  // advisory lock all described exactly ONE database. That refusal was the
+  // correct answer while there was no fan-out. The fan-out now exists, so the
+  // property worth pinning has moved: not "it declines", but "it opens one loop
+  // per tenant and never a single shared one".
 
-    const { startOutboxRelay } = await import('../events/relay')
-    await startOutboxRelay()
-
-    // A shared `leadership` handle for one database, in a process serving many,
-    // would drain one workspace's outbox and silently deliver nothing for the
-    // rest. Today it does not even try: the failure is loud and at boot.
-    expect(attempts).toEqual([])
-    vi.resetModules()
+  const tenant = (id: string) => ({
+    tenantId: id,
+    revision: 1,
+    database: { directUrl: `postgres://direct/${id}`, pooledUrl: `postgres://pooled/${id}` },
   })
 
-  it('DOES attempt leadership single-tenant, so the refusal is the pooled branch', async () => {
-    // The control. Without it "no attempt" could mean the relay is simply
-    // broken, and the assertion above would hold for the wrong reason.
+  async function runTier(pooled: boolean) {
     vi.resetModules()
-    const attempts: number[] = []
-    vi.doMock('../events/relay-lock', () => ({
-      tryAcquireRelayLeadership: async () => {
-        attempts.push(1)
-        return null
-      },
-    }))
+    const scopes: string[] = []
+    const listeners: Array<{ url: string; channel: string }> = []
+
     vi.doMock('@/lib/server/queue/role', () => ({ shouldRunWorkers: () => true }))
     vi.doMock('@/lib/server/tenancy/mode', () => ({
-      isPooledTenancy: () => false,
+      isPooledTenancy: () => pooled,
       POOLED_TENANCY: 'pooled',
     }))
-    vi.doMock('@/lib/server/db', () => ({
-      db: {},
-      events: {},
-      eq: () => null,
-      isNull: () => null,
-      asc: () => null,
+    vi.doMock('@/lib/server/config', () => ({
+      config: { isPooledTenancy: pooled, databaseUrl: 'postgres://direct/single' },
     }))
+    vi.doMock('@/lib/server/tenancy/registry', () => ({
+      listActiveTenants: async () => ({ tenants: [tenant('t-a'), tenant('t-b')], refused: [] }),
+    }))
+    vi.doMock('@/lib/server/tenancy/pool-cache', () => ({
+      resolveTenantPassword: async () => 'pw',
+      openTenantDirectPool: async (t: { tenantId: string }) => ({
+        sql: {},
+        db: { __tenant: t.tenantId },
+        secrets: { secretKey: 'k', storage: null },
+        close: async () => {},
+      }),
+    }))
+    vi.doMock('@/lib/server/tenancy/tenant-context', () => ({
+      runWithTenantScope: async (scope: { tenant: { tenantId: string } }, fn: () => unknown) => {
+        scopes.push(scope.tenant.tenantId)
+        return fn()
+      },
+    }))
+    vi.doMock('@/lib/server/jobs/wake', () => ({
+      JOB_WAKE_CHANNEL: 'quackback_job_wake',
+      openWakeListener: async (input: { directUrl: string; channel: string }) => {
+        listeners.push({ url: input.directUrl, channel: input.channel })
+        return { close: async () => {}, verify: async () => true }
+      },
+    }))
+    vi.doMock('../events/relay', () => ({
+      drainOnce: async () => ({
+        drained: 0,
+        enqueued: 0,
+        skipped: 0,
+        failed: 0,
+        lagMsSamples: [],
+      }),
+    }))
+    vi.doMock('../events/relay-leader', () => ({
+      claimRelayLease: async () => null,
+      renewRelayLease: async () => null,
+      releaseRelayLease: async () => true,
+      isMissingRelayLeaderTable: () => false,
+      relayOwnerId: () => 'owner-1',
+    }))
+    vi.doMock('../events/resolvers', () => ({ registerAllResolvers: () => {} }))
 
-    const { startOutboxRelay, stopOutboxRelay } = await import('../events/relay')
-    await startOutboxRelay()
-
-    expect(attempts).toEqual([1])
-    await stopOutboxRelay()
+    const mod = await import('../events/relay-tier')
+    await mod.startRelayTier()
+    const status = mod.getRelayTierStatus()
+    await mod.stopRelayTier()
     vi.resetModules()
+    return { status, listeners }
+  }
+
+  it('opens one loop per tenant, each on that tenant own direct DSN', async () => {
+    const { status, listeners } = await runTier(true)
+    expect(status.tenants.map((t) => t.tenantId).sort()).toEqual(['t-a', 't-b'])
+    // Direct, never pooled: through a transaction pooler the LISTEN registers
+    // and nothing is ever delivered.
+    expect(listeners.map((l) => l.url).sort()).toEqual([
+      'postgres://direct/t-a',
+      'postgres://direct/t-b',
+    ])
+    expect(new Set(listeners.map((l) => l.channel))).toEqual(new Set(['outbox_wake']))
+  })
+
+  it('single-tenant runs exactly one loop, so the fan-out above is the pooled branch', async () => {
+    // The control. Without it "two loops" could mean the tier always makes two,
+    // and the assertion above would hold for the wrong reason.
+    const { status, listeners } = await runTier(false)
+    expect(status.tenants.map((t) => t.tenantId)).toEqual(['__single__'])
+    expect(listeners.map((l) => l.url)).toEqual(['postgres://direct/single'])
   })
 })
