@@ -133,10 +133,13 @@ describe('the readiness memo cannot go blind under pooled tenancy', () => {
       vi.doMock('@/lib/server/queue/redis-config', () => ({
         getQueueRedis: () => ({ ping: async () => 'PONG' }),
       }))
-      vi.doMock('@/lib/server/queue/worker-registry', () => ({
-        getWorkerBootStatus: () => ({ failed: 0, booted: 0, pending: 0 }),
+      // A web replica, so the probe's worker-tier check is vacuously ok and
+      // this test stays about the migration memo. What that check asserts is
+      // covered where it belongs, in `routes/api/__tests__/health-probes.test.ts`.
+      vi.doMock('@/lib/server/queue/role', () => ({
+        getProcessRole: () => 'web',
+        shouldRunWorkers: () => false,
       }))
-      vi.doMock('@/lib/server/queue/role', () => ({ getProcessRole: () => 'all' }))
       vi.doMock('@/lib/server/tenancy/registry', () => ({
         // Sync, returning the tagged-template `sql` — the shape the probe uses.
         getControlSql: () => () => Promise.resolve([{ '?column?': 1 }]),
