@@ -1,0 +1,412 @@
+/**
+ * The billing module's outward surface: what the admin UI reads and the
+ * actions it can take.
+ *
+ * Everything here answers `null` or a no-op when billing is unconfigured, so
+ * no caller needs to know whether the feature exists. That is the mechanism
+ * behind "default off is today's behaviour": the surfaces are not
+ * conditionally compiled, they are conditionally *empty*.
+ */
+
+import { logger } from '@/lib/server/logger'
+import { config as appConfig } from '@/lib/server/config'
+import { getCloudConfig } from '../settings/cloud/cloud.service'
+import { PLAN_CATALOGUE, type PlanId } from '../settings/cloud/cloud.types'
+import { listEntitlements } from '../settings/cloud/entitlements'
+import {
+  BILLING_PROVIDER,
+  WORKSPACE_STAMP_KEY,
+  getBillingConfig,
+  type BillingConfig,
+} from './billing.config'
+import { makeProviderClient, type BillingProviderClient } from './provider/client'
+import { checkoutLineItems, syncSeats, type CheckoutAddOns } from './seat-sync'
+import { workspaceStamp } from './identity'
+import { countSeats, type SeatCounts } from './seats'
+import { applySubscription, currentSubscriptionRef, toSnapshot } from './subscription'
+import { deriveOutcomeUsage, pushOutcomeUsage, usageSummary } from './usage'
+
+const log = logger.child({ component: 'billing-service' })
+
+/** Invoice list length on the admin surface. */
+const INVOICE_LIMIT = 12
+
+export interface BillingInvoice {
+  id: string
+  number: string | null
+  status: string | null
+  /** Minor units, as the provider reports them. */
+  total: number
+  currency: string
+  createdAt: string
+  hostedUrl: string | null
+  pdfUrl: string | null
+}
+
+export interface BillingPaymentMethod {
+  brand: string
+  last4: string
+  expMonth: number
+  expYear: number
+}
+
+/** See `BillingOverview.catalogueDrift`. `null` there means "no subscription". */
+export type CatalogueDriftState =
+  | { status: 'ok' }
+  | { status: 'unknown' }
+  | {
+      status: 'drifted'
+      /** Licensed items the catalogue cannot account for. Seat creation is paused. */
+      unaccountedLicensedItems: number
+      /** Metered items likewise. These do not pause anything. */
+      unaccountedMeteredItems: number
+      /** True when the subscription's prices resolve to no plan at all. */
+      planUnresolvable: boolean
+    }
+
+export interface BillingOverview {
+  /**
+   * Which plans this deployment sells, cheapest first.
+   *
+   * `copilotAddOn` says only whether the plan OFFERS the add-on, never what
+   * it costs — a boolean, so no price identifier reaches the client. It
+   * drives whether the opt-in control renders at all.
+   */
+  purchasablePlans: Array<{ id: PlanId; name: string; grants: string[]; copilotAddOn: boolean }>
+  plan: PlanId | null
+  planName: string | null
+  status: string | null
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  seats: SeatCounts
+  entitlements: Record<string, boolean>
+  usage: { total: number; reported: number; pending: number }
+  invoices: BillingInvoice[]
+  paymentMethod: BillingPaymentMethod | null
+  /** True once a subscription exists, so the UI can offer manage vs buy. */
+  hasSubscription: boolean
+  /**
+   * Whether the subscription carries line items whose price is in no plan in
+   * the catalogue — a repricing that has not been reconciled.
+   *
+   * Surfaced rather than left in logs because the failure is invisible to the
+   * only party who can fix it: a repricing fires across the whole book at
+   * once, and nobody watches a per-tenant pod's warn stream. While it is
+   * `drifted`, seat *creation* is paused (updates continue), and if the plan
+   * itself could not be resolved the previously stored plan is being held
+   * rather than downgraded.
+   *
+   * `unknown` is a distinct state on purpose. The check needs a provider
+   * fetch, and an outage is exactly when someone opens this page — reporting
+   * "no drift" then would mean **"could not check" rendering identically to
+   * "checked, all fine"**, which is the wrong direction for a warning
+   * surface. There is no persisted record to fall back on, so the honest
+   * answer is that the state is not known.
+   *
+   * Counts only. No item id and no price id: those are provider references,
+   * and `no-client-leak.db.test.ts` asserts none reaches the client.
+   */
+  catalogueDrift: CatalogueDriftState | null
+  /** Only present in the provider's own dashboard sense; never an id. */
+  livemode: boolean
+}
+
+/**
+ * Everything the admin billing page renders.
+ *
+ * Returns `null` when billing is unconfigured, which the route turns into "no
+ * billing page". Note what is deliberately absent from this shape: no
+ * customer reference, no subscription reference, no price ids, no API key.
+ * The page needs to *show* a plan and a card, not to *address* the provider —
+ * every action that needs an identifier resolves it server-side.
+ */
+export async function getBillingOverview(
+  deps: { client?: BillingProviderClient } = {}
+): Promise<BillingOverview | null> {
+  const config = getBillingConfig()
+  if (!config) return null
+
+  const cloud = await getCloudConfig()
+  const [seats, entitlements, stored] = await Promise.all([
+    countSeats(),
+    listEntitlements(),
+    currentSubscriptionRef(),
+  ])
+
+  let invoices: BillingInvoice[] = []
+  let paymentMethod: BillingPaymentMethod | null = null
+  let cancelAtPeriodEnd = false
+  // Defaults to `unknown` once a subscription exists: it is only downgraded to
+  // `ok` by a fetch that actually succeeded and found nothing.
+  let catalogueDrift: BillingOverview['catalogueDrift'] = null
+
+  if (stored) {
+    const client = deps.client ?? makeProviderClient(config)
+    // Provider reads are best-effort: an outage must degrade the page to
+    // "plan and seats, no invoice history" rather than break it. This is a
+    // commercial surface, and the same failure direction §8.1 argues for.
+    const [invoiceResult, methodResult, subscriptionResult] = await Promise.allSettled([
+      client.listInvoices(stored.customerRef, INVOICE_LIMIT),
+      client.listPaymentMethods(stored.customerRef),
+      client.getSubscription(stored.subscriptionRef),
+    ])
+    if (invoiceResult.status === 'fulfilled') {
+      invoices = invoiceResult.value.map((invoice) => ({
+        id: invoice.id,
+        number: invoice.number,
+        status: invoice.status,
+        total: invoice.total,
+        currency: invoice.currency,
+        createdAt: new Date(invoice.created * 1000).toISOString(),
+        hostedUrl: invoice.hosted_invoice_url,
+        pdfUrl: invoice.invoice_pdf,
+      }))
+    } else {
+      log.warn({ err: invoiceResult.reason }, 'invoice list unavailable')
+    }
+    if (methodResult.status === 'fulfilled') {
+      const card = methodResult.value.find((method) => method.card)?.card
+      if (card) {
+        paymentMethod = {
+          brand: card.brand,
+          last4: card.last4,
+          expMonth: card.exp_month,
+          expYear: card.exp_year,
+        }
+      }
+    }
+    if (subscriptionResult.status === 'fulfilled') {
+      cancelAtPeriodEnd = subscriptionResult.value.cancel_at_period_end === true
+      // Recomputed from the same snapshot mapping the sync uses, so the page
+      // cannot claim a healthy catalogue while the sync is refusing to create.
+      const snapshot = toSnapshot(subscriptionResult.value, config, new Date())
+      const unaccounted = snapshot.unaccountedItems
+      catalogueDrift =
+        unaccounted.length === 0
+          ? { status: 'ok' }
+          : {
+              status: 'drifted',
+              unaccountedLicensedItems: unaccounted.filter((item) => item.licensed).length,
+              unaccountedMeteredItems: unaccounted.filter((item) => !item.licensed).length,
+              planUnresolvable: snapshot.plan === null,
+            }
+    } else {
+      // The fetch failed, so drift genuinely cannot be determined. Saying so
+      // is the point: silence here would read as "all fine" during exactly the
+      // outage that makes the page worth opening.
+      catalogueDrift = { status: 'unknown' }
+      log.warn({ err: subscriptionResult.reason }, 'catalogue drift could not be determined')
+    }
+  }
+
+  const since = startOfPeriod(cloud.billing.currentPeriodEnd)
+  const usage = await usageSummary(since)
+
+  return {
+    purchasablePlans: Object.keys(config.catalogue)
+      .filter((id): id is PlanId => id in PLAN_CATALOGUE)
+      .map((id) => PLAN_CATALOGUE[id])
+      .sort((a, b) => a.rank - b.rank)
+      .map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        grants: [...plan.grants],
+        copilotAddOn: Boolean(config.catalogue[plan.id]?.copilotSeat),
+      })),
+    plan: cloud.plan,
+    planName: cloud.plan ? PLAN_CATALOGUE[cloud.plan].name : null,
+    status: cloud.billing.status,
+    currentPeriodEnd: cloud.billing.currentPeriodEnd,
+    cancelAtPeriodEnd,
+    seats,
+    entitlements,
+    usage,
+    invoices,
+    paymentMethod,
+    hasSubscription: stored !== null,
+    catalogueDrift,
+    livemode: config.livemode,
+  }
+}
+
+/**
+ * The usage window shown on the page.
+ *
+ * Anchored on the subscription's period end minus a month rather than the
+ * calendar month, because that is the window the customer is actually billed
+ * over. Falls back to 30 days when there is no subscription yet.
+ */
+function startOfPeriod(currentPeriodEnd: string | null): Date {
+  if (currentPeriodEnd) {
+    const end = new Date(currentPeriodEnd)
+    if (!Number.isNaN(end.getTime())) {
+      const start = new Date(end)
+      start.setUTCMonth(start.getUTCMonth() - 1)
+      return start
+    }
+  }
+  return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+
+export class BillingNotConfiguredError extends Error {
+  constructor() {
+    super('Billing is not configured for this deployment.')
+    this.name = 'BillingNotConfiguredError'
+  }
+}
+
+/**
+ * Start a self-serve upgrade.
+ *
+ * The seat quantities are derived here, at session creation, from the same
+ * count the invoice will use — so the checkout page shows the customer the
+ * real number rather than asking them to type one. The webhook re-derives
+ * afterwards, which corrects for seats added while the customer was on the
+ * payment page.
+ */
+export async function startCheckout(input: {
+  plan: PlanId
+  actorEmail: string | null
+  returnPath: string
+  /** Optional extras. Absent means none — the add-on is never assumed. */
+  addOns?: CheckoutAddOns
+}): Promise<{ url: string }> {
+  const config = getBillingConfig()
+  if (!config) throw new BillingNotConfiguredError()
+  if (!config.catalogue[input.plan]) {
+    throw new Error(`Plan "${input.plan}" is not sold by this deployment.`)
+  }
+
+  const client = makeProviderClient(config)
+  const customerRef = await ensureCustomer(client, input.actorEmail)
+  const seats = await countSeats()
+  const addOns = input.addOns ?? {}
+  const lineItems = checkoutLineItems(config, input.plan, seats, addOns)
+
+  const base = config.returnUrl || appConfig.baseUrl
+  const session = await client.createCheckoutSession({
+    customer: customerRef,
+    lineItems,
+    successUrl: `${base}${input.returnPath}?checkout=done`,
+    cancelUrl: `${base}${input.returnPath}?checkout=cancelled`,
+    metadata: { plan: input.plan, copilot: addOns.copilot === true ? 'yes' : 'no' },
+    // Keyed on the intent, so a double-clicked upgrade button reuses one
+    // session instead of opening two subscriptions.
+    // The add-on is part of the intent, so changing one's mind about it must
+    // open a NEW session rather than reuse the one without it.
+    idempotencyKey: `checkout:${customerRef}:${input.plan}:${seats.full}:${seats.lite}:${
+      addOns.copilot === true ? 'copilot' : 'no-copilot'
+    }`,
+  })
+
+  if (!session.url) throw new Error('Provider returned a checkout session with no URL.')
+  return { url: session.url }
+}
+
+/** Open the provider's own management surface (cards, cancellation, receipts). */
+export async function openBillingPortal(returnPath: string): Promise<{ url: string }> {
+  const config = getBillingConfig()
+  if (!config) throw new BillingNotConfiguredError()
+  const stored = await currentSubscriptionRef()
+  if (!stored) throw new Error('This workspace has no subscription to manage.')
+
+  const client = makeProviderClient(config)
+  const base = config.returnUrl || appConfig.baseUrl
+  const session = await client.createPortalSession({
+    customer: stored.customerRef,
+    returnUrl: `${base}${returnPath}`,
+  })
+  if (!session.url) throw new Error('Provider returned a portal session with no URL.')
+  return { url: session.url }
+}
+
+/**
+ * Full reconcile: re-read the subscription, re-apply plan and limits, push
+ * seat quantities, derive and report usage.
+ *
+ * The same routine the webhook path runs, callable on a timer and from the
+ * admin page. Having one reconcile rather than two is what makes a missed
+ * webhook a delay instead of a permanent divergence.
+ */
+export async function reconcileBilling(deps: { client?: BillingProviderClient } = {}): Promise<{
+  reconciled: boolean
+  plan: PlanId | null
+}> {
+  const config = getBillingConfig()
+  if (!config) return { reconciled: false, plan: null }
+
+  const client = deps.client ?? makeProviderClient(config)
+  const stored = await currentSubscriptionRef()
+
+  if (!stored) {
+    const cloud = await getCloudConfig()
+    if (cloud.billing.customerRef) {
+      // A known customer with no locally-recorded subscription is ambiguous:
+      // either they cancelled (and the webhook already wrote Free), or a
+      // subscription exists at the provider that this workspace has lost
+      // track of. Asserting Free from a timer would resolve that ambiguity by
+      // downgrading a customer who may well be paying — the expensive
+      // direction of the guess, and one no human asked for. The webhook path
+      // handles real transitions; this leaves the plan alone and says so.
+      log.info(
+        { plan: cloud.plan },
+        'billing reconcile: customer known but no subscription recorded; leaving the plan as it is'
+      )
+      return { reconciled: true, plan: cloud.plan }
+    }
+    // Never had a customer: assert the unsubscribed plan, so a workspace on a
+    // billing-enabled deployment is gated as Free rather than ungated.
+    const result = await applySubscription(null, config)
+    return { reconciled: true, plan: result.plan }
+  }
+
+  const fetchedAt = new Date()
+  const subscription = await client.getSubscription(stored.subscriptionRef)
+  const snapshot = toSnapshot(subscription, config, fetchedAt)
+  const applied = await applySubscription(snapshot, config)
+  await syncSeats(client, config, snapshot)
+  await deriveOutcomeUsage()
+  await pushOutcomeUsage(client, snapshot.customerRef, config, applied.plan)
+  return { reconciled: true, plan: applied.plan }
+}
+
+/**
+ * The provider customer for this workspace, created on first use.
+ *
+ * Stored on `settings.cloud.billing.customerRef` through the shared write
+ * seam rather than in this module's own table, because it is the one billing
+ * reference the *product* needs to know about — support answering "which
+ * account is this workspace" should not need a second system, which is
+ * exactly what the `CloudBilling` block was shaped for.
+ */
+async function ensureCustomer(
+  client: BillingProviderClient,
+  actorEmail: string | null
+): Promise<string> {
+  const cloud = await getCloudConfig()
+  if (cloud.billing.customerRef) return cloud.billing.customerRef
+
+  // The workspace stamp is what lets `webhook.service.ts` verify, rather
+  // than assume, that an incoming subscription belongs to this workspace when
+  // it has no customer on record yet.
+  const created = await client.createCustomer({
+    ...(actorEmail ? { email: actorEmail } : {}),
+    metadata: { source: 'quackback', [WORKSPACE_STAMP_KEY]: await workspaceStamp() },
+  })
+
+  const { writeCloudConfig } = await import('../settings/cloud/cloud.service')
+  await writeCloudConfig(
+    { billing: { provider: BILLING_PROVIDER, customerRef: created.id } },
+    { writer: 'billing' }
+  )
+  log.info('billing customer created')
+  return created.id
+}
+
+/** Exported for the reconcile sweep and tests. */
+export { syncSeats, countSeats }
+export type { BillingConfig }

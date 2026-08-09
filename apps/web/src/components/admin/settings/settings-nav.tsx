@@ -25,6 +25,7 @@ import {
   SignalIcon,
   BellIcon,
   BuildingOfficeIcon,
+  CreditCardIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
@@ -59,8 +60,16 @@ export function isNavGroup(entry: NavEntry): entry is NavGroup {
  * ITEMS (or whole product accordions), never sections, so the sidebar layout
  * does not reflow when a flag flips. AI & Automation lives outside settings
  * entirely, as its own main-nav area at /admin/automation (M5).
+ *
+ * @param billingEnabled Whether this deployment has a billing provider
+ *   configured. Not a feature flag — a flag answers "has the admin turned it
+ *   on", and this answers "does this deployment sell anything". False on
+ *   every self-hosted install, which is why the Billing row is absent there.
  */
-export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
+export function buildNavSections(
+  flags?: Partial<FeatureFlags>,
+  billingEnabled = false
+): NavSection[] {
   const products: NavEntry[] = []
 
   if (isProductEnabled(flags, 'feedback')) {
@@ -148,6 +157,9 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
           : []),
         { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
         { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+        ...(billingEnabled
+          ? [{ label: 'Plan & billing', to: '/admin/settings/billing', icon: CreditCardIcon }]
+          : []),
         { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
       ],
     },
@@ -173,10 +185,13 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
 
 export function SettingsNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { settings } = useRouteContext({ from: '__root__' })
+  const { settings, billingEnabled } = useRouteContext({ from: '__root__' })
   const flags = settings?.featureFlags as FeatureFlags | undefined
 
-  const navSections = useMemo(() => buildNavSections(flags), [flags])
+  const navSections = useMemo(
+    () => buildNavSections(flags, billingEnabled),
+    [flags, billingEnabled]
+  )
 
   return (
     <div className="space-y-2">

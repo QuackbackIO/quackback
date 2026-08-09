@@ -79,6 +79,22 @@ export function makeReconcileDeps(): ReconcileDeps {
         })
         .onConflictDoNothing({ target: settings.slug })
     },
+    applyCloudConfig: async (patch) => {
+      // Dynamic import: cloud.service imports managed-paths from this same
+      // config-file directory, so a static import here would close a cycle.
+      const { writeCloudConfig } = await import(
+        '@/lib/server/domains/settings/cloud/cloud.service'
+      )
+      const result = await writeCloudConfig(patch, { writer: 'config' })
+      return result.changed
+    },
+    applyTierLimits: async (limits) => {
+      const { writeTierLimits } = await import(
+        '@/lib/server/domains/settings/tier-limits.write'
+      )
+      const result = await writeTierLimits(limits as never, { writer: 'config' })
+      return result.changed
+    },
     invalidateSettingsCache: async () => {
       await invalidateSettingsCache()
     },

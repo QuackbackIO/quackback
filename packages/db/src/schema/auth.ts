@@ -463,6 +463,20 @@ export const settings = pgTable('settings', {
    */
   cloud: jsonb('cloud').$type<StoredCloudConfig>(),
   /**
+   * Optimistic-concurrency token incremented with every `cloud` write.
+   *
+   * `settings.cloud` has two independent writers — the declarative config
+   * file's reconciler and the billing module — and both are read-modify-write
+   * over a whole JSON block. Without a token, a reconcile that read at T0 and
+   * wrote at T2 would silently erase a billing write at T1, with nothing
+   * recording that it happened. `writeCloudConfig()` takes the row lock,
+   * re-reads inside it, and bumps this; a caller that carried a stale
+   * revision across a request boundary is refused rather than merged over.
+   *
+   * Same shape and same reason as `assistantConfigRevision` above.
+   */
+  cloudRevision: integer('cloud_revision').notNull().default(0),
+  /**
    * JSON array of dot-paths whose values are managed by the
    * declarative config file (`/etc/quackback/config.yaml`). When a
    * path is in this list, the in-app UI mutator for that field

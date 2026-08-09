@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 630 surfaces
+### Server functions (`requireAuth`) — 634 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -249,6 +249,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/auth-provider-credentials.ts`::deleteAuthProviderCredentialsFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderCredentialsMaskedFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderStatusFn | auth.manage |
+| `lib/server/functions/billing.ts`::fetchBillingOverviewFn | billing.manage |
+| `lib/server/functions/billing.ts`::startCheckoutFn | billing.manage |
+| `lib/server/functions/billing.ts`::openBillingPortalFn | billing.manage |
+| `lib/server/functions/billing.ts`::reconcileBillingFn | billing.manage |
 | `lib/server/functions/blocking.ts`::getPersonBlockStatusFn | people.view |
 | `lib/server/functions/blocking.ts`::blockPersonFn | people.manage |
 | `lib/server/functions/blocking.ts`::unblockPersonFn | people.manage |
@@ -934,7 +938,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-185 of 926 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+186 of 931 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1052,6 +1056,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/auth/$.ts`::POST | route |
 | `routes/api/auth/invitation.$invitationId.ts`::GET | route |
 | `routes/api/auth/portal-signin.ts`::POST | route |
+| `routes/api/billing/webhook.ts`::POST | route |
 | `routes/api/chat/email/inbound.ts`::POST | route |
 | `routes/api/chat/stream.ts`::GET | route |
 | `routes/api/devices.ts`::DELETE | route |

@@ -156,6 +156,13 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
     reason:
       'Same shape and same reasoning as post_mentions, for @-mentions inside internal notes: stamped synchronously after dispatch, with no drain reading it today.',
   },
+  {
+    column: schema.billingWebhookEvents.processedAt,
+    policy: 'settle',
+    strategy: 'stamp-pending',
+    reason:
+      'The billing webhook claim treats a row with processed_at IS NULL as an interrupted attempt and re-runs the handler on the next redelivery, and that handler pushes seat quantities onto the live subscription and reports usage. A rewind therefore re-runs handlers using the RESTORED seat count, changing an invoice from internal state the restore has already invalidated. Stamping pending rows costs at most a plan refresh that the reconcile path would make anyway.',
+  },
 
   // -- preserve: this is the data -------------------------------------------
   {

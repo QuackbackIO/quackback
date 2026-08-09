@@ -20,12 +20,27 @@ const baseDeps = (): ReconcileDeps => ({
   })),
   updateSettings: vi.fn(async () => {}),
   createSettings: vi.fn(async () => {}),
+  applyCloudConfig: vi.fn(async () => true),
+  applyTierLimits: vi.fn(async () => true),
   invalidateSettingsCache: vi.fn(async () => {}),
   invalidateTierLimitsCache: vi.fn(async () => {}),
 })
 
 function lastUpdate(deps: ReconcileDeps) {
   return (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+}
+
+/**
+ * The patch the reconciler handed to the cloud write seam.
+ *
+ * The reconciler no longer computes a merged block and puts it in the column
+ * update: `settings.cloud` has a second writer, so the merge has to happen
+ * inside that writer's row lock or one of them is silently lost. What the
+ * reconciler produces now is the PATCH; the merge is asserted against a real
+ * database in `cloud/__tests__/cloud-concurrency.test.ts`.
+ */
+function lastCloudPatch(deps: ReconcileDeps) {
+  return (deps.applyCloudConfig as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
 }
 
 const envelope = (spec: unknown) => ({
@@ -119,25 +134,29 @@ describe('managed paths for the cloud block', () => {
 })
 
 describe('reconcileFileIntoDb — cloud block', () => {
-  it('writes plan and entitlements as a jsonb object, not a JSON string', async () => {
+  it('hands the declared block to the cloud write seam, not to the column update', async () => {
     const deps = baseDeps()
     await reconcileFileIntoDb(
       { cloud: { enabled: true, plan: 'pro', entitlements: { sso: true } } },
       deps
     )
-    const update = lastUpdate(deps)
-    expect(update.cloud).toEqual(
-      expect.objectContaining({
-        enabled: true,
-        plan: 'pro',
-        entitlements: { sso: true },
-        source: 'config',
-      })
-    )
-    expect(update.managedFieldPaths).toEqual(['cloud.enabled', 'cloud.plan', 'cloud.entitlements'])
+    expect(lastCloudPatch(deps)).toEqual({
+      enabled: true,
+      plan: 'pro',
+      entitlements: { sso: true },
+    })
+    // The column update must NOT carry cloud: a `SET cloud = <merged>`
+    // computed from a row read earlier in the function is exactly the write
+    // that loses the billing writer's update.
+    expect(lastUpdate(deps)).not.toHaveProperty('cloud')
+    expect(lastUpdate(deps).managedFieldPaths).toEqual([
+      'cloud.enabled',
+      'cloud.plan',
+      'cloud.entitlements',
+    ])
   })
 
-  it('preserves a billing reference the file never declared', async () => {
+  it('declares only the plan, so the seam has nothing with which to clobber a billing reference', async () => {
     const deps = baseDeps()
     deps.readSettings = vi.fn(async () => ({
       id: 'ws_1',
@@ -154,9 +173,11 @@ describe('reconcileFileIntoDb — cloud block', () => {
       managedFieldPaths: [],
     }))
     await reconcileFileIntoDb({ cloud: { enabled: true, plan: 'enterprise' } }, deps)
-    const update = lastUpdate(deps)
-    expect(update.cloud.plan).toBe('enterprise')
-    expect(update.cloud.billing).toEqual({ provider: 'acme', subscriptionRef: 'sub_1' })
+    const patch = lastCloudPatch(deps)
+    expect(patch).toEqual({ enabled: true, plan: 'enterprise' })
+    // The absence is the assertion: a patch with no `billing` key cannot
+    // overwrite a stored one, whatever the merge does with it.
+    expect(patch).not.toHaveProperty('billing')
   })
 
   it('skips the write when the file restates what is already stored', async () => {
@@ -181,6 +202,9 @@ describe('reconcileFileIntoDb — cloud block', () => {
     }))
     await reconcileFileIntoDb({ cloud: { enabled: true, plan: 'pro' } }, deps)
     expect(deps.updateSettings).not.toHaveBeenCalled()
+    // The seam is idempotent too, but the reconciler must not even open a
+    // locking transaction on a steady-state tick.
+    expect(deps.applyCloudConfig).not.toHaveBeenCalled()
   })
 
   it('seeds the cloud block on a fresh install', async () => {
@@ -198,6 +222,7 @@ describe('reconcileFileIntoDb — cloud block', () => {
     const deps = baseDeps()
     await reconcileFileIntoDb({ tierLimits: { maxBoards: 3 } }, deps)
     expect(lastUpdate(deps)).not.toHaveProperty('cloud')
+    expect(deps.applyCloudConfig).not.toHaveBeenCalled()
   })
 
   it('leaves the column untouched on a fresh install with no cloud block', async () => {

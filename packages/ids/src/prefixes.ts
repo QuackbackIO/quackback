@@ -156,6 +156,11 @@ export const ID_PREFIXES = {
   // Visitor analytics
   page_view: 'pv',
 
+  // Billing (self-serve subscription for hosted workspaces; inert unless
+  // a billing provider is configured)
+  billing_event: 'billing_event',
+  billing_usage: 'billing_usage',
+
   // ============================================
   // Auth Entities (Better-auth, text primary keys)
   // ============================================

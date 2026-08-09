@@ -1,10 +1,16 @@
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
 import { db, eq, settings } from '@/lib/server/db'
+import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { logger } from '@/lib/server/logger'
-import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
-import { invalidateSettingsCache, requireSettings } from '../settings.helpers'
-import { cloudPatchPaths, mergeCloudConfig, type CloudConfigPatch } from './cloud.merge'
+import { invalidateSettingsCache } from '../settings.helpers'
+import {
+  cloudConfigEquivalent,
+  cloudPatchPaths,
+  mergeCloudConfig,
+  type CloudConfigPatch,
+} from './cloud.merge'
 import {
   BILLING_STATUSES,
   DISABLED_CLOUD_CONFIG,
@@ -135,41 +141,124 @@ export async function getCloudConfig(): Promise<CloudConfig> {
 // Write
 // ---------------------------------------------------------------------------
 
+export interface CloudWriteResult {
+  /** False when the merge produced a block equivalent to the stored one. */
+  changed: boolean
+  /** `settings.cloud_revision` after this call. */
+  revision: number
+}
+
 /**
  * The single mutation seam for `settings.cloud`.
  *
- * Both writers go through here. A writer other than `config` is refused any
- * path the declarative config file has claimed in `settings.managed_field_paths`
- * — so if an operator pins `cloud.plan` in `/etc/quackback/config.yaml`, the
- * billing module cannot quietly move the workspace to a different plan on the
- * next webhook. The file wins where it declares; the other writer owns
- * everything it does not.
+ * ## Two writers, one lock
+ *
+ * The declarative config file's reconciler and the billing module both write
+ * this column, and both are read-modify-write over a whole JSON block. The
+ * naive shape — read the row, merge in memory, write it back — loses updates:
+ * the reconciler reads at T0, billing writes `billing.subscriptionRef` at T1,
+ * the reconciler writes its stale merge at T2, and the subscription reference
+ * is gone with nothing recording that it ever existed.
+ *
+ * The read, the merge and the write therefore all happen inside one
+ * transaction that holds `SELECT … FOR UPDATE` on the settings row. Because
+ * `settings` is exactly one row per database, that lock serialises every
+ * writer of this column: the second writer's merge is computed against the
+ * first writer's committed value, so both survive. `cloud_revision` is bumped
+ * on every effective write, which makes an interleave visible after the fact
+ * and gives a caller that read in an earlier request a token to pass back.
+ *
+ * `expectedRevision` is for that second case — a UI that rendered a plan and
+ * then submitted a change. Server-side writers (the reconciler, a webhook)
+ * omit it: they have nothing stale to protect, because the merge they want is
+ * computed under the lock from whatever is current.
+ *
+ * ## Managed paths
+ *
+ * A writer other than `config` is refused any path the config file has claimed
+ * in `settings.managed_field_paths` — so if an operator pins `cloud.plan` in
+ * `/etc/quackback/config.yaml`, the billing module cannot quietly move the
+ * workspace to a different plan on the next webhook. The file wins where it
+ * declares; the other writer owns everything it does not. That check also
+ * reads the locked row, so it cannot be raced by a reconcile that claims a
+ * path between the check and the write.
  */
 export async function writeCloudConfig(
   patch: CloudConfigPatch,
-  opts: { writer: CloudWriter; now?: Date }
-): Promise<void> {
+  opts: { writer: CloudWriter; now?: Date; expectedRevision?: number }
+): Promise<CloudWriteResult> {
   const paths = cloudPatchPaths(patch)
-  if (paths.length === 0) return
+  if (paths.length === 0) return { changed: false, revision: -1 }
   validatePatch(patch)
 
-  const row = await requireSettings()
-  if (opts.writer !== 'config') {
-    const managed = (row.managedFieldPaths as string[] | null) ?? []
-    for (const path of paths) {
-      if (isPathManaged(path, managed)) {
-        throw new ForbiddenError(
-          'FIELD_MANAGED',
-          `Field "${path}" is managed by the declarative config file; the ${opts.writer} writer cannot change it.`
-        )
+  const result = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: settings.id,
+        cloud: settings.cloud,
+        cloudRevision: settings.cloudRevision,
+        managedFieldPaths: settings.managedFieldPaths,
+      })
+      .from(settings)
+      .limit(1)
+      .for('update')
+
+    if (!row) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+
+    if (opts.expectedRevision !== undefined && row.cloudRevision !== opts.expectedRevision) {
+      throw new ConflictError(
+        'CLOUD_REVISION_CONFLICT',
+        'Plan and billing settings changed in another session. Reload and try again.'
+      )
+    }
+
+    if (opts.writer !== 'config') {
+      const managed = (row.managedFieldPaths as string[] | null) ?? []
+      for (const path of paths) {
+        if (isPathManaged(path, managed)) {
+          throw new ForbiddenError(
+            'FIELD_MANAGED',
+            `Field "${path}" is managed by the declarative config file; the ${opts.writer} writer cannot change it.`
+          )
+        }
       }
     }
-  }
 
-  const merged = mergeCloudConfig(row.cloud as StoredCloudConfig | null, patch, opts)
-  await db.update(settings).set({ cloud: merged }).where(eq(settings.id, row.id))
-  await invalidateSettingsCache()
-  log.info({ writer: opts.writer, paths, plan: merged.plan }, 'cloud config written')
+    const current = row.cloud as StoredCloudConfig | null
+    const merged = mergeCloudConfig(current, patch, opts)
+    // Idempotent by design: the reconciler polls every 30s and a provider
+    // redelivers webhooks, so a write that changes nothing substantive must
+    // not bump the revision, bust the settings cache, or churn the row.
+    // `cloudConfigEquivalent` ignores the `source`/`updatedAt` stamp, which
+    // otherwise differs on every single call.
+    if (cloudConfigEquivalent(merged, current)) {
+      return { changed: false, revision: row.cloudRevision, plan: merged.plan }
+    }
+
+    const revision = row.cloudRevision + 1
+    await tx.update(settings).set({ cloud: merged, cloudRevision: revision }).where(eq(settings.id, row.id))
+    // Same bump every other settings write performs, so a pod's cached
+    // auth instance is rebuilt against the new row rather than serving a
+    // stale one. Guarded by the equivalence check above, so a no-op
+    // reconcile tick does not invalidate every pod's auth every 30s.
+    await bumpAuthConfigVersionInTx(tx)
+    return { changed: true, revision, plan: merged.plan }
+  })
+
+  if (result.changed) {
+    await invalidateSettingsCache()
+    log.info(
+      { writer: opts.writer, paths, plan: result.plan, revision: result.revision },
+      'cloud config written'
+    )
+  }
+  return { changed: result.changed, revision: result.revision }
+}
+
+/** Current `settings.cloud_revision`, for a caller that will write later. */
+export async function getCloudRevision(): Promise<number> {
+  const [row] = await db.select({ revision: settings.cloudRevision }).from(settings).limit(1)
+  return row?.revision ?? 0
 }
 
 function validatePatch(patch: CloudConfigPatch): void {

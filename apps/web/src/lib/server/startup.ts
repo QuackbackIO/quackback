@@ -359,6 +359,34 @@ function startBackgroundProcessing(): void {
     })
     .catch((err) => log.error({ err }, 'failed to init summary sweep'))
 
+  // Billing reconcile. A no-op on every install with no billing provider
+  // configured — `reconcileBilling()` returns immediately — so this costs a
+  // dynamic import and nothing else for self-hosters.
+  //
+  // Webhooks keep plan and seat state current in normal operation; this is
+  // the recovery path for a delivery that never arrived or whose handler died
+  // past its claim lease. Without it, an interrupted delivery leaves the
+  // workspace on the wrong plan until a human presses Refresh, and nothing
+  // surfaces that it happened. It runs the SAME routine the webhook path
+  // runs, so the two cannot drift.
+  //
+  // Under a cross-instance lock because it makes provider API calls and
+  // pushes seat quantities: several replicas doing that per tick would burn
+  // rate limit for one outcome.
+  Promise.all([import('./domains/billing/billing.service'), import('@/lib/server/sweep-lock')])
+    .then(([{ reconcileBilling }, { withSweepLock }]) => {
+      const TEN_MINUTES = 10 * 60 * 1000
+      const tick = () =>
+        withSweepLock('billing_reconcile', TEN_MINUTES, async () => {
+          await reconcileBilling().catch((err) => log.error({ err }, 'billing reconcile failed'))
+        })
+      // 20s in, so a pod that restarts mid-rollout re-asserts plan state
+      // promptly rather than waiting out a full interval.
+      setTimeout(() => void tick(), 20_000)
+      setInterval(() => void tick(), 15 * 60 * 1000)
+    })
+    .catch((err) => log.error({ err }, 'failed to init billing reconcile'))
+
   // Start periodic merge suggestion sweep (detects duplicate posts).
   // Runs under a cross-instance lock — AI calls are expensive and duplicate
   // merge suggestions are user-visible, so only one replica per tick.
