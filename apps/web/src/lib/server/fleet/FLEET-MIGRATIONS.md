@@ -139,6 +139,16 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS …  → SUCCEEDS
 Pinned by `__tests__/schema-ops.test.ts`. This is the fact the heal ordering
 rests on, so it is measured rather than assumed.
 
+### A fresh tenant, end to end
+
+```
+inst_p10_fleet_a  OK [reconciled]  ledger 0->228  applied=228 healed=0 post=true  164530ms
+```
+
+Verified afterwards by `indisvalid`, not by a name list: 7 HNSW and 8 GIN
+indexes present, `indisvalid = t` on every one, zero invalid indexes anywhere in
+any user schema, both extensions installed, 228 ledger rows.
+
 ### A killed `CREATE INDEX CONCURRENTLY`, on Neon
 
 The blocking transaction is the instrument, not the point: `CREATE INDEX
@@ -151,6 +161,94 @@ session A:  BEGIN; SELECT 1 FROM principal LIMIT 1;   -- holds a snapshot
 migrator:   … step concurrent-indexes …
             kill -9 <migrator pid>
 ```
+
+What it left behind:
+
+```
+index_name               | table_name | indisvalid | indisready
+posts_embedding_hnsw_idx | posts      | f          | t
+
+ledger_rows | newest
+        228 | 1785700000012      <- complete
+```
+
+The two verdicts side by side, on that database:
+
+```
+THE LEDGER SAYS:     {"upToDate":true,"bundledCount":228,"appliedCount":228}
+  floor at 0253:     {"ok":true,"missing":[],"floorTag":"0253_job_queue"}
+THE CATALOGUE SAYS:  ok=false
+  VIOLATION [invalid_index] public.posts_embedding_hnsw_idx on posts is INVALID (indisready=true)
+  VIOLATION [missing_index] kb_articles_embedding_hnsw_idx does not exist
+  … 5 more
+```
+
+And the control that shows why re-running is not a repair — on the live Neon
+database, not a local one:
+
+```
+CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_embedding_hnsw_idx …
+NOTICE:  relation "posts_embedding_hnsw_idx" already exists, skipping
+CREATE INDEX          <- exit 0
+posts_embedding_hnsw_idx | f     <- still INVALID
+```
+
+Then the next migrator run, which heals rather than certifies:
+
+```
+reaped(requeued=1)                                   <- the killed owner's lease
+inst_p10_fleet_c  OK [reconciled]  ledger 228->228  applied=0 healed=1 post=true
+all 7 concurrent indexes indisvalid = t · 0 invalid anywhere
+```
+
+### The five ledger-behind databases
+
+Before — a complete 226-row ledger stopping at `0248`, over five different
+physical schemas:
+
+```
+alpha  ledger=226 @0248   0251=0 0252=0 0253=1
+bravo  ledger=226 @0248   0251=0 0252=0 0253=1
+t1     ledger=226 @0248   0251=1 0252=1 0253=1
+t2     ledger=226 @0248   0251=1 0252=1 0253=1
+t3     ledger=226 @0248   0251=0 0252=1 0253=0
+```
+
+The progress ledger recorded these as "physically carrying 0251, 0252 and
+0253". They carry _different subsets_ — which is the harder case and the one
+that makes a per-migration decision necessary rather than a blanket one.
+
+After one `run --concurrency 6`:
+
+```
+alpha  OK [reconciled] ledger 226->228 applied=2 post=true   24728ms
+bravo  OK [reconciled] ledger 226->228 applied=2 post=true   24375ms
+t1     OK [reconciled] ledger 226->228 applied=2 post=true   27313ms
+t2     OK [reconciled] ledger 226->228 applied=2 post=true   29320ms
+t3     OK [reconciled] ledger 226->228 applied=2 post=true   30267ms
+t4     OK [reconciled] ledger 228->229 applied=1 post=true   24284ms
+```
+
+`t4` is the interesting one: it carries `0252`, which this build does not
+bundle, so it ends at 229 rows — ahead of the code, and correctly so.
+
+### The gate, both directions
+
+`p10-old` is a database migrated against a journal trimmed at `0248` — a
+genuinely old lineage, not a doctored ledger.
+
+```
+MIN_SCHEMA_VERSION unset
+  p10-old  -> 200   neon-t1 -> 200   neon-t4 -> 200
+
+MIN_SCHEMA_VERSION=0251
+  p10-old  -> 503 retry-after=30  "This workspace is being updated…"
+  neon-t1  -> 200
+  neon-t4  -> 200      <- carries 0252, which this build has never heard of
+```
+
+The gate-off row is the control: without it, a 503 would be equally consistent
+with the tenant being broken for some unrelated reason.
 
 Reproduce with `scripts/fleet-migrator.ts` and the runbook in §7.
 
@@ -250,9 +348,28 @@ failed, halt and read · `2` the invocation was wrong.
 
 The migrator builds its own connection from the tenant record's **`directUrl`**,
 and refuses a DSN whose host looks like a transaction-mode pooler.
-`pg_advisory_lock` is session-scoped and `CREATE INDEX CONCURRENTLY` cannot run
-inside a transaction block; through a pooler the lock is taken and released on
-whichever backend served the statement, which is not a lock.
+
+**The usual justification for that is wrong, and the real one is worse.**
+Measured through Neon's pooled endpoint:
+
+|                                                  | pooled                                 | direct |
+| ------------------------------------------------ | -------------------------------------- | ------ |
+| `CREATE INDEX CONCURRENTLY`                      | **works**                              | works  |
+| `pg_advisory_lock` released on client disconnect | **no**                                 | yes    |
+| second client gets the same lock                 | **yes** (`pg_try_advisory_lock` → `t`) | no     |
+| a _direct_ client can then take that key         | **no — blocks**                        | —      |
+
+CIC is one statement to the client; its multi-transaction dance happens
+server-side where the pooler cannot see it, so it passes through fine. The
+advisory lock is the casualty: a pooled client's "session" is a server
+connection the pooler keeps alive after the client has gone, so the lock
+survives disconnect, fails to exclude a second pooled client, **and then wedges
+the direct endpoint** — verified by watching a direct `pg_advisory_lock` die on
+a 10 s `lock_timeout` until the stranded backend was terminated by hand.
+
+So a migrator run through the pooler does not merely lose its own
+serialisation; it strands a lock that blocks every subsequent direct run of the
+same tenant.
 
 It does **not** go through the tenant pool cache, for two reasons that are both
 correctness: the pool cache terminates at the _pooled_ endpoint, and it asserts

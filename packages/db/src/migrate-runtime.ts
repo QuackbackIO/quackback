@@ -32,13 +32,28 @@
  * post-condition verdict separately from the ledger, and why a caller must
  * never read "all migrations applied" as "the database is correct".
  *
- * ## Session mode
+ * ## Session mode, and what actually breaks
  *
- * `pg_advisory_lock` is session-scoped and `CREATE INDEX CONCURRENTLY` cannot
- * run inside a transaction block. Both need a direct, session-mode connection;
- * through a transaction-mode pooler the lock is taken and released on whichever
- * backend served the statement, which is not a lock at all. The pooled endpoint
- * is refused up front rather than half-working — see {@link assertSessionModeDsn}.
+ * Measured through Neon's pooled endpoint rather than assumed, and the answer is
+ * not the one usually given:
+ *
+ * - **`CREATE INDEX CONCURRENTLY` works through the pooler.** It is one
+ *   statement to the client; the multi-transaction dance happens server-side
+ *   where the pooler cannot see it. So "CIC cannot run through a pooler" is
+ *   wrong, and a guard justified only by that would be justified by nothing.
+ * - **`pg_advisory_lock` is where it breaks, and it breaks badly.** The lock is
+ *   session-scoped, and a pooled client's "session" is a server connection the
+ *   pooler keeps alive after the client disconnects. Measured: take the lock
+ *   through the pooler, disconnect, and the lock is still held; a *second*
+ *   pooled client then gets `pg_try_advisory_lock = true` for the same key, so
+ *   it is not mutual exclusion either; and a client on the **direct** endpoint
+ *   asking for that key blocks — verified by watching it die on a 10 s
+ *   `lock_timeout` — until the stranded backend is terminated by hand.
+ *
+ * So a migrator run through the pooler does not merely lose its own
+ * serialisation: it strands a lock that wedges every subsequent direct run of
+ * the same tenant. That is why the pooled endpoint is refused up front rather
+ * than allowed to half-work — see {@link assertSessionModeDsn}.
  */
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
@@ -119,8 +134,10 @@ export class PooledDsnRefused extends Error {
   constructor(host: string) {
     super(
       `refusing to migrate through what looks like a transaction-mode pooler (${host}). ` +
-        'pg_advisory_lock is session-scoped and CREATE INDEX CONCURRENTLY cannot run inside a ' +
-        "transaction block; both need the direct endpoint. Use the tenant record's directUrl."
+        'The migration advisory lock is session-scoped, and a pooled session outlives the ' +
+        'client: measured on Neon, the lock survives disconnect, does not exclude a second ' +
+        'pooled client, and then BLOCKS the direct endpoint until the stranded backend is ' +
+        "terminated by hand. Use the tenant record's directUrl."
     )
     this.name = 'PooledDsnRefused'
   }
@@ -132,12 +149,12 @@ export class PooledDsnRefused extends Error {
  * Neon's pooled endpoint host carries a `-pooler` suffix, and the same
  * signal is what the control plane's own `cp_tenant_registry_direct_not_pooler_ck`
  * constraint checks — so a record that passed the CP's write gate cannot fail
- * this one, and a hand-edited DSN cannot silently get a lock that is not a lock.
+ * this one, and a hand-edited DSN cannot silently strand a lock.
  *
  * The check is a heuristic on a hostname and is deliberately conservative: it
  * refuses rather than probes, because the probe for "is this session mode"
  * that most people reach for — asking the catalogue — is the false-green
- * instrument this run has already been burned by twice.
+ * instrument this plan has already been burned by twice.
  */
 export function assertSessionModeDsn(connectionString: string): void {
   let host: string
