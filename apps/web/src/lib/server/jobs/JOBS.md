@@ -453,6 +453,43 @@ tenant, and an operator sizing connections cares about the product.
   Redis had been cleared. They are now derived from `segments` rows on every
   tick, so there is no scheduler state to lose and nothing to reconcile.
 
+### Measured against the reference
+
+Same seeded database, same script, one run each
+(`scripts/queue-parity-probe.ts`):
+
+|                                      | reference `8310ee89d`  | this branch       |
+| ------------------------------------ | ---------------------- | ----------------- |
+| consumer                             | bullmq worker registry | postgres job tier |
+| import: terminal status              | completed              | completed         |
+| import: posts visible afterwards     | 2                      | 2                 |
+| export: terminal status              | completed              | completed         |
+| export: sizeBytes                    | 212258                 | 212198            |
+| events: outbox rows published        | 1                      | 1                 |
+| events: outbox rows left unpublished | 0                      | 0                 |
+| events: hook deliveries              | 3                      | 2                 |
+
+The byte and delivery counts differ because each run adds rows the next one
+exports and fans out; the statuses and the post count are the like-for-like
+part.
+
+**Two things stopped this being driven over HTTP, both checked rather than
+assumed.** A production build's API routes that call a server function fail
+with `Server function info not found for 552eb43…` — **reproduced identically
+on `8310ee89d`**, so pre-existing — and `vite dev` cannot start on a machine
+whose inotify watch budget is exhausted (`ENOSPC`). The probe therefore drives
+the same producers those routes call and reads the same rows their pollers
+read. `/api/health/ready` _is_ served, and is where the readiness change is
+visible.
+
+**A false alarm worth recording**, because it looked exactly like a real
+regression: the export job failed under this branch and succeeded on the
+reference, repeatably. The cause was a leftover server from an earlier step
+still attached to the same database, draining the same `job_queue` under an
+environment with no S3 keys. Postgres queues have no per-consumer namespace,
+so any process pointed at the database is a consumer — which is the same
+property that makes the queue per-tenant, seen from the other side.
+
 ### What is still Redis, and whose it is
 
 The queues are done; `bullmq` is imported by nothing under `apps/web/src`. Redis
@@ -501,4 +538,9 @@ DATABASE_URL=... bun run scripts/job-concurrency-proof.ts --work-seconds 130
 # the `events` queue's four properties: the custom retry curve, bulk dedupe,
 # cancelable delayed jobs, and webhook auto-disable — each with its control
 DATABASE_URL=... bun run scripts/job-events-proof.ts
+
+# like-for-like against the reference build. The SAME file runs on both trees
+# against ONE seeded database, driving the real producers and reading the rows
+# a caller would poll; it starts whichever consumer the tree has.
+DATABASE_URL=... bun run scripts/queue-parity-probe.ts <label>
 ```
