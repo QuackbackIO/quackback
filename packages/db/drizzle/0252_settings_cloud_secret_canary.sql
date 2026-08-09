@@ -28,6 +28,24 @@
 -- will — the check is claim-based, so it only applies to a record whose
 -- `appSecretsRef` says the key is derived. Nothing reads this column until a
 -- control plane writes it.
+--
+-- ## This migration is replay-safe, and deliberately does NOT write a canary
+--
+-- Worth stating explicitly, because the column's PURPOSE invites the opposite
+-- assumption. Every gauntlet database was applied with `psql -f`, which writes
+-- no ledger row, so `bun run db:migrate` would replay this file — and a
+-- migration that sealed a canary would then reseal it, which is the one
+-- operation that must never happen twice with a different result.
+--
+-- It cannot, because the only statements here are an `ADD COLUMN IF NOT EXISTS`
+-- and a `COMMENT`. Neither touches a value. Sealing is done exactly once, by
+-- exactly one writer — `stampSecretKeyCanary` in the control plane — which
+-- refuses to install a canary over an existing one that does not open under the
+-- key about to be used. One guard, one writer, and the schema step is inert.
+--
+-- Verified rather than argued: replayed twice against two live tenants that
+-- already carried a canary, md5 and length byte-unchanged both times, and the
+-- fleet still opened both afterwards.
 ALTER TABLE "settings" ADD COLUMN IF NOT EXISTS "cloud_secret_canary" text;
 
 COMMENT ON COLUMN "settings"."cloud_secret_canary" IS

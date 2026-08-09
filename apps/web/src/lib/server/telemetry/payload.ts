@@ -1,5 +1,6 @@
 import { existsSync } from 'fs'
 import { getOrCreateInstanceId } from './instance-id'
+import { activeSecretKey } from '@/lib/server/secret-key'
 
 export interface TelemetryPayload {
   version: string
@@ -63,7 +64,7 @@ async function getFeatureFlags(): Promise<TelemetryPayload['features']> {
     ])
 
     return {
-      oauth: !!config.secretKey,
+      oauth: !!activeSecretKey(),
       smtp: !!config.emailSmtpHost,
       s3: !!config.s3Bucket,
       ai: !!config.openaiApiKey,

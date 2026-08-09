@@ -20,6 +20,7 @@ import {
 import {
   encodeStorageCredentials,
   resolveTenantSecretsFromRefs,
+  tenantAppSecretVariable,
   TenantSecretResolutionError,
 } from '../vendor/tenant-secret-resolution'
 
@@ -114,7 +115,7 @@ describe('SECRET_KEY failures refuse the tenant', () => {
 
   it('refuses an env ref whose variable is unset, rather than returning empty', () => {
     expect(() =>
-      resolve({ appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP', env: {} })
+      resolve({ appSecretsRef: `env://${tenantAppSecretVariable(TENANT)}`, env: {} })
     ).toThrow(/which is unset/)
   })
 
@@ -133,22 +134,41 @@ describe('SECRET_KEY failures refuse the tenant', () => {
 
   it('resolves an env-supplied SECRET_KEY when the variable IS set', () => {
     // Positive control for the two refusals above.
+    const variable = tenantAppSecretVariable(TENANT)
     const resolved = resolve({
-      appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP',
-      env: { QUACKBACK_TENANT_SECRET_APP: 'an-operator-supplied-secret-key-000' },
+      appSecretsRef: `env://${variable}`,
+      env: { [variable]: 'an-operator-supplied-secret-key-000' },
     })
     expect(resolved.secretKey).toBe('an-operator-supplied-secret-key-000')
+  })
+
+  it('refuses an env ref naming a variable that is not THIS tenant’s', () => {
+    // An env ref carries no tenant, so the ref-names-tenant check has nothing to
+    // read — and without this, two hand-edited records can name one variable and
+    // silently share a SECRET_KEY. The canary cannot see that: both tenants
+    // derive the same key, so both canaries open, and nothing anywhere notices.
+    const bravos = tenantAppSecretVariable('inst_bravo')
+    expect(() =>
+      resolve({ appSecretsRef: `env://${bravos}`, env: { [bravos]: 'shared-key-000000000000000' } })
+    ).toThrow(/must be held in QUACKBACK_TENANT_SECRET_INST_ALPHA_/)
+  })
+
+  it('gives two tenants different variable names, so they cannot collide', () => {
+    expect(tenantAppSecretVariable('inst_alpha')).not.toBe(tenantAppSecretVariable('inst_bravo'))
+    // The normalisation is lossy, so the digest is what separates these two.
+    expect(tenantAppSecretVariable('inst_a-b')).not.toBe(tenantAppSecretVariable('inst_a_b'))
   })
 })
 
 describe('storage failures degrade storage only', () => {
   it('reports a wrong root key as a problem, not as a throw', () => {
+    const variable = tenantAppSecretVariable(TENANT)
     const resolved = resolveTenantSecretsFromRefs({
       tenantId: TENANT,
-      appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP',
+      appSecretsRef: `env://${variable}`,
       storageCredentialRef: sealedStorageRef(TENANT, 1, 'a-different-fleet-root-key-000000000000'),
       rootKey: ROOT,
-      env: { QUACKBACK_TENANT_SECRET_APP: 'an-operator-supplied-secret-key-000' },
+      env: { [variable]: 'an-operator-supplied-secret-key-000' },
     })
     expect(resolved.secretKey).toBe('an-operator-supplied-secret-key-000')
     expect(resolved.storage).toBeNull()

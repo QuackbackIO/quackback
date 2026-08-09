@@ -27,6 +27,7 @@
  *
  * Both directions are loud. Neither substitutes a value.
  */
+import { createHash } from 'node:crypto'
 import {
   deriveTenantSecret,
   FleetSecretError,
@@ -104,6 +105,25 @@ function resolveAppSecretKey(input: TenantSecretResolutionInput): string {
       }
     }
     case 'env': {
+      // An env ref carries no tenant, so `assertRefNamesTenant` has nothing to
+      // check — and without a check two hand-edited records can name ONE
+      // variable and silently share a SECRET_KEY. The canary cannot see that:
+      // both tenants derive the same key, so both canaries open. Nothing else
+      // in the system would notice either.
+      //
+      // So the variable NAME carries the tenant, derived deterministically from
+      // the tenant id, and a ref naming any other variable is refused. Two
+      // tenants can then no longer name one variable, and the operator gets the
+      // name to create rather than a rule to remember.
+      const expected = tenantAppSecretVariable(input.tenantId)
+      if (parsed.variable !== expected) {
+        throw new TenantSecretResolutionError(
+          'ref_tenant_mismatch',
+          `${redactRef(ref)} names ${parsed.variable}, but tenant ${input.tenantId}'s app secret ` +
+            `must be held in ${expected}. An env ref carries no tenant of its own, so the ` +
+            `variable name is the only thing that can bind it to one.`,
+        )
+      }
       const value = (input.env ?? process.env)[parsed.variable]
       if (!value) {
         throw new TenantSecretResolutionError(
@@ -194,6 +214,30 @@ function parseStorageCredentials(raw: string, ref: SecretRef): TenantStorageCred
     )
   }
   return { accessKeyId: obj.accessKeyId, secretAccessKey: obj.secretAccessKey }
+}
+
+/**
+ * The one environment variable a tenant's `env://` app-secret ref may name.
+ *
+ * Deterministic from the tenant id so both sides compute it rather than agree
+ * on it. The normalisation is lossy — `inst_a-b`, `inst_a.b` and `inst_a_b` all
+ * fold to the same suffix — so a short digest of the original id is appended:
+ * two tenants sharing one variable would mean one of them silently encrypting
+ * under the other's key, which is the whole failure this is closing.
+ *
+ * Mirrors `tenantDbSecretVariable` in the control plane's provisioning deps,
+ * which does the same job for the database credential.
+ */
+export function tenantAppSecretVariable(tenantId: string): string {
+  const suffix = tenantId.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  if (!suffix) {
+    throw new TenantSecretResolutionError(
+      'bad_tenant',
+      `cannot derive an app-secret variable name from '${tenantId}'`,
+    )
+  }
+  const digest = createHash('sha256').update(tenantId).digest('hex').slice(0, 8).toUpperCase()
+  return `QUACKBACK_TENANT_SECRET_${suffix}_${digest}_APP`
 }
 
 /** Serialise credentials for sealing. The inverse of {@link parseStorageCredentials}. */

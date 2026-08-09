@@ -15,6 +15,7 @@
  * derives its expectation the way the code does follows the code wherever it
  * goes.
  */
+import { createDecipheriv, hkdfSync } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
   deriveTenantSecret,
@@ -126,6 +127,59 @@ describe('sealTenantSecret / openTenantSecret', () => {
     expect(() => openTenantSecret(ROOT, target, blob.slice(0, blob.length - 4))).toThrow(
       FleetSecretError
     )
+  })
+})
+
+describe('the AEAD additional data is actually applied', () => {
+  /**
+   * The tenant and purpose are bound twice — once through the key's HKDF info,
+   * and again as AEAD additional data. The second is redundant *today*, because
+   * every purpose already has its own key, which means no behavioural test
+   * written against the module's own surface can see it: removing the AAD leaves
+   * every other case in this file green.
+   *
+   * That is exactly the shape this run keeps catching — a defence pinned by
+   * nothing. So it is pinned from outside: open a sealed blob by hand, once
+   * supplying the AAD and once not. Only one of those can succeed, and which
+   * one tells you whether the binding is really there.
+   */
+  const target = { generation: 1, tenantId: 'inst_alpha', purpose: 'storage' } as const
+  const AAD = `v${target.generation}|${target.tenantId}|${target.purpose}`
+
+  function openByHand(blob: string, aad: string | null): string {
+    const raw = Buffer.from(blob, 'base64url')
+    const key = Buffer.from(
+      hkdfSync(
+        'sha256',
+        ROOT,
+        'quackback-fleet-root-v1',
+        `quackback:fleet:seal:v${target.generation}:${target.tenantId}:${target.purpose}`,
+        32
+      )
+    )
+    const decipher = createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12), {
+      authTagLength: 16,
+    })
+    if (aad !== null) decipher.setAAD(Buffer.from(aad, 'utf8'))
+    decipher.setAuthTag(raw.subarray(raw.length - 16))
+    return Buffer.concat([
+      decipher.update(raw.subarray(12, raw.length - 16)),
+      decipher.final(),
+    ]).toString('utf8')
+  }
+
+  it('opens by hand only when the additional data is supplied', () => {
+    const blob = sealTenantSecret(ROOT, target, 'the-secret')
+
+    expect(openByHand(blob, AAD)).toBe('the-secret')
+    // Remove the AAD from the seal and this line starts passing, which is the
+    // whole point of asserting it.
+    expect(() => openByHand(blob, null)).toThrow()
+  })
+
+  it('rejects additional data for a different tenant', () => {
+    const blob = sealTenantSecret(ROOT, target, 'the-secret')
+    expect(() => openByHand(blob, `v1|inst_bravo|storage`)).toThrow()
   })
 })
 

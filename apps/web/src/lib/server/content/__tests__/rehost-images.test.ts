@@ -17,7 +17,6 @@ vi.mock('@/lib/server/content/ssrf-guard', async (importOriginal) => {
 
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Usable: vi.fn(() => true),
-  isS3Usable: vi.fn(() => true),
   uploadImageBuffer: vi.fn(),
 }))
 

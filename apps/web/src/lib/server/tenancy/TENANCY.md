@@ -439,6 +439,23 @@ Sealed rather than hashed: a hash of the key would be an offline-guessable
 verifier sitting in a database; a sealed constant proves possession and publishes
 nothing.
 
+**The canary has exactly one writer, and it never overwrites blind.** A process
+holding the wrong root would otherwise derive the wrong key, replace the canary
+with one that matches it, report success, and leave a serving tenant permanently
+refused — the check defeated by its own writer. So an existing canary that does
+not open under the key about to be installed is a refusal, overridable only by an
+explicit re-key. Migration `0252` adds the column and **never writes a value**,
+which is what keeps a replayed migration inert: `ADD COLUMN IF NOT EXISTS` plus a
+`COMMENT`, verified by replaying it twice against two live tenants with the
+canary byte-unchanged.
+
+**An `env://` app-secret ref must name its own tenant's variable.** Such a ref
+carries no tenant, so the ref-names-tenant check has nothing to read, and without
+this two hand-edited records could name one variable and silently share a
+`SECRET_KEY` — which the canary cannot see, because both tenants would derive the
+same key and both canaries would open. The variable name is derived from the
+tenant id (`tenantAppSecretVariable`), so a collision is not expressible.
+
 #### The two halves fail in different directions
 
 | Failure | Consequence |

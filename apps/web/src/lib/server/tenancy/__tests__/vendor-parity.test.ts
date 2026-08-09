@@ -45,7 +45,7 @@ const VENDORED = {
   // one-line "tidy-up" in one repo and data loss in the other.
   'fleet-secrets.ts': 'c9da2db5c7060c1c77a19e3344e728e044d339d8cdcabfac503b9577842bccb4',
   'tenant-secret-resolution.ts':
-    '7dfbac1731a9048ca24a78873f176348b0f909a0888b768a703fa2f68be9ee61',
+    '0ff468aa302a1574a152e3959f10bfcd7462c0941d29ed669b3e71ca7ab9ce0b',
 } as const
 
 /** Where the control plane lives when this machine has a checkout of it. */
