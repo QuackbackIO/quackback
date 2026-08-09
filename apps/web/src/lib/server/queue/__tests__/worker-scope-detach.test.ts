@@ -20,13 +20,20 @@
  * 3. **no queue module calls `new Worker` directly** (the coverage) — a new
  *    queue added next month is the whole reason §4.4 exists.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as ts from 'typescript'
 import { walkSourceFiles } from '@/lib/server/policy/source-files'
 import { runWithoutLogContext } from '@/lib/server/log-context'
+
+// `createQueueWorker` calls `new Worker(...)`; the fake keeps the constructor
+// semantics and drops the Redis dependency.
+vi.mock('bullmq', async () => {
+  const { FakeWorker } = await import('./fake-bullmq')
+  return { Worker: FakeWorker }
+})
 
 const SERVER_ROOT = join(__dirname, '../..')
 
@@ -119,38 +126,53 @@ describe('the leak this seam removes is real', () => {
 })
 
 describe('createQueueWorker detaches the REAL tenant store', () => {
-  it('CONTROL: a loop started inside a request scope processes as that tenant', async () => {
+  // Calls the PRODUCTION function, not a hand-rolled equivalent. The round-3
+  // first draft of this block wrapped `runWithoutLogContext` by hand and never
+  // imported `createQueueWorker` — so removing the detach from the seam left it
+  // 6/6 green. That is the same defect this round was dispatched to fix, one
+  // file over, and the falsification harness caught it rather than review.
+  //
+  // `bullmq` is faked so no Redis is needed, but the fake reproduces the one
+  // property that matters: the constructor starts the consumer loop, so the
+  // loop's continuations inherit whatever context constructed it.
+  it('CONTROL: the fake Worker really does inherit its constructing scope', async () => {
     const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
     const { getCurrentTenant } = await import('@/lib/server/tenancy/tenant-context')
-    const scopeOf = () => getCurrentTenant()?.tenantId ?? 'none'
-    const jobs = channel<string>()
+    const { FakeWorker, resetFakeWorkers } = await import('./fake-bullmq')
+    resetFakeWorkers()
+
     const seen: string[] = []
+    const worker = withTenant(
+      'tenant-alpha',
+      () => new FakeWorker('q', async () => seen.push(getCurrentTenant()?.tenantId ?? 'none'))
+    )
+    await withTenant('tenant-bravo', () => worker.deliver())
 
-    const finished = withTenant('tenant-alpha', () => startConsumer(jobs, scopeOf, seen, 1))
-    withTenant('tenant-bravo', () => jobs.push('bravo-job'))
-    await finished
-
-    // This is the defect, on the production store: bravo's job, alpha's
-    // database. Without this case the assertion below could pass on a store
-    // that simply never propagates.
-    expect(seen).toEqual(['bravo-job:tenant-alpha'])
+    // bravo's job, alpha's database. Without this the assertion below could
+    // pass on a fake that never propagated anything.
+    expect(seen).toEqual(['tenant-alpha'])
   })
 
-  it('started through the seam, it processes with no tenant', async () => {
+  it('a Worker built through createQueueWorker processes with no tenant', async () => {
     const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
     const { getCurrentTenant } = await import('@/lib/server/tenancy/tenant-context')
-    const scopeOf = () => getCurrentTenant()?.tenantId ?? 'none'
-    const jobs = channel<string>()
+    const { resetFakeWorkers, lastFakeWorker } = await import('./fake-bullmq')
+    const { createQueueWorker } = await import('../create-worker')
+    resetFakeWorkers()
+
     const seen: string[] = []
-
-    const finished = withTenant('tenant-alpha', () =>
-      // Exactly what `createQueueWorker` does around `new Worker(...)`.
-      runWithoutLogContext(() => startConsumer(jobs, scopeOf, seen, 1))
+    withTenant('tenant-alpha', () =>
+      createQueueWorker(
+        'q',
+        async () => {
+          seen.push(getCurrentTenant()?.tenantId ?? 'none')
+        },
+        {} as never
+      )
     )
-    withTenant('tenant-bravo', () => jobs.push('bravo-job'))
-    await finished
+    await withTenant('tenant-bravo', () => lastFakeWorker().deliver())
 
-    expect(seen).toEqual(['bravo-job:none'])
+    expect(seen).toEqual(['none'])
   })
 })
 

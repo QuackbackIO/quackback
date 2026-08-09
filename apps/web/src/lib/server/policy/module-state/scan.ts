@@ -1066,7 +1066,7 @@ export function scanRoots(repoRoot: string, roots: ScanRoot[]): StateSite[] {
       // use `export … from` — so any factory moved behind an index file would
       // have vanished from the scan with nothing failing. `depth` bounds a
       // re-export cycle so CI cannot hang on one.
-      if (false && ts.isExportDeclaration(stmt) && stmt.moduleSpecifier) {
+      if (ts.isExportDeclaration(stmt) && stmt.moduleSpecifier) {
         if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue
         const next = resolveModule(mod.rel, stmt.moduleSpecifier.text)
         if (!next) continue
