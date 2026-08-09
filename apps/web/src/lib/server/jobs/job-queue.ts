@@ -115,11 +115,29 @@ export interface EnqueueJobResult {
   inserted: boolean
 }
 
+/** A found row, for callers that need to know whether a job still exists. */
+export interface JobLookup {
+  jobId: string
+  queue: string
+  status: string
+  runAt: Date
+  attempts: number
+  maxAttempts: number
+}
+
 /** The subset of a claimed row a handler and the lease writes need. */
 export interface ClaimedJob {
   id: string
   jobId: string
   queue: string
+  /**
+   * The idempotency handle this row was enqueued under, when it had one.
+   *
+   * Handlers that dedupe their own side effects need it: the reference passed
+   * BullMQ's `job.id` into `hook.run`, and for relay-enqueued hooks that id was
+   * the deterministic `<eventId>:<sink>:<target>` key. That key is this column.
+   */
+  dedupeKey: string | null
   payload: Record<string, unknown>
   tenantId: string | null
   attempts: number
@@ -132,6 +150,7 @@ interface ClaimRow {
   id: string | number | bigint
   job_id: string
   queue: string
+  dedupe_key: string | null
   payload: Record<string, unknown> | null
   tenant_id: string | null
   attempts: number
@@ -194,56 +213,202 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   return { jobId, inserted: rows.length > 0 }
 }
 
-export interface ClaimJobsInput {
-  queues: readonly string[]
+/** How many rows one queue may have claimed in a pass, and for how long. */
+export interface QueueClaimSpec {
+  queue: string
+  /** Free slots for this queue right now. A queue at capacity is left out. */
   limit: number
-  /** How long the claim holds the job before the reaper may take it back. */
+  /** How long the claim holds a row from this queue before the reaper may take it. */
   leaseMs: number
 }
 
 /**
- * Claim up to `limit` runnable jobs, in one short transaction.
+ * Enqueue many jobs in one statement, deduplicating on `dedupeKey`.
+ *
+ * This is the outbox relay's shape (`enqueueHookJobsWithIds`): it re-drains a
+ * row after a crash and re-enqueues the SAME deterministic keys, and the fact
+ * that a second enqueue is a no-op is what makes delivery effectively-once.
+ * `ON CONFLICT DO NOTHING` gives that, including for duplicates *within* one
+ * call — unlike `DO UPDATE`, which errors when a command touches a row twice.
+ *
+ * Returns the keys that were actually written, so a caller can tell a fresh
+ * enqueue from a re-drain.
+ */
+export async function enqueueJobs(
+  inputs: readonly EnqueueJobInput[]
+): Promise<{ inserted: number; insertedDedupeKeys: string[] }> {
+  if (inputs.length === 0) return { inserted: 0, insertedDedupeKeys: [] }
+
+  const rows = inputs.map((input) => {
+    const maxAttempts = input.maxAttempts ?? 1
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+      throw new Error(`maxAttempts must be an integer >= 1, received ${String(input.maxAttempts)}`)
+    }
+    return {
+      job_id: generateId('job'),
+      queue: input.queue,
+      dedupe_key: input.dedupeKey ?? null,
+      payload: input.payload ?? {},
+      run_at: (input.runAt ?? new Date()).toISOString(),
+      max_attempts: maxAttempts,
+    }
+  })
+
+  const result = await db.execute(sql`
+    INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
+    SELECT x.job_id, x.queue, x.dedupe_key, ${currentTenantId()}, x.payload, x.run_at, x.max_attempts
+    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(
+      job_id text, queue text, dedupe_key text, payload jsonb,
+      run_at timestamptz, max_attempts int
+    )
+    ON CONFLICT (queue, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+    RETURNING dedupe_key
+  `)
+  const written = getExecuteRows<{ dedupe_key: string | null }>(result)
+  return {
+    inserted: written.length,
+    insertedDedupeKeys: written.map((r) => r.dedupe_key).filter((k): k is string => k !== null),
+  }
+}
+
+/**
+ * Cancel a job by its dedupe key, so the key is free to be scheduled again.
+ *
+ * The reference for this is BullMQ's `job.remove()`, which the scheduler uses
+ * to move a delayed job (a changelog publish that was re-dated, a maintenance
+ * window that shifted). A *running* row is deliberately not removable: its
+ * handler is mid-flight and the fencing token is what adjudicates its result.
+ * Everything else — pending, and terminal rows still occupying the key —
+ * is deleted, because under BullMQ `removeOnComplete` had already freed the id
+ * and a caller that could not re-schedule a key it had already used would be a
+ * silent behaviour change.
+ *
+ * Returns how many rows were removed.
+ */
+export async function cancelJob(queue: string, dedupeKey: string): Promise<number> {
+  const result = await db.execute(sql`
+    DELETE FROM job_queue
+    WHERE queue = ${queue} AND dedupe_key = ${dedupeKey} AND status <> 'running'
+    RETURNING id
+  `)
+  return getExecuteRows(result).length
+}
+
+/**
+ * Look a job up by its dedupe key.
+ *
+ * The workflow sweeper's orphan pass needs exactly this: "does the durable
+ * timer for this parked run still exist, and in what state?". Under BullMQ that
+ * was `queue.getJob(id)` plus `job.getState()`.
+ */
+export async function findJobByDedupeKey(
+  queue: string,
+  dedupeKey: string
+): Promise<JobLookup | null> {
+  const result = await db.execute(sql`
+    SELECT job_id, queue, status, run_at, attempts, max_attempts
+    FROM job_queue
+    WHERE queue = ${queue} AND dedupe_key = ${dedupeKey}
+    LIMIT 1
+  `)
+  const rows = getExecuteRows<{
+    job_id: string
+    queue: string
+    status: string
+    run_at: Date | string
+    attempts: number
+    max_attempts: number
+  }>(result)
+  if (rows.length === 0) return null
+  const row = rows[0]
+  return {
+    jobId: row.job_id,
+    queue: row.queue,
+    status: row.status,
+    runAt: asDate(row.run_at),
+    attempts: row.attempts,
+    maxAttempts: row.max_attempts,
+  }
+}
+
+export interface ClaimJobsInput {
+  specs: readonly QueueClaimSpec[]
+}
+
+/**
+ * Claim runnable jobs, in one short transaction, respecting a per-queue cap.
  *
  * `attempts` is incremented here. That placement is the whole at-most-once
  * property — see the module header before moving it.
+ *
+ * **Why the cap is per queue rather than one number for the pass.** The
+ * reference gave every queue its own BullMQ `Worker` with its own
+ * `concurrency`, so a slow queue could not consume another's capacity and a
+ * long lock on one queue did not lengthen anyone else's. A single `LIMIT` over
+ * a union of queues loses both properties: `help-center-translate`'s 120s lease
+ * would be applied to a `snooze-sweep` row claimed in the same batch, and one
+ * queue's backlog would fill the batch. The `LATERAL` below is what restores
+ * them — one query per pass regardless of queue count, but each queue's own
+ * limit and its own lease.
  */
 export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
-  if (input.queues.length === 0 || input.limit < 1) return []
+  const runnable = input.specs.filter((s) => s.limit >= 1)
+  if (runnable.length === 0) return []
 
-  // A JSON array rather than a Postgres array literal: Drizzle's `sql` template
+  // A JSON object rather than Postgres array literals: Drizzle's `sql` template
   // flattens a JS array into one parameter per element, so `= ANY($1::text[])`
   // arrives as a bare string and Postgres rejects it as a malformed array. This
   // shape parameterises cleanly and leaves the value opaque to the parser.
-  const queues = JSON.stringify([...input.queues])
+  const spec = JSON.stringify(
+    Object.fromEntries(
+      runnable.map((s) => [s.queue, { limit: s.limit, leaseSecs: s.leaseMs / 1000 }])
+    )
+  )
   const result = await db.execute(sql`
-    WITH claimable AS (
-      SELECT id
-      FROM job_queue
-      WHERE status = 'pending'
-        AND queue IN (SELECT jsonb_array_elements_text(${queues}::jsonb))
-        AND run_at <= now()
-        -- The second barrier. A spent job must not be claimable even if some
-        -- other writer put it back to pending; see the module header.
-        AND attempts < max_attempts
-      ORDER BY run_at, id
-      FOR UPDATE SKIP LOCKED
-      LIMIT ${input.limit}
+    WITH spec AS (
+      SELECT key AS queue,
+             (value->>'limit')::int AS lim,
+             (value->>'leaseSecs')::numeric AS lease_secs
+      FROM jsonb_each(${spec}::jsonb)
+    ),
+    claimable AS (
+      SELECT c.id, s.lease_secs
+      FROM spec s
+      CROSS JOIN LATERAL (
+        SELECT j.id
+        FROM job_queue j
+        WHERE j.queue = s.queue
+          AND j.status = 'pending'
+          AND j.run_at <= now()
+          -- The second barrier. A spent job must not be claimable even if some
+          -- other writer put it back to pending; see the module header.
+          AND j.attempts < j.max_attempts
+        ORDER BY j.run_at, j.id
+        LIMIT s.lim
+        FOR UPDATE SKIP LOCKED
+      ) c
     )
     UPDATE job_queue j
     SET status = 'running',
         attempts = j.attempts + 1,
         lease_token = gen_random_uuid(),
-        locked_until = now() + make_interval(secs => ${input.leaseMs / 1000}),
+        locked_until = now() + make_interval(secs => c.lease_secs),
         locked_by = ${jobWorkerId()},
         started_at = COALESCE(j.started_at, now()),
         updated_at = now()
     FROM claimable c
     WHERE j.id = c.id
-    RETURNING j.id, j.job_id, j.queue, j.payload, j.tenant_id,
+    RETURNING j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.tenant_id,
               j.attempts, j.max_attempts, j.lease_token, j.locked_until
   `)
 
-  const rows = getExecuteRows<ClaimRow>(result)
+  // The UPDATE's RETURNING order is unspecified. Sorting by id restores the
+  // enqueue order the LATERAL selected in, so a caller that runs the batch
+  // serially runs it oldest-first rather than in whatever order the executor
+  // produced.
+  const rows = getExecuteRows<ClaimRow>(result).sort((a, b) =>
+    BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0
+  )
   const expected = currentTenantId()
   const claimed: ClaimedJob[] = []
 
@@ -252,6 +417,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
       id: String(row.id),
       jobId: row.job_id,
       queue: row.queue,
+      dedupeKey: row.dedupe_key,
       payload: row.payload ?? {},
       tenantId: row.tenant_id,
       attempts: row.attempts,
@@ -345,25 +511,32 @@ export type FailOutcome = 'retrying' | 'failed' | 'lease-lost'
  * The retry decision uses the same `attempts < max_attempts` predicate the claim
  * and the reaper use, so a no-retry job cannot be retried through this path
  * either.
+ *
+ * `terminal` is the reference's `UnrecoverableError`: a failure the handler
+ * knows retrying cannot fix (an unknown hook type, a deleted segment). It is
+ * ANDed into the retry predicate rather than replacing it, so it can only ever
+ * make a job *more* terminal — there is no value of `terminal` that lets a
+ * spent job back into `pending`.
  */
 export async function failJob(
   job: ClaimedJob,
   message: string,
-  opts?: { backoffMs?: number }
+  opts?: { backoffMs?: number; terminal?: boolean }
 ): Promise<FailOutcome> {
   const backoffSecs = Math.max(0, opts?.backoffMs ?? 0) / 1000
+  const retryable = opts?.terminal ? sql`false` : sql`attempts < max_attempts`
   const result = await db.execute(sql`
     UPDATE job_queue
-    SET status = CASE WHEN attempts < max_attempts THEN 'pending' ELSE 'failed' END,
+    SET status = CASE WHEN ${retryable} THEN 'pending' ELSE 'failed' END,
         run_at = CASE
-                   WHEN attempts < max_attempts
+                   WHEN ${retryable}
                    THEN now() + make_interval(secs => ${backoffSecs})
                    ELSE run_at
                  END,
         lease_token = NULL,
         locked_until = NULL,
         locked_by = NULL,
-        finished_at = CASE WHEN attempts < max_attempts THEN NULL ELSE now() END,
+        finished_at = CASE WHEN ${retryable} THEN NULL ELSE now() END,
         last_error = ${message.slice(0, 4000)},
         updated_at = now()
     WHERE id = ${job.id}::bigint AND lease_token = ${job.leaseToken}::uuid AND status = 'running'
@@ -456,11 +629,37 @@ export async function reapExpiredLeases(): Promise<ReapResult> {
  * emits the slot bracketing "now", so a multi-day window is many orders of
  * magnitude of slack.
  */
-export async function pruneTerminalJobs(olderThanMs: number): Promise<number> {
+export async function pruneTerminalJobs(
+  olderThanMs: number,
+  perQueueMs: Readonly<Record<string, { succeeded?: number; failed?: number }>> = {}
+): Promise<number> {
+  // Per-queue, per-status overrides exist because the reference set retention
+  // that way, and the asymmetry was deliberate: `{event-hooks}` kept completed
+  // jobs 24h and failed ones 30 days, so *"did this webhook actually fire?"*
+  // stays answerable long after the successful traffic has been discarded. One
+  // fleet-wide window either bloats the highest-volume queue's table or throws
+  // away the diagnostic history the low-volume ones were keeping on purpose.
+  const overrides = JSON.stringify(
+    Object.fromEntries(
+      Object.entries(perQueueMs).map(([queue, byStatus]) => [
+        queue,
+        Object.fromEntries(
+          Object.entries(byStatus)
+            .filter(([, ms]) => typeof ms === 'number')
+            .map(([status, ms]) => [status, (ms as number) / 1000])
+        ),
+      ])
+    )
+  )
   const result = await db.execute(sql`
     DELETE FROM job_queue
     WHERE status IN ('succeeded', 'failed')
-      AND finished_at < now() - make_interval(secs => ${olderThanMs / 1000})
+      AND finished_at < now() - make_interval(
+        secs => COALESCE(
+          (${overrides}::jsonb -> queue ->> status)::numeric,
+          ${olderThanMs / 1000}
+        )
+      )
     RETURNING id
   `)
   return getExecuteRows(result).length

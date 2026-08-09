@@ -8,10 +8,13 @@
  * never terminate at a pooled endpoint.
  */
 export {
+  cancelJob,
   claimJobs,
   completeJob,
   enqueueJob,
+  enqueueJobs,
   failJob,
+  findJobByDedupeKey,
   heartbeatJob,
   isMissingJobQueue,
   jobQueueDepth,
@@ -23,32 +26,47 @@ export {
   type EnqueueJobInput,
   type EnqueueJobResult,
   type FailOutcome,
+  type JobLookup,
+  type QueueClaimSpec,
   type ReapResult,
 } from './job-queue'
 
 export {
   JOB_DEFINITIONS,
+  TerminalJobError,
+  concurrencyFor,
   findJobDefinition,
+  isTerminalJobError,
   jobDefinitions,
   leaseMsFor,
   maxAttemptsFor,
+  retentionOverrides,
   retryBackoffMs,
+  type DynamicSchedule,
   type JobDefinition,
   type JobHandler,
 } from './definitions'
 
 export {
   activeQueueNames,
+  awaitPool,
+  claimSpecsFor,
+  createJobPool,
   createScheduleState,
+  dispatchPass,
   drainOnce,
+  poolSize,
   primeJobHandlers,
   resetJobHandlers,
   runJob,
   runMaintenanceTick,
   runScheduleTick,
   runnerConfig,
+  totalDeclaredConcurrency,
   wakeDisabled,
+  type DispatchResult,
   type DrainResult,
+  type JobPool,
   type RunnerConfig,
   type ScheduleState,
 } from './runner'

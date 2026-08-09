@@ -1,82 +1,93 @@
+/**
+ * Segment evaluation scheduling.
+ *
+ * The schedules are derived from `segments` rows on every tick rather than
+ * registered anywhere, so what these tests pin is the derivation: which rows
+ * become schedules, what happens to a row whose cron cannot be parsed, and that
+ * a disabled or deleted segment simply stops appearing.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const queueInstances: Array<{
-  add: ReturnType<typeof vi.fn>
-  getRepeatableJobs: ReturnType<typeof vi.fn>
-  removeRepeatableByKey: ReturnType<typeof vi.fn>
-  waitUntilReady: ReturnType<typeof vi.fn>
-  close: ReturnType<typeof vi.fn>
-}> = []
+interface SegmentRow {
+  id: string
+  evaluationSchedule: { enabled: boolean; pattern: string } | null
+}
 
-vi.mock('@/lib/server/config', () => ({
-  config: {
-    redisUrl: 'redis://localhost:6379',
-  },
-}))
+let rows: SegmentRow[] = []
 
-vi.mock('bullmq', () => {
-  class Queue {
-    add = vi.fn().mockResolvedValue(undefined)
-    getRepeatableJobs = vi.fn().mockResolvedValue([])
-    removeRepeatableByKey = vi.fn().mockResolvedValue(undefined)
-    waitUntilReady = vi.fn().mockResolvedValue(undefined)
-    close = vi.fn().mockResolvedValue(undefined)
-
-    constructor() {
-      queueInstances.push(this)
-    }
+vi.mock('@/lib/server/db', () => {
+  const chain = {
+    select: () => chain,
+    from: () => chain,
+    // The scheduler filters `type = 'dynamic' AND deleted_at IS NULL` in SQL;
+    // the fixture stands in for the rows that survive it.
+    where: async () => rows,
   }
-
-  class Worker {
-    on = vi.fn()
-    close = vi.fn().mockResolvedValue(undefined)
+  return {
+    db: chain,
+    segments: {
+      id: 'id',
+      evaluationSchedule: 'evaluationSchedule',
+      type: 'type',
+      deletedAt: 'deletedAt',
+    },
+    eq: () => true,
+    and: () => true,
+    isNull: () => true,
   }
-
-  class UnrecoverableError extends Error {}
-
-  return { Queue, Worker, UnrecoverableError }
 })
 
-describe('segment-scheduler', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    queueInstances.length = 0
-  })
+import { listEvaluationSchedules, segmentEvaluationSchedules } from '../segment-scheduler'
 
-  it('schedules a repeatable job when enabled', async () => {
-    const { upsertSegmentEvaluationSchedule, closeSegmentScheduler } =
-      await import('../segment-scheduler')
-    await upsertSegmentEvaluationSchedule('segment_abc' as never, {
-      enabled: true,
-      pattern: '0 * * * *',
-    })
+beforeEach(() => {
+  rows = []
+})
 
-    const queue = queueInstances[0]
-    expect(queue?.add).toHaveBeenCalledWith(
-      'segment-eval:segment_abc',
-      { segmentId: 'segment_abc' },
-      {
-        repeat: { pattern: '0 * * * *' },
-        jobId: 'segment-eval:segment_abc',
-      }
-    )
-
-    await closeSegmentScheduler()
-  })
-
-  it('lists only segment evaluation repeatable jobs', async () => {
-    const { listEvaluationSchedules, closeSegmentScheduler } = await import('../segment-scheduler')
-    await listEvaluationSchedules()
-
-    const queue = queueInstances[0]
-    queue.getRepeatableJobs.mockResolvedValue([
-      { name: 'segment-eval:segment_one', pattern: '*/5 * * * *', next: 123 },
-      { name: 'other-job', pattern: '* * * * *', next: 456 },
+describe('segmentEvaluationSchedules', () => {
+  it('derives one schedule per enabled dynamic segment', async () => {
+    rows = [
+      { id: 'segment_a', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } },
+      { id: 'segment_b', evaluationSchedule: { enabled: true, pattern: '*/5 * * * *' } },
+    ]
+    const schedules = await segmentEvaluationSchedules()
+    expect(schedules).toEqual([
+      { key: 'segment_a', cron: '0 * * * *', payload: { segmentId: 'segment_a' } },
+      { key: 'segment_b', cron: '*/5 * * * *', payload: { segmentId: 'segment_b' } },
     ])
+  })
 
-    const result = await listEvaluationSchedules()
-    expect(result).toEqual([{ segmentId: 'segment_one', pattern: '*/5 * * * *', next: 123 }])
+  it('omits a segment whose schedule is disabled or absent', async () => {
+    rows = [
+      { id: 'segment_off', evaluationSchedule: { enabled: false, pattern: '0 * * * *' } },
+      { id: 'segment_none', evaluationSchedule: null },
+    ]
+    expect(await segmentEvaluationSchedules()).toEqual([])
+  })
 
-    await closeSegmentScheduler()
+  it('drops a segment whose cron cannot be parsed rather than guessing a cadence', async () => {
+    // A permissive fallback would change the segment's cadence with no error
+    // anywhere, which is the failure mode `cron.ts` throws to prevent.
+    rows = [
+      { id: 'segment_bad', evaluationSchedule: { enabled: true, pattern: 'every 5 minutes' } },
+      { id: 'segment_ok', evaluationSchedule: { enabled: true, pattern: '0 3 * * *' } },
+    ]
+    const schedules = await segmentEvaluationSchedules()
+    expect(schedules.map((s) => s.key)).toEqual(['segment_ok'])
+  })
+})
+
+describe('listEvaluationSchedules', () => {
+  it('reports the live schedules with their next fire time', async () => {
+    rows = [{ id: 'segment_one', evaluationSchedule: { enabled: true, pattern: '*/5 * * * *' } }]
+    const listed = await listEvaluationSchedules()
+    expect(listed).toHaveLength(1)
+    expect(listed[0].segmentId).toBe('segment_one')
+    expect(listed[0].pattern).toBe('*/5 * * * *')
+    expect(listed[0].next).toBeGreaterThan(Date.now())
+  })
+
+  it('lists nothing when no segment carries a schedule', async () => {
+    rows = [{ id: 'segment_two', evaluationSchedule: null }]
+    expect(await listEvaluationSchedules()).toEqual([])
   })
 })

@@ -26,14 +26,19 @@ import {
   pruneTerminalJobs,
   reapExpiredLeases,
   type ClaimedJob,
+  type QueueClaimSpec,
   type ReapResult,
 } from './job-queue'
 import {
+  concurrencyFor,
   findJobDefinition,
+  isTerminalJobError,
   jobDefinitions,
   leaseMsFor,
   maxAttemptsFor,
+  retentionOverrides,
   retryBackoffMs,
+  type DynamicSchedule,
   type JobDefinition,
   type JobHandler,
 } from './definitions'
@@ -56,12 +61,22 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
 export interface RunnerConfig {
   /** Poll fallback interval. The correctness floor when a NOTIFY is lost. */
   pollIntervalMs: number
-  /** Jobs claimed per drain pass. */
+  /** Ceiling on rows claimed from ONE queue in a single pass. */
   batchSize: number
   /** How often expired leases are reclaimed. */
   reapIntervalMs: number
   /** How long terminal rows are kept. Must exceed any live cron slot key. */
   retentionMs: number
+  /**
+   * Ceiling on jobs running at once in one tenant's loop.
+   *
+   * Defaults to the sum of every definition's `concurrency`, which is exactly
+   * what the reference allowed (one BullMQ `Worker` per queue, each at its own
+   * concurrency), so the default binds nothing and single-tenant behaviour does
+   * not move. It exists because a pooled process runs one loop per tenant, and
+   * a fleet operator sizing connections cares about the product, not the term.
+   */
+  maxConcurrency: number
 }
 
 /**
@@ -78,12 +93,18 @@ export function wakeDisabled(): boolean {
   return process.env.JOB_WAKE_DISABLED === '1'
 }
 
+/** Sum of every registered queue's concurrency — the reference's own ceiling. */
+export function totalDeclaredConcurrency(): number {
+  return jobDefinitions().reduce((n, def) => n + concurrencyFor(def), 0)
+}
+
 export function runnerConfig(): RunnerConfig {
   return {
     pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 1_000, 50, 600_000),
     batchSize: envInt('JOB_BATCH_SIZE', 5, 1, 100),
     reapIntervalMs: envInt('JOB_REAP_INTERVAL_MS', 15_000, 500, 3_600_000),
     retentionMs: envInt('JOB_RETENTION_MS', 7 * 24 * 60 * 60 * 1000, 60_000, 365 * 86_400_000),
+    maxConcurrency: envInt('JOB_MAX_CONCURRENCY', totalDeclaredConcurrency(), 1, 512),
   }
 }
 
@@ -198,8 +219,13 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
   } catch (err) {
     clearInterval(heartbeat)
     const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+    // A terminal error is the reference's `UnrecoverableError`: retrying an
+    // unknown hook type or a deleted segment burns attempts to reach the same
+    // answer. It only ever makes the outcome final sooner — see failJob.
+    const terminal = isTerminalJobError(err)
     const outcome = await failJob(job, message, {
       backoffMs: retryBackoffMs(def, job.attempts),
+      terminal,
     })
     log.error(
       {
@@ -208,10 +234,26 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
         queue: job.queue,
         attempts: job.attempts,
         maxAttempts: job.maxAttempts,
+        terminal,
         outcome,
       },
       'job handler failed'
     )
+    // The reference expressed this as `worker.on('failed')`, and the webhook
+    // auto-disable counter depends on the `permanent` distinction: counting a
+    // retry would disable a flaky endpoint after ~17 events instead of 50.
+    // 'lease-lost' is NOT permanent — the job now belongs to another worker,
+    // and attributing its failure here would double-count.
+    if (def.onFailure) {
+      await def
+        .onFailure(job, err, outcome === 'failed')
+        .catch((hookErr) =>
+          log.error(
+            { err: hookErr, jobId: job.jobId, queue: job.queue },
+            'job onFailure hook threw'
+          )
+        )
+    }
     return outcome === 'retrying' ? 'retrying' : 'failed'
   }
   clearInterval(heartbeat)
@@ -239,34 +281,145 @@ export interface DrainResult {
 }
 
 /**
- * Claim and run one batch, serially.
+ * The tier's bounded worker pool — the answer to the hand-off `JOBS.md` §10
+ * left for this piece.
  *
- * Serial on purpose: every sweep in the first cohort ran at `concurrency: 1`
- * under BullMQ, and these run against a per-tenant database whose compute is
- * sized for one tenant's ordinary load.
+ * **The problem it solves.** The first cohort drained serially: claim a batch,
+ * run it to completion, then go round again and tick the schedule. That was
+ * fine while every sweep was sub-second, and `JOBS.md` §10 said so explicitly.
+ * It stops being fine the moment `help-center-translate` arrives, because its
+ * lease is 120 seconds — and the slots that elapse while the loop is inside a
+ * long job are *dropped, not delayed*: `latestSlotAtOrBefore` only ever returns
+ * the slot bracketing now, so a two-minute job costs the per-minute
+ * `snooze-sweep` and `sla-breach-sweep` two runs each, silently.
+ *
+ * **Why a pool rather than per-queue loops.** Fifteen loops per tenant would
+ * multiply the poll traffic by fifteen against a per-tenant database, and the
+ * database is the scarce thing here — §6's corollary is that this tier already
+ * holds a connection per tenant open by design. One loop keeps one poll, one
+ * listener and one claim query per pass, whatever the queue count.
+ *
+ * **Why per-queue caps rather than one pool size.** The reference gave each
+ * queue its own `Worker` with its own `concurrency`, and one of those numbers
+ * is load-bearing: `workflow-dispatch` is `concurrency: 1` because it is a
+ * global FIFO, not because it is slow. A single undifferentiated pool would run
+ * two dispatch jobs at once and reorder a reply and a close on one
+ * conversation. So the cap is per queue, the claim asks for exactly the free
+ * slots each queue has, and the FIFO queue can never have two in flight.
+ */
+export interface JobPool {
+  /** Jobs currently running, per queue. */
+  readonly inFlight: Map<string, number>
+  /** Every running job's promise, so a caller can wait the pool out. */
+  readonly active: Set<Promise<void>>
+}
+
+export function createJobPool(): JobPool {
+  return { inFlight: new Map(), active: new Set() }
+}
+
+export function poolSize(pool: JobPool): number {
+  let n = 0
+  for (const count of pool.inFlight.values()) n += count
+  return n
+}
+
+/** The free slots each queue has right now, given the pool and the caps. */
+export function claimSpecsFor(pool: JobPool, config: RunnerConfig): QueueClaimSpec[] {
+  let budget = Math.max(0, config.maxConcurrency - poolSize(pool))
+  const specs: QueueClaimSpec[] = []
+  for (const def of jobDefinitions()) {
+    if (budget <= 0) break
+    const free = Math.min(
+      concurrencyFor(def) - (pool.inFlight.get(def.name) ?? 0),
+      config.batchSize,
+      budget
+    )
+    if (free < 1) continue
+    specs.push({ queue: def.name, limit: free, leaseMs: leaseMsFor(def) })
+    budget -= free
+  }
+  return specs
+}
+
+export interface DispatchResult {
+  claimed: number
+  /** True when every queue was already at its cap, so nothing was even asked for. */
+  saturated: boolean
+}
+
+/**
+ * Claim what the pool has room for and start it — without waiting for it.
+ *
+ * Returning before the work finishes is the whole point: the caller's next act
+ * is the schedule tick, and a 120-second job must not stand between a
+ * per-minute sweep and its slot.
+ */
+export async function dispatchPass(opts: {
+  pool: JobPool
+  config: RunnerConfig
+  /** Runs one job, in whatever tenant scope the caller owns. */
+  run: (job: ClaimedJob) => Promise<'succeeded' | 'failed' | 'retrying'>
+  /** Called as each job settles, so the loop can claim the freed slot at once. */
+  onSettled?: (queue: string, outcome: 'succeeded' | 'failed' | 'retrying') => void
+}): Promise<DispatchResult> {
+  const { pool } = opts
+  const specs = claimSpecsFor(pool, opts.config)
+  if (specs.length === 0) return { claimed: 0, saturated: true }
+
+  const jobs = await claimJobs({ specs })
+  for (const job of jobs) {
+    pool.inFlight.set(job.queue, (pool.inFlight.get(job.queue) ?? 0) + 1)
+    const promise = opts
+      .run(job)
+      .catch((err): 'failed' => {
+        // runJob already records every handler failure on the row; reaching
+        // here means the queue machinery itself threw, which must still free
+        // the slot rather than wedge the pool at its cap forever.
+        log.error({ err, jobId: job.jobId, queue: job.queue }, 'job runner threw outside runJob')
+        return 'failed'
+      })
+      .then((outcome) => {
+        const held = pool.inFlight.get(job.queue) ?? 1
+        if (held <= 1) pool.inFlight.delete(job.queue)
+        else pool.inFlight.set(job.queue, held - 1)
+        pool.active.delete(promise)
+        opts.onSettled?.(job.queue, outcome)
+      })
+    pool.active.add(promise)
+  }
+  return { claimed: jobs.length, saturated: false }
+}
+
+/** Wait for every job the pool is running. */
+export async function awaitPool(pool: JobPool): Promise<void> {
+  while (pool.active.size > 0) await Promise.all([...pool.active])
+}
+
+/**
+ * Claim one pass and run it to completion.
+ *
+ * The same claim and the same execution path the tier uses — this is
+ * `dispatchPass` plus a wait, not a second implementation — so a harness or a
+ * test that drives this is exercising the shipped mechanism. Per-queue
+ * concurrency still applies, so a queue declared `concurrency: 1` yields one
+ * job per call, exactly as its BullMQ `Worker` did.
  */
 export async function drainOnce(config: RunnerConfig): Promise<DrainResult> {
-  const queues = activeQueueNames()
   const out: DrainResult = { claimed: 0, succeeded: 0, failed: 0, retrying: 0 }
-  if (queues.length === 0) return out
-
-  // One lease length covers the batch: each definition may want its own, so the
-  // claim uses the longest and each job's heartbeat then works to its own.
-  const leaseMs = Math.max(
-    ...jobDefinitions().map((d) => leaseMsFor(d)),
-    // A definitionless queue cannot appear here (queues comes from the same
-    // list), but Math.max of an empty array is -Infinity, so seed it.
-    1_000
-  )
-
-  const jobs = await claimJobs({ queues, limit: config.batchSize, leaseMs })
-  out.claimed = jobs.length
-  for (const job of jobs) {
-    const outcome = await runJob(job)
-    if (outcome === 'succeeded') out.succeeded += 1
-    else if (outcome === 'retrying') out.retrying += 1
-    else out.failed += 1
-  }
+  const pool = createJobPool()
+  const result = await dispatchPass({
+    pool,
+    config,
+    run: runJob,
+    onSettled: (_queue, outcome) => {
+      if (outcome === 'succeeded') out.succeeded += 1
+      else if (outcome === 'retrying') out.retrying += 1
+      else out.failed += 1
+    },
+  })
+  out.claimed = result.claimed
+  await awaitPool(pool)
   return out
 }
 
@@ -357,24 +510,36 @@ export async function runScheduleTick(
   let enqueued = 0
   let nextSlotAt: Date | null = null
 
-  for (const def of jobDefinitions()) {
-    if (!def.cron) continue
-    const cron = cronFor(def.cron)
+  // Every schedule name this tick considered. Anything in the state that is no
+  // longer here belonged to a schedule that has gone away — a deleted segment,
+  // an IMAP mailbox unconfigured — and holding its slot forever would leak.
+  const live = new Set<string>()
+
+  /** One schedule: a queue, a cron, and the payload its jobs carry. */
+  const tick = async (
+    def: JobDefinition,
+    stateKey: string,
+    dedupeName: string,
+    pattern: string,
+    payload: Record<string, unknown>
+  ): Promise<void> => {
+    const cron = cronFor(pattern)
+    live.add(stateKey)
 
     const slot = latestSlotAtOrBefore(cron, now)
-    const seen = state.seen.get(def.name)
+    const seen = state.seen.get(stateKey)
     if (seen === undefined) {
       // First pass for THIS scheduler: adopt the current slot, do not run it.
-      if (slot) state.seen.set(def.name, slot.getTime())
+      if (slot) state.seen.set(stateKey, slot.getTime())
     } else if (slot && slot.getTime() > seen) {
       attempted += 1
       const result = await enqueueJob({
         queue: def.name,
-        dedupeKey: slotKey(def.name, slot),
-        payload: { scheduledFor: slot.toISOString() },
+        dedupeKey: slotKey(dedupeName, slot),
+        payload: { ...payload, scheduledFor: slot.toISOString() },
         maxAttempts: maxAttemptsFor(def),
       })
-      state.seen.set(def.name, slot.getTime())
+      state.seen.set(stateKey, slot.getTime())
       if (result.inserted) {
         enqueued += 1
         log.debug({ queue: def.name, slot: slot.toISOString() }, 'scheduled job enqueued')
@@ -383,6 +548,50 @@ export async function runScheduleTick(
 
     const next = nextSlotAfter(cron, now)
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
+  }
+
+  for (const def of jobDefinitions()) {
+    if (def.cron) {
+      // A disabled schedule writes nothing, rather than enqueueing a job whose
+      // handler returns immediately. The reference achieved the same by never
+      // constructing the worker; a table full of no-op rows would not.
+      let enabled = true
+      if (def.cronEnabled) {
+        try {
+          enabled = await def.cronEnabled()
+        } catch (err) {
+          enabled = false
+          log.error({ err, queue: def.name }, 'cron gate threw; treating the schedule as disabled')
+        }
+      }
+      if (enabled) await tick(def, def.name, def.name, def.cron, {})
+    }
+
+    if (def.dynamicSchedules) {
+      let schedules: readonly DynamicSchedule[] = []
+      try {
+        schedules = await def.dynamicSchedules()
+      } catch (err) {
+        log.error({ err, queue: def.name }, 'could not read dynamic schedules for this queue')
+      }
+      for (const schedule of schedules) {
+        // The dedupe key must separate the schedules sharing this queue, or the
+        // first segment's slot would spend every other segment's.
+        const dedupeName = `${def.name}:${schedule.key}`
+        try {
+          await tick(def, dedupeName, dedupeName, schedule.cron, schedule.payload)
+        } catch (err) {
+          log.error(
+            { err, queue: def.name, schedule: schedule.key },
+            'a dynamic schedule could not be ticked'
+          )
+        }
+      }
+    }
+  }
+
+  for (const key of [...state.seen.keys()]) {
+    if (!live.has(key)) state.seen.delete(key)
   }
 
   return { attempted, enqueued, nextSlotAt }
@@ -395,6 +604,6 @@ export interface MaintenanceResult extends ReapResult {
 /** Reclaim expired leases, then drop terminal rows past retention. */
 export async function runMaintenanceTick(config: RunnerConfig): Promise<MaintenanceResult> {
   const reaped = await reapExpiredLeases()
-  const pruned = await pruneTerminalJobs(config.retentionMs)
+  const pruned = await pruneTerminalJobs(config.retentionMs, retentionOverrides())
   return { ...reaped, pruned }
 }

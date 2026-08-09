@@ -236,6 +236,10 @@ describe('draining', () => {
     __setJobDefinitionsForTests([
       {
         name: q,
+        // Two jobs in one pass needs two slots. Per-queue concurrency is what
+        // bounds a pass now (runner.ts's pool), so the default of 1 would claim
+        // one job per call — the same shape its BullMQ Worker had.
+        concurrency: 2,
         handler: async () => async (job) => {
           seen.push(String((job.payload as { n?: number }).n))
         },
@@ -302,7 +306,7 @@ describe('draining', () => {
     const q = queue('drain-orphan')
     __setJobDefinitionsForTests([{ name: q, maxAttempts: 1, handler: async () => async () => {} }])
     await enqueueJob({ queue: q, maxAttempts: 1 })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: 30_000 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
 
     __setJobDefinitionsForTests([])
     expect(await runJob(job)).toBe('failed')
@@ -351,7 +355,7 @@ describe('maintenance', () => {
 
     // A job a dead process left leased.
     await enqueueJob({ queue: q, dedupeKey: 'stranded', maxAttempts: 1 })
-    await claimJobs({ queues: [q], limit: 1, leaseMs: 30_000 })
+    await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
     await expireLease(q)
 
     // And a terminal row older than any retention window.

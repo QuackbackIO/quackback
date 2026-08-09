@@ -3,7 +3,6 @@
  * Build-time constants are injected via Vite `define`; runtime info is read at call time.
  */
 import { logger } from '@/lib/server/logger'
-import { closeAllWorkers, initAllWorkers } from './queue/worker-registry'
 import { getProcessRole, shouldRunWorkers } from './queue/role'
 import { config, validateRuntimeConfig } from './config'
 
@@ -13,14 +12,13 @@ let _logged = false
 let _shutdownWired = false
 
 /**
- * Wire SIGTERM/SIGINT to gracefully drain BullMQ queues + workers and
- * close the shared Redis connection. BullMQ's stalled-job checker
- * recovers any in-flight jobs on the next startup, but shutting down
- * cleanly avoids spurious "stalled" reports and double-billing on
- * AI/webhook handlers that are mid-flight.
+ * Wire SIGTERM/SIGINT to drain the job tier and close the remaining Redis
+ * connections cleanly. A job left mid-flight is not lost — its lease lapses and
+ * the reaper adjudicates it — but draining avoids abandoning work that was
+ * seconds from finishing, and avoids double-billing an AI call.
  *
- * 30s overall budget — if any worker hangs (e.g. a 60s OpenAI call),
- * we force-exit so k8s/systemd doesn't SIGKILL us mid-cleanup.
+ * 30s overall budget — if a handler hangs (e.g. a 60s AI call), we force-exit
+ * so the supervisor doesn't SIGKILL us mid-cleanup.
  */
 function wireGracefulShutdown(): void {
   if (_shutdownWired) return
@@ -49,15 +47,11 @@ function wireGracefulShutdown(): void {
         await import('./events/relay-tier').then(({ stopRelayTier }) => stopRelayTier())
 
         // Stop the Postgres job tier's loops and release its LISTEN
-        // connections. In-flight jobs are NOT cancelled: their leases simply
-        // lapse and the reaper adjudicates them on the next boot, which is the
-        // whole point of the lease — a job with no attempts left goes terminal
-        // rather than running a second time.
+        // connections. Jobs already running are awaited within the budget
+        // below; anything still in flight when the process dies is NOT
+        // re-run blindly — its lease lapses and the reaper adjudicates it,
+        // which for a no-retry job means terminal rather than a second run.
         await import('./jobs/tier').then(({ stopJobTier }) => stopJobTier())
-
-        // Drain every registered queue/worker. One list drives boot and
-        // shutdown, so nothing can be booted but left undrained.
-        await closeAllWorkers()
 
         // Drain the conversation pub/sub subscriber connection before the
         // shared client closes — it's a separate long-lived socket.
@@ -211,24 +205,17 @@ export function logStartupBanner(): void {
  * replicas stay safe.
  */
 function startBackgroundProcessing(): void {
-  // The BullMQ tier does NOT run under pooled tenancy, and that refusal is
-  // deliberate rather than unfinished work: a BullMQ job carries no tenant, so
-  // every processor would resolve `db` with no scope and throw on its first
-  // query — a per-job failure is a far worse signal than one loud refusal at
-  // boot.
+  // The Postgres job tier — every background queue in the process. It runs
+  // under BOTH tenancy modes, because a job row lives in the tenant's own
+  // database and the tier opens a real tenant scope around every claim. Those
+  // are exactly the two properties BullMQ lacked: a Redis job carries no
+  // tenant, so its processor resolved `db` with no scope and threw on its first
+  // query, and one un-namespaced Redis list per queue held every tenant's
+  // payloads.
   //
-  // The outbox relay used to be refused for a related but distinct reason, and
-  // it no longer is. It needs session-mode connections for `LISTEN` and for its
-  // leadership, which a transaction pooler cannot give it; it now gets them from
-  // its own per-tenant tier (SAAS-HOSTING-STACK.md §7.3) rather than from the
-  // pool cache, so it runs under both tenancy modes.
-  //
-  // The periodic sweepers below DO run: they funnel through `withSweepLock`,
-  // which fans a tick out across the fleet with a real tenant scope each time.
-  // The Postgres job tier. Unlike BullMQ it runs under BOTH tenancy modes,
-  // because a job row lives in the tenant's own database and the tier opens a
-  // real tenant scope around every claim — the two properties whose absence is
-  // why the BullMQ tier below still refuses to start pooled.
+  // The periodic sweepers below run under both modes too: they funnel through
+  // `withSweepLock`, which fans a tick out across the fleet with a real tenant
+  // scope each time.
   import('./jobs/tier')
     .then(({ startJobTier }) => startJobTier())
     .catch((err) => log.error({ err }, 'failed to start the job tier'))
@@ -258,21 +245,14 @@ function startBackgroundProcessing(): void {
     .then(({ startRelayTier }) => startRelayTier())
     .catch((err) => log.error({ err }, 'failed to start the outbox relay tier'))
 
-  if (config.isPooledTenancy) {
-    log.warn(
-      'pooled tenancy — the EAGER BullMQ queue-worker boot is not started here. The outbox ' +
-        'relay DOES run, on the per-tenant tier; its hook jobs land in each tenant own ' +
-        'Postgres job queue rather than in the fleet-shared Redis lists, which carry no ' +
-        'tenant prefix. Note the eager skip is not a guarantee on its own: four of the ' +
-        'remaining queue modules arm lazily on first enqueue. What does guarantee it is ' +
-        'queue/create-worker.ts, which refuses to construct a BullMQ worker under pooled ' +
-        'tenancy whatever the role.'
-    )
-  } else {
-    // Boot every eagerly-initialized queue worker from the registry. Each init
-    // is isolated: one failure is logged without blocking the rest.
-    initAllWorkers()
-  }
+  // There is deliberately no tenancy branch left in this function. It used to
+  // hold a warning and an eager BullMQ worker boot: under pooled tenancy the
+  // queue tier and the relay were both refused, because a Redis job carries no
+  // tenant and the relay needs a session-mode connection a transaction pooler
+  // cannot give it. Both refusals are answered above rather than restated
+  // here — every queue is now a table in the tenant's own database, drained by
+  // the job tier, and the relay runs one loop per tenant on that tenant's own
+  // direct connection. Neither branch had anything left to do.
 
   // Space reclamation for the tables that replaced Redis (kv_store, rate_bucket,
   // kv_set_member, presence_stream, realtime_overflow).

@@ -137,7 +137,7 @@ describe('running a job does not import anything', () => {
     expect(loads).toEqual([q])
 
     await enqueueJob({ queue: q, maxAttempts: 1 })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: 30_000 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
     expect(await runJob(job)).toBe('succeeded')
 
     // The assertion that a `resolveHandler` ignoring its memo cannot satisfy:
@@ -161,7 +161,7 @@ describe('running a job does not import anything', () => {
     // plausibly "fix" with an optional chain.
     currentTenantId = 'inst_alpha'
     await enqueueJob({ queue: q, maxAttempts: 1 })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: 30_000 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
     expect(
       job,
       'the claim must reach the handler for this assertion to mean anything'
@@ -176,7 +176,7 @@ describe('running a job does not import anything', () => {
     const q = queue('prime-miss-unscoped')
     countingDefs([q])
     await enqueueJob({ queue: q, maxAttempts: 1 })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: 30_000 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
     await runJob(job)
     expect(warnings.flat().join(' ')).not.toMatch(/imported inside a tenant scope/)
   })

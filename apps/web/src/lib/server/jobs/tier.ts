@@ -39,11 +39,15 @@ import { resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
 import { withTenantScopeById } from '@/lib/server/tenancy/fleet'
 import { isMissingJobQueue } from './job-queue'
 import {
+  awaitPool,
+  createJobPool,
   createScheduleState,
-  drainOnce,
+  dispatchPass,
+  poolSize,
   primeJobHandlers,
   wakeDisabled,
   resetJobHandlers,
+  runJob,
   runMaintenanceTick,
   runScheduleTick,
   runnerConfig,
@@ -80,6 +84,10 @@ interface LoopStats {
   /** Milliseconds from the notify arriving to the drain that answered it. */
   lastWakeLatencyMs: number | null
   schemaMissing: boolean
+  /** Jobs running right now, across every queue. */
+  inFlight: number
+  /** High-water mark of `inFlight`, for sizing the tier. */
+  peakInFlight: number
 }
 
 const loops = new Map<string, TenantLoop>()
@@ -100,17 +108,29 @@ function emptyStats(): LoopStats {
     wakes: 0,
     lastWakeLatencyMs: null,
     schemaMissing: false,
+    inFlight: 0,
+    peakInFlight: 0,
   }
 }
 
 /**
- * One tenant's loop: schedule → drain → wait for a wake or the poll interval.
+ * One tenant's loop: schedule → dispatch → wait for a wake, a freed slot, or
+ * the poll interval.
  *
  * The wait is a race between the doorbell and the poll. If the doorbell is lost
  * — a dropped connection, a pooled DSN, a NOTIFY that raced the LISTEN — the
  * poll still fires, so a lost wake costs latency and never correctness. That is
  * the same guarantee the outbox relay ships with, and it is why the poll
  * interval is a floor rather than a fallback nobody exercises.
+ *
+ * **The loop no longer waits for the work it started.** `dispatchPass` hands
+ * claimed jobs to a bounded pool and returns, so the next schedule tick happens
+ * on time whatever the running jobs are doing. That is not a performance
+ * nicety: `latestSlotAtOrBefore` returns only the slot bracketing now, so a
+ * slot that elapses while the loop is blocked is never enqueued at all —
+ * dropped, not delayed. With a 120-second `help-center-translate` job on a
+ * serial loop, the per-minute `snooze-sweep` and `sla-breach-sweep` would each
+ * silently lose two runs. Measured before and after; see JOBS.md §10.
  */
 function startLoop(opts: {
   tenantId: string
@@ -130,13 +150,22 @@ function startLoop(opts: {
   // created here, inside the closure, so there is nothing for a second tenant's
   // loop to share. See runner.ts's ScheduleState for what sharing it cost.
   const schedule = createScheduleState()
+  // This loop's bounded worker pool. Per tenant for the same reason the
+  // scheduler state is: one process runs one loop per tenant, and a shared pool
+  // would let a busy tenant consume another's slots.
+  const pool = createJobPool()
+
+  /** End the current wait without claiming a doorbell arrived. */
+  const nudge = () => {
+    const resolve = wakeResolve
+    wakeResolve = null
+    resolve?.()
+  }
 
   const ring = () => {
     if (wakeAt === null) wakeAt = Date.now()
     s.wakes += 1
-    const resolve = wakeResolve
-    wakeResolve = null
-    resolve?.()
+    nudge()
   }
 
   const waitForWork = () =>
@@ -177,21 +206,41 @@ function startLoop(opts: {
             s.terminated += maintenance.terminated
             nextMaintenanceAt = now + opts.config.reapIntervalMs
           }
-          return drainOnce(opts.config)
+          return dispatchPass({
+            pool,
+            config: opts.config,
+            // Each job gets its own scope, opened here rather than inherited
+            // from the pass that claimed it: the pass returns while the job is
+            // still running, so a scope belonging to the pass would be the
+            // wrong lifetime. A fresh one per job is the same guarantee the
+            // serial version had, stated for a pool.
+            run: (job) => opts.scoped(() => runJob(job)),
+            onSettled: (_queue, outcome) => {
+              if (outcome === 'succeeded') s.succeeded += 1
+              else if (outcome === 'failed') s.failed += 1
+              s.inFlight = poolSize(pool)
+              // A freed slot is work the loop can claim now, so end the wait —
+              // but through `nudge`, not `ring`: `wakes` counts doorbell
+              // arrivals and is the instrument the wake-latency harness reads.
+              // Counting our own completions there would make the doorbell look
+              // like it fired when it did not.
+              nudge()
+            },
+          })
         })
 
         s.passes += 1
         s.claimed += result.claimed
-        s.succeeded += result.succeeded
-        s.failed += result.failed
+        s.inFlight = poolSize(pool)
+        if (s.inFlight > s.peakInFlight) s.peakInFlight = s.inFlight
         s.schemaMissing = false
 
         if (wokenAt !== null && result.claimed > 0) {
           s.lastWakeLatencyMs = Date.now() - wokenAt
         }
 
-        // A full batch means there is probably more; go straight round again.
-        if (result.claimed > 0) continue
+        // Claimed something and still have room: go straight round again.
+        if (result.claimed > 0 && !result.saturated) continue
       } catch (err) {
         if (isMissingJobQueue(err)) {
           if (!s.schemaMissing) {
@@ -221,8 +270,14 @@ function startLoop(opts: {
     ring,
     async stop() {
       stopped = true
-      wakeResolve?.()
+      nudge()
       await opts.listener?.close()
+      // In-flight jobs are left to finish. Cancelling them would abandon a
+      // lease mid-work, which is precisely the case the reaper handles worst:
+      // an at-most-once job that was claimed is spent, so an interrupted import
+      // is a failed import rather than one that runs again on the next boot.
+      // The caller's shutdown budget (startup.ts, 30s) bounds the wait.
+      await awaitPool(pool)
       stats.delete(opts.tenantId)
     },
   }

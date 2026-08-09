@@ -5,8 +5,8 @@ import { db, sql, getMigrationStatus } from '@/lib/server/db'
 // that would report the process unhealthy for a reason it is not.
 import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import { getQueueRedis } from '@/lib/server/queue/redis-config'
-import { getWorkerBootStatus } from '@/lib/server/queue/worker-registry'
-import { getProcessRole } from '@/lib/server/queue/role'
+import { getJobTierStatus } from '@/lib/server/jobs/tier'
+import { getProcessRole, shouldRunWorkers } from '@/lib/server/queue/role'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'health' })
@@ -104,10 +104,26 @@ export async function handleReadinessProbe(): Promise<Response> {
     runCheck('redis', checkRedis),
     runCheck('migrations', checkMigrations),
   ])
-  // On web-role replicas no workers boot, so the check passes with zero
-  // counts — the role field says which reading you're looking at.
-  const bootStatus = getWorkerBootStatus()
-  const workersCheck = { ok: bootStatus.failed === 0, ...bootStatus }
+  // Background work is now one tier rather than a registry of BullMQ workers,
+  // so readiness reports the tier.
+  //
+  // **`ok` asserts something now.** The old check computed
+  // `ok = bootStatus.failed === 0` over eagerly-initialised workers, and a
+  // worker that was never *constructed* is not failed — so a pooled replica
+  // that started no consumer at all reported `workers ok:true total:0` while
+  // every queue silently accumulated. Here a worker-role process that is not
+  // running the tier is NOT ready, and `loops` says how many tenants it is
+  // actually serving, which zero would have made obvious.
+  const tier = getJobTierStatus()
+  const expected = shouldRunWorkers()
+  const workersCheck = {
+    ok: expected ? tier.running : true,
+    expected,
+    running: tier.running,
+    loops: tier.tenants.length,
+    inFlight: tier.tenants.reduce((n, t) => n + t.inFlight, 0),
+    schemaMissing: tier.tenants.filter((t) => t.schemaMissing).length,
+  }
 
   const ready = dbCheck.ok && redisCheck.ok && migrationsCheck.ok && workersCheck.ok
   return Response.json(

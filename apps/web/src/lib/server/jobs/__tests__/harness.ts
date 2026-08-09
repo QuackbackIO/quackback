@@ -71,6 +71,22 @@ export async function cleanupQueues(queues: readonly string[]): Promise<void> {
   await testSql()`DELETE FROM job_queue WHERE queue = ANY(${[...queues]}::text[])`
 }
 
+/**
+ * Clean up by dedupe key rather than by queue name.
+ *
+ * The eight migrated queues have fixed names (`events`, `workflow-dispatch`, …)
+ * so a suite exercising one cannot mint a private queue. Deleting the whole
+ * queue would delete another checkout's rows out from under it — the shared
+ * `quackback_test` rule again — so a suite that has to use the real name
+ * removes exactly the keys it wrote.
+ */
+export async function cleanupDedupeKeys(queue: string, keys: readonly string[]): Promise<void> {
+  if (keys.length === 0) return
+  await testSql()`
+    DELETE FROM job_queue WHERE queue = ${queue} AND dedupe_key = ANY(${[...keys]}::text[])
+  `
+}
+
 export async function closeHarness(): Promise<void> {
   const sql = sqlHandle
   sqlHandle = null

@@ -106,7 +106,7 @@ describe('enqueue', () => {
 
     // Run it to completion, then try the same key again. A spent cron slot must
     // stay spent — otherwise a scheduler restart re-runs the slot it already ran.
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     await completeJob(job)
     const third = await enqueueJob({ queue: q, dedupeKey: 'slot-1' })
     expect(third.inserted).toBe(false)
@@ -125,7 +125,7 @@ describe('claim', () => {
     await enqueueJob({ queue: q })
 
     const before = Date.now()
-    const [job] = await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })
     expect(job).toBeDefined()
     expect(job.attempts).toBe(1)
 
@@ -142,7 +142,7 @@ describe('claim', () => {
   it('does not claim a job whose run_at is in the future', async () => {
     const q = queue('delayed')
     await enqueueJob({ queue: q, runAt: new Date(Date.now() + 60_000) })
-    expect(await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })).toHaveLength(0)
+    expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 
   it('skips a row another claimer is holding rather than blocking behind it', async () => {
@@ -171,7 +171,7 @@ describe('claim', () => {
 
     const BLOCKED = Symbol('blocked')
     const raced = await Promise.race([
-      claimJobs({ queues: [q], limit: 5, leaseMs: LEASE }),
+      claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] }),
       new Promise<typeof BLOCKED>((r) => setTimeout(() => r(BLOCKED), 2_000)),
     ])
     release()
@@ -193,8 +193,8 @@ describe('claim', () => {
     await enqueueJob({ queue: q })
 
     const [a, b] = await Promise.all([
-      claimJobs({ queues: [q], limit: 5, leaseMs: LEASE }),
-      claimJobs({ queues: [q], limit: 5, leaseMs: LEASE }),
+      claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] }),
+      claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] }),
     ])
     expect(a.length + b.length).toBe(1)
 
@@ -210,7 +210,7 @@ describe('claim', () => {
     await enqueueJob({ queue: q, maxAttempts: 1 })
     await testSql()`UPDATE job_queue SET attempts = 1 WHERE queue = ${q}`
 
-    expect(await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })).toHaveLength(0)
+    expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 })
 
@@ -218,7 +218,7 @@ describe('holding work longer than a transaction', () => {
   it('leaves no row lock behind, so the claim cannot be a long transaction', async () => {
     const q = queue('no-row-lock')
     await enqueueJob({ queue: q })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     expect(job).toBeDefined()
 
     // If the claim were holding the row (the naive `FOR UPDATE` shape), this
@@ -242,7 +242,7 @@ describe('holding work longer than a transaction', () => {
   it('extends the lease by heartbeat, with no transaction open', async () => {
     const q = queue('heartbeat')
     await enqueueJob({ queue: q })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: 2_000 })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 2_000 }] })
     const [before] = await rowsFor(q)
 
     const held = await heartbeatJob(job, 120_000)
@@ -260,7 +260,7 @@ describe('the reaper and the no-retry flag', () => {
   it('terminates an expired lease on a no-retry job instead of requeueing it', async () => {
     const q = queue('no-retry')
     await enqueueJob({ queue: q, maxAttempts: 1 })
-    await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     await expireLease(q)
 
     const reaped = await reapExpiredLeases()
@@ -274,7 +274,7 @@ describe('the reaper and the no-retry flag', () => {
 
     // And it stays unclaimable. A terminal row is not pending, and even if it
     // were, `attempts < max_attempts` refuses it.
-    expect(await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })).toHaveLength(0)
+    expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 
   it('requeues an expired lease while attempts remain, then terminates on the last', async () => {
@@ -282,7 +282,7 @@ describe('the reaper and the no-retry flag', () => {
     await enqueueJob({ queue: q, maxAttempts: 3 })
 
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const claimed = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+      const claimed = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
       expect(claimed).toHaveLength(1)
       expect(claimed[0].attempts).toBe(attempt)
       await expireLease(q)
@@ -296,13 +296,13 @@ describe('the reaper and the no-retry flag', () => {
       }
     }
 
-    expect(await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })).toHaveLength(0)
+    expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 
   it('leaves an unexpired lease alone', async () => {
     const q = queue('live-lease')
     await enqueueJob({ queue: q, maxAttempts: 3 })
-    await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
 
     await reapExpiredLeases()
     expect((await rowsFor(q))[0].status).toBe('running')
@@ -313,12 +313,12 @@ describe('the fencing token', () => {
   it('stops a reaped owner from recording a result over its successor', async () => {
     const q = queue('fencing')
     await enqueueJob({ queue: q, maxAttempts: 3 })
-    const [ghost] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const [ghost] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
 
     // The ghost stalls; the reaper decides it is dead and hands the job back.
     await expireLease(q)
     await reapExpiredLeases()
-    const [heir] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const [heir] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     expect(heir.leaseToken).not.toBe(ghost.leaseToken)
 
     // The ghost comes back and reports success. It must not be believed.
@@ -346,7 +346,7 @@ describe('the tenant assertion', () => {
     await enqueueJob({ queue: q })
     expect((await rowsFor(q))[0].tenant_id).toBe('inst_alpha')
 
-    const claimed = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const claimed = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     expect(claimed).toHaveLength(1)
     expect(claimed[0].tenantId).toBe('inst_alpha')
   })
@@ -361,14 +361,14 @@ describe('the tenant assertion', () => {
     // a cross-tenant execution.
     await testSql()`UPDATE job_queue SET tenant_id = 'inst_bravo' WHERE queue = ${q}`
 
-    const claimed = await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })
+    const claimed = await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })
     expect(claimed).toHaveLength(0)
 
     const [row] = await rowsFor(q)
     expect(row.status).toBe('failed')
     expect(row.last_error).toMatch(/tenant mismatch/)
     // It stays refused rather than becoming claimable on the next pass.
-    expect(await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })).toHaveLength(0)
+    expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 
   it('refuses a tenant-stamped row when no tenant scope is open', async () => {
@@ -377,7 +377,7 @@ describe('the tenant assertion', () => {
     await enqueueJob({ queue: q })
 
     currentTenantId = null
-    expect(await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })).toHaveLength(0)
+    expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
     expect((await rowsFor(q))[0].status).toBe('failed')
   })
 })
@@ -386,7 +386,7 @@ describe('failure reporting', () => {
   it('retries with backoff while attempts remain', async () => {
     const q = queue('fail-retry')
     await enqueueJob({ queue: q, maxAttempts: 2 })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
 
     expect(await failJob(job, 'boom', { backoffMs: 30_000 })).toBe('retrying')
     const [row] = await rowsFor(q)
@@ -394,13 +394,13 @@ describe('failure reporting', () => {
     expect(row.last_error).toBe('boom')
     expect(row.run_at.getTime()).toBeGreaterThan(Date.now() + 20_000)
     // Backed off, so not claimable yet.
-    expect(await claimJobs({ queues: [q], limit: 5, leaseMs: LEASE })).toHaveLength(0)
+    expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 
   it('goes terminal on the last attempt', async () => {
     const q = queue('fail-final')
     await enqueueJob({ queue: q, maxAttempts: 1 })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
 
     expect(await failJob(job, 'boom')).toBe('failed')
     const [row] = await rowsFor(q)
@@ -413,7 +413,7 @@ describe('retention', () => {
   it('drops terminal rows past the window and keeps live ones', async () => {
     const q = queue('retention')
     await enqueueJob({ queue: q, dedupeKey: 'old' })
-    const [job] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     await completeJob(job)
     await enqueueJob({ queue: q, dedupeKey: 'live' })
 
@@ -451,7 +451,9 @@ describe('the lease-shape constraint', () => {
   it('refuses a pending row that still carries a lease', async () => {
     const q = queue('shape-2')
     await enqueueJob({ queue: q })
-    const claimed: ClaimedJob[] = await claimJobs({ queues: [q], limit: 1, leaseMs: LEASE })
+    const claimed: ClaimedJob[] = await claimJobs({
+      specs: [{ queue: q, limit: 1, leaseMs: LEASE }],
+    })
     expect(claimed).toHaveLength(1)
     await expect(
       testSql()`UPDATE job_queue SET status = 'pending' WHERE queue = ${q}`
