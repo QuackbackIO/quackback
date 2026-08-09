@@ -149,35 +149,30 @@ describe('claiming', () => {
     expect(again.map((c) => c.tenantId)).toEqual(['t1'])
   })
 
-  it('does not re-claim an already-current tenant when the target is re-issued', async () => {
-    // The one case that reaches the claim's version predicate. Every other test
-    // is satisfied by the `status = 'pending'` half, which is why this one had
-    // to be written specially: deleting `current_version < target_version` left
-    // the whole suite green. Re-issuing `set-target` — what an operator does
-    // after a partly-failed rollout — resets every non-running row to `pending`,
-    // and without the version predicate that re-claims tenants that are already
-    // done and wakes every one of their suspended computes (§10.7).
-    await register('done', 'behind')
+  it('does not claim a tenant another writer put back to pending while already current', async () => {
+    // The one case that reaches the claim's version predicate, and it is the
+    // same argument `job_queue` makes for its own second barrier: a row must
+    // not be claimable just because some other writer set it to `pending`.
+    // Reachable in practice by a hand `UPDATE` during an incident, or by any
+    // future control-plane writer.
+    //
+    // This fixture had to be rebuilt: it originally used `set-target` to
+    // produce the pending row, and then `set-target` was fixed to stop
+    // resetting already-current tenants — which quietly stopped the test
+    // reaching the predicate at all. A fixture that no longer reaches its
+    // branch is the commonest way a test stops being one.
+    await register('done')
     await seed('done')
-    await seed('behind')
-    const claimed = await claimTenants({ limit: 5, leaseMs: 60_000, workerId: 'w1' })
-    const doneClaim = claimed.find((c) => c.tenantId === 'done')!
-    await completeTenant(doneClaim, {
-      version: TARGET,
-      appliedCount: 228,
-      postconditionsOk: true,
-    })
-    const behindClaim = claimed.find((c) => c.tenantId === 'behind')!
-    await failTenant(behindClaim, 'transient')
+    const [claim] = await claimTenants({ limit: 5, leaseMs: 60_000, workerId: 'w1' })
+    await completeTenant(claim!, { version: TARGET, appliedCount: 228, postconditionsOk: true })
 
-    await setTargetVersion({ targetVersion: TARGET })
-    expect((await listSchemaState()).map((r) => `${r.tenantId}:${r.status}`).sort()).toEqual([
-      'behind:pending',
-      'done:pending',
-    ])
+    await sql`UPDATE cp_tenant_schema_state SET status = 'pending', attempts = 0`
+    const [row] =
+      await sql`SELECT status, current_version, target_version FROM cp_tenant_schema_state`
+    expect(row!.status).toBe('pending')
+    expect(Number(row!.current_version)).toBeGreaterThanOrEqual(Number(row!.target_version))
 
-    const again = await claimTenants({ limit: 5, leaseMs: 60_000, workerId: 'w2' })
-    expect(again.map((c) => c.tenantId)).toEqual(['behind'])
+    expect(await claimTenants({ limit: 5, leaseMs: 60_000, workerId: 'w2' })).toEqual([])
   })
 
   it('two concurrent migrators take disjoint tenants', async () => {
@@ -340,6 +335,33 @@ describe('intent', () => {
     expect(row.status).toBe('running')
     expect(row.attempts).toBe(1)
     expect(row.targetVersion).toBe(TARGET + 5000)
+  })
+
+  it('setTargetVersion leaves an already-current tenant `succeeded`, not `pending`', async () => {
+    // Re-issuing the same target used to reset every non-running row to
+    // `pending`, so `status` reported a fleet full of work that would never be
+    // claimed — the claim narrows on `current_version < target_version`, so
+    // correctness held and only the operator-facing column lied. During a
+    // rollout that column is the thing people read.
+    await register('done', 'behind')
+    await seed('done')
+    await seed('behind')
+    const claimed = await claimTenants({ limit: 5, leaseMs: 60_000, workerId: 'w1' })
+    await completeTenant(claimed.find((c) => c.tenantId === 'done')!, {
+      version: TARGET,
+      appliedCount: 228,
+      postconditionsOk: true,
+    })
+    await failTenant(claimed.find((c) => c.tenantId === 'behind')!, 'transient')
+
+    await setTargetVersion({ targetVersion: TARGET })
+
+    const byId = Object.fromEntries((await listSchemaState()).map((r) => [r.tenantId, r]))
+    expect(byId.done!.status).toBe('succeeded')
+    expect(byId.behind!.status).toBe('pending')
+    expect(await claimTenants({ limit: 5, leaseMs: 60_000, workerId: 'w2' })).toEqual([
+      expect.objectContaining({ tenantId: 'behind' }),
+    ])
   })
 
   it('setTargetVersion does NOT un-block a deliberately blocked tenant', async () => {

@@ -344,10 +344,31 @@ export async function setTargetVersion(input: {
   const result = await controlDb().execute(sql`
     UPDATE ${sql.identifier(SCHEMA_STATE_TABLE)}
     SET target_version = ${input.targetVersion},
-        status = CASE WHEN status IN ('running', 'blocked') THEN status ELSE 'pending' END,
-        attempts = CASE WHEN status IN ('running', 'blocked') THEN attempts ELSE 0 END,
+        -- Only a tenant that is actually BEHIND the new target goes back to
+        -- pending. Resetting unconditionally left a fleet reading "10 pending"
+        -- when every one of them was already at the target and none was
+        -- claimable: the claim narrows on current_version < target_version, so
+        -- correctness held while the status column lied to the operator reading
+        -- it during a rollout.
+        status = CASE
+                   WHEN status IN ('running', 'blocked') THEN status
+                   WHEN current_version IS NOT NULL
+                        AND current_version >= ${input.targetVersion} THEN status
+                   ELSE 'pending'
+                 END,
+        attempts = CASE
+                     WHEN status IN ('running', 'blocked') THEN attempts
+                     WHEN current_version IS NOT NULL
+                          AND current_version >= ${input.targetVersion} THEN attempts
+                     ELSE 0
+                   END,
         run_at = now(),
-        last_error = CASE WHEN status = 'blocked' THEN last_error ELSE NULL END
+        last_error = CASE
+                       WHEN status = 'blocked' THEN last_error
+                       WHEN current_version IS NOT NULL
+                            AND current_version >= ${input.targetVersion} THEN last_error
+                       ELSE NULL
+                     END
     WHERE ${scope}
     RETURNING tenant_id
   `)
