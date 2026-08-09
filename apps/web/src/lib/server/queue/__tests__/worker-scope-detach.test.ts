@@ -26,7 +26,6 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as ts from 'typescript'
 import { walkSourceFiles } from '@/lib/server/policy/source-files'
-import { runWithoutLogContext } from '@/lib/server/log-context'
 
 // `createQueueWorker` calls `new Worker(...)`; the fake keeps the constructor
 // semantics and drops the Redis dependency.
