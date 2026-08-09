@@ -32,19 +32,19 @@ function say(name: string, value: unknown): void {
   console.log(`${name.padEnd(44)} ${String(value)}`)
 }
 
+/**
+ * This probe was written to run on two trees and compare them, so it used to
+ * fall back to the queue-package worker registry when the job tier was absent.
+ * That registry no longer exists in any tree, and the fallback could only ever
+ * throw a module-not-found from inside a `catch` — turning a real job-tier
+ * failure into an unrelated error. One consumer, and it is allowed to fail
+ * loudly.
+ */
 async function startConsumer(): Promise<() => Promise<void>> {
-  try {
-    const tier = await import('@/lib/server/jobs/tier')
-    await tier.startJobTier()
-    say('consumer', 'postgres job tier')
-    return () => tier.stopJobTier()
-  } catch {
-    const registry = await import('@/lib/server/queue/worker-registry')
-    registry.initAllWorkers()
-    say('consumer', 'bullmq worker registry')
-    await new Promise((r) => setTimeout(r, 2_000))
-    return () => registry.closeAllWorkers()
-  }
+  const tier = await import('@/lib/server/jobs/tier')
+  await tier.startJobTier()
+  say('consumer', 'postgres job tier')
+  return () => tier.stopJobTier()
 }
 
 async function waitForStatus(
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
   // ---- export ------------------------------------------------------------
   const { createExportRun } = await import('@/lib/server/domains/export/export-run.service')
   const { enqueueWorkspaceExportJob } = await import('@/lib/server/domains/export/export-queue')
-  let exportStatus = 'not attempted'
+  let exportStatus: string
   let exportSize: unknown = '?'
   try {
     const exportRun = await createExportRun({
