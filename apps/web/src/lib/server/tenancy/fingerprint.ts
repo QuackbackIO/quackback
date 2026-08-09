@@ -186,8 +186,11 @@ export function evaluateSecretKeyCanary(
       code: 'secret_key_canary_missing',
       detail:
         `settings.cloud_secret_canary is absent, so nothing proves this fleet holds the key ` +
-        `this database's stored ciphertext was written under. Run the control plane's ` +
-        `provisioning converge for ${tenantId} (it applies migration 0252 and writes the canary).`,
+        `this database's stored ciphertext was written under. Repair with the control plane's ` +
+        `establish-tenant-secrets script:\n` +
+        `  bun run src/scripts/establish-tenant-secrets.ts --tenant-id ${tenantId}\n` +
+        `Provisioning will NOT do it: it returns early on an already-registered tenant, before ` +
+        `the custody step.`,
     }
   }
   if (!verifySecretKeyCanary(secretKey, tenantId, observedCanary)) {

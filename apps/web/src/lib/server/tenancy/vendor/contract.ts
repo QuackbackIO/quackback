@@ -34,9 +34,12 @@ import {
   SECRET_REF_SCHEMES,
   isSecretRefAllowedFor,
   isValidSecretRef,
+  parseSecretRef,
+  type ParsedSecretRef,
   type SecretRef,
   type SecretRefField,
 } from './secret-ref'
+import { tenantAppSecretVariable } from './tenant-secret-resolution'
 
 export { SECRET_REF_SCHEMES, type SecretRef }
 
@@ -266,6 +269,41 @@ export const tenantRecordSchema = z.object({
  * or a future column added without a matching constraint. A reader that trusts
  * the writer is one migration away from serving the wrong tenant.
  */
+/**
+ * The complaint about `ref`, or null when it is consistent with `tenantId`.
+ *
+ * Returns a message rather than a boolean so the caller can name which field
+ * was wrong — during an incident "a ref is wrong" is not an actionable line.
+ */
+function tenantNamedBySecretRef(
+  ref: SecretRef,
+  tenantId: string,
+  purpose: 'app-secrets' | 'storage',
+): string | null {
+  let parsed: ParsedSecretRef
+  try {
+    parsed = parseSecretRef(ref)
+  } catch {
+    return null // shape is the per-field schema's job; do not report it twice
+  }
+  if (parsed.scheme === 'derived+hkdf' || parsed.scheme === 'sealed+aead') {
+    if (parsed.tenantId !== tenantId) {
+      return `names tenant ${parsed.tenantId}, not ${tenantId}`
+    }
+    if (parsed.purpose !== purpose) {
+      return `has purpose '${parsed.purpose}' where '${purpose}' was required`
+    }
+    return null
+  }
+  if (parsed.scheme === 'env' && purpose === 'app-secrets') {
+    const expected = tenantAppSecretVariable(tenantId)
+    if (parsed.variable !== expected) {
+      return `names ${parsed.variable}, but ${tenantId}'s app secret must be held in ${expected}`
+    }
+  }
+  return null
+}
+
 export function checkTenantRecordInvariants(record: TenantRecord): string[] {
   const problems: string[] = []
 
@@ -282,6 +320,23 @@ export function checkTenantRecordInvariants(record: TenantRecord): string[] {
 
   if (new Set(record.routing.hostnames).size !== record.routing.hostnames.length) {
     problems.push('duplicate hostnames')
+  }
+
+  // Every ref that CAN name a tenant must name this one.
+  //
+  // A `derived+hkdf://` or `sealed+aead://` ref carries its tenant in the path,
+  // and an `env://` ref carries it in the variable name — so all three are
+  // checkable here, and the resolver refuses each of them at read time. The
+  // invariant this restores is that the WRITER refuses what the READER would
+  // reject: without it the database accepted `env://QUACKBACK_TENANT_SECRET_FOO`,
+  // the control plane returned `ok`, and only the fleet refused — fail-closed,
+  // but the failure arrived at a customer's request instead of at the write.
+  for (const [label, ref, purpose] of [
+    ['app secrets', record.secrets.appSecretsRef, 'app-secrets'],
+    ['storage credential', record.storage.credentialRef, 'storage'],
+  ] as const) {
+    const named = tenantNamedBySecretRef(ref, record.tenantId, purpose)
+    if (named !== null) problems.push(`${label} ref ${named}`)
   }
 
   // baseUrl pinned to the primary hostname. Catches the `https://*.quackback.io`
