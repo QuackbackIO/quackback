@@ -9,7 +9,7 @@
  * inheriting confidence from the connection.
  *
  * The lease semantics live in `apps/web/src/lib/server/jobs/job-queue.ts`; the
- * SQL migration `0252_job_queue.sql` carries the reasoning for the columns that
+ * SQL migration `0253_job_queue.sql` carries the reasoning for the columns that
  * are easy to get wrong (`attempts` incremented at claim, the fencing token,
  * the wake trigger). Read that first if you are changing this.
  */
@@ -50,7 +50,7 @@ export const jobQueue = pgTable(
     status: text('status').$type<JobStatus>().notNull().default('pending'),
     /** Earliest instant the job may be claimed. */
     runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
-    /** Incremented BY THE CLAIM. See 0252_job_queue.sql. */
+    /** Incremented BY THE CLAIM. See 0253_job_queue.sql. */
     attempts: integer('attempts').notNull().default(0),
     /** 1 means at-most-once: an expired lease goes terminal, never to pending. */
     maxAttempts: integer('max_attempts').notNull().default(1),

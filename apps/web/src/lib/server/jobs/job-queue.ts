@@ -70,13 +70,13 @@ import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
 
 const log = logger.child({ component: 'job-queue' })
 
-/** Postgres `undefined_table`. The tenant has not run migration 0252 yet. */
+/** Postgres `undefined_table`. The tenant has not run migration 0253 yet. */
 export const UNDEFINED_TABLE = '42P01'
 
 export class JobQueueMissingError extends Error {
   constructor() {
     super(
-      'job_queue does not exist in this database. Migration 0252 has not been applied here; ' +
+      'job_queue does not exist in this database. Migration 0253 has not been applied here; ' +
         'the queue tier skips this tenant rather than crash-looping (expand lands before the ' +
         'code that reads it — SAAS-HOSTING-STACK.md §5, §10.5).'
     )

@@ -192,7 +192,7 @@ pooled web tier — and it carries §6's corollary: **this tier holds connection
 open by design, so it must never share a compute with tenants you expect to
 suspend.** Sizing it for a large fleet belongs with the relay-tier work.
 
-A tenant whose database has not yet run migration `0252` is **skipped with a
+A tenant whose database has not yet run migration `0253` is **skipped with a
 warning**, not crash-looped. §5's ordering rule is that expand lands before the
 code that reads it; a queue tier that died on a mid-rollout fleet would turn that
 ordering into an outage.

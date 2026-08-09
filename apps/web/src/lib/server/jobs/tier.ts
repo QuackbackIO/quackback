@@ -187,7 +187,7 @@ function startLoop(opts: {
             s.schemaMissing = true
             log.warn(
               { tenantId: opts.tenantId },
-              'job_queue is absent in this database (migration 0252 not applied); ' +
+              'job_queue is absent in this database (migration 0253 not applied); ' +
                 'skipping this tenant rather than crash-looping'
             )
           }

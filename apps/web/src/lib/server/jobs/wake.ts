@@ -28,7 +28,7 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'job-wake' })
 
-/** Channel name. Must match the trigger in migration 0252. */
+/** Channel name. Must match the trigger in migration 0253. */
 export const JOB_WAKE_CHANNEL = 'quackback_job_wake'
 
 export interface WakeListener {
