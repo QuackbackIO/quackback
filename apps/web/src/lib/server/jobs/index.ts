@@ -39,14 +39,18 @@ export {
 
 export {
   activeQueueNames,
+  createScheduleState,
   drainOnce,
-  resetScheduleState,
+  primeJobHandlers,
+  resetJobHandlers,
   runJob,
   runMaintenanceTick,
   runScheduleTick,
   runnerConfig,
+  wakeDisabled,
   type DrainResult,
   type RunnerConfig,
+  type ScheduleState,
 } from './runner'
 
 export {

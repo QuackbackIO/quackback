@@ -41,8 +41,8 @@ import {
   heartbeatJob,
   reapExpiredLeases,
 } from '@/lib/server/jobs/job-queue'
-import { drainOnce, runnerConfig } from '@/lib/server/jobs/runner'
-import { openWakeListener } from '@/lib/server/jobs/wake'
+import { drainOnce, runnerConfig, wakeDisabled } from '@/lib/server/jobs/runner'
+import { getJobTierStatus, startJobTier, stopJobTier } from '@/lib/server/jobs/tier'
 
 const DSN = process.env.DATABASE_URL ?? ''
 if (!DSN) {
@@ -56,10 +56,6 @@ function flag(name: string, fallback?: string): string | undefined {
   const i = args.indexOf(`--${name}`)
   return i === -1 ? fallback : args[i + 1]
 }
-function has(name: string): boolean {
-  return args.includes(`--${name}`)
-}
-
 /** Stages a job passes through. The child pauses at whichever one is named. */
 const STAGES = ['claimed', 'effect-written', 'work-done', 'completed'] as const
 type Stage = (typeof STAGES)[number]
@@ -423,70 +419,111 @@ async function longLease(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// wake-latency — enqueue, and measure how long until a listener is woken and a
-// claim succeeds. `--no-listen` measures the poll fallback instead.
+// wake-latency — enqueue, and measure how long until THE TIER runs the job.
+//
+// The first version of this measured its own `setTimeout`: it resolved on
+// `min(NOTIFY, setTimeout(pollMs))`, so the "poll fallback" number it reported
+// was the harness's timer rather than the queue's, and it would have printed
+// the same figure against a queue that never ran at all. It is the run's
+// recurring shape — a measurement that agrees with the hypothesis but could not
+// have disagreed.
+//
+// This version starts the real tier and stops the clock inside the handler, so
+// every number includes the doorbell (or its absence), the claim, and dispatch.
+// `JOB_WAKE_DISABLED=1` exercises the poll floor through the tier's own code
+// path rather than by faking it.
 // ---------------------------------------------------------------------------
 
 async function wakeLatency(): Promise<void> {
   const samples = Number(flag('samples', '20'))
-  const pollMs = Number(flag('poll-ms', '1000'))
-  const useListen = !has('no-listen')
   const queue = `wake-${Date.now().toString(36)}`
 
-  let ring: (() => void) | null = null
-  const listener = useListen
-    ? await openWakeListener({
-        directUrl: DSN,
-        label: 'proof',
-        onWake: (q) => {
-          if (q === queue) ring?.()
-        },
-      })
-    : null
+  let onRun: ((jobId: string) => void) | null = null
+  __setJobDefinitionsForTests([
+    {
+      name: queue,
+      maxAttempts: 1,
+      leaseMs: 30_000,
+      handler: async () => async (job) => {
+        onRun?.(job.jobId)
+      },
+    },
+  ])
 
-  if (listener) {
-    const ok = await listener.verify()
-    console.log(`listener verified by a real NOTIFY round trip: ${ok}`)
-    if (!ok) {
-      console.log('the doorbell does not deliver; measuring the poll fallback instead')
-    }
-  } else {
-    console.log('listener disabled — measuring the poll fallback')
+  await startJobTier()
+  const status = getJobTierStatus()
+  if (!status.running || status.tenants.length === 0) {
+    console.log('tier did not start — is QUACKBACK_ROLE=web?')
+    process.exit(2)
   }
+  console.log(
+    `tier running; loops=${status.tenants.length} ` +
+      `poll_interval_ms=${runnerConfig().pollIntervalMs} ` +
+      `doorbell=${wakeDisabled() ? 'DISABLED (poll only)' : 'enabled'}`
+  )
+  // Let the loops settle into their wait before the first sample, or the first
+  // measurement times a loop that was already mid-pass.
+  await new Promise((r) => setTimeout(r, 1_500))
 
   const latencies: number[] = []
+  let missed = 0
   for (let i = 0; i < samples; i++) {
-    const woken = new Promise<number>((resolve) => {
+    // Arrive at a uniformly random phase within the poll window. Without this
+    // every sample lands just after the previous pass finished, which measures
+    // the worst case and reports it as the median — a real workload does not
+    // synchronise itself to the poller.
+    await new Promise((r) => setTimeout(r, Math.random() * runnerConfig().pollIntervalMs))
+
+    const ran = new Promise<number | null>((resolve) => {
       const t0 = Date.now()
       let settled = false
-      ring = () => {
-        if (settled) return
+      onRun = (jobId) => {
+        if (settled || jobId !== expected.jobId) return
         settled = true
+        clearTimeout(timer)
         resolve(Date.now() - t0)
       }
-      // The fallback: whatever the doorbell does, the poll interval bounds it.
+      // A generous ceiling: this is the "the tier never ran it" case, which is
+      // what a dead doorbell AND a dead poll looks like. It must be reported as
+      // a miss, not folded into the distribution.
       const timer = setTimeout(() => {
         if (settled) return
         settled = true
-        resolve(Date.now() - t0)
-      }, pollMs)
+        resolve(null)
+      }, 10_000)
       timer.unref?.()
     })
-    await enqueueJob({ queue, dedupeKey: `s-${i}` })
-    latencies.push(await woken)
+    const expected = await enqueueJob({ queue, dedupeKey: `s-${i}` })
+    const took = await ran
+    if (took === null) missed += 1
+    else latencies.push(took)
   }
-  ring = null
-  await listener?.close()
+  onRun = null
+  await stopJobTier()
 
   latencies.sort((a, b) => a - b)
   const p = (q: number) =>
-    latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * q))]
+    latencies.length === 0
+      ? NaN
+      : latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * q))]
   console.log('')
   console.log(
-    `n=${latencies.length}  min=${latencies[0]}ms  p50=${p(0.5)}ms  p95=${p(0.95)}ms  max=${latencies[latencies.length - 1]}ms`
+    `ran=${latencies.length}/${samples}  missed=${missed}  ` +
+      (latencies.length
+        ? `min=${latencies[0]}ms  p50=${p(0.5)}ms  p95=${p(0.95)}ms  max=${latencies[latencies.length - 1]}ms`
+        : 'NO JOB WAS EVER RUN')
   )
-  console.log(`samples: ${latencies.join(', ')}`)
+  if (latencies.length) console.log(`samples: ${latencies.join(', ')}`)
 
+  const left = await db.execute(sql`
+    SELECT status, count(*)::int AS n FROM job_queue WHERE queue = ${queue} GROUP BY status
+  `)
+  console.log(
+    'rows left behind: ' +
+      getExecuteRows<{ status: string; n: number }>(left)
+        .map((r) => `${r.status}=${r.n}`)
+        .join(' ') || 'none'
+  )
   await db.execute(sql`DELETE FROM job_queue WHERE queue = ${queue}`)
 }
 

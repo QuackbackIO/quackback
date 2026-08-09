@@ -117,9 +117,19 @@ describe('slot search', () => {
 describe('slotKey', () => {
   it('is stable for one slot and distinct across slots', () => {
     const a = slotKey('analytics', at(2026, 8, 9, 14, 0))
-    expect(a).toBe('analytics:2026-08-09T14:00')
+    // The INSTANT, not the wall clock — see cron.ts. `__tests__/cron-dst.test.ts`
+    // holds the transition-day cases this format exists for.
+    expect(a).toBe(`analytics:${at(2026, 8, 9, 14, 0).toISOString()}`)
     expect(slotKey('analytics', at(2026, 8, 9, 14, 0))).toBe(a)
     expect(slotKey('analytics', at(2026, 8, 9, 15, 0))).not.toBe(a)
     expect(slotKey('anon-sweep', at(2026, 8, 9, 14, 0))).not.toBe(a)
+  })
+
+  it('separates two instants that share a wall clock', () => {
+    // The fall-back property, stated here too because this is where a future
+    // reader will be tempted to "simplify" the key back to local time.
+    const a = new Date('2026-11-01T05:30:00Z')
+    const b = new Date('2026-11-01T06:30:00Z')
+    expect(slotKey('probe', a)).not.toBe(slotKey('probe', b))
   })
 })

@@ -5,7 +5,7 @@
  * Real Postgres, real commits, unique queue names (the test database is shared
  * across every worktree on this machine).
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   cleanupQueues,
   closeHarness,
@@ -39,8 +39,9 @@ import { __setJobDefinitionsForTests } from '../definitions'
 import { slotKey } from '../cron'
 import { claimJobs, enqueueJob, reapExpiredLeases } from '../job-queue'
 import {
+  createScheduleState,
   drainOnce,
-  resetScheduleState,
+  resetJobHandlers,
   runJob,
   runMaintenanceTick,
   runScheduleTick,
@@ -63,7 +64,7 @@ beforeAll(async () => {
 afterEach(() => {
   currentTenantId = null
   __setJobDefinitionsForTests(null)
-  resetScheduleState()
+  resetJobHandlers()
 })
 
 afterAll(async () => {
@@ -72,6 +73,11 @@ afterAll(async () => {
 })
 
 describe('the schedule tick', () => {
+  let state = createScheduleState()
+  beforeEach(() => {
+    state = createScheduleState()
+  })
+
   it('enqueues the current slot once, however many times it ticks', async () => {
     const q = queue('sched')
     __setJobDefinitionsForTests([
@@ -80,17 +86,17 @@ describe('the schedule tick', () => {
 
     // The first pass ADOPTS the slot in progress rather than running it, which
     // is what a repeatable job does on registration.
-    const first = await runScheduleTick(new Date(2026, 7, 9, 14, 37, 12))
+    const first = await runScheduleTick(state, new Date(2026, 7, 9, 14, 37, 12))
     expect(first.enqueued).toBe(0)
     expect(await rowsFor(q)).toHaveLength(0)
 
     // Same minute, a second later. Still the adopted slot, so nothing.
-    const second = await runScheduleTick(new Date(2026, 7, 9, 14, 37, 55))
+    const second = await runScheduleTick(state, new Date(2026, 7, 9, 14, 37, 55))
     expect(second.enqueued).toBe(0)
     expect(await rowsFor(q)).toHaveLength(0)
 
     // Next minute is a new slot, and it runs.
-    const third = await runScheduleTick(new Date(2026, 7, 9, 14, 38, 1))
+    const third = await runScheduleTick(state, new Date(2026, 7, 9, 14, 38, 1))
     expect(third.enqueued).toBe(1)
     // WHICH slot, not just how many. Counting alone cannot distinguish "this
     // slot" from "the next one" — an earlier version of this test passed with
@@ -99,7 +105,7 @@ describe('the schedule tick', () => {
     expect((await rowsFor(q))[0].dedupe_key).toBe(slotKey(q, new Date(2026, 7, 9, 14, 38)))
 
     // And a fourth tick in the same minute adds nothing.
-    expect((await runScheduleTick(new Date(2026, 7, 9, 14, 38, 30))).enqueued).toBe(0)
+    expect((await runScheduleTick(state, new Date(2026, 7, 9, 14, 38, 30))).enqueued).toBe(0)
     expect(await rowsFor(q)).toHaveLength(1)
   })
 
@@ -111,13 +117,13 @@ describe('the schedule tick', () => {
     __setJobDefinitionsForTests([
       { name: q, cron: '0 3 * * *', handler: async () => async () => {} },
     ])
-    const boot = await runScheduleTick(new Date(2026, 7, 9, 14, 0, 0))
+    const boot = await runScheduleTick(state, new Date(2026, 7, 9, 14, 0, 0))
     expect(boot.enqueued).toBe(0)
     expect(await rowsFor(q)).toHaveLength(0)
 
     // It runs at the next 03:00, and only then.
-    expect((await runScheduleTick(new Date(2026, 7, 10, 2, 59, 0))).enqueued).toBe(0)
-    expect((await runScheduleTick(new Date(2026, 7, 10, 3, 0, 5))).enqueued).toBe(1)
+    expect((await runScheduleTick(state, new Date(2026, 7, 10, 2, 59, 0))).enqueued).toBe(0)
+    expect((await runScheduleTick(state, new Date(2026, 7, 10, 3, 0, 5))).enqueued).toBe(1)
     expect((await rowsFor(q))[0].dedupe_key).toBe(slotKey(q, new Date(2026, 7, 10, 3, 0)))
   })
 
@@ -126,7 +132,7 @@ describe('the schedule tick', () => {
     __setJobDefinitionsForTests([
       { name: q, cron: '*/5 * * * *', handler: async () => async () => {} },
     ])
-    const tick = await runScheduleTick(new Date(2026, 7, 9, 14, 37, 0))
+    const tick = await runScheduleTick(state, new Date(2026, 7, 9, 14, 37, 0))
     expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 40, 0))
   })
 
@@ -137,8 +143,8 @@ describe('the schedule tick', () => {
     __setJobDefinitionsForTests([
       { name: q, cron: '0 * * * *', handler: async () => async () => {} },
     ])
-    await runScheduleTick(new Date(2026, 7, 9, 14, 5, 0)) // boot: adopt 14:00
-    await runScheduleTick(new Date(2026, 7, 9, 17, 5, 0)) // three hours later
+    await runScheduleTick(state, new Date(2026, 7, 9, 14, 5, 0)) // boot: adopt 14:00
+    await runScheduleTick(state, new Date(2026, 7, 9, 17, 5, 0)) // three hours later
     const rows = await rowsFor(q)
     // ONE row, for the 17:00 slot — not a backfill of 15:00 and 16:00.
     expect(rows).toHaveLength(1)
@@ -146,13 +152,66 @@ describe('the schedule tick', () => {
     expect(rows[0].payload.scheduledFor).toBe(new Date(2026, 7, 9, 17, 0).toISOString())
   })
 
+  it("gives every tenant every slot — one scheduler must not consume another's", async () => {
+    // The defect this pins: a module-scope `seen` map keyed on the schedule name
+    // alone is shared by every tenant loop in the process, so whichever tenant
+    // reached a slot first advanced a counter the rest read as "already done".
+    // Measured live on two Neon tenants before the fix: each minute's sweep
+    // landed on exactly one tenant, never both.
+    const q = queue('sched-two-tenants')
+    __setJobDefinitionsForTests([
+      { name: q, cron: '* * * * *', handler: async () => async () => {} },
+    ])
+
+    // Two schedulers, as `tier.ts` builds one per tenant loop.
+    const alpha = createScheduleState()
+    const bravo = createScheduleState()
+    const minute = (m: number) => new Date(2026, 7, 9, 14, m, 5)
+
+    // Both boot and adopt the slot in progress.
+    await runScheduleTick(alpha, minute(0))
+    await runScheduleTick(bravo, minute(0))
+
+    // Then they interleave, which is what two independent loops do.
+    const alphaKeys: string[] = []
+    const bravoKeys: string[] = []
+    for (const m of [1, 2, 3]) {
+      // `attempted`, not `enqueued`: both schedulers share one test database, so
+      // the second writer of each slot is legitimately deduped by the unique
+      // index. Production gives each tenant its own database and both insert.
+      // What must hold either way is that each scheduler DECIDED the slot was
+      // due — which is exactly what shared state destroys.
+      currentTenantId = 'tenant-alpha'
+      if ((await runScheduleTick(alpha, minute(m))).attempted) {
+        alphaKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
+      }
+      currentTenantId = 'tenant-bravo'
+      if ((await runScheduleTick(bravo, minute(m))).attempted) {
+        bravoKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
+      }
+    }
+    currentTenantId = null
+
+    // Each scheduler saw all three slots. With shared state the second caller of
+    // each minute finds the counter already advanced and never attempts, so one
+    // of these arrays comes back empty.
+    const expected = [1, 2, 3].map((m) => slotKey(q, new Date(2026, 7, 9, 14, m)))
+    expect(alphaKeys).toEqual(expected)
+    expect(bravoKeys).toEqual(expected)
+
+    // Only one row per slot survives here because both schedulers write to the
+    // same test database; in production each tenant has its own. The rows prove
+    // the enqueue was attempted for every slot by both.
+    expect((await rowsFor(q)).map((r) => r.dedupe_key)).toEqual(expected)
+  })
+
   it('carries the definition maxAttempts onto the enqueued row', async () => {
     const q = queue('sched-attempts')
     __setJobDefinitionsForTests([
       { name: q, cron: '* * * * *', maxAttempts: 3, handler: async () => async () => {} },
     ])
-    await runScheduleTick(new Date(2026, 7, 9, 14, 37, 0))
-    await runScheduleTick(new Date(2026, 7, 9, 14, 38, 0))
+    await runScheduleTick(state, new Date(2026, 7, 9, 14, 37, 0))
+    await runScheduleTick(state, new Date(2026, 7, 9, 14, 38, 0))
     expect((await rowsFor(q))[0].max_attempts).toBe(3)
   })
 })

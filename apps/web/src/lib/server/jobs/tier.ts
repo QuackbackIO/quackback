@@ -39,8 +39,11 @@ import { resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
 import { withTenantScopeById } from '@/lib/server/tenancy/fleet'
 import { isMissingJobQueue } from './job-queue'
 import {
+  createScheduleState,
   drainOnce,
-  resetScheduleState,
+  primeJobHandlers,
+  wakeDisabled,
+  resetJobHandlers,
   runMaintenanceTick,
   runScheduleTick,
   runnerConfig,
@@ -69,6 +72,8 @@ interface LoopStats {
   succeeded: number
   failed: number
   scheduled: number
+  /** Slots this tenant's scheduler decided were due, whoever won the write. */
+  scheduleAttempts: number
   requeued: number
   terminated: number
   wakes: number
@@ -89,6 +94,7 @@ function emptyStats(): LoopStats {
     succeeded: 0,
     failed: 0,
     scheduled: 0,
+    scheduleAttempts: 0,
     requeued: 0,
     terminated: 0,
     wakes: 0,
@@ -120,6 +126,10 @@ function startLoop(opts: {
   let wakeAt: number | null = null
   let nextScheduleAt = 0
   let nextMaintenanceAt = 0
+  // This loop's own scheduler memory. Per tenant by construction: the state is
+  // created here, inside the closure, so there is nothing for a second tenant's
+  // loop to share. See runner.ts's ScheduleState for what sharing it cost.
+  const schedule = createScheduleState()
 
   const ring = () => {
     if (wakeAt === null) wakeAt = Date.now()
@@ -153,8 +163,9 @@ function startLoop(opts: {
 
         const result = await opts.scoped(async () => {
           if (now >= nextScheduleAt) {
-            const tick = await runScheduleTick(new Date(now))
+            const tick = await runScheduleTick(schedule, new Date(now))
             s.scheduled += tick.enqueued
+            s.scheduleAttempts += tick.attempted
             // Sleep until the next slot rather than re-asking every second: the
             // schedule is deterministic, so a tick that finds nothing is pure
             // traffic against a per-tenant database.
@@ -217,20 +228,54 @@ function startLoop(opts: {
   }
 }
 
+/**
+ * Prove a freshly attached doorbell actually delivers, and say so loudly if it
+ * does not.
+ *
+ * §7.3's finding is that this failure is silent: a pooled DSN accepts the
+ * `LISTEN` registration and then delivers nothing, and `pg_listening_channels()`
+ * reports the registration as present the whole time. A tier that attached and
+ * assumed would run on the poll interval forever without a word. One NOTIFY
+ * round trip per tenant at boot buys the difference between "slower than you
+ * think" and "you know why".
+ *
+ * Deliberately not awaited by the caller: the queue is correct on the poll
+ * interval alone, so a slow or failing probe must not delay boot.
+ */
+function verifyDoorbell(listener: WakeListener, label: string): void {
+  void listener
+    .verify()
+    .then((ok) => {
+      if (ok) return
+      log.error(
+        { tenant: label },
+        'job wake doorbell attached but delivered nothing — this tenant is running on the ' +
+          'poll interval alone. A pooled DSN produces exactly this; the listener needs the ' +
+          'direct endpoint.'
+      )
+    })
+    .catch((err) => log.warn({ err, tenant: label }, 'could not verify the job wake doorbell'))
+}
+
 async function startSingleTenantLoop(cfg: RunnerConfig): Promise<void> {
   const holder: { ring: (() => void) | null } = { ring: null }
   let listener: WakeListener | null = null
-  try {
-    listener = await openWakeListener({
-      directUrl: config.databaseUrl,
-      label: SINGLE,
-      onWake: () => holder.ring?.(),
-    })
-  } catch (err) {
-    log.error(
-      { err },
-      'could not attach the job wake listener; the queue runs on the poll fallback only'
-    )
+  if (wakeDisabled()) {
+    log.warn('JOB_WAKE_DISABLED=1 — no doorbell; the queue runs on the poll interval alone')
+  } else {
+    try {
+      listener = await openWakeListener({
+        directUrl: config.databaseUrl,
+        label: SINGLE,
+        onWake: () => holder.ring?.(),
+      })
+      verifyDoorbell(listener, SINGLE)
+    } catch (err) {
+      log.error(
+        { err },
+        'could not attach the job wake listener; the queue runs on the poll fallback only'
+      )
+    }
   }
 
   const loop = startLoop({
@@ -246,20 +291,28 @@ async function startSingleTenantLoop(cfg: RunnerConfig): Promise<void> {
 async function startTenantLoop(tenant: TenantDescriptor, cfg: RunnerConfig): Promise<void> {
   const holder: { ring: (() => void) | null } = { ring: null }
   let listener: WakeListener | null = null
-  try {
-    listener = await openWakeListener({
-      // Direct, never pooled. Through a transaction pooler the registration is
-      // accepted and nothing is ever delivered — see wake.ts.
-      directUrl: tenant.database.directUrl,
-      password: () => resolveTenantPassword(tenant),
-      label: tenant.tenantId,
-      onWake: () => holder.ring?.(),
-    })
-  } catch (err) {
-    log.error(
-      { err, tenantId: tenant.tenantId },
-      'could not attach the job wake listener; this tenant runs on the poll fallback only'
+  if (wakeDisabled()) {
+    log.warn(
+      { tenantId: tenant.tenantId },
+      'JOB_WAKE_DISABLED=1 — no doorbell; this tenant runs on the poll interval alone'
     )
+  } else {
+    try {
+      listener = await openWakeListener({
+        // Direct, never pooled. Through a transaction pooler the registration is
+        // accepted and nothing is ever delivered — see wake.ts.
+        directUrl: tenant.database.directUrl,
+        password: () => resolveTenantPassword(tenant),
+        label: tenant.tenantId,
+        onWake: () => holder.ring?.(),
+      })
+      verifyDoorbell(listener, tenant.tenantId)
+    } catch (err) {
+      log.error(
+        { err, tenantId: tenant.tenantId },
+        'could not attach the job wake listener; this tenant runs on the poll fallback only'
+      )
+    }
   }
 
   const loop = startLoop({
@@ -305,6 +358,11 @@ export async function startJobTier(): Promise<void> {
   running = true
   const cfg = runnerConfig()
 
+  // Import every handler module before a single tenant scope is open, so no
+  // module can execute its top level under one tenant's connection. See
+  // runner.ts's primeJobHandlers for the shape this is guarding against.
+  await primeJobHandlers()
+
   if (!config.isPooledTenancy) {
     await startSingleTenantLoop(cfg)
     log.info({ poll_interval_ms: cfg.pollIntervalMs }, 'job tier started (single tenant)')
@@ -333,9 +391,10 @@ export async function stopJobTier(): Promise<void> {
   const all = [...loops.values()]
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
-  // A restarted tier adopts the current slot again rather than inheriting a
-  // seed from the previous run.
-  resetScheduleState()
+  // Each loop's scheduler state died with its closure. The handler memo is
+  // process-wide, so drop it: a restarted tier may be running a different
+  // definition list.
+  resetJobHandlers()
 }
 
 export interface JobTierStatus {

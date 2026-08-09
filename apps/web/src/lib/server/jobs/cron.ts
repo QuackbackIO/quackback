@@ -124,36 +124,46 @@ export function matchesCron(cron: ParsedCron, date: Date): boolean {
   return domHit || dowHit
 }
 
-function floorToMinute(date: Date): Date {
-  const d = new Date(date.getTime())
-  d.setSeconds(0, 0)
-  return d
+const MINUTE_MS = 60_000
+
+/** The instant at the start of `date`'s minute. */
+function floorToMinuteMs(date: Date): number {
+  return Math.floor(date.getTime() / MINUTE_MS) * MINUTE_MS
 }
 
 /**
- * The most recent slot at or before `now`, or null if none within the window.
+ * The slot search walks ABSOLUTE time, one minute of real elapsed time per
+ * step, and only interprets each instant in local time when asking whether it
+ * matches.
  *
- * This is what the scheduler enqueues: the current slot, not a backlog of missed
- * ones. A tier that was down for three hours therefore runs an hourly sweep once
- * on restart rather than three times, which is the behaviour the repeatable jobs
- * had.
+ * The obvious implementation — `cursor.setMinutes(cursor.getMinutes() - 1)` —
+ * walks wall-clock fields instead, and that livelocks in a spring-forward gap.
+ * Stepping back from 03:00 local asks for 02:59, which does not exist, so the
+ * runtime normalises it *forward* to 03:59; the next step lands on 03:58, and
+ * the walk oscillates inside the gap until it exhausts its budget and reports
+ * "no slot found". Measured: `30 2 * * *` — which is `page-view-partitions` —
+ * returned null on the transition day rather than the previous day's slot.
+ *
+ * Absolute stepping cannot do that: every step moves the same real distance
+ * regardless of what the local calendar is doing.
  */
 export function latestSlotAtOrBefore(cron: ParsedCron, now: Date): Date | null {
-  const cursor = floorToMinute(now)
+  let ms = floorToMinuteMs(now)
   for (let i = 0; i < SEARCH_WINDOW_MINUTES; i++) {
-    if (matchesCron(cron, cursor)) return new Date(cursor.getTime())
-    cursor.setMinutes(cursor.getMinutes() - 1)
+    const at = new Date(ms)
+    if (matchesCron(cron, at)) return at
+    ms -= MINUTE_MS
   }
   return null
 }
 
 /** The first slot strictly after `now`, or null if none within the window. */
 export function nextSlotAfter(cron: ParsedCron, now: Date): Date | null {
-  const cursor = floorToMinute(now)
-  cursor.setMinutes(cursor.getMinutes() + 1)
+  let ms = floorToMinuteMs(now) + MINUTE_MS
   for (let i = 0; i < SEARCH_WINDOW_MINUTES; i++) {
-    if (matchesCron(cron, cursor)) return new Date(cursor.getTime())
-    cursor.setMinutes(cursor.getMinutes() + 1)
+    const at = new Date(ms)
+    if (matchesCron(cron, at)) return at
+    ms += MINUTE_MS
   }
   return null
 }
@@ -161,15 +171,20 @@ export function nextSlotAfter(cron: ParsedCron, now: Date): Date | null {
 /**
  * The dedupe key for one slot of one schedule.
  *
- * Local wall-clock, to the minute. The queue's unique index on
- * `(queue, dedupe_key)` is what makes a slot spendable exactly once — two
- * replicas racing the same tick produce one row, decided by the database rather
- * than by a lock.
+ * **The instant, not the wall clock**, and that distinction is load-bearing
+ * exactly once a year. A local-time key collapses the two passes of a
+ * fall-back hour onto one string — 01:30 EDT and 01:30 EST are different
+ * instants with the same wall clock — so the unique index suppresses the whole
+ * repeated hour as a duplicate. Measured before this changed: an hourly
+ * schedule produced 7 slots across 8 hours, and a five-minutely one produced 48
+ * where 60 were due.
+ *
+ * The queue's unique index on `(queue, dedupe_key)` is still what makes a slot
+ * spendable exactly once — two replicas racing the same tick produce one row,
+ * decided by the database rather than by a lock. Keying on the instant is what
+ * makes "the same slot" mean the same thing on both replicas and across a
+ * timezone transition.
  */
 export function slotKey(scheduleName: string, slot: Date): string {
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
-  return (
-    `${scheduleName}:${slot.getFullYear()}-${pad(slot.getMonth() + 1)}-${pad(slot.getDate())}` +
-    `T${pad(slot.getHours())}:${pad(slot.getMinutes())}`
-  )
+  return `${scheduleName}:${slot.toISOString()}`
 }

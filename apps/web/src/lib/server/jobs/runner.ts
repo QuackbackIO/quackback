@@ -17,6 +17,7 @@
  * including a worker process that has not loaded the full application config.
  */
 import { logger } from '@/lib/server/logger'
+import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
 import {
   claimJobs,
   completeJob,
@@ -33,6 +34,8 @@ import {
   leaseMsFor,
   maxAttemptsFor,
   retryBackoffMs,
+  type JobDefinition,
+  type JobHandler,
 } from './definitions'
 import { enqueueJob } from './job-queue'
 import { latestSlotAtOrBefore, nextSlotAfter, parseCron, slotKey, type ParsedCron } from './cron'
@@ -61,6 +64,20 @@ export interface RunnerConfig {
   retentionMs: number
 }
 
+/**
+ * Skip the NOTIFY doorbell and run on the poll interval alone.
+ *
+ * A real operational switch, not a test hook: §7.3's measurement is that a
+ * pooled DSN accepts the `LISTEN` registration and then delivers nothing, so an
+ * operator who knows their connection is pooled can turn the listener off
+ * rather than have it retry and log. It is also what makes the poll floor
+ * measurable end to end — a harness that fakes the fallback with its own timer
+ * measures its own timer.
+ */
+export function wakeDisabled(): boolean {
+  return process.env.JOB_WAKE_DISABLED === '1'
+}
+
 export function runnerConfig(): RunnerConfig {
   return {
     pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 1_000, 50, 600_000),
@@ -73,6 +90,69 @@ export function runnerConfig(): RunnerConfig {
 /** All queue names the tier will claim for. */
 export function activeQueueNames(): string[] {
   return jobDefinitions().map((d) => d.name)
+}
+
+/**
+ * Handler modules, imported once and memoised.
+ *
+ * The reason this exists is a hazard measured on the BullMQ side of the house: a
+ * `Worker` constructed inside a request's tenant scope inherits that scope for
+ * every job it ever processes, because the scope is AsyncLocalStorage and the
+ * constructor captured it. Seven queue modules arm lazily on first enqueue, so
+ * that is not a theoretical shape.
+ *
+ * This queue does not have that shape — `tier.ts` opens a fresh
+ * `withTenantScopeById(...)` around every pass, so a handler always runs inside
+ * the scope of the job it is running, never one captured earlier. But the
+ * *import* is a second, quieter version of the same risk: `def.handler()` is a
+ * dynamic import, and a module executing top-level work would run it inside
+ * whichever tenant's scope happened to trigger the first import.
+ *
+ * `primeJobHandlers()` closes that by importing every module once, at tier
+ * start, **before any tenant scope is open**. The memo is then a pure function
+ * lookup. A miss still resolves rather than failing — a direct `runJob` in a
+ * test must work — but it says so, because a miss in a running tier means a
+ * module is being imported under a tenant scope.
+ */
+const handlerMemo = new Map<string, JobHandler>()
+
+export async function primeJobHandlers(): Promise<void> {
+  if (getCurrentTenant()) {
+    // Priming is the thing that must happen OUTSIDE a scope. If a caller has one
+    // open, priming here would defeat its own purpose silently.
+    log.error(
+      'primeJobHandlers() was called inside a tenant scope — handler modules would ' +
+        'be imported under that tenant. Prime before opening any scope.'
+    )
+    return
+  }
+  for (const def of jobDefinitions()) {
+    if (handlerMemo.has(def.name)) continue
+    try {
+      handlerMemo.set(def.name, await def.handler())
+    } catch (err) {
+      log.error({ err, queue: def.name }, 'could not load job handler')
+    }
+  }
+}
+
+/** Test/shutdown seam: drop the memo so a new definition list is picked up. */
+export function resetJobHandlers(): void {
+  handlerMemo.clear()
+}
+
+async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
+  const memo = handlerMemo.get(def.name)
+  if (memo) return memo
+  if (getCurrentTenant()) {
+    log.warn(
+      { queue: def.name },
+      'job handler module imported inside a tenant scope — prime handlers at tier start'
+    )
+  }
+  const handler = await def.handler()
+  handlerMemo.set(def.name, handler)
+  return handler
 }
 
 /**
@@ -113,7 +193,7 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
 
   const startedAt = Date.now()
   try {
-    const handler = await def.handler()
+    const handler = await resolveHandler(def)
     await handler(job)
   } catch (err) {
     clearInterval(heartbeat)
@@ -191,6 +271,17 @@ export async function drainOnce(config: RunnerConfig): Promise<DrainResult> {
 }
 
 export interface ScheduleTickResult {
+  /**
+   * Slots this scheduler decided were due and wrote for.
+   *
+   * Distinct from `enqueued` on purpose. `enqueued` is what the database
+   * accepted, so it is 0 when another replica won the same slot — a normal,
+   * healthy race. `attempted` is this scheduler's own decision, and it is the
+   * only way to tell "another replica got there first" apart from "this
+   * scheduler never considered the slot due at all", which is what shared
+   * scheduler state produced across tenants.
+   */
+  attempted: number
   enqueued: number
   /** Earliest next slot across all schedules, for setting the next timer. */
   nextSlotAt: Date | null
@@ -208,28 +299,43 @@ function cronFor(pattern: string): ParsedCron {
 }
 
 /**
- * The last slot this process has accounted for, per schedule.
+ * One scheduler's memory of the last slot it has accounted for, per schedule.
  *
- * The first pass **adopts** the current slot without enqueueing it, and that is
- * not an optimisation — it is the behaviour the repeatable jobs had, and the
- * absence of it was a real divergence caught by running both side by side.
+ * **This is per tenant, and it is passed in rather than held here, because the
+ * module-scope version of it was a real cross-tenant defect.** One process runs
+ * one loop per tenant; a `Map` keyed on the schedule name alone is shared by all
+ * of them, so whichever tenant's loop reached a slot first advanced a counter
+ * every other tenant then read as "already done" — and the rest silently never
+ * enqueued that slot. Measured live on two Neon tenants: each minute's sweep
+ * landed on one tenant, never both. It affected all seven sweeps.
+ *
+ * That is the §4.1 process-global-state hazard, introduced by the piece meant to
+ * remove it. Keying the map by tenant would fix the instance; making the state a
+ * parameter fixes the class, because there is no longer a shared object for the
+ * next scheduler to key wrongly.
+ *
+ * ## What the state is for
+ *
+ * The first pass **adopts** the current slot without enqueueing it. That is not
+ * an optimisation — it is the behaviour the repeatable jobs had, and its absence
+ * was a divergence caught by running the old and new builds side by side.
  * Registering a repeatable job schedules its NEXT occurrence; it does not run
  * the occurrence that has already passed. Without the seed, a process booting at
- * 14:00 would immediately run the 03:00 daily sweep — once, because the dedupe
- * key makes a slot spendable once, but at entirely the wrong time of day, and
- * an off-peak sweep that fires at 14:00 is a behaviour change even though the
- * per-day count is unchanged.
+ * 14:00 immediately runs the 03:00 daily sweep — once, because the dedupe key
+ * makes a slot spendable once, but at entirely the wrong time of day.
  *
  * The residual difference is narrow and worth stating: the repeatable job's next
  * occurrence lives in Redis and therefore survives a restart, while this seed is
  * per process. A restart in the same minute as a slot skips that slot. A restart
  * at any other time does not.
  */
-const seenSlot = new Map<string, number>()
+export interface ScheduleState {
+  readonly seen: Map<string, number>
+}
 
-/** Test/shutdown seam: forget the seed so the next pass adopts afresh. */
-export function resetScheduleState(): void {
-  seenSlot.clear()
+/** A scheduler's own state. One per tenant loop — never shared between them. */
+export function createScheduleState(): ScheduleState {
+  return { seen: new Map<string, number>() }
 }
 
 /**
@@ -243,7 +349,11 @@ export function resetScheduleState(): void {
  * on `(queue, dedupe_key)` settles it, so the cross-instance exclusion is a
  * database property rather than a lock this code has to hold.
  */
-export async function runScheduleTick(now = new Date()): Promise<ScheduleTickResult> {
+export async function runScheduleTick(
+  state: ScheduleState,
+  now = new Date()
+): Promise<ScheduleTickResult> {
+  let attempted = 0
   let enqueued = 0
   let nextSlotAt: Date | null = null
 
@@ -252,18 +362,19 @@ export async function runScheduleTick(now = new Date()): Promise<ScheduleTickRes
     const cron = cronFor(def.cron)
 
     const slot = latestSlotAtOrBefore(cron, now)
-    const seen = seenSlot.get(def.name)
+    const seen = state.seen.get(def.name)
     if (seen === undefined) {
-      // First pass in this process: adopt the current slot, do not run it.
-      if (slot) seenSlot.set(def.name, slot.getTime())
+      // First pass for THIS scheduler: adopt the current slot, do not run it.
+      if (slot) state.seen.set(def.name, slot.getTime())
     } else if (slot && slot.getTime() > seen) {
+      attempted += 1
       const result = await enqueueJob({
         queue: def.name,
         dedupeKey: slotKey(def.name, slot),
         payload: { scheduledFor: slot.toISOString() },
         maxAttempts: maxAttemptsFor(def),
       })
-      seenSlot.set(def.name, slot.getTime())
+      state.seen.set(def.name, slot.getTime())
       if (result.inserted) {
         enqueued += 1
         log.debug({ queue: def.name, slot: slot.toISOString() }, 'scheduled job enqueued')
@@ -274,7 +385,7 @@ export async function runScheduleTick(now = new Date()): Promise<ScheduleTickRes
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
   }
 
-  return { enqueued, nextSlotAt }
+  return { attempted, enqueued, nextSlotAt }
 }
 
 export interface MaintenanceResult extends ReapResult {

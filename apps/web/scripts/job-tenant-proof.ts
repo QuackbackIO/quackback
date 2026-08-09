@@ -34,6 +34,7 @@
  */
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
+import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
@@ -197,17 +198,69 @@ async function run(): Promise<void> {
   ])
 
   await withTenantScopeById(a.tenantId, 'script', async () => {
-    await enqueueJob({ queue: plantedQueue, payload: {}, maxAttempts: 1, dedupeKey: 'planted' })
-    // Restamp it as the OTHER tenant's job, in A's own database.
+    // ONE write, already carrying the foreign stamp. The earlier version
+    // enqueued and then restamped, which is a race the doorbell wins about a
+    // third of the time: the tier wakes on the insert and can run the job while
+    // it is still correctly stamped, so the run reports a pass without ever
+    // presenting the tier with a wrong-tenant row. The instrument was a coin
+    // flip. The row must never exist in a runnable, correctly-stamped state.
     await db.execute(sql`
-      UPDATE job_queue SET tenant_id = ${b.tenantId}
-      WHERE queue = ${plantedQueue} AND dedupe_key = 'planted'
+      INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, max_attempts)
+      VALUES (${generateId('job')}, ${plantedQueue}, 'planted', ${b.tenantId}, '{}'::jsonb, 1)
     `)
   })
   console.log(`planted a row in ${a.tenantId}'s queue stamped for ${b.tenantId}`)
   await new Promise((r) => setTimeout(r, 6_000))
 
+  // ---- the cron path: every tenant must receive every slot ----------------
+  // Both earlier harnesses used cron-less definitions, so neither could see a
+  // scheduler that hands each slot to one tenant and starves the rest.
+  const cronQueue = `${queue}-cron`
   await stopJobTier()
+  __setJobDefinitionsForTests([
+    {
+      name: cronQueue,
+      cron: '* * * * *',
+      maxAttempts: 1,
+      leaseMs: 30_000,
+      handler: async () => async (job) => {
+        const scope = getCurrentTenant()?.tenantId ?? null
+        await db.execute(sql`
+          INSERT INTO gauntlet_tenant_effects
+            (job_id, queue, enqueued_for, scope_tenant_id, db_name, branch_id)
+          SELECT ${job.jobId}, ${job.queue},
+                 ${String((job.payload as { scheduledFor?: string }).scheduledFor ?? 'CRON')},
+                 ${scope}, current_database(), current_setting('neon.branch_id', true)
+        `)
+      },
+    },
+  ])
+  await startJobTier()
+  console.log('watching a per-minute schedule across both tenants for 150s...')
+  await new Promise((r) => setTimeout(r, 150_000))
+  await stopJobTier()
+
+  const slotsBy = new Map<string, string[]>()
+  for (const t of [a, b]) {
+    const rows = await effectsIn(t.tenantId)
+    slotsBy.set(
+      t.tenantId,
+      rows
+        .filter((r) => r.queue === cronQueue)
+        .map((r) => r.enqueued_for)
+        .sort()
+    )
+  }
+  const aSlots = slotsBy.get(a.tenantId)!
+  const bSlots = slotsBy.get(b.tenantId)!
+  const onlyA = aSlots.filter((x) => !bSlots.includes(x))
+  const onlyB = bSlots.filter((x) => !aSlots.includes(x))
+  console.log('')
+  console.log(`${a.tenantId} cron slots (${aSlots.length}): ${aSlots.join('  ')}`)
+  console.log(`${b.tenantId} cron slots (${bSlots.length}): ${bSlots.join('  ')}`)
+  console.log(`only A: ${onlyA.join('  ') || '(none)'}`)
+  console.log(`only B: ${onlyB.join('  ') || '(none)'}`)
+  const cronStarved = onlyA.length > 0 || onlyB.length > 0 || aSlots.length === 0
 
   // ---- verdict ------------------------------------------------------------
   let crossTenant = 0
@@ -216,7 +269,7 @@ async function run(): Promise<void> {
 
   console.log('')
   for (const t of [a, b]) {
-    const rows = await effectsIn(t.tenantId)
+    const rows = (await effectsIn(t.tenantId)).filter((r) => r.queue !== cronQueue)
     console.log(`--- effects recorded IN ${t.tenantId} (${rows.length}) ---`)
     for (const r of rows) {
       const enqueuedElsewhere = r.enqueued_for !== t.tenantId
@@ -242,8 +295,8 @@ async function run(): Promise<void> {
   console.log(`planted row: status=${planted?.status} attempts=${planted?.attempts}`)
   console.log(`             last_error=${planted?.last_error}`)
 
-  const plantedRan = (await effectsIn(a.tenantId)).some((r) => r.enqueued_for === 'PLANTED')
-  const plantedRanB = (await effectsIn(b.tenantId)).some((r) => r.enqueued_for === 'PLANTED')
+  const plantedRan = (await effectsIn(a.tenantId)).some((r) => r.queue === plantedQueue)
+  const plantedRanB = (await effectsIn(b.tenantId)).some((r) => r.queue === plantedQueue)
 
   console.log('')
   console.log(`cross-tenant observations: ${crossTenant}`)
@@ -251,7 +304,9 @@ async function run(): Promise<void> {
 
   // Positive control: the harness has to be able to SEE an effect at all. Two
   // executions were expected, one per tenant, each in its own database.
-  const total = (await effectsIn(a.tenantId)).length + (await effectsIn(b.tenantId)).length
+  const nonCron = (id: string) =>
+    effectsIn(id).then((rs) => rs.filter((r) => r.queue !== cronQueue))
+  const total = (await nonCron(a.tenantId)).length + (await nonCron(b.tenantId)).length
   const legit = total - (plantedRan || plantedRanB ? 1 : 0)
   console.log(`legitimate executions observed: ${legit} (expected 2 — one per tenant)`)
   if (legit !== 2) {
@@ -261,11 +316,17 @@ async function run(): Promise<void> {
     console.log('nothing. Fix the fixture before reading the verdict.')
     process.exit(3)
   }
+  if (cronStarved) {
+    console.log('')
+    console.log('FAIL — a scheduled slot did not reach every tenant. Scheduler state is shared.')
+    process.exit(1)
+  }
   if (crossTenant > 0 || plantedRan || plantedRanB) {
     console.log('FAIL')
     process.exit(1)
   }
-  console.log('PASS — every job executed against exactly its own tenant database.')
+  console.log('PASS — every job executed against exactly its own tenant database,')
+  console.log('       and every scheduled slot reached both tenants.')
 }
 
 /**
