@@ -24,6 +24,10 @@ function stubValidEnvFor(tenancy: string | undefined): void {
   if (tenancy === 'pooled') {
     vi.stubEnv('DATABASE_URL', '')
     vi.stubEnv('QUACKBACK_CONTROL_DATABASE_URL', 'postgresql://u@localhost:5432/control')
+    // Pooled refuses a queue-consuming role: a BullMQ Worker permanently
+    // inherits the tenant scope of whichever request armed it, and the default
+    // role runs workers. See config.ts's pooled refinement.
+    vi.stubEnv('QUACKBACK_ROLE', 'web')
   } else {
     vi.stubEnv('DATABASE_URL', 'postgresql://u@localhost:5432/x')
   }

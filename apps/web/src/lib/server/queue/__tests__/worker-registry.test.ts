@@ -32,6 +32,22 @@ const WORKER_MODULES = [
  */
 const TYPE_ONLY_MODULES: string[] = []
 
+/**
+ * The construction seam itself: infrastructure, not a queue.
+ *
+ * `queue/create-worker.ts` wraps `new Worker` in `runWithoutLogContext` so a
+ * Worker cannot inherit the tenant scope of whichever request armed it. It
+ * imports bullmq and constructs, but it owns no queue and belongs in no
+ * registry — so it is adjudicated here rather than in WORKER_MODULES, whose
+ * members must each be dynamically imported by worker-registry.ts.
+ *
+ * This list is the answer to the chokepoint comment below, which anticipated
+ * exactly this refactor: construction moved behind a helper, so the classifier
+ * counts a `createQueueWorker` call as construction too and the fifteen queue
+ * modules stay where they were.
+ */
+const WORKER_FACTORY_MODULES = ['queue/create-worker.ts']
+
 const SERVER_ROOT = path.resolve(__dirname, '../..')
 
 /** lib/server files importing bullmq, split by whether they construct a Worker. */
@@ -42,7 +58,9 @@ function bullmqImporters(): { constructing: string[]; typeOnly: string[] } {
     const content = fs.readFileSync(full, 'utf8')
     if (!content.includes("from 'bullmq'")) continue
     const rel = path.relative(SERVER_ROOT, full).split(path.sep).join('/')
-    ;(content.includes('new Worker') ? constructing : typeOnly).push(rel)
+    if (WORKER_FACTORY_MODULES.includes(rel)) continue
+    const constructs = content.includes('new Worker') || /\bcreateQueueWorker\s*[(<]/.test(content)
+    ;(constructs ? constructing : typeOnly).push(rel)
   }
   return { constructing: constructing.sort(), typeOnly: typeOnly.sort() }
 }
@@ -55,6 +73,15 @@ describe('worker registry seal', () => {
     const { constructing, typeOnly } = bullmqImporters()
     expect(constructing).toEqual(WORKER_MODULES)
     expect(typeOnly).toEqual(TYPE_ONLY_MODULES)
+  })
+
+  it('the construction seam is still the only adjudicated factory', () => {
+    // If a second factory appears, the classifier above silently stops seeing
+    // whatever it wraps. Pinning the list keeps that a deliberate edit.
+    expect(WORKER_FACTORY_MODULES).toEqual(['queue/create-worker.ts'])
+    const seam = fs.readFileSync(path.resolve(SERVER_ROOT, 'queue/create-worker.ts'), 'utf8')
+    expect(seam).toContain('runWithoutLogContext')
+    expect(seam).toContain('new Worker')
   })
 
   it('the registry dynamically imports every worker module', () => {
