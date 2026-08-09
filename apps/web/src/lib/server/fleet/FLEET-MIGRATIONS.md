@@ -232,6 +232,25 @@ t4     OK [reconciled] ledger 228->229 applied=1 post=true   24284ms
 `t4` is the interesting one: it carries `0252`, which this build does not
 bundle, so it ends at 229 rows — ahead of the code, and correctly so.
 
+### Two migrators, one fleet
+
+Ten tenants set claimable, `attempts` reset to 0, two `run --concurrency 3`
+processes started together:
+
+```
+migrator A  claimed=4   t2, t3, t4, p10-old
+migrator B  claimed=6   alpha, bravo, t1, fleet-a, fleet-b, fleet-c
+
+attempts | tenants
+       1 |      10        <- every tenant claimed exactly once
+```
+
+Note the durations: 2–6 s each rather than the 25–165 s a real reconcile takes.
+That is the cheap path — nothing to apply and clean post-conditions, so the
+executor is never started and no index is rebuilt. A pass over an
+already-reconciled fleet costs one query per tenant, which is what keeps §10.7's
+cost model intact.
+
 ### The gate, both directions
 
 `p10-old` is a database migrated against a journal trimmed at `0248` — a
