@@ -102,6 +102,20 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
   type Origin = 'bullmq' | 'non-bullmq' | 'unresolvable' | 'local'
   const origins = new Map<string, Origin>()
 
+  /**
+   * Local names that refer to the `Worker` EXPORT, whatever they are called.
+   *
+   * Recording a rename's origin achieves nothing on its own: the construction
+   * matcher keys on the name `Worker`, so `const { Worker: W } = await
+   * import('bullmq')` followed by `new W(...)` is a bullmq worker the matcher
+   * never looks at. Tracked separately from `origins` rather than by widening
+   * that to "any bullmq-bound name", because `import { Queue } from 'bullmq'`
+   * is also bullmq-bound and `new Queue(...)` is not a Worker construction —
+   * that widening would move a producer-only module onto the constructing side
+   * and assert something false about it.
+   */
+  const workerAliases = new Set<string>()
+
   const specifierOrigin = (spec: string): Origin =>
     isBullmqSpecifier(spec) ? 'bullmq' : 'non-bullmq'
 
@@ -144,20 +158,40 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
    * flag it, so the "unresolvable stays flagged" case passed for entirely the
    * wrong reason and could not fail when that rule was inverted.
    */
+  /** Every local name a binding name introduces, destructuring included. */
+  const boundNames = (name: ts.BindingName, acc: string[] = []): string[] => {
+    if (ts.isIdentifier(name)) {
+      acc.push(name.text)
+      return acc
+    }
+    for (const el of name.elements) {
+      if (ts.isBindingElement(el)) boundNames(el.name, acc)
+    }
+    return acc
+  }
+
   const collectBindings = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
-      if (!node.initializer) {
-        recordOrigin(node.name.text, 'local')
-      } else {
-        const dyn = dynamicImportOf(node.initializer)
-        if (!dyn) {
-          recordOrigin(node.name.text, 'local')
-        } else {
-          const arg = dyn.arguments[0]
-          recordOrigin(
-            node.name.text,
-            arg && ts.isStringLiteral(arg) ? specifierOrigin(arg.text) : 'unresolvable'
-          )
+    // Destructuring included. `const { Worker } = await import('bullmq')` is an
+    // ObjectBindingPattern, so an identifier-only rule never recorded its
+    // bullmq origin — and a file that ALSO imports `Worker` from
+    // node:worker_threads then has that non-bullmq origin stand unchallenged,
+    // dismissing a live construction. `{ Worker: W }` renames bind `W`, which
+    // is the name the construction actually uses.
+    if (ts.isVariableDeclaration(node)) {
+      const names = boundNames(node.name)
+      const dyn = node.initializer ? dynamicImportOf(node.initializer) : null
+      let origin: Origin = 'local'
+      if (dyn) {
+        const arg = dyn.arguments[0]
+        origin = arg && ts.isStringLiteral(arg) ? specifierOrigin(arg.text) : 'unresolvable'
+      }
+      for (const name of names) recordOrigin(name, origin)
+      if (dyn && origin !== 'non-bullmq' && ts.isObjectBindingPattern(node.name)) {
+        for (const el of node.name.elements) {
+          const property = el.propertyName ?? el.name
+          if (ts.isIdentifier(property) && property.text === 'Worker' && ts.isIdentifier(el.name)) {
+            workerAliases.add(el.name.text)
+          }
         }
       }
     }
@@ -174,7 +208,11 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
       const bindings = clause?.namedBindings
       if (bindings && ts.isNamespaceImport(bindings)) recordOrigin(bindings.name.text, origin)
       if (bindings && ts.isNamedImports(bindings)) {
-        for (const el of bindings.elements) recordOrigin(el.name.text, origin)
+        for (const el of bindings.elements) {
+          recordOrigin(el.name.text, origin)
+          const property = el.propertyName ?? el.name
+          if (origin === 'bullmq' && property.text === 'Worker') workerAliases.add(el.name.text)
+        }
       }
       continue
     }
@@ -225,6 +263,7 @@ export function classifyBullmqUsage(text: string): { imports: boolean; construct
     // from somewhere that is not bullmq.
     if (ts.isNewExpression(node)) {
       const ctor = node.expression
+      if (ts.isIdentifier(ctor) && workerAliases.has(ctor.text)) constructs = true
       if (ts.isIdentifier(ctor) && ctor.text === 'Worker' && couldBeBullmq(ctor)) constructs = true
       if (
         ts.isPropertyAccessExpression(ctor) &&
@@ -561,6 +600,74 @@ describe('the seal sees bullmq however it is obtained', () => {
     // still adjudicated rather than assumed innocent.
     const source = `export const w = new Worker('q', async () => {}, {} as never)`
     expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: true })
+  })
+
+  it('catches a DESTRUCTURED dynamic import beside a legitimate Worker binding', () => {
+    // Newly opened by the provenance fix, not inherited: a variable declaration
+    // was recorded only when its name was an identifier, so
+    // `const { Worker } = await import('bullmq')` never recorded its origin.
+    // The static node:worker_threads import had already written
+    // `Worker -> non-bullmq`, nothing upgraded it, and the construction was
+    // dismissed. worker_threads for one job and BullMQ for another is an
+    // ordinary pairing.
+    //
+    // The failure landed on the worse side too: `imports` stayed true so CI
+    // still fired, but it put the file on the TYPE-ONLY side, where the obvious
+    // remedy records "this file does not construct a Worker" over a live,
+    // unwrapped one.
+    const source = `
+      import { Worker } from 'node:worker_threads'
+      export function spawn(s: string) { return new Worker(s, { eval: true }) }
+      export async function drain() {
+        const { Worker } = await import('bullmq')
+        return new Worker('q', async () => {}, {} as never)
+      }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: true })
+  })
+
+  it('follows a renamed Worker through a destructured dynamic import', () => {
+    // Recording the rename's origin is not enough on its own — the matcher
+    // keys on the name `Worker`, so `new W(...)` is a bullmq worker it would
+    // never look at.
+    const source = `
+      import { Worker } from 'node:worker_threads'
+      export function spawn(s: string) { return new Worker(s, { eval: true }) }
+      export async function drain() {
+        const { Worker: W } = await import('bullmq')
+        return new W('q', async () => {}, {} as never)
+      }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: true })
+  })
+
+  it('follows a renamed Worker through a static import', () => {
+    const source = `
+      import { Worker as BullWorker } from 'bullmq'
+      export const w = new BullWorker('q', async () => {}, {} as never)
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: true })
+  })
+
+  it('does NOT follow a renamed Worker from a non-bullmq package', () => {
+    // The other direction of the alias rule. An alias is only recorded when the
+    // specifier is bullmq, so a renamed thread worker stays invisible.
+    const source = `
+      import { Worker as ThreadWorker } from 'node:worker_threads'
+      export function spawn(s: string) { return new ThreadWorker(s, { eval: true }) }
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: false, constructs: false })
+  })
+
+  it('does NOT treat every bullmq-bound name as a Worker construction', () => {
+    // Why aliases are tracked separately from origins. `new Queue(...)` is
+    // bullmq-bound but is not a Worker, and a producer-only module must stay on
+    // the type-only side rather than being asserted to construct one.
+    const source = `
+      import { Queue } from 'bullmq'
+      export const q = new Queue('q', {} as never)
+    `
+    expect(classifyBullmqUsage(source)).toEqual({ imports: true, constructs: false })
   })
 
   it('is not fooled by the string "bullmq" in a comment or literal', () => {
