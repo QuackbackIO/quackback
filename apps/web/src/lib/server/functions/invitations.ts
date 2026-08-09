@@ -11,7 +11,7 @@ import {
 } from '@/lib/server/domains/principals/principal.factory'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from '@/lib/server/auth/session'
-import { cacheDel } from '@/lib/server/redis'
+import { cacheDel } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'invitations' })

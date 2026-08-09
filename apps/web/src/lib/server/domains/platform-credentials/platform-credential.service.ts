@@ -14,7 +14,7 @@
 
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
-import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { encryptPlatformCredentials } from '@/lib/server/integrations/encryption'
 import { config } from '@/lib/server/config'
 import { DbCredentialSource, EnvCredentialSource, type CredentialSource } from './credential-source'
