@@ -87,6 +87,16 @@ export function proxyCacheKey(key: string): string {
   return `${currentTenantNamespace()} ${key}`
 }
 
+/**
+ * The S3 client reports a missing object two ways depending on the operation and
+ * the provider, so both are checked rather than whichever one this provider
+ * happened to send today.
+ */
+function isNotFound(error: unknown): boolean {
+  const e = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } }
+  return e?.name === 'NoSuchKey' || e?.name === 'NotFound' || e?.$metadata?.httpStatusCode === 404
+}
+
 const KEY_PREFIX = '/api/storage/'
 
 function extractKey(url: URL): string | null {
@@ -96,7 +106,7 @@ function extractKey(url: URL): string | null {
 
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
   const {
-    isS3Configured,
+    isS3Usable,
     getS3Config,
     uploadObject,
     verifyProxyUploadToken,
@@ -106,8 +116,15 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   const { sniffImageMime } = await import('@/lib/server/content/magic-bytes')
   const { config } = await import('@/lib/server/config')
 
-  if (!isS3Configured() || !config.s3Proxy) {
+  // Two different refusals, deliberately not one. "This deployment does not do
+  // proxy uploads" is a permanent 403; "this workspace's storage credentials do
+  // not resolve" is a 503 an operator can fix. Collapsing them would report a
+  // configuration outage as a policy decision.
+  if (!config.s3Proxy) {
     return Response.json({ error: 'Proxy uploads not enabled' }, { status: 403 })
+  }
+  if (!isS3Usable()) {
+    return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
 
   const url = new URL(request.url)
@@ -154,16 +171,25 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
  */
 export async function handleStorageGet({ request }: { request: Request }): Promise<Response> {
   const {
-    isS3Configured,
+    isS3Usable,
     generatePresignedGetUrl,
     getS3Object,
     getS3Config,
     isPublicStorageKey,
+    StorageUnavailableError,
     verifyStorageReadToken,
   } = await import('@/lib/server/storage/s3')
   const { config } = await import('@/lib/server/config')
 
-  if (!isS3Configured()) {
+  // Usability, not addressability. A pooled tenant record always names a bucket,
+  // so the addressability question answers `true` while `getS3Config()` throws
+  // three lines later — and because that call sits outside the try/catch below,
+  // the whole route answered **500** for every key of every tenant. A tenant
+  // whose storage credentials do not resolve is a configuration state, not a
+  // crash, and it has to be distinguishable from one: a 500 tells a caller
+  // nothing, and it cost the isolation probe its P03 verdict on top of the
+  // feature.
+  if (!isS3Usable()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
 
@@ -234,6 +260,22 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       },
     })
   } catch (error) {
+    // Second barrier behind the gate above. The gate is the one that fires in
+    // practice; this is here so that a credential that becomes unresolvable
+    // between the two still reports as a refusal rather than as a crash.
+    if (error instanceof StorageUnavailableError) {
+      log.error({ err: error }, 'storage credentials unresolvable')
+      return Response.json({ error: 'Storage not configured' }, { status: 503 })
+    }
+    // An object that is not there is not a server fault. It reached this branch
+    // as a 500 before, which under pooled tenancy is actively misleading: the
+    // three states a caller has to tell apart are "this workspace has no
+    // storage" (503), "this object does not exist" (404) and "something broke"
+    // (500), and collapsing the middle one into the last makes an ordinary
+    // missing asset look like an outage.
+    if (isNotFound(error)) {
+      return Response.json({ error: 'Not found' }, { status: 404 })
+    }
     log.error({ err: error }, 'storage object serve failed')
     return Response.json({ error: 'Failed to resolve storage URL' }, { status: 500 })
   }

@@ -25,6 +25,7 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
+import { activeSecretKey } from '@/lib/server/secret-key'
 
 const DOMAIN_TAG = 'csat-email:v1\n'
 const DEFAULT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -34,7 +35,7 @@ function b64url(input: string): string {
 }
 
 function sign(payload: string): string {
-  return createHmac('sha256', config.secretKey)
+  return createHmac('sha256', activeSecretKey())
     .update(DOMAIN_TAG + payload)
     .digest('base64url')
 }

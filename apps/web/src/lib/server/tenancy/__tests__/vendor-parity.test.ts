@@ -35,8 +35,17 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': 'ace6a5cbb5d457fd46835c79a22de9bd54a23bab8ea8281083bcac2800f6f204',
-  'secret-ref.ts': 'e72eaffc5901a9f93b8617a9c3c81608bb32b72066f7e0e0b64ee641629be71a',
+  'contract.ts': 'cf095d608552e3b6029ad7345be195e35ed8d2b4dce7face0ba78a7d5cb4f27e',
+  'secret-ref.ts': 'e4c714c7ff097e94c5e27fd5cc95d31e4656de657a60c9953e2c897bf48f567a',
+  // Sealing and derivation, vendored for a sharper reason than the others: the
+  // control plane seals a value and a fleet replica opens it. Drift here is not
+  // a wrong answer, it is ciphertext nobody can open — and for SECRET_KEY that
+  // means integration tokens, webhook secrets and custom-action headers are
+  // permanently unrecoverable. The digest is the only thing standing between a
+  // one-line "tidy-up" in one repo and data loss in the other.
+  'fleet-secrets.ts': 'c9da2db5c7060c1c77a19e3344e728e044d339d8cdcabfac503b9577842bccb4',
+  'tenant-secret-resolution.ts':
+    '7dfbac1731a9048ca24a78873f176348b0f909a0888b768a703fa2f68be9ee61',
 } as const
 
 /** Where the control plane lives when this machine has a checkout of it. */
@@ -95,7 +104,7 @@ describe('the vendored predicate is the one that runs', () => {
     const throughApp = app.evaluateTenantIdentity(
       expected,
       { neonProjectId: null, neonBranchId: null },
-      { ...observed, physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null }, stampSource: 'metadata', stampSourceConflict: null }
+      { ...observed, physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null }, stampSource: 'metadata', stampSourceConflict: null, secretCanary: null }
     )
 
     expect(direct).toMatchObject({ ok: false, code: 'workspace_id_mismatch' })

@@ -10,7 +10,7 @@
  */
 
 import { hkdfSync, randomBytes, createCipheriv, createDecipheriv } from 'crypto'
-import { config } from './config'
+import { activeSecretKey } from './secret-key'
 import {
   currentTenantNamespace,
   SINGLE_TENANT_NAMESPACE,
@@ -62,6 +62,19 @@ function hkdfInfo(namespace: string, purpose: string): string {
 }
 
 /**
+ * Derivation now starts from the TENANT's master secret (`activeSecretKey`),
+ * not from one fleet-wide value.
+ *
+ * Domain separation alone was not enough, and the distinction is worth stating.
+ * The info string already carried the tenant, so two tenants derived different
+ * keys — but from one master, so any process holding it could derive every
+ * tenant's keys, and the separation was a property of this function rather than
+ * of custody. Different input keying material is what makes the boundary real.
+ *
+ * Both are kept. The info string still names the tenant, so the separation
+ * survives even if a future custody scheme ever hands two tenants one master.
+ */
+/**
  * Derive a purpose-specific encryption key using HKDF-SHA256.
  *
  * @param purpose - Identifies what the key is used for (e.g., 'integration-tokens')
@@ -73,7 +86,7 @@ function deriveKey(purpose: string): Buffer {
 
   const derived = hkdfSync(
     'sha256',
-    config.secretKey,
+    activeSecretKey(),
     HKDF_SALT,
     hkdfInfo(currentTenantNamespace(), purpose),
     KEY_LENGTH

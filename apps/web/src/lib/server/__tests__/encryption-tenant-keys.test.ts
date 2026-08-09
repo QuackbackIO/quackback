@@ -62,6 +62,27 @@ describe('deriveKey under the single-tenant namespace', () => {
 })
 
 describe('deriveKey under a tenant scope', () => {
+  /**
+   * hkdf-sha256(ikm='test-secret-key-for-tenant-alpha-0123456789abcdef',
+   * salt='quackback-encryption-salt-v1',
+   * info='quackback:v1:t:tenant-alpha:integration-tokens', 32).
+   *
+   * The IKM is the TENANT's resolved `SECRET_KEY`, not the fleet-wide one. That
+   * is the whole point of this case and it is the only one that can see it: every
+   * other test here passes whether the master secret is per-tenant or shared,
+   * because the info string already carried the tenant. Pinned rather than
+   * computed, so it cannot follow the source.
+   */
+  const TENANT_KEY_HEX = 'd19dda6f2de70250e1975bc33f5405acff503e1a574c3c110aede0d02aac2547'
+
+  it('derives from the TENANT’s own SECRET_KEY, not the fleet-wide one', () => {
+    const sealed = sealWith(TENANT_KEY_HEX, 'alpha-oauth-refresh-token')
+
+    expect(withTenant('tenant-alpha', () => decrypt(sealed, 'integration-tokens'))).toBe(
+      'alpha-oauth-refresh-token'
+    )
+  })
+
   it('does not derive the single-tenant key', () => {
     const sealedWithHistoricalKey = sealWith(HISTORICAL_KEY_HEX, 'stored-oauth-refresh-token')
 

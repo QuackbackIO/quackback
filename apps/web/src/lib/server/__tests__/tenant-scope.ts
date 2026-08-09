@@ -9,8 +9,32 @@
  */
 import type { TenantDescriptor } from '@/lib/server/tenancy/registry'
 import { runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import type { ResolvedTenantSecrets } from '@/lib/server/tenancy/vendor/tenant-secret-resolution'
 
 type StorageOverrides = Partial<TenantDescriptor['storage']>
+
+/**
+ * The per-tenant secrets the real scope carries.
+ *
+ * Derived from the tenant id rather than shared, so a test that accidentally
+ * relied on two tenants holding one key fails instead of passing — which is the
+ * property the production resolver provides and the reason this fixture must
+ * not hand out a constant.
+ */
+export function makeTenantSecrets(
+  tenantId: string,
+  overrides: Partial<ResolvedTenantSecrets> = {}
+): ResolvedTenantSecrets {
+  return {
+    secretKey: `test-secret-key-for-${tenantId}-0123456789abcdef`,
+    storage: {
+      accessKeyId: `AK-${tenantId}`,
+      secretAccessKey: `SK-${tenantId}-0123456789abcdef`,
+    },
+    storageProblem: null,
+    ...overrides,
+  }
+}
 
 export function makeTenantDescriptor(
   tenantId: string,
@@ -56,13 +80,18 @@ export function makeTenantDescriptor(
 export function withTenant<T>(
   tenantId: string,
   fn: () => T,
-  overrides?: { storage?: StorageOverrides; baseUrl?: string }
+  overrides?: {
+    storage?: StorageOverrides
+    baseUrl?: string
+    secrets?: Partial<ResolvedTenantSecrets>
+  }
 ): T {
   return runWithTenantScope(
     {
       tenant: makeTenantDescriptor(tenantId, overrides),
       db: {} as never,
       sql: {} as never,
+      secrets: makeTenantSecrets(tenantId, overrides?.secrets ?? {}),
       origin: 'test',
     },
     fn

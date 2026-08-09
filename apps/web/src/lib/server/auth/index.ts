@@ -15,6 +15,7 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
+import { activeSecretKey } from '@/lib/server/secret-key'
 import { logger } from '@/lib/server/logger'
 import { getTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
 import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
@@ -377,7 +378,7 @@ async function createAuth() {
     // including the email address.
     logger: createAuthLogger(log),
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
-    secret: config.secretKey,
+    secret: activeSecretKey(),
 
     // Disable the JWT plugin's /token endpoint — conflicts with OAuth's /oauth2/token
     // Does NOT affect magicLink or session management

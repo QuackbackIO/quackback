@@ -1,0 +1,193 @@
+/**
+ * A record's refs → the tenant's actual secrets, and what happens when they do
+ * not resolve.
+ *
+ * Two properties carry the piece, and they pull in opposite directions:
+ *
+ * 1. **A missing or wrong `SECRET_KEY` refuses**, and never substitutes the
+ *    fleet-wide one. That fallback is the state this replaces, and it is not a
+ *    read-only mistake — the fleet would go on WRITING ciphertext under the
+ *    wrong key.
+ * 2. **A missing storage credential degrades storage only.** Refusing an entire
+ *    workspace because one bucket credential is unreadable turns a broken
+ *    integration into an outage.
+ */
+import { describe, expect, it } from 'vitest'
+import {
+  deriveTenantSecret,
+  sealTenantSecret,
+} from '../vendor/fleet-secrets'
+import {
+  encodeStorageCredentials,
+  resolveTenantSecretsFromRefs,
+  TenantSecretResolutionError,
+} from '../vendor/tenant-secret-resolution'
+
+const ROOT = 'resolution-test-fleet-root-key-0123456789'
+const TENANT = 'inst_alpha'
+
+const CREDS = { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'sk-0123456789abcdef' }
+
+function sealedStorageRef(tenantId = TENANT, generation = 1, root = ROOT): string {
+  const blob = sealTenantSecret(
+    root,
+    { generation, tenantId, purpose: 'storage' },
+    encodeStorageCredentials(CREDS)
+  )
+  return `sealed+aead://v${generation}/${tenantId}/storage/${blob}`
+}
+
+function resolve(over: Partial<Parameters<typeof resolveTenantSecretsFromRefs>[0]> = {}) {
+  return resolveTenantSecretsFromRefs({
+    tenantId: TENANT,
+    appSecretsRef: `derived+hkdf://v1/${TENANT}/app-secrets`,
+    storageCredentialRef: sealedStorageRef(),
+    rootKey: ROOT,
+    env: {},
+    ...over,
+  })
+}
+
+describe('the happy path', () => {
+  it('derives the tenant’s SECRET_KEY and opens its storage credentials', () => {
+    const resolved = resolve()
+    expect(resolved.secretKey).toBe(
+      deriveTenantSecret(ROOT, { generation: 1, tenantId: TENANT, purpose: 'app-secrets' })
+    )
+    expect(resolved.storage).toEqual(CREDS)
+    expect(resolved.storageProblem).toBeNull()
+  })
+
+  it('gives two tenants different keys and different storage credentials', () => {
+    const alpha = resolve()
+    const bravo = resolveTenantSecretsFromRefs({
+      tenantId: 'inst_bravo',
+      appSecretsRef: 'derived+hkdf://v1/inst_bravo/app-secrets',
+      storageCredentialRef: (() => {
+        const blob = sealTenantSecret(
+          ROOT,
+          { generation: 1, tenantId: 'inst_bravo', purpose: 'storage' },
+          encodeStorageCredentials({ accessKeyId: 'AKB', secretAccessKey: 'sk-bravo-000000' })
+        )
+        return `sealed+aead://v1/inst_bravo/storage/${blob}`
+      })(),
+      rootKey: ROOT,
+      env: {},
+    })
+
+    expect(alpha.secretKey).not.toBe(bravo.secretKey)
+    expect(alpha.storage!.secretAccessKey).not.toBe(bravo.storage!.secretAccessKey)
+  })
+})
+
+describe('a ref must name the tenant whose record carries it', () => {
+  it('refuses an app-secrets ref naming another tenant', () => {
+    // Without this, a row that named another tenant would derive that tenant's
+    // key — the §3 wrong-pool failure moved to the secret, and just as quiet.
+    expect(() =>
+      resolve({ appSecretsRef: 'derived+hkdf://v1/inst_bravo/app-secrets' })
+    ).toThrow(/names tenant inst_bravo but sits on the record for inst_alpha/)
+  })
+
+  it('reports a storage ref naming another tenant as a storage problem', () => {
+    const resolved = resolve({ storageCredentialRef: sealedStorageRef('inst_bravo') })
+    expect(resolved.storage).toBeNull()
+    expect(resolved.storageProblem).toMatch(/names tenant inst_bravo/)
+    // …and the app-secret half is unaffected, which is the asymmetry.
+    expect(resolved.secretKey).toBeTruthy()
+  })
+})
+
+describe('SECRET_KEY failures refuse the tenant', () => {
+  it('refuses a scheme this process cannot resolve, by name', () => {
+    expect(() => resolve({ appSecretsRef: 'openbao+kv://apps/alpha' })).toThrow(
+      TenantSecretResolutionError
+    )
+    expect(() => resolve({ appSecretsRef: 'openbao+kv://apps/alpha' })).toThrow(
+      /no resolver for 'openbao\+kv:\/\/' app secrets/
+    )
+  })
+
+  it('refuses when the fleet root key is absent', () => {
+    expect(() => resolve({ rootKey: null })).toThrow(/QUACKBACK_FLEET_ROOT_KEY is unset/)
+  })
+
+  it('refuses an env ref whose variable is unset, rather than returning empty', () => {
+    expect(() =>
+      resolve({ appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP', env: {} })
+    ).toThrow(/which is unset/)
+  })
+
+  it('never returns the fleet-wide key as a substitute', () => {
+    // The assertion that matters is the absence of a value, not the presence of
+    // a throw: a resolver that quietly returned `config.secretKey` here would
+    // satisfy every other test in this file.
+    let resolved: unknown
+    try {
+      resolved = resolve({ appSecretsRef: 'openbao+kv://apps/alpha' })
+    } catch {
+      resolved = null
+    }
+    expect(resolved).toBeNull()
+  })
+
+  it('resolves an env-supplied SECRET_KEY when the variable IS set', () => {
+    // Positive control for the two refusals above.
+    const resolved = resolve({
+      appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP',
+      env: { QUACKBACK_TENANT_SECRET_APP: 'an-operator-supplied-secret-key-000' },
+    })
+    expect(resolved.secretKey).toBe('an-operator-supplied-secret-key-000')
+  })
+})
+
+describe('storage failures degrade storage only', () => {
+  it('reports a wrong root key as a problem, not as a throw', () => {
+    const resolved = resolveTenantSecretsFromRefs({
+      tenantId: TENANT,
+      appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP',
+      storageCredentialRef: sealedStorageRef(TENANT, 1, 'a-different-fleet-root-key-000000000000'),
+      rootKey: ROOT,
+      env: { QUACKBACK_TENANT_SECRET_APP: 'an-operator-supplied-secret-key-000' },
+    })
+    expect(resolved.secretKey).toBe('an-operator-supplied-secret-key-000')
+    expect(resolved.storage).toBeNull()
+    expect(resolved.storageProblem).toMatch(/did not open/)
+  })
+
+  it('reports a scheme with no resolver as a problem', () => {
+    const resolved = resolve({ storageCredentialRef: 'openbao+kv://apps/alpha' })
+    expect(resolved.storage).toBeNull()
+    expect(resolved.storageProblem).toMatch(/no resolver for 'openbao\+kv:\/\/'/)
+  })
+
+  it('refuses a sealed payload that is not a credential pair', () => {
+    const blob = sealTenantSecret(
+      ROOT,
+      { generation: 1, tenantId: TENANT, purpose: 'storage' },
+      '{"accessKeyId":"AK"}'
+    )
+    const resolved = resolve({
+      storageCredentialRef: `sealed+aead://v1/${TENANT}/storage/${blob}`,
+    })
+    expect(resolved.storage).toBeNull()
+    expect(resolved.storageProblem).toMatch(/no secretAccessKey/)
+  })
+
+  it('refuses an empty secret rather than building a client that fails at the provider', () => {
+    const blob = sealTenantSecret(
+      ROOT,
+      { generation: 1, tenantId: TENANT, purpose: 'storage' },
+      '{"accessKeyId":"AK","secretAccessKey":""}'
+    )
+    const resolved = resolve({
+      storageCredentialRef: `sealed+aead://v1/${TENANT}/storage/${blob}`,
+    })
+    expect(resolved.storage).toBeNull()
+  })
+
+  it('never falls back to another tenant’s or the fleet’s credentials', () => {
+    const resolved = resolve({ storageCredentialRef: 'openbao+kv://apps/alpha' })
+    expect(resolved.storage).toBeNull()
+  })
+})

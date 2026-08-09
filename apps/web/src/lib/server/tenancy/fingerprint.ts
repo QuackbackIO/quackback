@@ -56,6 +56,7 @@ import {
   type PhysicalExpectation,
   type PhysicalFailure,
 } from './physical-identity'
+import { verifySecretKeyCanary } from './vendor/fleet-secrets'
 
 /** Where the tenant id was read from, for the refusal log. */
 export type StampSource = 'column' | 'metadata' | 'none'
@@ -65,9 +66,20 @@ export interface TenantIdentityObservation extends ObservedFingerprint {
   stampSource: StampSource
   /** Both sources present and naming different tenants. */
   stampSourceConflict: { column: string; metadata: string } | null
+  /**
+   * `settings.cloud_secret_canary` — a constant sealed under this tenant's own
+   * `SECRET_KEY`. Null on a self-hosted install and on a database that predates
+   * migration 0252.
+   */
+  secretCanary: string | null
 }
 
-export type IdentityFailure = FingerprintFailure | PhysicalFailure | 'stamp_source_conflict'
+export type IdentityFailure =
+  | FingerprintFailure
+  | PhysicalFailure
+  | 'stamp_source_conflict'
+  | 'secret_key_canary_missing'
+  | 'secret_key_canary_mismatch'
 
 export type IdentityVerdict = { ok: true } | { ok: false; code: IdentityFailure; detail: string }
 
@@ -93,10 +105,16 @@ export async function observeTenantIdentity(sql: Sql): Promise<TenantIdentityObs
   const rows = (await sql`
     SELECT s.id::text AS id,
            s.metadata,
-           (to_jsonb(s) ->> 'cloud_tenant_id') AS cloud_tenant_id
+           (to_jsonb(s) ->> 'cloud_tenant_id')     AS cloud_tenant_id,
+           (to_jsonb(s) ->> 'cloud_secret_canary') AS cloud_secret_canary
       FROM settings s
      LIMIT 2
-  `) as unknown as Array<{ id: string; metadata: string | null; cloud_tenant_id: string | null }>
+  `) as unknown as Array<{
+    id: string
+    metadata: string | null
+    cloud_tenant_id: string | null
+    cloud_secret_canary: string | null
+  }>
 
   const physical = await observePhysicalIdentity(sql)
 
@@ -108,6 +126,7 @@ export async function observeTenantIdentity(sql: Sql): Promise<TenantIdentityObs
       physical,
       stampSource: 'none',
       stampSourceConflict: null,
+      secretCanary: null,
     }
   }
 
@@ -137,7 +156,51 @@ export async function observeTenantIdentity(sql: Sql): Promise<TenantIdentityObs
     physical,
     stampSource,
     stampSourceConflict: conflict,
+    secretCanary: normalise(row.cloud_secret_canary),
   }
+}
+
+/**
+ * Does the key this process resolved match the key this database's ciphertext
+ * was written under?
+ *
+ * A separate verdict from {@link evaluateTenantIdentity} on purpose. That one
+ * asks "is this the right database"; this one asks "is this the right key", and
+ * conflating them would make the refusal log name the wrong problem — the
+ * database can be exactly correct while the key is wrong, and the operator fix
+ * for the two is nothing alike.
+ *
+ * Missing is a refusal, not a pass. That mirrors the stamp rule for the same
+ * reason: "no evidence" and "good evidence" must not produce the same outcome
+ * when the thing at stake is whether new ciphertext is about to be written under
+ * a key that will not open it again.
+ */
+export function evaluateSecretKeyCanary(
+  tenantId: string,
+  secretKey: string,
+  observedCanary: string | null
+): IdentityVerdict {
+  if (!observedCanary) {
+    return {
+      ok: false,
+      code: 'secret_key_canary_missing',
+      detail:
+        `settings.cloud_secret_canary is absent, so nothing proves this fleet holds the key ` +
+        `this database's stored ciphertext was written under. Run the control plane's ` +
+        `provisioning converge for ${tenantId} (it applies migration 0252 and writes the canary).`,
+    }
+  }
+  if (!verifySecretKeyCanary(secretKey, tenantId, observedCanary)) {
+    return {
+      ok: false,
+      code: 'secret_key_canary_mismatch',
+      detail:
+        `the SECRET_KEY this process resolved does not open settings.cloud_secret_canary. ` +
+        `Serving would write new ciphertext under a key that cannot read the old — refusing. ` +
+        `Check the fleet root key and the generation in this tenant's appSecretsRef.`,
+    }
+  }
+  return { ok: true }
 }
 
 /**

@@ -8,7 +8,7 @@
  * request's own host belongs to whichever hostname the visitor happened to
  * use. The tenant record pins one origin; that is the one that must win.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('@/lib/server/config', () => ({
   config: {
@@ -30,7 +30,7 @@ const {
   getS3Config,
   isS3Configured,
   isS3Usable,
-  setStorageCredentialResolver,
+  StorageUnavailableError,
 } = await import('../s3')
 const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
 
@@ -38,21 +38,24 @@ const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
 const PUBLIC_KEY = 'logos/2026/08/brand.png'
 const PRIVATE_KEY = 'attachments/2026/08/contract.pdf'
 
-/** The resolver is process-global; leave it unset unless a case installs one. */
-beforeEach(() => setStorageCredentialResolver(null))
-
 /**
- * A resolver that returns the SAME secret for every tenant — the pessimistic
- * case where the fleet shares one storage credential. The read token must still
- * be tenant-bound, because the object key alone does not say which bucket it
- * names.
+ * The pessimistic case: every tenant holding the SAME storage secret. The read
+ * token must still be tenant-bound, because the object key alone does not say
+ * which bucket it names.
+ *
+ * Passed per call rather than installed globally — the credentials now live on
+ * the tenant scope, resolved at pool checkout, so "shared" is a property of the
+ * fixture rather than of a process-wide switch.
  */
-function installSharedSecretResolver(): void {
-  setStorageCredentialResolver(() => ({
-    accessKeyId: 'shared-key',
-    secretAccessKey: 'shared-secret',
-  }))
-}
+const SHARED_SECRET = {
+  storage: { accessKeyId: 'shared-key', secretAccessKey: 'shared-secret' },
+} as const
+
+/** A tenant whose storage credentials did not resolve. */
+const NO_STORAGE = {
+  storage: null,
+  storageProblem: 'openbao+kv://… has no resolver in this process',
+} as const
 
 describe('public URLs', () => {
   it('uses the tenant pinned publicUrl, not the environment CDN', () => {
@@ -84,16 +87,20 @@ describe('public URLs', () => {
   })
 
   it('routes private keys through the tenant origin with a read capability', () => {
-    installSharedSecretResolver()
-    const url = withTenant('tenant-alpha', () => getPublicUrlOrNull(PRIVATE_KEY))
+    const url = withTenant('tenant-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), {
+      secrets: SHARED_SECRET,
+    })
 
     expect(url).toContain(`https://tenant-alpha.example.com/api/storage/${PRIVATE_KEY}?read=`)
   })
 
   it('signs a private key differently per tenant even on one shared secret', () => {
-    installSharedSecretResolver()
-    const alpha = withTenant('tenant-alpha', () => getPublicUrlOrNull(PRIVATE_KEY))
-    const bravo = withTenant('tenant-bravo', () => getPublicUrlOrNull(PRIVATE_KEY))
+    const alpha = withTenant('tenant-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), {
+      secrets: SHARED_SECRET,
+    })
+    const bravo = withTenant('tenant-bravo', () => getPublicUrlOrNull(PRIVATE_KEY), {
+      secrets: SHARED_SECRET,
+    })
 
     const sigOf = (url: string | null) => new URL(url!).searchParams.get('read')
     expect(sigOf(alpha)).toBeTruthy()
@@ -121,60 +128,72 @@ describe('placement', () => {
     expect(placement.endpoint).toBe('https://storage.example.com')
   })
 
-  it('needs no credential resolver to address a bucket', () => {
-    setStorageCredentialResolver(null)
-    expect(() => withTenant('tenant-alpha', () => getStoragePlacement())).not.toThrow()
-    expect(withTenant('tenant-alpha', () => isS3Configured())).toBe(true)
+  it('needs no resolved credential to address a bucket', () => {
+    expect(() =>
+      withTenant('tenant-alpha', () => getStoragePlacement(), { secrets: NO_STORAGE })
+    ).not.toThrow()
+    expect(
+      withTenant('tenant-alpha', () => isS3Configured(), { secrets: NO_STORAGE })
+    ).toBe(true)
   })
 
-  it('is NOT usable without a resolver, even though the bucket is addressable', () => {
+  it('is NOT usable without resolved credentials, though the bucket is addressable', () => {
     // Addressability and usability diverge under pooled tenancy, and conflating
     // them is not academic: a tenant record always names a bucket, so the
     // addressability question answers `true` while every upload throws. The two
     // callers that gate an upload already skip cleanly on `false`, so the wrong
     // question there turns a skip into an exception.
-    setStorageCredentialResolver(null)
-    expect(withTenant('tenant-alpha', () => isS3Usable())).toBe(false)
-    expect(withTenant('tenant-alpha', () => isS3Configured())).toBe(true)
+    expect(withTenant('tenant-alpha', () => isS3Usable(), { secrets: NO_STORAGE })).toBe(false)
+    expect(withTenant('tenant-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(
+      true
+    )
   })
 
-  it('becomes usable once a resolver is registered', () => {
+  it('is usable once the credentials resolved', () => {
     // The positive control: without it, `isS3Usable` could return false
     // unconditionally and the assertion above would still pass.
-    setStorageCredentialResolver(() => ({ accessKeyId: 'k', secretAccessKey: 's' }))
     expect(withTenant('tenant-alpha', () => isS3Usable())).toBe(true)
-    setStorageCredentialResolver(null)
   })
 })
 
 describe('credentials', () => {
   it('refuses loudly rather than falling back to the fleet-wide keys', () => {
-    setStorageCredentialResolver(null)
-
-    expect(() => withTenant('tenant-alpha', () => getS3Config())).toThrow(
-      /No storage credential resolver is configured/
-    )
+    // The failure that matters is not "throws" — it is "does not silently return
+    // env-access-key". A fleet-wide fallback would build a client for tenant
+    // alpha's bucket holding credentials that might well open it.
+    expect(() =>
+      withTenant('tenant-alpha', () => getS3Config(), { secrets: NO_STORAGE })
+    ).toThrow(StorageUnavailableError)
+    expect(() =>
+      withTenant('tenant-alpha', () => getS3Config(), { secrets: NO_STORAGE })
+    ).toThrow(/no resolver in this process/)
   })
 
-  it('resolves through the injected seam once one is registered', () => {
-    const seen: string[] = []
-    setStorageCredentialResolver((ref) => {
-      seen.push(ref)
-      return { accessKeyId: 'tenant-key', secretAccessKey: 'tenant-secret' }
-    })
-    try {
-      const resolved = withTenant('tenant-alpha', () => getS3Config())
-      expect(resolved.accessKeyId).toBe('tenant-key')
-      expect(resolved.bucket).toBe('tenant-alpha-bucket')
-      expect(seen).toEqual(['env://QUACKBACK_TENANT_SECRET_STORAGE'])
-    } finally {
-      setStorageCredentialResolver(null)
-    }
+  it('uses the credentials resolved for THIS tenant', () => {
+    const alpha = withTenant('tenant-alpha', () => getS3Config())
+    const bravo = withTenant('tenant-bravo', () => getS3Config())
+
+    expect(alpha.accessKeyId).toBe('AK-tenant-alpha')
+    expect(alpha.bucket).toBe('tenant-alpha-bucket')
+    expect(bravo.accessKeyId).toBe('AK-tenant-bravo')
+    expect(alpha.secretAccessKey).not.toBe(bravo.secretAccessKey)
+    expect(alpha.accessKeyId).not.toBe('env-access-key')
+  })
+
+  it('gives no private URL at all when the credentials did not resolve', () => {
+    // Null rather than a throw: an unsignable private key degrades one avatar or
+    // one attachment link, while an escaping throw takes down every page that
+    // renders one.
+    expect(
+      withTenant('tenant-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), { secrets: NO_STORAGE })
+    ).toBeNull()
+    // …and the public URL still renders, because it needs no secret.
+    expect(
+      withTenant('tenant-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), { secrets: NO_STORAGE })
+    ).toBe(`https://assets-tenant-alpha.example.com/${PUBLIC_KEY}`)
   })
 
   it('still reads the environment keys with no tenant scope', () => {
-    setStorageCredentialResolver(null)
-
     expect(getS3Config()).toMatchObject({
       bucket: 'env-bucket',
       accessKeyId: 'env-access-key',

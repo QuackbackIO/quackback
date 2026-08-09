@@ -108,7 +108,10 @@ export async function acquireTenantScope(
 ): Promise<TenantAcquisition> {
   try {
     const pool = await acquireTenantPool(tenant)
-    return { kind: 'ok', scope: { tenant, db: pool.db, sql: pool.sql, origin } }
+    return {
+      kind: 'ok',
+      scope: { tenant, db: pool.db, sql: pool.sql, secrets: pool.secrets, origin },
+    }
   } catch (err) {
     const code = (err as { code?: string }).code ?? 'pool_unavailable'
     const detail = err instanceof Error ? err.message : String(err)

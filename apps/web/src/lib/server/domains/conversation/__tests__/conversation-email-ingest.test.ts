@@ -89,7 +89,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 // generateStorageKey + MAX_FILE_SIZE stay real via the spread.
 vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
-  isS3Configured: () => true,
+  isS3Usable: () => true,
   uploadImageBuffer: (...a: unknown[]) => uploadImageBuffer(...a),
   uploadObject: (...a: unknown[]) => uploadObject(...a),
 }))

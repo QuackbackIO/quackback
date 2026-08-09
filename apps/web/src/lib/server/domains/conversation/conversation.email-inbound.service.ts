@@ -42,7 +42,7 @@ import { loadTicketOr404 } from '@/lib/server/domains/tickets/ticket.service'
 import { appendInboundTicketReply } from '@/lib/server/domains/tickets/requester.service'
 import { emailHtmlToContent } from '@/lib/server/content/email-html-to-content'
 import {
-  isS3Configured,
+  isS3Usable,
   uploadImageBuffer,
   uploadObject,
   generateStorageKey,
@@ -143,7 +143,7 @@ function rewriteCidReferences(html: string, cidMap: Map<string, string>): string
 async function rehostInboundMedia(parsed: ParsedInboundEmail): Promise<RehostedInboundMedia> {
   const parts = parsed.attachments ?? []
   if (parts.length === 0) return { html: parsed.html, attachments: [] }
-  if (!isS3Configured()) {
+  if (!isS3Usable()) {
     log.warn({ count: parts.length }, 'inbound email media dropped: storage not configured')
     return { html: parsed.html, attachments: [] }
   }

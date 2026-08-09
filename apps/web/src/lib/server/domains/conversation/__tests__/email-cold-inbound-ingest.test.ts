@@ -57,7 +57,7 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
   const { config } = await import('@/lib/server/config')
   return {
     ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
-    isS3Configured: () => true,
+    isS3Usable: () => true,
     uploadImageBuffer: async (bytes: Buffer, mime: string) => ({
       url: `${config.baseUrl}/api/storage/chat-images/img-${bytes.length}.${mime.split('/')[1]}`,
     }),

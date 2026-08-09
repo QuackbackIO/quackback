@@ -12,6 +12,32 @@
  * behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { deriveTenantSecret, sealSecretKeyCanary } from '../vendor/fleet-secrets'
+
+/** The fleet root this fixture derives every tenant's SECRET_KEY from. */
+const ROOT_KEY = 'pool-cache-test-fleet-root-key-0123456789'
+const STORAGE_ENV_VAR = 'QUACKBACK_TENANT_SECRET_STORAGE_TEST'
+
+/** The canary a tenant's own derived key opens. */
+function canaryFor(tenantId: string): string {
+  return sealSecretKeyCanary(
+    deriveTenantSecret(ROOT_KEY, { generation: 1, tenantId, purpose: 'app-secrets' }),
+    tenantId
+  )
+}
+
+/**
+ * The canary is per tenant by construction, so the stub has to be too: a fixture
+ * that handed every tenant one canary would make the pool cache's key check pass
+ * for the wrong reason. The tenant is recovered from the DSN the stubbed driver
+ * recorded, which is the only tenant-identifying thing `observeTenantIdentity`
+ * is given.
+ */
+async function defaultObservation(sql: { dsn?: string }) {
+  if (observeError) throw observeError
+  const tenantId = /\/([^/?]+)$/.exec(sql?.dsn ?? '')?.[1] ?? 't1'
+  return { ...(observation as Record<string, unknown>), secretCanary: canaryFor(tenantId) }
+}
 
 const ended: string[] = []
 let observation: unknown = null
@@ -39,10 +65,10 @@ vi.mock('../fingerprint', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {
     ...actual,
-    observeTenantIdentity: vi.fn(async () => {
-      if (observeError) throw observeError
-      return observation
-    }),
+    // The canary is per tenant by construction, so the stub has to be too: a
+    // fixture that handed every tenant one canary would make the pool cache's
+    // key check pass for the wrong reason.
+    observeTenantIdentity: vi.fn(defaultObservation),
     evaluateTenantIdentity: vi.fn(() => ({ ok: true })),
   }
 })
@@ -61,8 +87,8 @@ function descriptor(id: string, revision = 1) {
       credentialRef: 'env://QUACKBACK_TENANT_SECRET_TEST',
     },
     fingerprint: { expectedTenantId: id, expectedWorkspaceId: 'w', stampedAt: 's' },
-    secrets: { appSecretsRef: 'openbao+kv://apps/x' },
-    storage: {},
+    secrets: { appSecretsRef: `derived+hkdf://v1/${id}/app-secrets` },
+    storage: { credentialRef: `env://${STORAGE_ENV_VAR}` },
     email: { from: '' },
     features: { aiEnabled: false },
     physical: { neonProjectId: null, neonBranchId: null },
@@ -77,6 +103,8 @@ async function loadCache() {
   vi.stubEnv('DATABASE_URL', '')
   vi.stubEnv('QUACKBACK_CONTROL_DATABASE_URL', 'postgresql://u@localhost:5432/control')
   vi.stubEnv('QUACKBACK_TENANT_SECRET_TEST', 'hunter2')
+  vi.stubEnv('QUACKBACK_FLEET_ROOT_KEY', ROOT_KEY)
+  vi.stubEnv(STORAGE_ENV_VAR, '{"accessKeyId":"AK","secretAccessKey":"SK-0123456789abcdef"}')
   return import('../pool-cache')
 }
 
@@ -93,11 +121,13 @@ describe('tenant pool cache', () => {
       physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null },
       stampSource: 'none',
       stampSourceConflict: null,
+      secretCanary: null,
     }
-    // `clearAllMocks` clears calls but keeps implementations, so a verdict
-    // stubbed by one case would silently govern every later one.
+    // `clearAllMocks` clears calls but keeps implementations, so a verdict or an
+    // observation stubbed by one case would silently govern every later one.
     const fp = await import('../fingerprint')
     vi.mocked(fp.evaluateTenantIdentity).mockReturnValue({ ok: true })
+    vi.mocked(fp.observeTenantIdentity).mockImplementation(defaultObservation as never)
   })
 
   afterEach(() => {
@@ -220,6 +250,53 @@ describe('tenant pool cache', () => {
     expect(stats.evictedByReason.refused).toBe(1)
     // And the socket is closed, not leaked.
     expect(ended).toHaveLength(1)
+  })
+
+  it('refuses a tenant whose SECRET_KEY does not open its canary', async () => {
+    // The §3 idea applied to the key. The database can be exactly the right one
+    // — the fingerprint here is stubbed to `ok` — and the fleet still must not
+    // serve, because the first write would seal data under a key that cannot
+    // open what is already there. `SAAS-HOSTING-STACK.md` §4.3: that damage is
+    // silent and permanent, so "refuse" is the only defensible answer.
+    const cache = await loadCache()
+    const fp = await import('../fingerprint')
+    vi.mocked(fp.observeTenantIdentity).mockImplementation((async () => ({
+      ...(observation as Record<string, unknown>),
+      // A canary sealed under a DIFFERENT tenant's derived key: the shape a
+      // mis-wired root or a restored-from-elsewhere database produces.
+      secretCanary: canaryFor('some-other-tenant'),
+    })) as never)
+
+    await expect(cache.acquireTenantPool(descriptor('t1'))).rejects.toThrow(
+      /secret_key_canary_mismatch/
+    )
+    expect(cache.getPoolCacheStats().live).toBe(0)
+    expect(cache.getPoolCacheStats().refusals).toBe(1)
+    expect(ended).toHaveLength(1)
+  })
+
+  it('refuses a tenant with no canary at all, rather than treating absence as consent', async () => {
+    const cache = await loadCache()
+    const fp = await import('../fingerprint')
+    vi.mocked(fp.observeTenantIdentity).mockImplementation((async () => ({
+      ...(observation as Record<string, unknown>),
+      secretCanary: null,
+    })) as never)
+
+    await expect(cache.acquireTenantPool(descriptor('t1'))).rejects.toThrow(
+      /secret_key_canary_missing/
+    )
+  })
+
+  it('serves when the canary DOES open — the positive control for both refusals', async () => {
+    const cache = await loadCache()
+    const pool = await cache.acquireTenantPool(descriptor('t1'))
+    expect(pool.secrets.secretKey).toBeTruthy()
+    expect(pool.secrets.storage).toEqual({
+      accessKeyId: 'AK',
+      secretAccessKey: 'SK-0123456789abcdef',
+    })
+    await cache.closeAllTenantPools()
   })
 
   it('refuses again on the next attempt rather than serving a cached success', async () => {

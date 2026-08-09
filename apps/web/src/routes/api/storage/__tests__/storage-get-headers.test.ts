@@ -16,7 +16,7 @@ const getS3Object = vi.fn(async (_key: string) => ({
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
-  isS3Configured: vi.fn(() => true),
+  isS3Usable: vi.fn(() => true),
   getS3Config: vi.fn(() => ({ secretAccessKey: 'test-secret' })),
   isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
   verifyStorageReadToken: vi.fn(
@@ -24,6 +24,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
   ),
   getS3Object,
   generatePresignedGetUrl: vi.fn(async () => 'https://s3.example.com/presigned'),
+  StorageUnavailableError: class StorageUnavailableError extends Error {},
 }))
 
 const { handleStorageGet } = await import('../$')
@@ -75,5 +76,30 @@ describe('handleStorageGet — proxy response headers', () => {
     const res = await get('/api/storage/chat-images/private.gif?read=ok')
     expect(res.status).toBe(200)
     expect(res.headers.get('Cache-Control')).toContain('private')
+  })
+})
+
+
+describe('handleStorageGet — the three states a caller must tell apart', () => {
+  it('answers 404 for an object that is not there, not 500', async () => {
+    getS3Object.mockRejectedValueOnce(
+      Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' })
+    )
+    mockConfig.s3Proxy = true
+    const res = await handleStorageGet({
+      request: new Request('http://localhost/api/storage/logos/missing.png'),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('still answers 500 for a fault that is not a missing object', async () => {
+    // The discriminator. Without this the 404 branch could swallow everything
+    // and the test above would pass for the wrong reason.
+    getS3Object.mockRejectedValueOnce(new Error('connection reset'))
+    mockConfig.s3Proxy = true
+    const res = await handleStorageGet({
+      request: new Request('http://localhost/api/storage/logos/broken.png'),
+    })
+    expect(res.status).toBe(500)
   })
 })

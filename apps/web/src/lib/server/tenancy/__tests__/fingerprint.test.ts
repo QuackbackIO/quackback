@@ -32,6 +32,7 @@ function observation(over: Partial<TenantIdentityObservation> = {}): TenantIdent
     },
     stampSource: 'column',
     stampSourceConflict: null,
+    secretCanary: null,
     ...over,
   }
 }

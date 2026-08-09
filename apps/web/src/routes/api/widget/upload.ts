@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { auth } from '@/lib/server/auth'
-import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadImageFromFormData } from '@/lib/server/storage/s3'
 import { enforceWidgetQuota, widgetJsonError } from '@/lib/server/widget/public-endpoint'
 import { getSettings } from '@/lib/server/functions/workspace'
 
@@ -26,7 +26,7 @@ export async function handleWidgetUpload({ request }: { request: Request }): Pro
     message: 'Too many uploads, slow down',
   })
   if (limited) return limited
-  if (!isS3Configured()) {
+  if (!isS3Usable()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
   let formData: FormData

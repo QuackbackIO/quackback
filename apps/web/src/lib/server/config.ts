@@ -105,6 +105,19 @@ const configSchema = z.object({
   tenantRegistryTtlMs: envInt.pipe(z.number().int().min(0).max(600_000)).default(30_000),
   /** Neon API key used to dereference `neon+role://` credential refs. */
   neonApiKey: z.string().optional(),
+  /**
+   * The fleet root from which every tenant's `SECRET_KEY` is derived and every
+   * tenant's storage credential is sealed (`tenancy/vendor/fleet-secrets.ts`).
+   *
+   * Belongs in a sealed platform variable, never in a tenant record. The 32-char
+   * floor is enforced here as well as in the crypto because HKDF will stretch a
+   * short root into something indistinguishable from a real key, so nothing
+   * downstream can tell — the check has to happen where the value enters.
+   */
+  fleetRootKey: z
+    .string()
+    .min(32, 'QUACKBACK_FLEET_ROOT_KEY must be at least 32 characters')
+    .optional(),
 
   // Auth
   secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
@@ -212,6 +225,7 @@ function buildConfigFromEnv(): unknown {
     tenantPoolMaxEntries: env('TENANT_POOL_MAX_ENTRIES'),
     tenantRegistryTtlMs: env('TENANT_REGISTRY_TTL_MS'),
     neonApiKey: env('NEON_API_KEY'),
+    fleetRootKey: env('QUACKBACK_FLEET_ROOT_KEY'),
 
     // Auth
     secretKey: process.env.SECRET_KEY,
@@ -357,6 +371,9 @@ export const config = {
   },
   get neonApiKey() {
     return loadConfig().neonApiKey
+  },
+  get fleetRootKey() {
+    return loadConfig().fleetRootKey
   },
   get dbPoolMax() {
     const configured = loadConfig().dbPoolMax

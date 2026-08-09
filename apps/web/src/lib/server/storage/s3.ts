@@ -20,7 +20,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { config } from '@/lib/server/config'
 import { sniffImageMime } from '@/lib/server/content/magic-bytes'
-import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { getCurrentTenant, getTenantScope } from '@/lib/server/tenancy/tenant-context'
 import {
   currentTenantNamespace,
   SINGLE_TENANT_NAMESPACE,
@@ -106,28 +106,33 @@ export interface StorageCredentials {
   secretAccessKey: string
 }
 
-/**
- * Resolves a registry `credentialRef` — one of the secret-reference schemes in
- * `tenancy/vendor/secret-ref.ts` — to real keys.
- *
- * A seam rather than an implementation: this process holds no secret-store
- * client, and inventing one here would mean guessing at an auth method, a mount
- * path and a rotation story. Unset, every credentialled storage operation fails
- * loud and specific instead of silently reaching for the fleet-wide environment
- * keys — which would hand one tenant a client pointed at another tenant's
- * bucket, holding credentials that might well open it.
- */
-export type StorageCredentialResolver = (credentialRef: string) => StorageCredentials
-
-let credentialResolver: StorageCredentialResolver | null = null
-
-export function setStorageCredentialResolver(resolver: StorageCredentialResolver | null): void {
-  credentialResolver = resolver
+/** Storage is addressable but its credentials could not be resolved. */
+export class StorageUnavailableError extends Error {
+  readonly tenantId: string
+  constructor(tenantId: string, detail: string) {
+    super(`Storage is not usable for tenant ${tenantId}: ${detail}`)
+    this.name = 'StorageUnavailableError'
+    this.tenantId = tenantId
+  }
 }
 
+/**
+ * The active tenant's storage keys, or the process-wide ones when unscoped.
+ *
+ * Under a tenant scope these were resolved on pool checkout from the record's
+ * `storage.credentialRef` (`tenancy/tenant-secrets.ts`) and carried on the
+ * scope, which is what lets this stay synchronous — `buildPublicUrl` and every
+ * gate below are called from hundreds of places that cannot await.
+ *
+ * When a tenant's credentials did not resolve this throws
+ * {@link StorageUnavailableError}, and it never falls back to the fleet-wide
+ * environment keys. That fallback is the specific thing this must not do: it
+ * would hand one tenant a client pointed at another tenant's bucket, holding
+ * credentials that might well open it.
+ */
 function resolveStorageCredentials(): StorageCredentials {
-  const tenant = getCurrentTenant()
-  if (!tenant) {
+  const scope = getTenantScope()
+  if (!scope) {
     if (!config.s3AccessKeyId || !config.s3SecretAccessKey) {
       throw new Error(
         'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
@@ -135,16 +140,14 @@ function resolveStorageCredentials(): StorageCredentials {
     }
     return { accessKeyId: config.s3AccessKeyId, secretAccessKey: config.s3SecretAccessKey }
   }
-  const ref = tenant.storage.credentialRef
-  if (!credentialResolver) {
-    const scheme = ref.slice(0, Math.max(ref.indexOf('://'), 0)) || 'unknown'
-    throw new Error(
-      `No storage credential resolver is configured, so the '${scheme}' credential reference ` +
-        `for tenant ${tenant.tenantId} cannot be resolved. Register one with ` +
-        'setStorageCredentialResolver() during startup.'
+  const resolved = scope.secrets.storage
+  if (!resolved) {
+    throw new StorageUnavailableError(
+      scope.tenant.tenantId,
+      scope.secrets.storageProblem ?? 'no credentials were resolved for this tenant'
     )
   }
-  return credentialResolver(ref)
+  return resolved
 }
 
 /**
@@ -173,7 +176,8 @@ export function isS3Configured(): boolean {
  */
 export function isS3Usable(): boolean {
   if (!isS3Configured()) return false
-  return getCurrentTenant() ? credentialResolver !== null : true
+  const scope = getTenantScope()
+  return scope ? scope.secrets.storage !== null : true
 }
 
 /**
@@ -396,7 +400,10 @@ function buildPublicUrl(placement: StoragePlacement, key: string): string {
   const base = `${placement.originUrl.replace(/\/$/, '')}/api/storage/${key}`
   if (isPublicStorageKey(key)) return base
   // Only the private branch needs a secret, so a public asset URL still renders
-  // on a tenant whose credential reference has no resolver.
+  // on a tenant whose credential reference has no resolver. The private branch
+  // cannot: minting a read capability requires the signing secret, so a tenant
+  // whose credentials are unresolvable has no URL to offer rather than a broken
+  // one. `getPublicUrlOrNull` turns that into null; `getPublicUrl` still throws.
   return `${base}?read=${storageReadSig(resolveStorageCredentials().secretAccessKey, key)}`
 }
 
@@ -661,6 +668,11 @@ export async function uploadImageBuffer(
 export function getPublicUrlOrNull(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
+  // A private key needs a signature, and a tenant whose storage credentials are
+  // unresolvable cannot produce one. Returning null degrades an avatar or an
+  // attachment link; letting the throw escape would take down every page that
+  // renders one, which is a much larger blast radius for the same fault.
+  if (!isPublicStorageKey(key) && !isS3Usable()) return null
 
   return buildPublicUrl(getStoragePlacement(), key)
 }
@@ -674,6 +686,7 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
 export function getEmailSafeUrl(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
+  if (!isPublicStorageKey(key) && !isS3Usable()) return null
 
   const placement = getStoragePlacement()
   const storageUrl = buildPublicUrl(placement, key)

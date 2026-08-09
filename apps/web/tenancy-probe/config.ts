@@ -29,6 +29,11 @@ Credentials (each unlocks probe families; missing ones produce BLOCKED, not skip
   --bravo-api-key <qb_...>   REST API key for bravo                   (env BRAVO_API_KEY)
   --alpha-storage-secret <s> S3/R2 secret access key for alpha        (env ALPHA_S3_SECRET_ACCESS_KEY)
   --bravo-storage-secret <s> S3/R2 secret access key for bravo        (env BRAVO_S3_SECRET_ACCESS_KEY)
+  --alpha-tenant-id <id>     Control-plane tenant id for alpha        (env ALPHA_TENANT_ID)
+  --bravo-tenant-id <id>     Control-plane tenant id for bravo        (env BRAVO_TENANT_ID)
+                             Required only under pooled tenancy, where the storage read
+                             capability is bound to the tenant as well as to the object key.
+                             Omit on a single-tenant deployment.
   --alpha-widget-secret <s>  Widget signing secret for alpha          (env ALPHA_WIDGET_SECRET)
   --bravo-widget-secret <s>  Widget signing secret for bravo          (env BRAVO_WIDGET_SECRET)
                              (both widget secrets are read from the database automatically
@@ -145,6 +150,8 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     bravoDatabaseUrl: flags.get('bravo-db') ?? env.BRAVO_DATABASE_URL,
     alphaApiKey: flags.get('alpha-api-key') ?? env.ALPHA_API_KEY,
     bravoApiKey: flags.get('bravo-api-key') ?? env.BRAVO_API_KEY,
+    alphaTenantId: flags.get('alpha-tenant-id') ?? env.ALPHA_TENANT_ID,
+    bravoTenantId: flags.get('bravo-tenant-id') ?? env.BRAVO_TENANT_ID,
     alphaStorageSecret: flags.get('alpha-storage-secret') ?? env.ALPHA_S3_SECRET_ACCESS_KEY,
     bravoStorageSecret: flags.get('bravo-storage-secret') ?? env.BRAVO_S3_SECRET_ACCESS_KEY,
     alphaWidgetSecret: flags.get('alpha-widget-secret') ?? env.ALPHA_WIDGET_SECRET,
@@ -166,6 +173,8 @@ const KNOWN_FLAGS = new Set([
   'bravo-db',
   'alpha-api-key',
   'bravo-api-key',
+  'alpha-tenant-id',
+  'bravo-tenant-id',
   'alpha-storage-secret',
   'bravo-storage-secret',
   'alpha-widget-secret',

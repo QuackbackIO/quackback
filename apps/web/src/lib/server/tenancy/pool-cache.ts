@@ -40,10 +40,17 @@ import { createDbFromSql, type Database } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
-import { evaluateTenantIdentity, observeTenantIdentity, TenantFingerprintRefusal } from './fingerprint'
+import {
+  evaluateSecretKeyCanary,
+  evaluateTenantIdentity,
+  observeTenantIdentity,
+  TenantFingerprintRefusal,
+} from './fingerprint'
 import { readNeonRolePassword, invalidateNeonRolePassword } from './neon-credentials'
 import type { TenantDescriptor } from './registry'
+import { clearTenantSecretsCache, resolveTenantSecrets } from './tenant-secrets'
 import { parseSecretRef, redactRef } from './vendor/secret-ref'
+import type { ResolvedTenantSecrets } from './vendor/tenant-secret-resolution'
 
 const log = logger.child({ component: 'tenant-pool-cache' })
 
@@ -56,8 +63,13 @@ interface PoolEntry {
   db: Database
   createdAt: number
   lastUsedAt: number
-  /** Resolves once the database has proven it is the one the registry named. */
-  verification: Promise<void>
+  /**
+   * Resolves once the database has proven it is the one the registry named AND
+   * this process has proven it holds that tenant's own `SECRET_KEY`. It yields
+   * the resolved secret bundle, so "verified" and "has credentials" are one
+   * state rather than two that can disagree.
+   */
+  verification: Promise<ResolvedTenantSecrets>
 }
 
 /** Insertion order is the LRU order; a touch is delete-then-set. */
@@ -104,6 +116,8 @@ export function getPoolCacheStats(): PoolCacheStats {
 export interface AcquiredPool {
   sql: postgres.Sql
   db: Database
+  /** Resolved on this same checkout — see `tenant-secrets.ts`. */
+  secrets: ResolvedTenantSecrets
 }
 
 /**
@@ -140,15 +154,16 @@ export async function acquireTenantPool(tenant: TenantDescriptor): Promise<Acqui
 
   entry.lastUsedAt = Date.now()
 
+  let secrets: ResolvedTenantSecrets
   try {
-    await entry.verification
+    secrets = await entry.verification
   } catch (err) {
     stats.refusals += 1
     await evict(tenant.tenantId, 'refused')
     throw err
   }
 
-  return { sql: entry.sql, db: entry.db }
+  return { sql: entry.sql, db: entry.db, secrets }
 }
 
 function createEntry(tenant: TenantDescriptor): PoolEntry {
@@ -209,7 +224,14 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
         `${redactRef(ref)} needs an OpenBao reader; this process has none configured`
       )
     case 'openbao+kv':
-      throw new Error('openbao+kv refs hold the app secret bundle, not database credentials')
+    case 'derived+hkdf':
+    case 'sealed+aead':
+      // All three name an APPLICATION secret. A database password is issued by a
+      // provider or a vault and is never a value this system chooses, so a
+      // derived one would be a plausible-looking string that no server accepts.
+      throw new Error(
+        `${parsed.scheme}:// refs hold application secrets, not database credentials`
+      )
   }
 }
 
@@ -221,7 +243,10 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
  * stale password memoised would make the retry fail for a second, unrelated
  * reason.
  */
-async function verify(tenant: TenantDescriptor, sql: postgres.Sql): Promise<void> {
+async function verify(
+  tenant: TenantDescriptor,
+  sql: postgres.Sql
+): Promise<ResolvedTenantSecrets> {
   // Resolve the credential once, eagerly, before the first connection. Not for
   // caching — `postgres.js` calls the provider per connection either way — but
   // for the error. A password provider that throws is swallowed by the driver
@@ -229,36 +254,51 @@ async function verify(tenant: TenantDescriptor, sql: postgres.Sql): Promise<void
   // and names the wrong cause; a missing secret should say so immediately.
   await resolvePassword(tenant)
 
+  // Before the first query, and before the fingerprint. An unresolvable
+  // `SECRET_KEY` is not a degraded tenant, it is a tenant this process must not
+  // touch — every write path downstream would encrypt under the fleet-wide key.
+  // Resolving it here is also what makes it atomic with the DSN: both come off
+  // the one descriptor this function was handed.
+  const secrets = await resolveTenantSecrets(tenant)
+
   const observed = await observeTenantIdentity(sql)
   const verdict = evaluateTenantIdentity(tenant.fingerprint, tenant.physical, observed)
-  if (verdict.ok) {
+  const keyVerdict = verdict.ok
+    ? evaluateSecretKeyCanary(tenant.tenantId, secrets.secretKey, observed.secretCanary)
+    : verdict
+  if (keyVerdict.ok) {
     log.info(
       {
         tenantId: tenant.tenantId,
         workspaceId: observed.workspaceId,
         stampSource: observed.stampSource,
         neonBranchId: observed.physical.neonBranchId,
+        storageResolved: secrets.storage !== null,
       },
       'tenant database fingerprint verified'
     )
-    return
+    return secrets
   }
 
   const parsed = parseSecretRef(tenant.database.credentialRef)
   if (parsed.scheme === 'neon+role') invalidateNeonRolePassword(parsed)
+  // A refused pool must not leave a resolved bundle memoised: the commonest
+  // recoverable cause is a rotation mid-flight, and the retry has to re-resolve
+  // rather than re-fail on the value that was already wrong.
+  clearTenantSecretsCache(tenant.tenantId)
 
   log.error(
     {
       tenantId: tenant.tenantId,
-      code: verdict.code,
-      detail: verdict.detail,
+      code: keyVerdict.code,
+      detail: keyVerdict.detail,
       observedWorkspaceId: observed.workspaceId,
       observedBranchId: observed.physical.neonBranchId,
       expectedBranchId: tenant.physical.neonBranchId,
     },
     'tenant database fingerprint REFUSED'
   )
-  throw new TenantFingerprintRefusal(tenant.tenantId, verdict.code, verdict.detail)
+  throw new TenantFingerprintRefusal(tenant.tenantId, keyVerdict.code, keyVerdict.detail)
 }
 
 async function enforceCap(keepTenantId: string): Promise<void> {

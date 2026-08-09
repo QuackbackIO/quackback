@@ -370,27 +370,121 @@ than `PASS` whenever a host fails to serve its own marker.
 
 ---
 
-### Storage does not work under pooled tenancy
+### Per-tenant `SECRET_KEY` and storage credentials
 
-Stated plainly rather than left as an inference from a stack trace: **every
-storage operation fails for a pooled tenant, and the reason is a single missing
-piece.** `resolveStorageCredentials()` throws whenever a tenant scope is active
-and no credential resolver has been registered, and it throws *before* the
-proxy cache is consulted — so `/api/storage/*` returns an error for every key,
-which is also why no cross-tenant cache hit could be produced there even though
-the underlying defect was real.
+Both are resolved from the registry record on **pool checkout**, in the same
+pass as the fingerprint, and carried on the tenant scope. That placement is the
+design rather than a convenience:
 
-**The attribution, precisely:**
+- **Atomic with the DSN.** §4.3 asks for the secret ref to resolve "correctly
+  *and* atomically with `databaseUrl`". Both come off one record, read once, and
+  are resolved in one function against one `TenantDescriptor`. A mix-up is not
+  expressible.
+- **Once per pool.** Same cadence as the fingerprint, for the same reason: it is
+  a property of the tenant, not of the request.
+- **Synchronously readable afterwards.** `buildPublicUrl`, `getPublicUrlOrNull`
+  and every storage gate are synchronous and called from hundreds of places.
+  Resolving on the checkout path is what lets them stay that way.
 
-| Part | Whose |
+#### Two schemes, because the two halves are not the same problem
+
+| Half | Scheme | Why |
+| --- | --- | --- |
+| `SECRET_KEY` | `derived+hkdf://v<gen>/<tenant>/app-secrets` | A value **we** choose. Nothing outside the system has to agree with it, so it need not be stored: HKDF from one fleet root (`QUACKBACK_FLEET_ROOT_KEY`) with the tenant id as domain separation. No store, no network hop, no handoff — custody stops being a delivery problem, which is the failure that shipped once already on the database credential |
+| S3 keys | `sealed+aead://v<gen>/<tenant>/storage/<blob>` | A value **Cloudflare** chose. No derivation produces it, so it is carried — sealed under a key derived from the same root and bound to the tenant, with the blob riding **in the reference**, so it is read in the same row and the same query as the DSN |
+
+**Blast radius, stated plainly.** One root opens every tenant. That is weaker
+than an external custodian holding N independent secrets, and it is the
+destination. It is *not* a regression: today every pooled tenant shares one
+literal `SECRET_KEY`, so a root that yields a different key per tenant is
+strictly better than what it replaces. The generation in every ref is what keeps
+the move to external custody, or a root rotation, a migration rather than a flag
+day.
+
+**Storage chose per-tenant scoped tokens over one fleet-wide R2 credential, and
+the reason is a second gate.** With a fleet key, a record naming the wrong bucket
+succeeds — one tenant reads and writes another's objects and nothing errors, the
+§3 failure moved to object storage. With a per-tenant scoped token the same
+mis-wiring is refused **by the provider**: measured, `Access Denied`. The
+credential is the gate storage would otherwise not have. The residual case this
+does not catch is a record carrying *both* the wrong bucket and the matching
+sealed credential, which is a whole-record swap.
+
+#### The `SECRET_KEY` canary
+
+A wrong key does not announce itself. AES-GCM fails closed, so nothing is forged
+and nothing is corrupted — but the fleet goes on **writing** ciphertext under the
+wrong key while the old stops opening, and §4.3 records that this makes an entire
+class of stored data permanently unrecoverable with no alarm beyond scattered
+per-call errors.
+
+So the key gets the treatment §3 gives the database. The control plane seals a
+constant under the tenant's own `SECRET_KEY` into `settings.cloud_secret_canary`
+(migration `0252`), and the fleet opens it on pool checkout:
+
+| Observation | Verdict |
 | --- | --- |
-| No resolver exists for the `openbao+kv://` credential ref the registry carries | **The per-tenant app-secret resolver piece.** Not closable here; see §7 for the six requirements the app has of it |
-| The two upload gates asked whether a bucket was *addressable*, not whether storage was *usable* | **Mine, fixed.** A tenant record always names a bucket, so the addressability question answers `true` while every upload throws. `isS3Configured()` keeps that meaning — `buildPublicUrl` needs a placement and no credentials, and a public asset URL must keep resolving for a tenant this process cannot dereference — and `isS3Usable()` is the new question the upload gates ask. A first attempt collapsed the two and three placement tests caught it |
-| The failure surfaces as an unhandled 500 rather than a typed refusal | **Mine, open.** It is a configuration state, not a crash. It is why P03 reports `expected 403 but got 500 — the probe cannot distinguish an accepted signature from a refused one`, so it costs a probe family its verdict on top of the feature |
+| canary opens | serve |
+| canary does not open | `REFUSED [secret_key_canary_mismatch]`, 503 |
+| canary absent | `REFUSED [secret_key_canary_missing]`, 503 |
 
-Until the resolver lands, a pooled fleet has no working uploads, no asset proxy
-and no presigned URLs. That is a larger statement than "P03 is blocked" and it
-belongs in front of anyone who reads this file.
+Absence is a refusal for the same reason a missing stamp is: "no evidence" and
+"good evidence" must not produce the same outcome when what is at stake is
+whether a write is about to seal data under a key that will not open it again.
+Read through `to_jsonb(s) ->> 'cloud_secret_canary'` and kept out of the Drizzle
+schema, exactly as `cloud_tenant_id` is, so a database that predates `0252` still
+answers the query.
+
+Sealed rather than hashed: a hash of the key would be an offline-guessable
+verifier sitting in a database; a sealed constant proves possession and publishes
+nothing.
+
+#### The two halves fail in different directions
+
+| Failure | Consequence |
+| --- | --- |
+| `appSecretsRef` unresolvable | **the whole tenant is refused** (503). There is no safe degraded mode: the only one on offer is falling back to the fleet-wide `SECRET_KEY`, which is the silent default this piece exists to delete, and it *writes* |
+| `storage.credentialRef` unresolvable | **storage only** answers `503 Storage not configured`. The portal, roadmap, inbox and API keep working. Refusing a whole workspace because one bucket credential is unreadable turns a broken integration into an outage |
+
+`isS3Configured()` (can a bucket be *addressed*) and `isS3Usable()` (can an
+operation actually be *attempted*) stay separate, and every gate that touches the
+bucket now asks the second. `getPublicUrlOrNull` returns **null** for a private
+key it cannot sign rather than throwing, because an unsignable avatar should cost
+one broken image and not every page that renders one.
+
+#### The 500 that is now a 503
+
+`GET /api/storage/*` gated on addressability and then called `getS3Config()`
+**outside** its own try/catch, so a pooled tenant got HTTP **500 for every key**
+— which is also why the isolation probe's P03 could not tell an accepted
+signature from a refused one, and lost its verdict on top of the feature. The
+gate now asks `isS3Usable()`, and `StorageUnavailableError` is caught explicitly
+as a second barrier.
+
+Proxy upload keeps two distinct refusals: `403` when this deployment does not do
+proxy uploads at all (a permanent policy answer) and `503` when this workspace's
+credentials do not resolve (a configuration outage an operator can fix).
+
+#### `openbao+kv://` was narrowed before any of this shipped
+
+The scheme validated traversal and nothing else, so
+`openbao+kv://secret/platform/ai` — the fleet's own AI credential — was in policy
+by the artifact's own rules. It was inert for exactly one reason: nothing could
+dereference the scheme. Control-plane migration `0046` confines it to
+`apps/<tenant>` **in its own migration, ahead of `0047`** which admits the two
+new schemes; and no resolver for `openbao+kv://` ships here at all — every
+resolver refuses it by name. Per-field policy now also stops a database
+credential being expressible as an app-secret bundle and vice versa.
+
+#### What is vendored, and why the digest matters more here
+
+`vendor/fleet-secrets.ts` and `vendor/tenant-secret-resolution.ts` join
+`contract.ts` and `secret-ref.ts` under the byte-for-byte digest check. The
+stakes are higher than for the others: the control plane seals a value and a
+fleet replica opens it, so drift is not a wrong answer, it is ciphertext nobody
+can open. `__tests__/fleet-secrets.test.ts` additionally pins the derivation to
+hardcoded vectors, because a digest cannot catch both copies being changed
+*together*.
 
 ## 5. Background subsystems
 
@@ -456,23 +550,19 @@ that looks correct.
   provides the two primitives they need (`tenantKey` for external keys,
   `TenantKeyedCache` for in-heap maps), and the single-tenant namespace is a
   stable `_` so self-hosted behaviour is unchanged.
-- **Per-tenant `SECRET_KEY` and S3 credentials.** The registry carries
-  `appSecretsRef` and `storage.credentialRef` as `openbao+kv://` references, and
-  this process has no OpenBao resolver. Until it does, a pooled fleet shares the
-  fleet-level `SECRET_KEY` — which does not silently corrupt or forge anything
-  (AES-GCM fails closed) but does mean per-tenant encrypted material is not yet
-  separated. This must close before the pooled fleet serves anything real.
+- ~~**Per-tenant `SECRET_KEY` and S3 credentials.**~~ **Closed** — see §4. The
+  requirements listed here were met as follows, with one deliberate deviation.
 
   **What the app requires of whoever closes it**, so the seam is not guessed at:
 
-  | Requirement | Why |
+  | Requirement | How it was met |
   | --- | --- |
-  | One resolver, injected — not imported | `setStorageCredentialResolver()` is the existing seam; the app must stay free of a vault client so a process that serves no cloud tenant needs no vault credentials, exactly as `readNeonRolePassword` is injected today. |
-  | Resolve `appSecretsRef` **atomically with** `databaseUrl` | §4.3. They are already one record read once, and that is what makes a mix-up inexpressible. A resolver that fetches the secret on a later, separate call reintroduces the window. |
-  | Return the whole bundle, not one key | `appSecretsRef` names `SECRET_KEY`, `ADMIN_API_TOKEN`, `QUACKBACK_CP_INTERNAL_TOKEN` and the S3 keys together. Splitting them into per-key fetches multiplies the failure modes and the latency on the pool-checkout path. |
-  | Fail closed, and fail **loudly** | A `SECRET_KEY` mix-up does not corrupt or forge — AES-GCM's auth tag fails to verify — but it makes integration OAuth tokens, webhook signing secrets and custom-action headers *permanently unrecoverable* until the right key returns, with no alarm beyond scattered per-call errors. The resolver must refuse rather than substitute, and the refusal must reach the pool cache so the tenant stops being served. |
-  | Cache per tenant with a short TTL, and re-resolve on failure | Same shape as `neon-credentials.ts`: a burst of pool creations must not fan out into N vault reads, and a rotation must be picked up without an operator action. |
-  | Never widen `openbao+kv://`'s target policy | The scheme blocks traversal but has **no namespace confinement** today, so `openbao+kv://secret/platform/ai` is in-policy by the artifact's own rules. Tighten that *before* a resolver ships, not after — a resolver is what makes it reachable. |
+  | One resolver, injected — not imported | **Deviated, deliberately.** `setStorageCredentialResolver()` was the wrong shape: it resolves one key, and the requirement two rows down asks for the whole bundle. It is replaced by `setTenantSecretsResolver()`, which takes the `TenantDescriptor` — a resolver that receives only a ref cannot check that the ref names the tenant whose record carries it, and that check is a real gate. The built-in resolver needs no client at all (local HKDF and local AEAD over a blob that arrived in the record), so the "no vault client" property holds by construction rather than by discipline. |
+  | Resolve `appSecretsRef` **atomically with** `databaseUrl` | Met literally rather than by convention: the sealed storage blob rides *in the ref*, so both halves are fields of the one row the DSN came from, resolved in one call against one descriptor. |
+  | Return the whole bundle, not one key | `resolveTenantSecrets` returns `{secretKey, storage, storageProblem}` in one resolution. |
+  | Fail closed, and fail **loudly** | Two directions, chosen by cost — the tenant is refused when `SECRET_KEY` cannot resolve; storage alone degrades to 503 when its credential cannot. Neither substitutes a value. The `SECRET_KEY` refusal reaches the pool cache and evicts. |
+  | Cache per tenant with a short TTL, and re-resolve on failure | 60 s TTL keyed by tenant **and `revision`**, dropped on any refusal so a retry re-resolves rather than re-failing on the value that was already wrong. |
+  | Never widen `openbao+kv://`'s target policy | Narrowed instead, in its own control-plane migration ahead of the one that admits the new schemes — and no resolver for the scheme ships at all. |
 - **`MIN_SCHEMA_VERSION`.** §10.5 asks for a per-tenant schema gate in the same
   pass as the fingerprint, reading `tenant_schema_state`. That table belongs to
   the migrator piece; the hook point is `evaluateTenantIdentity`'s caller, which

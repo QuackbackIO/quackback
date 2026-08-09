@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, eq, principal } from '@/lib/server/db'
-import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadImageFromFormData } from '@/lib/server/storage/s3'
 
 export async function handlePortalUpload({ request }: { request: Request }): Promise<Response> {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -16,7 +16,7 @@ export async function handlePortalUpload({ request }: { request: Request }): Pro
   if (!principalRecord || principalRecord.type === 'anonymous') {
     return Response.json({ error: 'Authentication required to upload images' }, { status: 403 })
   }
-  if (!isS3Configured()) {
+  if (!isS3Usable()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
   let formData: FormData

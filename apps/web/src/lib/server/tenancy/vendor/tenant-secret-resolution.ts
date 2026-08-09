@@ -1,0 +1,244 @@
+/**
+ * A tenant record's secret references → the actual secrets.
+ *
+ * **Vendored byte-for-byte into the app** alongside `contract.ts`,
+ * `secret-ref.ts` and `fleet-secrets.ts`. The control plane runs this to prove a
+ * ref works before it registers a tenant; a fleet replica runs it on every pool
+ * build. If the two ever diverged, provisioning would certify a ref the fleet
+ * cannot follow — which is precisely the failure this readback exists to catch,
+ * so the checker and the checked must be the same code.
+ *
+ * ## The two halves fail in different directions, deliberately
+ *
+ * `SECRET_KEY` is not a feature. It decrypts sessions, integration OAuth tokens,
+ * webhook signing secrets and custom-action headers, and — the part that makes
+ * this asymmetric — a fleet that guesses it wrong will happily *write new
+ * ciphertext under the wrong key*. So an unresolvable `appSecretsRef` refuses
+ * the whole tenant. There is no degraded mode that is safer than refusing, and
+ * falling back to the fleet-wide `SECRET_KEY` is the exact behaviour this piece
+ * exists to remove: it is a silent default wearing the costume of resilience.
+ *
+ * Object storage *is* a feature. A workspace with no resolvable storage
+ * credential can still serve its portal, its roadmap, its inbox and its API; it
+ * just cannot upload or read files. Refusing the whole tenant for that would
+ * turn one broken integration into an outage. So a storage failure is captured
+ * and reported, never thrown, and the storage surfaces answer `503` while
+ * everything else keeps working.
+ *
+ * Both directions are loud. Neither substitutes a value.
+ */
+import {
+  deriveTenantSecret,
+  FleetSecretError,
+  openTenantSecret,
+  type FleetSecretPurpose,
+} from './fleet-secrets'
+import { parseSecretRef, redactRef, type SecretRef } from './secret-ref'
+
+export interface TenantStorageCredentials {
+  accessKeyId: string
+  secretAccessKey: string
+}
+
+export interface ResolvedTenantSecrets {
+  /** The tenant's `SECRET_KEY`. Never the fleet-wide one. */
+  secretKey: string
+  /** Null when storage could not be resolved; see {@link storageProblem}. */
+  storage: TenantStorageCredentials | null
+  /** Why storage is null, in operator-readable terms. Null when storage resolved. */
+  storageProblem: string | null
+}
+
+export class TenantSecretResolutionError extends Error {
+  readonly code: string
+  constructor(code: string, message: string) {
+    super(message)
+    this.name = 'TenantSecretResolutionError'
+    this.code = code
+  }
+}
+
+export interface TenantSecretResolutionInput {
+  tenantId: string
+  appSecretsRef: SecretRef
+  storageCredentialRef: SecretRef
+  /** The fleet root, or null in a process that holds none. */
+  rootKey: string | null
+  env?: Record<string, string | undefined>
+}
+
+/**
+ * Resolve both halves for one tenant.
+ *
+ * Takes the record's own `tenantId` and checks every ref names it. A ref is a
+ * value in a row, so a row that named *another* tenant's secret would otherwise
+ * derive or open that tenant's material — the storage-side equivalent of §3's
+ * wrong-pool failure, and just as quiet. The check is cheap and it is the reason
+ * the tenant id appears in the ref path at all rather than only in the key
+ * derivation.
+ */
+export function resolveTenantSecretsFromRefs(
+  input: TenantSecretResolutionInput,
+): ResolvedTenantSecrets {
+  const secretKey = resolveAppSecretKey(input)
+  const storage = resolveStorageCredentials(input)
+  return { secretKey, storage: storage.value, storageProblem: storage.problem }
+}
+
+function resolveAppSecretKey(input: TenantSecretResolutionInput): string {
+  const ref = input.appSecretsRef
+  const parsed = parseSecretRef(ref)
+  switch (parsed.scheme) {
+    case 'derived+hkdf': {
+      assertRefNamesTenant(parsed.tenantId, input.tenantId, ref)
+      assertPurpose(parsed.purpose, 'app-secrets', ref)
+      const rootKey = requireRootKey(ref, input.rootKey)
+      try {
+        return deriveTenantSecret(rootKey, {
+          generation: parsed.generation,
+          tenantId: parsed.tenantId,
+          purpose: 'app-secrets',
+        })
+      } catch (err) {
+        throw asResolutionError(err, ref)
+      }
+    }
+    case 'env': {
+      const value = (input.env ?? process.env)[parsed.variable]
+      if (!value) {
+        throw new TenantSecretResolutionError(
+          'app_secret_unresolvable',
+          `${redactRef(ref)} names ${parsed.variable}, which is unset`,
+        )
+      }
+      return value
+    }
+    default:
+      // Named rather than generic: "no resolver" and "wrong scheme" are
+      // different operator problems, and the scheme is the fix instruction.
+      throw new TenantSecretResolutionError(
+        'app_secret_no_resolver',
+        `this process has no resolver for '${parsed.scheme}://' app secrets ` +
+          `(tenant ${input.tenantId}). Re-point the record at a scheme this fleet implements.`,
+      )
+  }
+}
+
+function resolveStorageCredentials(
+  input: TenantSecretResolutionInput,
+): { value: TenantStorageCredentials | null; problem: string | null } {
+  const ref = input.storageCredentialRef
+  try {
+    const parsed = parseSecretRef(ref)
+    switch (parsed.scheme) {
+      case 'sealed+aead': {
+        assertRefNamesTenant(parsed.tenantId, input.tenantId, ref)
+        assertPurpose(parsed.purpose, 'storage', ref)
+        const rootKey = requireRootKey(ref, input.rootKey)
+        const opened = openTenantSecret(
+          rootKey,
+          { generation: parsed.generation, tenantId: parsed.tenantId, purpose: 'storage' },
+          parsed.blob,
+        )
+        return { value: parseStorageCredentials(opened, ref), problem: null }
+      }
+      case 'env': {
+        const raw = (input.env ?? process.env)[parsed.variable]
+        if (!raw) {
+          throw new TenantSecretResolutionError(
+            'storage_unresolvable',
+            `${redactRef(ref)} names ${parsed.variable}, which is unset`,
+          )
+        }
+        return { value: parseStorageCredentials(raw, ref), problem: null }
+      }
+      default:
+        throw new TenantSecretResolutionError(
+          'storage_no_resolver',
+          `this process has no resolver for '${parsed.scheme}://' storage credentials`,
+        )
+    }
+  } catch (err) {
+    return { value: null, problem: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/**
+ * The sealed plaintext is `{"accessKeyId":"…","secretAccessKey":"…"}`.
+ *
+ * Both fields are required and neither may be empty. An S3 client built with an
+ * empty secret does not fail at construction — it fails later, at the provider,
+ * with a signature error that reads like a clock-skew problem.
+ */
+function parseStorageCredentials(raw: string, ref: SecretRef): TenantStorageCredentials {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new TenantSecretResolutionError(
+      'storage_malformed',
+      `${redactRef(ref)} did not contain a JSON credential object`,
+    )
+  }
+  const obj = parsed as { accessKeyId?: unknown; secretAccessKey?: unknown }
+  if (typeof obj?.accessKeyId !== 'string' || obj.accessKeyId === '') {
+    throw new TenantSecretResolutionError(
+      'storage_malformed',
+      `${redactRef(ref)} has no accessKeyId`,
+    )
+  }
+  if (typeof obj?.secretAccessKey !== 'string' || obj.secretAccessKey === '') {
+    throw new TenantSecretResolutionError(
+      'storage_malformed',
+      `${redactRef(ref)} has no secretAccessKey`,
+    )
+  }
+  return { accessKeyId: obj.accessKeyId, secretAccessKey: obj.secretAccessKey }
+}
+
+/** Serialise credentials for sealing. The inverse of {@link parseStorageCredentials}. */
+export function encodeStorageCredentials(creds: TenantStorageCredentials): string {
+  return JSON.stringify({
+    accessKeyId: creds.accessKeyId,
+    secretAccessKey: creds.secretAccessKey,
+  })
+}
+
+function assertRefNamesTenant(refTenantId: string, recordTenantId: string, ref: SecretRef): void {
+  if (refTenantId !== recordTenantId) {
+    throw new TenantSecretResolutionError(
+      'ref_tenant_mismatch',
+      `${redactRef(ref)} names tenant ${refTenantId} but sits on the record for ${recordTenantId}`,
+    )
+  }
+}
+
+function assertPurpose(purpose: string, expected: FleetSecretPurpose, ref: SecretRef): void {
+  if (purpose !== expected) {
+    throw new TenantSecretResolutionError(
+      'ref_purpose_mismatch',
+      `${redactRef(ref)} has purpose '${purpose}' where '${expected}' was required`,
+    )
+  }
+}
+
+function requireRootKey(ref: SecretRef, rootKey: string | null): string {
+  if (!rootKey) {
+    throw new TenantSecretResolutionError(
+      'root_key_missing',
+      `${redactRef(ref)} needs the fleet root key; QUACKBACK_FLEET_ROOT_KEY is unset in this process`,
+    )
+  }
+  return rootKey
+}
+
+function asResolutionError(err: unknown, ref: SecretRef): TenantSecretResolutionError {
+  if (err instanceof FleetSecretError) {
+    return new TenantSecretResolutionError(err.code, `${redactRef(ref)}: ${err.message}`)
+  }
+  if (err instanceof TenantSecretResolutionError) return err
+  return new TenantSecretResolutionError(
+    'unresolvable',
+    `${redactRef(ref)}: ${err instanceof Error ? err.message : String(err)}`,
+  )
+}

@@ -26,6 +26,7 @@ import type { Database } from '@quackback/db/client'
 import type { Sql } from 'postgres'
 import { getLogContext, runWithLogContext, setLogContext } from '@/lib/server/log-context'
 import type { TenantDescriptor } from './registry'
+import type { ResolvedTenantSecrets } from './vendor/tenant-secret-resolution'
 
 /**
  * `Symbol.for` rather than a module-private symbol: the dev server can evaluate
@@ -50,6 +51,14 @@ export interface TenantScope {
   readonly db: Database
   /** The underlying postgres.js handle, for raw/session-level work. */
   readonly sql: Sql
+  /**
+   * This tenant's `SECRET_KEY` and storage credentials, resolved on the same
+   * pool-checkout pass as the fingerprint and carried here so the synchronous
+   * readers (`deriveKey`, `buildPublicUrl`, every storage gate) never have to
+   * await. The scope only exists when the SECRET_KEY half resolved, so any code
+   * holding a scope is holding a real per-tenant key.
+   */
+  readonly secrets: ResolvedTenantSecrets
   readonly origin: TenantScopeOrigin
 }
 
@@ -95,6 +104,17 @@ export function getScopedDatabase(): Database | null {
 /** The active tenant record, or null. Safe to call from single-tenant code. */
 export function getCurrentTenant(): TenantDescriptor | null {
   return getTenantScope()?.tenant ?? null
+}
+
+/**
+ * The active tenant's resolved secrets, or null outside a tenant scope.
+ *
+ * Null means "single tenant", not "unresolved": a pooled scope cannot be created
+ * without a resolved `SECRET_KEY`. Callers read `config.secretKey` on null,
+ * which is the self-hosted path and is unchanged.
+ */
+export function getCurrentTenantSecrets(): ResolvedTenantSecrets | null {
+  return getTenantScope()?.secrets ?? null
 }
 
 /**

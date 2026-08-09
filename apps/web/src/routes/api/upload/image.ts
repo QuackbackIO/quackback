@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, eq, principal } from '@/lib/server/db'
-import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadImageFromFormData } from '@/lib/server/storage/s3'
 
 const ALLOWED_PREFIXES = new Set([
   'uploads',
@@ -25,7 +25,7 @@ export async function handleAdminUpload({ request }: { request: Request }): Prom
   if (!principalRecord || (principalRecord.role !== 'admin' && principalRecord.role !== 'member')) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (!isS3Configured()) {
+  if (!isS3Usable()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
   let formData: FormData

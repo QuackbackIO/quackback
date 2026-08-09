@@ -320,6 +320,13 @@ export interface ProbeConfig {
   adminPassword: string
   alphaDatabaseUrl?: string
   bravoDatabaseUrl?: string
+  /**
+   * Control-plane tenant ids. Needed only under pooled tenancy, where the
+   * storage read capability is bound to the tenant as well as to the object key
+   * — a single-tenant deployment signs the historical message and needs neither.
+   */
+  alphaTenantId?: string
+  bravoTenantId?: string
   alphaStorageSecret?: string
   bravoStorageSecret?: string
   alphaApiKey?: string

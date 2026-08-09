@@ -30,7 +30,13 @@
  *    same function.
  */
 import { z } from 'zod'
-import { SECRET_REF_SCHEMES, isValidSecretRef, type SecretRef } from './secret-ref'
+import {
+  SECRET_REF_SCHEMES,
+  isSecretRefAllowedFor,
+  isValidSecretRef,
+  type SecretRef,
+  type SecretRefField,
+} from './secret-ref'
 
 export { SECRET_REF_SCHEMES, type SecretRef }
 
@@ -195,6 +201,25 @@ export const secretRefSchema = z
   .string()
   .refine(isValidSecretRef, 'not a well-formed, in-policy secret reference')
 
+/**
+ * The same parser, plus the per-field scheme policy.
+ *
+ * A scheme being implementable is not the same as it being appropriate here.
+ * `openbao+kv://` holds the app-secret bundle and the database resolver has
+ * always refused it, so it must not be committable in `db_credential_ref`; a
+ * scheme that cannot carry a provider-issued key pair must not be committable in
+ * the storage credential. Stating that once, in `secret-ref.ts`, keeps the
+ * schema, the database CHECK and the resolver from drifting into three opinions.
+ */
+export function fieldRefSchema(field: SecretRefField) {
+  return z
+    .string()
+    .refine(
+      (ref) => isSecretRefAllowedFor(field, ref),
+      `not a well-formed secret reference this record's ${field} field may name`,
+    )
+}
+
 export const tenantStorageSchema = z.object({
   provider: z.literal('r2'),
   bucket: z.string().min(1),
@@ -202,7 +227,7 @@ export const tenantStorageSchema = z.object({
   region: z.string().min(1),
   forcePathStyle: z.boolean(),
   publicUrl: z.string().url(),
-  credentialRef: secretRefSchema,
+  credentialRef: fieldRefSchema('storage'),
 })
 
 export const tenantRecordSchema = z.object({
@@ -219,14 +244,14 @@ export const tenantRecordSchema = z.object({
     directUrl: z.string().regex(DSN_RE, 'direct DSN must be scheme://role@host/db with no password'),
     name: z.string().min(1),
     role: z.string().min(1),
-    credentialRef: secretRefSchema,
+    credentialRef: fieldRefSchema('database'),
   }),
   fingerprint: z.object({
     expectedTenantId: z.string().min(1),
     expectedWorkspaceId: z.string().regex(UUID_RE, 'workspace id must be the settings.id UUID'),
     stampedAt: z.string().min(1),
   }),
-  secrets: z.object({ appSecretsRef: secretRefSchema }),
+  secrets: z.object({ appSecretsRef: fieldRefSchema('appSecrets') }),
   storage: tenantStorageSchema,
   email: z.object({ from: z.string().min(1) }),
   features: z.object({ aiEnabled: z.boolean() }),

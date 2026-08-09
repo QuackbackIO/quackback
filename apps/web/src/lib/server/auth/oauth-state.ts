@@ -6,12 +6,12 @@
  */
 
 import crypto from 'crypto'
-import { config } from '@/lib/server/config'
+import { activeSecretKey } from '@/lib/server/secret-key'
 
 const SIGNATURE_SEPARATOR = '.'
 
 function getSecret(): string {
-  return config.secretKey
+  return activeSecretKey()
 }
 
 function computeSignature(json: string): string {

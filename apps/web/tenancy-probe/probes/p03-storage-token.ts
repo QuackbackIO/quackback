@@ -84,7 +84,9 @@ export const p03StorageToken: Probe = {
     // --- discriminator control: a bogus signature must be rejected -----------
     // Without this, a deployment with storage unconfigured (503 for everything)
     // would look like "alpha accepted, bravo refused" and pass.
-    const bogus = await alpha.http.request(path(mintStorageReadSig('not-the-secret', PRIVATE_KEY)))
+    const bogus = await alpha.http.request(
+      path(mintStorageReadSig('not-the-secret', PRIVATE_KEY, config.alphaTenantId))
+    )
     const bogusRejected = bogus.status === REJECTED
     controls.push(
       control(
@@ -112,8 +114,12 @@ export const p03StorageToken: Probe = {
       })
     }
 
-    const alphaSig = mintStorageReadSig(alphaSecret, PRIVATE_KEY)
-    const bravoSig = mintStorageReadSig(bravoSecret, PRIVATE_KEY)
+    // Each capability is minted the way ITS OWN tenant would mint it — with that
+    // tenant's secret and, under pooled tenancy, that tenant's binding. Minting
+    // alpha's capability with bravo's binding would be refused by arithmetic
+    // rather than by isolation and would prove nothing.
+    const alphaSig = mintStorageReadSig(alphaSecret, PRIVATE_KEY, config.alphaTenantId)
+    const bravoSig = mintStorageReadSig(bravoSecret, PRIVATE_KEY, config.bravoTenantId)
 
     // --- positive control ---------------------------------------------------
     const ownRes = await alpha.http.request(path(alphaSig))

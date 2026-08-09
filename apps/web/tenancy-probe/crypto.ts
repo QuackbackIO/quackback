@@ -26,8 +26,26 @@ import { createHmac } from 'node:crypto'
  * tenants means a single shared secret, and a capability minted for tenant A's
  * key verifies against tenant B's. Cross-tenant private-file read by construction.
  */
-export function mintStorageReadSig(secret: string, key: string): string {
-  return createHmac('sha256', secret).update(`read|${key}`).digest('hex').slice(0, 32)
+export function mintStorageReadSig(secret: string, key: string, tenantId?: string): string {
+  return createHmac('sha256', secret).update(storageReadMessage(key, tenantId)).digest('hex').slice(0, 32)
+}
+
+/**
+ * The message `verifyStorageReadToken` HMACs.
+ *
+ * Under pooled tenancy the app binds the tenant into it (`tenantBind` in
+ * `lib/server/storage/s3.ts`): object keys are per-bucket, so `uploads/<uuid>`
+ * names a different object in every workspace while reading identically, and
+ * without the binding a capability minted for one tenant would verify against
+ * another's object on any shared secret.
+ *
+ * A single-tenant deployment signs the historical message byte for byte —
+ * those signatures are embedded in absolute URLs already written into stored
+ * content — so the tenant id is optional here and its absence reproduces the
+ * old message exactly.
+ */
+export function storageReadMessage(key: string, tenantId?: string): string {
+  return tenantId ? `t:${tenantId}|read|${key}` : `read|${key}`
 }
 
 function base64url(input: Buffer | string): string {
