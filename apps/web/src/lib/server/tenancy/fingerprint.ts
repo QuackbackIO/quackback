@@ -82,7 +82,7 @@ export type IdentityFailure =
   | 'secret_key_canary_mismatch'
 
 /**
- * The codes that actually mean "this is the wrong database".
+ * What each refusal code is actually an accusation about.
  *
  * `acquireTenantScope` funnels EVERY exception from pool checkout into one
  * `refused` variant with a `code`, and the caller used to treat that variant as
@@ -92,51 +92,59 @@ export type IdentityFailure =
  * reserved for a cross-tenant near-miss — the one an operator is trained to
  * read as a tenancy breach.
  *
- * So the fingerprint message is emitted only for codes on this list, and the
- * list is checked against the union in both directions: `satisfies` catches a
- * member that is not an `IdentityFailure`, and the exhaustiveness map below
- * catches an `IdentityFailure` that is not a member. Adding a failure code
- * without adding it here fails to compile.
+ * Two subjects, not one. `database` codes mean the row in front of us belongs
+ * to someone else; `key` codes mean the row may be exactly right while the key
+ * we would encrypt under is not the one its stored ciphertext was written with.
+ * `evaluateSecretKeyCanary` keeps that distinction deliberately, on the grounds
+ * that the operator fix for the two is nothing alike, and collapsing them here
+ * would undo it at the only place an operator reads.
  */
-export const IDENTITY_FAILURE_CODES = [
-  'settings_row_missing',
-  'settings_not_singleton',
-  'stamp_missing',
-  'stamp_tenant_mismatch',
-  'workspace_id_mismatch',
-  'neon_identity_unavailable',
-  'neon_project_mismatch',
-  'neon_branch_mismatch',
-  'stamp_source_conflict',
-  // The secret-key canary is an identity check like the rest, asked of the key
-  // rather than of the row: a canary that this key cannot open, or that was
-  // never sealed at all, means nothing establishes that this database and this
-  // key belong to each other. Serving either would write new ciphertext under a
-  // key that may not read the old, which is the same wrong-but-plausible answer
-  // §3 is about.
-  'secret_key_canary_missing',
-  'secret_key_canary_mismatch',
-] as const satisfies readonly IdentityFailure[]
+const IDENTITY_FAILURE_SUBJECT = {
+  settings_row_missing: 'database',
+  settings_not_singleton: 'database',
+  stamp_missing: 'database',
+  stamp_tenant_mismatch: 'database',
+  workspace_id_mismatch: 'database',
+  neon_identity_unavailable: 'database',
+  neon_project_mismatch: 'database',
+  neon_branch_mismatch: 'database',
+  stamp_source_conflict: 'database',
+  secret_key_canary_missing: 'key',
+  secret_key_canary_mismatch: 'key',
+} as const satisfies Record<IdentityFailure, 'database' | 'key'>
 
-/** Compile-time exhaustiveness: every `IdentityFailure` must appear above. */
-const _identityFailureCoverage: Record<IdentityFailure, true> = {
-  settings_row_missing: true,
-  settings_not_singleton: true,
-  stamp_missing: true,
-  stamp_tenant_mismatch: true,
-  workspace_id_mismatch: true,
-  neon_identity_unavailable: true,
-  neon_project_mismatch: true,
-  neon_branch_mismatch: true,
-  stamp_source_conflict: true,
-  secret_key_canary_missing: true,
-  secret_key_canary_mismatch: true,
-}
-void _identityFailureCoverage
+/**
+ * The codes that mean "this is the wrong database", derived rather than
+ * restated so the two lists cannot drift apart.
+ *
+ * `Record<IdentityFailure, …>` above is the compile-time gate: a new failure
+ * code fails to compile until it is classified, and it cannot be classified
+ * without someone deciding which alarm it belongs to. That is the property
+ * worth keeping. A hand-maintained second list would let a new code be added
+ * to the union and silently default to neither.
+ */
+export const IDENTITY_FAILURE_CODES = Object.keys(IDENTITY_FAILURE_SUBJECT).filter(
+  (code) => IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'database'
+) as readonly IdentityFailure[]
+
+/** The codes that mean "the key and the database do not belong to each other". */
+export const KEY_CUSTODY_FAILURE_CODES = Object.keys(IDENTITY_FAILURE_SUBJECT).filter(
+  (code) => IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'key'
+) as readonly IdentityFailure[]
 
 /** True when a refusal code means the database failed its identity check. */
 export function isIdentityFailureCode(code: string): code is IdentityFailure {
-  return (IDENTITY_FAILURE_CODES as readonly string[]).includes(code)
+  return IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'database'
+}
+
+/**
+ * True when a refusal code means the key and the database do not belong to each
+ * other. Distinct from {@link isIdentityFailureCode} because the cross-tenant
+ * alarm is trained on the other one, and the repair is a custody script rather
+ * than a registry correction.
+ */
+export function isKeyCustodyFailureCode(code: string): code is IdentityFailure {
+  return IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'key'
 }
 
 export type IdentityVerdict = { ok: true } | { ok: false; code: IdentityFailure; detail: string }

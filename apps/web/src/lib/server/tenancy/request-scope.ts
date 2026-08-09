@@ -23,6 +23,7 @@
  * | `refused` — the database is not the one the record named | 503, alert | one query |
  * | `refused[schema_below_floor]` — right database, schema too old for this build | 503 + `Retry-After`, warn | one query |
  * | `refused[schema_floor_misconfigured]` — this process's own MIN_SCHEMA_VERSION is unresolvable | 503, alert | none |
+ * | `refused[secret_key_canary_*]` — right database, wrong key | 503, alert naming the KEY, not the database | one query |
  * | `refused[*]` — credential, connectivity, anything else | 503, alert, NOT the fingerprint alarm | varies |
  *
  * Every one of them is a refusal to serve. None degrades to a default tenant,
@@ -34,7 +35,7 @@ import {
   SCHEMA_FLOOR_MISCONFIGURED_CODE,
   SCHEMA_FLOOR_REFUSAL_CODE,
 } from '@/lib/server/fleet/schema-floor'
-import { isIdentityFailureCode } from './fingerprint'
+import { isIdentityFailureCode, isKeyCustodyFailureCode } from './fingerprint'
 import { acquireScopeForHost } from './resolver'
 import { runWithTenantScope } from './tenant-context'
 
@@ -149,6 +150,18 @@ export async function resolveTenantAndContinue<T>({
         log.error(
           { tenantId, code, detail },
           'tenant database refused the fingerprint — refusing to serve'
+        )
+        return refusal(503, 'This workspace is temporarily unavailable.')
+      }
+      if (isKeyCustodyFailureCode(code)) {
+        // Deliberately NOT the fingerprint alarm. The database can be exactly
+        // the right one while the key is wrong, and an operator reading a
+        // tenancy-breach alarm would go looking at the registry when the repair
+        // is a custody script. `detail` carries that script and the reason
+        // provisioning will not run it.
+        log.error(
+          { tenantId, code, detail },
+          'the tenant key and the tenant database do not belong to each other — refusing to serve'
         )
         return refusal(503, 'This workspace is temporarily unavailable.')
       }

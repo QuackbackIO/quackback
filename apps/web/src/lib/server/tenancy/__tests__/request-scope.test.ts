@@ -8,7 +8,7 @@
  * an information leak about another tenant's identifiers.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { IDENTITY_FAILURE_CODES } from '../fingerprint'
+import { IDENTITY_FAILURE_CODES, KEY_CUSTODY_FAILURE_CODES } from '../fingerprint'
 
 const acquireScopeForHost = vi.fn()
 
@@ -214,6 +214,44 @@ describe('resolveTenantAndContinue', () => {
       const [, message] = silentLog.error.mock.calls.at(-1)!
       expect(message, `code ${code}`).toContain('fingerprint')
     }
+  })
+
+  it('a key-custody failure names the key, and does NOT pull the fingerprint alarm', async () => {
+    // The database can be exactly the right one while the key is wrong, and the
+    // repair for the two is nothing alike: a registry correction versus a
+    // custody script. An operator reading a tenancy-breach alarm goes looking at
+    // the registry, so routing a canary failure there sends them to the wrong
+    // place with the right urgency.
+    expect(KEY_CUSTODY_FAILURE_CODES.length).toBeGreaterThan(0)
+    for (const code of KEY_CUSTODY_FAILURE_CODES) {
+      silentLog.error.mockClear()
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'refused',
+        tenantId: 'inst_a',
+        code,
+        detail: 'canary could not be opened',
+      })
+      const res = (await serve('t1.localhost')) as Response
+      expect(res.status).toBe(503)
+      const [, message] = silentLog.error.mock.calls.at(-1)!
+      expect(message, `code ${code}`).toContain('do not belong to each other')
+      // Both poles. Without these it would pass while falling through to either
+      // neighbouring branch, which is exactly the bug.
+      expect(message, `code ${code}`).not.toContain('fingerprint')
+      expect(message, `code ${code}`).not.toContain('could not open a verified connection')
+    }
+  })
+
+  it('every failure code is classified as exactly one of the two subjects', async () => {
+    // The compile-time map already forces a new code to be classified. This is
+    // the runtime half: that the two derived lists partition it rather than
+    // overlapping or leaving a gap, which is what would let a code reach the
+    // catch-all branch while still being an identity failure.
+    const both = IDENTITY_FAILURE_CODES.filter((c) => KEY_CUSTODY_FAILURE_CODES.includes(c))
+    expect(both).toEqual([])
+    expect(IDENTITY_FAILURE_CODES.length + KEY_CUSTODY_FAILURE_CODES.length).toBe(
+      new Set([...IDENTITY_FAILURE_CODES, ...KEY_CUSTODY_FAILURE_CODES]).size
+    )
   })
 
   it('never marks a refusal cacheable', async () => {
