@@ -100,8 +100,6 @@ async function loadCache() {
   vi.stubEnv('SECRET_KEY', 'a'.repeat(64))
   vi.stubEnv('REDIS_URL', 'redis://localhost:6379')
   vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
-  // Pooled refuses a queue-consuming role — see config.ts's pooled refinement.
-  vi.stubEnv('QUACKBACK_ROLE', 'web')
   vi.stubEnv('DATABASE_URL', '')
   vi.stubEnv('QUACKBACK_CONTROL_DATABASE_URL', 'postgresql://u@localhost:5432/control')
   vi.stubEnv('QUACKBACK_TENANT_SECRET_TEST', 'hunter2')
@@ -347,10 +345,7 @@ describe('tenant pool cache', () => {
   it('keeps prepared statements on', async () => {
     const cache = await loadCache()
     await cache.acquireTenantPool(descriptor('t1'))
-    const options = (postgresFactory.mock.calls[0]?.[1] ?? {}) as {
-      prepare?: boolean
-      idle_timeout?: number
-    }
+    const options = (postgresFactory.mock.calls[0]?.[1] ?? {}) as { prepare?: boolean; idle_timeout?: number }
     expect(options.prepare).toBe(true)
     // And the idle timeout must be well under Neon's 300s suspend window and
     // Railway's 600s sleep window, or nothing ever goes quiet.

@@ -468,46 +468,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'not reassured by a transport that was never the problem.',
   },
   {
-    file: 'apps/web/src/lib/server/domains/analytics/analytics-queue.ts',
-    name: 'initPromise',
-    category: 'process-lifetime',
-    reason:
-      'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
-      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
-      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
-      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
-      'the async context alive at construction for every job it ever handles - and seven of these ' +
-      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
-      "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
-      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
-      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
-      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
-      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
-      'configuration at all.',
-  },
-  {
-    file: 'apps/web/src/lib/server/domains/analytics/partition-maintenance-queue.ts',
-    name: 'initPromise',
-    category: 'process-lifetime',
-    reason:
-      'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
-      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
-      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
-      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
-      'the async context alive at construction for every job it ever handles - and seven of these ' +
-      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
-      "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
-      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
-      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
-      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
-      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
-      'configuration at all.',
-  },
-  {
     file: 'apps/web/src/lib/server/domains/api/openapi.ts',
     name: 'registeredPaths',
     category: 'process-lifetime',
@@ -542,26 +502,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     reason:
       'Routing strategy objects registered at import. Stateless implementations, identical for every ' +
       'tenant.',
-  },
-  {
-    file: 'apps/web/src/lib/server/domains/conversation/snooze-sweep-queue.ts',
-    name: 'initPromise',
-    category: 'process-lifetime',
-    reason:
-      'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
-      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
-      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
-      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
-      'the async context alive at construction for every job it ever handles - and seven of these ' +
-      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
-      "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
-      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
-      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
-      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
-      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
-      'configuration at all.',
   },
   {
     file: 'apps/web/src/lib/server/domains/export/export-queue.ts',
@@ -640,46 +580,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       '§8 establishes is fleet-wide for the 24 integrations it governs.',
   },
   {
-    file: 'apps/web/src/lib/server/domains/principals/anon-sweep-queue.ts',
-    name: 'initPromise',
-    category: 'process-lifetime',
-    reason:
-      'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
-      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
-      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
-      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
-      'the async context alive at construction for every job it ever handles - and seven of these ' +
-      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
-      "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
-      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
-      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
-      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
-      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
-      'configuration at all.',
-  },
-  {
-    file: 'apps/web/src/lib/server/domains/sla/sla-breach-sweep-queue.ts',
-    name: 'initPromise',
-    category: 'process-lifetime',
-    reason:
-      'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
-      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
-      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
-      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
-      'the async context alive at construction for every job it ever handles - and seven of these ' +
-      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
-      "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
-      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
-      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
-      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
-      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
-      'configuration at all.',
-  },
-  {
     file: 'apps/web/src/lib/server/domains/workflows/dispatcher.guards.ts',
     name: 'warnedAudienceWorkflowIds',
     category: 'process-lifetime',
@@ -690,46 +590,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'apps/web/src/lib/server/domains/workflows/workflow-dispatch-queue.ts',
-    name: 'initPromise',
-    category: 'process-lifetime',
-    reason:
-      'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
-      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
-      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
-      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
-      'the async context alive at construction for every job it ever handles - and seven of these ' +
-      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
-      "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
-      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
-      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
-      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
-      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
-      'configuration at all.',
-  },
-  {
-    file: 'apps/web/src/lib/server/domains/workflows/workflow-retention-queue.ts',
-    name: 'initPromise',
-    category: 'process-lifetime',
-    reason:
-      'A boot latch holding the in-flight BullMQ queue/worker construction so concurrent callers ' +
-      'share one. Named explicitly by §4.4 as a genuine process-lifetime case. The LATCH is ' +
-      'process-lifetime; what it gates was not, and an earlier version of this entry said it held ' +
-      '"connection objects, never tenant rows", which was the same reassurance bootstrap._initialized ' +
-      'was corrected for. A BullMQ Worker starts its run loop inside the constructor, so it keeps ' +
-      'the async context alive at construction for every job it ever handles - and seven of these ' +
-      "arm lazily on first enqueue, from inside a request. The arming tenant's scope would have " +
-      "been welded onto the processor and every tenant's jobs would have run against that one " +
-      'database. Closed in queue/create-worker.ts, which refuses to construct a BullMQ Worker under ' +
-      'pooled tenancy whatever the role, and constructs every other one detached so it cannot ' +
-      'inherit an arming scope. An earlier version of this entry said the refusal lived in config ' +
-      'as "pooled requires QUACKBACK_ROLE=web"; that banned the role rather than BullMQ, and the ' +
-      'role is exactly what the pooled job tier needs, so the two guards left no runnable pooled ' +
-      'configuration at all.',
-  },
-  {
-    file: 'apps/web/src/lib/server/domains/workflows/workflow-sweep-queue.ts',
     name: 'initPromise',
     category: 'process-lifetime',
     reason:
@@ -936,15 +796,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'credential.',
   },
   {
-    file: 'apps/web/src/lib/server/storage/s3.ts',
-    name: 'credentialResolver',
-    category: 'process-lifetime',
-    owner: 'Piece 18 (saas/tenant-secrets)',
-    reason:
-      'The installed resolver function, not a credential. Per-tenant resolution happens inside it on ' +
-      'every call.',
-  },
-  {
     file: 'apps/web/src/lib/server/tenancy/pool-cache.ts',
     name: 'stats',
     category: 'process-lifetime',
@@ -1053,5 +904,113 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'once per enqueue. Keys are the fifteen compile-time queue-name constants, identical for ' +
       'every tenant; the only shared effect is a suppressed duplicate log line. Caught by this ' +
       'scanner on the commit that introduced it, which is the ratchet working on its own author.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'loops',
+    category: 'tenant-scoped-key',
+    keyedBy: 'tenant.tenantId',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'One drain loop per tenant, keyed by tenant id, each pass wrapped in ' +
+      'withTenantScopeById(...) so a handler always runs inside the scope of the tenant whose ' +
+      'row it claimed. The per-tenant partition IS the design here rather than a retrofit - ' +
+      'this is the pooled-safe job tier that replaced the BullMQ workers whose run loops ' +
+      'inherited whichever request armed them.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'stats',
+    category: 'tenant-scoped-key',
+    keyedBy: 'opts.tenantId',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Per-tenant loop counters (passes, claimed, succeeded, failed, wake latency) keyed by ' +
+      'tenant id, for the readiness and diagnostics surfaces. Shared, one tenant s throughput ' +
+      'would be reported as another s, which is the kind of wrong number an operator acts on.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'running',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Start-once latch for the job tier, the same shape as the outbox relay s. Holds a boolean ' +
+      'that is a fact about this process, and startJobTier() returns early on it so a second ' +
+      'call cannot double-start the loops.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'refreshTimer',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'The interval handle that re-reads the active tenant list so loops appear and disappear ' +
+      'with the fleet. One timer per process by construction; the tenant dimension lives in the ' +
+      'loops it maintains, not in the handle.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/runner.ts',
+    name: 'handlerMemo',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Job name to handler function, primed by primeJobHandlers() at tier start and deliberately ' +
+      'BEFORE any tenant scope is open - a handler module imported under a scope would bind ' +
+      'whatever module-scope state its own import graph builds to that tenant. The values are ' +
+      'tenant-agnostic module functions, and the priming order is the contract this scanner ' +
+      'exists to keep honest: primeJobHandlers() logs an error if it is called inside a scope.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/runner.ts',
+    name: 'cronCache',
+    category: 'content-addressed',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Parsed cron expressions keyed by the pattern string. Parsing is a pure function of that ' +
+      'string, so a cross-tenant hit returns exactly what the requesting tenant would have ' +
+      'parsed - and the patterns are compile-time constants in jobs/definitions.ts anyway.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/job-queue.ts',
+    name: 'workerIdMemo',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'This process s identity for locked_by, composed once from hostname, pid and a random ' +
+      'suffix. Identifying the PROCESS is exactly what it is for: a per-tenant worker id would ' +
+      'make the lease column unable to answer "which replica holds this row".',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/definitions.ts',
+    name: 'overrides',
+    category: 'process-lifetime',
+    owner: 'Piece 6 (saas/queue-lease)',
+    reason:
+      'Test seam holding a replacement job-definition list, null in production so jobDefinitions() ' +
+      'returns the compile-time JOB_DEFINITIONS constant. Deliberately a whole-list swap rather ' +
+      'than a merge, so a test cannot accidentally run the real sweeps alongside its own.',
+  },
+  {
+    file: 'apps/web/src/lib/server/tenancy/tenant-secrets.ts',
+    name: 'cache',
+    category: 'tenant-scoped-key',
+    keyedBy: 'tenant.tenantId',
+    owner: 'Piece 18 (saas/tenant-secrets)',
+    reason:
+      'Resolved per-tenant SECRET_KEY and object-storage credentials, keyed by tenant id and ' +
+      'refreshed on the same cadence as the pool it hangs off. This is the singleton whose ' +
+      'absence made storage non-functional under pooling and left the encryption boundary as ' +
+      'one HKDF info string rather than one key; shared, it would be the whole boundary.',
+  },
+  {
+    file: 'apps/web/src/lib/server/tenancy/tenant-secrets.ts',
+    name: 'injected',
+    category: 'process-lifetime',
+    owner: 'Piece 18 (saas/tenant-secrets)',
+    reason:
+      'The installed custodian resolver, not a credential: a function the deployment plugs in ' +
+      'once, which is then called per tenant. Setting it clears the cache above, so a swapped ' +
+      'custodian cannot serve secrets the previous one resolved.',
   },
 ]

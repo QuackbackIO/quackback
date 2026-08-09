@@ -7,9 +7,9 @@
  * processor reading `db` gets the ARMING tenant's database — for every tenant's
  * jobs, forever, with nothing erroring.
  *
- * Seven queue modules arm lazily on first enqueue and four have no eager init
- * hook at all, while `middleware/request-scope.ts` runs every request inside
- * `runWithTenantScope`. So the arming is request-reachable, and the pooled
+ * Four of the eight remaining queue modules have no eager init hook at all and
+ * arm lazily on first enqueue, while `middleware/request-scope.ts` runs every
+ * request inside `runWithTenantScope`. So the arming is request-reachable, and the pooled
  * refusal in `startup.ts` removes only the SAFE (eager, unscoped) path.
  *
  * Three layers are checked here, because each covers a different way the
@@ -200,20 +200,32 @@ function directWorkerConstructions(): string[] {
 
 describe('coverage: nothing constructs a Worker outside the seam', () => {
   it('finds no direct `new Worker(...)` in server code', () => {
-    // The fifteen queue modules go through `createQueueWorker`. This is what
-    // stops the sixteenth from quietly reintroducing the inheritance — the
+    // Every registered queue module goes through `createQueueWorker`. This is
+    // what stops the next one from quietly reintroducing the inheritance — the
     // mechanism tests above would stay green while a new queue leaked.
     expect(directWorkerConstructions()).toEqual([])
   })
 
-  it('is looking at something: the queue modules are in scope and use the seam', () => {
+  it('is looking at something: every registered worker module uses the seam', () => {
     // A source scan that scanned nothing would satisfy the assertion above.
+    //
+    // Derived from WORKER_REGISTRY rather than hardcoded. The count was 15 and
+    // is 8 — Piece 6 migrated seven of them onto the Postgres job queue — and a
+    // magic number silently became wrong the moment that landed. The registry
+    // is the thing that actually says which modules own a BullMQ worker, so it
+    // is what this counts.
+    const registry = readFileSync(join(SERVER_ROOT, 'queue/worker-registry.ts'), 'utf8')
+    const registered = [...registry.matchAll(/name:\s*'([a-z-]+)'/g)].length
+    expect(registered, 'no worker modules found in the registry').toBeGreaterThan(0)
+
     let usingSeam = 0
     for (const file of walkSourceFiles(SERVER_ROOT)) {
       if (!file.endsWith('.ts')) continue
+      // The seam's own declaration matches the pattern; it is not a consumer.
+      if (file.endsWith('create-worker.ts')) continue
       if (/\bcreateQueueWorker\s*[(<]/.test(readFileSync(file, 'utf8'))) usingSeam += 1
     }
-    expect(usingSeam).toBeGreaterThanOrEqual(15)
+    expect(usingSeam).toBe(registered)
   })
 })
 
@@ -244,7 +256,7 @@ describe('under pooled tenancy no BullMQ worker is constructed at all', () => {
 
   it('CONTROL: still constructs one under single tenancy', async () => {
     // Without this, "returns null" would pass on a function that returns null
-    // unconditionally — and the fifteen queue modules would silently lose their
+    // unconditionally — and every registered queue module would silently lose its
     // consumers on every self-hosted install.
     const { createQueueWorker } = await load(false)
     expect(createQueueWorker('q', async () => {}, {} as never)).not.toBeNull()

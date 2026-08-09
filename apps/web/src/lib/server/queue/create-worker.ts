@@ -19,11 +19,11 @@
  * SAAS-HOSTING-STACK.md §3's exact failure mode: no error, no failed permission
  * check, self-consistent rows from the wrong workspace.
  *
- * And the arming is request-reachable. Seven queue modules arm lazily on first
- * enqueue (`ensureQueue()`), four of them have no eager `init` hook in
- * `worker-registry.ts` at all, and `middleware/request-scope.ts` runs every
- * request inside `runWithTenantScope`. So under pooled tenancy the first
- * request to trigger an export, import, event fan-out or help-centre
+ * And the arming is request-reachable. Of the eight queue modules still on
+ * BullMQ, four have no eager `init` hook in `worker-registry.ts` at all and arm
+ * lazily on first enqueue (`ensureQueue()`), while `middleware/request-scope.ts`
+ * runs every request inside `runWithTenantScope`. So under pooled tenancy the
+ * first request to trigger an export, import, event fan-out or help-centre
  * translation arms the worker with that tenant's scope welded on.
  *
  * ## Why detaching is the right shape, and what it deliberately does NOT do

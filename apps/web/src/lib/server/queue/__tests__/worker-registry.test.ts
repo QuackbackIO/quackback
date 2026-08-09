@@ -44,7 +44,7 @@ const TYPE_ONLY_MODULES: string[] = []
  *
  * This list is the answer to the chokepoint comment below, which anticipated
  * exactly this refactor: construction moved behind a helper, so the classifier
- * counts a `createQueueWorker` call as construction too and the fifteen queue
+ * counts a `createQueueWorker` call as construction too and the registered queue
  * modules stay where they were.
  */
 const WORKER_FACTORY_MODULES = ['queue/create-worker.ts']

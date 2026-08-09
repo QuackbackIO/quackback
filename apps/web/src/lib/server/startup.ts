@@ -251,8 +251,8 @@ function startBackgroundProcessing(): void {
       'pooled tenancy — the EAGER queue-worker boot and the outbox relay are not started here. ' +
         'They require per-tenant session-mode connections on a dedicated tier; ' +
         'events will accumulate in each tenant outbox until that tier runs. ' +
-        'Note this is not a guarantee on its own: seven queue modules arm lazily on first ' +
-        'enqueue, so the eager skip here does not cover them. What does is ' +
+        'Note this is not a guarantee on its own: four of the remaining queue modules arm ' +
+        'lazily on first enqueue, so the eager skip here does not cover them. What does is ' +
         'queue/create-worker.ts, which refuses to construct a BullMQ worker under pooled ' +
         'tenancy whatever the role.'
     )
