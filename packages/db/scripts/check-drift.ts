@@ -301,7 +301,11 @@ async function main(): Promise<number> {
     console.log('Applying all migrations to the scratch database...')
     // The same code path production boot uses (migrate + system seed); the
     // seed's DML cannot affect the DDL diff.
-    await runMigrations(scratchUrl())
+    // Concurrent indexes and the post-condition sweep are deliberately off:
+    // this check diffs DDL that drizzle-kit can express, and the concurrent
+    // indexes are raw-SQL-owned (they are in the exemption list below). Running
+    // them here would change what the diff sees for no gain.
+    await runMigrations(scratchUrl(), { concurrentIndexes: false, verify: false })
 
     console.log('Diffing live schema against the Drizzle TS schema...')
     // pushSchema reads `.rows` off execute() results, but the postgres-js

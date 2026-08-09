@@ -21,22 +21,24 @@
  * | `deleting` — teardown in flight | 410 | none |
  * | `invalid` — a record exists but fails the contract | 503, alert | none |
  * | `refused` — the database is not the one the record named | 503, alert | one query |
+ * | `refused[schema_below_floor]` — right database, schema too old for this build | 503 + `Retry-After`, warn | one query |
  *
  * Every one of them is a refusal to serve. None degrades to a default tenant,
  * because §3's failure mode is precisely that a wrong-but-plausible answer looks
  * correct all the way down.
  */
 import { logger } from '@/lib/server/logger'
+import { SCHEMA_FLOOR_REFUSAL_CODE } from '@/lib/server/fleet/schema-floor'
 import { acquireScopeForHost } from './resolver'
 import { runWithTenantScope } from './tenant-context'
 
 /** Cache-Control on every refusal: a routing decision must never be cached. */
 const NO_STORE = { 'cache-control': 'no-store' } as const
 
-function refusal(status: number, body: string): Response {
+function refusal(status: number, body: string, extra?: Record<string, string>): Response {
   return new Response(body, {
     status,
-    headers: { 'content-type': 'text/plain; charset=utf-8', ...NO_STORE },
+    headers: { 'content-type': 'text/plain; charset=utf-8', ...NO_STORE, ...extra },
   })
 }
 
@@ -101,6 +103,25 @@ export async function resolveTenantAndContinue<T>({
       return refusal(503, 'This workspace is temporarily unavailable.')
 
     case 'refused':
+      // Two different refusals share this branch and must not share a message.
+      // A fingerprint refusal means "this is the wrong database" and is a
+      // security event; a schema-floor refusal means "this is the right
+      // database, mid-rollout" and is expected, transient, and this tenant's
+      // alone. Collapsing them would put a routine rollout in the same alert
+      // stream as a cross-tenant near-miss.
+      if (acquisition.code === SCHEMA_FLOOR_REFUSAL_CODE) {
+        log.warn(
+          { tenantId: acquisition.tenantId, code: acquisition.code, detail: acquisition.detail },
+          'tenant schema is below MIN_SCHEMA_VERSION — this workspace is updating'
+        )
+        return refusal(
+          503,
+          'This workspace is being updated. It will be available again shortly.',
+          // A rollout is measured in minutes per tenant; a client that retries
+          // sooner than this is adding load to a database that is migrating.
+          { 'retry-after': '30' }
+        )
+      }
       log.error(
         { tenantId: acquisition.tenantId, code: acquisition.code, detail: acquisition.detail },
         'tenant database refused the fingerprint — refusing to serve'

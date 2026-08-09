@@ -1,0 +1,130 @@
+/**
+ * The two decisions the reconciler makes before it touches a tenant's schema:
+ * *what would drizzle apply*, and *is any of it dangerous to apply twice*.
+ *
+ * Both are pure and both are read off the real bundled journal, because the
+ * question they answer is about this corpus and this driver rather than about a
+ * fixture someone wrote to make them pass.
+ */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import {
+  BUNDLED_MIGRATIONS,
+  MIGRATIONS_DIR,
+  latestBundledVersion,
+  type AppliedLedger,
+} from '@quackback/db/schema-version'
+import { assessReplaySafety } from '@/lib/server/policy/migration-contract/replay-safety'
+import { replayGateVerdict, replaySetFor } from '../migrator'
+
+function ledger(versions: number[]): AppliedLedger {
+  return {
+    versions: new Set(versions),
+    count: versions.length,
+    max: versions.length === 0 ? 0 : Math.max(...versions),
+  }
+}
+
+const verdictsFor = (tags: string[]) =>
+  tags.map((tag) =>
+    assessReplaySafety(tag, readFileSync(join(MIGRATIONS_DIR, `${tag}.sql`), 'utf8'))
+  )
+
+describe('replaySetFor', () => {
+  it('is everything on a database that has never been migrated', () => {
+    const set = replaySetFor(ledger([]))
+    expect(set).toHaveLength(BUNDLED_MIGRATIONS.length)
+    expect(set[0]).toBe(BUNDLED_MIGRATIONS[0]!.tag)
+  })
+
+  it('is empty on a database already at the newest bundled migration', () => {
+    expect(replaySetFor(ledger(BUNDLED_MIGRATIONS.map((e) => e.when)))).toEqual([])
+  })
+
+  it('is a SUFFIX by `when` — drizzle never revisits a gap below the high-water mark', () => {
+    // PgDialect.migrate reads `order by created_at desc limit 1` and applies
+    // every bundled entry strictly greater than that single value. A hole below
+    // it is invisible to the migrator, which is exactly why the compatibility
+    // gate checks the whole prefix instead of the maximum.
+    const all = BUNDLED_MIGRATIONS.map((e) => e.when)
+    const gapIndex = all.length - 5
+    const gapped = all.filter((_, i) => i !== gapIndex)
+    const set = replaySetFor(ledger(gapped))
+    expect(set).toEqual([])
+    expect(BUNDLED_MIGRATIONS[gapIndex]!.when).toBeLessThan(latestBundledVersion())
+  })
+
+  it('is the tail above the newest applied row', () => {
+    const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
+    const applied = BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when)
+    expect(replaySetFor(ledger(applied))).toEqual(
+      BUNDLED_MIGRATIONS.slice(cutoff + 1).map((e) => e.tag)
+    )
+  })
+})
+
+describe('replayGateVerdict', () => {
+  it('lets a fresh database through even though its replay set is full of writes', () => {
+    // The whole lineage from 0000_initial. Refusing it would refuse every new
+    // tenant, and there is nothing to apply twice on an empty ledger.
+    const tags = replaySetFor(ledger([]))
+    const verdicts = verdictsFor(tags)
+    expect(verdicts.some((v) => v.verdict === 'mutates')).toBe(true)
+    expect(replayGateVerdict(ledger([]), verdicts, false)).toEqual({ ok: true })
+  })
+
+  it('refuses a mutating replay against a database with an existing ledger', () => {
+    const before = ledger([1, 2, 3])
+    const verdicts = verdictsFor(['0006_thick_arclight'])
+    const verdict = replayGateVerdict(before, verdicts, false)
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) throw new Error('unreachable')
+    expect(verdict.detail).toContain('0006_thick_arclight')
+    // The refusal has to name the repair, not just the problem — this is the
+    // message an operator reads mid-rollout.
+    expect(verdict.detail).toContain('a wrong row is worse than a missing one')
+  })
+
+  it('allows the same set once the operator has established the ledger is honest', () => {
+    const verdicts = verdictsFor(['0006_thick_arclight'])
+    expect(replayGateVerdict(ledger([1, 2, 3]), verdicts, true)).toEqual({ ok: true })
+  })
+
+  it('lets an ordinary rollout through — errors-on-replay is not dangerous', () => {
+    // The realistic case: a tenant at 0248 and a build shipping 0253. Most of
+    // what lies between is plain DDL that would error on a second run, and
+    // migrate()'s transaction bounds that. A gate that refused it would refuse
+    // every rollout this system exists to perform.
+    const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
+    const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
+    const tags = replaySetFor(before)
+    const verdicts = verdictsFor(tags)
+    expect(tags.length).toBeGreaterThan(0)
+    expect(verdicts.every((v) => v.verdict !== 'mutates')).toBe(true)
+    expect(replayGateVerdict(before, verdicts, false)).toEqual({ ok: true })
+  })
+
+  it('this fleet’s actual drift — a ledger at 0248 carrying everything since — passes the gate', () => {
+    // Five live gauntlet tenant databases are in exactly this state, because
+    // every builder applied with `psql -f`, which never writes the ledger. The
+    // window grows with every migration the branch adds, and it is listed
+    // rather than derived on purpose: if one of these ever stops being
+    // replay-safe, healing those databases stops being free and this is where
+    // that is noticed.
+    const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
+    const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
+    expect(replaySetFor(before)).toEqual([
+      '0249_settings_cloud',
+      '0250_billing',
+      '0251_settings_cloud_tenant_id',
+      '0252_settings_cloud_secret_canary',
+      '0253_job_queue',
+      '0256_outbox_relay_leader',
+      '0257_pg_kv_presence_realtime',
+    ])
+    expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)).toEqual({
+      ok: true,
+    })
+  })
+})

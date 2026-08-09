@@ -645,6 +645,30 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The control-plane database connection handle. One control store per fleet by definition.',
   },
   {
+    file: 'apps/web/src/lib/server/fleet/schema-state.ts',
+    name: 'controlDbMemo',
+    category: 'process-lifetime',
+    reason:
+      'A drizzle handle wrapped around the connection above, so it inherits its scope exactly: one ' +
+      'control store per fleet. It is memoized lazily rather than at module scope because ' +
+      'getControlSql() throws when QUACKBACK_CONTROL_DATABASE_URL is unset, and a single-tenant ' +
+      'install that will never reconcile a fleet must still be able to import this file.',
+  },
+  {
+    file: 'apps/web/src/lib/server/fleet/schema-floor.ts',
+    name: 'floorMemo',
+    category: 'fleet-wide',
+    reason:
+      "This process's own MIN_SCHEMA_VERSION, not any tenant's schema. The value is a pure function " +
+      'of process.env.MIN_SCHEMA_VERSION and the journal bundled into this build, both frozen for ' +
+      'the life of the process, and the memo is keyed on the raw string it was resolved from — so a ' +
+      'cross-tenant hit returns the identical number the requesting tenant would have computed. ' +
+      'What it deliberately does NOT hold is the per-tenant answer: assertSchemaFloor() re-reads ' +
+      "each tenant's own drizzle.__drizzle_migrations on every pool checkout and memoizes nothing " +
+      'about it. Caching that instead would be the §10.5 gate certifying one tenant on the strength ' +
+      "of another tenant's ledger.",
+  },
+  {
     file: 'apps/web/src/lib/shared/i18n.ts',
     name: 'isRtlForced',
     category: 'process-lifetime',

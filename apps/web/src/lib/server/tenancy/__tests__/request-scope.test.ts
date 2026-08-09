@@ -116,6 +116,49 @@ describe('resolveTenantAndContinue', () => {
     )
   })
 
+  it('names a schema-floor refusal distinguishably from a fingerprint refusal', async () => {
+    // Two refusals share the `refused` branch and mean opposite things. A
+    // fingerprint refusal is "this is the wrong database" — a security event. A
+    // schema-floor refusal is "this is the right database, mid-rollout" — routine
+    // and this tenant's alone. Collapsing them would put every rollout in the
+    // same alert stream as a cross-tenant near-miss.
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'refused',
+      tenantId: 'inst_a',
+      code: 'schema_below_floor',
+      detail: 'missing 1 migration(s): 0251_settings_cloud_tenant_id',
+    })
+    const res = (await serve('t1.localhost')) as Response
+    expect(res.status).toBe(503)
+    expect(res.headers.get('retry-after')).toBe('30')
+    const body = await res.text()
+    expect(body).toContain('being updated')
+    // Still no operator detail to the visitor.
+    expect(body).not.toContain('0251_settings_cloud_tenant_id')
+    // Warn, not error: this is expected during a rollout.
+    expect(silentLog.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'schema_below_floor' }),
+      expect.stringContaining('MIN_SCHEMA_VERSION')
+    )
+    expect(silentLog.error).not.toHaveBeenCalled()
+  })
+
+  it('a fingerprint refusal carries no Retry-After and is logged at error', async () => {
+    // The control for the case above: if both produced the same response, the
+    // assertion that they differ would be satisfied by neither being right.
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'refused',
+      tenantId: 'inst_a',
+      code: 'neon_branch_mismatch',
+      detail: 'branch br-x, expected br-y',
+    })
+    const res = (await serve('t1.localhost')) as Response
+    expect(res.status).toBe(503)
+    expect(res.headers.get('retry-after')).toBeNull()
+    expect(await res.text()).toContain('temporarily unavailable')
+    expect(silentLog.error).toHaveBeenCalled()
+  })
+
   it('never marks a refusal cacheable', async () => {
     // A cached 404 or 503 on a shared edge would pin a tenant into an outage
     // long after the record was fixed.

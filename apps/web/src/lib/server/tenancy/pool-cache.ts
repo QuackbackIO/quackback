@@ -40,6 +40,7 @@ import { createDbFromSql, type Database } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
+import { assertSchemaFloor } from '@/lib/server/fleet/schema-floor'
 import {
   evaluateSecretKeyCanary,
   evaluateTenantIdentity,
@@ -280,6 +281,12 @@ async function verifyTenantDatabase(
     ? evaluateSecretKeyCanary(tenant.tenantId, secrets.secretKey, observed.secretCanary)
     : verdict
   if (keyVerdict.ok) {
+    // §10.5's compatibility gate, in the same pass and cached the same way: this
+    // database is the right one, but is its schema new enough for this build to
+    // read? Deliberately *after* the identity checks — asking a database we have
+    // not established the identity of what version it is at would be answering
+    // the second question before the first.
+    await assertSchemaFloor(tenant.tenantId, sql)
     log.info(
       {
         tenantId: tenant.tenantId,

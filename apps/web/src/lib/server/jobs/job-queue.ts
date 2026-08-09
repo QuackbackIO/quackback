@@ -49,6 +49,16 @@
  * updates zero rows and is told its lease was lost. Without the token it would
  * overwrite whatever the job's new owner had done.
  *
+ * ## Where the statements live
+ *
+ * The claim/heartbeat/complete/fail/reap statements moved to `lease.ts` so the
+ * fleet migrator's claim loop is the same primitive rather than a second one
+ * (SAAS-HOSTING-STACK.md §10.3: *"Fleet migration is its second consumer, not a
+ * new subsystem"*). Nothing about the semantics moved with them — this file
+ * still owns the queue's shape, the tenant assertion and the enqueue path, and
+ * the kill-matrix proof still runs through here, which is what keeps `lease.ts`
+ * honest.
+ *
  * ## The tenant assertion
  *
  * The queue is per-tenant because the table lives in the tenant's own database —
@@ -67,8 +77,19 @@ import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
 import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import {
+  leaseClaimGroupedSql,
+  leaseCompleteSql,
+  leaseFailSql,
+  leaseHeartbeatSql,
+  leaseReapSql,
+  leaseTerminateSql,
+} from './lease'
 
 const log = logger.child({ component: 'job-queue' })
+
+/** The table the lease statements operate on. */
+const TABLE = 'job_queue'
 
 /** Postgres `undefined_table`. The tenant has not run migration 0253 yet. */
 export const UNDEFINED_TABLE = '42P01'
@@ -359,48 +380,18 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
   // flattens a JS array into one parameter per element, so `= ANY($1::text[])`
   // arrives as a bare string and Postgres rejects it as a malformed array. This
   // shape parameterises cleanly and leaves the value opaque to the parser.
-  const spec = JSON.stringify(
-    Object.fromEntries(
-      runnable.map((s) => [s.queue, { limit: s.limit, leaseSecs: s.leaseMs / 1000 }])
-    )
+  const result = await db.execute(
+    leaseClaimGroupedSql({
+      table: TABLE,
+      groupColumn: 'queue',
+      groups: Object.fromEntries(
+        runnable.map((s) => [s.queue, { limit: s.limit, leaseMs: s.leaseMs }])
+      ),
+      workerId: jobWorkerId(),
+      returning: sql`j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.tenant_id,
+              j.attempts, j.max_attempts, j.lease_token, j.locked_until`,
+    })
   )
-  const result = await db.execute(sql`
-    WITH spec AS (
-      SELECT key AS queue,
-             (value->>'limit')::int AS lim,
-             (value->>'leaseSecs')::numeric AS lease_secs
-      FROM jsonb_each(${spec}::jsonb)
-    ),
-    claimable AS (
-      SELECT c.id, s.lease_secs
-      FROM spec s
-      CROSS JOIN LATERAL (
-        SELECT j.id
-        FROM job_queue j
-        WHERE j.queue = s.queue
-          AND j.status = 'pending'
-          AND j.run_at <= now()
-          -- The second barrier. A spent job must not be claimable even if some
-          -- other writer put it back to pending; see the module header.
-          AND j.attempts < j.max_attempts
-        ORDER BY j.run_at, j.id
-        LIMIT s.lim
-        FOR UPDATE SKIP LOCKED
-      ) c
-    )
-    UPDATE job_queue j
-    SET status = 'running',
-        attempts = j.attempts + 1,
-        lease_token = gen_random_uuid(),
-        locked_until = now() + make_interval(secs => c.lease_secs),
-        locked_by = ${jobWorkerId()},
-        started_at = COALESCE(j.started_at, now()),
-        updated_at = now()
-    FROM claimable c
-    WHERE j.id = c.id
-    RETURNING j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.tenant_id,
-              j.attempts, j.max_attempts, j.lease_token, j.locked_until
-  `)
 
   // The UPDATE's RETURNING order is unspecified. Sorting by id restores the
   // enqueue order the LATERAL selected in, so a caller that runs the batch
@@ -455,17 +446,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
 
 /** Terminal-fail a job outright, bypassing the retry decision. */
 async function terminate(job: ClaimedJob, reason: string): Promise<void> {
-  await db.execute(sql`
-    UPDATE job_queue
-    SET status = 'failed',
-        lease_token = NULL,
-        locked_until = NULL,
-        locked_by = NULL,
-        finished_at = now(),
-        last_error = ${reason},
-        updated_at = now()
-    WHERE id = ${job.id}::bigint AND lease_token = ${job.leaseToken}::uuid AND status = 'running'
-  `)
+  await db.execute(leaseTerminateSql(TABLE, job, reason))
 }
 
 /**
@@ -476,30 +457,13 @@ async function terminate(job: ClaimedJob, reason: string): Promise<void> {
  * from here is racing whoever holds the job now.
  */
 export async function heartbeatJob(job: ClaimedJob, leaseMs: number): Promise<boolean> {
-  const result = await db.execute(sql`
-    UPDATE job_queue
-    SET locked_until = now() + make_interval(secs => ${leaseMs / 1000}),
-        updated_at = now()
-    WHERE id = ${job.id}::bigint AND lease_token = ${job.leaseToken}::uuid AND status = 'running'
-    RETURNING id
-  `)
+  const result = await db.execute(leaseHeartbeatSql(TABLE, job, leaseMs))
   return getExecuteRows(result).length > 0
 }
 
 /** Mark a job done. False means the lease was lost and nothing was written. */
 export async function completeJob(job: ClaimedJob): Promise<boolean> {
-  const result = await db.execute(sql`
-    UPDATE job_queue
-    SET status = 'succeeded',
-        lease_token = NULL,
-        locked_until = NULL,
-        locked_by = NULL,
-        finished_at = now(),
-        last_error = NULL,
-        updated_at = now()
-    WHERE id = ${job.id}::bigint AND lease_token = ${job.leaseToken}::uuid AND status = 'running'
-    RETURNING id
-  `)
+  const result = await db.execute(leaseCompleteSql(TABLE, job))
   return getExecuteRows(result).length > 0
 }
 
@@ -523,25 +487,7 @@ export async function failJob(
   message: string,
   opts?: { backoffMs?: number; terminal?: boolean }
 ): Promise<FailOutcome> {
-  const backoffSecs = Math.max(0, opts?.backoffMs ?? 0) / 1000
-  const retryable = opts?.terminal ? sql`false` : sql`attempts < max_attempts`
-  const result = await db.execute(sql`
-    UPDATE job_queue
-    SET status = CASE WHEN ${retryable} THEN 'pending' ELSE 'failed' END,
-        run_at = CASE
-                   WHEN ${retryable}
-                   THEN now() + make_interval(secs => ${backoffSecs})
-                   ELSE run_at
-                 END,
-        lease_token = NULL,
-        locked_until = NULL,
-        locked_by = NULL,
-        finished_at = CASE WHEN ${retryable} THEN NULL ELSE now() END,
-        last_error = ${message.slice(0, 4000)},
-        updated_at = now()
-    WHERE id = ${job.id}::bigint AND lease_token = ${job.leaseToken}::uuid AND status = 'running'
-    RETURNING status
-  `)
+  const result = await db.execute(leaseFailSql(TABLE, job, message, opts))
   const rows = getExecuteRows<{ status: string }>(result)
   if (rows.length === 0) return 'lease-lost'
   return rows[0].status === 'pending' ? 'retrying' : 'failed'
@@ -563,23 +509,10 @@ export interface ReapResult {
  * death from turning an at-most-once import into a double import.
  */
 export async function reapExpiredLeases(): Promise<ReapResult> {
-  const result = await db.execute(sql`
-    UPDATE job_queue
-    SET status = CASE WHEN attempts < max_attempts THEN 'pending' ELSE 'failed' END,
-        lease_token = NULL,
-        locked_until = NULL,
-        locked_by = NULL,
-        finished_at = CASE WHEN attempts < max_attempts THEN NULL ELSE now() END,
-        last_error = CASE
-          WHEN attempts < max_attempts
-          THEN 'lease expired; requeued (attempt ' || attempts || ' of ' || max_attempts || ')'
-          ELSE 'lease expired with no attempts remaining; not retried (max_attempts=' ||
-               max_attempts || '). A retry here would re-run work that must run at most once.'
-        END,
-        updated_at = now()
-    WHERE status = 'running' AND locked_until < now()
-    RETURNING job_id, queue, status, attempts, max_attempts, locked_by
-  `)
+  // The reaper's RETURNING is the lease's, plus this queue's own two columns
+  // for the log line. Widening it here rather than re-writing the statement is
+  // what keeps the reaper single-sourced.
+  const result = await db.execute(leaseReapSql(TABLE, sql`j.job_id, j.queue`))
 
   const rows = getExecuteRows<{
     job_id: string

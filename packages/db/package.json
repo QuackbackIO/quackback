@@ -14,7 +14,9 @@
     "./migrate": "./src/migrate-runtime.ts",
     "./queries/public": "./src/queries/public.ts",
     "./types": "./src/types.ts",
-    "./drizzle/*": "./drizzle/*"
+    "./drizzle/*": "./drizzle/*",
+    "./schema-version": "./src/schema-version.ts",
+    "./schema-ops": "./src/schema-ops.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.check.json",

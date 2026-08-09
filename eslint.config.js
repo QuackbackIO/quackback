@@ -14,6 +14,18 @@ const dbReexportFiles = [
   // client factory the rest of the app is kept away from.
   '**/src/lib/server/tenancy/pool-cache.ts',
   '**/src/lib/server/tenancy/tenant-context.ts',
+  // The fleet migrator operates ON databases rather than through one. It builds
+  // its own direct, session-mode connection per tenant (the pooled handle
+  // `db.ts` resolves cannot run `pg_advisory_lock` or `CREATE INDEX
+  // CONCURRENTLY`), reads the bundled migration journal, and runs the executor —
+  // none of which is expressible through the re-export layer. Named file by file
+  // rather than by directory so a fourth module has to justify itself.
+  '**/src/lib/server/fleet/migrator.ts',
+  '**/src/lib/server/fleet/schema-state.ts',
+  '**/src/lib/server/fleet/schema-floor.ts',
+  // Its tests assert against the same layer, and a test forced through the
+  // re-export would be asserting about a different object than the one shipped.
+  '**/src/lib/server/fleet/__tests__/**',
 ]
 
 // `no-restricted-imports` fragments, shared because flat config REPLACES a
@@ -158,10 +170,7 @@ export default tseslint.config(
     files: ['**/src/lib/**/*.{ts,tsx}'],
     ignores: dbReexportFiles,
     rules: {
-      'no-restricted-imports': [
-        'error',
-        { patterns: [noDirectDbImport, noComponentsFromLib] },
-      ],
+      'no-restricted-imports': ['error', { patterns: [noDirectDbImport, noComponentsFromLib] }],
     },
   },
   // Server-function failures are logged once, globally, by the
