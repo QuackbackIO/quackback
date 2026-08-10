@@ -44,12 +44,12 @@ const VENDORED = {
   // permanently unrecoverable. The digest is the only thing standing between a
   // one-line "tidy-up" in one repo and data loss in the other.
   'fleet-secrets.ts': 'c9da2db5c7060c1c77a19e3344e728e044d339d8cdcabfac503b9577842bccb4',
-  'tenant-secret-resolution.ts':
-    '0ff468aa302a1574a152e3959f10bfcd7462c0941d29ed669b3e71ca7ab9ce0b',
+  'tenant-secret-resolution.ts': '0ff468aa302a1574a152e3959f10bfcd7462c0941d29ed669b3e71ca7ab9ce0b',
 } as const
 
 /** Where the control plane lives when this machine has a checkout of it. */
-const CP_TENANCY = process.env.QUACKBACK_CP_TENANCY_DIR ?? '/home/james/quackback-cp/src/lib/server/tenancy'
+const CP_TENANCY =
+  process.env.QUACKBACK_CP_TENANCY_DIR ?? '/home/james/quackback-cp/src/lib/server/tenancy'
 
 function digest(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
@@ -104,7 +104,14 @@ describe('the vendored predicate is the one that runs', () => {
     const throughApp = app.evaluateTenantIdentity(
       expected,
       { neonProjectId: null, neonBranchId: null },
-      { ...observed, physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null }, stampSource: 'metadata', stampSourceConflict: null, secretCanary: null }
+      {
+        ...observed,
+        physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null },
+        stampSource: 'metadata',
+        stampSourceConflict: null,
+        secretCanary: null,
+        storedCiphertext: { kind: 'unobserved' },
+      }
     )
 
     expect(direct).toMatchObject({ ok: false, code: 'workspace_id_mismatch' })
