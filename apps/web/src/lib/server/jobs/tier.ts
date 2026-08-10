@@ -169,6 +169,8 @@ const stats = new Map<string, LoopStats>()
 let running = false
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 let unsubscribeActivity: (() => void) | null = null
+/** When this process last read the fleet's tenant list from the control database. */
+let lastFleetReadAt = 0
 
 function emptyStats(): LoopStats {
   return {
@@ -584,8 +586,19 @@ function startLoop(opts: {
     ring,
     signal,
     observe(tenant) {
+      const changed = descriptor !== null && descriptor.revision !== tenant.revision
       descriptor = tenant
       opts.onObserve?.(tenant)
+      // A changed record is the signal that a refusal may have been repaired,
+      // and it is worthless if nobody is awake to act on it. A quarantined loop
+      // is asleep on the terminal backoff — fifteen minutes by default — so
+      // without this an operator's fix lands and then sits, which measured as a
+      // repaired tenant still refused eighty seconds later.
+      //
+      // Through `nudge`, not `signal`: a record changing is not the tenant being
+      // used, and counting it as activity would hold an otherwise-quiet tenant
+      // attached every time the control plane touched its row.
+      if (changed && !attached) nudge()
     },
     isAttached: () => attached,
     async stop() {
@@ -761,23 +774,40 @@ async function refreshTenantLoops(cfg: RunnerConfig, idle: TenantIdlePolicy): Pr
 }
 
 /**
- * Re-arm the tenant refresh at a cadence the fleet's own state justifies.
+ * Re-arm the tenant refresh, deciding at FIRE time whether to actually read.
  *
- * A `setInterval` cannot do this, because the right interval changes: 60 seconds
- * while any tenant is attached, and the rescan interval once every loop has let
- * go. The second case is the one that matters — this read goes to the control
- * database, and a fixed minute timer would hold that compute awake for ever
- * while every tenant it names slept.
+ * The read goes to the control database, which is now expected to suspend when
+ * the fleet goes quiet, so a fixed minute timer would be the client that keeps
+ * it awake for ever — the same defect as the tenant doorbells, one level up.
+ *
+ * The first version chose the *interval* instead, stretching it to the rescan
+ * interval whenever nothing was attached. That was wrong in a way only a
+ * measurement showed: the choice is made when the timer is armed, and at boot it
+ * is armed before any loop has finished attaching, so the fleet permanently read
+ * its tenant list once every fifteen minutes. A record repaired by an operator
+ * then sat unnoticed for that long, which is the one thing quarantine promised
+ * it would not do.
+ *
+ * So the timer always fires on the minute and the *read* is what is conditional:
+ * free while the fleet is doing something, skipped while it is not, and forced
+ * once per rescan interval regardless so a newly provisioned tenant is still
+ * discovered on a fleet that is otherwise asleep.
  */
 function scheduleTenantRefresh(cfg: RunnerConfig, idle: TenantIdlePolicy): void {
   if (!running) return
-  const anyAttached = [...loops.values()].some((l) => l.isAttached())
-  const delay = anyAttached ? TENANT_REFRESH_MS : Math.max(TENANT_REFRESH_MS, idle.rescanIntervalMs)
   refreshTimer = setTimeout(() => {
+    if (!running) return
+    const anyAttached = [...loops.values()].some((l) => l.isAttached())
+    const overdue = Date.now() - lastFleetReadAt >= idle.rescanIntervalMs
+    if (!anyAttached && !overdue) {
+      scheduleTenantRefresh(cfg, idle)
+      return
+    }
+    lastFleetReadAt = Date.now()
     void refreshTenantLoops(cfg, idle)
       .catch((err) => log.error({ err }, 'job tier tenant refresh failed'))
       .finally(() => scheduleTenantRefresh(cfg, idle))
-  }, delay)
+  }, TENANT_REFRESH_MS)
   refreshTimer.unref?.()
 }
 

@@ -263,6 +263,17 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'fingerprint before the pool is handed out (§3).',
   },
   {
+    file: 'apps/web/src/lib/server/tenancy/quarantine.ts',
+    name: 'quarantined',
+    category: 'tenant-scoped-key',
+    keyedBy: 'tenant.tenantId',
+    reason:
+      'Tenants a tier has stopped reconnecting to, keyed by tenantId and holding the revision the ' +
+      'refusal was seen at. A cross-tenant hit would say one tenant is refused because another is, ' +
+      'which the revision check makes impossible: the entry is discarded the moment the record it ' +
+      'accuses changes.',
+  },
+  {
     file: 'apps/web/src/lib/server/tenancy/resolver.ts',
     name: 'byHostname',
     category: 'tenant-scoped-key',
@@ -622,6 +633,75 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     name: 'stats',
     category: 'process-lifetime',
     reason: 'Eviction and checkout counters for the pool cache. Diagnostics about the process.',
+  },
+  {
+    file: 'apps/web/src/lib/server/tenancy/quarantine.ts',
+    name: 'lastReportAt',
+    category: 'process-lifetime',
+    reason:
+      'When this process last logged the quarantine heartbeat. A clock for a log line, carrying no ' +
+      'tenant data; the worst a wrong value does is repeat or delay one report.',
+  },
+  {
+    file: 'apps/web/src/lib/server/tenancy/idle.ts',
+    name: 'subscribers',
+    category: 'process-lifetime',
+    reason:
+      'The in-process tenant-activity listeners — the two tiers, registered once at boot. The tenant ' +
+      'is an ARGUMENT to each callback rather than state held here, so there is nothing keyed and ' +
+      'nothing to leak across tenants.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/deadlines.ts',
+    name: 'providers',
+    category: 'process-lifetime',
+    reason:
+      'Queue name to deadline function, registered at module load before any tenant scope is open. ' +
+      "The functions are pure code; every call runs inside the caller's scope and reads that " +
+      "tenant's own database, so the ambient scope supplies the tenant rather than this map.",
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'lastFleetReadAt',
+    category: 'fleet-wide',
+    reason:
+      "When this process last read the FLEET's tenant list from the control database. Fleet-wide by " +
+      'definition — it is about the one shared registry, not about any tenant. It exists so an idle ' +
+      'fleet stops re-reading a control database that is trying to suspend.',
+  },
+  {
+    file: 'apps/web/src/lib/server/events/relay-tier.ts',
+    name: 'lastFleetReadAt',
+    category: 'fleet-wide',
+    reason:
+      "When this tier last read the FLEET's tenant list from the control database. Same fact as the " +
+      "job tier's, held separately because the two tiers refresh on their own clocks.",
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'unsubscribeActivity',
+    category: 'process-lifetime',
+    reason:
+      "The job tier's handle for detaching its activity listener at shutdown. One closure per " +
+      'process, carrying no tenant.',
+  },
+  {
+    file: 'apps/web/src/lib/server/events/relay-tier.ts',
+    name: 'unsubscribeActivity',
+    category: 'process-lifetime',
+    reason:
+      "The relay tier's handle for detaching its activity listener at shutdown. One closure per " +
+      'process, carrying no tenant.',
+  },
+  {
+    file: 'apps/web/src/lib/server/tenancy/registry.ts',
+    name: 'controlRead',
+    category: 'fleet-wide',
+    reason:
+      'When the CONTROL database last answered, and with what. The control database is one shared ' +
+      'database for the whole fleet, so this is fleet-wide by construction. It exists so the ' +
+      'readiness probe can observe rather than connect: a probe that ran SELECT 1 every few seconds ' +
+      'was the client keeping that compute awake.',
   },
   {
     file: 'apps/web/src/lib/server/tenancy/pool-cache.ts',

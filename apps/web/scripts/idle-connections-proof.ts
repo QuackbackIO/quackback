@@ -408,12 +408,20 @@ async function refusal(): Promise<void> {
        SET app_secrets_ref = ${original[0]!.app_secrets_ref}, revision = revision + 1
      WHERE tenant_id = ${bad.id}`
   invalidateTenantCache()
-  for (let i = 1; i <= 4; i++) {
+  // Long enough to cover a whole tenant-refresh interval. The loop learns the
+  // new revision from `refreshTenantLoops`, not from the cache invalidation, so
+  // a window shorter than that would report "still refused" for a repair that
+  // had in fact landed — the harness measuring its own impatience.
+  for (let i = 1; i <= 16; i++) {
     await sleep(5_000)
     const backends = await observe(observer, [bad.db, good.db])
     process.stdout.write(
       `  +${i * 5}s  repaired=${tally(backends, bad.db)}   control=${tally(backends, good.db)}\n`
     )
+    if (listQuarantinedTenants().length === 0) {
+      process.stdout.write(`  >>> quarantine cleared after ${i * 5}s\n`)
+      break
+    }
   }
   process.stdout.write(`  still quarantined: ${listQuarantinedTenants().length}\n`)
 

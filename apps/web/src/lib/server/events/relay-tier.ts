@@ -248,6 +248,8 @@ const stats = new Map<string, RelayLoopStats>()
 let running = false
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 let unsubscribeActivity: (() => void) | null = null
+/** When this process last read the fleet's tenant list from the control database. */
+let lastFleetReadAt = 0
 
 function emptyStats(): RelayLoopStats {
   return {
@@ -643,8 +645,18 @@ function startLoop(opts: {
     ring,
     signal,
     observe(tenant) {
+      const changed = descriptor !== null && descriptor.revision !== tenant.revision
       descriptor = tenant
       opts.onObserve?.(tenant)
+      // A changed record may be a repaired one, and a quarantined loop is asleep
+      // on the terminal backoff. Waking it is what turns an operator's fix into
+      // a reconnection rather than a wait. Not counted as activity: the control
+      // plane touching a row is not the tenant being used.
+      if (changed && !attachment) {
+        const resolve = wakeResolve
+        wakeResolve = null
+        resolve?.()
+      }
     },
     isAttached: () => attachment !== null,
     async stop() {
@@ -845,23 +857,40 @@ async function refreshTenantLoops(cfg: RelayTierConfig, idle: TenantIdlePolicy):
 }
 
 /**
- * Re-arm the tenant refresh at a cadence the fleet's own state justifies.
+ * Re-arm the tenant refresh, deciding at FIRE time whether to actually read.
  *
- * A fixed `setInterval` would read the **control** database once a minute for
- * ever, which is the same defect as the tenant doorbells one level up: that
- * compute is now expected to suspend when the fleet goes quiet, and a minute
- * timer is a client that never lets it. While any tenant is attached the fleet
- * is busy and the control database is being read on the request path anyway.
+ * The read goes to the control database, which is now expected to suspend when
+ * the fleet goes quiet, so a fixed minute timer would be the client that keeps
+ * it awake for ever — the same defect as the tenant doorbells, one level up.
+ *
+ * The first version chose the *interval* instead, stretching it to the rescan
+ * interval whenever nothing was attached. That was wrong in a way only a
+ * measurement showed: the choice is made when the timer is armed, and at boot it
+ * is armed before any loop has finished attaching, so the fleet permanently read
+ * its tenant list once every fifteen minutes. A record repaired by an operator
+ * then sat unnoticed for that long, which is the one thing quarantine promised
+ * it would not do.
+ *
+ * So the timer always fires on the minute and the *read* is what is conditional:
+ * free while the fleet is doing something, skipped while it is not, and forced
+ * once per rescan interval regardless so a newly provisioned tenant is still
+ * discovered on a fleet that is otherwise asleep.
  */
 function scheduleTenantRefresh(cfg: RelayTierConfig, idle: TenantIdlePolicy): void {
   if (!running) return
-  const anyAttached = [...loops.values()].some((l) => l.isAttached())
-  const delay = anyAttached ? TENANT_REFRESH_MS : Math.max(TENANT_REFRESH_MS, idle.rescanIntervalMs)
   refreshTimer = setTimeout(() => {
+    if (!running) return
+    const anyAttached = [...loops.values()].some((l) => l.isAttached())
+    const overdue = Date.now() - lastFleetReadAt >= idle.rescanIntervalMs
+    if (!anyAttached && !overdue) {
+      scheduleTenantRefresh(cfg, idle)
+      return
+    }
+    lastFleetReadAt = Date.now()
     void refreshTenantLoops(cfg, idle)
       .catch((err) => log.error({ err }, 'outbox relay tier tenant refresh failed'))
       .finally(() => scheduleTenantRefresh(cfg, idle))
-  }, delay)
+  }, TENANT_REFRESH_MS)
   refreshTimer.unref?.()
 }
 
