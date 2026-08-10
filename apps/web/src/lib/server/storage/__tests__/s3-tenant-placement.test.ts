@@ -8,7 +8,7 @@
  * request's own host belongs to whichever hostname the visitor happened to
  * use. The tenant record pins one origin; that is the one that must win.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 
 vi.mock('@/lib/server/config', () => ({
   config: {
@@ -24,15 +24,64 @@ vi.mock('@/lib/server/config', () => ({
   },
 }))
 
+/**
+ * Placement and credentials are no longer readable as values: `getS3Config` and
+ * `getStoragePlacement` are module-private, because a bucket plus a credential
+ * is a complete capability to address any object and nothing outside the module
+ * needs one. So the tests that used to read them now observe them where they are
+ * spent — the `Bucket` a command names, and the credentials a client is built
+ * with. That is a better question than the old one: it asks what the request
+ * actually addressed rather than what an accessor was willing to say.
+ */
+const sent: Array<{ Bucket: string; Key: string }> = []
+const clientConfigs: Array<{
+  region: string
+  endpoint?: string
+  forcePathStyle: boolean
+  credentials: { accessKeyId: string; secretAccessKey: string }
+}> = []
+
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: vi.fn(function (cfg: (typeof clientConfigs)[number]) {
+    clientConfigs.push(cfg)
+    return {
+      send: async (command: { input: { Bucket: string; Key: string } }) => {
+        sent.push(command.input)
+        return {}
+      },
+      destroy: vi.fn(),
+    }
+  }),
+  PutObjectCommand: vi.fn(function (input: unknown) {
+    return { input }
+  }),
+  GetObjectCommand: vi.fn(function (input: unknown) {
+    return { input }
+  }),
+  DeleteObjectCommand: vi.fn(function (input: unknown) {
+    return { input }
+  }),
+}))
+vi.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: vi.fn(async () => 'https://stub'),
+}))
+
 const {
   getPublicUrlOrNull,
-  getStoragePlacement,
-  getS3Config,
+  getStorageSigningSecret,
   isS3Configured,
   isS3Usable,
   StorageUnavailableError,
+  uploadObject,
 } = await import('../s3')
 const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
+
+const BYTES = Buffer.from([1, 2, 3])
+
+beforeEach(() => {
+  sent.length = 0
+  clientConfigs.length = 0
+})
 
 // `logos/` is a public prefix; `attachments/` is not (unknown prefixes are private).
 const PUBLIC_KEY = 'logos/2026/08/brand.png'
@@ -119,22 +168,30 @@ describe('public URLs', () => {
 })
 
 describe('placement', () => {
-  it('addresses the tenant bucket, not the environment bucket', () => {
-    const placement = withTenant('tenant-alpha', () => getStoragePlacement())
+  it('addresses the tenant bucket, not the environment bucket', async () => {
+    await withTenant('tenant-alpha', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'))
 
-    expect(placement.bucket).toBe('tenant-alpha-bucket')
-    expect(placement.region).toBe('auto')
-    expect(placement.forcePathStyle).toBe(false)
-    expect(placement.endpoint).toBe('https://storage.example.com')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.Bucket).toBe('tenant-alpha-bucket')
+    expect(sent[0]!.Bucket).not.toBe('env-bucket')
+    expect(clientConfigs).toHaveLength(1)
+    expect(clientConfigs[0]).toMatchObject({
+      region: 'auto',
+      forcePathStyle: false,
+      endpoint: 'https://storage.example.com',
+    })
   })
 
   it('needs no resolved credential to address a bucket', () => {
-    expect(() =>
-      withTenant('tenant-alpha', () => getStoragePlacement(), { secrets: NO_STORAGE })
-    ).not.toThrow()
+    // The old spelling of this asked whether `getStoragePlacement()` threw. That
+    // accessor is gone; the property it was protecting is not, and it was never
+    // really about the accessor — it is that a public asset URL keeps rendering
+    // for a tenant whose credentials this process cannot dereference, because
+    // rendering one needs a bucket and no secret.
+    expect(withTenant('tenant-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(true)
     expect(
-      withTenant('tenant-alpha', () => isS3Configured(), { secrets: NO_STORAGE })
-    ).toBe(true)
+      withTenant('tenant-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), { secrets: NO_STORAGE })
+    ).toBe(`https://assets-tenant-alpha.example.com/${PUBLIC_KEY}`)
   })
 
   it('is NOT usable without resolved credentials, though the bucket is addressable', () => {
@@ -144,9 +201,7 @@ describe('placement', () => {
     // callers that gate an upload already skip cleanly on `false`, so the wrong
     // question there turns a skip into an exception.
     expect(withTenant('tenant-alpha', () => isS3Usable(), { secrets: NO_STORAGE })).toBe(false)
-    expect(withTenant('tenant-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(
-      true
-    )
+    expect(withTenant('tenant-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(true)
   })
 
   it('is usable once the credentials resolved', () => {
@@ -157,27 +212,49 @@ describe('placement', () => {
 })
 
 describe('credentials', () => {
-  it('refuses loudly rather than falling back to the fleet-wide keys', () => {
-    // The failure that matters is not "throws" — it is "does not silently return
+  it('refuses loudly rather than falling back to the fleet-wide keys', async () => {
+    // The failure that matters is not "throws" — it is "does not silently use
     // env-access-key". A fleet-wide fallback would build a client for tenant
     // alpha's bucket holding credentials that might well open it.
     expect(() =>
-      withTenant('tenant-alpha', () => getS3Config(), { secrets: NO_STORAGE })
+      withTenant('tenant-alpha', () => getStorageSigningSecret(), { secrets: NO_STORAGE })
     ).toThrow(StorageUnavailableError)
     expect(() =>
-      withTenant('tenant-alpha', () => getS3Config(), { secrets: NO_STORAGE })
+      withTenant('tenant-alpha', () => getStorageSigningSecret(), { secrets: NO_STORAGE })
     ).toThrow(/no resolver in this process/)
+
+    // …and the command path refuses too, without ever constructing a client.
+    //
+    // A tenant nothing else has touched. The S3 client is memoised per tenant,
+    // so a tenant that built one earlier in this file would send through the
+    // cached client and never reach credential resolution — the test would be
+    // reporting on that earlier client rather than on this call.
+    await expect(
+      withTenant('tenant-foxtrot', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), {
+        secrets: NO_STORAGE,
+      })
+    ).rejects.toThrow(StorageUnavailableError)
+    expect(clientConfigs).toHaveLength(0)
+    expect(sent).toHaveLength(0)
   })
 
-  it('uses the credentials resolved for THIS tenant', () => {
-    const alpha = withTenant('tenant-alpha', () => getS3Config())
-    const bravo = withTenant('tenant-bravo', () => getS3Config())
+  it('uses the credentials resolved for THIS tenant', async () => {
+    // Observed at the client rather than at an accessor. Two tenants no other
+    // test in this file has touched, because the client cache is keyed by
+    // tenant and a reused one would be evidence from an earlier test.
+    await withTenant('tenant-delta', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'))
+    await withTenant('tenant-echo', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'))
 
-    expect(alpha.accessKeyId).toBe('AK-tenant-alpha')
-    expect(alpha.bucket).toBe('tenant-alpha-bucket')
-    expect(bravo.accessKeyId).toBe('AK-tenant-bravo')
-    expect(alpha.secretAccessKey).not.toBe(bravo.secretAccessKey)
-    expect(alpha.accessKeyId).not.toBe('env-access-key')
+    expect(clientConfigs).toHaveLength(2)
+    const [delta, echo] = clientConfigs as [
+      (typeof clientConfigs)[number],
+      (typeof clientConfigs)[number],
+    ]
+    expect(delta.credentials.accessKeyId).toBe('AK-tenant-delta')
+    expect(echo.credentials.accessKeyId).toBe('AK-tenant-echo')
+    expect(delta.credentials.secretAccessKey).not.toBe(echo.credentials.secretAccessKey)
+    expect(delta.credentials.accessKeyId).not.toBe('env-access-key')
+    expect(sent.map((c) => c.Bucket)).toEqual(['tenant-delta-bucket', 'tenant-echo-bucket'])
   })
 
   it('gives no private URL at all when the credentials did not resolve', () => {
@@ -194,10 +271,10 @@ describe('credentials', () => {
   })
 
   it('still reads the environment keys with no tenant scope', () => {
-    expect(getS3Config()).toMatchObject({
-      bucket: 'env-bucket',
-      accessKeyId: 'env-access-key',
-      secretAccessKey: 'env-secret-key',
-    })
+    // The self-hosted path. Only the signing secret is observable from outside
+    // the module now; that the unscoped bucket is still the environment one is
+    // asserted at the command in `unscoped-storage.test.ts`, which is the only
+    // place that can supply the database the unscoped namespace is read from.
+    expect(getStorageSigningSecret()).toBe('env-secret-key')
   })
 })

@@ -17,7 +17,7 @@ const getS3Object = vi.fn(async (_key: string) => ({
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Usable: vi.fn(() => true),
-  getS3Config: vi.fn(() => ({ secretAccessKey: 'test-secret' })),
+  getStorageSigningSecret: vi.fn(() => 'test-secret'),
   isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
   verifyStorageReadToken: vi.fn(
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
@@ -79,12 +79,9 @@ describe('handleStorageGet — proxy response headers', () => {
   })
 })
 
-
 describe('handleStorageGet — the three states a caller must tell apart', () => {
   it('answers 404 for an object that is not there, not 500', async () => {
-    getS3Object.mockRejectedValueOnce(
-      Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' })
-    )
+    getS3Object.mockRejectedValueOnce(Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' }))
     mockConfig.s3Proxy = true
     const res = await handleStorageGet({
       request: new Request('http://localhost/api/storage/logos/missing.png'),

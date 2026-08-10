@@ -107,7 +107,7 @@ function extractKey(url: URL): string | null {
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
   const {
     isS3Usable,
-    getS3Config,
+    getStorageSigningSecret,
     uploadObject,
     verifyProxyUploadToken,
     isAllowedImageType,
@@ -136,7 +136,10 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
 
   const exp = url.searchParams.get('exp')
   const sig = url.searchParams.get('sig')
-  const { secretAccessKey } = getS3Config()
+  // Only the signing secret, never the bucket. This route is the surface an
+  // unauthenticated request reaches, and it needs an HMAC key, not a capability
+  // to address every object in the bucket.
+  const secretAccessKey = getStorageSigningSecret()
 
   if (!verifyProxyUploadToken(secretAccessKey, key, ct, exp, sig)) {
     return Response.json({ error: 'Invalid or expired upload token' }, { status: 401 })
@@ -174,7 +177,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     isS3Usable,
     generatePresignedGetUrl,
     getS3Object,
-    getS3Config,
+    getStorageSigningSecret,
     isPublicStorageKey,
     StorageUnavailableError,
     verifyStorageReadToken,
@@ -182,8 +185,8 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
   const { config } = await import('@/lib/server/config')
 
   // Usability, not addressability. A pooled tenant record always names a bucket,
-  // so the addressability question answers `true` while `getS3Config()` throws
-  // three lines later — and because that call sits outside the try/catch below,
+  // so the addressability question answers `true` while the credential read
+  // throws a few lines later — and because that call sits outside the try/catch,
   // the whole route answered **500** for every key of every tenant. A tenant
   // whose storage credentials do not resolve is a configuration state, not a
   // crash, and it has to be distinguishable from one: a 500 tells a caller
@@ -202,7 +205,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
 
   if (
     !isPublicStorageKey(key) &&
-    !verifyStorageReadToken(getS3Config().secretAccessKey, key, url.searchParams.get('read'))
+    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'))
   ) {
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }
