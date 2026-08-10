@@ -55,7 +55,7 @@ import { openWakeListener, type WakeListener } from '@/lib/server/jobs/wake'
 import { warnIfPooled } from './direct-session'
 import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
 import { openTenantDirectPool, resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
-import { runWithTenantScope, type TenantScope } from '@/lib/server/tenancy/tenant-context'
+import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
 import { drainOnce, type DrainResult } from './relay'
 import {
   claimRelayLease,
@@ -468,13 +468,13 @@ async function startTenantLoop(tenant: TenantDescriptor, cfg: RelayTierConfig): 
   // path runs, so a mis-pointed record is refused here for the same reason and
   // with the same message.
   const pool = await openTenantDirectPool(tenant)
-  const scope: TenantScope = {
+  const scope = createTenantScope({
     tenant,
     db: pool.db,
     sql: pool.sql,
     secrets: pool.secrets,
     origin: 'relay',
-  }
+  })
 
   const holder: { ring: (() => void) | null } = { ring: null }
   const s = emptyStats()

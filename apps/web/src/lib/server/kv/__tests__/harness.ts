@@ -21,7 +21,7 @@ import postgres from 'postgres'
 // db-test-fixture.ts and jobs/__tests__/harness.ts.
 // eslint-disable-next-line no-restricted-imports
 import { createDbFromSql, type Database } from '@quackback/db/client'
-import { runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
 import { makeTenantDescriptor, makeTenantSecrets } from '@/lib/server/__tests__/tenant-scope'
 
 const URL =
@@ -74,13 +74,13 @@ export async function ensureKvSchema(): Promise<void> {
  */
 export function withRealTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
   return runWithTenantScope(
-    {
+    createTenantScope({
       tenant: makeTenantDescriptor(tenantId),
       db: testDb(),
       sql: testSql() as never,
       secrets: makeTenantSecrets(tenantId),
       origin: 'test',
-    },
+    }),
     fn
   )
 }

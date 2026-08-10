@@ -35,9 +35,20 @@ describe('resolveTenantAndContinue', () => {
 
   it('serves the workspace inside the tenant scope when the record is good', async () => {
     const handle = { label: 'tenant-a' }
+    const { createTenantScope } = await import('../tenant-context')
     acquireScopeForHost.mockResolvedValue({
       kind: 'ok',
-      scope: { tenant: { tenantId: 'inst_a' }, db: handle, sql: {}, origin: 'request' },
+      // Built the way the real resolver builds it. A plain literal satisfies
+      // `TenantScope` now that secrets are off the shape, and `runWithTenantScope`
+      // refuses it — which is the point, and which a mock returning one would
+      // otherwise hide behind a green test.
+      scope: createTenantScope({
+        tenant: { tenantId: 'inst_a' },
+        db: handle,
+        sql: {},
+        origin: 'request',
+        secrets: { secretKey: 'd'.repeat(64), storage: null, storageProblem: 'not read here' },
+      } as never),
     })
 
     const { getScopedDatabase } = await import('../tenant-context')

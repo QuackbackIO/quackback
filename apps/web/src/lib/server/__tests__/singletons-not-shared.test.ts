@@ -199,6 +199,15 @@ describe('the relay is per tenant, not one leader for whichever database this pr
       }),
     }))
     vi.doMock('@/lib/server/tenancy/tenant-context', () => ({
+      // Mirrors the real constructor: secrets go in, no secrets come out, and a
+      // scope with no resolved SECRET_KEY is refused rather than built.
+      createTenantScope: (init: Record<string, unknown>) => {
+        const secrets = init.secrets as { secretKey?: string } | undefined
+        if (!secrets?.secretKey) throw new Error('createTenantScope: no resolved SECRET_KEY')
+        const scope = { ...init }
+        delete scope.secrets
+        return scope
+      },
       runWithTenantScope: async (scope: { tenant: { tenantId: string } }, fn: () => unknown) => {
         scopes.push(scope.tenant.tenantId)
         return fn()

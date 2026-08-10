@@ -28,7 +28,7 @@ import {
   type TenantDescriptor,
   type TenantLookup,
 } from './registry'
-import type { TenantScope, TenantScopeOrigin } from './tenant-context'
+import { createTenantScope, type TenantScope, type TenantScopeOrigin } from './tenant-context'
 
 const log = logger.child({ component: 'tenant-resolver' })
 
@@ -111,7 +111,13 @@ export async function acquireTenantScope(
     const pool = await acquireTenantPool(tenant)
     return {
       kind: 'ok',
-      scope: { tenant, db: pool.db, sql: pool.sql, secrets: pool.secrets, origin },
+      scope: createTenantScope({
+        tenant,
+        db: pool.db,
+        sql: pool.sql,
+        secrets: pool.secrets,
+        origin,
+      }),
     }
   } catch (err) {
     const code = (err as { code?: string }).code ?? 'pool_unavailable'

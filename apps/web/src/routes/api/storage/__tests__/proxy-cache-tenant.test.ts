@@ -23,14 +23,23 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
 import { SINGLE_TENANT_NAMESPACE } from '@/lib/server/tenancy/tenant-keyed'
 import { proxyCacheKey } from '../$'
 
 const ROUTE = join(dirname(fileURLToPath(import.meta.url)), '..', '$.ts')
 
 function scope(tenantId: string) {
-  return { tenant: { tenantId }, db: {}, sql: {}, origin: 'test' } as never
+  // Secrets are an input to `createTenantScope()` rather than a field on the
+  // result, and it refuses one with no resolved `SECRET_KEY`. Nothing below
+  // reads them; the cache key is derived from the tenant id alone.
+  return createTenantScope({
+    tenant: { tenantId },
+    db: {},
+    sql: {},
+    origin: 'test',
+    secrets: { secretKey: 'c'.repeat(64), storage: null, storageProblem: 'not read here' },
+  } as never)
 }
 
 describe('proxyCacheKey', () => {

@@ -11,6 +11,11 @@
  * self-hosted install, and every pooled code path that runs outside a request —
  * it is `config.secretKey`, unchanged byte for byte.
  *
+ * `getWorkspaceSecretKey()` returns exactly this one string and nothing else on
+ * the scope, so the signing key and the storage credential no longer come out
+ * of one call. A scope whose secrets never resolved throws there rather than
+ * answering null, because the null branch below is the fleet-wide key.
+ *
  * ## Why this is safe to swap under the session and token signers
  *
  * `SAAS-HOSTING-STACK.md` §4.3 established that a wrong key here fails closed:
@@ -26,8 +31,8 @@
  * instead of letting the fleet discover the problem one integration at a time.
  */
 import { config } from './config'
-import { getCurrentTenantSecrets } from './tenancy/tenant-context'
+import { getWorkspaceSecretKey } from './tenancy/tenant-context'
 
 export function activeSecretKey(): string {
-  return getCurrentTenantSecrets()?.secretKey ?? config.secretKey
+  return getWorkspaceSecretKey() ?? config.secretKey
 }

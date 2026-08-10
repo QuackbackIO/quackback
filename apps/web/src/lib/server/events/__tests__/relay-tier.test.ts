@@ -77,6 +77,17 @@ async function runTier(opts: {
     },
   }))
   vi.doMock('@/lib/server/tenancy/tenant-context', () => ({
+    // Mirrors the real constructor's contract rather than stubbing it away:
+    // secrets are an input it refuses to go without, and never a field on what
+    // it hands back. A stub that skipped the refusal would let this suite pass
+    // over a relay loop scoped with no resolved SECRET_KEY.
+    createTenantScope: (init: Record<string, unknown>) => {
+      const secrets = init.secrets as { secretKey?: string } | undefined
+      if (!secrets?.secretKey) throw new Error('createTenantScope: no resolved SECRET_KEY')
+      const scope = { ...init }
+      delete scope.secrets
+      return scope
+    },
     runWithTenantScope: async (scope: { tenant: FakeTenant }, fn: () => unknown) => fn(),
   }))
   vi.doMock('@/lib/server/jobs/wake', () => ({
