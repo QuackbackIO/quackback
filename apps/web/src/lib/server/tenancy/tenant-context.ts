@@ -260,10 +260,17 @@ export function getWorkspaceStorageCredential(): WorkspaceStorageCredential | nu
   const secrets = scopeSecrets(getTenantScope())
   if (!secrets) return null
   if (!secrets.storage) {
-    return {
-      ok: false,
-      problem: secrets.storageProblem ?? 'no storage credential was resolved for this workspace',
-    }
+    // No credential AND no problem is the pooled default, not a failure: a
+    // workspace on the fleet bucket has none of its own because its isolation
+    // is the key prefix. `null` means "nothing workspace-specific here", which
+    // is what both callers already want — `resolveStorageCredentials` falls
+    // back to the fleet credential and `isS3Usable` stays true.
+    //
+    // Reporting it as `{ ok: false }` is what made every request answer 503
+    // after the credential ref was dropped: the resolver had stopped calling it
+    // a problem and this door started calling it one again.
+    if (secrets.storageProblem === null) return null
+    return { ok: false, problem: secrets.storageProblem }
   }
   // Copied rather than handed out by reference: the scope's own credential is
   // frozen to everything that cannot reach the slot, and returning the live

@@ -75,7 +75,7 @@ const ALPHA_ENDPOINT = makeTenantDescriptor('tenant-alpha').storage.endpoint
 /** A workspace whose storage credential reference did not resolve. */
 const NO_STORAGE = {
   storage: null,
-  storageProblem: 'openbao+kv://… has no resolver in this process',
+  storageProblem: 'derived+hkdf://… has no resolver in this process',
 } as const
 
 /**
@@ -140,6 +140,23 @@ describe('the storage-credential consumer still works', () => {
     expect(
       withTenant('tenant-alpha', () => getWorkspaceStorageCredential(), { secrets: NO_STORAGE })
     ).toEqual({ ok: false, problem: NO_STORAGE.storageProblem })
+  })
+
+  it('tells "has none by design" apart from "did not resolve"', () => {
+    // The third state, and the one that shipped broken. A workspace on the
+    // fleet bucket carries no credential AND no problem, because its isolation
+    // is the key prefix rather than a key pair. That must answer `null` — the
+    // same as "no scope", since both mean "use the fleet credential" — and must
+    // NOT answer `{ ok: false }`, which is what makes `s3.ts` return 503.
+    //
+    // Exactly this conflation reached production: the resolver stopped calling
+    // absence a problem, and this door went on calling it one, so every request
+    // answered 503 with nothing in the logs to say why.
+    expect(
+      withTenant('tenant-alpha', () => getWorkspaceStorageCredential(), {
+        secrets: { storage: null, storageProblem: null },
+      })
+    ).toBeNull()
   })
 
   it('tells "no scope" apart from "did not resolve"', () => {
