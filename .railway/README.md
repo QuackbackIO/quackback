@@ -185,7 +185,7 @@ as a record of intent, not as something enforced.
 
 ## The fleet shape
 
-`.railway/railway.ts` describes five app services and the buckets. The five run
+`.railway/railway.ts` describes six app services and the buckets. All six run
 **one image, pinned by digest** (`APP_IMAGE`), published by the repository's
 Docker workflow and pulled anonymously from a public package, so no registry
 credential has to exist in a file that cannot express one. That is what makes
@@ -201,6 +201,7 @@ What separates the services is **which connections they hold**:
 | `quackback`                        | `web`                           | workspace **pooled** endpoints, evicted after 45 s idle                                     | no — the pooled tier is always warm |
 | `quackback-worker`                 | `worker`                        | workspace **direct** (session-mode) endpoints, one always-attached relay loop per workspace | no                                  |
 | `quackback-cron-daily` / `-hourly` | `worker` + `QUACKBACK_CRON_JOB` | whatever the sweep touches, for the length of the run                                       | n/a — it exits                      |
+| `quackback-migrator`               | `migrator`, one-shot            | the **direct** endpoint of each workspace it claims                                         | n/a — it exits                      |
 | `quackback-web-sleeper`            | `web`                           | same as `quackback`                                                                         | **yes** (`deploy.sleepApplication`) |
 
 `DATABASE_URL` is deliberately absent from every one of them: pooled mode

@@ -10,7 +10,10 @@
  * | `quackback` | `web` | workspace **pooled** endpoints, evicted after 45 s idle | no — the pooled tier is always warm |
  * | `quackback-worker` | `worker` | workspace **direct** endpoints, one always-attached relay loop per workspace | no — and neither do the workspace computes it holds |
  * | `quackback-cron-*` | `worker`, one-shot | whatever the sweep touches, for the length of the run | n/a — it exits |
+ * | `quackback-migrator` | `migrator`, one-shot | the **direct** endpoint of each workspace it claims | n/a — it exits |
  * | `quackback-web-sleeper` | `web` | same as `quackback` | **yes** (`deploy.sleepApplication`) |
+ *
+ * All six run the same image, pinned by digest. See APP_IMAGE.
  *
  * The web/worker split is not an optimisation. `LISTEN` is silently lost
  * through a transaction-mode pooler (§7.3, measured: a NOTIFY is never
