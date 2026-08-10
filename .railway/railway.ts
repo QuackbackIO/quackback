@@ -24,17 +24,47 @@
  * for why §9's "Railway Postgres for the control plane" did not survive contact
  * with region placement.
  *
- * ## This file does not yet describe the whole environment — do not `apply`
+ * ## This file describes the whole environment, and `apply` is live
  *
- * The control-plane service and its `qb-cp-*` buckets live in this project and
- * are absent here, because they were created through the API rather than
- * declared. Absent means *deleted*: a plan run today proposes destroying the
- * control-plane service and two of its buckets alongside the Redis removal this
- * file does intend. So `apply` is unsafe until they are declared, and until then
- * a variable set through the CLI is live but not durable — the next apply, once
- * it is safe to run, removes anything this file does not name.
+ * It did not always. The control-plane service, the Redis database, both
+ * `qb-cp-*` buckets and four secrets were created through the API and never
+ * declared, and absent means *deleted*: a plan proposed destroying all of them,
+ * including the two per-workspace `SECRET_KEY`s. They are declared now, `plan`
+ * reports no changes, and `apply` has been run.
+ *
+ * What that costs is a standing obligation. Anything the control plane creates
+ * through the API — a workspace bucket, a per-workspace secret — has to be added
+ * here, or the next `apply` removes it. Run `plan` before `apply`, every time,
+ * and read the destroy list rather than the count.
  */
-import { bucket, defineRailway, preserve, project, redis, service } from 'railway/iac'
+import { bucket, defineRailway, image, preserve, project, redis, service } from 'railway/iac'
+
+/**
+ * The one image, by digest.
+ *
+ * §10.8's deploy gate says step 2 ships the artifact step 1 validated against.
+ * Under a source build that is an assumption, not a fact: each service uploads
+ * the tree and builds independently, so five services produce five images from
+ * one commit. Almost certainly identical, and "almost certainly" is the whole
+ * problem — the gate's promise is that the migrator and the serving tier are
+ * the same build, and nothing enforced it.
+ *
+ * A digest enforces it. `ghcr.io/quackbackio/quackback` is the package the
+ * repository's Docker workflow already publishes, public, so Railway pulls it
+ * anonymously and no registry credential has to exist in a file that cannot
+ * express one.
+ *
+ * Pinned to the DIGEST, never the `saas` tag: a tag moves under a running
+ * service, so two services deployed a day apart from `:saas` are back to being
+ * two different builds with one name. Rolling forward is editing this line,
+ * which is also what makes rolling back the same edit in reverse.
+ *
+ * Contains: the TanStack Start server, the widget bundle, `migrate.mjs`, the
+ * drizzle SQL, and `fleet-migrator.mjs`. That last one is why one artifact is
+ * enough for every role the rollout touches.
+ */
+const APP_IMAGE =
+  'ghcr.io/quackbackio/quackback@sha256:35c39652797f5dc6db4a6a04b6bb67b417d6f4c33f69639f8895567758e34da3'
 
 /** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
  * is declared intent only — `plan` never diffs placement and `apply` never
@@ -90,7 +120,6 @@ export default defineRailway(() => {
   const fleetEnv = {
     NODE_ENV: 'production',
     PORT: '3000',
-    RAILWAY_DOCKERFILE_PATH: 'apps/web/Dockerfile',
 
     // One process, many workspaces, database chosen per request from the Host
     // header. `DATABASE_URL` is deliberately absent: pooled mode refuses to
@@ -188,10 +217,29 @@ export default defineRailway(() => {
     S3_FORCE_PATH_STYLE: 'false',
   }
 
-  /** The build every app service shares. One image, four roles. */
+  /** What every app service shares. One image, four roles, one digest. */
   const appBuild = {
-    // The repo Dockerfile builds the widget bundle, the TanStack Start server
-    // and a standalone migration bundle. Railpack cannot reproduce that.
+    // Not a build. Every app service deploys the same published image by
+    // digest, so "the migrator ran against this build" and "the web tier is
+    // running this build" are the same sentence about the same bytes rather
+    // than two hopes about two Dockerfile runs. See APP_IMAGE.
+    //
+    // The repo Dockerfile still describes how that image is made — widget
+    // bundle, TanStack Start server, migration bundle, fleet migrator — it is
+    // just no longer run here, once per service. CI builds it once, and this
+    // file names the result.
+    source: image(APP_IMAGE),
+    // Vestigial, and declared because it cannot be removed. Switching a service
+    // to an image source leaves its build config stored; `apply` accepts the
+    // clearing, reports it applied, and does not store it, so a file that omits
+    // this reports the same two changes on every `plan` forever and
+    // `--detailed-exit-code` never reaches 0. That is the drift gate the README
+    // recommends for CI, disabled by an omission. The same platform behaviour
+    // the README already records for defaults, in the other direction.
+    //
+    // Nothing runs it: an image deploy has no build step, which the deploys
+    // demonstrate by completing in seconds with no builder. It is here so the
+    // file agrees with what Railway stores.
     build: { builder: 'DOCKERFILE' as const, dockerfilePath: 'apps/web/Dockerfile' },
     replicas: { [REGION]: 1 },
     // Only the retry count is declared. The restart policy itself is already
@@ -246,6 +294,12 @@ export default defineRailway(() => {
   // actually sleep?") against a real deployment rather than by reasoning. Same
   // image, same role, same tenancy as `quackback`; the only difference is the
   // toggle, so what it measures is the role rather than a special build.
+  //
+  // It was also the first service moved to `APP_IMAGE`, deliberately: whether
+  // Railway can pull that image at all is a question no amount of local testing
+  // answers, and this is the one service in the fleet carrying no traffic. It
+  // answered yes, in seven seconds and with no registry credential, so the rest
+  // of the fleet followed.
   const sleeper = service('quackback-web-sleeper', {
     ...appBuild,
     healthcheckPath: '/api/health/ready',

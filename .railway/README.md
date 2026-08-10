@@ -85,6 +85,29 @@ railway config plan
 `railway config plan --runner /abs/path/to/bin.js` works identically if you
 prefer a flag to an environment variable.
 
+**In a git worktree this bites again**, because worktrees here share the primary
+checkout's `node_modules` through a symlink, and the shipped `dist/iac/bin.js`
+is `777` in every one of them. Make one real `755` copy and point every worktree
+at it by absolute path:
+
+```bash
+cp node_modules/railway/dist/iac/bin.js node_modules/railway/dist/iac/bin-755.js
+chmod 755 node_modules/railway/dist/iac/bin-755.js
+```
+
+Keep the copy inside the package's own tree. Moved elsewhere it resolves its
+`graphql` import against the wrong `node_modules` and fails differently.
+
+`--file` takes an absolute path too, so a linked directory can plan a
+`railway.ts` that lives in another worktree — which is the usual case here,
+since `railway link` records a directory and a worktree does not inherit one:
+
+```bash
+railway config plan \
+  --runner /abs/path/node_modules/railway/dist/iac/bin-755.js \
+  --file   /abs/path/to/worktree/.railway/railway.ts
+```
+
 One further prerequisite, which this repo already satisfies: the runner
 `import()`s its own entry point with a query string appended, and Node refuses
 that for a `.cjs` file, so in a project without `"type": "module"` you clear the
@@ -107,6 +130,13 @@ Two smaller traps in the same area:
   `--detailed-exit-code` never reaches `0`. `deploy.restartPolicyType`
   (`ON_FAILURE`) is the one that bites; `deploy.restartPolicyMaxRetries` is
   safe to declare because its default is `10`.
+- **A `build` block cannot be cleared, only overwritten.** Same failure, other
+  direction. Moving a service from a Dockerfile build to `source: image(...)`
+  leaves `build.builder` and `build.dockerfilePath` stored; omitting them asks
+  for their removal, which `apply` reports as applied and does not perform. So
+  every app service here still declares its `build` block even though an image
+  deploy never runs one. Declaring what is stored is what keeps the drift gate
+  usable; omitting it costs five phantom changes on every `plan`.
 
 To check for drift in CI, use `railway config plan --detailed-exit-code`: `0`
 means clean, `2` means changes are pending, anything else is an error.
@@ -155,8 +185,16 @@ as a record of intent, not as something enforced.
 
 ## The fleet shape
 
-`.railway/railway.ts` describes five app services built from one image, plus
-the buckets. What separates them is **which connections they hold**:
+`.railway/railway.ts` describes five app services and the buckets. The five run
+**one image, pinned by digest** (`APP_IMAGE`), published by the repository's
+Docker workflow and pulled anonymously from a public package, so no registry
+credential has to exist in a file that cannot express one. That is what makes
+§10.8's deploy gate mean something: the migrator and the serving tier are the
+same bytes by construction, where five independent source builds could only be
+the same by coincidence. Rolling forward is editing that one line; rolling back
+is editing it in reverse.
+
+What separates the services is **which connections they hold**:
 
 | Service                            | `QUACKBACK_ROLE`                | Connections                                                                                 | Sleeps                              |
 | ---------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------- |
