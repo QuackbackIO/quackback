@@ -99,15 +99,34 @@ function isNotFound(error: unknown): boolean {
 
 const KEY_PREFIX = '/api/storage/'
 
+/**
+ * The stored key this request is asking for, or null if it is not one.
+ *
+ * `decodeURIComponent` throws `URIError` on a malformed escape — `%c0%ae`, a
+ * lone `%`, a truncated `%2` — and this runs *outside* the try/catch below, so
+ * the route answered 500 for input a caller controls. Worse for this change: a
+ * 500 here means the storage boundary's own "malformed percent-encoding"
+ * refusal is never reached from the only route that decodes, so the refusal
+ * looked covered and was unreachable.
+ *
+ * Undecodable is not a server fault and not a missing object; it is a key that
+ * does not name anything, which is the same answer as `..` — null, and the
+ * caller sends 400.
+ */
 function extractKey(url: URL): string | null {
-  const key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  let key: string
+  try {
+    key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  } catch {
+    return null
+  }
   return key && !key.includes('..') ? key : null
 }
 
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
   const {
     isS3Usable,
-    getS3Config,
+    getStorageSigningSecret,
     uploadObject,
     verifyProxyUploadToken,
     isAllowedImageType,
@@ -136,7 +155,10 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
 
   const exp = url.searchParams.get('exp')
   const sig = url.searchParams.get('sig')
-  const { secretAccessKey } = getS3Config()
+  // Only the signing secret, never the bucket. This route is the surface an
+  // unauthenticated request reaches, and it needs an HMAC key, not a capability
+  // to address every object in the bucket.
+  const secretAccessKey = getStorageSigningSecret()
 
   if (!verifyProxyUploadToken(secretAccessKey, key, ct, exp, sig)) {
     return Response.json({ error: 'Invalid or expired upload token' }, { status: 401 })
@@ -174,7 +196,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     isS3Usable,
     generatePresignedGetUrl,
     getS3Object,
-    getS3Config,
+    getStorageSigningSecret,
     isPublicStorageKey,
     StorageUnavailableError,
     verifyStorageReadToken,
@@ -182,8 +204,8 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
   const { config } = await import('@/lib/server/config')
 
   // Usability, not addressability. A pooled tenant record always names a bucket,
-  // so the addressability question answers `true` while `getS3Config()` throws
-  // three lines later — and because that call sits outside the try/catch below,
+  // so the addressability question answers `true` while the credential read
+  // throws a few lines later — and because that call sits outside the try/catch,
   // the whole route answered **500** for every key of every tenant. A tenant
   // whose storage credentials do not resolve is a configuration state, not a
   // crash, and it has to be distinguishable from one: a 500 tells a caller
@@ -202,7 +224,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
 
   if (
     !isPublicStorageKey(key) &&
-    !verifyStorageReadToken(getS3Config().secretAccessKey, key, url.searchParams.get('read'))
+    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'))
   ) {
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }

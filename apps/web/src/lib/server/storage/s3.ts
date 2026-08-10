@@ -15,23 +15,78 @@
  * interfaces for the exact SDK surface we use, with `as unknown as S3Module`
  * applied at the two dynamic import boundaries. All downstream code is fully
  * typed with no `any`.
+ *
+ * ## Every object name is composed for one workspace
+ *
+ * Nothing below addresses the bucket directly. {@link currentWorkspaceStorage}
+ * returns the only thing that can issue a command; its methods take the *stored*
+ * key and compose `w/<workspaceId>/` internally. It is the only export that
+ * yields a client, and the factory behind it is deliberately private — see
+ * `workspace-scope.ts` for the hole that was, and `namespace.ts` for why the
+ * identifier is `settings.id` and not something else.
+ *
+ * The exported helpers (`uploadObject`, `getS3Object`, `deleteObject`, the two
+ * presigners) keep the signatures ~20 call sites already use and resolve the
+ * workspace themselves. Threading a workspace id through those call sites is the
+ * convention this design exists to replace: a convention survives until the next
+ * call site is added by someone who has not read this file.
+ *
+ * ## Relocating objects that predate the namespace
+ *
+ * An install that has been serving before this change holds its objects at bare
+ * keys, and composing a namespace makes them unreachable. There is deliberately
+ * **no read-time fallback to the bare key.** Under one fleet bucket a bare key
+ * is nobody's namespace, so reading it is the §3 failure exactly; and any
+ * "…except when the bucket is not shared" carve-out would have to be gated on a
+ * configuration value, which is the class of thing nobody checks and everybody
+ * eventually gets wrong. The fallback is not merely unsafe by default, it is
+ * unsafe in a way nothing in this process can detect.
+ *
+ * The relocation is instead a one-time move inside the bucket, run by the
+ * operator with the credentials they already hold, before the new build serves
+ * traffic:
+ *
+ * ```
+ * aws s3 mv s3://<bucket>/ s3://<bucket>/w/<settings.id>/ --recursive --exclude 'w/*'
+ * ```
+ *
+ * It is a server-side copy: no bytes leave the bucket, the stored keys do not
+ * change, and no content is rewritten, because the namespace appears in neither
+ * the database nor any URL. Every affected install holds exactly one workspace
+ * per bucket, so `<settings.id>` is unambiguous — `SELECT id FROM settings`.
+ *
+ * **Note what this repository must NOT grow to make that convenient.** Listing
+ * and deleting at the bucket root is correct against a bucket that holds one
+ * tenant and catastrophic against one that holds the fleet, so the app has no
+ * such capability and gains none here, not even for its own migration. The cost
+ * is that an operator who deploys without moving the objects serves 404s for
+ * pre-existing assets until they do — visible, reversible, and self-announcing,
+ * which is the opposite of what the fallback would have been.
  */
 
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import type { WorkspaceId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { sniffImageMime } from '@/lib/server/content/magic-bytes'
 import { getCurrentTenant, getTenantScope } from '@/lib/server/tenancy/tenant-context'
-import {
-  currentTenantNamespace,
-  SINGLE_TENANT_NAMESPACE,
-  TenantKeyedCache,
-} from '@/lib/server/tenancy/tenant-keyed'
+import { currentTenantNamespace, SINGLE_TENANT_NAMESPACE } from '@/lib/server/tenancy/tenant-keyed'
+import { composeNamespacedKey, workspaceNamespace } from './namespace'
+import { currentWorkspaceId } from './workspace-scope'
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-export interface S3Config {
+/**
+ * Bucket, endpoint and credentials together: a complete capability to address
+ * any object in the bucket.
+ *
+ * **Module-private, and that is the point.** It used to be exported, which made
+ * the one thing this design removes — an un-namespaced way to reach the bucket —
+ * an import away for any file in the app. Nothing outside this module now
+ * receives a bucket name and a credential in the same value.
+ */
+interface S3Config {
   endpoint?: string
   bucket: string
   region: string
@@ -47,7 +102,7 @@ export interface S3Config {
  * resolving a secret, so the two are split and only the paths that actually
  * talk to storage pay for credential resolution.
  */
-export interface StoragePlacement {
+interface StoragePlacement {
   endpoint?: string
   bucket: string
   region: string
@@ -66,7 +121,7 @@ export interface StoragePlacement {
  * The active tenant's placement, or the process-wide one when unscoped.
  * Returns null when storage is not configured at all.
  */
-export function getStoragePlacementOrNull(): StoragePlacement | null {
+function getStoragePlacementOrNull(): StoragePlacement | null {
   const tenant = getCurrentTenant()
   if (tenant) {
     const storage = tenant.storage
@@ -90,7 +145,7 @@ export function getStoragePlacementOrNull(): StoragePlacement | null {
   }
 }
 
-export function getStoragePlacement(): StoragePlacement {
+function getStoragePlacement(): StoragePlacement {
   const placement = getStoragePlacementOrNull()
   if (!placement) {
     throw new Error(
@@ -185,7 +240,7 @@ export function isS3Usable(): boolean {
  * actually sign or send a request; use {@link getStoragePlacement} for anything
  * that just needs to name a bucket or build a URL.
  */
-export function getS3Config(): S3Config {
+function getS3Config(): S3Config {
   const placement = getStoragePlacement()
   const credentials = resolveStorageCredentials()
   return {
@@ -197,6 +252,28 @@ export function getS3Config(): S3Config {
     forcePathStyle: placement.forcePathStyle,
     publicUrl: placement.publicUrl,
   }
+}
+
+/**
+ * The key the storage read and proxy-upload tokens are signed with.
+ *
+ * This exists so the `/api/storage` route can verify a token without being
+ * handed a bucket name and a credential pair. It asked for `getS3Config()` and
+ * used the one field, which meant a route — the surface reachable by an
+ * unauthenticated GET — held a complete capability to address any object in the
+ * bucket for the sake of an HMAC. Both of its uses take exactly this.
+ *
+ * Still the storage secret rather than a purpose-derived one: the tokens it
+ * verifies are embedded in absolute URLs already written into `contentJson`, so
+ * changing the signing key is a fleet of dead asset links rather than a
+ * rotation. The narrowing here is of who can *see* the value, not of what it is.
+ *
+ * Throws {@link StorageUnavailableError} for a tenant whose credentials did not
+ * resolve, exactly as `getS3Config()` did. Both callers gate on
+ * {@link isS3Usable} first.
+ */
+export function getStorageSigningSecret(): string {
+  return resolveStorageCredentials().secretAccessKey
 }
 
 // ============================================================================
@@ -262,17 +339,42 @@ let _s3Module: S3Module | null = null
 let _presignerModule: PresignerModule | null = null
 
 /**
- * One client per tenant. The client is built FROM a bucket, an endpoint and a
- * credential pair, so a process-wide one is a handle on whichever tenant
- * happened to upload first — every later tenant's upload then lands in that
- * bucket, under a key that reads as valid from both sides.
+ * One client per set of connection parameters.
  *
- * The bound is a client count, not a correctness limit: eviction only costs the
- * evicted tenant a rebuild on its next upload, so it is sized to sit above the
- * tenant count one pod realistically serves rather than to be exact.
+ * This used to be keyed by the ambient tenant, which was correct only while a
+ * client was built and used inside one scope. It is not a property of the
+ * client: an SDK client is a signer and a connection pool built from a region,
+ * an endpoint and a credential pair, and nothing else. Keying it by *who was
+ * asking* meant a `WorkspaceStorage` captured under one scope and used under
+ * another picked up the other scope's client — its own bucket reached through
+ * somebody else's endpoint and credentials.
+ *
+ * Keyed by the parameters instead, the value is a pure function of the key, so
+ * a hit across two scopes is byte-identical to what the asking scope would have
+ * built. Under §9's one fleet credential that is one client for the fleet, which
+ * is the correct number; under per-tenant credentials the keys differ and so do
+ * the clients.
+ *
+ * The bound is a client count, not a correctness limit: eviction only costs a
+ * rebuild on the next command.
  */
-const s3Clients = new TenantKeyedCache<S3ClientInstance>(256)
-const S3_CLIENT_KEY = 'client'
+const s3Clients = new Map<string, S3ClientInstance>()
+const MAX_S3_CLIENTS = 256
+
+/**
+ * A stable name for one set of connection parameters.
+ *
+ * The non-secret half is spelled out so a cache key is legible during an
+ * incident; the credential pair is hashed rather than embedded, because this
+ * string is a Map key that a future debug log would be all too willing to print.
+ */
+function connectionKey(cfg: S3Config): string {
+  const credential = createHash('sha256')
+    .update(`${cfg.accessKeyId}\u0000${cfg.secretAccessKey}`)
+    .digest('hex')
+    .slice(0, 16)
+  return `${cfg.region}|${cfg.endpoint ?? ''}|${cfg.forcePathStyle}|${credential}`
+}
 
 /**
  * Get the AWS S3 module singleton.
@@ -294,12 +396,18 @@ async function getPresignerModule(): Promise<PresignerModule> {
   return _presignerModule
 }
 
-/** Get the S3 client for the active tenant, building it on first use. */
-async function getS3Client(): Promise<S3ClientInstance> {
-  const existing = s3Clients.get(S3_CLIENT_KEY)
+/**
+ * The S3 client for one set of connection parameters, building it on first use.
+ *
+ * Takes the config rather than resolving it, so the caller decides *when* the
+ * ambient scope was read. {@link workspaceStorage} reads it once, at
+ * construction; nothing re-reads it mid-operation.
+ */
+async function getS3Client(s3Config: S3Config): Promise<S3ClientInstance> {
+  const key = connectionKey(s3Config)
+  const existing = s3Clients.get(key)
   if (existing) return existing
 
-  const s3Config = getS3Config()
   const { S3Client } = await getS3Module()
 
   const client = new S3Client({
@@ -311,9 +419,170 @@ async function getS3Client(): Promise<S3ClientInstance> {
       secretAccessKey: s3Config.secretAccessKey,
     },
   })
-  s3Clients.set(S3_CLIENT_KEY, client)
+  s3Clients.set(key, client)
+  while (s3Clients.size > MAX_S3_CLIENTS) {
+    const oldest = s3Clients.keys().next()
+    if (oldest.done) break
+    s3Clients.delete(oldest.value)
+  }
 
   return client
+}
+
+// ============================================================================
+// The workspace-scoped client — the only way to reach the bucket
+// ============================================================================
+
+/**
+ * Every operation this application performs on an object, for one workspace.
+ *
+ * The methods take the **stored** key — `uploads/2026/08/…`, exactly what the
+ * database holds — and compose `w/<workspaceId>/` themselves. There is no method
+ * that accepts a finished object name, and no accessor that hands out the bucket
+ * with a credential, so "address something outside my namespace" is not a
+ * request that can be expressed rather than one that is checked for.
+ */
+export interface WorkspaceStorage {
+  readonly workspaceId: WorkspaceId
+  /** Everything every object name this client produces begins with. */
+  readonly namespace: string
+  /**
+   * What a stored key composes to. Exposed because it is the fact worth
+   * asserting about — a caller that wants it for anything other than an
+   * assertion is reaching for the capability this type exists to withhold.
+   */
+  objectName(key: string): string
+  presignPut(key: string, contentType: string, expiresIn: number): Promise<string>
+  put(key: string, body: Buffer | Uint8Array, contentType: string): Promise<void>
+  get(key: string): Promise<S3ObjectResult>
+  presignGet(key: string, expiresIn: number, downloadName?: string): Promise<string>
+  remove(key: string): Promise<void>
+}
+
+/**
+ * A client bound to one workspace and to one set of connection parameters.
+ *
+ * **Not exported, and that is the fix for the hole this function used to be.**
+ * An earlier revision exported it and guarded it by comparing `workspaceId`
+ * against the ambient scope — which skipped the comparison when there was no
+ * scope, so an unscoped caller in a pooled process could name any workspace and
+ * reach the fleet bucket with the fleet credential. The refusal that makes an
+ * unscoped access safe lives in {@link currentWorkspaceId}, and this function
+ * did not call it.
+ *
+ * A guard cannot repair that, because "no scope" is a legitimate state: it is
+ * every self-hosted install, and that path resolves correctly by reading its own
+ * `settings.id`. So the fix is to remove the choice rather than to police it —
+ * {@link currentWorkspaceStorage} is the only door, and it always resolves.
+ *
+ * Nor could the type system have carried it. `TypeId<'workspace'>` is
+ * `` `workspace_${string}` ``, a template-literal type and not a nominal brand,
+ * so `` workspaceStorage(`workspace_${req.params.ws}`) `` compiles with no cast
+ * and no error. The branded parameter is a real constraint on a *literal*
+ * mistake and no constraint at all on an interpolated one.
+ *
+ * Placement and credentials are read **once, here**, from the scope that is
+ * active at construction. They used to be re-read inside every method, so a
+ * client held across a scope boundary composed its own workspace's prefix
+ * against whichever bucket the *later* scope named — which in one shared bucket
+ * is somebody else's objects. Capturing them binds the whole client, not just
+ * its prefix, to the scope that built it.
+ */
+function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
+  const connection = getS3Config()
+
+  /**
+   * Compose, then verify — in one place, before the name reaches any command.
+   *
+   * Doing it here rather than at each call site is what makes traversal,
+   * absolute keys, empty keys and encoding tricks one refusal rather than five
+   * that each command has to remember. A name that fails throws; there is no
+   * branch in which a command runs against the un-namespaced key.
+   */
+  const objectName = (key: string): string => composeNamespacedKey(workspaceId, key)
+
+  return {
+    workspaceId,
+    namespace: workspaceNamespace(workspaceId),
+    objectName,
+
+    async presignPut(key, contentType, expiresIn) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { PutObjectCommand } = await getS3Module()
+      const { getSignedUrl } = await getPresignerModule()
+      const command = new PutObjectCommand({
+        Bucket: connection.bucket,
+        Key,
+        ContentType: contentType,
+      })
+      return getSignedUrl(client, command, { expiresIn })
+    },
+
+    async put(key, body, contentType) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { PutObjectCommand } = await getS3Module()
+      await client.send(
+        new PutObjectCommand({
+          Bucket: connection.bucket,
+          Key,
+          ContentType: contentType,
+          Body: body,
+        })
+      )
+    },
+
+    async get(key) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { GetObjectCommand } = await getS3Module()
+      const response = (await client.send(
+        new GetObjectCommand({ Bucket: connection.bucket, Key })
+      )) as {
+        Body?: { transformToWebStream(): ReadableStream<Uint8Array> }
+        ContentType?: string
+      }
+      if (!response.Body) throw new Error(`S3 object not found: ${key}`)
+      return {
+        body: response.Body.transformToWebStream(),
+        contentType: response.ContentType || 'application/octet-stream',
+      }
+    },
+
+    async presignGet(key, expiresIn, downloadName) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { GetObjectCommand } = await getS3Module()
+      const { getSignedUrl } = await getPresignerModule()
+      const command = new GetObjectCommand({
+        Bucket: connection.bucket,
+        Key,
+        ...(downloadName
+          ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
+          : {}),
+      })
+      return getSignedUrl(client, command, { expiresIn })
+    },
+
+    async remove(key) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { DeleteObjectCommand } = await getS3Module()
+      await client.send(new DeleteObjectCommand({ Bucket: connection.bucket, Key }))
+    },
+  }
+}
+
+/**
+ * The client for the workspace this call is running as.
+ *
+ * The one place the workspace id is resolved, so that the ~20 call sites below
+ * and outside this module keep taking a bare key. What an unscoped call does —
+ * and why it needs no guard of its own — is in `workspace-scope.ts`.
+ */
+export async function currentWorkspaceStorage(): Promise<WorkspaceStorage> {
+  return workspaceStorage(await currentWorkspaceId())
 }
 
 // ============================================================================
@@ -433,25 +702,18 @@ export async function generatePresignedUploadUrl(
   contentType: string,
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
-  const s3Config = getS3Config()
+  // `key` stays bare in everything that leaves here: the returned `key` is what
+  // the caller stores in the database, and `publicUrl` is built from it. Only
+  // the presigned URL names the object, and only the client composes that.
   const publicUrl = buildPublicUrl(getStoragePlacement(), key)
 
   if (config.s3Proxy) {
-    const uploadUrl = buildProxyUploadUrl(s3Config.secretAccessKey, key, contentType, expiresIn)
+    const uploadUrl = buildProxyUploadUrl(getStorageSigningSecret(), key, contentType, expiresIn)
     return { uploadUrl, publicUrl, key }
   }
 
-  const client = await getS3Client()
-  const { PutObjectCommand } = await getS3Module()
-  const { getSignedUrl } = await getPresignerModule()
-
-  const command = new PutObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-    ContentType: contentType,
-  })
-
-  const uploadUrl = await getSignedUrl(client, command, { expiresIn })
+  const storage = await currentWorkspaceStorage()
+  const uploadUrl = await storage.presignPut(key, contentType, expiresIn)
   return { uploadUrl, publicUrl, key }
 }
 
@@ -518,19 +780,8 @@ export async function uploadObject(
   body: Buffer | Uint8Array,
   contentType: string
 ): Promise<string> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { PutObjectCommand } = await getS3Module()
-
-  const command = new PutObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-    ContentType: contentType,
-    Body: body,
-  })
-
-  await client.send(command)
-
+  const storage = await currentWorkspaceStorage()
+  await storage.put(key, body, contentType)
   return buildPublicUrl(getStoragePlacement(), key)
 }
 
@@ -734,20 +985,8 @@ export async function generatePresignedGetUrl(
   expiresIn: number = 172800,
   downloadName?: string
 ): Promise<string> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { GetObjectCommand } = await getS3Module()
-  const { getSignedUrl } = await getPresignerModule()
-
-  const command = new GetObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-    ...(downloadName
-      ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
-      : {}),
-  })
-
-  return getSignedUrl(client, command, { expiresIn })
+  const storage = await currentWorkspaceStorage()
+  return storage.presignGet(key, expiresIn, downloadName)
 }
 
 // ============================================================================
@@ -765,28 +1004,8 @@ export interface S3ObjectResult {
  * Used when S3_PROXY is enabled to stream file bytes through the server.
  */
 export async function getS3Object(key: string): Promise<S3ObjectResult> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { GetObjectCommand } = await getS3Module()
-
-  const command = new GetObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-  })
-
-  const response = (await client.send(command)) as {
-    Body?: { transformToWebStream(): ReadableStream<Uint8Array> }
-    ContentType?: string
-  }
-
-  if (!response.Body) {
-    throw new Error(`S3 object not found: ${key}`)
-  }
-
-  return {
-    body: response.Body.transformToWebStream(),
-    contentType: response.ContentType || 'application/octet-stream',
-  }
+  const storage = await currentWorkspaceStorage()
+  return storage.get(key)
 }
 
 // ============================================================================
@@ -799,14 +1018,6 @@ export async function getS3Object(key: string): Promise<S3ObjectResult> {
  * @param key - Storage key (path within bucket) to delete
  */
 export async function deleteObject(key: string): Promise<void> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { DeleteObjectCommand } = await getS3Module()
-
-  const command = new DeleteObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-  })
-
-  await client.send(command)
+  const storage = await currentWorkspaceStorage()
+  await storage.remove(key)
 }

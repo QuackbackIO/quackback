@@ -7,11 +7,38 @@
  * descriptor and hands the database handles as stubs. A test that touches the
  * database should open a real scope instead.
  */
+import { createHash } from 'node:crypto'
+import { fromUuid, type WorkspaceId } from '@quackback/ids'
 import type { TenantDescriptor } from '@/lib/server/tenancy/registry'
 import { runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
 import type { ResolvedTenantSecrets } from '@/lib/server/tenancy/vendor/tenant-secret-resolution'
 
 type StorageOverrides = Partial<TenantDescriptor['storage']>
+
+/**
+ * A distinct `settings.id` per tenant, derived rather than shared.
+ *
+ * Same rule as {@link makeTenantSecrets}: a fixture that hands every tenant one
+ * value lets a test that accidentally relied on two tenants colliding pass. It
+ * matters more here than it did for the secrets, because `settings.id` is now
+ * the storage namespace — a constant would make every isolation assertion in
+ * the storage tests vacuously true.
+ */
+export function workspaceUuidFor(tenantId: string): string {
+  const hex = createHash('sha256').update(tenantId).digest('hex')
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `7${hex.slice(13, 16)}`,
+    `8${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join('-')
+}
+
+/** The branded form of {@link workspaceUuidFor} — what the storage namespace is built from. */
+export function workspaceIdFor(tenantId: string): WorkspaceId {
+  return fromUuid('workspace', workspaceUuidFor(tenantId))
+}
 
 /**
  * The per-tenant secrets the real scope carries.
@@ -56,7 +83,7 @@ export function makeTenantDescriptor(
     },
     fingerprint: {
       expectedTenantId: tenantId,
-      expectedWorkspaceId: '00000000-0000-4000-8000-000000000000',
+      expectedWorkspaceId: workspaceUuidFor(tenantId),
       stampedAt: '2026-01-01T00:00:00.000Z',
     },
     secrets: { appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP' },
