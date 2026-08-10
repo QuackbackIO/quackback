@@ -177,11 +177,33 @@ async function main(): Promise<number> {
     // plan that disagrees with the run is worse than no plan.
     const tenantId = opts.tenant as string | undefined
     if (!tenantId) throw new Error('plan needs --tenant')
-    const { applied, replaySet, verdicts } = await planTenant(await requireTenant(tenantId))
+    const { applied, gap, replaySet, verdicts, refusal } = await planTenant(
+      await requireTenant(tenantId)
+    )
     console.log(
       `${tenantId}: ledger ${applied.count} rows, newest ` +
         `${applied.max === 0 ? 'none' : tagForVersion(applied.max)}`
     )
+    if (gap) {
+      // Printed above the replay set and not folded into it, because the two are
+      // different facts: one is "this database is behind", the other is "this
+      // database is wrong". A gapped ledger reads as nearly current by its
+      // high-water mark, which is precisely when it is least current.
+      console.log(
+        `  LEDGER GAP: ${gap.missing.length} migration(s) at or below the high-water mark are ` +
+          `absent: ${gap.missing.join(', ')}`
+      )
+      console.log(
+        `  would truncate from ${tagForVersion(gap.from)}, rewriting ` +
+          `${gap.rewrites.length} row(s): ${gap.rewrites.join(', ') || '(none)'}`
+      )
+      if (gap.unrewritable.length > 0) {
+        console.log(
+          `  ${gap.unrewritable.length} row(s) this build does not bundle would be discarded ` +
+            `unrecoverably: ${gap.unrewritable.join(', ')}`
+        )
+      }
+    }
     console.log(`  would apply ${replaySet.length}: ${replaySet.join(', ') || '(nothing)'}`)
     for (const r of verdicts) {
       console.log(
@@ -190,6 +212,7 @@ async function main(): Promise<number> {
       )
       for (const m of r.mutating) console.log(`        MUTATES L${m.line}: ${m.excerpt}`)
     }
+    if (refusal) console.log(`  WOULD REFUSE: ${refusal}`)
     return 0
   }
 
@@ -212,7 +235,24 @@ async function main(): Promise<number> {
       // becomes a silent no-op that looks like it worked.
       const why = await explainUnclaimed(opts.tenant as string)
       console.log(`  NOT CLAIMED [${why.kind}] ${why.detail}`)
-      return why.kind === 'already_current' ? 0 : 1
+      if (why.kind !== 'already_current') return 1
+
+      // `already_current` is a belief about the control row, and the control row
+      // is only as good as the reconcile that wrote it. A tenant whose ledger
+      // has a hole was recorded at the target by a run that healed nothing, and
+      // the claim narrows on `current_version < target_version` — so it can
+      // never be claimed again and the reason it is broken is exactly the reason
+      // nothing will look at it. Read the tenant's own ledger before agreeing.
+      const { gap } = await planTenant(await requireTenant(opts.tenant as string))
+      if (!gap) return 0
+      console.log(
+        `  LEDGER GAP: this tenant is recorded at its target but its ledger is missing ` +
+          `${gap.missing.length} migration(s) below its own high-water mark: ` +
+          `${gap.missing.join(', ')}. It cannot be claimed while current_version meets ` +
+          `target_version, so healing it needs the observation cleared first — see ` +
+          'FLEET-MIGRATIONS.md §10.'
+      )
+      return 1
     }
     return result.failed > 0 ? 1 : 0
   }
@@ -240,6 +280,7 @@ function resolveTargetSpec(spec: string): number {
 function printPass(result: Awaited<ReturnType<typeof runReconcilePass>>): void {
   console.log(
     `claimed=${result.claimed} reconciled=${result.reconciled} ` +
+      `gaps_healed=${result.healed} ` +
       `already_current=${result.alreadyCurrent} failed=${result.failed} ` +
       `refused_records=${result.refusedRecords} ` +
       `reaped(requeued=${result.reaped.requeued} terminated=${result.reaped.terminated})`
@@ -251,6 +292,12 @@ function printPass(result: Awaited<ReturnType<typeof runReconcilePass>>): void {
         `applied=${o.replaySet.length} healed=${o.healedIndexes.length} ` +
         `post=${o.postconditions ? o.postconditions.ok : '-'} ${o.durationMs}ms`
     )
+    if (o.gap) {
+      console.log(
+        `      LEDGER GAP ${o.gap.missing.length}: ${o.gap.missing.join(', ')} ` +
+          `(replayed from ${tagForVersion(o.gap.from)})`
+      )
+    }
     if (!o.ok) console.log(`      ${o.detail}`)
     for (const v of o.postconditions?.violations ?? []) console.log(`      VIOLATION ${v.detail}`)
   }

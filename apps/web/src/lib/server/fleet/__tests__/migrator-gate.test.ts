@@ -1,10 +1,12 @@
 /**
- * The two decisions the reconciler makes before it touches a tenant's schema:
- * *what would drizzle apply*, and *is any of it dangerous to apply twice*.
+ * The three decisions the reconciler makes before it touches a tenant's schema:
+ * *what would drizzle apply*, *does this ledger have a hole in it*, and *is any
+ * of it dangerous to apply twice*.
  *
- * Both are pure and both are read off the real bundled journal, because the
- * question they answer is about this corpus and this driver rather than about a
- * fixture someone wrote to make them pass.
+ * All pure, and all read off the real bundled journal, because the question they
+ * answer is about this corpus and this driver rather than about a fixture
+ * someone wrote to make them pass. The heal these gates guard is exercised
+ * against a real Postgres in `migrator-gap-heal.test.ts`.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -16,7 +18,7 @@ import {
   type AppliedLedger,
 } from '@quackback/db/schema-version'
 import { assessReplaySafety } from '@/lib/server/policy/migration-contract/replay-safety'
-import { replayGateVerdict, replaySetFor } from '../migrator'
+import { gapHealVerdict, ledgerGapFor, planFor, replayGateVerdict, replaySetFor } from '../migrator'
 
 function ledger(versions: number[]): AppliedLedger {
   return {
@@ -30,6 +32,25 @@ const verdictsFor = (tags: string[]) =>
   tags.map((tag) =>
     assessReplaySafety(tag, readFileSync(join(MIGRATIONS_DIR, `${tag}.sql`), 'utf8'))
   )
+
+const ALL_WHEN = BUNDLED_MIGRATIONS.map((e) => e.when)
+
+/** Journal `when` for a `0NNN` prefix, so a fixture reads as the tag an operator would. */
+const whenOf = (prefix: string) =>
+  BUNDLED_MIGRATIONS.find((e) => e.tag.startsWith(`${prefix}_`))!.when
+
+/** A complete ledger with these migrations' rows removed — what `psql -f` drift looks like. */
+const withoutRows = (...prefixes: string[]) => {
+  const removed = new Set(prefixes.map(whenOf))
+  return ALL_WHEN.filter((v) => !removed.has(v))
+}
+
+/**
+ * The shape measured on two live tenants: a high-water mark at `0253` with rows
+ * absent for `0249`, `0250`, `0252`, `0256` and `0257`, while the database
+ * physically carried some of them and was serving 500s.
+ */
+const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257')
 
 describe('replaySetFor', () => {
   it('is everything on a database that has never been migrated', () => {
@@ -61,6 +82,155 @@ describe('replaySetFor', () => {
     expect(replaySetFor(ledger(applied))).toEqual(
       BUNDLED_MIGRATIONS.slice(cutoff + 1).map((e) => e.tag)
     )
+  })
+})
+
+describe('ledgerGapFor', () => {
+  it('is null on a database that has never been migrated', () => {
+    // Every bundled migration is "absent" from an empty ledger, and none of them
+    // is missing from a prefix it does not have. Treating a fresh database as
+    // gapped would route provisioning through the heal path; this is the same
+    // guard `replayGateVerdict` makes on `count === 0` and it is the one most
+    // likely to be dropped by someone tightening this later.
+    expect(ledgerGapFor(ledger([]))).toBeNull()
+  })
+
+  it('is null on a ledger already at the tip', () => {
+    expect(ledgerGapFor(ledger(ALL_WHEN))).toBeNull()
+  })
+
+  it('is null on a contiguous ledger behind the tip — the control', () => {
+    const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
+    expect(ledgerGapFor(ledger(ALL_WHEN.slice(0, cutoff + 1)))).toBeNull()
+  })
+
+  it('is null for a tenant ahead of this build, whose extra rows are not holes', () => {
+    // A tenant a newer image has already migrated past keeps being served (§10.2).
+    // Its ledger carries a `when` this build has never heard of, and that must
+    // not read as drift.
+    expect(ledgerGapFor(ledger([...ALL_WHEN, latestBundledVersion() + 1_000]))).toBeNull()
+  })
+
+  it('finds the fleet’s measured hole, and does not mistake the forward tail for it', () => {
+    const gap = ledgerGapFor(ledger(MEASURED_DRIFT))
+    expect(gap).not.toBeNull()
+    // 0256 and 0257 are ABOVE the high-water mark, so they are an ordinary
+    // rollout tail rather than part of the hole. Only what is missing from the
+    // prefix this ledger claims to have completed counts.
+    expect(gap!.missing).toEqual([
+      '0249_settings_cloud',
+      '0250_billing',
+      '0252_settings_cloud_secret_canary',
+    ])
+    expect(gap!.from).toBe(whenOf('0249'))
+    // The rows the truncation withdraws: applied, at or above the truncation
+    // point, and bundled here so drizzle can write them back.
+    expect(gap!.rewrites).toEqual(['0251_settings_cloud_tenant_id', '0253_job_queue'])
+    expect(gap!.unrewritable).toEqual([])
+  })
+
+  it('reports rows this build cannot rewrite, rather than silently discarding them', () => {
+    const ahead = latestBundledVersion() + 1_000
+    const gap = ledgerGapFor(ledger([...withoutRows('0249'), ahead]))
+    expect(gap!.unrewritable).toEqual([ahead])
+  })
+})
+
+describe('planFor', () => {
+  it('reports seven where the high-water mark reports two', () => {
+    // The whole defect in one assertion. `replaySetFor` answers a question about
+    // drizzle's high-water mark; on this ledger that answer reads as "nearly
+    // current" at the moment the database is least current.
+    const applied = ledger(MEASURED_DRIFT)
+    expect(replaySetFor(applied)).toEqual([
+      '0256_outbox_relay_leader',
+      '0257_pg_kv_presence_realtime',
+    ])
+    expect(planFor(applied).tags).toEqual([
+      '0249_settings_cloud',
+      '0250_billing',
+      '0251_settings_cloud_tenant_id',
+      '0252_settings_cloud_secret_canary',
+      '0253_job_queue',
+      '0256_outbox_relay_leader',
+      '0257_pg_kv_presence_realtime',
+    ])
+  })
+
+  it('is exactly replaySetFor whenever the ledger has no hole — the control', () => {
+    // Unchanged behaviour is the property that matters most here: every ordinary
+    // rollout, every fresh database and every already-current tenant has to be
+    // routed exactly as it was before the heal existed.
+    const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
+    for (const applied of [
+      ledger([]),
+      ledger(ALL_WHEN),
+      ledger(ALL_WHEN.slice(0, cutoff + 1)),
+      ledger([...ALL_WHEN, latestBundledVersion() + 1_000]),
+    ]) {
+      const plan = planFor(applied)
+      expect(plan.gap).toBeNull()
+      expect(plan.tags).toEqual(replaySetFor(applied))
+    }
+  })
+
+  it('starts at the earliest missing entry, because everything below it is present', () => {
+    // The equality the heal rests on: after deleting every row at or above
+    // `from`, the new high-water mark is the largest applied value below `from`,
+    // and every bundled entry below `from` is in the ledger — so what drizzle
+    // then applies is precisely the bundled entries at or above `from`.
+    const applied = ledger(MEASURED_DRIFT)
+    const { gap, tags } = planFor(applied)
+    const below = BUNDLED_MIGRATIONS.filter((e) => e.when < gap!.from)
+    expect(below.every((e) => applied.versions.has(e.when))).toBe(true)
+    expect(tags).toEqual(BUNDLED_MIGRATIONS.filter((e) => e.when >= gap!.from).map((e) => e.tag))
+  })
+})
+
+describe('gapHealVerdict', () => {
+  const verdictFor = (versions: number[]) => {
+    const applied = ledger(versions)
+    const { gap, tags } = planFor(applied)
+    return gapHealVerdict(gap!, verdictsFor(tags))
+  }
+
+  it('heals the fleet’s measured hole — every migration it replays is a no-op', () => {
+    expect(verdictFor(MEASURED_DRIFT)).toEqual({ ok: true })
+  })
+
+  it('refuses when a row it would delete records a migration that is not a no-op', () => {
+    // Truncating past 0246 puts 0247 back in the replay set, and 0247's row was
+    // there — so it ran, and re-running it is not a risk, it is a certainty of
+    // failure. Because nothing here inserts a ledger row, a truncation that then
+    // cannot replay leaves the tenant further under-claimed with no run that can
+    // ever succeed. That is why the refusal has to come before the DELETE.
+    const verdict = verdictFor(withoutRows('0246'))
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) throw new Error('unreachable')
+    expect(verdict.detail).toContain('0247_user_tags')
+    expect(verdict.detail).toContain('the deleted rows cannot be restored')
+  })
+
+  it('refuses when the hole itself contains a mutating migration, and names it', () => {
+    // A ledger stopping short of 0006 and then jumping to 0012: the rows it
+    // would rewrite (0012) are replay-safe, so the only thing standing in the
+    // way is the hole's own content — which includes an INSERT with no ON
+    // CONFLICT. Nothing in a ledger can say whether that ran; that is what a
+    // hole means, and it is why a human has to look.
+    const verdict = verdictFor([...ALL_WHEN.filter((v) => v < whenOf('0006')), whenOf('0012')])
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) throw new Error('unreachable')
+    expect(verdict.detail).toContain('0006_thick_arclight')
+    expect(verdict.detail).toContain('--allow-mutating-replay does not override')
+  })
+
+  it('refuses to discard rows this build cannot rewrite', () => {
+    const ahead = latestBundledVersion() + 1_000
+    const verdict = verdictFor([...withoutRows('0249'), ahead])
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) throw new Error('unreachable')
+    expect(verdict.detail).toContain(String(ahead))
+    expect(verdict.detail).toContain('This tenant is ahead of this image')
   })
 })
 

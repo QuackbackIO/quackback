@@ -53,6 +53,26 @@
  * — which is the state five live gauntlet databases are in, because they were
  * migrated with `psql -f` — is healed by replaying the SQL, not by asserting
  * that it ran. A wrong ledger row is worse than a missing one.
+ *
+ * ## Gaps, and the division of labour that used to leave them stuck
+ *
+ * Drizzle applies every bundled entry above `max(created_at)` and never looks
+ * below it, so a ledger with a *hole* is invisible to the migrator while being
+ * exactly what the compatibility gate refuses. That split — the reconciler
+ * advances the tip, the gate detects holes — has a dead end in it, because the
+ * gate can only refuse. Measured on two live tenants: high-water at `0253` with
+ * rows absent for `0249`, `0250`, `0252`, `0256` and `0257`, `settings.cloud`
+ * physically missing, every page 500ing, and both instruments reporting fine —
+ * the reconciler `OK [reconciled] post=true`, having applied two migrations and
+ * healed nothing.
+ *
+ * {@link ledgerGapFor} finds the hole and {@link gapHealVerdict} decides whether
+ * it may be closed; the close itself is a DELETE and nothing else. The direction
+ * is the safety argument: a DELETE can only make the ledger claim *less*, every
+ * surviving row is still drizzle's own evidence, and the rows that come back are
+ * written by drizzle after it has run the SQL again. Under-claiming is the
+ * recoverable direction — a ledger describing less than its database is replayed
+ * forward; one describing more is a false answer nothing can detect.
  */
 import postgres from 'postgres'
 import { readFileSync } from 'node:fs'
@@ -63,6 +83,8 @@ import {
   MIGRATIONS_DIR,
   latestBundledVersion,
   readAppliedLedger,
+  tagForVersion,
+  truncateAppliedLedger,
   type AppliedLedger,
 } from '@quackback/db/schema-version'
 import { verifySchemaPostconditions, type PostconditionReport } from '@quackback/db'
@@ -92,8 +114,10 @@ const log = logger.child({ component: 'fleet-migrator' })
 
 export type MigrateTenantCode =
   | 'reconciled'
+  | 'healed_ledger_gap'
   | 'already_current'
   | 'refused_replay_mutates'
+  | 'refused_ledger_gap'
   | 'refused_pooled_dsn'
   | 'postconditions_violated'
   | 'migration_failed'
@@ -107,7 +131,13 @@ export interface MigrateTenantResult {
   before: AppliedLedger
   /** Ledger after the run, absent when nothing was attempted. */
   after: AppliedLedger | null
-  /** Bundled tags drizzle would execute, given `before`. */
+  /** Null when `before` records an unbroken prefix of the bundled journal. */
+  gap: LedgerGap | null
+  /**
+   * Bundled tags this run would execute — after its ledger truncation, when
+   * there is a gap. Not `replaySetFor(before)`, which on a gapped ledger reports
+   * a short tail and hides the hole.
+   */
   replaySet: string[]
   /** Verdicts for those tags. */
   replayVerdicts: ReplaySafetyReport[]
@@ -128,8 +158,27 @@ export interface MigrateTenantOptions {
   allowMutatingReplay?: boolean
   /** Skip the concurrent index build. For a dry preflight, never for a rollout. */
   skipConcurrentIndexes?: boolean
+  /** Override {@link DEFAULT_MIGRATE_LOCK_TIMEOUT_MS}. */
+  lockTimeoutMs?: number
   onStep?: (step: MigrationStep) => void
 }
+
+/**
+ * How long the lineage will wait for a table lock before giving up.
+ *
+ * Set here rather than left off, because the migrator runs against tenants whose
+ * worker tier is live. `0253_job_queue` needs ACCESS EXCLUSIVE on `job_queue` to
+ * replace its wake trigger, and the job poller holds ROW EXCLUSIVE on that table
+ * more or less continuously — measured against the live fleet, that pair
+ * deadlocks rather than queues, because the migration transaction is upgrading a
+ * lock it already holds. Bounding the wait turns an unbounded stall into a
+ * `55P03` that rolls the whole lineage back and is retried by the lease.
+ *
+ * 30 s is comfortably above the incidental waits a healthy tenant produces and
+ * well below the default lease, so a timeout is a diagnosis rather than a lost
+ * claim.
+ */
+export const DEFAULT_MIGRATE_LOCK_TIMEOUT_MS = 30_000
 
 /**
  * Which bundled migrations drizzle would execute against this ledger.
@@ -143,6 +192,199 @@ export interface MigrateTenantOptions {
  */
 export function replaySetFor(applied: AppliedLedger): string[] {
   return BUNDLED_MIGRATIONS.filter((e) => e.when > applied.max).map((e) => e.tag)
+}
+
+export interface LedgerGap {
+  /** Bundled tags at or below the ledger's high-water mark that it does not record. */
+  missing: string[]
+  /**
+   * Journal `when` of the earliest missing entry — the truncation point.
+   *
+   * Deleting every row at or above this value is the *minimal* truncation that
+   * puts the whole gap back inside drizzle's replay window, so it withdraws the
+   * fewest claims that can work.
+   */
+  from: number
+  /**
+   * Bundled tags whose ledger rows the truncation deletes, and which drizzle
+   * therefore replays and rewrites.
+   *
+   * These are the migrations we **know** ran, because their row was there. That
+   * knowledge is what makes them stricter than the rest of the replay set: see
+   * {@link gapHealVerdict}.
+   */
+  rewrites: string[]
+  /**
+   * Rows the truncation would delete that this build does not bundle, so nothing
+   * can rewrite them. Non-empty means healing would permanently forget a
+   * migration that ran — the one case where a truncation stops being recoverable.
+   */
+  unrewritable: number[]
+}
+
+/**
+ * The hole in a ledger, if it has one.
+ *
+ * A ledger is a set, not a counter. `applied.max` says how far the tenant got;
+ * it says nothing about what it skipped on the way, and drizzle only ever looks
+ * at the maximum. So this asks the question the maximum cannot: *is every
+ * bundled migration at or below this ledger's own high-water mark recorded in
+ * it?*
+ *
+ * **An empty ledger is never a gap.** A database that has never been migrated
+ * has nothing missing from a prefix it does not have, and treating it as gapped
+ * would put provisioning through the heal path — which is the condition most
+ * likely to be dropped by someone tightening this later, exactly as it is in
+ * {@link replayGateVerdict}.
+ */
+export function ledgerGapFor(applied: AppliedLedger): LedgerGap | null {
+  if (applied.count === 0) return null
+  const missing = BUNDLED_MIGRATIONS.filter(
+    (e) => e.when <= applied.max && !applied.versions.has(e.when)
+  )
+  if (missing.length === 0) return null
+
+  const from = missing[0]!.when
+  const bundled = new Set(BUNDLED_MIGRATIONS.map((e) => e.when))
+  const discards = [...applied.versions].filter((v) => v >= from).sort((a, b) => a - b)
+  return {
+    missing: missing.map((e) => e.tag),
+    from,
+    rewrites: discards.filter((v) => bundled.has(v)).map((v) => tagForVersion(v)),
+    unrewritable: discards.filter((v) => !bundled.has(v)),
+  }
+}
+
+export interface MigrationPlan {
+  /** Null when the ledger records an unbroken prefix of the bundled journal. */
+  gap: LedgerGap | null
+  /**
+   * The tags drizzle would execute if this plan were run — including, when there
+   * is a gap, the effect of the truncation the run would perform first.
+   */
+  tags: string[]
+}
+
+/**
+ * What a run would execute against this ledger. The one answer `plan` prints and
+ * `migrateTenant` acts on, so the two cannot disagree.
+ *
+ * With no gap this is {@link replaySetFor} unchanged. With a gap it is **every
+ * bundled entry from `gap.from` onward**, and that equality is exact rather than
+ * approximate: after deleting every row at or above `from`, the new high-water
+ * mark is the largest applied value strictly below `from`; every bundled entry
+ * below `from` is in the ledger, or one of them would have been the earliest
+ * missing entry instead; so the bundled entries above the new mark are precisely
+ * the bundled entries at or above `from`.
+ *
+ * The difference is not cosmetic. On the ledger this fleet actually produced —
+ * high-water at `0253` with rows absent for `0249`, `0250`, `0252`, `0256` and
+ * `0257` — `replaySetFor` reports two tags while seven are missing, so a plan
+ * built on it tells an operator the tenant is nearly current at the moment it is
+ * least current.
+ */
+export function planFor(applied: AppliedLedger): MigrationPlan {
+  const gap = ledgerGapFor(applied)
+  if (!gap) return { gap: null, tags: replaySetFor(applied) }
+  return { gap, tags: BUNDLED_MIGRATIONS.filter((e) => e.when >= gap.from).map((e) => e.tag) }
+}
+
+/**
+ * May this gap be healed by truncating the ledger and letting drizzle replay?
+ *
+ * The heal itself is not the interesting part — it is one DELETE, and a DELETE
+ * can only ever withdraw claims. What is interesting is that the replay it
+ * enables covers two populations with **different evidence**, and lumping them
+ * together gets one of them wrong:
+ *
+ * - **`rewrites` — migrations whose ledger row we are deleting.** Their row was
+ *   there, so they *did* run. Replaying them must therefore change nothing:
+ *   `safe`, and nothing weaker. A `mutates` one writes a second time, which
+ *   atomicity cannot undo. An `errors` one is not merely risky here, it is a
+ *   *certainty* — measured: truncating past `0247_user_tags` and replaying fails
+ *   on `relation "user_tags" already exists`, and because the rows cannot be put
+ *   back (nothing here inserts a ledger row) the tenant is left under-claiming
+ *   further than it started, with no run that can ever succeed. Refusing before
+ *   the DELETE is the only protection, which is why this runs first.
+ * - **`missing` — the hole itself.** Nobody knows whether these ran; that is what
+ *   makes it a hole. `errors` is acceptable for the same reason it is acceptable
+ *   in an ordinary rollout: `migrate()` wraps the lineage in one transaction, so
+ *   the run rolls back whole and Postgres's own message is the diagnosis.
+ *   `mutates` is refused, because a statement that succeeds and writes a second
+ *   time is the class atomicity cannot save you from.
+ *
+ * **`allowMutatingReplay` does not reach this gate, deliberately.** That flag
+ * means "the operator has established that this ledger is honest". A gap is
+ * proof that it is not. The refusal names the migration because the repair is a
+ * human deciding, for that specific file, whether its writes already happened.
+ */
+export function gapHealVerdict(
+  gap: LedgerGap,
+  verdicts: ReplaySafetyReport[]
+): { ok: true } | { ok: false; detail: string } {
+  const context =
+    `Ledger gap: ${gap.missing.length} bundled migration(s) at or below this database's own ` +
+    `high-water mark are absent from its ledger (${gap.missing.join(', ')}). Healing means ` +
+    `deleting the ${gap.rewrites.length + gap.unrewritable.length} row(s) from ` +
+    `${tagForVersion(gap.from)} onward so drizzle replays the whole span and rewrites them.`
+
+  if (gap.unrewritable.length > 0) {
+    return {
+      ok: false,
+      detail:
+        `${context} Refusing: ${gap.unrewritable.length} of those row(s) record migrations this ` +
+        `build does not bundle (${gap.unrewritable.join(', ')}), so nothing here can rewrite ` +
+        'them and the heal would delete evidence permanently. This tenant is ahead of this ' +
+        'image; run the heal from the image that carries those migrations.',
+    }
+  }
+
+  const byTag = new Map(verdicts.map((v) => [v.tag, v]))
+  const unsafeRewrites = gap.rewrites
+    .map((tag) => byTag.get(tag))
+    .filter((v): v is ReplaySafetyReport => v !== undefined && v.verdict !== 'safe')
+  if (unsafeRewrites.length > 0) {
+    return {
+      ok: false,
+      detail:
+        `${context} Refusing: ${unsafeRewrites.length} of those migration(s) are recorded as ` +
+        'having run and would not be a no-op on a second run — ' +
+        unsafeRewrites
+          .map(
+            (v) =>
+              `${v.tag} (${v.verdict}: ${(v.mutating[0] ?? v.erroring[0])?.reason ?? 'not replay-safe'})`
+          )
+          .join('; ') +
+        '. A `mutates` one would write twice; an `errors` one would roll the whole run back ' +
+        'every time, and the deleted rows cannot be restored because nothing here inserts a ' +
+        'ledger row. A human has to establish, per migration, what this database actually ' +
+        'carries. --allow-mutating-replay does not override this: it asserts the ledger is ' +
+        'honest, and the gap is proof that it is not.',
+    }
+  }
+
+  const mutatingHoles = gap.missing
+    .map((tag) => byTag.get(tag))
+    .filter((v): v is ReplaySafetyReport => v !== undefined && v.verdict === 'mutates')
+  if (mutatingHoles.length > 0) {
+    return {
+      ok: false,
+      detail:
+        `${context} Refusing: the gap contains ${mutatingHoles.length} migration(s) that would ` +
+        'succeed and change data if this database has already had them applied outside the ' +
+        'ledger — ' +
+        mutatingHoles
+          .map((v) => `${v.tag} (${v.mutating[0]?.reason ?? 'writes on replay'})`)
+          .join('; ') +
+        '. Nothing in the ledger can tell you whether they ran, which is what a gap means. ' +
+        'Establish it against the database itself — a branch dry-run is the cheap way ' +
+        '(SAAS-HOSTING-STACK.md §10.8) — then repair by hand. Do not insert ledger rows: a ' +
+        'wrong row is worse than a missing one. --allow-mutating-replay does not override ' +
+        'this gate.',
+    }
+  }
+
+  return { ok: true }
 }
 
 /**
@@ -214,7 +456,8 @@ export async function migrateTenant(
     await probe.end({ timeout: 5 }).catch(() => {})
   }
 
-  const replaySet = replaySetFor(before)
+  const plan = planFor(before)
+  const replaySet = plan.tags
   const replayVerdicts = replaySet.map((tag) => assessReplaySafety(tag, readMigrationSql(tag)))
   const mutating = replayVerdicts.filter((r) => r.verdict === 'mutates')
 
@@ -222,6 +465,7 @@ export async function migrateTenant(
     tenantId: tenant.tenantId,
     before,
     after: null,
+    gap: plan.gap,
     replaySet,
     replayVerdicts,
     healedIndexes: [],
@@ -243,6 +487,11 @@ export async function migrateTenant(
   // drop the invalid indexes, apply nothing (the ledger is complete), rebuild,
   // and verify. An earlier version of this function returned the violation
   // without healing it, which reported the defect and left it in place.
+  //
+  // A gapped ledger can never take this branch: a gap has at least one missing
+  // entry, and `planFor` puts every entry from the gap onward into the set. That
+  // is what stops a tenant whose high-water mark is at the tip but whose ledger
+  // has a hole from being reported `already_current`.
   if (replaySet.length === 0) {
     const early = await withProbe(dsn, (sql) => verifySchemaPostconditions(sql))
     if (early.ok) {
@@ -262,6 +511,20 @@ export async function migrateTenant(
     )
   }
 
+  // Both gates run before anything is written, and this one runs first because
+  // its refusal is the one that has to happen before the DELETE — after it,
+  // there is no way back.
+  if (plan.gap) {
+    const heal = gapHealVerdict(plan.gap, replayVerdicts)
+    if (!heal.ok) {
+      log.error(
+        { tenantId: tenant.tenantId, missing: plan.gap.missing, rewrites: plan.gap.rewrites },
+        heal.detail
+      )
+      return { ...base, ok: false, code: 'refused_ledger_gap', detail: heal.detail }
+    }
+  }
+
   const gate = replayGateVerdict(before, replayVerdicts, options.allowMutatingReplay ?? false)
   if (!gate.ok) {
     log.error({ tenantId: tenant.tenantId, mutating: mutating.map((m) => m.tag) }, gate.detail)
@@ -269,8 +532,24 @@ export async function migrateTenant(
   }
 
   try {
+    if (plan.gap) {
+      const discarded = await withProbe(dsn, (sql) =>
+        truncateAppliedLedger(sql, plan.gap!.from)
+      )
+      log.warn(
+        {
+          tenantId: tenant.tenantId,
+          from: tagForVersion(plan.gap.from),
+          missing: plan.gap.missing,
+          discarded: discarded.length,
+        },
+        'ledger gap: truncated the ledger so drizzle replays the span it does not record'
+      )
+    }
+
     const result = await runMigrations(dsn, {
       concurrentIndexes: !options.skipConcurrentIndexes,
+      lockTimeoutMs: options.lockTimeoutMs ?? DEFAULT_MIGRATE_LOCK_TIMEOUT_MS,
       onStep: (step) => {
         lastStep = step
         options.onStep?.(step)
@@ -297,6 +576,40 @@ export async function migrateTenant(
       }
     }
 
+    // The run has to have done what it said it would, and the ledger is the
+    // right instrument for that because the ledger is what the plan was computed
+    // from. This is the direct guard against the defect being fixed: a run
+    // reporting `reconciled` over a database it did not repair.
+    //
+    // Asked as "is every planned migration now recorded" rather than "is the
+    // ledger still gapped", because the truncation turns a hole into a *short*
+    // ledger — and a short ledger has no hole in it. Checking for a gap here
+    // would be an assertion that cannot fail, which is worse than no assertion.
+    const planned = new Set(replaySet)
+    const unrecorded = BUNDLED_MIGRATIONS.filter(
+      (e) => planned.has(e.tag) && !after.versions.has(e.when)
+    ).map((e) => e.tag)
+    if (unrecorded.length > 0) {
+      const detail =
+        `the run reported success but the ledger does not record ${unrecorded.length} of the ` +
+        `${replaySet.length} migration(s) it was to apply (${unrecorded.join(', ')}). Drizzle ` +
+        'writes a row only after executing, so this database has not been brought to the ' +
+        'planned version and must not be reported as reconciled.'
+      log.error({ tenantId: tenant.tenantId, unrecorded }, detail)
+      return {
+        ...base,
+        after,
+        lastStep,
+        healedIndexes: result.healed.map((i) => i.name),
+        unhealableIndexes: result.unhealable.map((i) => i.name),
+        postconditions,
+        ok: false,
+        code: 'migration_failed',
+        detail,
+        durationMs: Date.now() - started,
+      }
+    }
+
     return {
       ...base,
       after,
@@ -305,8 +618,12 @@ export async function migrateTenant(
       unhealableIndexes: result.unhealable.map((i) => i.name),
       postconditions,
       ok: true,
-      code: 'reconciled',
+      code: plan.gap ? 'healed_ledger_gap' : 'reconciled',
       detail:
+        (plan.gap
+          ? `healed a ledger gap of ${plan.gap.missing.length} migration(s) ` +
+            `(${plan.gap.missing.join(', ')}) by replaying from ${tagForVersion(plan.gap.from)}; `
+          : '') +
         `applied ${replaySet.length} migration(s); ledger ${before.count} -> ${after.count}; ` +
         `${result.healed.length} invalid index(es) healed; post-conditions verified`,
       durationMs: Date.now() - started,
@@ -358,6 +675,12 @@ export interface ReconcilePassOptions {
 export interface ReconcilePassResult {
   claimed: number
   reconciled: number
+  /**
+   * Tenants whose ledger had a hole in it that this pass closed. A subset of
+   * `reconciled`, reported separately because it is the one outcome that means
+   * a database was *wrong* rather than merely behind.
+   */
+  healed: number
   alreadyCurrent: number
   failed: number
   /** Tenants whose registry record the request path would refuse. Never migrated. */
@@ -393,6 +716,7 @@ export async function runReconcilePass(
   const result: ReconcilePassResult = {
     claimed: 0,
     reconciled: 0,
+    healed: 0,
     alreadyCurrent: 0,
     failed: 0,
     refusedRecords: refused.length,
@@ -429,7 +753,10 @@ export async function runReconcilePass(
       result.outcomes.push(outcome)
       if (!outcome.ok) result.failed += 1
       else if (outcome.code === 'already_current') result.alreadyCurrent += 1
-      else result.reconciled += 1
+      else {
+        result.reconciled += 1
+        if (outcome.code === 'healed_ledger_gap') result.healed += 1
+      }
     }
   }
 
@@ -455,6 +782,7 @@ async function reconcileClaimed(
       detail,
       before: empty,
       after: null,
+      gap: null,
       replaySet: [],
       replayVerdicts: [],
       healedIndexes: [],
@@ -547,22 +875,33 @@ export async function enrolActiveTenants(cohort = 'default'): Promise<number> {
 /**
  * What a run WOULD do, computed by the same functions the run uses.
  *
- * Shares `replaySetFor` and `assessReplaySafety` with {@link migrateTenant}
- * rather than recomputing them, because a preflight that can disagree with the
- * thing it is previewing is worse than no preflight.
+ * Shares `planFor` and `assessReplaySafety` with {@link migrateTenant} rather
+ * than recomputing them, because a preflight that can disagree with the thing it
+ * is previewing is worse than no preflight. `planFor` in particular is why this
+ * no longer under-reports a gapped ledger: it used to print `replaySetFor`,
+ * which answers a question about drizzle's high-water mark rather than about the
+ * run, and on a hole reports a short tail with no hint that anything is wrong.
  */
 export async function planTenant(tenant: TenantDescriptor): Promise<{
   applied: AppliedLedger
+  gap: LedgerGap | null
   replaySet: string[]
   verdicts: ReplaySafetyReport[]
+  /** The refusal an operator would get if they ran this now. Null when it would proceed. */
+  refusal: string | null
 }> {
   const dsn = withPassword(tenant.database.directUrl, await resolveTenantPassword(tenant))
   const applied = await withProbe(dsn, (sql) => readAppliedLedger(sql))
-  const replaySet = replaySetFor(applied)
+  const { gap, tags } = planFor(applied)
+  const verdicts = tags.map((tag) => assessReplaySafety(tag, readMigrationSql(tag)))
+  const heal = gap ? gapHealVerdict(gap, verdicts) : { ok: true as const }
+  const replay = heal.ok ? replayGateVerdict(applied, verdicts, false) : heal
   return {
     applied,
-    replaySet,
-    verdicts: replaySet.map((tag) => assessReplaySafety(tag, readMigrationSql(tag))),
+    gap,
+    replaySet: tags,
+    verdicts,
+    refusal: replay.ok ? null : replay.detail,
   }
 }
 

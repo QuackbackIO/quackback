@@ -123,6 +123,28 @@ export interface RunMigrationsOptions {
    * this; the image lays the SQL out somewhere other than the source tree.
    */
   migrationsFolder?: string
+  /**
+   * `lock_timeout` for the migration transaction, so a statement that cannot get
+   * the table lock it needs **fails fast instead of waiting**. Unset means no
+   * timeout, which is the historical behaviour and what the boot path keeps.
+   *
+   * The hazard is specific and was hit against the live fleet. `0253_job_queue`
+   * contains `DROP TRIGGER IF EXISTS job_queue_wake_trg ON job_queue`, which
+   * needs ACCESS EXCLUSIVE on `job_queue` — a table the worker tier's poller
+   * holds ROW EXCLUSIVE on continuously. The migration transaction has already
+   * touched `job_queue` by then, so it is asking to *upgrade* a lock it holds
+   * while another session holds a conflicting one, which is the classic shape of
+   * a deadlock rather than a wait. Postgres detects it and kills one side after
+   * `deadlock_timeout`, and which side loses is not ours to choose.
+   *
+   * A timeout does not prevent the contention; it bounds it. The lineage is one
+   * transaction, so a `55P03` rolls the whole run back and changes nothing, the
+   * reconciler records the failure with its diagnosis, and the lease's own
+   * backoff retries — which is a better retry than a new one here, because it
+   * counts against `max_attempts` and therefore cannot loop forever against a
+   * tenant whose worker never goes quiet.
+   */
+  lockTimeoutMs?: number
   /** Progress callback, so a reconciler can report which step a kill landed in. */
   onStep?: (step: MigrationStep) => void
 }
@@ -196,8 +218,13 @@ export async function runMigrations(
     verify = true,
     requireSessionMode = true,
     migrationsFolder = MIGRATIONS_FOLDER,
+    lockTimeoutMs,
     onStep = () => {},
   } = options
+
+  if (lockTimeoutMs !== undefined && !Number.isSafeInteger(lockTimeoutMs)) {
+    throw new Error(`lockTimeoutMs must be an integer number of milliseconds, got ${lockTimeoutMs}`)
+  }
 
   if (requireSessionMode) assertSessionModeDsn(connStr)
 
@@ -222,7 +249,17 @@ export async function runMigrations(
     const healed = await dropInvalidIndexes(sql)
 
     onStep('migrate')
-    await migrate(database, { migrationsFolder })
+    // Scoped to the lineage rather than set for the whole run: the concurrent
+    // index step that follows waits on old snapshots rather than on locks, and a
+    // timeout there would abort a build that was making progress.
+    if (lockTimeoutMs !== undefined) {
+      await sql.unsafe(`SET lock_timeout = ${lockTimeoutMs}`)
+    }
+    try {
+      await migrate(database, { migrationsFolder })
+    } finally {
+      if (lockTimeoutMs !== undefined) await sql.unsafe(`SET lock_timeout = 0`).catch(() => {})
+    }
 
     if (concurrentIndexes) {
       onStep('concurrent-indexes')

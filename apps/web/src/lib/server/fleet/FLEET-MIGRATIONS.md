@@ -83,7 +83,29 @@ Three consequences, and they are the shape of the whole module:
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Extensions first**     | `runMigrations` never issued `CREATE EXTENSION vector`, and no migration file does either, while `0000_initial` declares `vector` columns. A fresh database migrated through the runtime path could not succeed at all.                                                                               |
 | **Heal before building** | An interrupted `CREATE INDEX CONCURRENTLY` leaves an _invalid_ index. `IF NOT EXISTS` then treats it as present — measured, see §5 — so re-running the migrator **certifies** the invalid index rather than repairing it, and exits 0. Invalid non-constraint indexes are dropped _before_ the build. |
-| **Verify the catalogue** | Post-conditions are checked against `pg_index` / `pg_extension`, never against `drizzle.__drizzle_migrations`. The ledger's row count is recorded next to the verdict as a diagnostic, never as evidence.                                                                                             |
+| **Verify the catalogue** | Post-conditions are checked against `pg_index` / `pg_extension` / `information_schema`, never against `drizzle.__drizzle_migrations`. The ledger's row count is recorded next to the verdict as a diagnostic, never as evidence.                                                                                             |
+
+### What the post-condition check covers, and what it does not
+
+`verifySchemaPostconditions` returned `ok=true` for the two broken tenants
+above, and was right to by its own lights: it checked extensions and the
+concurrent indexes and nothing else, while its name promised the schema. A
+verdict is only as good as its scope, and it had no way to state its scope.
+
+It now also checks **the shape this build queries with** — every table and
+column the Drizzle schema object declares must exist — and returns the list of
+checks it performed in `report.covers`, so a reader of a green verdict can see
+what green meant without reading the source. The shape check is derived from the
+schema the running code queries with, not from a second hand-written list, which
+is what makes it worth having: Drizzle emits explicit column lists, so a declared
+column that does not exist is not a missing value, it is a throw.
+
+Still **not** covered, stated so a green verdict is readable: types,
+nullability, defaults, constraints, triggers and functions. And objects the
+database has that this build does not declare are ignored on purpose — a tenant
+a newer image has migrated past must keep being served (§6), so extra is never a
+violation. Full bidirectional comparison is `db:check-drift`, which needs the
+Drizzle Kit toolchain rather than a query.
 
 ## 4. Replaying, and the ledger this fleet actually has
 
@@ -122,6 +144,104 @@ to apply. The refusal names the file, the statement and the repair.
 **`0251_settings_cloud_tenant_id` is `safe`**, which is what makes this fleet
 healable. Its two statements are `ADD COLUMN IF NOT EXISTS` and `COMMENT ON`;
 neither touches a value. Established statically _and_ empirically — see §5.
+
+## 4a. Holes, and closing them
+
+Everything above is about a ledger that is _behind_. A ledger can also be
+_wrong_, and the two need different machinery.
+
+Drizzle selects `order by created_at desc limit 1` and applies every bundled
+entry strictly greater than that one value. So a **hole below the high-water
+mark is invisible to the migrator** while being exactly what the compatibility
+gate refuses. That split — the reconciler advances the tip, the gate detects
+holes — has a dead end in it, because the gate can only refuse. A tenant with a
+hole was refused by the gate on every request, forever, and reconciled by the
+migrator without being repaired.
+
+Measured on two live tenants: high-water at `0253` with rows absent for `0249`,
+`0250`, `0252`, `0256` and `0257`, `settings.cloud` physically missing, every
+page 500ing. A `run` applied `0256` and `0257`, wrote those two rows, and
+reported `OK [reconciled] post=true`. Both instruments said the tenant was fine.
+
+### The heal is a DELETE and nothing else
+
+`ledgerGapFor` finds the hole. The close is one statement:
+
+```sql
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at >= <earliest missing>
+```
+
+and then drizzle replays the span and writes the rows back itself. That is the
+whole algorithm, and its shape is the safety argument:
+
+- **It cannot over-claim, structurally.** The only write this codebase performs
+  against the ledger is a DELETE, so the resulting ledger is a subset of the one
+  it started from. Every surviving row is still drizzle's own evidence; the
+  removed ones are claims _withdrawn_, never claims invented. Nothing anywhere
+  inserts a row — that rule is unchanged and is what the heal is built on rather
+  than around.
+- **Under-claiming is the recoverable direction.** A ledger describing less than
+  its database is replayed forward by the next run. One describing more is a
+  false answer nothing can detect. A crash between the DELETE and the replay
+  therefore leaves a state no worse than the hole, which the next pass fixes.
+- **The truncation point is the earliest missing entry**, which is the minimal
+  deletion that works: after it, the new high-water mark is the largest applied
+  value below that point, every bundled entry below it is present (or one of
+  _them_ would have been the earliest missing), so what drizzle then applies is
+  exactly the bundled entries from the hole onward.
+
+### Two populations, two rules
+
+The replay this enables covers migrations with **different evidence behind
+them**, and treating them alike gets one of them wrong.
+
+| Population                                   | What is known           | Rule                        |
+| -------------------------------------------- | ----------------------- | --------------------------- |
+| **rewrites** — rows the DELETE removes        | they **did** run        | must be `safe`, nothing less |
+| **the hole** — entries with no row            | nobody knows            | `errors` ok, `mutates` refused |
+| the forward tail above the high-water mark    | ordinary rollout        | unchanged (§4)              |
+
+`errors` is tolerable in the hole for the reason it is tolerable in any rollout:
+`migrate()` is one transaction, so the run rolls back whole and Postgres's own
+message is the diagnosis. In the **rewrites** it is not a risk but a
+_certainty_ — measured, on a scratch database carrying the whole lineage:
+
+```
+truncate past 0246, replay
+  → Failed query: -- User tags: ... (0247_user_tags)
+  → ledger 223 rows, unchanged by the failure
+```
+
+and because nothing can put the deleted rows back, a truncation that then cannot
+replay leaves the tenant under-claiming further than it started with no run that
+can ever succeed. **That is why the refusal happens before the DELETE**, and it
+is asserted as such: the refusal tests check that the ledger is byte-for-byte
+untouched.
+
+A fourth refusal covers rows the truncation would delete that _this build does
+not bundle_ — a tenant ahead of the image. Nothing here could rewrite them, so
+healing would delete evidence permanently; run the heal from the image that
+carries them.
+
+**`--allow-mutating-replay` does not reach any of this.** That flag asserts the
+ledger is honest. A hole is proof that it is not.
+
+### What it reports
+
+`plan` prints the hole above the replay set, because the two are different
+facts — one says "behind", the other says "wrong" — and because a gapped ledger
+reads as nearly current by its high-water mark at the moment it is least
+current. On the measured drift it now prints seven where it used to print two.
+
+`run` reports `[healed_ledger_gap]` rather than `[reconciled]`, and the pass
+summary carries `gaps_healed=` beside `reconciled=`.
+
+Then the run verifies itself: **every migration the plan named must be recorded
+in the ledger afterwards**, or the outcome is a failure however clean the
+post-conditions look. Note the question — _did the plan land_, not _is the
+ledger still holed_. The truncation turns a hole into a short ledger, and a
+short ledger has no hole in it, so the second question is one that cannot fail.
+It was written that way first and the falsification pass caught it.
 
 ## 5. The evidence
 
@@ -391,7 +511,8 @@ that is off while every dashboard says it is on.
 ## 7. Running it
 
 ```bash
-# what a run WOULD apply, and whether any of it is replay-dangerous
+# what a run WOULD apply, whether the ledger has a hole in it, and whether any
+# of it is replay-dangerous. Reports the refusal an operator would get, if any.
 bun run scripts/fleet-migrator.ts plan --tenant inst_x
 
 # create intent rows for active tenants that have none, at this build's version
@@ -510,6 +631,60 @@ tenant's migration, which keeps that tenant's Neon compute awake.** That is
 unavoidable and bounded; it is also why the migrator is a separate role from the
 pooled web tier, whose whole cost model depends on going silent.
 
+### Locks, and why the lineage runs under a `lock_timeout`
+
+**Every measurement in the table above was taken against an idle database.** The
+one below was not, and it is the difference that matters.
+
+A tenant being reconciled has a **live worker tier**. Its job poller holds ROW
+EXCLUSIVE on `job_queue` more or less continuously, and `0253_job_queue` both
+builds indexes on that table (SHARE) and replaces its wake trigger (`DROP
+TRIGGER IF EXISTS job_queue_wake_trg` / `CREATE TRIGGER`, SHARE ROW EXCLUSIVE).
+Both conflict with ROW EXCLUSIVE. On a fresh rollout nothing contends, because
+the table does not exist yet; on a **replay** — which is what healing a hole
+spanning `0253` does — it does.
+
+Reproduced on a scratch database carrying the full lineage, with one session
+holding the poller's lock:
+
+```
+no lock_timeout:  still pending after 2000 ms
+                  pg_locks on job_queue: ShareLock granted=false
+                                         RowExclusiveLock granted=true
+                  → completes 9 ms after the holder rolls back
+
+lock_timeout=1s:  fails after 1022 ms, SQLSTATE 55P03
+                  "canceling statement due to lock timeout"
+                  ledger unchanged — the lineage is one transaction
+```
+
+The wait is unbounded, and the migration transaction has already touched
+`job_queue` by the time it asks, so it is upgrading a lock it holds while
+another session holds a conflicting one — the shape that becomes a deadlock
+rather than a queue as soon as the poller wants something the migrator holds.
+Nothing is corrupted either way (the transaction rolls back whole), but it can
+stall or fail a rollout at random on any tenant whose worker is busy.
+
+So the fleet migrator sets `lock_timeout` for the lineage —
+`DEFAULT_MIGRATE_LOCK_TIMEOUT_MS`, 30 s. **This does not prevent the contention;
+it bounds it.** A `55P03` rolls the run back, the reconciler records it with the
+migration named in the message, and the lease's existing backoff retries — which
+is a better retry than a new one, because it counts against `max_attempts` and so
+cannot loop forever against a tenant whose worker never goes quiet.
+
+Three deliberate choices:
+
+- **Scoped to the lineage**, set before `migrate()` and cleared after. The
+  concurrent index step that follows waits on old snapshots rather than on locks,
+  and a timeout there would abort a build that was making progress.
+- **Off by default in `runMigrations`.** The boot path (`migrate.ts`) keeps its
+  historical unbounded wait; a self-hosted install migrating its own database at
+  startup has no fleet to protect and no reconciler to retry it.
+- **No quiescing of the worker tier.** Draining a tenant's jobs before migrating
+  it would be a larger mechanism than the problem, and the timeout plus the
+  existing retry already turns the failure into a bounded, named, self-clearing
+  one.
+
 ### Sizing the lease
 
 The lease must outlive the slowest tenant migration. Measured on a 0.25 CU Neon
@@ -533,6 +708,17 @@ claimed, which is the correct outcome and needs an operator, not a longer retry.
 ## 8. What the reconciler will not do
 
 - **Insert a ledger row.** Ever. Drizzle writes them after executing the SQL.
+  Healing a hole is a DELETE and a replay; the rows that come back are written by
+  drizzle, after the fact, as a consequence of having run.
+- **Truncate a ledger it has not first established is safe to replay.** The
+  refusal happens before the DELETE, because a truncation that cannot then
+  replay is unrecoverable. Asserted, not intended: the refusal tests check the
+  ledger is untouched.
+- **Heal a hole containing a data-mutating migration**, or one whose rewritten
+  rows are not no-ops, or one that would discard rows this build cannot rewrite.
+  Three refusals, each naming the migration. `--allow-mutating-replay` overrides
+  none of them: it asserts the ledger is honest, and a hole is proof otherwise.
+- **Report `reconciled` for a run whose migrations the ledger does not record.**
 - **Record `succeeded` without a catalogue-verified verdict.** Refused in code
   and by a database `CHECK`.
 - **Record `succeeded` below the target.** A migrator whose bundle is older than
@@ -596,6 +782,26 @@ drift is not.
   observations — is what the CP has to implement, and it is enforced by
   `CHECK`s rather than by convention, so a CP writer cannot get it wrong
   quietly.
+- **A tenant already recorded at its target cannot be claimed, so it cannot be
+  healed by a plain `run`.** The claim narrows on
+  `current_version < target_version`, and a tenant with a hole was recorded at
+  the target by a run that healed nothing — which is exactly the state the two
+  live tenants are in. The reason it is broken is the reason nothing will look at
+  it again.
+
+  `plan --tenant X` reports the hole regardless of claim state, and
+  `run --tenant X` now reads the tenant's own ledger before agreeing with an
+  `already_current` verdict and exits 1 naming the missing migrations. Clearing
+  the observation so the reconciler can claim it is a **control-plane write**,
+  and deliberately not a command here: `current_version` is an observation this
+  app writes, but the `succeeded` status is guarded by `CHECK`s that live in the
+  CP's own migration `0049`, in another repository, and shipping an `UPDATE`
+  against constraints that cannot be read or tested from here is how a repair
+  tool becomes an incident. The write an operator needs is
+  `UPDATE cp_tenant_schema_state SET current_version = NULL, status = 'pending',
+  attempts = 0 WHERE tenant_id = ...` — status and version together, because the
+  `CHECK` couples them. Making that a first-class command belongs with the CP
+  work that owns the table.
 - **Neon-branch preflight (§10.8) is not built.** `plan` reports the replay set
   and its verdicts against the live database, which is the cheap half; dry-running
   a release against a branch of the largest and oldest tenant is not.
