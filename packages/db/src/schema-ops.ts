@@ -32,7 +32,10 @@
  * `CREATE INDEX CONCURRENTLY` cannot run inside a transaction block and the
  * drizzle wrapper is not the right handle for a statement with that constraint.
  */
+import { is } from 'drizzle-orm'
+import { PgTable, getTableConfig } from 'drizzle-orm/pg-core'
 import type postgres from 'postgres'
+import * as schema from './schema'
 
 /**
  * Arbitrary application-chosen key identifying "quackback migrations" for
@@ -228,19 +231,76 @@ export async function ensureConcurrentIndexes(sql: postgres.Sql): Promise<void> 
 }
 
 export interface PostconditionViolation {
-  kind: 'invalid_index' | 'missing_index' | 'missing_extension'
+  kind: 'invalid_index' | 'missing_index' | 'missing_extension' | 'missing_table' | 'missing_column'
   detail: string
 }
+
+/**
+ * Exactly what {@link verifySchemaPostconditions} looks at, carried in its own
+ * report.
+ *
+ * A verdict is only as good as its scope, and this one used to have no way to
+ * state its scope: it returned `ok: true` for a tenant whose `settings.cloud`
+ * column did not exist and which 500'd on every page, because it checked
+ * extensions and the concurrent indexes and nothing else while its name promised
+ * the schema. Naming the checks in the report means a reader of a green verdict
+ * can see what green did and did not mean, without reading this file.
+ */
+export const POSTCONDITION_CHECKS = [
+  'no invalid index in any user schema',
+  'every concurrent index present',
+  'every required extension installed',
+  'every table this build declares exists',
+  'every column this build declares exists',
+] as const
 
 export interface PostconditionReport {
   ok: boolean
   violations: PostconditionViolation[]
+  /** What was checked. See {@link POSTCONDITION_CHECKS}. */
+  covers: readonly string[]
   /** Everything observed, for the run log — reported whether or not it passed. */
   observed: {
     invalidIndexes: InvalidIndex[]
     missingIndexes: string[]
     extensions: string[]
+    /** Declared tables absent from the database, as `schema.table`. */
+    missingTables: string[]
+    /** Declared columns absent from an existing table, as `schema.table.column`. */
+    missingColumns: string[]
   }
+}
+
+interface DeclaredTable {
+  schema: string
+  name: string
+  columns: string[]
+}
+
+/**
+ * The tables and columns this build's Drizzle schema declares.
+ *
+ * Derived from the schema object the running code queries with, never from a
+ * hand-written list — which is the property that makes it worth having. Drizzle
+ * emits explicit column lists, so `findFirst()` on a table missing a declared
+ * column *throws* rather than returning a null; the set of columns this function
+ * returns is therefore the set whose absence takes a page down.
+ */
+export function declaredTables(): DeclaredTable[] {
+  // The schema barrel also exports enums, relations and plain constants, and its
+  // table types are each distinct literal-named generics, so a type predicate
+  // over the union does not narrow. `is()` is the runtime check; the cast only
+  // reunifies what it already established.
+  return (Object.values(schema) as unknown[])
+    .filter((v) => is(v, PgTable))
+    .map((value) => {
+      const config = getTableConfig(value as PgTable)
+      return {
+        schema: config.schema ?? 'public',
+        name: config.name,
+        columns: config.columns.map((c) => c.name),
+      }
+    })
 }
 
 /**
@@ -252,7 +312,7 @@ export interface PostconditionReport {
  * complete ledger and a broken database, so a checker that consults the ledger
  * is a checker that agrees with the failure.
  *
- * Three checks, and the first is deliberately not derived from anything:
+ * Four checks, and none of them is derived from a hand-written list:
  *
  * 1. **The `indisvalid` sweep.** Every index in every user schema. No list of
  *    expected names, so it catches invalid indexes this module has never heard
@@ -263,6 +323,20 @@ export interface PostconditionReport {
  *    creator uses, so it cannot drift out of step with it.
  * 3. **Extensions.** A dropped `vector` makes every embedding column
  *    unqueryable while the ledger still reads complete.
+ * 4. **The shape this build queries with.** Every table and column
+ *    {@link declaredTables} names must exist. Added because checks 1–3 returned
+ *    `ok: true` on a tenant whose `settings.cloud` column was absent and which
+ *    500'd on every page: the ledger said complete, the post-conditions said
+ *    correct, and the tenant was down. Drizzle emits explicit column lists, so a
+ *    declared column that does not exist is not a missing value, it is a throw.
+ *
+ * **What it still does not cover, stated so a green verdict is readable.** Types,
+ * nullability, defaults, constraints, triggers and functions are not compared,
+ * and objects the database has but this build does not declare are ignored on
+ * purpose — a tenant a newer image has already migrated past must keep being
+ * served (§10.2), so extra is never a violation. Full bidirectional comparison
+ * is what `db:check-drift` is for, and it needs the Drizzle Kit toolchain rather
+ * than a query.
  */
 export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<PostconditionReport> {
   const invalidIndexes = await listInvalidIndexes(sql)
@@ -282,6 +356,34 @@ export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<Pos
   const extRows = await sql.unsafe<{ extname: string }[]>(`SELECT extname FROM pg_extension`)
   const extensions = extRows.map((r) => r.extname).sort()
   const missingExtensions = REQUIRED_EXTENSIONS.filter((e) => !extensions.includes(e))
+
+  const columnRows = await sql.unsafe<
+    { table_schema: string; table_name: string; column_name: string }[]
+  >(`
+    SELECT table_schema, table_name, column_name
+      FROM information_schema.columns
+     WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+  `)
+  const columnsByTable = new Map<string, Set<string>>()
+  for (const row of columnRows) {
+    const key = `${row.table_schema}.${row.table_name}`
+    let cols = columnsByTable.get(key)
+    if (!cols) columnsByTable.set(key, (cols = new Set()))
+    cols.add(row.column_name)
+  }
+  const missingTables: string[] = []
+  const missingColumns: string[] = []
+  for (const table of declaredTables()) {
+    const key = `${table.schema}.${table.name}`
+    const present = columnsByTable.get(key)
+    if (!present) {
+      missingTables.push(key)
+      continue
+    }
+    for (const column of table.columns) {
+      if (!present.has(column)) missingColumns.push(`${key}.${column}`)
+    }
+  }
 
   const violations: PostconditionViolation[] = [
     ...invalidIndexes.map(
@@ -304,11 +406,25 @@ export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<Pos
         detail: `extension ${name} is not installed`,
       })
     ),
+    ...missingTables.map(
+      (name): PostconditionViolation => ({
+        kind: 'missing_table',
+        detail: `table ${name} is declared by this build and does not exist`,
+      })
+    ),
+    ...missingColumns.map(
+      (name): PostconditionViolation => ({
+        kind: 'missing_column',
+        detail: `column ${name} is declared by this build and does not exist; every query this ` +
+          'build issues against that table names it explicitly and will throw',
+      })
+    ),
   ]
 
   return {
     ok: violations.length === 0,
     violations,
-    observed: { invalidIndexes, missingIndexes, extensions },
+    covers: POSTCONDITION_CHECKS,
+    observed: { invalidIndexes, missingIndexes, extensions, missingTables, missingColumns },
   }
 }

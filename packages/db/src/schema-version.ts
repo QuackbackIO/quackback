@@ -172,6 +172,42 @@ export async function readAppliedLedger(reader: LedgerReader): Promise<AppliedLe
   }
 }
 
+/**
+ * Delete every ledger row at or above `from`, and report what was deleted.
+ *
+ * The **only** write this codebase performs against `drizzle.__drizzle_migrations`,
+ * and it is a DELETE by construction. That matters more than it looks:
+ *
+ * - A DELETE can only ever make the ledger claim *less*. The rows that remain
+ *   were each written by drizzle after it executed their statements, so they are
+ *   still evidence; the ones removed are claims withdrawn, never claims invented.
+ *   There is no code path anywhere that inserts a row here — drizzle writes them,
+ *   after the fact, as a consequence of having run.
+ * - Under-claiming is the recoverable direction. A ledger that describes less
+ *   than the database is replayed forward by the next run; a ledger that
+ *   describes more is a false answer nothing can detect.
+ *
+ * Callers must have established that everything the truncation puts back inside
+ * drizzle's replay window is safe to replay. This function does not check that
+ * and cannot: it can see the ledger, not the SQL.
+ */
+export async function truncateAppliedLedger(
+  reader: LedgerReader,
+  from: number
+): Promise<number[]> {
+  if (!Number.isSafeInteger(from)) {
+    throw new Error(`truncateAppliedLedger needs an integer journal timestamp, got ${from}`)
+  }
+  const statement =
+    `DELETE FROM drizzle.__drizzle_migrations WHERE created_at >= ${from} RETURNING created_at`
+  const result = reader.execute
+    ? await reader.execute(sql.raw(statement))
+    : await reader.unsafe!(statement)
+  return rowsOf(result)
+    .map((r) => Number(r.created_at))
+    .sort((a, b) => a - b)
+}
+
 export interface SchemaFloorVerdict {
   ok: boolean
   /** Bundled tags at or below the floor that this database's ledger does not record. */

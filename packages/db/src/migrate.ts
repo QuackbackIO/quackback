@@ -79,9 +79,11 @@ async function main() {
     console.error('❌ POST-CONDITIONS VIOLATED (the migration ledger reads complete anyway):')
     for (const v of post.violations) console.error(`   [${v.kind}] ${v.detail}`)
   } else if (post) {
-    console.log(
-      `✅ Post-conditions verified: 0 invalid indexes, ${post.observed.extensions.length} extensions`
-    )
+    // Listed rather than summarised, because a green verdict is only as good as
+    // its scope and this line is where a reader forms a belief about what green
+    // covered.
+    console.log('✅ Post-conditions verified:')
+    for (const check of post.covers) console.log(`   ${check}`)
   }
 }
 
