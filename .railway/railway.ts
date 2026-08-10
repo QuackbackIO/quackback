@@ -268,6 +268,35 @@ export default defineRailway(() => {
     env: { ...fleetEnv, QUACKBACK_ROLE: 'worker' },
   })
 
+  // The schema step of a rollout (§10.3), and the first half of §10.8's deploy
+  // gate. It claims the workspaces sitting behind their target version, migrates
+  // each on its **direct** endpoint, verifies the postconditions, and exits: 0
+  // if every claimed workspace reconciled, 1 if any failed, which is what tells
+  // a rollout to halt rather than deploy over a half-migrated fleet.
+  //
+  // **The schedule is not the trigger.** A pass only touches a workspace whose
+  // recorded version is below its target, and a target only moves when an
+  // operator moves it, so an idle pass costs one control-database query and
+  // changes nothing. Migration stays a deliberate act; this is what converges
+  // the stragglers afterwards — a workspace whose compute was unreachable during
+  // the triggered run is otherwise never looked at again. Daily, because the
+  // cost of a pass is a control-plane wake, and the same reasoning that keeps
+  // the sweeps off a five-minute timer applies here.
+  //
+  // `startCommand` overrides the image entrypoint, which starts a server. This
+  // role is a command: `fleet-migrator.mjs` is bundled into the same image (see
+  // APP_IMAGE), so the build that owns these migrations is the build that
+  // applies them, by construction rather than by scheduling.
+  const migrator = service('quackback-migrator', {
+    ...appBuild,
+    deploy: {
+      restartPolicyType: 'NEVER',
+      cronSchedule: '47 2 * * *',
+      startCommand: 'bun /app/fleet-migrator.mjs run',
+    },
+    env: { ...fleetEnv, QUACKBACK_ROLE: 'migrator' },
+  })
+
   // The scheduled sweeps, as `deploy.cronSchedule` services that run and exit.
   // They are not on the worker's timers because every sweep fans out across the
   // whole fleet: a 5-minute reconciler means every suspended compute is woken
@@ -361,6 +390,7 @@ export default defineRailway(() => {
     resources: [
       web,
       worker,
+      migrator,
       cronDaily,
       cronHourly,
       sleeper,

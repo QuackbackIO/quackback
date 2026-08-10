@@ -226,6 +226,26 @@ The `replicas` warning below is not the only gap.
   workspace's stored objects. So resources the control plane creates through the
   API must still be enumerated in this file, or `apply` must never be run.
 
+### `preserve()` cannot bootstrap a new service
+
+`preserve()` means "keep the value the platform already holds", so on a service
+that does not exist yet it holds nothing and the variable is simply absent.
+`quackback-migrator` was created this way and came up with only its literal
+variables: no `QUACKBACK_CONTROL_DATABASE_URL`, no `SECRET_KEY`, no
+`QUACKBACK_FLEET_ROOT_KEY`. `apply` reported success, because from its side
+nothing failed.
+
+So creating a service whose secrets are preserved is two steps, and the file
+only describes the second:
+
+```bash
+railway variables --service <new-service> --skip-deploys --set 'KEY=value' ...
+railway config plan     # now clean, because the values exist to be preserved
+```
+
+`--skip-deploys` matters when setting several at once: without it each `--set`
+can trigger its own deployment.
+
 ### Cron services
 
 `deploy.cronSchedule` runs a service and waits for it to exit, so the cron
@@ -235,6 +255,17 @@ for cron services, and it is right: a failed sweep should wait for the next slot
 rather than restart-loop against a fleet of workspace databases) and
 `restartPolicyMaxRetries` is **not** — it means nothing under NEVER and
 declaring it showed as permanent plan drift.
+
+`quackback-migrator` is the same shape with `startCommand` overriding the image
+entrypoint, because that role is a command rather than a server. Its schedule is
+a convergence pass, not the trigger: a run only touches a workspace recorded
+below its target version, and the target only moves when an operator moves it.
+
+**Cron service logs are not readable through the API or `railway logs`.** Both
+return empty for `quackback-cron-hourly`, which certainly runs. So an empty log
+is not evidence a scheduled run did not happen, and a rollout cannot use it to
+decide anything — read `cp_workspace_schema_state` instead, which is where the
+migrator records what it did.
 
 ## Notes
 
