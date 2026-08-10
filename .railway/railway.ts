@@ -23,6 +23,16 @@
  * the control-plane registry is a Neon project too — see the note in the body
  * for why §9's "Railway Postgres for the control plane" did not survive contact
  * with region placement.
+ *
+ * ## This file does not yet describe the whole environment — do not `apply`
+ *
+ * The control-plane service and its `qb-cp-*` buckets live in this project and
+ * are absent here, because they were created through the API rather than
+ * declared. Absent means *deleted*: a plan run today proposes destroying the
+ * control-plane service and two of its buckets alongside the Redis removal this
+ * file does intend. So `apply` is unsafe until they are declared, and until then
+ * a variable set through the CLI is live but not durable — the next apply, once
+ * it is safe to run, removes anything this file does not name.
  */
 import { bucket, defineRailway, preserve, project, service } from 'railway/iac'
 
@@ -120,6 +130,18 @@ export default defineRailway(() => {
     // Fleet-level secrets, set out of band and never written to source.
     SECRET_KEY: preserve(),
     NEON_API_KEY: preserve(),
+
+    // The one root every tenant's SECRET_KEY derives from and every tenant
+    // storage credential is sealed under (`derived+hkdf://`, `sealed+aead://`).
+    // Declared here so a tenant costs no fleet variable — the per-tenant
+    // `env://QUACKBACK_TENANT_SECRET_*` scheme it replaces needed one each, and
+    // one absent from this file is deleted by the next apply.
+    //
+    // It must be the SAME value on every service that resolves tenants, and the
+    // same value the control plane holds: the control plane seals, a replica
+    // opens, and two different roots produce ciphertext nobody can open rather
+    // than an error.
+    QUACKBACK_FLEET_ROOT_KEY: preserve(),
 
     // A real fleet hostname, never `https://${{RAILWAY_PUBLIC_DOMAIN}}`: with a
     // wildcard custom domain attached that variable is the literal string
