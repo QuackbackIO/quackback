@@ -184,7 +184,7 @@ operator does not pin it, billing owns it.
 
 **The file wins where it declares. The other writer owns everything else.**
 That is the spirit of the original "one mechanism for self-hosters and cloud
-tenants" principle preserved — the writer varies, the enforcement path does not.
+workspaces" principle preserved — the writer varies, the enforcement path does not.
 
 Removing the block from the config file releases the lock but **does not clear
 the stored plan**. Unlocking the UI and downgrading a workspace are different
@@ -216,7 +216,7 @@ spec:
 - **The read fails open.** If the settings read throws, `getCloudConfig()`
   returns the disabled config and logs an error rather than propagating. On a
   self-hosted install that is simply today's behaviour preserved through an
-  outage. On a cloud tenant it means a broken settings read _grants_ rather than
+  outage. On a cloud workspace it means a broken settings read _grants_ rather than
   denies. That is the right direction for a commercial gate — an entitlement is
   not an authorization boundary, and under a settings-read failure every gated
   feature is broken anyway — but it is a real fail-open and should be revisited
@@ -242,7 +242,7 @@ spec:
 
 `CLAUDE.md` currently states _"The OSS code is unaware of 'cloud' as a concept,
 so limits and their writer are the same mechanism for self-hosters and cloud
-tenants."_ That principle is deliberately relaxed by `SAAS-HOSTING-STACK.md`
+workspaces."_ That principle is deliberately relaxed by `SAAS-HOSTING-STACK.md`
 §8.1 and this implementation. The rule should be updated to describe the two
 layers — numeric limits in `settings.tier_limits`, plan and entitlements in
 `settings.cloud`, default off — when this branch lands.

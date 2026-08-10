@@ -2,10 +2,10 @@
  * Composing a bucket object name for one workspace, then proving it landed
  * inside that workspace.
  *
- * SAAS-HOSTING-STACK.md §9 replaces one bucket per tenant with one bucket for
- * the fleet and a per-tenant key prefix. That moves the isolation boundary out
+ * SAAS-HOSTING-STACK.md §9 replaces one bucket per workspace with one bucket for
+ * the fleet and a per-workspace key prefix. That moves the isolation boundary out
  * of the provider and into this file. A per-bucket credential could not name
- * another tenant's bucket whatever the application believed; a shared bucket has
+ * another workspace's bucket whatever the application believed; a shared bucket has
  * no such backstop, so the failure shape is §3's exactly: **a key that escapes
  * its namespace reads another customer's object, and it does not error and it
  * looks correct.**
@@ -13,8 +13,8 @@
  * ## Why the WorkspaceId, and not some other identifier
  *
  * The namespace is `settings.id` — the branded {@link WorkspaceId}. It is not a
- * new tenant identifier, and refusing to invent one is the point: it is the
- * value §3's fingerprint already asserts. `evaluateTenantIdentity` refuses a
+ * new workspace identifier, and refusing to invent one is the point: it is the
+ * value §3's fingerprint already asserts. `evaluateWorkspaceIdentity` refuses a
  * pool whose `settings.id` is not the one the registry named, so **a database
  * that passes the fingerprint has, by construction, the right storage
  * namespace.**

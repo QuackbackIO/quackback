@@ -16,8 +16,8 @@ a checked-in golden, fail CI on any difference.
 ## Why this exists rather than "we fixed the twenty"
 
 Module-scope mutable state is what survives a request. In a pooled process that
-also means it survives a **tenant**, so every such site is either tenant-keyed,
-holds nothing tenant-derived, or is a cross-tenant capability nobody wrote down.
+also means it survives a **workspace**, so every such site is either workspace-keyed,
+holds nothing workspace-derived, or is a cross-workspace capability nobody wrote down.
 `SAAS-HOSTING-STACK.md` §4.4 rates this control above the twenty fixes it
 accompanies, and the reasoning is one line: _"without it, singleton twenty-one
 lands three weeks after twenty is fixed."_
@@ -66,7 +66,7 @@ constant.
 
 `new X(...)` becoming a site on its own is what closes the second row without
 needing to know what a constructor does. It costs five ledger lines — including
-`AsyncLocalStorage`, the store that carries tenant identity, and the `db`
+`AsyncLocalStorage`, the store that carries workspace identity, and the `db`
 `Proxy` — and the exemption list (`PURE_CONSTRUCTORS`, plus any `Intl.*`) is
 short, enumerated, and restricted to types that cannot carry state.
 
@@ -90,14 +90,14 @@ The cheap way to defeat a ledger is to write the reassuring word next to the
 dangerous code. Three of the six categories are therefore checked against the
 source.
 
-| category            | meaning                                                                                    | verified?                                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `tenant-keyed`      | partitioned by the active tenant                                                           | **yes** — initializer must be `new TenantKeyedCache`                                                       |
-| `tenant-scoped-key` | keyed by something that already identifies one tenant                                      | **yes** — `keyedBy` must name a token present in the file                                                  |
-| `refuses-pooled`    | only correct single-tenant, and the code refuses to run pooled                             | **yes** — must import `isPooledTenancy` from `tenancy/mode` (or read `config.isPooledTenancy`), unshadowed |
-| `content-addressed` | the value is a function of the key, so a cross-tenant hit is byte-identical to a recompute | no                                                                                                         |
-| `fleet-wide`        | holds only values identical for every tenant                                               | no                                                                                                         |
-| `process-lifetime`  | a latch, a timer, a connection handle                                                      | no                                                                                                         |
+| category               | meaning                                                                                       | verified?                                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `workspace-keyed`      | partitioned by the active workspace                                                           | **yes** — initializer must be `new WorkspaceKeyedCache`                                                    |
+| `workspace-scoped-key` | keyed by something that already identifies one workspace                                      | **yes** — `keyedBy` must name a token present in the file                                                  |
+| `refuses-pooled`       | only correct single-workspace, and the code refuses to run pooled                             | **yes** — must import `isPooledTenancy` from `tenancy/mode` (or read `config.isPooledTenancy`), unshadowed |
+| `content-addressed`    | the value is a function of the key, so a cross-workspace hit is byte-identical to a recompute | no                                                                                                         |
+| `fleet-wide`           | holds only values identical for every workspace                                               | no                                                                                                         |
+| `process-lifetime`     | a latch, a timer, a connection handle                                                         | no                                                                                                         |
 
 `refuses-pooled` started as `text.includes('isPooledTenancy')` and was defeated
 on the first attack: swapping the import for a local
@@ -127,9 +127,9 @@ anyway, because a structural claim still deserves a witness.
 Run the suite; the failure names the site. Then classify it honestly.
 
 If the honest category is `process-lifetime`, `fleet-wide` or
-`content-addressed`, the reason must say **what a cross-tenant hit would return
-and why that is the same thing the requesting tenant would have computed**. If
-you cannot write that sentence, the answer is a `TenantKeyedCache`.
+`content-addressed`, the reason must say **what a cross-workspace hit would return
+and why that is the same thing the requesting workspace would have computed**. If
+you cannot write that sentence, the answer is a `WorkspaceKeyedCache`.
 
 Regenerate `MODULE-STATE.md` by running the suite and copying the rendered doc
 (`renderLedgerDoc`) — it is a golden, so a content change is a visible diff and

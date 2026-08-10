@@ -67,7 +67,7 @@ export function PlatformCredentialsForm({
 
   const allFieldsFilled = fields.every((f) => values[f.key]?.trim())
 
-  // Managed cloud: credentials are platform-provided and not editable per-tenant.
+  // Managed cloud: credentials are platform-provided and not editable per-workspace.
   if (isManaged) {
     return (
       <div className="space-y-4">

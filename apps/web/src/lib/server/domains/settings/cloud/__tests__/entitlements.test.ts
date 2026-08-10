@@ -16,10 +16,10 @@ import {
 } from '../cloud.types'
 import { buildRefusal, isEntitled } from '../entitlements'
 
-const hoisted = vi.hoisted(() => ({ mockGetTenantSettings: vi.fn() }))
+const hoisted = vi.hoisted(() => ({ mockGetWorkspaceSettings: vi.fn() }))
 
 vi.mock('../../settings.service', () => ({
-  getTenantSettings: hoisted.mockGetTenantSettings,
+  getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
 }))
 
 function cloud(overrides: Partial<CloudConfig>): CloudConfig {
@@ -153,11 +153,11 @@ describe('the refusal reuses the existing 402 plumbing', () => {
 describe('requireEntitlement against a configured workspace', () => {
   beforeEach(() => {
     vi.resetModules()
-    hoisted.mockGetTenantSettings.mockReset()
+    hoisted.mockGetWorkspaceSettings.mockReset()
   })
 
   it('refuses and names the plan', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', cloud: { enabled: true, plan: 'free' } },
     })
     const { requireEntitlement } = await import('../entitlements')
@@ -167,7 +167,7 @@ describe('requireEntitlement against a configured workspace', () => {
   })
 
   it('allows what the plan grants', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', cloud: { enabled: true, plan: 'pro' } },
     })
     const { requireEntitlement } = await import('../entitlements')
@@ -175,7 +175,7 @@ describe('requireEntitlement against a configured workspace', () => {
   })
 
   it('reports the whole catalogue for a plan surface', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', cloud: { enabled: true, plan: 'pro' } },
     })
     const { listEntitlements } = await import('../entitlements')

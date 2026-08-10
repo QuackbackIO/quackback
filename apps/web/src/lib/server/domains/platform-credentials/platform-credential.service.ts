@@ -9,7 +9,7 @@
  * - 'db'  (self-host, default): the integration_platform_credentials table + admin UI.
  * - 'env' (managed cloud): shared app creds from INTEGRATION_<PROVIDER>_<FIELD> env
  *   (projected from OpenBao via ESO). In 'env' mode writes are refused — the
- *   credentials are platform-managed, not editable per-tenant.
+ *   credentials are platform-managed, not editable per-workspace.
  */
 
 import { generateId, type PrincipalId } from '@quackback/ids'
@@ -55,7 +55,7 @@ function activeSource(): CredentialSource {
 }
 
 // Social-login / SSO credentials (auth_*) share this table but are a separate
-// concern: they are per-tenant, DB-managed (the control plane seeds auth_sso), and
+// concern: they are per-workspace, DB-managed (the control plane seeds auth_sso), and
 // the env source has no knowledge of them. They are ALWAYS DB-backed regardless of
 // PLATFORM_CREDENTIALS_SOURCE — the env switch governs only the 24 integrations.
 function isAuthCredentialType(integrationType: string): boolean {
@@ -117,11 +117,11 @@ export async function savePlatformCredentials({
     await bumpAuthConfigVersionInTx(tx)
   })
   resetAuth()
-  // One Redis round-trip drops both keys (TENANT_SETTINGS for the
+  // One Redis round-trip drops both keys (WORKSPACE_SETTINGS for the
   // version-check fallback, PLATFORM_INTEGRATION_TYPES for the cached
   // configured-types Set hit by getRegisteredAuthProviders).
   await cacheDel(
-    CACHE_KEYS.TENANT_SETTINGS,
+    CACHE_KEYS.WORKSPACE_SETTINGS,
     CACHE_KEYS.PLATFORM_INTEGRATION_TYPES,
     // The registered-provider list gates on the configured-types Set (a saved
     // credential is what flips a provider to "registered"), so drop it too.
@@ -154,7 +154,7 @@ export async function hasPlatformCredentials(integrationType: string): Promise<b
 /**
  * Get the set of integration types that have platform credentials configured.
  *
- * Cached: hot dependency of getTenantSettings, runs on every settings cache
+ * Cached: hot dependency of getWorkspaceSettings, runs on every settings cache
  * miss. Only the integration-type *names* are cached (no secret material),
  * and save/delete flows invalidate the key.
  */
@@ -171,7 +171,7 @@ async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
   // path to invalidate a Redis entry in env mode, so caching would serve a stale set
   // for up to the TTL after OpenBao/ESO changes the managed credentials (e.g. an empty
   // list from before a provider was added, or a removed one). The cost is an env scan
-  // plus one auth_* DB lookup — cheap, and already gated by the getTenantSettings
+  // plus one auth_* DB lookup — cheap, and already gated by the getWorkspaceSettings
   // cache upstream.
   if (config.platformCredentialsSource === 'env') {
     const types = await activeSource().listConfigured()
@@ -209,7 +209,7 @@ export async function deletePlatformCredentials(integrationType: string): Promis
   })
   resetAuth()
   await cacheDel(
-    CACHE_KEYS.TENANT_SETTINGS,
+    CACHE_KEYS.WORKSPACE_SETTINGS,
     CACHE_KEYS.PLATFORM_INTEGRATION_TYPES,
     // The registered-provider list gates on the configured-types Set (a saved
     // credential is what flips a provider to "registered"), so drop it too.

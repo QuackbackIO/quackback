@@ -83,7 +83,7 @@ async function extractThemeFromCss(css: string): Promise<PublicServerTheme> {
  * Build the public server config. `enabled: false` means the widget is off
  * for this workspace and callers should serve their disabled variant.
  *
- * Every read below goes through the Redis-cached tenant settings (see
+ * Every read below goes through the Redis-cached workspace settings (see
  * requireSettingsCached / isFeatureEnabled), so a warm request costs a single
  * Redis GET rather than repeated settings-row queries.
  */

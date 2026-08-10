@@ -2,7 +2,7 @@
  * SLA policies + events (support platform §4.6). Named reusable policies applied
  * ONLY via the Apply-SLA workflow action; clocks are office-hours-aware. The
  * `sla_events` log is the append-only breach/response timeline the lazy breach
- * evaluator reads. Per-tenant DB, so no workspace column.
+ * evaluator reads. Per-workspace DB, so no workspace column.
  */
 import {
   pgTable,

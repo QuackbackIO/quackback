@@ -4,8 +4,8 @@
  * ## Why this is not a hypothetical
  *
  * Provider webhook endpoints subscribe to event **types**, never to customers.
- * Under one operator account with a per-tenant endpoint URL, every tenant's
- * endpoint receives every other tenant's subscription events — correctly
+ * Under one operator account with a per-workspace endpoint URL, every workspace's
+ * endpoint receives every other workspace's subscription events — correctly
  * signed for its own endpoint secret, because the secret authenticates the
  * *endpoint*, not the subject.
  *
@@ -43,7 +43,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
     await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()
   return {
     ...actual,
-    getTenantSettings: async () => {
+    getWorkspaceSettings: async () => {
       const db = (await import('@/lib/server/__tests__/db-test-fixture')).testDb
       const row = await db.query.settings.findFirst()
       return row ? { settings: row } : null
@@ -53,9 +53,8 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
 
 const { handleBillingWebhook } = await import('../webhook.service')
 const { signWebhookPayload } = await import('../provider/signature')
-const { BILLING_PROVIDER, getBillingConfig, resetBillingConfigCache } = await import(
-  '../billing.config'
-)
+const { BILLING_PROVIDER, getBillingConfig, resetBillingConfigCache } =
+  await import('../billing.config')
 const { applySubscription, currentSubscriptionRef, toSnapshot } = await import('../subscription')
 const { workspaceStamp } = await import('../identity')
 
@@ -71,7 +70,7 @@ const fixture = await createDbTestFixture({
 
 const SECRET = 'whsec_scoping'
 const MINE = { customer: 'cus_mine', subscription: 'sub_mine' }
-const OTHER = { customer: 'cus_other_tenant', subscription: 'sub_other_tenant' }
+const OTHER = { customer: 'cus_other_workspace', subscription: 'sub_other_workspace' }
 
 const CATALOGUE = {
   free: { seat: 'price_free' },
@@ -254,7 +253,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const result = await deliver(
       // Payload lies: says cus_mine.
       subscriptionEvent('evt_spoofed', OTHER.subscription, MINE.customer),
-      // Provider tells the truth: sub_other_tenant belongs to cus_other_tenant.
+      // Provider tells the truth: sub_other_workspace belongs to cus_other_workspace.
       stub(calls, 'business', OTHER.customer, OTHER.subscription)
     )
     expect(result.body).toMatchObject({ handled: false, foreign: true })
@@ -338,7 +337,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     // A customer created outside this module — a provisioning flow that has
     // not been taught the contract, or a stranger's. Refusing is the correct
     // direction for an identity question: a diagnosable failure rather than a
-    // silent cross-tenant adoption.
+    // silent cross-workspace adoption.
     await testDb.delete(billingSubscriptionState)
     await testDb.update(settings).set({ cloud: null })
 
@@ -398,7 +397,12 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
         created: Math.floor(Date.now() / 1000),
         data: { object: { id: MINE.subscription, customer: MINE.customer } },
       },
-      stub({ fetched: [], pushes: [], customerLookups: [] }, 'pro', MINE.customer, MINE.subscription)
+      stub(
+        { fetched: [], pushes: [], customerLookups: [] },
+        'pro',
+        MINE.customer,
+        MINE.subscription
+      )
     )
 
     const cloud = await storedCloud()
@@ -423,7 +427,12 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
         created: Math.floor(Date.now() / 1000),
         data: { object: { id: MINE.subscription, customer: MINE.customer } },
       },
-      stub({ fetched: [], pushes: [], customerLookups: [] }, 'pro', MINE.customer, MINE.subscription)
+      stub(
+        { fetched: [], pushes: [], customerLookups: [] },
+        'pro',
+        MINE.customer,
+        MINE.subscription
+      )
     )
 
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
@@ -494,7 +503,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
   })
 
   it('spends no provider quota on an event whose payload names another customer', async () => {
-    // Under one operator account every tenant receives every other tenant's
+    // Under one operator account every workspace receives every other workspace's
     // events. Without a pre-filter each workspace would spend a subscription
     // fetch on every event belonging to every other workspace — N-times
     // amplification against a per-account rate limit that grows with the

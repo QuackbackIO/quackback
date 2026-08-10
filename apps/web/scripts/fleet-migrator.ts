@@ -9,12 +9,12 @@
  * A command rather than a daemon, because that is what the platform wants: it
  * fits `deploy.cronSchedule` (Railway runs a service on a schedule and lets it
  * exit), it is what a release pipeline invokes after a deploy, and it is what
- * provisioning calls for one tenant. §10.3's *"one code path, two triggers"* is
- * literally this file with and without `--tenant`.
+ * provisioning calls for one workspace. §10.3's *"one code path, two triggers"* is
+ * literally this file with and without `--workspace`.
  *
  * Exit codes are the contract, because a scheduled service is judged on them:
- *   0  every claimed tenant reconciled (or was already current)
- *   1  at least one tenant failed — the rollout should halt and be read
+ *   0  every claimed workspace reconciled (or was already current)
+ *   1  at least one workspace failed — the rollout should halt and be read
  *   2  the invocation itself was wrong (bad argument, no control database)
  */
 import {
@@ -25,52 +25,52 @@ import {
 import { hostname } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import {
-  enrolActiveTenants,
-  planTenant,
-  requireTenant,
+  enrolActiveWorkspaces,
+  planWorkspace,
+  requireWorkspace,
   runReconcilePass,
 } from '@/lib/server/fleet/migrator'
 import {
-  blockTenant,
+  blockWorkspace,
   explainUnclaimed,
   listSchemaState,
   setTargetVersion,
 } from '@/lib/server/fleet/schema-state'
-import { closeControlSql } from '@/lib/server/tenancy/registry'
+import { closeControlSql } from '@/lib/server/workspaces/registry'
 
 type Command = 'run' | 'status' | 'enrol' | 'set-target' | 'block' | 'plan'
 
 const USAGE = `fleet-migrator <command> [options]
 
-  run          Claim tenants behind their target and reconcile them.
-  plan         Report, per tenant, what a run WOULD apply. Touches no schema.
-  status       Print cp_tenant_schema_state.
-  enrol        Create intent rows for active tenants that have none.
-  set-target   Write the intent version for a cohort or a tenant list.
-  block        Take a tenant out of claiming, with a reason.
+  run          Claim workspaces behind their target and reconcile them.
+  plan         Report, per workspace, what a run WOULD apply. Touches no schema.
+  status       Print cp_workspace_schema_state.
+  enrol        Create intent rows for active workspaces that have none.
+  set-target   Write the intent version for a cohort or a workspace list.
+  block        Take a workspace out of claiming, with a reason.
 
 Options:
-  --tenant <id>         one tenant only
+  --workspace <id>         one workspace only
   --cohort <name>       restrict to a rollout cohort
-  --concurrency <n>     tenants claimed per batch (default 4)
+  --concurrency <n>     workspaces claimed per batch (default 4)
   --lease-ms <n>        lease duration (default 900000)
-  --max-tenants <n>     stop after this many claims
+  --max-workspaces <n>     stop after this many claims
   --target <spec>       version for set-target; a tag, its 0NNN prefix, or millis
   --reason <text>       required by block
   --allow-mutating-replay
                         proceed even when the replay set contains a migration
                         that would change data on a second run. Only correct
-                        once the ledger is known honest for that tenant.
+                        once the ledger is known honest for that workspace.
 `
 
 function parseArgs(argv: string[]): { command: Command; opts: Record<string, string | true> } {
   const [command, ...rest] = argv
   const known = new Set([
-    '--tenant',
+    '--workspace',
     '--cohort',
     '--concurrency',
     '--lease-ms',
-    '--max-tenants',
+    '--max-workspaces',
     '--target',
     '--reason',
   ])
@@ -129,7 +129,7 @@ async function main(): Promise<number> {
       const behind = r.currentVersion === null || r.currentVersion < r.targetVersion
       console.log(
         [
-          r.tenantId.padEnd(26),
+          r.workspaceKey.padEnd(26),
           r.status.padEnd(10),
           `cohort=${r.cohort}`,
           `target=${tagForVersion(r.targetVersion)}`,
@@ -146,8 +146,8 @@ async function main(): Promise<number> {
   }
 
   if (command === 'enrol') {
-    const created = await enrolActiveTenants((opts.cohort as string) ?? 'default')
-    console.log(`enrolled ${created} tenant(s) at ${tagForVersion(target)}`)
+    const created = await enrolActiveWorkspaces((opts.cohort as string) ?? 'default')
+    console.log(`enrolled ${created} workspace(s) at ${tagForVersion(target)}`)
     return 0
   }
 
@@ -156,32 +156,32 @@ async function main(): Promise<number> {
     const version = spec ? resolveTargetSpec(spec) : target
     const updated = await setTargetVersion({
       targetVersion: version,
-      tenantIds: opts.tenant ? [opts.tenant as string] : undefined,
+      workspaceKeys: opts.workspace ? [opts.workspace as string] : undefined,
       cohort: opts.cohort as string | undefined,
     })
-    console.log(`set target ${tagForVersion(version)} on ${updated} tenant(s)`)
+    console.log(`set target ${tagForVersion(version)} on ${updated} workspace(s)`)
     return 0
   }
 
   if (command === 'block') {
-    const tenant = opts.tenant as string | undefined
+    const workspace = opts.workspace as string | undefined
     const reason = opts.reason as string | undefined
-    if (!tenant || !reason) throw new Error('block needs --tenant and --reason')
-    const ok = await blockTenant(tenant, reason)
-    console.log(ok ? `blocked ${tenant}` : `${tenant} is running; not blocked`)
+    if (!workspace || !reason) throw new Error('block needs --workspace and --reason')
+    const ok = await blockWorkspace(workspace, reason)
+    console.log(ok ? `blocked ${workspace}` : `${workspace} is running; not blocked`)
     return ok ? 0 : 1
   }
 
   if (command === 'plan') {
     // Deliberately reuses the run's own preflight rather than recomputing it: a
     // plan that disagrees with the run is worse than no plan.
-    const tenantId = opts.tenant as string | undefined
-    if (!tenantId) throw new Error('plan needs --tenant')
-    const { applied, gap, replaySet, verdicts, refusal } = await planTenant(
-      await requireTenant(tenantId)
+    const workspaceKey = opts.workspace as string | undefined
+    if (!workspaceKey) throw new Error('plan needs --workspace')
+    const { applied, gap, replaySet, verdicts, refusal } = await planWorkspace(
+      await requireWorkspace(workspaceKey)
     )
     console.log(
-      `${tenantId}: ledger ${applied.count} rows, newest ` +
+      `${workspaceKey}: ledger ${applied.count} rows, newest ` +
         `${applied.max === 0 ? 'none' : tagForVersion(applied.max)}`
     )
     if (gap) {
@@ -217,36 +217,36 @@ async function main(): Promise<number> {
   }
 
   // run
-  if (opts.tenant && !opts.cohort) {
-    // Single-tenant mode still goes through the lease, so a provisioning call
-    // and a rollout cannot both be migrating one tenant at once.
+  if (opts.workspace && !opts.cohort) {
+    // Single-workspace mode still goes through the lease, so a provisioning call
+    // and a rollout cannot both be migrating one workspace at once.
     const result = await runReconcilePass({
       workerId: workerId(),
-      tenantId: opts.tenant as string,
+      workspaceKey: opts.workspace as string,
       concurrency: 1,
-      maxTenants: 1,
+      maxWorkspaces: 1,
       leaseMs: num(opts, 'lease-ms', 900_000),
       allowMutatingReplay: opts['allow-mutating-replay'] === true,
     })
     printPass(result)
     if (result.claimed === 0) {
-      // `claimed=0` on a NAMED tenant is not a success. Provisioning calls this
-      // to migrate one tenant now; reporting nothing and exiting 0 is how that
+      // `claimed=0` on a NAMED workspace is not a success. Provisioning calls this
+      // to migrate one workspace now; reporting nothing and exiting 0 is how that
       // becomes a silent no-op that looks like it worked.
-      const why = await explainUnclaimed(opts.tenant as string)
+      const why = await explainUnclaimed(opts.workspace as string)
       console.log(`  NOT CLAIMED [${why.kind}] ${why.detail}`)
       if (why.kind !== 'already_current') return 1
 
       // `already_current` is a belief about the control row, and the control row
-      // is only as good as the reconcile that wrote it. A tenant whose ledger
+      // is only as good as the reconcile that wrote it. A workspace whose ledger
       // has a hole was recorded at the target by a run that healed nothing, and
       // the claim narrows on `current_version < target_version` — so it can
       // never be claimed again and the reason it is broken is exactly the reason
-      // nothing will look at it. Read the tenant's own ledger before agreeing.
-      const { gap } = await planTenant(await requireTenant(opts.tenant as string))
+      // nothing will look at it. Read the workspace's own ledger before agreeing.
+      const { gap } = await planWorkspace(await requireWorkspace(opts.workspace as string))
       if (!gap) return 0
       console.log(
-        `  LEDGER GAP: this tenant is recorded at its target but its ledger is missing ` +
+        `  LEDGER GAP: this workspace is recorded at its target but its ledger is missing ` +
           `${gap.missing.length} migration(s) below its own high-water mark: ` +
           `${gap.missing.join(', ')}. It cannot be claimed while current_version meets ` +
           `target_version, so healing it needs the observation cleared first — see ` +
@@ -262,7 +262,7 @@ async function main(): Promise<number> {
     cohort: opts.cohort as string | undefined,
     concurrency: num(opts, 'concurrency', 4),
     leaseMs: num(opts, 'lease-ms', 900_000),
-    maxTenants: opts['max-tenants'] ? num(opts, 'max-tenants', 0) : undefined,
+    maxWorkspaces: opts['max-workspaces'] ? num(opts, 'max-workspaces', 0) : undefined,
     allowMutatingReplay: opts['allow-mutating-replay'] === true,
   })
   printPass(result)
@@ -287,7 +287,7 @@ function printPass(result: Awaited<ReturnType<typeof runReconcilePass>>): void {
   )
   for (const o of result.outcomes) {
     console.log(
-      `  ${o.tenantId.padEnd(26)} ${o.ok ? 'OK ' : 'ERR'} [${o.code}] ` +
+      `  ${o.workspaceKey.padEnd(26)} ${o.ok ? 'OK ' : 'ERR'} [${o.code}] ` +
         `ledger ${o.before.count}->${o.after?.count ?? '-'} ` +
         `applied=${o.replaySet.length} healed=${o.healedIndexes.length} ` +
         `post=${o.postconditions ? o.postconditions.ok : '-'} ${o.durationMs}ms`

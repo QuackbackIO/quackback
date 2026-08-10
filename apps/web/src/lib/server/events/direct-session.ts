@@ -73,14 +73,14 @@ export function looksPooled(dsn: string): boolean {
  * Returns whether it looked pooled, so a caller that wants to count or surface it
  * can, rather than having to re-derive it from the logs.
  */
-export function warnIfPooled(dsn: string, context: { tenantId: string; use: string }): boolean {
+export function warnIfPooled(dsn: string, context: { workspaceKey: string; use: string }): boolean {
   if (!looksPooled(dsn)) return false
   log.error(
-    { tenantId: context.tenantId, use: context.use },
+    { workspaceKey: context.workspaceKey, use: context.use },
     `the DSN for ${context.use} names a POOLED endpoint. LISTEN registers on a ` +
       'transaction-mode pooler and then delivers nothing — measured 0/1 at a single idle ' +
       'client across 16 runs, so this does not degrade under load, it never works. Point ' +
-      "this tenant's db_direct_url at the direct endpoint. Continuing anyway: the doorbell " +
+      "this workspace's db_direct_url at the direct endpoint. Continuing anyway: the doorbell " +
       'round trip at boot is the authoritative check, and this one is a hostname heuristic ' +
       'that a self-hosted pooler would not trip.'
   )

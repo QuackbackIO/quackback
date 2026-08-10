@@ -7,7 +7,7 @@
  * The migrations are bundled in `packages/db/drizzle`. If the control plane ran
  * them, version affinity between "which SQL" and "which code" would have to be
  * maintained by hand across two repositories, and the first time they disagreed
- * a tenant would be migrated to a schema no running build knows about. So the
+ * a workspace would be migrated to a schema no running build knows about. So the
  * CP records intent and this image reconciles toward it.
  *
  * ## Which executor route, and why
@@ -30,7 +30,7 @@
  * 2. **`migrate.ts` calls `process.exit(1)` on failure.** In-process that would
  *    kill the migrator mid-fleet, so the CLI route is not merely inconvenient,
  *    it forces the child-process shape rather than being chosen for it.
- * 3. **Concurrency.** §10.3 wants ~20 tenants at a time; that is 20 Node
+ * 3. **Concurrency.** §10.3 wants ~20 workspaces at a time; that is 20 Node
  *    processes each re-parsing the whole drizzle schema and re-reading 228 SQL
  *    files. In-process they share one module graph.
  *
@@ -49,7 +49,7 @@
  * `appliedCount` is carried alongside as a diagnostic rather than as evidence.
  *
  * Second: a ledger row is written by drizzle *after it executed the statements*.
- * Nothing here ever inserts one. A tenant whose ledger is behind its own schema
+ * Nothing here ever inserts one. A workspace whose ledger is behind its own schema
  * — which is the state five live gauntlet databases are in, because they were
  * migrated with `psql -f` — is healed by replaying the SQL, not by asserting
  * that it ran. A wrong ledger row is worse than a missing one.
@@ -60,7 +60,7 @@
  * below it, so a ledger with a *hole* is invisible to the migrator while being
  * exactly what the compatibility gate refuses. That split — the reconciler
  * advances the tip, the gate detects holes — has a dead end in it, because the
- * gate can only refuse. Measured on two live tenants: high-water at `0253` with
+ * gate can only refuse. Measured on two live workspaces: high-water at `0253` with
  * rows absent for `0249`, `0250`, `0252`, `0256` and `0257`, `settings.cloud`
  * physically missing, every page 500ing, and both instruments reporting fine —
  * the reconciler `OK [reconciled] post=true`, having applied two migrations and
@@ -94,25 +94,25 @@ import {
   type ReplaySafetyReport,
 } from '@/lib/server/policy/migration-contract/replay-safety'
 import {
-  listActiveTenants,
-  resolveTenantById,
-  type TenantDescriptor,
-} from '@/lib/server/tenancy/registry'
-import { resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
-import { withPassword } from '@/lib/server/tenancy/vendor/secret-ref'
+  listActiveWorkspaces,
+  resolveWorkspaceById,
+  type WorkspaceDescriptor,
+} from '@/lib/server/workspaces/registry'
+import { resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
+import { withPassword } from '@/lib/server/workspaces/vendor/secret-ref'
 import {
-  claimTenants,
-  completeTenant,
+  claimWorkspaces,
+  completeWorkspace,
   ensureSchemaStateRow,
-  failTenant,
-  heartbeatTenant,
-  reapExpiredTenantLeases,
-  type ClaimedTenant,
+  failWorkspace,
+  heartbeatWorkspace,
+  reapExpiredWorkspaceLeases,
+  type ClaimedWorkspace,
 } from './schema-state'
 
 const log = logger.child({ component: 'fleet-migrator' })
 
-export type MigrateTenantCode =
+export type MigrateWorkspaceCode =
   | 'reconciled'
   | 'healed_ledger_gap'
   | 'already_current'
@@ -122,10 +122,10 @@ export type MigrateTenantCode =
   | 'postconditions_violated'
   | 'migration_failed'
 
-export interface MigrateTenantResult {
-  tenantId: string
+export interface MigrateWorkspaceResult {
+  workspaceKey: string
   ok: boolean
-  code: MigrateTenantCode
+  code: MigrateWorkspaceCode
   detail: string
   /** Ledger before the run. */
   before: AppliedLedger
@@ -149,11 +149,11 @@ export interface MigrateTenantResult {
   durationMs: number
 }
 
-export interface MigrateTenantOptions {
+export interface MigrateWorkspaceOptions {
   /**
    * Proceed even when the replay set contains a migration that would mutate
    * data on a second run. Only ever correct when the operator has established
-   * by other means that the ledger is honest for this tenant.
+   * by other means that the ledger is honest for this workspace.
    */
   allowMutatingReplay?: boolean
   /** Skip the concurrent index build. For a dry preflight, never for a rollout. */
@@ -166,7 +166,7 @@ export interface MigrateTenantOptions {
 /**
  * How long the lineage will wait for a table lock before giving up.
  *
- * Set here rather than left off, because the migrator runs against tenants whose
+ * Set here rather than left off, because the migrator runs against workspaces whose
  * worker tier is live. `0253_job_queue` needs ACCESS EXCLUSIVE on `job_queue` to
  * replace its wake trigger, and the job poller holds ROW EXCLUSIVE on that table
  * more or less continuously — measured against the live fleet, that pair
@@ -174,7 +174,7 @@ export interface MigrateTenantOptions {
  * lock it already holds. Bounding the wait turns an unbounded stall into a
  * `55P03` that rolls the whole lineage back and is retried by the lease.
  *
- * 30 s is comfortably above the incidental waits a healthy tenant produces and
+ * 30 s is comfortably above the incidental waits a healthy workspace produces and
  * well below the default lease, so a timeout is a diagnosis rather than a lost
  * claim.
  */
@@ -225,7 +225,7 @@ export interface LedgerGap {
 /**
  * The hole in a ledger, if it has one.
  *
- * A ledger is a set, not a counter. `applied.max` says how far the tenant got;
+ * A ledger is a set, not a counter. `applied.max` says how far the workspace got;
  * it says nothing about what it skipped on the way, and drizzle only ever looks
  * at the maximum. So this asks the question the maximum cannot: *is every
  * bundled migration at or below this ledger's own high-water mark recorded in
@@ -267,7 +267,7 @@ export interface MigrationPlan {
 
 /**
  * What a run would execute against this ledger. The one answer `plan` prints and
- * `migrateTenant` acts on, so the two cannot disagree.
+ * `migrateWorkspace` acts on, so the two cannot disagree.
  *
  * With no gap this is {@link replaySetFor} unchanged. With a gap it is **every
  * bundled entry from `gap.from` onward**, and that equality is exact rather than
@@ -280,7 +280,7 @@ export interface MigrationPlan {
  * The difference is not cosmetic. On the ledger this fleet actually produced —
  * high-water at `0253` with rows absent for `0249`, `0250`, `0252`, `0256` and
  * `0257` — `replaySetFor` reports two tags while seven are missing, so a plan
- * built on it tells an operator the tenant is nearly current at the moment it is
+ * built on it tells an operator the workspace is nearly current at the moment it is
  * least current.
  */
 export function planFor(applied: AppliedLedger): MigrationPlan {
@@ -303,7 +303,7 @@ export function planFor(applied: AppliedLedger): MigrationPlan {
  *   atomicity cannot undo. An `errors` one is not merely risky here, it is a
  *   *certainty* — measured: truncating past `0247_user_tags` and replaying fails
  *   on `relation "user_tags" already exists`, and because the rows cannot be put
- *   back (nothing here inserts a ledger row) the tenant is left under-claiming
+ *   back (nothing here inserts a ledger row) the workspace is left under-claiming
  *   further than it started, with no run that can ever succeed. Refusing before
  *   the DELETE is the only protection, which is why this runs first.
  * - **`missing` — the hole itself.** Nobody knows whether these ran; that is what
@@ -334,7 +334,7 @@ export function gapHealVerdict(
       detail:
         `${context} Refusing: ${gap.unrewritable.length} of those row(s) record migrations this ` +
         `build does not bundle (${gap.unrewritable.join(', ')}), so nothing here can rewrite ` +
-        'them and the heal would delete evidence permanently. This tenant is ahead of this ' +
+        'them and the heal would delete evidence permanently. This workspace is ahead of this ' +
         'image; run the heal from the image that carries those migrations.',
     }
   }
@@ -430,7 +430,7 @@ function readMigrationSql(tag: string): string {
 }
 
 /**
- * Migrate one tenant, on its direct endpoint, and verify the result.
+ * Migrate one workspace, on its direct endpoint, and verify the result.
  *
  * The connection is built here rather than taken from the pool cache, for two
  * reasons that are both correctness rather than tidiness: the pool cache
@@ -440,13 +440,13 @@ function readMigrationSql(tag: string): string {
  * been stamped for yet. A migrator that could only run against already-stamped
  * databases could not do the one job provisioning needs it for.
  */
-export async function migrateTenant(
-  tenant: TenantDescriptor,
-  options: MigrateTenantOptions = {}
-): Promise<MigrateTenantResult> {
+export async function migrateWorkspace(
+  workspace: WorkspaceDescriptor,
+  options: MigrateWorkspaceOptions = {}
+): Promise<MigrateWorkspaceResult> {
   const started = Date.now()
   let lastStep: MigrationStep | 'preflight' = 'preflight'
-  const dsn = withPassword(tenant.database.directUrl, await resolveTenantPassword(tenant))
+  const dsn = withPassword(workspace.database.directUrl, await resolveWorkspacePassword(workspace))
 
   const probe = postgres(dsn, { max: 1, onnotice: () => {}, connect_timeout: 20 })
   let before: AppliedLedger
@@ -462,7 +462,7 @@ export async function migrateTenant(
   const mutating = replayVerdicts.filter((r) => r.verdict === 'mutates')
 
   const base = {
-    tenantId: tenant.tenantId,
+    workspaceKey: workspace.workspaceKey,
     before,
     after: null,
     gap: plan.gap,
@@ -473,10 +473,10 @@ export async function migrateTenant(
     postconditions: null,
     lastStep,
     durationMs: Date.now() - started,
-  } satisfies Omit<MigrateTenantResult, 'ok' | 'code' | 'detail'>
+  } satisfies Omit<MigrateWorkspaceResult, 'ok' | 'code' | 'detail'>
 
   // A cheap pre-check, and its shape is deliberate. If there is nothing to
-  // apply AND the catalogue already checks out, the tenant is done and the
+  // apply AND the catalogue already checks out, the workspace is done and the
   // executor is not run — which matters because the concurrent index builds are
   // ~140 s of round trips against a compute this would otherwise wake for
   // nothing (§10.7).
@@ -490,7 +490,7 @@ export async function migrateTenant(
   //
   // A gapped ledger can never take this branch: a gap has at least one missing
   // entry, and `planFor` puts every entry from the gap onward into the set. That
-  // is what stops a tenant whose high-water mark is at the tip but whose ledger
+  // is what stops a workspace whose high-water mark is at the tip but whose ledger
   // has a hole from being reported `already_current`.
   if (replaySet.length === 0) {
     const early = await withProbe(dsn, (sql) => verifySchemaPostconditions(sql))
@@ -506,7 +506,7 @@ export async function migrateTenant(
       }
     }
     log.warn(
-      { tenantId: tenant.tenantId, violations: early.violations.map((v) => v.detail) },
+      { workspaceKey: workspace.workspaceKey, violations: early.violations.map((v) => v.detail) },
       'ledger is complete but the database is not correct — healing'
     )
   }
@@ -518,7 +518,11 @@ export async function migrateTenant(
     const heal = gapHealVerdict(plan.gap, replayVerdicts)
     if (!heal.ok) {
       log.error(
-        { tenantId: tenant.tenantId, missing: plan.gap.missing, rewrites: plan.gap.rewrites },
+        {
+          workspaceKey: workspace.workspaceKey,
+          missing: plan.gap.missing,
+          rewrites: plan.gap.rewrites,
+        },
         heal.detail
       )
       return { ...base, ok: false, code: 'refused_ledger_gap', detail: heal.detail }
@@ -527,18 +531,19 @@ export async function migrateTenant(
 
   const gate = replayGateVerdict(before, replayVerdicts, options.allowMutatingReplay ?? false)
   if (!gate.ok) {
-    log.error({ tenantId: tenant.tenantId, mutating: mutating.map((m) => m.tag) }, gate.detail)
+    log.error(
+      { workspaceKey: workspace.workspaceKey, mutating: mutating.map((m) => m.tag) },
+      gate.detail
+    )
     return { ...base, ok: false, code: 'refused_replay_mutates', detail: gate.detail }
   }
 
   try {
     if (plan.gap) {
-      const discarded = await withProbe(dsn, (sql) =>
-        truncateAppliedLedger(sql, plan.gap!.from)
-      )
+      const discarded = await withProbe(dsn, (sql) => truncateAppliedLedger(sql, plan.gap!.from))
       log.warn(
         {
-          tenantId: tenant.tenantId,
+          workspaceKey: workspace.workspaceKey,
           from: tagForVersion(plan.gap.from),
           missing: plan.gap.missing,
           discarded: discarded.length,
@@ -595,7 +600,7 @@ export async function migrateTenant(
         `${replaySet.length} migration(s) it was to apply (${unrecorded.join(', ')}). Drizzle ` +
         'writes a row only after executing, so this database has not been brought to the ' +
         'planned version and must not be reported as reconciled.'
-      log.error({ tenantId: tenant.tenantId, unrecorded }, detail)
+      log.error({ workspaceKey: workspace.workspaceKey, unrecorded }, detail)
       return {
         ...base,
         after,
@@ -631,7 +636,10 @@ export async function migrateTenant(
   } catch (err) {
     const code = err instanceof PooledDsnRefused ? 'refused_pooled_dsn' : 'migration_failed'
     const detail = err instanceof Error ? err.message : String(err)
-    log.error({ tenantId: tenant.tenantId, step: lastStep, err }, 'tenant migration failed')
+    log.error(
+      { workspaceKey: workspace.workspaceKey, step: lastStep, err },
+      'workspace migration failed'
+    )
     return {
       ...base,
       lastStep,
@@ -658,41 +666,41 @@ async function withProbe<T>(dsn: string, body: (sql: postgres.Sql) => Promise<T>
 }
 
 export interface ReconcilePassOptions {
-  /** Tenants claimed per pass. Bounded and global — §10.3. */
+  /** Workspaces claimed per pass. Bounded and global — §10.3. */
   concurrency?: number
-  /** Lease duration. Must exceed the slowest tenant migration; see FLEET-MIGRATIONS.md. */
+  /** Lease duration. Must exceed the slowest workspace migration; see FLEET-MIGRATIONS.md. */
   leaseMs?: number
-  /** Push the lease forward this often while a tenant is migrating. */
+  /** Push the lease forward this often while a workspace is migrating. */
   heartbeatMs?: number
   cohort?: string
-  tenantId?: string
+  workspaceKey?: string
   workerId: string
   allowMutatingReplay?: boolean
-  /** Stop after this many claimed tenants. Unbounded when absent. */
-  maxTenants?: number
+  /** Stop after this many claimed workspaces. Unbounded when absent. */
+  maxWorkspaces?: number
 }
 
 export interface ReconcilePassResult {
   claimed: number
   reconciled: number
   /**
-   * Tenants whose ledger had a hole in it that this pass closed. A subset of
+   * Workspaces whose ledger had a hole in it that this pass closed. A subset of
    * `reconciled`, reported separately because it is the one outcome that means
    * a database was *wrong* rather than merely behind.
    */
   healed: number
   alreadyCurrent: number
   failed: number
-  /** Tenants whose registry record the request path would refuse. Never migrated. */
+  /** Workspaces whose registry record the request path would refuse. Never migrated. */
   refusedRecords: number
   reaped: { requeued: number; terminated: number }
-  outcomes: MigrateTenantResult[]
+  outcomes: MigrateWorkspaceResult[]
 }
 
 /**
  * One bounded reconcile pass.
  *
- * Claims through the lease, so two migrator replicas take disjoint tenants and a
+ * Claims through the lease, so two migrator replicas take disjoint workspaces and a
  * killed one is reclaimed by the reaper rather than blocking the rollout. The
  * reaper runs first for the same reason the job tier runs it on a timer: an
  * expired lease is the commonest thing standing between a resumed rollout and a
@@ -705,13 +713,13 @@ export async function runReconcilePass(
   const leaseMs = options.leaseMs ?? 15 * 60_000
   const heartbeatMs = options.heartbeatMs ?? Math.floor(leaseMs / 3)
 
-  const reaped = await reapExpiredTenantLeases()
+  const reaped = await reapExpiredWorkspaceLeases()
 
-  const { tenants, refused } = await listActiveTenants()
+  const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) {
-    log.error({ refused }, 'migrator skipping tenants with invalid registry records')
+    log.error({ refused }, 'migrator skipping workspaces with invalid registry records')
   }
-  const byId = new Map(tenants.map((t) => [t.tenantId, t]))
+  const byId = new Map(workspaces.map((t) => [t.workspaceKey, t]))
 
   const result: ReconcilePassResult = {
     claimed: 0,
@@ -726,22 +734,22 @@ export async function runReconcilePass(
 
   for (;;) {
     const remaining =
-      options.maxTenants === undefined ? concurrency : options.maxTenants - result.claimed
+      options.maxWorkspaces === undefined ? concurrency : options.maxWorkspaces - result.claimed
     if (remaining <= 0) break
 
-    const batch = await claimTenants({
+    const batch = await claimWorkspaces({
       limit: Math.min(concurrency, remaining),
       leaseMs,
       workerId: options.workerId,
       cohort: options.cohort,
-      tenantId: options.tenantId,
+      workspaceKey: options.workspaceKey,
     })
     if (batch.length === 0) break
     result.claimed += batch.length
 
     const settled = await Promise.all(
       batch.map((claim) =>
-        reconcileClaimed(claim, byId.get(claim.tenantId), {
+        reconcileClaimed(claim, byId.get(claim.workspaceKey), {
           heartbeatMs,
           leaseMs,
           allowMutatingReplay: options.allowMutatingReplay,
@@ -764,19 +772,19 @@ export async function runReconcilePass(
 }
 
 async function reconcileClaimed(
-  claim: ClaimedTenant,
-  tenant: TenantDescriptor | undefined,
+  claim: ClaimedWorkspace,
+  workspace: WorkspaceDescriptor | undefined,
   opts: { heartbeatMs: number; leaseMs: number; allowMutatingReplay?: boolean }
-): Promise<MigrateTenantResult> {
+): Promise<MigrateWorkspaceResult> {
   const empty: AppliedLedger = { versions: new Set(), count: 0, max: 0 }
-  if (!tenant) {
+  if (!workspace) {
     const detail =
-      `no servable registry record for ${claim.tenantId}. The migrator reads tenants through ` +
+      `no servable registry record for ${claim.workspaceKey}. The migrator reads workspaces through ` +
       'the same reader the request path uses, so a record the request path would refuse is ' +
       'not migrated either — a half-written record must not become a migrated one.'
-    await failTenant(claim, detail)
+    await failWorkspace(claim, detail)
     return {
-      tenantId: claim.tenantId,
+      workspaceKey: claim.workspaceKey,
       ok: false,
       code: 'migration_failed',
       detail,
@@ -794,14 +802,14 @@ async function reconcileClaimed(
   }
 
   // The heartbeat is created here and cleared in `finally`, so it lives exactly
-  // as long as the tenant's migration and can never outlive the lease it is
+  // as long as the workspace's migration and can never outlive the lease it is
   // extending.
   const beat = setInterval(() => {
-    void heartbeatTenant(claim, opts.leaseMs).then((held) => {
+    void heartbeatWorkspace(claim, opts.leaseMs).then((held) => {
       if (!held) {
         log.error(
-          { tenantId: claim.tenantId },
-          'migrator lease lost while still migrating — another migrator may now own this tenant'
+          { workspaceKey: claim.workspaceKey },
+          'migrator lease lost while still migrating — another migrator may now own this workspace'
         )
       }
     })
@@ -809,16 +817,16 @@ async function reconcileClaimed(
   beat.unref?.()
 
   try {
-    const outcome = await migrateTenant(tenant, {
+    const outcome = await migrateWorkspace(workspace, {
       allowMutatingReplay: opts.allowMutatingReplay,
     })
     if (outcome.ok && outcome.after && outcome.after.max < claim.targetVersion) {
       // This image cannot reach the target. Everything it ships has been
       // applied and the database is correct — it is simply an older build than
       // the control plane is asking for. Recording success here would mark the
-      // tenant unclaimable at a version no image produced, and the rollout
+      // workspace unclaimable at a version no image produced, and the rollout
       // would report complete having skipped it.
-      await failTenant(
+      await failWorkspace(
         claim,
         `this image's newest bundled migration is ${outcome.after.max}, below the target ` +
           `${claim.targetVersion} the control plane recorded. Everything this build ships is ` +
@@ -833,13 +841,13 @@ async function reconcileClaimed(
       }
     }
     if (outcome.ok && outcome.after) {
-      await completeTenant(claim, {
+      await completeWorkspace(claim, {
         version: outcome.after.max,
         appliedCount: outcome.after.count,
         postconditionsOk: outcome.postconditions?.ok ?? false,
       })
     } else {
-      await failTenant(claim, `[${outcome.code}] ${outcome.detail}`, {
+      await failWorkspace(claim, `[${outcome.code}] ${outcome.detail}`, {
         appliedCount: outcome.after?.count,
         postconditionsOk: outcome.postconditions?.ok,
       })
@@ -851,21 +859,23 @@ async function reconcileClaimed(
 }
 
 /**
- * Seed intent rows for every active tenant that has none, at the version this
+ * Seed intent rows for every active workspace that has none, at the version this
  * build ships.
  *
  * Provisioning and release are the two triggers §10.3 names for one code path.
- * This is the release trigger's half: a tenant that appears in the registry but
+ * This is the release trigger's half: a workspace that appears in the registry but
  * not in the intent table is invisible to the reconciler, which is the failure
- * mode where a rollout reports "fleet complete" having skipped a tenant nobody
+ * mode where a rollout reports "fleet complete" having skipped a workspace nobody
  * enrolled.
  */
-export async function enrolActiveTenants(cohort = 'default'): Promise<number> {
+export async function enrolActiveWorkspaces(cohort = 'default'): Promise<number> {
   const target = latestBundledVersion()
-  const { tenants } = await listActiveTenants()
+  const { workspaces } = await listActiveWorkspaces()
   let created = 0
-  for (const t of tenants) {
-    if (await ensureSchemaStateRow({ tenantId: t.tenantId, targetVersion: target, cohort })) {
+  for (const t of workspaces) {
+    if (
+      await ensureSchemaStateRow({ workspaceKey: t.workspaceKey, targetVersion: target, cohort })
+    ) {
       created += 1
     }
   }
@@ -875,14 +885,14 @@ export async function enrolActiveTenants(cohort = 'default'): Promise<number> {
 /**
  * What a run WOULD do, computed by the same functions the run uses.
  *
- * Shares `planFor` and `assessReplaySafety` with {@link migrateTenant} rather
+ * Shares `planFor` and `assessReplaySafety` with {@link migrateWorkspace} rather
  * than recomputing them, because a preflight that can disagree with the thing it
  * is previewing is worse than no preflight. `planFor` in particular is why this
  * no longer under-reports a gapped ledger: it used to print `replaySetFor`,
  * which answers a question about drizzle's high-water mark rather than about the
  * run, and on a hole reports a short tail with no hint that anything is wrong.
  */
-export async function planTenant(tenant: TenantDescriptor): Promise<{
+export async function planWorkspace(workspace: WorkspaceDescriptor): Promise<{
   applied: AppliedLedger
   gap: LedgerGap | null
   replaySet: string[]
@@ -890,7 +900,7 @@ export async function planTenant(tenant: TenantDescriptor): Promise<{
   /** The refusal an operator would get if they ran this now. Null when it would proceed. */
   refusal: string | null
 }> {
-  const dsn = withPassword(tenant.database.directUrl, await resolveTenantPassword(tenant))
+  const dsn = withPassword(workspace.database.directUrl, await resolveWorkspacePassword(workspace))
   const applied = await withProbe(dsn, (sql) => readAppliedLedger(sql))
   const { gap, tags } = planFor(applied)
   const verdicts = tags.map((tag) => assessReplaySafety(tag, readMigrationSql(tag)))
@@ -905,14 +915,14 @@ export async function planTenant(tenant: TenantDescriptor): Promise<{
   }
 }
 
-/** Resolve one tenant for the CLI's single-tenant modes. */
-export async function requireTenant(tenantId: string): Promise<TenantDescriptor> {
-  const lookup = await resolveTenantById(tenantId)
+/** Resolve one workspace for the CLI's single-workspace modes. */
+export async function requireWorkspace(workspaceKey: string): Promise<WorkspaceDescriptor> {
+  const lookup = await resolveWorkspaceById(workspaceKey)
   if (lookup.kind !== 'ok') {
     throw new Error(
-      `tenant ${tenantId} is not servable: ${lookup.kind}` +
+      `workspace ${workspaceKey} is not servable: ${lookup.kind}` +
         ('problems' in lookup ? ` — ${lookup.problems.join('; ')}` : '')
     )
   }
-  return lookup.tenant
+  return lookup.workspace
 }

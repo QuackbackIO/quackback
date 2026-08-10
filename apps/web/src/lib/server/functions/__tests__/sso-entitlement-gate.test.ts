@@ -34,7 +34,7 @@ vi.mock('@tanstack/react-start/server', () => ({
 }))
 
 const hoisted = vi.hoisted(() => ({
-  mockGetTenantSettings: vi.fn(),
+  mockGetWorkspaceSettings: vi.fn(),
   mockListIdentityProviders: vi.fn(),
   mockUpsertIdentityProvider: vi.fn(),
   mockCheckIsOnlyWorkingSignInMethod: vi.fn(),
@@ -48,7 +48,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getTenantSettings: hoisted.mockGetTenantSettings,
+  getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
 }))
 
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
@@ -74,7 +74,7 @@ const upsert = upsertIdentityProviderFn as unknown as AnyHandler
 
 /** A cloud-enabled workspace on a plan that does NOT include SSO. */
 function onFreePlan() {
-  hoisted.mockGetTenantSettings.mockResolvedValue({
+  hoisted.mockGetWorkspaceSettings.mockResolvedValue({
     settings: { id: 'ws_1', cloud: { enabled: true, plan: 'free' } },
   })
 }
@@ -107,7 +107,7 @@ describe('unconfigured install', () => {
     ['no cloud config', null],
     ['an explicitly disabled block', { enabled: false, plan: 'free' }],
   ])('creates a provider freely with %s', async (_label, cloud) => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({ settings: { id: 'ws_1', cloud } })
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { id: 'ws_1', cloud } })
     await expect(upsert({ data: { ...NEW_PROVIDER, enabled: true } })).resolves.toBeDefined()
     expect(hoisted.mockUpsertIdentityProvider).toHaveBeenCalledOnce()
   })
@@ -183,14 +183,14 @@ describe('plan gate on a workspace without the SSO entitlement', () => {
 
 describe('plan gate on a workspace that holds the entitlement', () => {
   it('allows creating a provider on Enterprise', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', cloud: { enabled: true, plan: 'enterprise' } },
     })
     await expect(upsert({ data: { ...NEW_PROVIDER, enabled: true } })).resolves.toBeDefined()
   })
 
   it('allows creating a provider on a grandfathered override', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', cloud: { enabled: true, plan: 'pro', entitlements: { sso: true } } },
     })
     await expect(upsert({ data: { ...NEW_PROVIDER, enabled: true } })).resolves.toBeDefined()

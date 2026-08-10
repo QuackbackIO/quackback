@@ -320,7 +320,7 @@ describe('the refuses-pooled claim cannot be certified by mention', () => {
   // there while the guard is gone. Certification by mention, the same shape as
   // Piece 5's "unconditional witness" helper.
   const guarded = `
-    import { isPooledTenancy } from '@/lib/server/tenancy/mode'
+    import { isPooledTenancy } from '@/lib/server/workspaces/mode'
     export function start() { if (isPooledTenancy()) return }
   `
   const viaConfig = `
@@ -413,7 +413,7 @@ describe('bypasses found by attacking the first version of this scanner', () => 
   })
 
   it('sees a module-scope `new` of any constructor it cannot vouch for', () => {
-    // `new AsyncLocalStorage()` is the store that carries tenant identity and
+    // `new AsyncLocalStorage()` is the store that carries workspace identity and
     // `new Proxy()` is the db handle; a scanner that only knows `new Map` has
     // neither in its ledger at all.
     expect(

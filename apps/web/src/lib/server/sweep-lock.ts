@@ -28,10 +28,10 @@ import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
-import { runFleetPass } from '@/lib/server/tenancy/fleet'
-import { isPooledTenancy } from '@/lib/server/tenancy/mode'
-import { getTenantScope } from '@/lib/server/tenancy/tenant-context'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { runFleetPass } from '@/lib/server/workspaces/fleet'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
+import { getWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 const log = logger.child({ component: 'sweep-lock' })
 
@@ -52,17 +52,17 @@ export async function withSweepLock(
   fn: () => Promise<void>,
   opts?: { keepUntilExpiry?: boolean }
 ): Promise<void> {
-  // Under pooled tenancy a sweeper tick has no tenant, and `db` refuses to
+  // Under pooled tenancy a sweeper tick has no workspace, and `db` refuses to
   // resolve without one. Fan the tick out across the fleet here rather than at
   // each of the ten call sites: every scheduled sweeper in `startup.ts` and the
   // telemetry claim already funnel through this function, so one seam scopes
   // all of them, and no caller changes.
   //
-  // The lock itself needs no tenant segment. `sweep_lock` lives in the tenant's
-  // OWN database, so once `db` is scoped the lock is already per-tenant — which
-  // is exactly the semantics wanted: two tenants must sweep independently, and
-  // two replicas must not sweep the same tenant concurrently.
-  if (isPooledTenancy() && !getTenantScope()) {
+  // The lock itself needs no workspace segment. `sweep_lock` lives in the workspace's
+  // OWN database, so once `db` is scoped the lock is already per-workspace — which
+  // is exactly the semantics wanted: two workspaces must sweep independently, and
+  // two replicas must not sweep the same workspace concurrently.
+  if (isPooledTenancy() && !getWorkspaceScope()) {
     await runFleetPass('sweep', () => acquireAndRun(name, ttlMs, fn, opts))
     return
   }
@@ -115,27 +115,27 @@ async function acquireAndRun(
 }
 
 /**
- * The in-process half of the same guard, partitioned by tenant.
+ * The in-process half of the same guard, partitioned by workspace.
  *
- * `withSweepLock` stops two *replicas* sweeping one tenant. A sweeper also
+ * `withSweepLock` stops two *replicas* sweeping one workspace. A sweeper also
  * needs to stop *itself* re-entering — the long AI sweeps overlap their own
  * schedule (`startup.ts` fires each at boot and again every 30 minutes, and a
- * fleet pass over N tenants is serial), so a second tick can begin while the
+ * fleet pass over N workspaces is serial), so a second tick can begin while the
  * first is still working.
  *
  * That guard used to be a module-scope `let _sweepInProgress`, which is
- * correct only while a process serves one tenant. Under pooling, `runFleetPass`
+ * correct only while a process serves one workspace. Under pooling, `runFleetPass`
  * walks the fleet through the same function: with a shared boolean the first
- * tenant to start the sweep suppresses it for **every other tenant** for as
+ * workspace to start the sweep suppresses it for **every other workspace** for as
  * long as it runs, and the suppression is invisible — the sweep simply returns,
  * nothing is logged, and the only symptom is that some workspaces' summaries
  * silently stop refreshing.
  *
- * Keyed per tenant and per sweep name, so two sweeps never share a latch either.
+ * Keyed per workspace and per sweep name, so two sweeps never share a latch either.
  */
-const inFlightSweeps = new TenantKeyedCache<true>(4_096)
+const inFlightSweeps = new WorkspaceKeyedCache<true>(4_096)
 
-export async function withTenantSweepReentrancyGuard(
+export async function withWorkspaceSweepReentrancyGuard(
   name: string,
   fn: () => Promise<void>
 ): Promise<void> {
@@ -148,7 +148,7 @@ export async function withTenantSweepReentrancyGuard(
   }
 }
 
-/** Test seam: forget the active tenant's in-flight latches. */
-export function __resetSweepReentrancyForTenant(): void {
-  inFlightSweeps.clearTenant()
+/** Test seam: forget the active workspace's in-flight latches. */
+export function __resetSweepReentrancyForWorkspace(): void {
+  inFlightSweeps.clearWorkspace()
 }

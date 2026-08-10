@@ -20,7 +20,7 @@
  *
  * Nothing below addresses the bucket directly. {@link currentWorkspaceStorage}
  * returns the only thing that can issue a command; its methods take the *stored*
- * key and compose `w/<workspaceId>/` internally. It is the only export that
+ * key and compose `w/<selfReportedWorkspaceId>/` internally. It is the only export that
  * yields a client, and the factory behind it is deliberately private — see
  * `workspace-scope.ts` for the hole that was, and `namespace.ts` for why the
  * identifier is `settings.id` and not something else.
@@ -57,7 +57,7 @@
  *
  * **Note what this repository must NOT grow to make that convenient.** Listing
  * and deleting at the bucket root is correct against a bucket that holds one
- * tenant and catastrophic against one that holds the fleet, so the app has no
+ * workspace and catastrophic against one that holds the fleet, so the app has no
  * such capability and gains none here, not even for its own migration. The cost
  * is that an operator who deploys without moving the objects serves 404s for
  * pre-existing assets until they do — visible, reversible, and self-announcing,
@@ -69,11 +69,11 @@ import type { WorkspaceId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { sniffImageMime } from '@/lib/server/content/magic-bytes'
 import {
-  getCurrentTenant,
+  getCurrentWorkspace,
   getWorkspaceStorageCredential,
-  requireTenantScope,
-} from '@/lib/server/tenancy/tenant-context'
-import { currentTenantNamespace, SINGLE_TENANT_NAMESPACE } from '@/lib/server/tenancy/tenant-keyed'
+  requireWorkspaceScope,
+} from '@/lib/server/workspaces/workspace-context'
+import { currentWorkspaceNamespace, SINGLE_WORKSPACE_NAMESPACE } from '@/lib/server/workspaces/workspace-keyed'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
 import { currentWorkspaceId } from './workspace-scope'
 
@@ -101,7 +101,7 @@ interface S3Config {
 }
 
 /**
- * Where a tenant's objects live and how their URLs are formed. Deliberately
+ * Where a workspace's objects live and how their URLs are formed. Deliberately
  * carries no credentials: rendering a public asset URL must not depend on
  * resolving a secret, so the two are split and only the paths that actually
  * talk to storage pay for credential resolution.
@@ -114,7 +114,7 @@ interface StoragePlacement {
   publicUrl?: string
   /**
    * Origin the `/api/storage` fallback URL is built from. Pinned to the
-   * tenant's canonical base URL, never derived from the request: contentJson
+   * workspace's canonical base URL, never derived from the request: contentJson
    * stores ABSOLUTE image URLs, so an origin that followed whichever hostname
    * the visitor happened to use would bake that hostname into stored content.
    */
@@ -122,20 +122,20 @@ interface StoragePlacement {
 }
 
 /**
- * The active tenant's placement, or the process-wide one when unscoped.
+ * The active workspace's placement, or the process-wide one when unscoped.
  * Returns null when storage is not configured at all.
  */
 function getStoragePlacementOrNull(): StoragePlacement | null {
-  const tenant = getCurrentTenant()
-  if (tenant) {
-    const storage = tenant.storage
+  const workspace = getCurrentWorkspace()
+  if (workspace) {
+    const storage = workspace.storage
     return {
       endpoint: storage.endpoint || undefined,
       bucket: storage.bucket,
       region: storage.region,
       forcePathStyle: storage.forcePathStyle,
       publicUrl: storage.publicUrl || undefined,
-      originUrl: tenant.routing.baseUrl,
+      originUrl: workspace.routing.baseUrl,
     }
   }
   if (!config.s3Bucket || !config.s3Region) return null
@@ -167,19 +167,19 @@ export interface StorageCredentials {
 
 /** Storage is addressable but its credentials could not be resolved. */
 export class StorageUnavailableError extends Error {
-  readonly tenantId: string
-  constructor(tenantId: string, detail: string) {
-    super(`Storage is not usable for tenant ${tenantId}: ${detail}`)
+  readonly workspaceKey: string
+  constructor(workspaceKey: string, detail: string) {
+    super(`Storage is not usable for workspace ${workspaceKey}: ${detail}`)
     this.name = 'StorageUnavailableError'
-    this.tenantId = tenantId
+    this.workspaceKey = workspaceKey
   }
 }
 
 /**
- * The active tenant's storage keys, or the process-wide ones when unscoped.
+ * The active workspace's storage keys, or the process-wide ones when unscoped.
  *
- * Under a tenant scope these were resolved on pool checkout from the record's
- * `storage.credentialRef` (`tenancy/tenant-secrets.ts`) and carried on the
+ * Under a workspace scope these were resolved on pool checkout from the record's
+ * `storage.credentialRef` (`workspaces/workspace-secrets.ts`) and carried on the
  * scope, which is what lets this stay synchronous — `buildPublicUrl` and every
  * gate below are called from hundreds of places that cannot await.
  *
@@ -189,10 +189,10 @@ export class StorageUnavailableError extends Error {
  * the bucket still arrives separately from {@link getStoragePlacement}. Nothing
  * here receives both halves in one call.
  *
- * When a tenant's credentials did not resolve this throws
+ * When a workspace's credentials did not resolve this throws
  * {@link StorageUnavailableError}, and it never falls back to the fleet-wide
  * environment keys. That fallback is the specific thing this must not do: it
- * would hand one tenant a client pointed at another tenant's bucket, holding
+ * would hand one workspace a client pointed at another workspace's bucket, holding
  * credentials that might well open it.
  */
 function resolveStorageCredentials(): StorageCredentials {
@@ -207,19 +207,19 @@ function resolveStorageCredentials(): StorageCredentials {
   }
   if (resolved.ok) return resolved.credential
   // A credential result at all means a scope is active, so the identity read is
-  // total. Asserted rather than defaulted: a placeholder tenant id in this
+  // total. Asserted rather than defaulted: a placeholder workspace id in this
   // message would be indistinguishable from a real one nobody recognises.
-  throw new StorageUnavailableError(requireTenantScope().tenant.tenantId, resolved.problem)
+  throw new StorageUnavailableError(requireWorkspaceScope().workspace.workspaceKey, resolved.problem)
 }
 
 /**
  * Whether a bucket can be *addressed*. Deliberately does NOT ask about
  * credentials: `buildPublicUrl` needs a placement and nothing else, and a
- * public asset URL must keep resolving for a tenant whose credentials this
+ * public asset URL must keep resolving for a workspace whose credentials this
  * process cannot dereference.
  */
 export function isS3Configured(): boolean {
-  if (getCurrentTenant()) return true
+  if (getCurrentWorkspace()) return true
   return !!(config.s3Bucket && config.s3Region && config.s3AccessKeyId && config.s3SecretAccessKey)
 }
 
@@ -227,7 +227,7 @@ export function isS3Configured(): boolean {
  * Whether an operation that actually touches the bucket can be attempted.
  *
  * Addressability and usability are different questions, and under pooled
- * tenancy they diverge: a tenant record always names a bucket, so
+ * workspaces they diverge: a workspace record always names a bucket, so
  * {@link isS3Configured} is true while every upload throws, because the
  * credential reference is an `openbao+kv://` ref no resolver has been
  * registered for.
@@ -276,7 +276,7 @@ function getS3Config(): S3Config {
  * changing the signing key is a fleet of dead asset links rather than a
  * rotation. The narrowing here is of who can *see* the value, not of what it is.
  *
- * Throws {@link StorageUnavailableError} for a tenant whose credentials did not
+ * Throws {@link StorageUnavailableError} for a workspace whose credentials did not
  * resolve, exactly as `getS3Config()` did. Both callers gate on
  * {@link isS3Usable} first.
  */
@@ -340,7 +340,7 @@ interface PresignerModule {
 /*
  * These two hold the SDK's own module namespace objects, not configuration or
  * credentials — the same value the ESM loader hands every importer. They stay
- * process-wide because partitioning them by tenant would store N references to
+ * process-wide because partitioning them by workspace would store N references to
  * one object and buy nothing.
  */
 let _s3Module: S3Module | null = null
@@ -349,7 +349,7 @@ let _presignerModule: PresignerModule | null = null
 /**
  * One client per set of connection parameters.
  *
- * This used to be keyed by the ambient tenant, which was correct only while a
+ * This used to be keyed by the ambient workspace, which was correct only while a
  * client was built and used inside one scope. It is not a property of the
  * client: an SDK client is a signer and a connection pool built from a region,
  * an endpoint and a credential pair, and nothing else. Keying it by *who was
@@ -360,7 +360,7 @@ let _presignerModule: PresignerModule | null = null
  * Keyed by the parameters instead, the value is a pure function of the key, so
  * a hit across two scopes is byte-identical to what the asking scope would have
  * built. Under §9's one fleet credential that is one client for the fleet, which
- * is the correct number; under per-tenant credentials the keys differ and so do
+ * is the correct number; under per-workspace credentials the keys differ and so do
  * the clients.
  *
  * The bound is a client count, not a correctness limit: eviction only costs a
@@ -445,13 +445,13 @@ async function getS3Client(s3Config: S3Config): Promise<S3ClientInstance> {
  * Every operation this application performs on an object, for one workspace.
  *
  * The methods take the **stored** key — `uploads/2026/08/…`, exactly what the
- * database holds — and compose `w/<workspaceId>/` themselves. There is no method
+ * database holds — and compose `w/<selfReportedWorkspaceId>/` themselves. There is no method
  * that accepts a finished object name, and no accessor that hands out the bucket
  * with a credential, so "address something outside my namespace" is not a
  * request that can be expressed rather than one that is checked for.
  */
 export interface WorkspaceStorage {
-  readonly workspaceId: WorkspaceId
+  readonly selfReportedWorkspaceId: WorkspaceId
   /** Everything every object name this client produces begins with. */
   readonly namespace: string
   /**
@@ -471,7 +471,7 @@ export interface WorkspaceStorage {
  * A client bound to one workspace and to one set of connection parameters.
  *
  * **Not exported, and that is the fix for the hole this function used to be.**
- * An earlier revision exported it and guarded it by comparing `workspaceId`
+ * An earlier revision exported it and guarded it by comparing `selfReportedWorkspaceId`
  * against the ambient scope — which skipped the comparison when there was no
  * scope, so an unscoped caller in a pooled process could name any workspace and
  * reach the fleet bucket with the fleet credential. The refusal that makes an
@@ -496,7 +496,7 @@ export interface WorkspaceStorage {
  * is somebody else's objects. Capturing them binds the whole client, not just
  * its prefix, to the scope that built it.
  */
-function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
+function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorage {
   const connection = getS3Config()
 
   /**
@@ -507,11 +507,11 @@ function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
    * that each command has to remember. A name that fails throws; there is no
    * branch in which a command runs against the un-namespaced key.
    */
-  const objectName = (key: string): string => composeNamespacedKey(workspaceId, key)
+  const objectName = (key: string): string => composeNamespacedKey(selfReportedWorkspaceId, key)
 
   return {
-    workspaceId,
-    namespace: workspaceNamespace(workspaceId),
+    selfReportedWorkspaceId,
+    namespace: workspaceNamespace(selfReportedWorkspaceId),
     objectName,
 
     async presignPut(key, contentType, expiresIn) {
@@ -608,7 +608,7 @@ export async function currentWorkspaceStorage(): Promise<WorkspaceStorage> {
  * so it works with both public and private buckets. Deployments that want direct
  * endpoint URLs set S3_PUBLIC_URL to their endpoint.
  *
- * Which prefixes are public is fleet-wide policy, not tenant data: the set below
+ * Which prefixes are public is fleet-wide policy, not workspace data: the set below
  * names the key spaces this application serves without a capability token, and
  * it means the same thing in every workspace.
  */
@@ -631,27 +631,27 @@ export function isPublicStorageKey(key: string): boolean {
 }
 
 /**
- * The signed message binds the tenant as well as the object key.
+ * The signed message binds the workspace as well as the object key.
  *
  * Object keys are per-bucket, so `attachments/<uuid>` names a different object
- * in every tenant while reading identically here. If the signing secret is ever
- * shared across tenants — which it is whenever the fleet-wide environment keys
- * are in play — a read token minted for one tenant would verify against
+ * in every workspace while reading identically here. If the signing secret is ever
+ * shared across workspaces — which it is whenever the fleet-wide environment keys
+ * are in play — a read token minted for one workspace would verify against
  * another's object without the binding.
  *
- * The single-tenant namespace signs the historical message byte for byte:
+ * The single-workspace namespace signs the historical message byte for byte:
  * these tokens are embedded in absolute URLs stored in contentJson, so a
  * changed message invalidates every private asset link already written.
  */
-function tenantBind(message: string): string {
-  const namespace = currentTenantNamespace()
-  if (namespace === SINGLE_TENANT_NAMESPACE) return message
+function workspaceBind(message: string): string {
+  const namespace = currentWorkspaceNamespace()
+  if (namespace === SINGLE_WORKSPACE_NAMESPACE) return message
   return `t:${namespace}|${message}`
 }
 
 function storageReadSig(secret: string, key: string): string {
   return createHmac('sha256', secret)
-    .update(tenantBind(`read|${key}`))
+    .update(workspaceBind(`read|${key}`))
     .digest('hex')
     .slice(0, 32)
 }
@@ -677,8 +677,8 @@ function buildPublicUrl(placement: StoragePlacement, key: string): string {
   const base = `${placement.originUrl.replace(/\/$/, '')}/api/storage/${key}`
   if (isPublicStorageKey(key)) return base
   // Only the private branch needs a secret, so a public asset URL still renders
-  // on a tenant whose credential reference has no resolver. The private branch
-  // cannot: minting a read capability requires the signing secret, so a tenant
+  // on a workspace whose credential reference has no resolver. The private branch
+  // cannot: minting a read capability requires the signing secret, so a workspace
   // whose credentials are unresolvable has no URL to offer rather than a broken
   // one. `getPublicUrlOrNull` turns that into null; `getPublicUrl` still throws.
   return `${base}?read=${storageReadSig(resolveStorageCredentials().secretAccessKey, key)}`
@@ -731,10 +731,10 @@ export async function generatePresignedUploadUrl(
 
 function proxyUploadSig(secret: string, key: string, contentType: string, exp: number): string {
   // truncated to 128 bits; sufficient for short-lived upload auth
-  // Tenant-bound for the same reason as the read token: the object key alone
+  // Workspace-bound for the same reason as the read token: the object key alone
   // does not say which bucket the write lands in.
   return createHmac('sha256', secret)
-    .update(tenantBind(`${key}|${contentType}|${exp}`))
+    .update(workspaceBind(`${key}|${contentType}|${exp}`))
     .digest('hex')
     .slice(0, 32)
 }
@@ -927,7 +927,7 @@ export async function uploadImageBuffer(
 export function getPublicUrlOrNull(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
-  // A private key needs a signature, and a tenant whose storage credentials are
+  // A private key needs a signature, and a workspace whose storage credentials are
   // unresolvable cannot produce one. Returning null degrades an avatar or an
   // attachment link; letting the throw escape would take down every page that
   // renders one, which is a much larger blast radius for the same fault.

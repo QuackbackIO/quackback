@@ -1,7 +1,7 @@
 /**
- * What a storage access with no tenant scope does.
+ * What a storage access with no workspace scope does.
  *
- * `currentTenantNamespace()` answers `_` when nothing is scoped. Composed into a
+ * `currentWorkspaceNamespace()` answers `_` when nothing is scoped. Composed into a
  * shared bucket that is a real, shared prefix every unscoped caller in the fleet
  * would write into, and the background tier is where it bites — `exports/` is
  * written by a job with no request scope. So the namespace resolver never falls
@@ -97,7 +97,7 @@ describe('a self-hosted process', () => {
     expect(sent[0]!.Bucket).toBe('self-hosted-bucket')
   })
 
-  it('never composes the single-tenant literal', async () => {
+  it('never composes the single-workspace literal', async () => {
     // `_` is the right answer for a cache key and the wrong one for a bucket.
     // In a shared bucket it is a prefix with no owner that every unscoped writer
     // in the fleet would land in.
@@ -140,28 +140,28 @@ describe('a pooled process with no scope', () => {
     // Exactly what `db.ts` does under QUACKBACK_TENANCY=pooled: there is no
     // fleet-wide connection to fall back to, so the read throws. Storage adds no
     // check of its own — it inherits this one.
-    const { TenantScopeMissingError } = await import('@/lib/server/tenancy/tenant-context')
+    const { WorkspaceScopeMissingError } = await import('@/lib/server/workspaces/workspace-context')
     findFirst.mockImplementation(() => {
-      throw new TenantScopeMissingError('A `db` call was made with no tenant resolved.')
+      throw new WorkspaceScopeMissingError('A `db` call was made with no workspace resolved.')
     })
     const { uploadObject } = await freshStorage()
 
     await expect(uploadObject(KEY, BYTES, 'application/zip')).rejects.toThrow(
-      TenantScopeMissingError
+      WorkspaceScopeMissingError
     )
     expect(sent).toHaveLength(0)
   })
 
   it('refuses every command, not only the write path', async () => {
-    const { TenantScopeMissingError } = await import('@/lib/server/tenancy/tenant-context')
+    const { WorkspaceScopeMissingError } = await import('@/lib/server/workspaces/workspace-context')
     findFirst.mockImplementation(() => {
-      throw new TenantScopeMissingError('A `db` call was made with no tenant resolved.')
+      throw new WorkspaceScopeMissingError('A `db` call was made with no workspace resolved.')
     })
     const { deleteObject, getS3Object, generatePresignedGetUrl } = await freshStorage()
 
-    await expect(getS3Object(KEY)).rejects.toThrow(TenantScopeMissingError)
-    await expect(deleteObject(KEY)).rejects.toThrow(TenantScopeMissingError)
-    await expect(generatePresignedGetUrl(KEY, 60)).rejects.toThrow(TenantScopeMissingError)
+    await expect(getS3Object(KEY)).rejects.toThrow(WorkspaceScopeMissingError)
+    await expect(deleteObject(KEY)).rejects.toThrow(WorkspaceScopeMissingError)
+    await expect(generatePresignedGetUrl(KEY, 60)).rejects.toThrow(WorkspaceScopeMissingError)
     expect(sent).toHaveLength(0)
   })
 })

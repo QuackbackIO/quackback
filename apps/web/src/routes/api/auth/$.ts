@@ -1,16 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { SSO_OAUTH_CALLBACK_PREFIX } from '@/lib/shared/sso-test-keys'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 /**
  * Simple rate limiter for OAuth client registration.
  * Limits to 10 registrations per IP per hour to prevent spam/abuse.
  *
- * Per tenant: the budget is a per-workspace resource, so a shared counter lets
+ * Per workspace: the budget is a per-workspace resource, so a shared counter lets
  * one address exhaust every workspace's registration allowance at once, and
  * lets a legitimate registration be refused because of traffic aimed elsewhere.
  */
-const registrationAttempts = new TenantKeyedCache<{ count: number; windowStart: number }>()
+const registrationAttempts = new WorkspaceKeyedCache<{ count: number; windowStart: number }>()
 const REG_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const REG_MAX = 10
 

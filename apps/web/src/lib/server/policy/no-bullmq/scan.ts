@@ -8,15 +8,15 @@
  * restating, because it is the reason this file exists at all: a `Worker`'s
  * `run()` loop starts synchronously inside its constructor, so the
  * AsyncLocalStorage context alive at construction becomes the context for every
- * job it ever processes. That store is where `getCurrentTenant()` lives, and
+ * job it ever processes. That store is where `getCurrentWorkspace()` lives, and
  * most of those workers armed lazily on first enqueue — from inside a request.
  * So under pooled tenancy the first request to trigger an export or an import
- * welded its own tenant onto the processor, and every other tenant's jobs then
+ * welded its own workspace onto the processor, and every other workspace's jobs then
  * ran against that one database: no error, no failed permission check,
  * self-consistent rows from the wrong workspace.
  *
  * The seam is gone because the eight modules it guarded were rewritten onto the
- * Postgres job tier, which opens a real tenant scope per claim. Deleting a
+ * Postgres job tier, which opens a real workspace scope per claim. Deleting a
  * control without replacing it is not a thing this area does, so the control
  * became a stricter one:
  *

@@ -3,8 +3,8 @@
  *
  * Each encryption purpose derives a unique key from the master secret
  * using HKDF (RFC 5869). This provides cryptographic isolation between
- * different uses (integrations, webhooks, API keys, etc.) and, when a tenant
- * scope is active, between tenants.
+ * different uses (integrations, webhooks, API keys, etc.) and, when a workspace
+ * scope is active, between workspaces.
  *
  * @see https://tools.ietf.org/html/rfc5869
  */
@@ -12,10 +12,10 @@
 import { hkdfSync, randomBytes, createCipheriv, createDecipheriv } from 'crypto'
 import { activeSecretKey } from './secret-key'
 import {
-  currentTenantNamespace,
-  SINGLE_TENANT_NAMESPACE,
-  TenantKeyedCache,
-} from './tenancy/tenant-keyed'
+  currentWorkspaceNamespace,
+  SINGLE_WORKSPACE_NAMESPACE,
+  WorkspaceKeyedCache,
+} from './workspaces/workspace-keyed'
 
 // =============================================================================
 // Constants
@@ -42,37 +42,37 @@ const INFO_PREFIX = 'quackback:v1'
 // Key Derivation
 // =============================================================================
 
-const derivedKeys = new TenantKeyedCache<Buffer>()
+const derivedKeys = new WorkspaceKeyedCache<Buffer>()
 
 /**
- * The HKDF info string for a purpose under the active tenant.
+ * The HKDF info string for a purpose under the active workspace.
  *
  * Domain separation was already per-purpose; under pooling it must also be
- * per-tenant, or one process holds one key that opens every tenant's
+ * per-workspace, or one process holds one key that opens every workspace's
  * integration tokens, webhook signing secrets and custom-action headers.
  *
- * The single-tenant namespace derives the historical info string byte for
+ * The single-workspace namespace derives the historical info string byte for
  * byte, and that is not a style choice: a self-hosted install's ciphertexts
  * are sealed under this exact string, and a changed info yields a different
  * key, which is unrecoverable data rather than a migration.
  */
 function hkdfInfo(namespace: string, purpose: string): string {
-  if (namespace === SINGLE_TENANT_NAMESPACE) return `${INFO_PREFIX}:${purpose}`
+  if (namespace === SINGLE_WORKSPACE_NAMESPACE) return `${INFO_PREFIX}:${purpose}`
   return `${INFO_PREFIX}:t:${namespace}:${purpose}`
 }
 
 /**
- * Derivation now starts from the TENANT's master secret (`activeSecretKey`),
+ * Derivation now starts from the WORKSPACE's master secret (`activeSecretKey`),
  * not from one fleet-wide value.
  *
  * Domain separation alone was not enough, and the distinction is worth stating.
- * The info string already carried the tenant, so two tenants derived different
+ * The info string already carried the workspace, so two workspaces derived different
  * keys — but from one master, so any process holding it could derive every
- * tenant's keys, and the separation was a property of this function rather than
+ * workspace's keys, and the separation was a property of this function rather than
  * of custody. Different input keying material is what makes the boundary real.
  *
- * Both are kept. The info string still names the tenant, so the separation
- * survives even if a future custody scheme ever hands two tenants one master.
+ * Both are kept. The info string still names the workspace, so the separation
+ * survives even if a future custody scheme ever hands two workspaces one master.
  */
 /**
  * Derive a purpose-specific encryption key using HKDF-SHA256.
@@ -88,7 +88,7 @@ function deriveKey(purpose: string): Buffer {
     'sha256',
     activeSecretKey(),
     HKDF_SALT,
-    hkdfInfo(currentTenantNamespace(), purpose),
+    hkdfInfo(currentWorkspaceNamespace(), purpose),
     KEY_LENGTH
   )
 

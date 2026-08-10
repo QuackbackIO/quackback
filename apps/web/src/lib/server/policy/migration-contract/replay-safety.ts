@@ -3,7 +3,7 @@
  * carries their effects.
  *
  * This exists because of something the fleet actually did, not a hypothetical.
- * Five live tenant databases have a complete 226-row `drizzle.__drizzle_migrations`
+ * Five live workspace databases have a complete 226-row `drizzle.__drizzle_migrations`
  * that stops at `0248`, while physically carrying assorted later migrations —
  * because every one of them was applied with raw `psql -f`, which never writes
  * the ledger. Running a migrator against them replays whatever the ledger does
@@ -17,7 +17,7 @@
  *   this work is exactly that.
  * - **Wrong: refuse anything that is not idempotent.** 197 of the 228 bundled
  *   migrations are plain `CREATE TABLE` / `ADD COLUMN`, so that rule would
- *   refuse every ordinary rollout as well as every fresh tenant, whose replay
+ *   refuse every ordinary rollout as well as every fresh workspace, whose replay
  *   set is the entire lineage starting at `0000_initial`.
  * - **Right: separate the two ways a replay can go wrong, because only one of
  *   them is dangerous.** A replay that *errors* is caught by the fact that

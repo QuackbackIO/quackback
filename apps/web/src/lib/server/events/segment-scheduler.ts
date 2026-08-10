@@ -38,10 +38,10 @@ const log = logger.child({ component: 'segment-scheduler' })
 export const SEGMENT_EVALUATION_QUEUE = 'segment-evaluation'
 
 /**
- * Every dynamic segment's live schedule, read from this tenant's own database.
+ * Every dynamic segment's live schedule, read from this workspace's own database.
  *
- * Called on each schedule tick inside the tenant's scope, so the answer is per
- * tenant by construction. A pattern the cron parser rejects is dropped with a
+ * Called on each schedule tick inside the workspace's scope, so the answer is per
+ * workspace by construction. A pattern the cron parser rejects is dropped with a
  * loud log rather than defaulting to some permissive reading: a mis-parsed
  * expression changes a segment's cadence with no error anywhere.
  */

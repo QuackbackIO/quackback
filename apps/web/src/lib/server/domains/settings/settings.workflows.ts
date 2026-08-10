@@ -14,7 +14,7 @@
  * from the run engine's hot park path (every interactive-block park), same as
  * `getOfficeHoursSchedule` is called from every run's condition-context
  * resolution — a single `requireSettings()` read, uncached, matching that
- * precedent rather than the heavier `getTenantSettings()` consolidation.
+ * precedent rather than the heavier `getWorkspaceSettings()` consolidation.
  */
 import { logger } from '@/lib/server/logger'
 import {

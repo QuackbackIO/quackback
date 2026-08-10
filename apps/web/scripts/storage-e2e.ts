@@ -1,25 +1,25 @@
 /**
- * Storage, end to end, on a pooled fleet — and the cross-tenant negative.
+ * Storage, end to end, on a pooled fleet — and the cross-workspace negative.
  *
  *   bun run apps/web/scripts/storage-e2e.ts <hostnameA> <hostnameB> [--http <origin>]
  *
- * Runs inside real tenant scopes, opened the way a request opens them:
+ * Runs inside real workspace scopes, opened the way a request opens them:
  * `acquireScopeForHost` → registry → pool → fingerprint → canary → secrets. So
- * every step below exercises the resolved per-tenant credential rather than a
+ * every step below exercises the resolved per-workspace credential rather than a
  * fixture.
  *
- * Per tenant: upload → read the bytes back → mint a presigned GET and fetch it
+ * Per workspace: upload → read the bytes back → mint a presigned GET and fetch it
  * over the network. Then the two negatives that matter, in both directions:
- * tenant A must not be able to read B's object, and B's `/api/storage` route
+ * workspace A must not be able to read B's object, and B's `/api/storage` route
  * must refuse a read capability minted by A.
  *
  * The negatives are only meaningful alongside the positives, so both are always
- * reported. "Could not read the other tenant's object" from a fleet where
+ * reported. "Could not read the other workspace's object" from a fleet where
  * nothing can read anything is not an isolation result.
  */
 import { randomUUID } from 'node:crypto'
-import { acquireScopeForHost } from '@/lib/server/tenancy/resolver'
-import { runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { acquireScopeForHost } from '@/lib/server/workspaces/resolver'
+import { runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
 import {
   generatePresignedGetUrl,
   getPublicUrlOrNull,
@@ -31,9 +31,7 @@ import {
 const args = process.argv.slice(2)
 const httpIdx = args.indexOf('--http')
 const httpOrigin = httpIdx >= 0 ? (args[httpIdx + 1] ?? null) : null
-const hostnames = args.filter(
-  (a, i) => !a.startsWith('--') && !(httpIdx >= 0 && i === httpIdx + 1)
-)
+const hostnames = args.filter((a, i) => !a.startsWith('--') && !(httpIdx >= 0 && i === httpIdx + 1))
 
 if (hostnames.length !== 2) {
   console.error('usage: storage-e2e.ts <hostnameA> <hostnameB> [--http http://localhost:3210]')
@@ -49,12 +47,12 @@ const check = (label: string, ok: boolean, detail = '') => {
   console.log(`  ${ok ? 'OK  ' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`)
 }
 
-async function inTenant<T>(hostname: string, fn: () => Promise<T>): Promise<T> {
+async function inWorkspace<T>(hostname: string, fn: () => Promise<T>): Promise<T> {
   const acquired = await acquireScopeForHost(hostname, 'script')
   if (acquired.kind !== 'ok') {
     throw new Error(`${hostname} did not resolve: ${acquired.kind}`)
   }
-  return runWithTenantScope(acquired.scope, fn)
+  return runWithWorkspaceScope(acquired.scope, fn)
 }
 
 const bodies = new Map<string, string>()
@@ -65,7 +63,7 @@ for (const hostname of hostnames) {
   bodies.set(hostname, body)
   console.log(`\n${hostname}`)
 
-  await inTenant(hostname, async () => {
+  await inWorkspace(hostname, async () => {
     check('storage reports usable', isS3Usable())
 
     // ── upload ────────────────────────────────────────────────────────────
@@ -76,7 +74,11 @@ for (const hostname of hostnames) {
     // ── read back ─────────────────────────────────────────────────────────
     const got = await getS3Object(KEY)
     const read = await new Response(got.body).text()
-    check('read back byte-identical', read === body, read === body ? '' : `got ${JSON.stringify(read)}`)
+    check(
+      'read back byte-identical',
+      read === body,
+      read === body ? '' : `got ${JSON.stringify(read)}`
+    )
 
     // ── presigned GET, fetched over the network ───────────────────────────
     const presigned = await generatePresignedGetUrl(KEY, 300)
@@ -96,19 +98,19 @@ for (const hostname of hostnames) {
 
 // ── the negative: the SAME key in two buckets ───────────────────────────────
 //
-// Deliberately one key string across both tenants. A per-tenant key would be
+// Deliberately one key string across both workspaces. A per-workspace key would be
 // refused by arithmetic rather than by isolation and would prove nothing; the
 // bucket is the boundary, so the key has to be held constant to test it.
-console.log('\ncross-tenant reads (same key, two buckets)')
+console.log('\ncross-workspace reads (same key, two buckets)')
 for (const hostname of hostnames) {
   const other = hostnames.find((h) => h !== hostname)!
-  await inTenant(hostname, async () => {
+  await inWorkspace(hostname, async () => {
     const got = await getS3Object(KEY)
     const read = await new Response(got.body).text()
     check(
       `${hostname} reads its OWN object, not ${other}'s`,
       read === bodies.get(hostname),
-      read === bodies.get(other) ? 'IT READ THE OTHER TENANT’S BYTES' : ''
+      read === bodies.get(other) ? 'IT READ THE OTHER WORKSPACE’S BYTES' : ''
     )
   })
 }
@@ -116,16 +118,16 @@ for (const hostname of hostnames) {
 // ── the sharper negative: a key that exists in ONE bucket only ─────────────
 //
 // The same-key check above catches a shared S3 client, because the second
-// tenant would read the first tenant's bytes. This one states the property
+// workspace would read the first workspace's bytes. This one states the property
 // directly: an object that exists only in A's bucket must be absent from B's.
 const EXCLUSIVE = `uploads/e2e/exclusive-${randomUUID()}.txt`
 console.log('\nexclusive-key reads')
-await inTenant(hostnames[0]!, async () => {
-  await uploadObject(EXCLUSIVE, Buffer.from('only in the first tenant', 'utf8'), 'text/plain')
+await inWorkspace(hostnames[0]!, async () => {
+  await uploadObject(EXCLUSIVE, Buffer.from('only in the first workspace', 'utf8'), 'text/plain')
   const read = await new Response((await getS3Object(EXCLUSIVE)).body).text()
-  check(`${hostnames[0]} can read the object it just wrote`, read === 'only in the first tenant')
+  check(`${hostnames[0]} can read the object it just wrote`, read === 'only in the first workspace')
 })
-await inTenant(hostnames[1]!, async () => {
+await inWorkspace(hostnames[1]!, async () => {
   let outcome = 'READ IT'
   try {
     await new Response((await getS3Object(EXCLUSIVE)).body).text()

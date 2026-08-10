@@ -1,11 +1,11 @@
 /**
  * Evidence harness for the outbox relay tier, run against a real pooled fleet
  * (`QUACKBACK_TENANCY=pooled`, a real control-plane registry, one Neon database
- * per tenant).
+ * per workspace).
  *
  * Four things are measured here rather than asserted, because none of them
  * survives a test double: whether a `LISTEN` on a given endpoint actually
- * delivers, whether two replicas can both drain one tenant, whether a drain ever
+ * delivers, whether two replicas can both drain one workspace, whether a drain ever
  * lands in the wrong database, and how long an event waits.
  *
  * ## The instrument rules this harness follows
@@ -29,7 +29,7 @@
  *
  * Usage:
  *   env $(cat pooled.env) bun run scripts/relay-tier-proof.ts listen-endpoints
- *   env ... bun run scripts/relay-tier-proof.ts tenant-proof   --a <id> --b <id>
+ *   env ... bun run scripts/relay-tier-proof.ts workspace-proof   --a <id> --b <id>
  *   env ... bun run scripts/relay-tier-proof.ts leader-proof   --a <id>
  *   env ... bun run scripts/relay-tier-proof.ts wake-latency   --a <id> --samples 24
  *   env ... bun run scripts/relay-tier-proof.ts cleanup
@@ -39,9 +39,9 @@ import { sql } from 'drizzle-orm'
 import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
-import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
-import { resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
-import { withTenantScopeById } from '@/lib/server/tenancy/fleet'
+import { listActiveWorkspaces, type WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
+import { resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
+import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import { WAKE_APPLICATION_NAME, openWakeListener } from '@/lib/server/jobs/wake'
 import {
   OUTBOX_WAKE_CHANNEL,
@@ -57,7 +57,7 @@ import {
 import { drainOnce } from '@/lib/server/events/relay'
 
 const args = process.argv.slice(2)
-const command = args[0] ?? 'tenant-proof'
+const command = args[0] ?? 'workspace-proof'
 function flag(name: string): string | undefined {
   const i = args.indexOf(`--${name}`)
   return i === -1 ? undefined : args[i + 1]
@@ -82,17 +82,17 @@ function summarise(label: string, values: number[]): string {
   )
 }
 
-async function fleet(): Promise<TenantDescriptor[]> {
-  const { tenants, refused } = await listActiveTenants()
+async function fleet(): Promise<WorkspaceDescriptor[]> {
+  const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) console.log('refused registry records:', JSON.stringify(refused))
-  return tenants
+  return workspaces
 }
 
-async function pick(name: 'a' | 'b', fallbackIndex: number): Promise<TenantDescriptor> {
+async function pick(name: 'a' | 'b', fallbackIndex: number): Promise<WorkspaceDescriptor> {
   const all = await fleet()
   const wanted = flag(name)
-  const found = wanted ? all.find((t) => t.tenantId === wanted) : all[fallbackIndex]
-  if (!found) throw new Error(`no tenant for --${name} (${wanted ?? `index ${fallbackIndex}`})`)
+  const found = wanted ? all.find((t) => t.workspaceKey === wanted) : all[fallbackIndex]
+  if (!found) throw new Error(`no workspace for --${name} (${wanted ?? `index ${fallbackIndex}`})`)
   return found
 }
 
@@ -101,7 +101,7 @@ async function pick(name: 'a' | 'b', fallbackIndex: number): Promise<TenantDescr
 // ---------------------------------------------------------------------------
 
 /**
- * Write one unpublished outbox row, carrying a marker that names the tenant it
+ * Write one unpublished outbox row, carrying a marker that names the workspace it
  * was planted for.
  *
  * `occurred_at` is stamped from THIS process's clock so the tier's lag samples
@@ -109,8 +109,8 @@ async function pick(name: 'a' | 'b', fallbackIndex: number): Promise<TenantDescr
  * clock when the harness hosts the tier, which is the only arrangement in which
  * an end-to-end number means anything without a skew correction.
  */
-async function plant(tenantId: string, marker: string, count = 1): Promise<string[]> {
-  return withTenantScopeById(tenantId, 'script', async () => {
+async function plant(workspaceKey: string, marker: string, count = 1): Promise<string[]> {
+  return withWorkspaceScopeById(workspaceKey, 'script', async () => {
     const ids: string[] = []
     for (let i = 0; i < count; i++) {
       const eventId = generateId('evt')
@@ -134,7 +134,7 @@ async function plant(tenantId: string, marker: string, count = 1): Promise<strin
             'gauntlet',
             ${marker},
             'system',
-            ${JSON.stringify({ marker, plantedFor: tenantId })}::jsonb,
+            ${JSON.stringify({ marker, plantedFor: workspaceKey })}::jsonb,
             ${JSON.stringify({ depth: 0, source: 'relay-tier-proof' })}::jsonb,
             ${new Date().toISOString()}
           )
@@ -155,8 +155,8 @@ interface PlantedRow {
   branch_id: string | null
 }
 
-async function probeRows(tenantId: string): Promise<PlantedRow[]> {
-  return withTenantScopeById(tenantId, 'script', async () => {
+async function probeRows(workspaceKey: string): Promise<PlantedRow[]> {
+  return withWorkspaceScopeById(workspaceKey, 'script', async () => {
     const res = await db.execute(sql`
       SELECT event_id,
              entity_id,
@@ -172,8 +172,8 @@ async function probeRows(tenantId: string): Promise<PlantedRow[]> {
   })
 }
 
-async function clearProbes(tenantId: string): Promise<number> {
-  return withTenantScopeById(tenantId, 'script', async () => {
+async function clearProbes(workspaceKey: string): Promise<number> {
+  return withWorkspaceScopeById(workspaceKey, 'script', async () => {
     const res = await db.execute(
       sql`DELETE FROM events WHERE type = 'gauntlet.relay_probe' RETURNING id`
     )
@@ -186,10 +186,10 @@ async function clearProbes(tenantId: string): Promise<number> {
 // ---------------------------------------------------------------------------
 
 async function listenEndpoints(): Promise<void> {
-  const tenants = await fleet()
+  const workspaces = await fleet()
   console.log(`\nNOTIFY round trip on '${OUTBOX_WAKE_CHANNEL}', per endpoint.`)
   console.log('Delivery is the instrument. pg_listening_channels() is never consulted.\n')
-  for (const t of tenants) {
+  for (const t of workspaces) {
     for (const [kind, url] of [
       ['direct', t.database.directUrl],
       ['pooled', t.database.pooledUrl],
@@ -199,8 +199,8 @@ async function listenEndpoints(): Promise<void> {
         const listener = await openWakeListener({
           directUrl: url,
           channel: OUTBOX_WAKE_CHANNEL,
-          label: `${t.tenantId}/${kind}`,
-          password: () => resolveTenantPassword(t),
+          label: `${t.workspaceKey}/${kind}`,
+          password: () => resolveWorkspacePassword(t),
           onWake: () => {},
         })
         delivered = (await listener.verify(5_000)) ? 'DELIVERED' : 'nothing arrived'
@@ -208,7 +208,7 @@ async function listenEndpoints(): Promise<void> {
       } catch (err) {
         delivered = `ERROR ${(err as Error).message.slice(0, 60)}`
       }
-      console.log(`  ${t.tenantId.padEnd(24)} ${kind.padEnd(7)} ${delivered}`)
+      console.log(`  ${t.workspaceKey.padEnd(24)} ${kind.padEnd(7)} ${delivered}`)
     }
   }
   console.log(
@@ -218,83 +218,83 @@ async function listenEndpoints(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// 2. tenant-proof — no row dispatched against another tenant's database
+// 2. workspace-proof — no row dispatched against another workspace's database
 // ---------------------------------------------------------------------------
 
-async function tenantProof(): Promise<void> {
+async function workspaceProof(): Promise<void> {
   const a = await pick('a', 0)
   const b = await pick('b', 1)
-  console.log(`\nA = ${a.tenantId}\nB = ${b.tenantId}\n`)
+  console.log(`\nA = ${a.workspaceKey}\nB = ${b.workspaceKey}\n`)
 
   for (const order of [
     [a, b],
     [b, a],
   ]) {
     const [first, second] = order
-    console.log(`--- ordering: ${first.tenantId} planted first ---`)
-    await clearProbes(a.tenantId)
-    await clearProbes(b.tenantId)
+    console.log(`--- ordering: ${first.workspaceKey} planted first ---`)
+    await clearProbes(a.workspaceKey)
+    await clearProbes(b.workspaceKey)
 
-    const firstIds = await plant(first.tenantId, `marker-${first.tenantId}`, 3)
-    const secondIds = await plant(second.tenantId, `marker-${second.tenantId}`, 3)
+    const firstIds = await plant(first.workspaceKey, `marker-${first.workspaceKey}`, 3)
+    const secondIds = await plant(second.workspaceKey, `marker-${second.workspaceKey}`, 3)
 
     await startRelayTier()
-    // Long enough for both tenants' loops to take their lease and drain.
+    // Long enough for both workspaces' loops to take their lease and drain.
     for (let i = 0; i < 60; i++) {
-      const rows = [...(await probeRows(a.tenantId)), ...(await probeRows(b.tenantId))]
+      const rows = [...(await probeRows(a.workspaceKey)), ...(await probeRows(b.workspaceKey))]
       if (rows.length > 0 && rows.every((r) => r.published_at !== null)) break
       await sleep(500)
     }
     const status = getRelayTierStatus()
     await stopRelayTier()
 
-    let crossTenant = 0
+    let crossWorkspace = 0
     for (const t of [a, b]) {
-      const rows = await probeRows(t.tenantId)
-      const foreign = rows.filter((r) => r.planted_for !== t.tenantId)
-      crossTenant += foreign.length
+      const rows = await probeRows(t.workspaceKey)
+      const foreign = rows.filter((r) => r.planted_for !== t.workspaceKey)
+      crossWorkspace += foreign.length
       const unpublished = rows.filter((r) => r.published_at === null).length
       console.log(
-        `  ${t.tenantId.padEnd(24)} rows=${rows.length} published=${rows.length - unpublished} ` +
+        `  ${t.workspaceKey.padEnd(24)} rows=${rows.length} published=${rows.length - unpublished} ` +
           `foreign=${foreign.length} db=${rows[0]?.db_name ?? '-'} branch=${rows[0]?.branch_id ?? '-'}`
       )
     }
-    for (const s of status.tenants) {
+    for (const s of status.workspaces) {
       console.log(
-        `    tier  ${s.tenantId.padEnd(24)} leader=${s.leader} fence=${s.fence} ` +
+        `    tier  ${s.workspaceKey.padEnd(24)} leader=${s.leader} fence=${s.fence} ` +
           `drained=${s.drained} wakes=${s.wakes} doorbell=${s.doorbellVerified}`
       )
     }
     console.log(
       `  planted A=${firstIds.length} B=${secondIds.length}  ` +
-        `CROSS-TENANT OBSERVATIONS: ${crossTenant}\n`
+        `CROSS-WORKSPACE OBSERVATIONS: ${crossWorkspace}\n`
     )
   }
 
   console.log(
     'Both orderings are run because a last-writer-wins cache is asymmetric: testing one\n' +
-      'direction leaves detection to whichever tenant happened to write last.\n' +
-      'Had the tier shared one connection or one scope across tenants, a row planted for one\n' +
-      'tenant would appear in the other database (foreign > 0) or be published against it.\n'
+      'direction leaves detection to whichever workspace happened to write last.\n' +
+      'Had the tier shared one connection or one scope across workspaces, a row planted for one\n' +
+      'workspace would appear in the other database (foreign > 0) or be published against it.\n'
   )
 }
 
 // ---------------------------------------------------------------------------
-// 3. leader-proof — two replicas do not both drain one tenant
+// 3. leader-proof — two replicas do not both drain one workspace
 // ---------------------------------------------------------------------------
 
 /**
- * Two independent owners against one tenant's real database, using the shipped
+ * Two independent owners against one workspace's real database, using the shipped
  * lease. The second owner is what a second Railway replica is: a different
  * process asking the same database the same question.
  */
 async function leaderProof(): Promise<void> {
   const a = await pick('a', 0)
-  console.log(`\ntenant = ${a.tenantId}\n`)
+  console.log(`\nworkspace = ${a.workspaceKey}\n`)
 
-  await clearProbes(a.tenantId)
+  await clearProbes(a.workspaceKey)
 
-  await withTenantScopeById(a.tenantId, 'script', async () => {
+  await withWorkspaceScopeById(a.workspaceKey, 'script', async () => {
     // Start from a clean lease so the run is deterministic.
     const held = await readRelayLease(db)
     if (held) await releaseRelayLease(db, held)
@@ -307,7 +307,7 @@ async function leaderProof(): Promise<void> {
     // What each would drain if it believed itself leader. `drainOnce` is
     // idempotent, so "both drained" is invisible from the row state alone —
     // hence the counters.
-    await plant(a.tenantId, 'leader-probe', 4)
+    await plant(a.workspaceKey, 'leader-probe', 4)
     const leaderDrain = await drainOnce({ batchSize: 100 })
     console.log(
       `  leader drain      -> drained=${leaderDrain.drained} enqueued=${leaderDrain.enqueued}`
@@ -336,7 +336,7 @@ async function leaderProof(): Promise<void> {
     )
     if (takeover) {
       // And the backlog the dead leader left is drained by the new one.
-      await plant(a.tenantId, 'leader-probe', 2)
+      await plant(a.workspaceKey, 'leader-probe', 2)
       const after = await drainOnce({ batchSize: 100 })
       console.log(`  new leader drained the backlog -> drained=${after.drained}`)
       const current = await readRelayLease(db)
@@ -348,7 +348,7 @@ async function leaderProof(): Promise<void> {
     '\nHad leadership failed open — which is exactly what pg_try_advisory_lock does when a\n' +
       'pooler routes two clients onto one backend — both claims above would read LEADER.\n'
   )
-  await clearProbes(a.tenantId)
+  await clearProbes(a.workspaceKey)
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +360,7 @@ async function leaderProof(): Promise<void> {
  *
  * This is what a second Railway replica is. The single-process `leader-proof`
  * above exercises the lease; only two OS processes can show that two relay
- * replicas do not both drain one tenant, because only then are the two drains
+ * replicas do not both drain one workspace, because only then are the two drains
  * genuinely independent.
  */
 async function replica(): Promise<void> {
@@ -368,12 +368,12 @@ async function replica(): Promise<void> {
   await startRelayTier()
   const tick = setInterval(() => {
     const s = getRelayTierStatus()
-    for (const t of s.tenants) {
+    for (const t of s.workspaces) {
       console.log(
         JSON.stringify({
           replica: label,
           owner: s.owner,
-          tenant: t.tenantId,
+          workspace: t.workspaceKey,
           leader: t.leader,
           fence: t.fence,
           drained: t.drained,
@@ -392,21 +392,21 @@ async function replica(): Promise<void> {
 async function plantCmd(): Promise<void> {
   const a = await pick('a', 0)
   const count = Number.parseInt(flag('count') ?? '3', 10)
-  const ids = await plant(a.tenantId, flag('marker') ?? 'two-replica', count)
-  console.log(JSON.stringify({ tenant: a.tenantId, planted: ids.length }))
+  const ids = await plant(a.workspaceKey, flag('marker') ?? 'two-replica', count)
+  console.log(JSON.stringify({ workspace: a.workspaceKey, planted: ids.length }))
 }
 
 async function inspect(): Promise<void> {
   const a = await pick('a', 0)
-  const rows = await probeRows(a.tenantId)
-  const lease = await withTenantScopeById(a.tenantId, 'script', () => readRelayLease(db))
+  const rows = await probeRows(a.workspaceKey)
+  const lease = await withWorkspaceScopeById(a.workspaceKey, 'script', () => readRelayLease(db))
   console.log(
     JSON.stringify({
-      tenant: a.tenantId,
+      workspace: a.workspaceKey,
       probeRows: rows.length,
       published: rows.filter((r) => r.published_at !== null).length,
       unpublished: rows.filter((r) => r.published_at === null).length,
-      foreign: rows.filter((r) => r.planted_for !== a.tenantId).length,
+      foreign: rows.filter((r) => r.planted_for !== a.workspaceKey).length,
       lease: lease ? { owner: lease.owner, fence: lease.fence } : null,
     })
   )
@@ -420,12 +420,12 @@ async function wakeLatency(): Promise<void> {
   const a = await pick('a', 0)
   const samples = Number.parseInt(flag('samples') ?? '20', 10)
   const pollMs = Number.parseInt(process.env.RELAY_POLL_INTERVAL_MS ?? '1000', 10)
-  console.log(`\ntenant = ${a.tenantId}  samples = ${samples}  poll floor = ${pollMs}ms`)
+  console.log(`\nworkspace = ${a.workspaceKey}  samples = ${samples}  poll floor = ${pollMs}ms`)
   console.log(
     `doorbell = ${process.env.RELAY_WAKE_DISABLED === '1' ? 'DISABLED' : OUTBOX_WAKE_CHANNEL}\n`
   )
 
-  await clearProbes(a.tenantId)
+  await clearProbes(a.workspaceKey)
   await startRelayTier()
   await sleep(1_500) // let the loops take their leases and verify their doorbells
 
@@ -434,21 +434,21 @@ async function wakeLatency(): Promise<void> {
     // drain phase-locks every arrival to the start of a poll window, which
     // reports the worst case as the median.
     await sleep(jitter(pollMs))
-    await plant(a.tenantId, `latency-${i}`, 1)
+    await plant(a.workspaceKey, `latency-${i}`, 1)
     // Wait for it to be published rather than for a fixed interval, so a slow
     // sample is measured rather than dropped.
     for (let w = 0; w < 40; w++) {
-      const rows = await probeRows(a.tenantId)
+      const rows = await probeRows(a.workspaceKey)
       if (rows.length > 0 && rows.every((r) => r.published_at !== null)) break
       await sleep(100)
     }
-    await clearProbes(a.tenantId)
+    await clearProbes(a.workspaceKey)
   }
 
   const status = getRelayTierStatus()
   await stopRelayTier()
 
-  for (const s of status.tenants) {
+  for (const s of status.workspaces) {
     if (s.lagSamplesMs.length === 0) continue
     console.log(
       summarise(`end-to-end (emit->published)`, s.lagSamplesMs) +
@@ -462,7 +462,7 @@ async function wakeLatency(): Promise<void> {
       `Had the doorbell not been delivering, every sample would sit at the ${pollMs}ms poll\n` +
       `floor and wakes would read 0 — which is the pooled arm of this measurement.\n`
   )
-  await clearProbes(a.tenantId)
+  await clearProbes(a.workspaceKey)
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +470,7 @@ async function wakeLatency(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Kill the doorbell connections for a tenant, then emit while nothing is
+ * Kill the doorbell connections for a workspace, then emit while nothing is
  * listening.
  *
  * This is a REAL cause rather than a flag. `NOTIFY` is not durable: a payload
@@ -486,7 +486,7 @@ async function pollFallback(): Promise<void> {
   const admin = postgres(a.database.directUrl, {
     max: 1,
     onnotice: () => {},
-    password: () => resolveTenantPassword(a),
+    password: () => resolveWorkspacePassword(a),
   })
 
   const killDoorbell = async (): Promise<number> => {
@@ -499,14 +499,16 @@ async function pollFallback(): Promise<void> {
     return rows.length
   }
 
-  console.log(`\ntenant = ${a.tenantId}  poll floor = ${pollMs}ms  samples per arm = ${samples}\n`)
-  await clearProbes(a.tenantId)
+  console.log(
+    `\nworkspace = ${a.workspaceKey}  poll floor = ${pollMs}ms  samples per arm = ${samples}\n`
+  )
+  await clearProbes(a.workspaceKey)
   await startRelayTier()
   await sleep(2_000)
 
   const arms: Record<string, number[]> = {}
   for (const arm of ['doorbell alive', 'doorbell killed before each emit'] as const) {
-    const before = getRelayTierStatus().tenants.find((t) => t.tenantId === a.tenantId)
+    const before = getRelayTierStatus().workspaces.find((t) => t.workspaceKey === a.workspaceKey)
     const baseline = before ? before.lagSamplesMs.length : 0
     const wakesBefore = before?.wakes ?? 0
     const suppress = arm === 'doorbell killed before each emit'
@@ -514,7 +516,7 @@ async function pollFallback(): Promise<void> {
     for (let i = 0; i < samples; i++) {
       await sleep(jitter(pollMs))
       if (suppress) killed += await killDoorbell()
-      await plant(a.tenantId, `fallback-${i}`, 1)
+      await plant(a.workspaceKey, `fallback-${i}`, 1)
       for (let w = 0; w < 60; w++) {
         // `postgres.js` reconnects and re-LISTENs within about a second, so a
         // single kill leaves a window too short to be sure the notify was lost.
@@ -522,13 +524,13 @@ async function pollFallback(): Promise<void> {
         // the POLL published this row, and that claim is only clean while no
         // listener could have received anything.
         if (suppress) killed += await killDoorbell()
-        const rows = await probeRows(a.tenantId)
+        const rows = await probeRows(a.workspaceKey)
         if (rows.length > 0 && rows.every((r) => r.published_at !== null)) break
         await sleep(100)
       }
-      await clearProbes(a.tenantId)
+      await clearProbes(a.workspaceKey)
     }
-    const after = getRelayTierStatus().tenants.find((t) => t.tenantId === a.tenantId)
+    const after = getRelayTierStatus().workspaces.find((t) => t.workspaceKey === a.workspaceKey)
     arms[arm] = (after?.lagSamplesMs ?? []).slice(baseline)
     const wakes = (after?.wakes ?? 0) - wakesBefore
     console.log(
@@ -540,10 +542,10 @@ async function pollFallback(): Promise<void> {
   const status = getRelayTierStatus()
   await stopRelayTier()
   await admin.end({ timeout: 5 })
-  for (const s of status.tenants) {
-    if (s.tenantId !== a.tenantId) continue
+  for (const s of status.workspaces) {
+    if (s.workspaceKey !== a.workspaceKey) continue
     console.log(
-      `\n  ${s.tenantId} wakes=${s.wakes} drained=${s.drained} leaseLosses=${s.leaseLosses}`
+      `\n  ${s.workspaceKey} wakes=${s.wakes} drained=${s.drained} leaseLosses=${s.leaseLosses}`
     )
   }
   console.log(
@@ -552,7 +554,7 @@ async function pollFallback(): Promise<void> {
       'doorbell off. Had the poll floor not existed, the second arm would never have\n' +
       'published at all and this command would have timed out rather than printed numbers.\n'
   )
-  await clearProbes(a.tenantId)
+  await clearProbes(a.workspaceKey)
 }
 
 // ---------------------------------------------------------------------------
@@ -560,21 +562,21 @@ async function pollFallback(): Promise<void> {
 async function cleanup(): Promise<void> {
   for (const t of await fleet()) {
     try {
-      const n = await clearProbes(t.tenantId)
-      await withTenantScopeById(t.tenantId, 'script', async () => {
+      const n = await clearProbes(t.workspaceKey)
+      await withWorkspaceScopeById(t.workspaceKey, 'script', async () => {
         const held = await readRelayLease(db)
         if (held) await releaseRelayLease(db, held)
       })
-      console.log(`  ${t.tenantId.padEnd(24)} probe rows removed=${n}`)
+      console.log(`  ${t.workspaceKey.padEnd(24)} probe rows removed=${n}`)
     } catch (err) {
-      console.log(`  ${t.tenantId.padEnd(24)} ${(err as Error).message.slice(0, 80)}`)
+      console.log(`  ${t.workspaceKey.padEnd(24)} ${(err as Error).message.slice(0, 80)}`)
     }
   }
 }
 
 const commands: Record<string, () => Promise<void>> = {
   'listen-endpoints': listenEndpoints,
-  'tenant-proof': tenantProof,
+  'workspace-proof': workspaceProof,
   'leader-proof': leaderProof,
   replica,
   plant: plantCmd,

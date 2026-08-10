@@ -9,7 +9,7 @@
  *
  * The signing scheme mirrors realtime/stream-token.ts's mintStreamToken /
  * verifyStreamToken (a domain-separated HMAC-SHA256 over a dot-joined
- * payload, keyed on the active tenant's SECRET_KEY) rather than
+ * payload, keyed on the active workspace's SECRET_KEY) rather than
  * conversation.email-channel.ts's signConversationId — that one needs
  * EMAIL_INBOUND_SIGNING_SECRET configured, which isn't a prerequisite
  * CSAT-over-email should share, and it only signs a bare conversation id,

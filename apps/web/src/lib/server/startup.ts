@@ -41,7 +41,7 @@ function wireGracefulShutdown(): void {
     void (async () => {
       try {
         // Stop the relay before closing the queue so a final poll cannot enqueue
-        // into a queue that is already draining. Each tenant loop releases its
+        // into a queue that is already draining. Each workspace loop releases its
         // leadership lease on the way out, so a surviving replica takes over
         // immediately instead of waiting out the TTL.
         await import('./events/relay-tier').then(({ stopRelayTier }) => stopRelayTier())
@@ -79,9 +79,8 @@ function wireGracefulShutdown(): void {
  * sweeping nothing, which is the one failure mode a cron service really has.
  */
 async function runCronJobAndExit(name: string): Promise<never> {
-  const { isFleetCronJobName, runFleetCronJob, FLEET_CRON_JOBS } = await import(
-    '@/lib/server/cron/fleet-jobs'
-  )
+  const { isFleetCronJobName, runFleetCronJob, FLEET_CRON_JOBS } =
+    await import('@/lib/server/cron/fleet-jobs')
   if (!isFleetCronJobName(name)) {
     log.error(
       { job: name, known: Object.keys(FLEET_CRON_JOBS) },
@@ -137,8 +136,8 @@ export function logStartupBanner(): void {
     .then(({ validateAiConfig }) => validateAiConfig())
     .catch((err) => log.error({ err }, 'ai config validation failed'))
 
-  // Reads the tenant's integration rows, so it is per-database work. Under
-  // pooled tenancy it runs once per tenant — and, like the startup backfill
+  // Reads the workspace's integration rows, so it is per-database work. Under
+  // pooled tenancy it runs once per workspace — and, like the startup backfill
   // below, only on a replica that already does background work, because a
   // fleet-wide read on every web boot would wake every suspended compute.
   //
@@ -152,7 +151,7 @@ export function logStartupBanner(): void {
   } else {
     Promise.all([
       import('@/integrations/segment/server/user-sync'),
-      import('@/lib/server/tenancy/fleet'),
+      import('@/lib/server/workspaces/fleet'),
     ])
       .then(([{ warnIfSegmentInboundIsInsecure }, { runFleetPass }]) =>
         runFleetPass('sweep', () => warnIfSegmentInboundIsInsecure())
@@ -169,9 +168,9 @@ export function logStartupBanner(): void {
   // custom-oidc → identity_provider migration that needs SECRET_KEY to decrypt
   // its credential and so can't live in the SQL migration bundle.
   //
-  // Per-database work, so under pooled tenancy it runs once per tenant — but
+  // Per-database work, so under pooled tenancy it runs once per workspace — but
   // only on a replica that already runs background work. A fleet-wide backfill
-  // on every web boot would open a connection to every tenant database and wake
+  // on every web boot would open a connection to every workspace database and wake
   // every suspended compute, which is precisely the cost the pooling exists to
   // avoid; one-shot per-database work belongs with the migrator role. The
   // backfill is idempotent and advisory-locked, which is what makes fanning it
@@ -181,7 +180,7 @@ export function logStartupBanner(): void {
   } else {
     Promise.all([
       import('@/lib/server/auth/backfill-custom-oidc-provider'),
-      import('@/lib/server/tenancy/fleet'),
+      import('@/lib/server/workspaces/fleet'),
     ])
       .then(([{ runStartupBackfills }, { runFleetPass }]) =>
         runFleetPass('sweep', () => runStartupBackfills())
@@ -194,15 +193,15 @@ export function logStartupBanner(): void {
   // is absent (self-host default).
   //
   // Deliberately NOT started under pooled tenancy. The mechanism is a single
-  // file at a single path with no tenant parameter anywhere in `ReconcileDeps`,
+  // file at a single path with no workspace parameter anywhere in `ReconcileDeps`,
   // and you cannot mount N files at one path — so it has to be replaced by a
-  // tenant-keyed entrypoint behind an authenticated control-plane route, not
-  // adapted. Starting it here would reconcile whichever tenant the fleet pass
+  // workspace-keyed entrypoint behind an authenticated control-plane route, not
+  // adapted. Starting it here would reconcile whichever workspace the fleet pass
   // happened to visit with one file's contents (SAAS-HOSTING-STACK.md §8).
   if (config.isPooledTenancy) {
     log.info(
       'pooled tenancy — the /etc/quackback/config.yaml watcher is not started; ' +
-        'per-tenant config arrives through the control plane'
+        'per-workspace config arrives through the control plane'
     )
   } else {
     import('@/lib/server/config-file')
@@ -229,7 +228,7 @@ export function logStartupBanner(): void {
 }
 
 /**
- * Boot the background tiers, and — on a single-tenant install only — the
+ * Boot the background tiers, and — on a single-workspace install only — the
  * periodic sweepers. Runs under QUACKBACK_ROLE=worker and the single-process
  * default ('all'), never on web-role replicas. Every sweeper additionally holds
  * a cross-instance sweep lock, so multiple worker replicas stay safe.
@@ -240,38 +239,38 @@ export function logStartupBanner(): void {
  */
 function startBackgroundProcessing(): void {
   // The Postgres job tier — every background queue in the process. It runs
-  // under BOTH tenancy modes, because a job row lives in the tenant's own
-  // database and the tier opens a real tenant scope around every claim. Those
+  // under BOTH tenancy modes, because a job row lives in the workspace's own
+  // database and the tier opens a real workspace scope around every claim. Those
   // are exactly the two properties BullMQ lacked: a Redis job carries no
-  // tenant, so its processor resolved `db` with no scope and threw on its first
-  // query, and one un-namespaced Redis list per queue held every tenant's
+  // workspace, so its processor resolved `db` with no scope and threw on its first
+  // query, and one un-namespaced Redis list per queue held every workspace's
   // payloads.
   //
   // The periodic sweepers below funnel through `withSweepLock`, which fans a
-  // tick out across the fleet with a real tenant scope each time — which is why
+  // tick out across the fleet with a real workspace scope each time — which is why
   // a pooled worker does not arm them at all; see the branch below.
   import('./jobs/tier')
     .then(({ startJobTier }) => startJobTier())
     .catch((err) => log.error({ err }, 'failed to start the job tier'))
 
   // Boot-time page_views partition ensure. This used to ride along inside the
-  // BullMQ queue's construction; it needs a real tenant scope now, so it runs as
+  // BullMQ queue's construction; it needs a real workspace scope now, so it runs as
   // a fleet pass instead. It stays at boot rather than waiting for the 02:30
   // slot because beacons are dropped while a day has no partition, and an
   // instance that was down long enough to exhaust its week-ahead window would
   // otherwise lose a day of them.
   Promise.all([
     import('./domains/analytics/partition-maintenance-queue'),
-    import('@/lib/server/tenancy/fleet'),
+    import('@/lib/server/workspaces/fleet'),
   ])
     .then(([{ ensurePageViewPartitionsAtBoot }, { runFleetPass }]) =>
       runFleetPass('sweep', () => ensurePageViewPartitionsAtBoot())
     )
     .catch((err) => log.error({ err }, 'boot-time partition ensure failed'))
 
-  // Durable event outbox relay (EVENTING-V2 WO-3), on the per-tenant tier
+  // Durable event outbox relay (EVENTING-V2 WO-3), on the per-workspace tier
   // (SAAS-HOSTING-STACK.md §7.3). Runs under BOTH tenancy modes: one loop per
-  // tenant on that tenant's own direct, session-mode connection, elected by a
+  // workspace on that workspace's own direct, session-mode connection, elected by a
   // lease row rather than a session advisory lock. Post-cutover (WO-18) the
   // outbox is the SOLE delivery path, so the relay always runs here — the only
   // gate is QUACKBACK_ROLE (worker/all), enforced inside startRelayTier().
@@ -284,8 +283,8 @@ function startBackgroundProcessing(): void {
   //
   // Every one of them funnels through `withSweepLock`, which under pooled
   // tenancy fans the tick out across the WHOLE fleet — one connection to every
-  // tenant database, per tick. So the interval stops being a scheduling
-  // preference and becomes the floor on how often every suspended tenant
+  // workspace database, per tick. So the interval stops being a scheduling
+  // preference and becomes the floor on how often every suspended workspace
   // compute is woken, and the 5-minute reconcilers sit almost exactly on the
   // 300 s (measured 337 s) suspend timeout: the compute is woken at very nearly
   // the rate it would otherwise sleep, with no functional symptom at all. That
@@ -299,19 +298,19 @@ function startBackgroundProcessing(): void {
   //
   // There is deliberately no BullMQ branch left. It used to hold a warning and
   // an eager worker boot, refused under pooled tenancy because a Redis job
-  // carries no tenant; every queue is now a table in the tenant's own database,
+  // carries no workspace; every queue is now a table in the workspace's own database,
   // drained by the job tier above.
   if (config.isPooledTenancy) {
     log.info(
       'pooled tenancy — the scheduled sweeps are not on this process. They fan out across the ' +
-        'whole fleet, so their intervals would set the rate at which every suspended tenant ' +
+        'whole fleet, so their intervals would set the rate at which every suspended workspace ' +
         'compute is woken; they run on the cron services instead (cron/fleet-jobs.ts)'
     )
     return
   }
 
   // The scheduled sweeps. Each body lives in `cron/fleet-jobs.ts` so this
-  // single-tenant schedule and the pooled fleet's cron services run the same
+  // single-workspace schedule and the pooled fleet's cron services run the same
   // code; only the trigger differs. The delays and intervals here are the ones
   // these sweeps have always had.
   import('@/lib/server/cron/fleet-jobs')

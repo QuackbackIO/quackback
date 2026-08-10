@@ -7,7 +7,7 @@ import { db, isNull, sql, statusComponents } from '@/lib/server/db'
 interface EnforceCountLimitArgs {
   /** Null = unlimited. */
   limit: number | null
-  /** Lazy — only called when limit is set, so unlimited tenants pay nothing. */
+  /** Lazy — only called when limit is set, so unlimited workspaces pay nothing. */
   currentCount: () => Promise<number>
   /** Matches the TierLimits key (e.g. 'maxBoards'). */
   name: string
@@ -80,7 +80,7 @@ export async function enforceStatusComponentLimit(): Promise<void> {
 }
 
 /**
- * Pre-call gate for any LLM-driven AI service. Refuses when the tenant
+ * Pre-call gate for any LLM-driven AI service. Refuses when the workspace
  * has used up its monthly token budget. Token usage is recorded after
  * each call by withUsageLogging, so this is a "you're already at/over"
  * check — small overruns are possible if many calls fire concurrently.

@@ -11,7 +11,7 @@
  * It also contradicted the architecture it was implementing:
  * SAAS-HOSTING-STACK.md §1 says "the 'conductor' is not a new component — it is
  * `QUACKBACK_ROLE=worker`. One shared, always-warm worker tier runs the queues,
- * relay and sweeps for every tenant."
+ * relay and sweeps for every workspace."
  *
  * So the role is free again, and the refusal moved to the noun it was always
  * about. It first became a seam that would not construct a `Worker` under
@@ -134,7 +134,7 @@ describe('the database refusals the pooled mode DOES keep', () => {
     expect(result.paths).toContain('controlDatabaseUrl')
   })
 
-  it('refuses a single-tenant process with no DATABASE_URL', async () => {
+  it('refuses a single-workspace process with no DATABASE_URL', async () => {
     useSingle()
     delete process.env.DATABASE_URL
 

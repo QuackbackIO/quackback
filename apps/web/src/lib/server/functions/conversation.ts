@@ -413,7 +413,7 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
 
 /**
  * The team's availability verdict (live presence + office-hours snapshot),
- * WITHOUT loading the conversation or messages. Tenant-global — no visitor auth
+ * WITHOUT loading the conversation or messages. Workspace-global — no visitor auth
  * needed. The widget polls this to keep the online/offline indicator fresh, and
  * the widget loader calls it server-side to SSR-seed the same value so the first
  * paint matches what the poll reports.
@@ -442,7 +442,7 @@ export const getConversationPresenceFn = createServerFn({ method: 'GET' }).handl
 )
 
 /**
- * Teammate avatars for the widget Home header cluster. Tenant-global and
+ * Teammate avatars for the widget Home header cluster. Workspace-global and
  * public-safe by construction — the domain query exposes only name + image for
  * genuine teammates (never portal users, anonymous visitors, or service
  * principals), so no visitor auth is needed.

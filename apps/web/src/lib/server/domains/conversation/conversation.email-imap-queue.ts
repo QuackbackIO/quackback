@@ -11,14 +11,14 @@
  * **The gate moved from construction to scheduling, deliberately.** The old
  * shape simply never built the worker when IMAP was unconfigured. A cron that
  * enqueued anyway and returned early from the handler would write 1,440 no-op
- * rows a day per tenant, so `isEmailImapPollable()` gates the schedule instead:
+ * rows a day per workspace, so `isEmailImapPollable()` gates the schedule instead:
  * nothing is written at all.
  *
  * **It refuses to schedule under pooled tenancy, and that is the honest
  * answer.** The mailbox is configured from process environment — one mailbox
- * for the whole process — while the queue is per tenant. Scheduling it on every
- * tenant's loop would have each tenant poll the *same* mailbox and ingest the
- * same message into its own database. That is a cross-tenant data movement, so
+ * for the whole process — while the queue is per workspace. Scheduling it on every
+ * workspace's loop would have each workspace poll the *same* mailbox and ingest the
+ * same message into its own database. That is a cross-workspace data movement, so
  * it fails closed and says why. It is not a regression: under pooled tenancy
  * the BullMQ worker was never started either (`startup.ts` refuses the whole
  * registry), so this replaces a silent absence with a stated refusal.
@@ -50,8 +50,8 @@ export function isEmailImapPollable(): boolean {
     if (!warnedPooled) {
       warnedPooled = true
       log.error(
-        'IMAP inbound is configured from process environment but the queue is per tenant — ' +
-          'polling one shared mailbox from every tenant loop would ingest the same message ' +
+        'IMAP inbound is configured from process environment but the queue is per workspace — ' +
+          'polling one shared mailbox from every workspace loop would ingest the same message ' +
           'into every database. The poller is NOT scheduled under pooled tenancy.'
       )
     }

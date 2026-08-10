@@ -51,7 +51,7 @@ const log = logger.child({ component: 'billing-subscription' })
  * The plan a workspace falls back to when it has no live subscription.
  *
  * Not "no plan": a workspace on a billing-enabled deployment with no
- * subscription is a real commercial state (a signed-up tenant who has not
+ * subscription is a real commercial state (a signed-up workspace who has not
  * bought anything), and `isEntitled()` treats *enabled with no plan* as deny
  * everything. Free is the honest answer and the one that renders an upgrade
  * prompt instead of a dead end.

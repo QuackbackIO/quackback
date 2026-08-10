@@ -1,6 +1,6 @@
 # Self-serve billing
 
-The product bills its own tenants. This module owns the provider customer and
+The product bills its own workspaces. This module owns the provider customer and
 subscription for **this workspace**, derives the quantities the invoice is
 computed from out of the product's own data, meters the usage the pricing
 model charges for, and translates the resulting subscription into a plan,
@@ -19,20 +19,20 @@ a `post.created` hook looks up the feedback author's revenue to annotate the
 post. Money flows towards the customer's business, and the credential belongs
 to the customer.
 
-This module bills **Quackback's tenants for Quackback**. Money flows towards
+This module bills **Quackback's workspaces for Quackback**. Money flows towards
 us, the credential is the operator's, and no admin may configure it. The two
 share a vendor name and nothing else.
 
 Putting billing in the integrations folder would have three concrete costs,
 not just an aesthetic one:
 
-1. It would appear in the integrations gallery, because that folder *is* the
+1. It would appear in the integrations gallery, because that folder _is_ the
    registry — `catalog.ts` per integration, rendered by
-   `/admin/settings/integrations`. A tenant would see "Billing" next to
+   `/admin/settings/integrations`. A workspace would see "Billing" next to
    "Slack" and be able to disconnect it.
 2. Integration credentials are per-workspace and admin-writable
    (`platform-credentials`). Ours is fleet-level operator configuration that a
-   tenant must never see or set.
+   workspace must never see or set.
 3. The integration framework's contract is `HookHandler` — react to a product
    event, call an external API. Billing needs a webhook receiver, a database
    ledger, a reconcile loop and an admin surface. It would fit the folder's
@@ -52,24 +52,24 @@ dep-graph golden file as two new edges, `billing -> settings` and
 The line, stated once: **the control plane declares what may be sold; the
 product decides what this workspace bought and how much of it they used.**
 
-| Concern | Owner | Where it lives |
-| --- | --- | --- |
-| Organisation and account identity | Control plane | CP database |
-| Tenant provisioning (database, bucket, DNS) | Control plane | CP |
-| **Plan catalogue** — which plans exist, their prices, their limits | **Control plane** | `BILLING_PRICES`, fleet-wide env |
-| Tenant lifecycle (suspend, delete) | Control plane | CP |
-| Cross-tenant revenue reporting | Control plane | Provider dashboard + CP |
-| **The provider customer and subscription** | **Product** | `settings.cloud.billing`, `billing_subscription_state` |
-| **The seat count** | **Product** | derived from `principal` at read time |
-| **Usage metering** | **Product** | `billing_usage_events` |
-| **Checkout and portal sessions** | **Product** | `billing.service.ts` |
-| **Plan, entitlements, limits** | **Product** | `settings.cloud`, `settings.tier_limits` |
+| Concern                                                            | Owner             | Where it lives                                         |
+| ------------------------------------------------------------------ | ----------------- | ------------------------------------------------------ |
+| Organisation and account identity                                  | Control plane     | CP database                                            |
+| Workspace provisioning (database, bucket, DNS)                     | Control plane     | CP                                                     |
+| **Plan catalogue** — which plans exist, their prices, their limits | **Control plane** | `BILLING_PRICES`, fleet-wide env                       |
+| Workspace lifecycle (suspend, delete)                              | Control plane     | CP                                                     |
+| Cross-workspace revenue reporting                                  | Control plane     | Provider dashboard + CP                                |
+| **The provider customer and subscription**                         | **Product**       | `settings.cloud.billing`, `billing_subscription_state` |
+| **The seat count**                                                 | **Product**       | derived from `principal` at read time                  |
+| **Usage metering**                                                 | **Product**       | `billing_usage_events`                                 |
+| **Checkout and portal sessions**                                   | **Product**       | `billing.service.ts`                                   |
+| **Plan, entitlements, limits**                                     | **Product**       | `settings.cloud`, `settings.tier_limits`               |
 
 The catalogue is env-configured because it is genuinely fleet-wide — the same
-prices for every tenant — which is the same class as the fleet-wide AI and
+prices for every workspace — which is the same class as the fleet-wide AI and
 email credentials in SAAS-HOSTING-STACK.md §8. Everything per-workspace is in
 the workspace's own database, which is what makes this work under
-database-per-tenant with no cross-tenant reads.
+database-per-workspace with no cross-workspace reads.
 
 **Where the two writers meet.** The declarative config file is still a writer
 of `settings.cloud`, and it wins wherever it declares — the managed-path
@@ -84,7 +84,7 @@ it, because a webhook is not a request a human is waiting on.
 
 **Entitlements are deliberately not written by billing.** They follow from the
 plan through `PLAN_CATALOGUE`, so moving the plan already moves what is
-unlocked. The stored `entitlements` map exists for the *other* writer — a
+unlocked. The stored `entitlements` map exists for the _other_ writer — a
 negotiated or grandfathered workspace an operator pinned — and a billing write
 to it would erase that deal on the next subscription change.
 
@@ -109,18 +109,18 @@ property that makes it defensible on an invoice.
 
 Excluded, and why:
 
-| Population | `role` | `type` | Seat? |
-| --- | --- | --- | --- |
-| Admin teammate | `admin` | `user` | **yes** |
-| Member teammate (including every custom-role holder) | `member` | `user` | **yes** |
-| Portal end user | `user` | `user` | no — a customer, not staff |
-| Anonymous visitor | `user` | `anonymous` | no |
-| API key / integration / CP bootstrap principal | `admin`/`member` | `service` | no — a machine |
+| Population                                           | `role`           | `type`      | Seat?                      |
+| ---------------------------------------------------- | ---------------- | ----------- | -------------------------- |
+| Admin teammate                                       | `admin`          | `user`      | **yes**                    |
+| Member teammate (including every custom-role holder) | `member`         | `user`      | **yes**                    |
+| Portal end user                                      | `user`           | `user`      | no — a customer, not staff |
+| Anonymous visitor                                    | `user`           | `anonymous` | no                         |
+| API key / integration / CP bootstrap principal       | `admin`/`member` | `service`   | no — a machine             |
 
 **Pending invitations are not seats.** A seat appears when the invite is
 accepted and the principal row exists. Billing for an unaccepted invite would
 charge for someone who has never signed in. (Note a pre-existing enforcement
-gap this inherits: `enforceSeatLimit()` runs on invite *send*, not on
+gap this inherits: `enforceSeatLimit()` runs on invite _send_, not on
 acceptance, so N invites issued under a cap can all accept and exceed it.
 Metering is unaffected — it counts principals, not invitations.)
 
@@ -130,25 +130,25 @@ reconcile drops the quantity. There is no deactivated-but-retained state:
 `user` and `principal` carry no status column, and teammates cannot even be
 blocked (`blocking.ts:27`).
 
-### Scope: new tenants only
+### Scope: new workspaces only
 
-**Operator decision.** *"Billing should work under new way for new tenants."*
+**Operator decision.** _"Billing should work under new way for new workspaces."_
 
-This module owns tenants provisioned on the new stack. Existing tenants stay
+This module owns workspaces provisioned on the new stack. Existing workspaces stay
 on the control-plane billing path, and **there is no migration between them** —
 so a provider customer with no workspace stamp being refused is not a
 limitation to work around, it is the boundary working. Such customers belong
 to the old path by definition.
 
 The practical consequence: `ensureCustomer()` stamps before checkout on every
-tenant this module serves, so the adoption path exists for robustness rather
+workspace this module serves, so the adoption path exists for robustness rather
 than as a routine flow.
 
 > **A seat-definition change is a silent invoice change on deploy.** Any
 > existing workspace with an AI-operations custom role — inbox reads plus
 > `assistant.manage`, and no other support-side write — moves from lite to
 > full on the next sync, which pushes new quantities and prorates. Nobody is
-> asked. That is intended and moot under new-tenants-only, because no existing
+> asked. That is intended and moot under new-workspaces-only, because no existing
 > workspace is billed by this module at all. **If that cutover ever widens,
 > the widening must account for it**: any change to
 > `SUPPORT_WRITE_PERMISSIONS` or `SUPPORT_SURFACE_EXTRAS` reprices the
@@ -159,7 +159,7 @@ than as a routine flow.
 > is not: declaring `cloud.billing` makes it a managed path, after which
 > `writeCloudConfig` refuses the billing writer with `FIELD_MANAGED`, the
 > webhook handler throws, and **every delivery 500s and retries forever**.
-> Nothing needs this now that the scope is new tenants only; it is recorded
+> Nothing needs this now that the scope is new workspaces only; it is recorded
 > so nobody rediscovers it as an idea.
 
 ### What a lite seat is
@@ -167,15 +167,15 @@ than as a routine flow.
 **There is no lite-seat class in the product today.** That is a finding, not
 an omission on my part, and it is the single most important caveat in this
 document. Every custom RBAC role deliberately rides `principal.role = 'member'`
-(`principal.service.ts`: *"Custom role grants ride the member role"*), so the
+(`principal.service.ts`: _"Custom role grants ride the member role"_), so the
 seat predicate above cannot tell an Owner from a read-only custom role. There
 are four system presets — Owner, Admin, Manager, Contributor — and all four
 are operator-grade. No viewer role exists anywhere in the catalogue.
 
 A cheaper seat therefore has to be **derived**.
 
-**Operator decision.** *"A lite seat is read-only on the customer support
-side."* So the derivation is:
+**Operator decision.** _"A lite seat is read-only on the customer support
+side."_ So the derivation is:
 
 > **A lite seat is a teammate who holds no write permission on the
 > customer-support surface** — conversations, tickets and the inbox —
@@ -183,13 +183,13 @@ side."* So the derivation is:
 
 Full seats are support agents; lite seats are everyone else who needs
 visibility. So a product manager who writes freely on feedback boards and
-roadmaps but only *observes* the support inbox is a **lite** seat. That is the
+roadmaps but only _observes_ the support inbox is a **lite** seat. That is the
 case worth stating, because it is the one the two readings disagree about.
 
-| Reading | A PM who writes on boards, reads the inbox | Status |
-| --- | --- | --- |
-| **Support-scoped** — no write on conversations / tickets / inbox | **lite** | **chosen** |
-| Globally read-only — writes nothing anywhere | full | alternative |
+| Reading                                                          | A PM who writes on boards, reads the inbox | Status      |
+| ---------------------------------------------------------------- | ------------------------------------------ | ----------- |
+| **Support-scoped** — no write on conversations / tickets / inbox | **lite**                                   | **chosen**  |
+| Globally read-only — writes nothing anywhere                     | full                                       | alternative |
 
 Reversing it is one edit: widen `SUPPORT_SURFACE_CATEGORIES` in
 `permission-classes.ts` to every catalogue category. The tests are written so
@@ -240,15 +240,16 @@ Two judgement calls inside the surface, both reversible in one line:
   write, **`lite ⇒ !copilotEligible` is a theorem**, so billing the add-on on
   `seats.full` can never charge for someone ineligible. It is pinned by a test
   rather than left as a coincidence.
-- **`assistant.manage` counts as a support write too.** *(Operator decision,
-  after being raised as an open question.)* The rule already applied to
-  `sla.manage`, `routing.manage` and `workflow.manage` decides it — *"none
+
+- **`assistant.manage` counts as a support write too.** _(Operator decision,
+  after being raised as an open question.)_ The rule already applied to
+  `sla.manage`, `routing.manage` and `workflow.manage` decides it — _"none
   touches a single conversation directly, but each decides what happens to
-  every conversation"* — and `assistant.manage` gates the agent's persona,
+  every conversation"_ — and `assistant.manage` gates the agent's persona,
   guidance, custom actions and knowledge, which is what every customer is
   automatically told. It also gates the Copilot configuration surface, so
-  keeping it out would have left the module calling *using* Copilot a support
-  write and *configuring* it not one.
+  keeping it out would have left the module calling _using_ Copilot a support
+  write and _configuring_ it not one.
 
   The discriminating case is an "AI operations" role holding inbox reads plus
   `assistant.manage` and nothing else: it is a **full** seat, and there is a
@@ -272,10 +273,10 @@ either rejecting the update and 500ing the webhook forever, or charging and
 crediting a seat nobody occupied.
 
 Two tests each asserted one half of that contradiction — one that the add-on
-matched the seat quantity *at the floor*, one that lite seats are excluded from
+matched the seat quantity _at the floor_, one that lite seats are excluded from
 the add-on — and neither could see the other. **Two tests can each be right and
 jointly describe an impossible system.** The property test that would have
-caught it asserts the two paths agree *across a range of seat shapes*, and it
+caught it asserts the two paths agree _across a range of seat shapes_, and it
 now exists.
 
 The floor is gone rather than duplicated. Billing one seat where nobody occupies
@@ -287,16 +288,17 @@ the plan. Two consequences follow, both handled:
   sells no lite seat. So `billableQuantities` takes the plan's prices: **a plan
   with no lite price has no lite seats**, and counts every teammate as full.
 
-  *(Operator decision — recorded so it is not relitigated.* You cannot bill
+  _(Operator decision — recorded so it is not relitigated._ You cannot bill
   someone at a rate that does not exist. The alternatives are free riders, or
   refusing to let the person exist, and both are worse. The oddity — that the
   same teammate can be a lite seat on one plan and a full seat on another — is
   largely cosmetic, because a plan without a lite SKU is usually `free`, which
-  costs nothing.)*
+  costs nothing.)\*
+
 - **A seat class with a zero quantity at checkout has no subscription item**,
   and the sync used to skip any meter without one — so the first support agent
   hired by an all-lite workspace would never have been billed. The sync now
-  *creates* a missing seat item, bounded to meters the plan sells and
+  _creates_ a missing seat item, bounded to meters the plan sells and
   **never** to the opt-in add-on, which is bought at checkout or not at all.
 
 ### Creation only when the catalogue accounts for everything
@@ -308,7 +310,7 @@ carries a guard the update path does not need.
 catalogue. An item whose price is in **no** plan therefore resolves to nothing
 — and "resolves to nothing" used to be indistinguishable from "there is no
 item". That is not an exotic state: a price's amount is **immutable** at the
-provider, so *any* repricing mints a new price object and retires the old one,
+provider, so _any_ repricing mints a new price object and retires the old one,
 while live subscriptions keep billing under the retired id. The sync would see
 no lite item, create one at the new price, and the customer would pay for the
 same seats twice on the same invoice, indefinitely. The blast radius is the
@@ -317,7 +319,7 @@ least tolerable.
 
 So unresolved items are **recorded rather than dropped**
 (`SubscriptionSnapshot.unaccountedItems`), and creation is refused while any
-*licensed* one is present. Three things about the shape:
+_licensed_ one is present. Three things about the shape:
 
 - **Refusal is the only correct guard here.** Matching an existing item by
   price would not help: the price about to be created is precisely the one the
@@ -325,8 +327,8 @@ So unresolved items are **recorded rather than dropped**
 - **Updates continue.** A stale line is a reason not to add, not a reason to
   freeze; the items that did resolve still track the product's seat count, or a
   repricing would silently stop all seat billing until someone noticed.
-- **The lookup rule is untouched.** `toSnapshot` looks each item up under *its
-  own* plan, which is what makes a downgrade leave an orphaned item resolvable.
+- **The lookup rule is untouched.** `toSnapshot` looks each item up under _its
+  own_ plan, which is what makes a downgrade leave an orphaned item resolvable.
   Only the disposal of a genuinely unresolvable item changed.
 
 A metered item is marked `licensed: false` and does not block, since it carries
@@ -351,10 +353,10 @@ conditions, each of which keeps the hold narrow:
 3. its status still entitles a plan, **and** there is a stored plan to hold.
 
 The stored plan is read through `requireSettings()`, deliberately **not**
-`getCloudConfig()`. That helper fails *open* — a settings-read error resolves
+`getCloudConfig()`. That helper fails _open_ — a settings-read error resolves
 to the disabled config, whose plan is null, which here would read as "nothing
 to hold" and downgrade the customer to Free through a different door. Failing
-open is right for an entitlement *check*, which gates commerce; it is wrong
+open is right for an entitlement _check_, which gates commerce; it is wrong
 where the read decides what someone is charged. So the read may throw, the
 webhook releases its claim and answers 500, and the provider redelivers.
 
@@ -362,7 +364,7 @@ webhook releases its claim and answers 500, and the provider redelivers.
 yields no plan, and falling to Free is exactly right there — the difference is
 that such a subscription's items all resolve, so `null` is evidence about the
 customer rather than about the catalogue. Condition (3) is what stops a
-cancelled customer keeping their entitlements when *both* problems coincide,
+cancelled customer keeping their entitlements when _both_ problems coincide,
 and it is the only reachable path to that branch: a subscription whose prices
 resolve returns before the status is ever consulted.
 
@@ -372,21 +374,21 @@ resolve returns before the status is ever consulted.
 snapshot mapping the sync uses so the page cannot claim a healthy catalogue
 while the sync is refusing to create. It has **three** states, not two:
 
-| state | meaning |
-| --- | --- |
-| `ok` | fetched, and every price is in the catalogue |
+| state     | meaning                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------- |
+| `ok`      | fetched, and every price is in the catalogue                                                        |
 | `drifted` | fetched, with counts of unaccounted licensed and metered items and whether the plan is unresolvable |
-| `unknown` | the provider could not be reached, so drift **cannot be determined** |
+| `unknown` | the provider could not be reached, so drift **cannot be determined**                                |
 
 `unknown` exists because the check needs a provider fetch and an outage is
 exactly when someone opens this page. Collapsing it into "no drift" would make
-*"could not check"* render identically to *"checked, all fine"* — the wrong
+_"could not check"_ render identically to _"checked, all fine"_ — the wrong
 direction for a warning surface, and there is no persisted record to fall back
 on. (`null` is reserved for "this workspace has no subscription".)
 
 It is surfaced rather than logged because the failure is **invisible to the
 only party who can fix it**: a repricing fires across the whole book at once,
-and nobody watches a per-tenant pod's warn stream. Counts only — no item id and
+and nobody watches a per-workspace pod's warn stream. Counts only — no item id and
 no price id, because those are provider references and
 `no-client-leak.db.test.ts` asserts none reaches the client.
 
@@ -409,10 +411,10 @@ once.
 
 ### Copilot
 
-**Operator decision.** *"Copilot bills per paid user/month."*
+**Operator decision.** _"Copilot bills per paid user/month."_
 
 So the billed quantity is **full seats** — not the number of teammates holding
-`copilot.use`. That permission still decides who may *use* Copilot
+`copilot.use`. That permission still decides who may _use_ Copilot
 (`assistant/copilot-gate.ts` is untouched), but it no longer decides what is
 charged. `SeatCounts.copilotEligible` reports it for the admin surface and is
 named so it cannot be mistaken for a billing figure.
@@ -481,7 +483,7 @@ simply absent, and support has no way to find out why.
 `writeCloudConfig` now opens a transaction and takes `SELECT … FOR UPDATE` on
 the settings row. `settings` is exactly one row per database, so that lock
 serialises every writer of the column: the second writer's merge is computed
-against the first writer's *committed* value, and both survive.
+against the first writer's _committed_ value, and both survive.
 
 **2. Both writers actually go through the seam.** This is the part the docs
 previously claimed and the code did not do. The reconciler no longer puts
@@ -506,7 +508,7 @@ that does not exist yet cannot lose anyone's write.
 
 Alongside those, `settings.cloud_revision` is bumped on every effective write.
 It is not what makes concurrent writers safe — the lock is — but it makes an
-interleave *visible*, and it gives a caller that read in an earlier request
+interleave _visible_, and it gives a caller that read in an earlier request
 (an admin form, not a reconciler) a token to pass back as `expectedRevision`
 and be refused rather than merged over.
 
@@ -529,20 +531,20 @@ tests go red, the three that do not depend on the lock stay green.
 Conflating these is how billing systems double-charge — or charge the wrong
 party.
 
-| Problem | Mechanism |
-| --- | --- |
-| Forged request | HMAC-SHA256 over `<timestamp>.<raw body>`, constant-time compare, ±300s tolerance |
-| **Event about another customer** | The re-fetched subscription's customer must equal this workspace's. See below |
-| Redelivery | `billing_webhook_events`, primary-keyed on the provider's own event id, claimed by an upsert guarded on `processed_at IS NULL` plus a staleness lease |
-| Out-of-order delivery | The handler **never trusts the event payload**. It re-fetches the subscription from the provider API and applies that, so two events arriving backwards converge on the same state |
-| Two concurrent fetches | `billing_subscription_state.snapshot_fetched_at` refuses a snapshot older than the one already applied |
+| Problem                          | Mechanism                                                                                                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Forged request                   | HMAC-SHA256 over `<timestamp>.<raw body>`, constant-time compare, ±300s tolerance                                                                                                  |
+| **Event about another customer** | The re-fetched subscription's customer must equal this workspace's. See below                                                                                                      |
+| Redelivery                       | `billing_webhook_events`, primary-keyed on the provider's own event id, claimed by an upsert guarded on `processed_at IS NULL` plus a staleness lease                              |
+| Out-of-order delivery            | The handler **never trusts the event payload**. It re-fetches the subscription from the provider API and applies that, so two events arriving backwards converge on the same state |
+| Two concurrent fetches           | `billing_subscription_state.snapshot_fetched_at` refuses a snapshot older than the one already applied                                                                             |
 
 ### Ownership: the one a signature cannot answer
 
 A webhook endpoint subscribes to event **types**, never to customers, and the
-endpoint secret authenticates the *endpoint* rather than the subject. Under one
-operator account with a per-tenant endpoint URL, **every tenant's endpoint
-receives every other tenant's subscription events**, each correctly signed for
+endpoint secret authenticates the _endpoint_ rather than the subject. Under one
+operator account with a per-workspace endpoint URL, **every workspace's endpoint
+receives every other workspace's subscription events**, each correctly signed for
 the endpoint that receives it. "Correctly signed" means "really from the
 provider" — never "about us".
 
@@ -561,7 +563,7 @@ A cheap **payload pre-filter** runs before the re-fetch, purely to protect
 provider quota: without it every workspace spends a subscription fetch on
 every event belonging to every other workspace, which is N-times amplification
 against a per-account rate limit that grows with the fleet. It reads the
-payload, so it can only *refuse*, never approve — a payload claiming our
+payload, so it can only _refuse_, never approve — a payload claiming our
 customer still reaches the authoritative check. A foreign event is acknowledged (200,
 `handled: false, foreign: true`) and recorded as consumed — a non-2xx would
 make the provider retry it forever — and logged at `warn`.
@@ -577,10 +579,10 @@ stamps this workspace's id into the customer's metadata
 
 A customer created outside this module carries no stamp and is refused, with a
 `warn` naming the reference. That is the right direction for an identity
-question — unlike an entitlement read, which fails *open* because it gates
+question — unlike an entitlement read, which fails _open_ because it gates
 commerce, this gates who gets billed, so a failed customer lookup refuses too.
 The contract for a provisioning flow that wants to hand this module a
-pre-made customer is one metadata key. Given the new-tenants-only scope above,
+pre-made customer is one metadata key. Given the new-workspaces-only scope above,
 nothing needs that today.
 
 A customer lookup that **fails** is deliberately not the same as a stamp that
@@ -611,7 +613,7 @@ else:
 - **The signature's timestamp tolerance is transport anti-replay, not
   idempotency.** A legitimate redelivery inside the window is a valid,
   correctly-signed duplicate; only the event ledger stops it.
-- **A failed handler releases its claim**, and a *stale* one is reclaimed
+- **A failed handler releases its claim**, and a _stale_ one is reclaimed
   after `CLAIM_LEASE_MS`. The normal error path deletes the claim row; a pod
   kill, an OOM or a failing release cannot, so the claim upsert also reclaims
   any row that is unprocessed and older than the lease. Without that second
@@ -621,7 +623,7 @@ else:
   parked in a slow provider call past the window is indistinguishable from a
   dead one, so a redelivery at `CLAIM_LEASE_MS + 1s` reclaims it and both run.
   That is inherent to leasing on a timeout rather than on liveness. What makes
-  the overlap safe is idempotence *underneath* the lease — no-op write seams,
+  the overlap safe is idempotence _underneath_ the lease — no-op write seams,
   the snapshot ordering guard, per-subscription synced quantities, and
   provider-side dedupe keys on usage. Do not add a step that relies on the
   lease for correctness.
@@ -650,7 +652,7 @@ path handles real transitions. (Resolving it properly means asking the
 provider which subscriptions the customer has, which needs a list endpoint
 this client does not have yet.)
 
-Seat quantities are pushed as *declarative* quantities rather than usage
+Seat quantities are pushed as _declarative_ quantities rather than usage
 events, which is why they need no ledger: pushing the same number twice is a
 no-op at the provider. Outcomes are append-only events, which is exactly why
 they do.
@@ -663,19 +665,19 @@ Nothing. With no `BILLING_API_KEY` / `BILLING_WEBHOOK_SECRET` /
 `BILLING_PRICES` — every self-hosted install, and any deployment that has not
 opted in:
 
-| | Behaviour |
-| --- | --- |
-| `getBillingConfig()` | `null`. Resolved once, logged once at boot |
-| Admin nav | No Billing row. Structurally identical to before |
-| `/admin/settings/billing` | Not linked; renders "not configured" if reached directly |
-| `fetchBillingOverviewFn` | `null` — no query, no provider call |
-| `POST /api/billing/webhook` | `400 billing_not_configured`, no database write |
-| Seat metering | Never runs |
-| Usage metering | Never runs |
-| Plan / entitlements | Unchanged: `settings.cloud` stays NULL, everything granted |
-| Numeric limits | Unchanged: unlimited |
-| Extra queries per request | Zero |
-| New module-scope cache | One: the resolved config. Fleet-wide, same class as `config.openaiApiKey` |
+|                             | Behaviour                                                                 |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `getBillingConfig()`        | `null`. Resolved once, logged once at boot                                |
+| Admin nav                   | No Billing row. Structurally identical to before                          |
+| `/admin/settings/billing`   | Not linked; renders "not configured" if reached directly                  |
+| `fetchBillingOverviewFn`    | `null` — no query, no provider call                                       |
+| `POST /api/billing/webhook` | `400 billing_not_configured`, no database write                           |
+| Seat metering               | Never runs                                                                |
+| Usage metering              | Never runs                                                                |
+| Plan / entitlements         | Unchanged: `settings.cloud` stays NULL, everything granted                |
+| Numeric limits              | Unchanged: unlimited                                                      |
+| Extra queries per request   | Zero                                                                      |
+| New module-scope cache      | One: the resolved config. Fleet-wide, same class as `config.openaiApiKey` |
 
 `default-off.test.ts` demonstrates this by driving each real entry point with
 an empty environment and a database proxy that **throws on any access**, so
@@ -691,22 +693,22 @@ outcome.
 
 ## Configuration
 
-| Variable | Required | Meaning |
-| --- | --- | --- |
-| `BILLING_API_KEY` | yes | Provider secret key. `sk_test_…` / `rk_test_…` is test mode |
-| `BILLING_WEBHOOK_SECRET` | yes | Endpoint signing secret |
-| `BILLING_PRICES` | yes | JSON plan catalogue (below) |
-| `BILLING_ALLOW_LIVE` | only for live keys | Must be `"true"` before a live-mode key is accepted |
-| `BILLING_RETURN_URL` | no | Base URL for checkout/portal returns. Defaults to `BASE_URL` |
+| Variable                 | Required           | Meaning                                                      |
+| ------------------------ | ------------------ | ------------------------------------------------------------ |
+| `BILLING_API_KEY`        | yes                | Provider secret key. `sk_test_…` / `rk_test_…` is test mode  |
+| `BILLING_WEBHOOK_SECRET` | yes                | Endpoint signing secret                                      |
+| `BILLING_PRICES`         | yes                | JSON plan catalogue (below)                                  |
+| `BILLING_ALLOW_LIVE`     | only for live keys | Must be `"true"` before a live-mode key is accepted          |
+| `BILLING_RETURN_URL`     | no                 | Base URL for checkout/portal returns. Defaults to `BASE_URL` |
 
 ```jsonc
 {
   "free": { "seat": "price_...", "limits": { "maxBoards": 3 } },
   "pro": {
-    "seat": "price_...",          // per full seat
-    "liteSeat": "price_...",      // per read-only seat
-    "copilotSeat": "price_...",   // per seat holding copilot.use
-    "outcome": "price_...",       // metered, per resolved outcome
+    "seat": "price_...", // per full seat
+    "liteSeat": "price_...", // per read-only seat
+    "copilotSeat": "price_...", // per seat holding copilot.use
+    "outcome": "price_...", // metered, per resolved outcome
     "outcomeMeter": "quackback_resolved_outcome",
     "limits": { "maxBoards": 25, "aiTokensPerMonth": 1000000 },
   },
@@ -775,7 +777,7 @@ exact-line allowlist.
   and not fixed here.
 - **Proration is the provider's.** Seat changes are pushed as quantity
   updates and whatever proration behaviour the prices carry applies. The
-  product does not model it — which is why a *redundant* push is not free, and
+  product does not model it — which is why a _redundant_ push is not free, and
   why the synced-quantity comparison is keyed per subscription rather than
   read off whichever state row is newest.
 - **`CLAIM_LEASE_MS` is a guess with a rationale, not a measurement.** Five

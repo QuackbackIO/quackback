@@ -6,20 +6,20 @@
  * existing check. The path exercised here is the production one:
  *
  *   setHelpCenterDomain -> requireEntitlement -> getCloudConfig
- *     -> getTenantSettings -> resolveCloudConfig -> refuse or proceed
+ *     -> getWorkspaceSettings -> resolveCloudConfig -> refuse or proceed
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 
 const hoisted = vi.hoisted(() => ({
-  mockGetTenantSettings: vi.fn(),
+  mockGetWorkspaceSettings: vi.fn(),
   mockUpdateHelpCenterConfig: vi.fn(),
   mockGetHelpCenterConfig: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getTenantSettings: hoisted.mockGetTenantSettings,
+  getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
   getHelpCenterConfig: hoisted.mockGetHelpCenterConfig,
   updateHelpCenterConfig: hoisted.mockUpdateHelpCenterConfig,
 }))
@@ -27,11 +27,11 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 const { setHelpCenterDomain } = await import('../help-center-domain.service')
 
 function withCloud(cloud: unknown) {
-  hoisted.mockGetTenantSettings.mockResolvedValue({ settings: { id: 'ws_1', cloud } })
+  hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { id: 'ws_1', cloud } })
 }
 
 beforeEach(() => {
-  hoisted.mockGetTenantSettings.mockReset()
+  hoisted.mockGetWorkspaceSettings.mockReset()
   hoisted.mockUpdateHelpCenterConfig.mockReset()
   hoisted.mockUpdateHelpCenterConfig.mockResolvedValue({
     domain: { domain: 'help.acme.com', verifiedAt: null },

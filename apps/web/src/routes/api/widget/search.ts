@@ -19,7 +19,7 @@ export const Route = createFileRoute('/api/widget/search')({
         if (!settings) return widgetJsonError(503, 'WORKSPACE_UNAVAILABLE', 'Workspace unavailable')
         const limited = await enforceWidgetQuota(request, {
           keyPrefix: 'widget-search',
-          tenantId: settings.id,
+          workspaceKey: settings.id,
           limit: 60,
           windowSeconds: 60,
           message: 'Too many searches, slow down',

@@ -7,19 +7,19 @@
  *
  * | Service | Role | Connections | Sleeps |
  * | --- | --- | --- | --- |
- * | `quackback` | `web` | tenant **pooled** endpoints, evicted after 45 s idle | no — the pooled tier is always warm |
- * | `quackback-worker` | `worker` | tenant **direct** endpoints, one always-attached relay loop per tenant | no — and neither do the tenant computes it holds |
+ * | `quackback` | `web` | workspace **pooled** endpoints, evicted after 45 s idle | no — the pooled tier is always warm |
+ * | `quackback-worker` | `worker` | workspace **direct** endpoints, one always-attached relay loop per workspace | no — and neither do the workspace computes it holds |
  * | `quackback-cron-*` | `worker`, one-shot | whatever the sweep touches, for the length of the run | n/a — it exits |
  * | `quackback-web-sleeper` | `web` | same as `quackback` | **yes** (`deploy.sleepApplication`) |
  *
  * The web/worker split is not an optimisation. `LISTEN` is silently lost
  * through a transaction-mode pooler (§7.3, measured: a NOTIFY is never
  * delivered, at any concurrency), so the relay cannot share the web tier's
- * pooled connections; and a process that polls a tenant database on a timer
+ * pooled connections; and a process that polls a workspace database on a timer
  * holds its Neon compute awake forever, so the relay cannot share the web
  * tier's process either.
  *
- * No database appears here. Tenant databases are Neon, one project each, and
+ * No database appears here. Workspace databases are Neon, one project each, and
  * the control-plane registry is a Neon project too — see the note in the body
  * for why §9's "Railway Postgres for the control plane" did not survive contact
  * with region placement.
@@ -62,21 +62,21 @@ export default defineRailway(() => {
   // 3,900 km between the control database and the tier that reads it on the
   // request path is worse than the tradeoff Neon brings, which is that the
   // control compute also scales to zero: on a fully idle fleet the first request
-  // pays a control-plane wake *before* the tenant wake. That is a real cost and
+  // pays a control-plane wake *before* the workspace wake. That is a real cost and
   // it is stated rather than hidden.
   const uploads = bucket('quackback-gauntlet', { region: 'iad' })
 
-  // Per-tenant buckets, created by the control plane through the API.
+  // Per-workspace buckets, created by the control plane through the API.
   //
-  // §9's line is "IaC for the skeleton, API for tenants" — and Railway's IaC
+  // §9's line is "IaC for the skeleton, API for workspaces" — and Railway's IaC
   // cannot express that. Anything absent from this file is a *deletion*: with
   // these three omitted, `railway config plan` proposed
   // "Delete bucket qb-neon-t1 / qb-neon-t2 / qb-neon-t4", which is every
-  // tenant's stored objects. So dynamic per-tenant resources must still be
-  // enumerated here, and a fleet that provisions tenants by API needs this file
+  // workspace's stored objects. So dynamic per-workspace resources must still be
+  // enumerated here, and a fleet that provisions workspaces by API needs this file
   // regenerated (or `apply` never run) rather than hand-maintained. Recorded as
   // a correction to §9 rather than worked around silently.
-  const tenantBuckets = [
+  const workspaceBuckets = [
     bucket('qb-neon-t1', { region: 'iad' }),
     bucket('qb-neon-t2', { region: 'iad' }),
     bucket('qb-neon-t4', { region: 'iad' }),
@@ -88,9 +88,9 @@ export default defineRailway(() => {
     PORT: '3000',
     RAILWAY_DOCKERFILE_PATH: 'apps/web/Dockerfile',
 
-    // One process, many tenants, database chosen per request from the Host
+    // One process, many workspaces, database chosen per request from the Host
     // header. `DATABASE_URL` is deliberately absent: pooled mode refuses to
-    // boot with one, because a stray fleet-wide DSN would let a missing tenant
+    // boot with one, because a stray fleet-wide DSN would let a missing workspace
     // scope connect somewhere real instead of throwing.
     QUACKBACK_TENANCY: 'pooled',
     // The Neon control project (see the note above). A secret, so it is set out
@@ -100,25 +100,25 @@ export default defineRailway(() => {
     // Below both Neon's suspend timeout (300 s documented, 337 s measured) and
     // Railway's 600 s sleep window. This is the number the idle-cost model
     // rests on — see `tenancy/pool-cache.ts`.
-    TENANT_POOL_IDLE_SECONDS: '45',
+    WORKSPACE_POOL_IDLE_SECONDS: '45',
 
     // The entrypoint would otherwise migrate on every boot. Under pooled
-    // tenancy there is no single database to migrate anyway: per-tenant schema
+    // tenancy there is no single database to migrate anyway: per-workspace schema
     // work belongs to the migrator role.
     SKIP_MIGRATIONS: 'true',
 
     // The compatibility gate (§10.5), and the reason it is not optional here.
-    // Unset, a tenant whose schema is older than this build does not degrade —
+    // Unset, a workspace whose schema is older than this build does not degrade —
     // it 500s at query time, because drizzle emits explicit column lists and
     // `select …, "cloud", … from "settings"` throws where the column does not
-    // exist. Set, the same tenant is refused on pool checkout with a 503 and a
-    // `Retry-After`, alone, while every other tenant keeps serving.
+    // exist. Set, the same workspace is refused on pool checkout with a 503 and a
+    // `Retry-After`, alone, while every other workspace keeps serving.
     //
     // The value is the newest migration THIS build bundles, and that is the
     // honest floor rather than a conservative one: the drizzle TS schema
     // declares `settings.cloud`/`cloud_revision` (0249/0250), `job_queue`
     // (0253), `outbox_relay_leader` (0256) and the five kv/presence tables
-    // (0257), so a tenant below any of them cannot be served by this image at
+    // (0257), so a workspace below any of them cannot be served by this image at
     // all. Bump it with the bundle.
     //
     // A value naming no bundled migration is a refusal to start, not a floor of
@@ -146,9 +146,9 @@ export default defineRailway(() => {
     // A real fleet hostname, never `https://${{RAILWAY_PUBLIC_DOMAIN}}`: with a
     // wildcard custom domain attached that variable is the literal string
     // `*.quackback.co.uk`, and BASE_URL feeds cookie `secure`, trusted origins
-    // and every absolute URL (§9). Under pooled tenancy each tenant's own
+    // and every absolute URL (§9). Under pooled tenancy each workspace's own
     // origin comes from its registry record; this is only the fallback for
-    // fleet paths that belong to no tenant.
+    // fleet paths that belong to no workspace.
     BASE_URL: preserve(),
 
     // Railway buckets are private-only, so S3_PUBLIC_URL stays unset and every
@@ -173,9 +173,9 @@ export default defineRailway(() => {
     deploy: { restartPolicyMaxRetries: 3 },
   }
 
-  // The always-warm pooled tier. Serves every tenant hostname on the wildcard
+  // The always-warm pooled tier. Serves every workspace hostname on the wildcard
   // domain; holds no timers and no session connections, so between requests it
-  // is silent and every tenant compute it touched can suspend.
+  // is silent and every workspace compute it touched can suspend.
   const web = service('quackback', {
     ...appBuild,
     healthcheckPath: '/api/health/ready',
@@ -184,7 +184,7 @@ export default defineRailway(() => {
   })
 
   // The conductor (§1.3): one always-warm tier running the relay for every
-  // tenant on **direct, session-mode** connections. No public domain — nothing
+  // workspace on **direct, session-mode** connections. No public domain — nothing
   // routes user traffic here.
   const worker = service('quackback-worker', {
     ...appBuild,
@@ -201,7 +201,7 @@ export default defineRailway(() => {
     ...appBuild,
     // `restartPolicyType: NEVER` is what Railway itself stores for a cron
     // service, and it is right: a failed sweep must wait for the next slot, not
-    // restart-loop against a fleet of tenant databases. `restartPolicyMaxRetries`
+    // restart-loop against a fleet of workspace databases. `restartPolicyMaxRetries`
     // is dropped here for the same reason — it means nothing under NEVER, and
     // declaring it produced permanent plan drift.
     deploy: { restartPolicyType: 'NEVER', cronSchedule: '17 3 * * *' },
@@ -228,6 +228,6 @@ export default defineRailway(() => {
   })
 
   return project('quackback-pooled-gauntlet', {
-    resources: [web, worker, cronDaily, cronHourly, sleeper, uploads, ...tenantBuckets],
+    resources: [web, worker, cronDaily, cronHourly, sleeper, uploads, ...workspaceBuckets],
   })
 })

@@ -158,12 +158,12 @@ as a record of intent, not as something enforced.
 `.railway/railway.ts` describes five app services built from one image, plus
 the buckets. What separates them is **which connections they hold**:
 
-| Service                            | `QUACKBACK_ROLE`                | Connections                                                                              | Sleeps                              |
-| ---------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- |
-| `quackback`                        | `web`                           | tenant **pooled** endpoints, evicted after 45 s idle                                     | no — the pooled tier is always warm |
-| `quackback-worker`                 | `worker`                        | tenant **direct** (session-mode) endpoints, one always-attached relay loop per tenant     | no                                  |
-| `quackback-cron-daily` / `-hourly` | `worker` + `QUACKBACK_CRON_JOB` | whatever the sweep touches, for the length of the run                                    | n/a — it exits                      |
-| `quackback-web-sleeper`            | `web`                           | same as `quackback`                                                                      | **yes** (`deploy.sleepApplication`) |
+| Service                            | `QUACKBACK_ROLE`                | Connections                                                                                 | Sleeps                              |
+| ---------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `quackback`                        | `web`                           | workspace **pooled** endpoints, evicted after 45 s idle                                     | no — the pooled tier is always warm |
+| `quackback-worker`                 | `worker`                        | workspace **direct** (session-mode) endpoints, one always-attached relay loop per workspace | no                                  |
+| `quackback-cron-daily` / `-hourly` | `worker` + `QUACKBACK_CRON_JOB` | whatever the sweep touches, for the length of the run                                       | n/a — it exits                      |
+| `quackback-web-sleeper`            | `web`                           | same as `quackback`                                                                         | **yes** (`deploy.sleepApplication`) |
 
 `DATABASE_URL` is deliberately absent from every one of them: pooled mode
 refuses to boot with a fleet-wide DSN. The control-plane registry lives in its
@@ -183,9 +183,9 @@ The `replicas` warning below is not the only gap.
   days. That is why the control-plane database here is Neon rather than the
   Railway Postgres §9 recommends.
 - **IaC cannot express "skeleton only".** Anything absent from
-  `.railway/railway.ts` is a _deletion_: with the per-tenant buckets omitted,
+  `.railway/railway.ts` is a _deletion_: with the per-workspace buckets omitted,
   `plan` proposed `Delete bucket qb-neon-t1 / qb-neon-t2 / qb-neon-t4` — every
-  tenant's stored objects. So resources the control plane creates through the
+  workspace's stored objects. So resources the control plane creates through the
   API must still be enumerated in this file, or `apply` must never be run.
 
 ### Cron services
@@ -194,7 +194,7 @@ The `replicas` warning below is not the only gap.
 services set `QUACKBACK_CRON_JOB` and `startup.ts` runs that job and exits with
 its status. `restartPolicyType: NEVER` is declared on them (Railway stores it
 for cron services, and it is right: a failed sweep should wait for the next slot
-rather than restart-loop against a fleet of tenant databases) and
+rather than restart-loop against a fleet of workspace databases) and
 `restartPolicyMaxRetries` is **not** — it means nothing under NEVER and
 declaring it showed as permanent plan drift.
 

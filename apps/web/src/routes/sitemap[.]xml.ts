@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { SitemapUrl } from '@/lib/server/sitemap'
-import { publicTenantCacheHeaders } from '@/lib/server/tenancy/http-cache'
+import { publicWorkspaceCacheHeaders } from '@/lib/server/workspaces/http-cache'
 
 export const Route = createFileRoute('/sitemap.xml')({
   server: {
@@ -18,13 +18,14 @@ export const Route = createFileRoute('/sitemap.xml')({
         const baseUrl = config.baseUrl
 
         // Private portals must not expose URLs to search engines.
-        const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-        const tenant = await getTenantSettings()
-        if (tenant?.portalConfig?.access?.visibility === 'private') {
+        const { getWorkspaceSettings } =
+          await import('@/lib/server/domains/settings/settings.service')
+        const workspace = await getWorkspaceSettings()
+        if (workspace?.portalConfig?.access?.visibility === 'private') {
           return new Response(renderSitemap([], baseUrl, null) ?? '', {
             headers: {
               'Content-Type': 'application/xml; charset=utf-8',
-              ...publicTenantCacheHeaders(3600),
+              ...publicWorkspaceCacheHeaders(3600),
             },
           })
         }
@@ -40,8 +41,8 @@ export const Route = createFileRoute('/sitemap.xml')({
         return new Response(xml, {
           headers: {
             'Content-Type': 'application/xml; charset=utf-8',
-            // The sitemap is per-tenant content on a path every tenant shares.
-            ...publicTenantCacheHeaders(3600),
+            // The sitemap is per-workspace content on a path every workspace shares.
+            ...publicWorkspaceCacheHeaders(3600),
           },
         })
       },

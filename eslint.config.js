@@ -12,10 +12,10 @@ const dbReexportFiles = [
   // The tenancy module is the layer that BUILDS `Database` handles — it is what
   // `db.ts` resolves through under pooled tenancy, so it necessarily imports the
   // client factory the rest of the app is kept away from.
-  '**/src/lib/server/tenancy/pool-cache.ts',
-  '**/src/lib/server/tenancy/tenant-context.ts',
+  '**/src/lib/server/workspaces/pool-cache.ts',
+  '**/src/lib/server/workspaces/workspace-context.ts',
   // The fleet migrator operates ON databases rather than through one. It builds
-  // its own direct, session-mode connection per tenant (the pooled handle
+  // its own direct, session-mode connection per workspace (the pooled handle
   // `db.ts` resolves cannot run `pg_advisory_lock` or `CREATE INDEX
   // CONCURRENTLY`), reads the bundled migration journal, and runs the executor —
   // none of which is expressible through the re-export layer. Named file by file

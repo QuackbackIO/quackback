@@ -18,7 +18,7 @@
  * supervisor watching liveness sees a process that is up and answering. It also
  * does not stop: measured, a process in that state kept its socket open and
  * made **7,417 connection attempts** to the database it had just declared
- * itself unfit to serve. On a pooled fleet each of those wakes a tenant's Neon
+ * itself unfit to serve. On a pooled fleet each of those wakes a workspace's Neon
  * compute, so a single mistyped variable becomes a fleet-wide cost and
  * availability problem rather than one dead replica.
  *
@@ -68,7 +68,7 @@ export function assertBootConfigurationOrExit(
       { err },
       'REFUSING TO START: this process is misconfigured. Exiting 1 rather than serving — ' +
         'a process that cannot resolve its own configuration would 500 every route while ' +
-        'still dialling every tenant database.'
+        'still dialling every workspace database.'
     )
     exit(1)
   }

@@ -12,15 +12,15 @@
  */
 import type { PrincipalId } from '@quackback/ids'
 import { getAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 /**
- * Per tenant: a principal id is a row in one workspace's database, so a shared
+ * Per workspace: a principal id is a row in one workspace's database, so a shared
  * memo flags a foreign id as "this is the assistant" in every other workspace —
  * mislabelling human agents' turns as the assistant's and vice versa.
  */
-const cachedAssistantPrincipalId = new TenantKeyedCache<PrincipalId>(256)
-const checkedAt = new TenantKeyedCache<number>(256)
+const cachedAssistantPrincipalId = new WorkspaceKeyedCache<PrincipalId>(256)
+const checkedAt = new WorkspaceKeyedCache<number>(256)
 const MEMO_KEY = 'assistant-principal'
 
 export async function assistantPrincipalIdOnce(): Promise<PrincipalId | null> {

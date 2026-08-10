@@ -12,7 +12,7 @@
  *
  * Two consequences run through this file:
  *
- * 1. The connection is built from the tenant's **direct** DSN, not from the pool
+ * 1. The connection is built from the workspace's **direct** DSN, not from the pool
  *    cache. It is the same shape `events/relay-tier.ts` uses for the outbox
  *    relay's own doorbell, which shares this module.
  * 2. **A listener is only ever verified by round-tripping a real NOTIFY.**
@@ -63,7 +63,7 @@ export interface OpenWakeListenerInput {
   password?: () => Promise<string>
   /** Called on every notify, with the queue name the trigger sent. */
   onWake: (queue: string) => void
-  /** Label for logs — the tenant id, or 'single'. */
+  /** Label for logs — the workspace id, or 'single'. */
   label: string
 }
 
@@ -89,7 +89,7 @@ export async function openWakeListener(input: OpenWakeListenerInput): Promise<Wa
     input.onWake(payload)
   })
 
-  log.info({ tenant: input.label, channel }, 'wake listener attached (direct, session mode)')
+  log.info({ workspace: input.label, channel }, 'wake listener attached (direct, session mode)')
 
   return {
     async close() {
@@ -127,7 +127,7 @@ export async function openWakeListener(input: OpenWakeListenerInput): Promise<Wa
       const ok = await delivered
       if (!ok) {
         log.error(
-          { tenant: input.label, channel },
+          { workspace: input.label, channel },
           'wake listener did NOT receive its own probe notify — the queue is running on ' +
             'the poll fallback only. A pooled DSN produces exactly this: the registration is ' +
             'accepted and nothing is ever delivered.'

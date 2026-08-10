@@ -6,7 +6,7 @@
  * creates a customer, and `ownsSubscription()` reads it back to decide
  * whether an unrecognised subscription may be adopted. Keeping one definition
  * of "this workspace's identity" is the whole point — two would drift, and
- * the failure would be a cross-tenant adoption rather than a type error.
+ * the failure would be a cross-workspace adoption rather than a type error.
  */
 
 import { requireSettings } from '../settings/settings.helpers'

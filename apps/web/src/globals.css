@@ -241,7 +241,7 @@
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) * 1.5);
 
-    /* Shadows (themeable per tenant) */
+    /* Shadows (themeable per workspace) */
     --shadow-2xs: var(--shadow-2xs);
     --shadow-xs: var(--shadow-xs);
     --shadow-sm: var(--shadow-sm);

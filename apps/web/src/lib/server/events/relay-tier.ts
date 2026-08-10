@@ -1,5 +1,5 @@
 /**
- * The outbox relay tier — one always-warm loop per tenant, on direct
+ * The outbox relay tier — one always-warm loop per workspace, on direct
  * (session-mode) connections, physically separate from the pooled web tier.
  *
  * `SAAS-HOSTING-STACK.md` §7.3. `relay.ts` still owns what a drain *is*
@@ -30,35 +30,35 @@
  * 2. the cache is an LRU sized for request traffic and evicts on idleness —
  *    exactly what an always-warm tier must not have done to it;
  * 3. §6's corollary: this tier holds its connections open **by design**, so it
- *    must never share a compute with tenants you expect to suspend. Making that
+ *    must never share a compute with workspaces you expect to suspend. Making that
  *    a separate pool makes it a separate, countable thing.
  *
  * ## "By design" is no longer a licence to hold them forever
  *
- * That third reason was the expensive one. Measured on a four-tenant fleet, this
- * tier's two sockets per tenant plus its 1s poll held every compute at 45–70%
+ * That third reason was the expensive one. Measured on a four-workspace fleet, this
+ * tier's two sockets per workspace plus its 1s poll held every compute at 45–70%
  * active while draining nothing; `pool-cache.ts` had already named it as the
  * reason its own eviction could not deliver the cost model.
  *
  * So the pool, the doorbell and the leadership lease are all taken at attach and
  * given back after `TENANT_IDLE_DETACH_MS` of no drained rows and no outside
- * activity — `tenancy/idle.ts` owns that policy. The lease goes back too rather
+ * activity — `workspaces/idle.ts` owns that policy. The lease goes back too rather
  * than being left to expire: a detached replica that still held it would keep
  * every other replica out for the lease TTL while doing nothing itself.
  *
- * A detached tenant is one whose doorbell is *known* to be absent, which the
+ * A detached workspace is one whose doorbell is *known* to be absent, which the
  * poll floor already covers. What changes is how long a lost NOTIFY costs, and
  * that is bounded by the rescan interval rather than by the poll.
  *
  * What it does *not* do is re-implement the §3 fingerprint assertion. It calls
- * `verifyTenantDatabase`, the same function the request path uses, so a
+ * `verifyWorkspaceDatabase`, the same function the request path uses, so a
  * mis-pointed record is refused on this tier for the same reason and with the
  * same message. A second copy of a fail-closed check is a second copy that can
  * drift open.
  *
- * ## Single-tenant installs
+ * ## Single-workspace installs
  *
- * One loop, no tenant scope, `DATABASE_URL` — which for a self-hosted install
+ * One loop, no workspace scope, `DATABASE_URL` — which for a self-hosted install
  * already is a direct session-mode connection. The lease replaces the advisory
  * lock there too, so a self-hoster running two worker replicas gets the same
  * one-drainer guarantee with one fewer dedicated connection than before.
@@ -70,24 +70,24 @@ import { runWithLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
 import { openWakeListener, type WakeListener } from '@/lib/server/jobs/wake'
 import { warnIfPooled } from './direct-session'
-import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
-import { openTenantDirectPool, resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
+import { listActiveWorkspaces, type WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
+import { openWorkspaceDirectPool, resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
 import {
   idleDetachDisabled,
-  onTenantActivity,
-  tenantIdlePolicy,
+  onWorkspaceActivity,
+  workspaceIdlePolicy,
   type ReattachReason,
-  type TenantIdlePolicy,
-} from '@/lib/server/tenancy/idle'
+  type WorkspaceIdlePolicy,
+} from '@/lib/server/workspaces/idle'
 import {
-  isTenantQuarantined,
-  noteTenantRefusal,
-  noteTenantServed,
+  isWorkspaceQuarantined,
+  noteWorkspaceRefusal,
+  noteWorkspaceServed,
   quarantineRetryAt,
   refusalCode,
   reportQuarantine,
-} from '@/lib/server/tenancy/quarantine'
-import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+} from '@/lib/server/workspaces/quarantine'
+import { createWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
 import { drainOnce, type DrainResult } from './relay'
 import {
   claimRelayLease,
@@ -103,16 +103,16 @@ const log = logger.child({ component: 'outbox-relay-tier' })
 
 /**
  * The channel the `emit()` path already NOTIFYs on commit. Unchanged from the
- * single-database relay — the channel is per *database*, and each tenant has its
- * own, so the name carries no tenant and needs none.
+ * single-database relay — the channel is per *database*, and each workspace has its
+ * own, so the name carries no workspace and needs none.
  */
 export const OUTBOX_WAKE_CHANNEL = 'outbox_wake'
 
-/** Sentinel tenant id for a single-tenant install. Never a real tenant id. */
+/** Sentinel workspace id for a single-workspace install. Never a real workspace id. */
 const SINGLE = '__single__'
 
-/** How often the pooled tier re-reads the tenant list. */
-const TENANT_REFRESH_MS = 60_000
+/** How often the pooled tier re-reads the workspace list. */
+const WORKSPACE_REFRESH_MS = 60_000
 
 export interface RelayTierConfig {
   /** Poll fallback. The correctness floor when a NOTIFY is lost. */
@@ -125,7 +125,7 @@ export interface RelayTierConfig {
    * Decoupled from the poll interval, which is what it used to be tied to. The
    * loop polls every second and the lease lasts thirty, so renewing at the top
    * of every iteration wrote **thirty renewals per lease lifetime** — a write
-   * per second per tenant, for ever, to hold something that had twenty-nine
+   * per second per workspace, for ever, to hold something that had twenty-nine
    * seconds left on it. That is a write, not a read, so it is the one thing in
    * this tier that could not be made free by the database being awake anyway:
    * every renewal is a WAL record and a page dirtied.
@@ -185,9 +185,9 @@ export interface RelayLoopStats {
   enqueued: number
   skipped: number
   failed: number
-  /** NOTIFYs received on this tenant's channel. */
+  /** NOTIFYs received on this workspace's channel. */
   wakes: number
-  /** True while this replica holds the lease for this tenant. */
+  /** True while this replica holds the lease for this workspace. */
   leader: boolean
   /** Leadership epoch, so a takeover is visible rather than inferred. */
   fence: string | null
@@ -209,15 +209,15 @@ export interface RelayLoopStats {
    * two deployments needs to know which half moved.
    */
   wakeToDrainMs: number[]
-  /** Set when this tenant's database predates the relay-leader migration. */
+  /** Set when this workspace's database predates the relay-leader migration. */
   schemaMissing: boolean
   /** Set when the boot doorbell probe round-tripped a real NOTIFY. */
   doorbellVerified: boolean | null
   /**
-   * True while this loop holds any connection to the tenant database.
+   * True while this loop holds any connection to the workspace database.
    *
    * First-class for the same reason `poolsEvicted` is in the pool cache:
-   * detaching has no functional symptom. A fleet where every tenant reads
+   * detaching has no functional symptom. A fleet where every workspace reads
    * `attached: true` forever is a fleet paying for every compute, and nothing
    * else in this process would say so.
    */
@@ -225,22 +225,22 @@ export interface RelayLoopStats {
   detaches: number
   reattaches: number
   lastReattachReason: ReattachReason | null
-  /** Set while this tenant is refused and not being retried. */
+  /** Set while this workspace is refused and not being retried. */
   refusedCode: string | null
 }
 
 interface RelayLoop {
-  tenantId: string
+  workspaceKey: string
   stop(): Promise<void>
   ring(): void
-  /** Something outside the tiers opened a scope for this tenant. */
+  /** Something outside the tiers opened a scope for this workspace. */
   signal(): void
   /** Latest registry view, so a revision change is seen without a restart. */
-  observe(tenant: TenantDescriptor): void
+  observe(workspace: WorkspaceDescriptor): void
   isAttached(): boolean
 }
 
-/** How many latency samples each tenant keeps. Bounded so a busy tenant cannot grow it. */
+/** How many latency samples each workspace keeps. Bounded so a busy workspace cannot grow it. */
 const LAG_RING = 200
 
 const loops = new Map<string, RelayLoop>()
@@ -248,7 +248,7 @@ const stats = new Map<string, RelayLoopStats>()
 let running = false
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 let unsubscribeActivity: (() => void) | null = null
-/** When this process last read the fleet's tenant list from the control database. */
+/** When this process last read the fleet's workspace list from the control database. */
 let lastFleetReadAt = 0
 
 function emptyStats(): RelayLoopStats {
@@ -281,7 +281,7 @@ function emptyStats(): RelayLoopStats {
  *
  * The failure §7.3 measured is silent: a pooled DSN accepts the `LISTEN` and
  * then delivers nothing, while `pg_listening_channels()` reports the
- * registration as present the whole time. One NOTIFY round trip per tenant at
+ * registration as present the whole time. One NOTIFY round trip per workspace at
  * boot is the difference between "slower than you think" and "you know why".
  *
  * Deliberately not awaited: the relay is correct on the poll interval alone, so
@@ -299,25 +299,25 @@ function verifyDoorbell(
       // A listener closed while its probe was still in flight reports a false
       // RED, which is the one failure mode this probe has. Observed in a harness
       // that stopped and restarted the tier: the previous run's 5s timeout fired
-      // during the next run and named a tenant whose doorbell was fine.
+      // during the next run and named a workspace whose doorbell was fine.
       if (live.stopped) return
       s.doorbellVerified = ok
       if (ok) return
       log.error(
-        { tenant: label, channel: OUTBOX_WAKE_CHANNEL },
-        'outbox wake doorbell attached but delivered nothing — this tenant is draining on the ' +
+        { workspace: label, channel: OUTBOX_WAKE_CHANNEL },
+        'outbox wake doorbell attached but delivered nothing — this workspace is draining on the ' +
           'poll interval alone. A pooled DSN produces exactly this: the registration is accepted ' +
           'and nothing is ever delivered. The listener needs the direct endpoint.'
       )
     })
     .catch((err) => {
       if (live.stopped) return
-      log.warn({ err, tenant: label }, 'could not verify the outbox wake doorbell')
+      log.warn({ err, workspace: label }, 'could not verify the outbox wake doorbell')
     })
 }
 
 /**
- * One tenant's loop: take or renew the lease → drain → wait for a wake or the
+ * One workspace's loop: take or renew the lease → drain → wait for a wake or the
  * poll interval.
  *
  * The wait is a race between the doorbell and the poll. If the doorbell is lost
@@ -325,40 +325,40 @@ function verifyDoorbell(
  * poll still fires, so a lost wake costs latency and never correctness.
  */
 interface RelayAttachment {
-  /** The tenant's own database. Direct endpoint under pooled tenancy. */
+  /** The workspace's own database. Direct endpoint under pooled workspaces. */
   db: Database
-  /** Runs the body inside this tenant's scope (identity under single tenancy). */
+  /** Runs the body inside this workspace's scope (identity under single workspaces). */
   scoped: <T>(body: () => Promise<T>) => Promise<T>
   /** Releases whatever this attachment owns. */
   close(): Promise<void>
 }
 
 function startLoop(opts: {
-  tenantId: string
+  workspaceKey: string
   config: RelayTierConfig
-  idle: TenantIdlePolicy
-  /** Latest registry view. Null under single tenancy, where nothing detaches. */
-  tenant: TenantDescriptor | null
-  /** Builds the tenant's pool and scope. Throws exactly as the request path does. */
+  idle: WorkspaceIdlePolicy
+  /** Latest registry view. Null under single workspaces, where nothing detaches. */
+  workspace: WorkspaceDescriptor | null
+  /** Builds the workspace's pool and scope. Throws exactly as the request path does. */
   openAttachment: () => Promise<RelayAttachment>
-  /** Builds this tenant's doorbell. Null when it could not be attached. */
+  /** Builds this workspace's doorbell. Null when it could not be attached. */
   openListener: (
     ring: () => void,
     live: { stopped: boolean },
     s: RelayLoopStats
   ) => Promise<WakeListener | null>
   /** Told when the registry view changes, so the next attach uses the new one. */
-  onObserve?: (tenant: TenantDescriptor) => void
+  onObserve?: (workspace: WorkspaceDescriptor) => void
 }): RelayLoop {
-  const s = stats.get(opts.tenantId) ?? emptyStats()
-  stats.set(opts.tenantId, s)
+  const s = stats.get(opts.workspaceKey) ?? emptyStats()
+  stats.set(opts.workspaceKey, s)
 
   /**
-   * Single-tenant installs never detach: one database, `DATABASE_URL`, shared
+   * Single-workspace installs never detach: one database, `DATABASE_URL`, shared
    * with the request path, and nothing about it is billed for idleness.
    */
-  const canDetach = opts.tenant !== null && !idleDetachDisabled(opts.idle)
-  let descriptor: TenantDescriptor | null = opts.tenant
+  const canDetach = opts.workspace !== null && !idleDetachDisabled(opts.idle)
+  let descriptor: WorkspaceDescriptor | null = opts.workspace
   let stopped = false
   let wakeResolve: (() => void) | null = null
   let lease: RelayLease | null = null
@@ -389,11 +389,11 @@ function startLoop(opts: {
   }
 
   /**
-   * Something outside the tiers opened a scope for this tenant.
+   * Something outside the tiers opened a scope for this workspace.
    *
    * Ends the wait **only when detached**. This fires on every request, and an
    * attached loop that woke on it would drain once per request instead of once
-   * per poll interval — a busy tenant would turn its own traffic into a hot
+   * per poll interval — a busy workspace would turn its own traffic into a hot
    * loop against its own outbox. While attached the doorbell already says when
    * there is something to publish; all this needs to do is hold the idle clock
    * open so the tier does not let go underneath live traffic.
@@ -436,35 +436,35 @@ function startLoop(opts: {
   }
 
   /**
-   * Take hold of the tenant: its own direct pool first, then the doorbell.
+   * Take hold of the workspace: its own direct pool first, then the doorbell.
    *
-   * `openTenantDirectPool` runs the same §3 fingerprint assertion the request
+   * `openWorkspaceDirectPool` runs the same §3 fingerprint assertion the request
    * path runs, so this is also where a refusal is detected — and detecting it
-   * before the doorbell is opened is what stops a tenant this fleet cannot serve
+   * before the doorbell is opened is what stops a workspace this fleet cannot serve
    * from holding a permanent `LISTEN` on its database anyway.
    */
   const attach = async (reason: ReattachReason): Promise<RelayAttachment | null> => {
-    if (descriptor && isTenantQuarantined(descriptor)) return null
+    if (descriptor && isWorkspaceQuarantined(descriptor)) return null
     try {
       attachment = await opts.openAttachment()
     } catch (err) {
       const code = refusalCode(err)
       s.refusedCode = code
       if (descriptor) {
-        const entry = noteTenantRefusal(descriptor, code, errText(err))
+        const entry = noteWorkspaceRefusal(descriptor, code, errText(err))
         if (entry.disposition === 'transient') {
           log.warn(
-            { tenantId: opts.tenantId, code, attempts: entry.attempts },
-            'outbox relay tier could not open this tenant; backing off and retrying'
+            { workspaceKey: opts.workspaceKey, code, attempts: entry.attempts },
+            'outbox relay tier could not open this workspace; backing off and retrying'
           )
         }
       } else {
-        log.error({ err, tenantId: opts.tenantId }, 'outbox relay tier could not open the database')
+        log.error({ err, workspaceKey: opts.workspaceKey }, 'outbox relay tier could not open the database')
       }
       return null
     }
 
-    if (descriptor) noteTenantServed(descriptor.tenantId)
+    if (descriptor) noteWorkspaceServed(descriptor.workspaceKey)
     s.refusedCode = null
     live = { stopped: false }
     listener = await opts.openListener(ring, live, s)
@@ -473,7 +473,7 @@ function startLoop(opts: {
     if (reason !== 'boot') {
       s.reattaches += 1
       s.lastReattachReason = reason
-      log.info({ tenantId: opts.tenantId, reason }, 'outbox relay tier re-attached to tenant')
+      log.info({ workspaceKey: opts.workspaceKey, reason }, 'outbox relay tier re-attached to workspace')
     }
     return attachment
   }
@@ -483,7 +483,7 @@ function startLoop(opts: {
    *
    * The lease is handed over rather than left to expire, exactly as `stop()`
    * does, and for a sharper reason here: a detached replica holding a lease
-   * would lock every other replica out of this tenant's relay for the TTL while
+   * would lock every other replica out of this workspace's relay for the TTL while
    * doing no draining itself.
    */
   const detach = async (): Promise<void> => {
@@ -497,7 +497,7 @@ function startLoop(opts: {
     if (lease) {
       await held
         .scoped(() => releaseRelayLease(held.db, lease as RelayLease))
-        .catch((err) => log.warn({ err, tenantId: opts.tenantId }, 'failed to release relay lease'))
+        .catch((err) => log.warn({ err, workspaceKey: opts.workspaceKey }, 'failed to release relay lease'))
       lease = null
       leaseRenewAt = 0
       s.leader = false
@@ -509,8 +509,8 @@ function startLoop(opts: {
     await held.close().catch(() => {})
     detachedAt = Date.now()
     log.info(
-      { tenantId: opts.tenantId, idle_ms: detachedAt - lastWorkAt },
-      'outbox relay tier detached from tenant — pool, doorbell and lease released'
+      { workspaceKey: opts.workspaceKey, idle_ms: detachedAt - lastWorkAt },
+      'outbox relay tier detached from workspace — pool, doorbell and lease released'
     )
   }
 
@@ -524,7 +524,7 @@ function startLoop(opts: {
    *
    * `failed > 0` counts as work on purpose: a row that threw is a row still
    * waiting, and a tier that detached with unpublished rows would defer them to
-   * the rescan. The cost is that a permanently-poisoned row keeps its tenant
+   * the rescan. The cost is that a permanently-poisoned row keeps its workspace
    * warm — the same row that already hot-spins the poll today.
    */
   const shouldDetach = (): boolean =>
@@ -539,7 +539,7 @@ function startLoop(opts: {
         held = await attach(reason)
         if (!held) {
           if (!running || stopped) break
-          const retryAt = descriptor ? quarantineRetryAt(descriptor.tenantId) : null
+          const retryAt = descriptor ? quarantineRetryAt(descriptor.workspaceKey) : null
           await waitForWork(retryAt ? Math.max(250, retryAt - Date.now()) : 1_000)
           continue
         }
@@ -566,10 +566,10 @@ function startLoop(opts: {
           if (lease) {
             s.leaseLosses += 1
             log.error(
-              { tenantId: opts.tenantId, fence: s.fence },
+              { workspaceKey: opts.workspaceKey, fence: s.fence },
               'lost outbox relay leadership while holding it — another replica took over. ' +
                 'This means a drain pass outran the lease; nothing is lost (drains are ' +
-                'idempotent) but the lease TTL is too short for this tenant.'
+                'idempotent) but the lease TTL is too short for this workspace.'
             )
           }
           lease = null
@@ -584,7 +584,7 @@ function startLoop(opts: {
 
         if (!lease || next.fence !== lease.fence) {
           log.info(
-            { tenantId: opts.tenantId, fence: next.fence, owner: next.owner },
+            { workspaceKey: opts.workspaceKey, fence: next.fence, owner: next.owner },
             'acquired outbox relay leadership'
           )
         }
@@ -612,14 +612,14 @@ function startLoop(opts: {
           if (!s.schemaMissing) {
             s.schemaMissing = true
             log.warn(
-              { tenantId: opts.tenantId },
+              { workspaceKey: opts.workspaceKey },
               'outbox_relay_leader is absent in this database (migration 0256 not applied); ' +
-                'skipping this tenant rather than crash-looping'
+                'skipping this workspace rather than crash-looping'
             )
           }
           waitMs = Math.max(opts.config.followerRetryMs, opts.config.pollIntervalMs)
         } else {
-          log.error({ err, tenantId: opts.tenantId }, 'outbox relay pass failed')
+          log.error({ err, workspaceKey: opts.workspaceKey }, 'outbox relay pass failed')
         }
       }
       if (!running || stopped) break
@@ -636,22 +636,22 @@ function startLoop(opts: {
   }
 
   void runWithLogContext(
-    { request_id: crypto.randomUUID(), route: 'events:relay-tier', tenant_id: opts.tenantId },
+    { request_id: crypto.randomUUID(), route: 'events:relay-tier', workspace_key: opts.workspaceKey },
     loop
-  ).catch((err) => log.error({ err, tenantId: opts.tenantId }, 'outbox relay loop exited'))
+  ).catch((err) => log.error({ err, workspaceKey: opts.workspaceKey }, 'outbox relay loop exited'))
 
   return {
-    tenantId: opts.tenantId,
+    workspaceKey: opts.workspaceKey,
     ring,
     signal,
-    observe(tenant) {
-      const changed = descriptor !== null && descriptor.revision !== tenant.revision
-      descriptor = tenant
-      opts.onObserve?.(tenant)
+    observe(workspace) {
+      const changed = descriptor !== null && descriptor.revision !== workspace.revision
+      descriptor = workspace
+      opts.onObserve?.(workspace)
       // A changed record may be a repaired one, and a quarantined loop is asleep
       // on the terminal backoff. Waking it is what turns an operator's fix into
       // a reconnection rather than a wait. Not counted as activity: the control
-      // plane touching a row is not the tenant being used.
+      // plane touching a row is not the workspace being used.
       if (changed && !attachment) {
         const resolve = wakeResolve
         wakeResolve = null
@@ -667,7 +667,7 @@ function startLoop(opts: {
       // making the next replica wait out the TTL, and closes the doorbell and
       // the pool. Shutdown wants exactly that, so it is the same path.
       await detach()
-      stats.delete(opts.tenantId)
+      stats.delete(opts.workspaceKey)
     },
   }
 }
@@ -687,7 +687,7 @@ async function openListener(
 ): Promise<WakeListener | null> {
   if (relayWakeDisabled()) {
     log.warn(
-      { tenant: label },
+      { workspace: label },
       'RELAY_WAKE_DISABLED=1 — no doorbell; the relay drains on the poll interval alone'
     )
     return null
@@ -704,20 +704,20 @@ async function openListener(
     return listener
   } catch (err) {
     log.error(
-      { err, tenant: label },
-      'could not attach the outbox wake listener; this tenant drains on the poll fallback only'
+      { err, workspace: label },
+      'could not attach the outbox wake listener; this workspace drains on the poll fallback only'
     )
     return null
   }
 }
 
-function startSingleTenantLoop(cfg: RelayTierConfig, idle: TenantIdlePolicy): void {
+function startSingleWorkspaceLoop(cfg: RelayTierConfig, idle: WorkspaceIdlePolicy): void {
   const holder: { ring: (() => void) | null } = { ring: null }
   const loop = startLoop({
-    tenantId: SINGLE,
+    workspaceKey: SINGLE,
     config: cfg,
     idle,
-    tenant: null,
+    workspace: null,
     openAttachment: async () => ({
       db: ambientDb,
       scoped: (body) => body(),
@@ -732,50 +732,50 @@ function startSingleTenantLoop(cfg: RelayTierConfig, idle: TenantIdlePolicy): vo
 }
 
 /**
- * Start this tenant's loop. The pool is opened by the loop, not here.
+ * Start this workspace's loop. The pool is opened by the loop, not here.
  *
  * It used to be opened eagerly, which made this function throw on a refusal and
- * made every caller responsible for catching per tenant. Now the loop owns the
+ * made every caller responsible for catching per workspace. Now the loop owns the
  * whole attach/detach lifetime, so a refusal is one more thing the loop handles
  * — and it handles it by *not connecting again*, which is the point.
  */
-function startTenantLoop(
-  tenant: TenantDescriptor,
+function startWorkspaceLoop(
+  workspace: WorkspaceDescriptor,
   cfg: RelayTierConfig,
-  idle: TenantIdlePolicy
+  idle: WorkspaceIdlePolicy
 ): void {
   // Named before the connection is opened, so the likeliest misconfiguration is
   // reported against the field that carries it rather than as a doorbell that
   // quietly never rings. The NOTIFY round trip later is still the authority.
-  warnIfPooled(tenant.database.directUrl, { tenantId: tenant.tenantId, use: 'the outbox relay' })
+  warnIfPooled(workspace.database.directUrl, { workspaceKey: workspace.workspaceKey, use: 'the outbox relay' })
 
   const holder: { ring: (() => void) | null } = { ring: null }
   /**
    * The descriptor every re-attach reads, not the one this call closed over.
    *
-   * A loop now outlives many attachments, and quarantine releases a tenant the
+   * A loop now outlives many attachments, and quarantine releases a workspace the
    * moment its `revision` changes — so a re-attach that still used the record
    * from boot would reconnect with the DSN and credential ref that were the
    * reason it was refused. `observe` keeps this current.
    */
-  let current = tenant
+  let current = workspace
   const loop = startLoop({
-    tenantId: tenant.tenantId,
+    workspaceKey: workspace.workspaceKey,
     config: cfg,
     idle,
-    tenant,
+    workspace,
     onObserve: (next) => {
       current = next
     },
     // One connection for the drain and the lease. The doorbell opens its own, so
-    // an attached tenant costs this tier exactly two sockets, both session-mode,
-    // and a detached one costs none. `openTenantDirectPool` runs the same §3
+    // an attached workspace costs this tier exactly two sockets, both session-mode,
+    // and a detached one costs none. `openWorkspaceDirectPool` runs the same §3
     // fingerprint assertion the request path runs, so a mis-pointed record is
     // refused here for the same reason and with the same message.
     openAttachment: async () => {
-      const pool = await openTenantDirectPool(current)
-      const scope = createTenantScope({
-        tenant: current,
+      const pool = await openWorkspaceDirectPool(current)
+      const scope = createWorkspaceScope({
+        workspace: current,
         db: pool.db,
         sql: pool.sql,
         secrets: pool.secrets,
@@ -783,7 +783,7 @@ function startTenantLoop(
       })
       return {
         db: pool.db,
-        scoped: (body) => runWithTenantScope(scope, body),
+        scoped: (body) => runWithWorkspaceScope(scope, body),
         close: () => pool.close(),
       }
     },
@@ -793,63 +793,63 @@ function startTenantLoop(
         // Direct, never pooled. Through a transaction pooler the registration is
         // accepted and nothing is ever delivered — see jobs/wake.ts.
         current.database.directUrl,
-        current.tenantId,
+        current.workspaceKey,
         s,
         holder,
         live,
-        () => resolveTenantPassword(current)
+        () => resolveWorkspacePassword(current)
       )
     },
   })
-  loops.set(tenant.tenantId, loop)
+  loops.set(workspace.workspaceKey, loop)
 }
 
 /**
- * Reconcile the running loops against the active tenant list.
+ * Reconcile the running loops against the active workspace list.
  *
- * Every failure is per tenant. A record the registry refuses, a database whose
+ * Every failure is per workspace. A record the registry refuses, a database whose
  * fingerprint does not match, an unresolvable credential — each costs that
- * tenant its relay and nothing else. A pass that threw on the first bad record
+ * workspace its relay and nothing else. A pass that threw on the first bad record
  * would turn one wrong row in the control plane into a fleet-wide eventing
  * outage, which is a strictly worse failure than the one it is reacting to.
  *
  * Starting a loop no longer connects to anything, so nothing here can throw for
- * a tenant-specific reason any more: the refusal happens inside the loop, where
+ * a workspace-specific reason any more: the refusal happens inside the loop, where
  * it can be classified and where a terminal one can stop the loop reconnecting.
  */
-async function refreshTenantLoops(cfg: RelayTierConfig, idle: TenantIdlePolicy): Promise<void> {
-  const { tenants, refused } = await listActiveTenants()
+async function refreshWorkspaceLoops(cfg: RelayTierConfig, idle: WorkspaceIdlePolicy): Promise<void> {
+  const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) {
     log.error(
-      { refused, active: tenants.length },
-      'outbox relay tier skipping tenants with invalid registry records — the rest of the fleet continues'
+      { refused, active: workspaces.length },
+      'outbox relay tier skipping workspaces with invalid registry records — the rest of the fleet continues'
     )
   }
-  const wanted = new Set(tenants.map((t) => t.tenantId))
+  const wanted = new Set(workspaces.map((t) => t.workspaceKey))
 
-  for (const [tenantId, loop] of loops) {
-    if (wanted.has(tenantId)) continue
-    log.info({ tenantId }, 'tenant left the active set — stopping its relay loop')
+  for (const [workspaceKey, loop] of loops) {
+    if (wanted.has(workspaceKey)) continue
+    log.info({ workspaceKey }, 'workspace left the active set — stopping its relay loop')
     await loop.stop()
-    loops.delete(tenantId)
+    loops.delete(workspaceKey)
   }
 
   let started = 0
-  for (const tenant of tenants) {
-    const existing = loops.get(tenant.tenantId)
+  for (const workspace of workspaces) {
+    const existing = loops.get(workspace.workspaceKey)
     if (existing) {
       // The revision a quarantined refusal is compared against. Without this a
       // record repaired by the control plane would stay refused until restart.
-      existing.observe(tenant)
+      existing.observe(workspace)
       continue
     }
-    startTenantLoop(tenant, cfg, idle)
+    startWorkspaceLoop(workspace, cfg, idle)
     started += 1
   }
   if (started > 0 || refused.length > 0) {
     log.info(
       { started, refused: refused.length, live: loops.size },
-      'outbox relay tier tenant set reconciled'
+      'outbox relay tier workspace set reconciled'
     )
   }
 
@@ -857,40 +857,40 @@ async function refreshTenantLoops(cfg: RelayTierConfig, idle: TenantIdlePolicy):
 }
 
 /**
- * Re-arm the tenant refresh, deciding at FIRE time whether to actually read.
+ * Re-arm the workspace refresh, deciding at FIRE time whether to actually read.
  *
  * The read goes to the control database, which is now expected to suspend when
  * the fleet goes quiet, so a fixed minute timer would be the client that keeps
- * it awake for ever — the same defect as the tenant doorbells, one level up.
+ * it awake for ever — the same defect as the workspace doorbells, one level up.
  *
  * The first version chose the *interval* instead, stretching it to the rescan
  * interval whenever nothing was attached. That was wrong in a way only a
  * measurement showed: the choice is made when the timer is armed, and at boot it
  * is armed before any loop has finished attaching, so the fleet permanently read
- * its tenant list once every fifteen minutes. A record repaired by an operator
+ * its workspace list once every fifteen minutes. A record repaired by an operator
  * then sat unnoticed for that long, which is the one thing quarantine promised
  * it would not do.
  *
  * So the timer always fires on the minute and the *read* is what is conditional:
  * free while the fleet is doing something, skipped while it is not, and forced
- * once per rescan interval regardless so a newly provisioned tenant is still
+ * once per rescan interval regardless so a newly provisioned workspace is still
  * discovered on a fleet that is otherwise asleep.
  */
-function scheduleTenantRefresh(cfg: RelayTierConfig, idle: TenantIdlePolicy): void {
+function scheduleWorkspaceRefresh(cfg: RelayTierConfig, idle: WorkspaceIdlePolicy): void {
   if (!running) return
   refreshTimer = setTimeout(() => {
     if (!running) return
     const anyAttached = [...loops.values()].some((l) => l.isAttached())
     const overdue = Date.now() - lastFleetReadAt >= idle.rescanIntervalMs
     if (!anyAttached && !overdue) {
-      scheduleTenantRefresh(cfg, idle)
+      scheduleWorkspaceRefresh(cfg, idle)
       return
     }
     lastFleetReadAt = Date.now()
-    void refreshTenantLoops(cfg, idle)
-      .catch((err) => log.error({ err }, 'outbox relay tier tenant refresh failed'))
-      .finally(() => scheduleTenantRefresh(cfg, idle))
-  }, TENANT_REFRESH_MS)
+    void refreshWorkspaceLoops(cfg, idle)
+      .catch((err) => log.error({ err }, 'outbox relay tier workspace refresh failed'))
+      .finally(() => scheduleWorkspaceRefresh(cfg, idle))
+  }, WORKSPACE_REFRESH_MS)
   refreshTimer.unref?.()
 }
 
@@ -909,26 +909,26 @@ export async function startRelayTier(): Promise<void> {
   registerAllResolvers()
   running = true
   const cfg = relayTierConfig()
-  const idle = tenantIdlePolicy()
+  const idle = workspaceIdlePolicy()
 
-  // A scope opened by anything that is not a tier means the tenant's compute is
+  // A scope opened by anything that is not a tier means the workspace's compute is
   // already awake and being used, so a detached loop should come straight back.
-  unsubscribeActivity = onTenantActivity((tenantId) => loops.get(tenantId)?.signal())
+  unsubscribeActivity = onWorkspaceActivity((workspaceKey) => loops.get(workspaceKey)?.signal())
 
   if (!config.isPooledTenancy) {
-    startSingleTenantLoop(cfg, idle)
+    startSingleWorkspaceLoop(cfg, idle)
     log.info(
       { poll_interval_ms: cfg.pollIntervalMs, owner: relayOwnerId() },
-      'outbox relay tier started (single tenant)'
+      'outbox relay tier started (single workspace)'
     )
     return
   }
 
-  await refreshTenantLoops(cfg, idle)
-  scheduleTenantRefresh(cfg, idle)
+  await refreshWorkspaceLoops(cfg, idle)
+  scheduleWorkspaceRefresh(cfg, idle)
   log.info(
     {
-      tenants: loops.size,
+      workspaces: loops.size,
       poll_interval_ms: cfg.pollIntervalMs,
       owner: relayOwnerId(),
       idle_detach_ms: idle.detachAfterMs,
@@ -954,13 +954,13 @@ export async function stopRelayTier(): Promise<void> {
 export interface RelayTierStatus {
   running: boolean
   owner: string
-  tenants: Array<{ tenantId: string } & RelayLoopStats>
+  workspaces: Array<{ workspaceKey: string } & RelayLoopStats>
 }
 
 export function getRelayTierStatus(): RelayTierStatus {
   return {
     running,
     owner: relayOwnerId(),
-    tenants: [...stats.entries()].map(([tenantId, s]) => ({ tenantId, ...s })),
+    workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),
   }
 }

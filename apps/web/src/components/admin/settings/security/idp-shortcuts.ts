@@ -1,7 +1,7 @@
 /**
  * Per-IdP shortcut inputs that build the OIDC discovery URL from the
  * one or two pieces of information that vary per customer (Okta org
- * subdomain, Auth0 tenant, Microsoft Entra tenant ID, Keycloak base +
+ * subdomain, Auth0 workspace, Microsoft Entra workspace ID, Keycloak base +
  * realm). The discovery URL field stays editable directly as the
  * canonical OIDC input — these shortcuts are a typo-resistant way to
  * fill it for known IdPs.
@@ -79,7 +79,7 @@ const AUTH0: IdpShortcutDef = {
     {
       key: 'domain',
       label: 'Auth0 domain',
-      placeholder: 'yourtenant.us.auth0.com',
+      placeholder: 'yourworkspace.us.auth0.com',
     },
   ],
   build: (v) => {
@@ -101,13 +101,13 @@ const ENTRA: IdpShortcutDef = {
   kind: 'entra',
   fields: [
     {
-      key: 'tenant',
-      label: 'Tenant ID or domain',
+      key: 'workspace',
+      label: 'Workspace ID or domain',
       placeholder: 'acme.onmicrosoft.com  /  6045704a-f241-4b8d-99ba-...',
     },
   ],
   build: (v) => {
-    const t = trim(v.tenant)
+    const t = trim(v.workspace)
     if (!t) return null
     return `https://login.microsoftonline.com/${encodeURIComponent(t)}/v2.0/.well-known/openid-configuration`
   },
@@ -117,7 +117,7 @@ const ENTRA: IdpShortcutDef = {
         url
       )
     if (!m) return null
-    return { tenant: decodeURIComponent(m[1]) }
+    return { workspace: decodeURIComponent(m[1]) }
   },
 }
 

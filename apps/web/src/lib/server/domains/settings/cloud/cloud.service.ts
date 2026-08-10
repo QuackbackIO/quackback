@@ -107,7 +107,7 @@ function str(value: unknown): string | null {
 /**
  * The active cloud config for this workspace.
  *
- * Reads through the existing Redis-backed tenant-settings blob rather than
+ * Reads through the existing Redis-backed workspace-settings blob rather than
  * adding a second process-level cache. That is a deliberate choice: every
  * settings mutation already calls `invalidateSettingsCache()`, so this needs
  * no invalidation seam of its own, and it adds no new module-scope mutable
@@ -116,7 +116,7 @@ function str(value: unknown): string | null {
  *
  * A failed settings read resolves to the *disabled* config rather than
  * throwing. On a self-hosted install that is simply today's behaviour
- * preserved through an outage; on a cloud tenant it means a broken settings
+ * preserved through an outage; on a cloud workspace it means a broken settings
  * read grants rather than denies. That is the right direction for a
  * commercial gate — an entitlement is not an authorization boundary, and
  * under a settings-read failure every gated feature is broken anyway — but it
@@ -127,9 +127,9 @@ export async function getCloudConfig(): Promise<CloudConfig> {
     // Dynamic import: settings.service is a large module that imports this
     // domain's helpers, so a static import here risks a load-time cycle. Same
     // reasoning as requireSettingsCached() in settings.helpers.ts.
-    const { getTenantSettings } = await import('../settings.service')
-    const tenant = await getTenantSettings()
-    const stored = (tenant?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
+    const { getWorkspaceSettings } = await import('../settings.service')
+    const workspace = await getWorkspaceSettings()
+    const stored = (workspace?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
     return resolveCloudConfig(stored ?? null)
   } catch (error) {
     log.error({ err: error }, 'cloud config read failed; falling back to disabled')
@@ -236,7 +236,10 @@ export async function writeCloudConfig(
     }
 
     const revision = row.cloudRevision + 1
-    await tx.update(settings).set({ cloud: merged, cloudRevision: revision }).where(eq(settings.id, row.id))
+    await tx
+      .update(settings)
+      .set({ cloud: merged, cloudRevision: revision })
+      .where(eq(settings.id, row.id))
     // Same bump every other settings write performs, so a pod's cached
     // auth instance is rebuilt against the new row rather than serving a
     // stale one. Guarded by the equivalence check above, so a no-op

@@ -4,7 +4,7 @@
  * The behaviour being pinned is not "it throws" — the previous version threw,
  * and that was the defect. A throw during ESM evaluation of the server entry is
  * cached by Node, so every route 500s permanently while the process stays up,
- * answers liveness, and keeps dialling every tenant database. What has to hold
+ * answers liveness, and keeps dialling every workspace database. What has to hold
  * is the exit **code**, and that the healthy case does not exit at all.
  */
 import { describe, expect, it } from 'vitest'

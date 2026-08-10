@@ -10,16 +10,16 @@
  *
  * Under pooled tenancy every one of these sweeps funnels through
  * `withSweepLock`, which fans the tick out across the **whole fleet** — one
- * connection to every tenant database per tick. So the interval is not a
+ * connection to every workspace database per tick. So the interval is not a
  * scheduling preference, it is the floor on how often every suspended Neon
  * compute is woken:
  *
  * | Timer in `startup.ts` | Fan-out interval | Against a 300 s suspend timeout |
  * | --- | --- | --- |
- * | changelog / status / maintenance reconcilers | 5 min | **no tenant ever suspends** |
- * | billing reconcile | 15 min | wakes every tenant four times an hour |
- * | summary + merge sweeps | 30 min | wakes every tenant twice an hour |
- * | kv sweep, telemetry claim | 1 h | wakes every tenant hourly |
+ * | changelog / status / maintenance reconcilers | 5 min | **no workspace ever suspends** |
+ * | billing reconcile | 15 min | wakes every workspace four times an hour |
+ * | summary + merge sweeps | 30 min | wakes every workspace twice an hour |
+ * | kv sweep, telemetry claim | 1 h | wakes every workspace hourly |
  * | daily audit maintenance | 24 h | fine |
  *
  * The 5-minute row is the one that matters: 300 s of fan-out against a 300 s
@@ -35,7 +35,7 @@
  * hourly is a real reduction in timeliness for a pooled fleet. They are
  * backstops — the primary paths are a synchronous publish, a delayed job and a
  * provider webhook — so what lengthens is the recovery window after a dropped
- * delivery, not the normal case. Nothing changes for a single-tenant install:
+ * delivery, not the normal case. Nothing changes for a single-workspace install:
  * `startup.ts` keeps its original timers there, calling exactly these functions.
  */
 import { logger } from '@/lib/server/logger'
@@ -72,7 +72,7 @@ export async function runKvSweep(): Promise<void> {
  * Under a cross-instance lock because it makes provider API calls and pushes
  * seat quantities: several replicas doing that per tick would burn rate limit
  * for one outcome. On a pooled fleet this runs hourly rather than the
- * single-tenant install's 15 minutes — see the tradeoff stated in the header.
+ * single-workspace install's 15 minutes — see the tradeoff stated in the header.
  */
 export async function runBillingReconcile(): Promise<void> {
   const [{ reconcileBilling }, { withSweepLock }] = await Promise.all([
@@ -196,14 +196,14 @@ export async function runStatusMaintenanceSweep(): Promise<void> {
  * The two cron services, and what each owns.
  *
  * There is no outbox backstop here. The outbox is drained by `events/relay-tier.ts`,
- * which holds one always-attached loop per tenant with a poll fallback under the
+ * which holds one always-attached loop per workspace with a poll fallback under the
  * doorbell — so an event whose NOTIFY was lost is picked up a second later by the
- * same loop, not an hour later by a sweep. A cron pass over every tenant's outbox
+ * same loop, not an hour later by a sweep. A cron pass over every workspace's outbox
  * would be a second drainer racing the leader lease for no reachable failure.
  *
  * Serial rather than concurrent: each of these already fans out across the whole
  * fleet, and running the seven at once would open seven connections to every
- * tenant database instead of one.
+ * workspace database instead of one.
  */
 export const FLEET_CRON_JOBS = {
   daily: async () => {

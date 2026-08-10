@@ -464,7 +464,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
     // workspace-wide ceiling (collapsed in migration 0084).
     if (ctx.principal.type === 'anonymous') {
       // Fail closed on a missing flag (single source of truth; the per-board
-      // submit tier is the inner gate, existing tenants carry an explicit
+      // submit tier is the inner gate, existing workspaces carry an explicit
       // value from migration 0084).
       if (!workspaceAllowsAnonymous(settings.portalConfig)) {
         throw new Error('Anonymous interaction is not enabled')

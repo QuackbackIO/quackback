@@ -30,10 +30,10 @@ export function computeDeviceFingerprint(userAgent: string, ip: string): string 
 }
 
 // User ids are only unique within a workspace database, so an undiscriminated
-// set would let one tenant's sign-in suppress another's new-device alert — the
+// set would let one workspace's sign-in suppress another's new-device alert — the
 // notification whose entire job is to be the first sign of a stolen credential.
-// `pg-kv.ts` writes the tenant into the row's key; under pooled tenancy the row
-// is additionally in that tenant's own database.
+// `pg-kv.ts` writes the workspace into the row's key; under pooled tenancy the row
+// is additionally in that workspace's own database.
 const key = (userId: string) => `user:devices:${userId}`
 
 /**

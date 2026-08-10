@@ -18,7 +18,7 @@ one database's relay, and `tryAcquireRelayLeadership()` opened its connection
 from `config.databaseUrl` — which does not exist under pooled tenancy. Started
 anyway, it entered a **silent 15-second retry loop delivering nothing**: the
 leadership attempt threw, the error was caught and logged, and the loop
-rescheduled itself forever. No tenant's outbox was ever drained and the only
+rescheduled itself forever. No workspace's outbox was ever drained and the only
 evidence was a repeating error nobody reads as _"eventing is off"_.
 
 It was then made to refuse loudly at boot instead. That was the right answer
@@ -26,26 +26,26 @@ while there was no fan-out. This is the fan-out.
 
 ## 2. Shape
 
-`relay-tier.ts` runs **one loop per tenant**. Each loop owns:
+`relay-tier.ts` runs **one loop per workspace**. Each loop owns:
 
 |                                  |                                          |
 | -------------------------------- | ---------------------------------------- |
 | a **direct** (session-mode) pool | one connection, `idle_timeout: 0`        |
 | a **direct** doorbell            | `LISTEN outbox_wake`, its own connection |
-| a **leadership lease**           | a row in that tenant's own database      |
+| a **leadership lease**           | a row in that workspace's own database   |
 | its counters                     | in the closure, not in a shared map      |
 
-Two sockets per tenant, both session-mode, both to the tenant's own database.
-Nothing is shared between loops, so there is no object left for a second tenant
+Two sockets per workspace, both session-mode, both to the workspace's own database.
+Nothing is shared between loops, so there is no object left for a second workspace
 to key wrongly.
 
-`tenancy/fleet.ts` already answers _"iterate all tenants per tick"_, and that is
+`tenancy/fleet.ts` already answers _"iterate all workspaces per tick"_, and that is
 the right answer for a periodic sweep and the wrong one for a relay: the latency
-of an event would become the tick interval times the tenant count, and the whole
+of an event would become the tick interval times the workspace count, and the whole
 point of the doorbell is that an event committed now drains now. So the fleet
-iteration is reduced to **discovering** tenants, refreshed every 60s.
+iteration is reduced to **discovering** workspaces, refreshed every 60s.
 
-**Single-tenant installs are unchanged in shape.** One loop, no tenant scope,
+**Single-workspace installs are unchanged in shape.** One loop, no workspace scope,
 `DATABASE_URL` — which for a self-hosted install already is a direct session-mode
 connection. They also lose one dedicated connection, because the lease replaces
 the advisory lock's connection.
@@ -53,7 +53,7 @@ the advisory lock's connection.
 ## 3. Why the connections are direct, and why the obvious check lies
 
 `LISTEN` needs a session-mode connection. Measured on Neon for **this** channel,
-across six tenant databases, with delivery as the instrument:
+across six workspace databases, with delivery as the instrument:
 
 | endpoint | NOTIFY actually delivered |
 | -------- | ------------------------- |
@@ -87,19 +87,19 @@ So the rule this tier follows, and the reason `verify()` exists:
 
 `wake.ts`'s `verify()` waits for a random `__verify__<8>` payload sent from a
 _second_ connection and matched by exact equality, so its only failure mode is a
-false _red_. Every tenant's doorbell is round-tripped once at boot and a failure
+false _red_. Every workspace's doorbell is round-tripped once at boot and a failure
 is logged at error naming the likely cause.
 
 The tier does **not** borrow the request pool cache. Three reasons, the first
 architectural: that cache terminates at the pooled endpoint; it is an LRU sized
 for request traffic and evicts on idleness, which is exactly what an always-warm
 tier must not have done to it; and §6's corollary is that this tier holds its
-connections open **by design**, so it must never share a compute with tenants you
+connections open **by design**, so it must never share a compute with workspaces you
 expect to suspend — which is easier to honour when its connections are a separate,
 countable thing.
 
 What it does not do is re-implement the §3 fingerprint assertion. It calls
-`openTenantDirectPool`, which calls the same `verifyTenantDatabase` the request
+`openWorkspaceDirectPool`, which calls the same `verifyWorkspaceDatabase` the request
 path calls. **A second copy of a fail-closed identity check is a second copy that
 can drift open.**
 
@@ -125,7 +125,7 @@ path:
 This tier terminates at the direct endpoint, so none of that applies to it today.
 **That is exactly the argument the design refuses to rely on.** A registry record
 whose `db_direct_url` is in fact a pooler is a one-character mistake, and it would
-silently elect two leaders for one tenant rather than failing. Correctness should
+silently elect two leaders for one workspace rather than failing. Correctness should
 not be one config field deep.
 
 `relay-leader.ts` replaces it with one row, one expiry, and **one statement** that
@@ -149,7 +149,7 @@ happened in between.
 
 Draining is idempotent regardless (deterministic job ids, `published_at IS NULL`
 as the read filter), so a lost fence costs a wasted pass and never a double
-delivery. **The fence is what makes "two replicas do not both drain one tenant" an
+delivery. **The fence is what makes "two replicas do not both drain one workspace" an
 observable fact rather than an inference from idempotency**, and the counters that
 observe it are why the harness can tell a healthy single-leader run from a
 fail-open one.
@@ -169,7 +169,7 @@ for the whole window, `notifies_received=0`), every event still published.
 
 **Which compute, and what else was on it.** The pooled arms ran against
 `inst_gauntlet_neon_t1` (Neon project `ep-tiny-poetry-auqd4saj`, branch
-`br-weathered-lake-aupi87in`); the single-tenant arm ran against a local
+`br-weathered-lake-aupi87in`); the single-workspace arm ran against a local
 Postgres database this piece created and owns (`quackback_p9`). **The t1 compute
 was shared with other pieces at the time**, which adds load but not skew — these
 are latency arms, not suspend arms, and no claim here depends on the compute being
@@ -190,7 +190,7 @@ magnitude; the _ratio_ is the transferable part.
 | end-to-end, doorbell alive        | 12  | 12       | 642 | **901**  | 1002 |
 | end-to-end, notify genuinely lost | 12  | **0**    | 763 | **1121** | 1538 |
 
-Local Postgres, single tenant, through the real tier: **33–343 ms** end to end.
+Local Postgres, single workspace, through the real tier: **33–343 ms** end to end.
 
 **Two numbers are reported rather than one** because the end-to-end figure also
 contains the emitter's own commit round trips, and a reader comparing two
@@ -212,19 +212,19 @@ away was the tier reporting `wakes=1` across 24 samples. _A latency measurement
 that never rings the doorbell it is measuring cannot disagree with the hypothesis
 that the doorbell is slow._
 
-### What this tier costs an idle tenant
+### What this tier costs an idle workspace
 
 **It keeps the compute awake, deliberately.** A loop holds two session-mode
 sockets with `idle_timeout: 0` and asks for its lease at least once per poll
-interval, and a ~1 Hz query against a tenant is measured to hold a Neon compute
+interval, and a ~1 Hz query against a workspace is measured to hold a Neon compute
 awake indefinitely. That is §6's corollary stated as a running cost: **this tier
-must never share a compute with tenants you expect to suspend.** The pool cache's
+must never share a compute with workspaces you expect to suspend.** The pool cache's
 eviction story is for the _web_ tier and does not apply here.
 
 What the tier does owe is that it lets go completely when it stops.
-`stopRelayTier()` releases each tenant's lease (so a surviving replica takes over
+`stopRelayTier()` releases each workspace's lease (so a surviving replica takes over
 immediately rather than waiting out the TTL), closes the doorbell and ends the
-pool. Verified by reading `pg_stat_activity` on all six tenant databases after a
+pool. Verified by reading `pg_stat_activity` on all six workspace databases after a
 run: **zero connections carrying `application_name = quackback-wake-listener`**.
 
 That check is only possible because the doorbell connections are named. Every
@@ -232,27 +232,27 @@ other client on those computes reports as `postgres.js`, which is to say
 unattributable — so naming them is what makes "who is holding this compute awake?"
 an answerable question rather than a guess.
 
-## 7. One tenant's failure never costs the fleet its relay
+## 7. One workspace's failure never costs the fleet its relay
 
-Every failure is per tenant, and there are three distinct shapes:
+Every failure is per workspace, and there are three distinct shapes:
 
-| shape                                                                           | outcome                                                                |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| the registry refuses the record                                                 | dropped by `listActiveTenants`, logged with the tenant, the rest start |
-| the database refuses the fingerprint, or its credential/secret will not resolve | that loop is not started, logged with the tenant, the rest start       |
-| the database predates migration `0256`                                          | the loop runs, warns **once**, and backs off — it does not crash-loop  |
+| shape                                                                           | outcome                                                                      |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| the registry refuses the record                                                 | dropped by `listActiveWorkspaces`, logged with the workspace, the rest start |
+| the database refuses the fingerprint, or its credential/secret will not resolve | that loop is not started, logged with the workspace, the rest start          |
+| the database predates migration `0256`                                          | the loop runs, warns **once**, and backs off — it does not crash-loop        |
 
 A pass that threw on the first bad record would turn one wrong row in the control
 plane into a fleet-wide eventing outage, which is strictly worse than the failure
-it is reacting to. Observed live: two tenants refused for an unresolvable secret
-ref and two more without `0256`, while the remaining tenants drained normally
+it is reacting to. Observed live: two workspaces refused for an unresolvable secret
+ref and two more without `0256`, while the remaining workspaces drained normally
 (`started=4 refused=2 live=4`).
 
 ## 8. Where a resolved hook job goes
 
 One sink, under either tenancy mode: `enqueueHookJobsWithIds` writes the whole
-fan-out into the `events` queue on the **tenant's own Postgres job tier**. Same
-database as the outbox row it came from, `tenant_id` stamped from the ambient
+fan-out into the `events` queue on the **workspace's own Postgres job tier**. Same
+database as the outbox row it came from, `workspace_key` stamped from the ambient
 scope and asserted again by the claim, no routing decision to get wrong because
 there is no shared queue.
 
@@ -260,7 +260,7 @@ there is no shared queue.
 crash between the enqueue and the publish stamp re-drains the row, which
 re-enqueues the same deterministic ids; a single
 `INSERT … ON CONFLICT (queue, dedupe_key) DO NOTHING` turns the whole repeat into
-a no-op, and it does so for duplicates *within* the batch too. A loop issuing one
+a no-op, and it does so for duplicates _within_ the batch too. A loop issuing one
 insert per target gives neither: it can be interrupted half-written, and it costs
 a round trip per target on the highest-volume queue in the process.
 
@@ -291,8 +291,8 @@ relay process that has not loaded the full application config.
 # §7.3 re-measured for THIS channel, direct vs pooled, delivery as the instrument
 env $(cat pooled.env) bun run scripts/relay-tier-proof.ts listen-endpoints
 
-# no row dispatched against another tenant's database, both orderings
-env $(cat pooled.env) bun run scripts/relay-tier-proof.ts tenant-proof --a <id> --b <id>
+# no row dispatched against another workspace's database, both orderings
+env $(cat pooled.env) bun run scripts/relay-tier-proof.ts workspace-proof --a <id> --b <id>
 
 # leadership, and a takeover after a dead leader
 env $(cat pooled.env) bun run scripts/relay-tier-proof.ts leader-proof --a <id>
@@ -316,7 +316,7 @@ env $(cat pooled.env) bun run scripts/relay-tier-proof.ts poll-fallback --a <id>
   so a replica whose relay is running with zero loops is still ready. The
   queue-migration piece is already reshaping that file for the same reason on the
   job tier; wiring both at once is cheaper than wiring them twice.
-- **`RELAY_LEASE_TTL_MS` is a fleet-wide number.** A tenant whose drain
+- **`RELAY_LEASE_TTL_MS` is a fleet-wide number.** A workspace whose drain
   legitimately outruns 30 s loses leadership and logs `leaseLosses`; nothing is
   lost, but the right answer is a heartbeat inside the drain rather than a larger
   constant.

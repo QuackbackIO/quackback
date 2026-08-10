@@ -54,16 +54,16 @@ import {
   activityToStatus,
 } from '.'
 import { logger } from '@/lib/server/logger'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 const log = logger.child({ component: 'assistant-orchestrator' })
 
 // The assistant's service principal is immutable once provisioned, so its id is
-// memoized to skip the find-or-create round trip on every turn — but per tenant.
+// memoized to skip the find-or-create round trip on every turn — but per workspace.
 // This id is written as the author foreign key on every message the assistant
 // sends, so one workspace's id memoized process-wide is another workspace's rows
 // pointing at a principal that does not exist in its database.
-const memoizedAssistantPrincipalId = new TenantKeyedCache<PrincipalId>(256)
+const memoizedAssistantPrincipalId = new WorkspaceKeyedCache<PrincipalId>(256)
 const ASSISTANT_PRINCIPAL_KEY = 'principal-id'
 
 async function ensureAssistantPrincipalId(): Promise<PrincipalId> {

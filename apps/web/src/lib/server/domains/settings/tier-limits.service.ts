@@ -1,5 +1,5 @@
 import { db, settings } from '@/lib/server/db'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
 
 type StoredTierLimits = Partial<Omit<TierLimits, 'features'>> & {
@@ -19,7 +19,7 @@ export function mergeTierLimits(stored: StoredTierLimits | null): TierLimits {
 }
 
 /**
- * Per tenant, because this is the billing ceiling.
+ * Per workspace, because this is the billing ceiling.
  *
  * A shared entry means whichever workspace is read first sets everyone's
  * limits: a paid plan's allowances leak to a free one, or a free plan's caps
@@ -27,7 +27,7 @@ export function mergeTierLimits(stored: StoredTierLimits | null): TierLimits {
  * silent — nothing errors, the wrong number is simply believed — so it can only
  * be caught by asserting the separation directly.
  */
-const cachedLimits = new TenantKeyedCache<TierLimits>()
+const cachedLimits = new WorkspaceKeyedCache<TierLimits>()
 const LIMITS_KEY = 'limits'
 
 /**
@@ -48,7 +48,7 @@ export async function getTierLimits(): Promise<TierLimits> {
   return limits
 }
 
-/** Invalidate the active tenant's cache. Call when settings.tier_limits is written. */
+/** Invalidate the active workspace's cache. Call when settings.tier_limits is written. */
 export function invalidateTierLimitsCache(): void {
   cachedLimits.delete(LIMITS_KEY)
 }

@@ -26,7 +26,7 @@
  *   domain?: { name, verified?=true, enforced?=false }
  * }
  *
- * After mutating, the caller (access-helpers) drops the tenant-settings +
+ * After mutating, the caller (access-helpers) drops the workspace-settings +
  * configured-types caches so the running dev server sees the change.
  */
 import postgres from 'postgres'

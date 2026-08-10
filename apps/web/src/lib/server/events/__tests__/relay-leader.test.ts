@@ -208,7 +208,7 @@ describe('why this is not pg_try_advisory_lock', () => {
 })
 
 describe('owner identity', () => {
-  it('is per process, not per tenant — two tenants share it, two processes do not', () => {
+  it('is per process, not per workspace — two workspaces share it, two processes do not', () => {
     __resetRelayOwnerIdForTests()
     const a = relayOwnerId()
     expect(relayOwnerId()).toBe(a)

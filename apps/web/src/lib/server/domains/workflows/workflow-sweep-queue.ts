@@ -5,7 +5,7 @@
  *
  * Runs on the Postgres job queue (`lib/server/jobs`). Schedule and retry policy
  * live in `jobs/definitions.ts`. The sweep module is imported statically so
- * `primeJobHandlers()` loads it outside any tenant scope — see
+ * `primeJobHandlers()` loads it outside any workspace scope — see
  * sla-breach-sweep-queue.ts for why that matters.
  */
 import { sweepWorkflowRuns } from './workflow-sweep'

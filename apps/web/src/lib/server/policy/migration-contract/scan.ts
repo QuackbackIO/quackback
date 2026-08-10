@@ -4,7 +4,7 @@
  * Walks `packages/db/drizzle/*.sql` and, via a comment/string-literal-aware
  * tokenizer (not a full SQL parser — see `stripNoise`), finds every DDL
  * statement that can break a code version that is still running against the
- * *old* shape while a pooled fleet rolls a migration out tenant by tenant
+ * *old* shape while a pooled fleet rolls a migration out workspace by workspace
  * (see SAAS-HOSTING-STACK.md §10). Each finding must be paired with a
  * `-- @contract: safe-after X.Y.Z` annotation somewhere in the same file, or
  * the migration is flagged.

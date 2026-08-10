@@ -26,9 +26,9 @@ const __dirname = path.dirname(__filename)
  *   connection pooler. Refusing that at boot would turn a working deployment
  *   into a crash loop over a property it has been getting away with for years.
  *   The fleet migrator does enforce it, because there the direct endpoint is a
- *   field on the tenant record and there is no excuse for using the other one.
+ *   field on the workspace record and there is no excuse for using the other one.
  * - **A post-condition violation is loud but not fatal.** This process's job is
- *   to make the database servable, and an absent HNSW index makes a tenant slow,
+ *   to make the database servable, and an absent HNSW index makes a workspace slow,
  *   not broken; exiting non-zero would refuse to boot over a performance
  *   regression. The reconciler treats the same violation as a failed reconcile,
  *   because there it has somewhere to record it and something else to try.

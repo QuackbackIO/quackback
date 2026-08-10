@@ -68,7 +68,7 @@ PR and written so a fresh Sonnet 5 subagent with **no prior context** can execut
   admin-initiated per-subscription backfill only (dry-run count first).
 - **Auto-CRUD emission via a persistence base class.** Drizzle has no change tracking; auto-CRUD
   produces semantically-poor row-diffs nobody consumes. Emission is explicit + catalogue-verified.
-- **Multi-workspace fan-out machinery.** Single workspace per instance (cloud tenants each run their
+- **Multi-workspace fan-out machinery.** Single workspace per instance (cloud workspaces each run their
   own instance). Global sequence is a `bigint identity`; relay is a single advisory-lock leader.
 
 ---

@@ -2,8 +2,8 @@
  * Module-scope mutable state scanner (SAAS-HOSTING-STACK.md §4.4).
  *
  * Module-scope mutable state is what survives a request. In a pooled process
- * that also means it survives a *tenant*, so every such site is either
- * tenant-keyed, holds nothing tenant-derived, or is a cross-tenant capability
+ * that also means it survives a *workspace*, so every such site is either
+ * workspace-keyed, holds nothing workspace-derived, or is a cross-workspace capability
  * nobody wrote down. §4.4's whole argument is that fixing the twenty known
  * sites is worth much less than stopping the twenty-first: "without it,
  * singleton twenty-one lands three weeks after twenty is fixed."
@@ -75,15 +75,15 @@ export interface StateSite {
   /** Whether the binding is exported (so mutation can arrive from elsewhere). */
   exported: boolean
   /**
-   * Initializer shape, when the scanner can name it. `TenantKeyedCache` here is
-   * what lets the `tenant-keyed` classification be *verified* rather than
-   * trusted — a raw `new Map()` cannot be labelled tenant-keyed.
+   * Initializer shape, when the scanner can name it. `WorkspaceKeyedCache` here is
+   * what lets the `workspace-keyed` classification be *verified* rather than
+   * trusted — a raw `new Map()` cannot be labelled workspace-keyed.
    */
   initializer: string | null
 }
 
 /** Containers whose construction alone implies "this holds mutable entries". */
-const CONTAINER_CONSTRUCTORS = new Set(['Map', 'Set', 'WeakMap', 'WeakSet', 'TenantKeyedCache'])
+const CONTAINER_CONSTRUCTORS = new Set(['Map', 'Set', 'WeakMap', 'WeakSet', 'WorkspaceKeyedCache'])
 
 /** Property names whose invocation mutates the receiver. */
 const MUTATING_METHODS = new Set([
@@ -101,7 +101,7 @@ const MUTATING_METHODS = new Set([
   'fill',
   'copyWithin',
   'memo',
-  'clearTenant',
+  'clearWorkspace',
 ])
 
 /**
@@ -262,7 +262,7 @@ function isContainerInitializer(init: ts.Expression | undefined): boolean {
  * Deliberately tiny and enumerated. Everything else built with `new` at module
  * scope becomes a ledgered site, because a scanner that only understands
  * `new Map` misses `new Lru()`, `new AsyncLocalStorage()` and `new Proxy()` —
- * and the first of those is the store that carries tenant identity.
+ * and the first of those is the store that carries workspace identity.
  *
  * Each entry here is a value type: immutable after construction, or holding
  * only its own constructor arguments. `Date` is absent on purpose; a
@@ -651,7 +651,7 @@ function classHoldsMutableState(node: ts.Node): boolean {
     if (ts.isPropertyDeclaration(member) && !member.initializer && member.type) {
       // `private entries!: Map<…>` — declared, assigned in the constructor.
       const text = member.type.getText(node.getSourceFile())
-      if (/\b(Map|Set|WeakMap|WeakSet|TenantKeyedCache)\b/.test(text)) return true
+      if (/\b(Map|Set|WeakMap|WeakSet|WorkspaceKeyedCache)\b/.test(text)) return true
     }
   }
   let assignsThis = false
@@ -1319,7 +1319,7 @@ export function countModuleScopeContainers(relPath: string, text: string): Conta
         init !== undefined &&
         ts.isNewExpression(init) &&
         ts.isIdentifier(init.expression) &&
-        init.expression.text !== 'TenantKeyedCache'
+        init.expression.text !== 'WorkspaceKeyedCache'
       for (const name of boundNames(d.name)) {
         const isMutated = mutatesBinding(sf, name)
         counts.declared += 1

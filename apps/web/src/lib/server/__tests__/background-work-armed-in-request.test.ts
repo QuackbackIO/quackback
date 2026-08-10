@@ -6,10 +6,10 @@
  * into the timer, into `startTelemetry`, and into the hourly `setInterval` it
  * arms — for the life of the process.
  *
- * Under pooled tenancy the store also carries the **tenant scope**, and
+ * Under pooled tenancy the store also carries the **workspace scope**, and
  * `withSweepLock` fans a tick across the fleet only `if (isPooledTenancy() &&
- * !getTenantScope())`. So an inherited scope means it never fans out: whichever
- * tenant rendered the first page owns the fleet's telemetry forever — an hourly
+ * !getWorkspaceScope())`. So an inherited scope means it never fans out: whichever
+ * workspace rendered the first page owns the fleet's telemetry forever — an hourly
  * claim in *its* database, no ping for anyone else, and `telemetry/instance-id.ts`
  * repeatedly issuing an unlocked read-modify-write of *its* `settings.metadata`,
  * which is the write SAAS-HOSTING-STACK.md §3 names as able to drop the
@@ -30,12 +30,12 @@ const hoisted = vi.hoisted(() => ({
   pooled: true,
 }))
 
-vi.mock('@/lib/server/tenancy/mode', () => ({
+vi.mock('@/lib/server/workspaces/mode', () => ({
   isPooledTenancy: () => hoisted.pooled,
   POOLED_TENANCY: 'pooled',
 }))
 
-vi.mock('@/lib/server/tenancy/fleet', () => ({
+vi.mock('@/lib/server/workspaces/fleet', () => ({
   runFleetPass: async (_origin: string, body: () => Promise<void>) => {
     hoisted.fleetPasses += 1
     await body()
@@ -44,12 +44,12 @@ vi.mock('@/lib/server/tenancy/fleet', () => ({
 }))
 
 vi.mock('@/lib/server/db', async () => {
-  const { getCurrentTenant } = await import('@/lib/server/tenancy/tenant-context')
+  const { getCurrentWorkspace } = await import('@/lib/server/workspaces/workspace-context')
   return {
     db: {
       execute: async () => {
-        // Where the lock is actually taken, and under which tenant.
-        hoisted.locksTakenInScope.push(getCurrentTenant()?.tenantId ?? null)
+        // Where the lock is actually taken, and under which workspace.
+        hoisted.locksTakenInScope.push(getCurrentWorkspace()?.workspaceKey ?? null)
         return [{ name: 'telemetry_ping', acquired_at: new Date() }]
       },
     },
@@ -57,18 +57,18 @@ vi.mock('@/lib/server/db', async () => {
 })
 
 const { withSweepLock } = await import('../sweep-lock')
-const { withTenant } = await import('./tenant-scope')
-const { getTenantScope } = await import('@/lib/server/tenancy/tenant-context')
+const { withWorkspace } = await import('./workspace-scope')
+const { getWorkspaceScope } = await import('@/lib/server/workspaces/workspace-context')
 const { runWithoutLogContext } = await import('@/lib/server/log-context')
 
 /**
- * Which tenants' databases the lock touched, deduped.
+ * Which workspaces' databases the lock touched, deduped.
  *
  * `withSweepLock` issues two statements per acquisition (the claim and the
  * release), so the raw list double-counts. The claim under test is *whose*
  * database was written, not how many statements it took.
  */
-function tenantsTouched(): (string | null)[] {
+function workspacesTouched(): (string | null)[] {
   return [...new Set(hoisted.locksTakenInScope)]
 }
 
@@ -86,30 +86,30 @@ beforeEach(() => {
 })
 
 describe('a timer armed inside a request', () => {
-  it('CONTROL: inherits the arming request’s tenant scope', async () => {
+  it('CONTROL: inherits the arming request’s workspace scope', async () => {
     // The precondition for everything below. If AsyncLocalStorage did not
     // propagate into the timer, the fix would be pinning nothing.
     let seen: string | null | undefined
-    await withTenant('tenant-alpha', () =>
+    await withWorkspace('workspace-alpha', () =>
       armTimer(() => {
-        seen = getTenantScope()?.tenant.tenantId ?? null
+        seen = getWorkspaceScope()?.workspace.workspaceKey ?? null
       })
     )
 
-    expect(seen).toBe('tenant-alpha')
+    expect(seen).toBe('workspace-alpha')
   })
 
-  it('CONTROL: so the sweep never fans out, and claims one tenant’s database', async () => {
-    await withTenant('tenant-alpha', () =>
+  it('CONTROL: so the sweep never fans out, and claims one workspace’s database', async () => {
+    await withWorkspace('workspace-alpha', () =>
       armTimer(() => withSweepLock('telemetry_ping', 1000, async () => {}))
     )
 
     expect(hoisted.fleetPasses).toBe(0)
-    expect(tenantsTouched()).toEqual(['tenant-alpha'])
+    expect(workspacesTouched()).toEqual(['workspace-alpha'])
   })
 
   it('detached with runWithoutLogContext, it fans out across the fleet instead', async () => {
-    await withTenant('tenant-alpha', () =>
+    await withWorkspace('workspace-alpha', () =>
       armTimer(() =>
         runWithoutLogContext(() => withSweepLock('telemetry_ping', 1000, async () => {}))
       )
@@ -118,8 +118,8 @@ describe('a timer armed inside a request', () => {
     expect(hoisted.fleetPasses).toBe(1)
   })
 
-  it('detaches whichever tenant armed it — not just the first one', async () => {
-    await withTenant('tenant-bravo', () =>
+  it('detaches whichever workspace armed it — not just the first one', async () => {
+    await withWorkspace('workspace-bravo', () =>
       armTimer(() =>
         runWithoutLogContext(() => withSweepLock('telemetry_ping', 1000, async () => {}))
       )
@@ -133,13 +133,13 @@ describe('a timer armed inside a request', () => {
     // every later tick inherits whatever context that call had. Detaching once
     // at the outer boundary has to cover the whole chain.
     let innerScope: string | null | undefined
-    await withTenant('tenant-alpha', () =>
+    await withWorkspace('workspace-alpha', () =>
       armTimer(() =>
         runWithoutLogContext(
           () =>
             new Promise<void>((resolve) => {
               const handle = setInterval(() => {
-                innerScope = getTenantScope()?.tenant.tenantId ?? null
+                innerScope = getWorkspaceScope()?.workspace.workspaceKey ?? null
                 clearInterval(handle)
                 resolve()
               }, 0)
@@ -152,7 +152,7 @@ describe('a timer armed inside a request', () => {
   })
 })
 
-describe('single-tenant behaviour is untouched', () => {
+describe('single-workspace behaviour is untouched', () => {
   it('takes the lock directly, with no fleet pass, exactly as before', async () => {
     hoisted.pooled = false
 
@@ -161,7 +161,7 @@ describe('single-tenant behaviour is untouched', () => {
     )
 
     expect(hoisted.fleetPasses).toBe(0)
-    expect(tenantsTouched()).toEqual([null])
+    expect(workspacesTouched()).toEqual([null])
   })
 })
 
@@ -213,7 +213,7 @@ describe('the production call site, not just the mechanism', () => {
     // §1's scale-to-zero argument is that "a QUACKBACK_ROLE=web replica runs
     // none of them". Detaching the scope made the sweep fleet-wide, which is
     // right in direction but would have had every web replica walking every
-    // tenant hourly — a wider blast radius than the bug it fixed.
+    // workspace hourly — a wider blast radius than the bug it fixed.
     let guarded = false
     const visit = (node: ts.Node): void => {
       if (

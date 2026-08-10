@@ -16,7 +16,7 @@
  * | --- | --- |
  * | {@link ensureExtensions} | `runMigrations()` never issued `CREATE EXTENSION vector`, and no migration file does either, while `0000_initial` declares `vector` columns. A fresh database migrated through the runtime path could not succeed at all. |
  * | {@link dropInvalidIndexes} | An interrupted `CREATE INDEX CONCURRENTLY` leaves an *invalid* index. `IF NOT EXISTS` then treats it as present, so the next run skips it and exits 0 — leaving it INVALID forever. Healing has to happen *before* the build, not by re-running and hoping. |
- * | {@link ensureConcurrentIndexes} | Never called by the runtime path at all. Without it the 4 HNSW and 3 trigram indexes silently do not exist: no error, just a slow tenant. |
+ * | {@link ensureConcurrentIndexes} | Never called by the runtime path at all. Without it the 4 HNSW and 3 trigram indexes silently do not exist: no error, just a slow workspace. |
  * | {@link verifySchemaPostconditions} | The ledger is not evidence. Post-conditions have to be checked against the catalogue, independently of what `drizzle.__drizzle_migrations` claims. |
  *
  * ## Why this module exists as a module
@@ -240,7 +240,7 @@ export interface PostconditionViolation {
  * report.
  *
  * A verdict is only as good as its scope, and this one used to have no way to
- * state its scope: it returned `ok: true` for a tenant whose `settings.cloud`
+ * state its scope: it returned `ok: true` for a workspace whose `settings.cloud`
  * column did not exist and which 500'd on every page, because it checked
  * extensions and the concurrent indexes and nothing else while its name promised
  * the schema. Naming the checks in the report means a reader of a green verdict
@@ -325,15 +325,15 @@ export function declaredTables(): DeclaredTable[] {
  *    unqueryable while the ledger still reads complete.
  * 4. **The shape this build queries with.** Every table and column
  *    {@link declaredTables} names must exist. Added because checks 1–3 returned
- *    `ok: true` on a tenant whose `settings.cloud` column was absent and which
+ *    `ok: true` on a workspace whose `settings.cloud` column was absent and which
  *    500'd on every page: the ledger said complete, the post-conditions said
- *    correct, and the tenant was down. Drizzle emits explicit column lists, so a
+ *    correct, and the workspace was down. Drizzle emits explicit column lists, so a
  *    declared column that does not exist is not a missing value, it is a throw.
  *
  * **What it still does not cover, stated so a green verdict is readable.** Types,
  * nullability, defaults, constraints, triggers and functions are not compared,
  * and objects the database has but this build does not declare are ignored on
- * purpose — a tenant a newer image has already migrated past must keep being
+ * purpose — a workspace a newer image has already migrated past must keep being
  * served (§10.2), so extra is never a violation. Full bidirectional comparison
  * is what `db:check-drift` is for, and it needs the Drizzle Kit toolchain rather
  * than a query.
@@ -415,7 +415,8 @@ export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<Pos
     ...missingColumns.map(
       (name): PostconditionViolation => ({
         kind: 'missing_column',
-        detail: `column ${name} is declared by this build and does not exist; every query this ` +
+        detail:
+          `column ${name} is declared by this build and does not exist; every query this ` +
           'build issues against that table names it explicitly and will throw',
       })
     ),

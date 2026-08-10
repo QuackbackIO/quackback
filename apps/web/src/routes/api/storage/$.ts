@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
-import { currentTenantNamespace } from '@/lib/server/tenancy/tenant-keyed'
+import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
 
 const log = logger.child({ component: 'storage' })
 
@@ -76,15 +76,15 @@ const proxyCache = createProxyCache({
 /**
  * The proxy cache holds file BYTES keyed by storage key, in process memory.
  *
- * Storage keys are per-bucket and the bucket is the tenant boundary, so two
- * tenants' keys share a namespace in this heap the moment one process serves
- * both — and a hit returns the other tenant's file with a 200 and no error.
+ * Storage keys are per-bucket and the bucket is the workspace boundary, so two
+ * workspaces' keys share a namespace in this heap the moment one process serves
+ * both — and a hit returns the other workspace's file with a 200 and no error.
  * That is worse than the edge-cache case below: it needs no CDN and no
  * misconfiguration, only a key that appears in two buckets, which is exactly
  * what an import or a migration produces.
  */
 export function proxyCacheKey(key: string): string {
-  return `${currentTenantNamespace()} ${key}`
+  return `${currentWorkspaceNamespace()} ${key}`
 }
 
 /**
@@ -203,10 +203,10 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
   } = await import('@/lib/server/storage/s3')
   const { config } = await import('@/lib/server/config')
 
-  // Usability, not addressability. A pooled tenant record always names a bucket,
+  // Usability, not addressability. A pooled workspace record always names a bucket,
   // so the addressability question answers `true` while the credential read
   // throws a few lines later — and because that call sits outside the try/catch,
-  // the whole route answered **500** for every key of every tenant. A tenant
+  // the whole route answered **500** for every key of every workspace. A workspace
   // whose storage credentials do not resolve is a configuration state, not a
   // crash, and it has to be distinguishable from one: a 500 tells a caller
   // nothing, and it cost the isolation probe its P03 verdict on top of the
@@ -243,7 +243,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
             'Cache-Control': isPublicStorageKey(key)
               ? 'public, max-age=31536000, immutable'
               : 'private, max-age=3600, immutable',
-            // The key namespace is per-bucket and the bucket is the tenant
+            // The key namespace is per-bucket and the bucket is the workspace
             // boundary, so the same path can name a different object per host.
             Vary: 'Host',
             // Stored Content-Types originate from upload requests — never
@@ -290,7 +290,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       return Response.json({ error: 'Storage not configured' }, { status: 503 })
     }
     // An object that is not there is not a server fault. It reached this branch
-    // as a 500 before, which under pooled tenancy is actively misleading: the
+    // as a 500 before, which under pooled workspaces is actively misleading: the
     // three states a caller has to tell apart are "this workspace has no
     // storage" (503), "this object does not exist" (404) and "something broke"
     // (500), and collapsing the middle one into the last makes an ordinary

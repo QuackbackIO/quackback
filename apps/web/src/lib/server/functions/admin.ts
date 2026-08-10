@@ -675,7 +675,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
  * exists. Reading the registry (not the legacy `authConfig.ssoOidc` blob) means
  * the legacy-config cleanup can run without breaking the button. In practice
  * this is rarely true at first onboarding (no admin yet to configure SSO) — but
- * a re-onboard against an existing tenant DB will use SSO when it's registered.
+ * a re-onboard against an existing workspace DB will use SSO when it's registered.
  */
 export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')

@@ -42,7 +42,7 @@ export function readsRealTenancyMode(text: string, fileName: string): boolean {
     if (
       ts.isImportDeclaration(stmt) &&
       ts.isStringLiteral(stmt.moduleSpecifier) &&
-      /tenancy\/mode$/.test(stmt.moduleSpecifier.text.split('?')[0]) &&
+      /workspaces\/mode$/.test(stmt.moduleSpecifier.text.split('?')[0]) &&
       stmt.importClause?.namedBindings &&
       ts.isNamedImports(stmt.importClause.namedBindings)
     ) {
@@ -116,8 +116,8 @@ export interface CheckResult {
 
 /** Categories whose claim the scanner can test against the source. */
 const VERIFIED: ReadonlySet<StateCategory> = new Set([
-  'tenant-keyed',
-  'tenant-scoped-key',
+  'workspace-keyed',
+  'workspace-scoped-key',
   'refuses-pooled',
 ])
 
@@ -139,8 +139,8 @@ export function checkModuleState(repoRoot: string): CheckResult {
   }
 
   const byCategory: Record<StateCategory, number> = {
-    'tenant-keyed': 0,
-    'tenant-scoped-key': 0,
+    'workspace-keyed': 0,
+    'workspace-scoped-key': 0,
     'refuses-pooled': 0,
     'content-addressed': 0,
     'fleet-wide': 0,
@@ -158,38 +158,38 @@ export function checkModuleState(repoRoot: string): CheckResult {
         detail:
           `${site.kind} at ${site.file}:${site.line} is module-scope mutable state with no ` +
           `entry in policy/module-state/ledger.ts. In a pooled process this survives a REQUEST, ` +
-          `which means it survives a TENANT. Add an entry naming what a cross-tenant hit would ` +
-          `return — or make it a TenantKeyedCache.`,
+          `which means it survives a WORKSPACE. Add an entry naming what a cross-workspace hit would ` +
+          `return — or make it a WorkspaceKeyedCache.`,
       })
       continue
     }
     byCategory[entry.category] += 1
     if (!VERIFIED.has(entry.category)) continue
 
-    if (entry.category === 'tenant-keyed' && site.kind !== 'factory') {
-      if (site.initializer !== 'new TenantKeyedCache') {
+    if (entry.category === 'workspace-keyed' && site.kind !== 'factory') {
+      if (site.initializer !== 'new WorkspaceKeyedCache') {
         findings.push({
           kind: 'miscategorised',
           id,
           detail:
-            `declared 'tenant-keyed' but its initializer is ${site.initializer ?? 'not a cache'}, ` +
-            `not 'new TenantKeyedCache'. A raw container cannot be labelled tenant-keyed.`,
+            `declared 'workspace-keyed' but its initializer is ${site.initializer ?? 'not a cache'}, ` +
+            `not 'new WorkspaceKeyedCache'. A raw container cannot be labelled workspace-keyed.`,
         })
       }
     }
-    if (entry.category === 'tenant-scoped-key') {
+    if (entry.category === 'workspace-scoped-key') {
       if (!entry.keyedBy) {
         findings.push({
           kind: 'miscategorised',
           id,
-          detail: `declared 'tenant-scoped-key' with no 'keyedBy' naming the code that composes the key.`,
+          detail: `declared 'workspace-scoped-key' with no 'keyedBy' naming the code that composes the key.`,
         })
       } else if (!read(site.file).includes(entry.keyedBy)) {
         findings.push({
           kind: 'miscategorised',
           id,
           detail:
-            `declared 'tenant-scoped-key' with keyedBy '${entry.keyedBy}', which does not appear ` +
+            `declared 'workspace-scoped-key' with keyedBy '${entry.keyedBy}', which does not appear ` +
             `in ${site.file}. The key composition it points at is gone.`,
         })
       }
@@ -224,8 +224,8 @@ export function checkModuleState(repoRoot: string): CheckResult {
 /** One line per site, for the MODULE-STATE.md golden snapshot. */
 export function renderLedgerDoc(result: CheckResult): string {
   const order: StateCategory[] = [
-    'tenant-keyed',
-    'tenant-scoped-key',
+    'workspace-keyed',
+    'workspace-scoped-key',
     'refuses-pooled',
     'content-addressed',
     'fleet-wide',

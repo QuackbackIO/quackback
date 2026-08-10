@@ -1,6 +1,6 @@
 # Migrating a fleet
 
-How a pooled Quackback fleet gets its tenant databases from one schema version
+How a pooled Quackback fleet gets its workspace databases from one schema version
 to the next (`SAAS-HOSTING-STACK.md` §10).
 
 `QUACKBACK_TENANCY=single` — every self-hosted install — is untouched by all of
@@ -11,21 +11,21 @@ has.
 
 ## 1. The problem, stated precisely
 
-**One code version serves tenants on two schema versions for the duration of
+**One code version serves workspaces on two schema versions for the duration of
 every rollout.** That is not a transient annoyance to engineer around; it is the
 permanent condition of a pooled fleet, and everything below follows from it.
 
 `deploy.preDeployCommand` cannot do the migrating. It runs **once per deploy,
-not once per tenant**, and making it iterate would put a multi-hour fleet
+not once per workspace**, and making it iterate would put a multi-hour fleet
 migration on the deploy critical path — every deploy blocked behind every
-tenant's slowest index build.
+workspace's slowest index build.
 
 So: **the control plane records intent, and the app reconciles toward it.**
 
 ```
 control DB                          app image (QUACKBACK_ROLE=migrator)
 ──────────                          ─────────────────────────────────
-cp_tenant_schema_state              claim a tenant (lease)
+cp_workspace_schema_state              claim a workspace (lease)
   target_version   ← CP writes  ──► migrate its database (direct endpoint)
   cohort           ← CP writes      verify the CATALOGUE, not the ledger
   current_version  ◄── app writes   record what was observed
@@ -35,7 +35,7 @@ cp_tenant_schema_state              claim a tenant (lease)
 The executor is the app image and not the control plane, because the migrations
 are bundled in `packages/db/drizzle`. If the control plane ran them, version
 affinity between "which SQL" and "which code" would be maintained by hand across
-two repositories, and the first time they disagreed a tenant would be migrated to
+two repositories, and the first time they disagreed a workspace would be migrated to
 a schema no running build knows about.
 
 ## 2. Which executor route, and why
@@ -56,7 +56,7 @@ reasons in order of weight:
 2. **`migrate.ts` calls `process.exit(1)` on failure.** In-process that kills the
    migrator mid-fleet — so the CLI route does not merely have a cost, it forces
    the child-process shape rather than being chosen for it.
-3. **Concurrency.** §10.3 wants tenants migrated ~20 at a time. That is 20 Node
+3. **Concurrency.** §10.3 wants workspaces migrated ~20 at a time. That is 20 Node
    processes each re-parsing the drizzle schema and re-reading 228 SQL files.
 
 The cost is stated rather than hidden: `packages/db` gained a leaf module,
@@ -83,11 +83,11 @@ Three consequences, and they are the shape of the whole module:
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Extensions first**     | `runMigrations` never issued `CREATE EXTENSION vector`, and no migration file does either, while `0000_initial` declares `vector` columns. A fresh database migrated through the runtime path could not succeed at all.                                                                               |
 | **Heal before building** | An interrupted `CREATE INDEX CONCURRENTLY` leaves an _invalid_ index. `IF NOT EXISTS` then treats it as present — measured, see §5 — so re-running the migrator **certifies** the invalid index rather than repairing it, and exits 0. Invalid non-constraint indexes are dropped _before_ the build. |
-| **Verify the catalogue** | Post-conditions are checked against `pg_index` / `pg_extension` / `information_schema`, never against `drizzle.__drizzle_migrations`. The ledger's row count is recorded next to the verdict as a diagnostic, never as evidence.                                                                                             |
+| **Verify the catalogue** | Post-conditions are checked against `pg_index` / `pg_extension` / `information_schema`, never against `drizzle.__drizzle_migrations`. The ledger's row count is recorded next to the verdict as a diagnostic, never as evidence.                                                                      |
 
 ### What the post-condition check covers, and what it does not
 
-`verifySchemaPostconditions` returned `ok=true` for the two broken tenants
+`verifySchemaPostconditions` returned `ok=true` for the two broken workspaces
 above, and was right to by its own lights: it checked extensions and the
 concurrent indexes and nothing else, while its name promised the schema. A
 verdict is only as good as its scope, and it had no way to state its scope.
@@ -102,14 +102,14 @@ column that does not exist is not a missing value, it is a throw.
 
 Still **not** covered, stated so a green verdict is readable: types,
 nullability, defaults, constraints, triggers and functions. And objects the
-database has that this build does not declare are ignored on purpose — a tenant
+database has that this build does not declare are ignored on purpose — a workspace
 a newer image has migrated past must keep being served (§6), so extra is never a
 violation. Full bidirectional comparison is `db:check-drift`, which needs the
 Drizzle Kit toolchain rather than a query.
 
 ## 4. Replaying, and the ledger this fleet actually has
 
-Five live gauntlet tenant databases have a complete 226-row ledger that stops at
+Five live gauntlet workspace databases have a complete 226-row ledger that stops at
 `0248` while physically carrying assorted later migrations, because every one of
 them was applied with raw `psql -f`, which never writes the ledger. A migrator
 run against them replays whatever the ledger does not record.
@@ -122,7 +122,7 @@ There are two tempting wrong answers.
   Drizzle writes them, _after_ it has executed the statements.
 - **Refusing anything non-idempotent.** 197 of the 228 bundled migrations are
   plain `CREATE TABLE` / `ADD COLUMN`. That rule refuses every ordinary rollout
-  and every fresh tenant, whose replay set starts at `0000_initial`.
+  and every fresh workspace, whose replay set starts at `0000_initial`.
 
 The distinction that works is between the **two ways a replay goes wrong**:
 
@@ -137,7 +137,7 @@ own SQL, reusing the destructive-DDL scanner's tokenizer so the two agree about
 what is a comment and what is a string. Of the 228 bundled migrations: **31
 safe, 145 errors, 52 mutates.**
 
-The reconciler refuses a tenant whose replay set contains a `mutates` migration
+The reconciler refuses a workspace whose replay set contains a `mutates` migration
 **and whose ledger is non-empty** — a fresh database has nothing to replay, only
 to apply. The refusal names the file, the statement and the repair.
 
@@ -154,14 +154,14 @@ Drizzle selects `order by created_at desc limit 1` and applies every bundled
 entry strictly greater than that one value. So a **hole below the high-water
 mark is invisible to the migrator** while being exactly what the compatibility
 gate refuses. That split — the reconciler advances the tip, the gate detects
-holes — has a dead end in it, because the gate can only refuse. A tenant with a
+holes — has a dead end in it, because the gate can only refuse. A workspace with a
 hole was refused by the gate on every request, forever, and reconciled by the
 migrator without being repaired.
 
-Measured on two live tenants: high-water at `0253` with rows absent for `0249`,
+Measured on two live workspaces: high-water at `0253` with rows absent for `0249`,
 `0250`, `0252`, `0256` and `0257`, `settings.cloud` physically missing, every
 page 500ing. A `run` applied `0256` and `0257`, wrote those two rows, and
-reported `OK [reconciled] post=true`. Both instruments said the tenant was fine.
+reported `OK [reconciled] post=true`. Both instruments said the workspace was fine.
 
 ### The heal is a DELETE and nothing else
 
@@ -195,11 +195,11 @@ whole algorithm, and its shape is the safety argument:
 The replay this enables covers migrations with **different evidence behind
 them**, and treating them alike gets one of them wrong.
 
-| Population                                   | What is known           | Rule                        |
-| -------------------------------------------- | ----------------------- | --------------------------- |
-| **rewrites** — rows the DELETE removes        | they **did** run        | must be `safe`, nothing less |
-| **the hole** — entries with no row            | nobody knows            | `errors` ok, `mutates` refused |
-| the forward tail above the high-water mark    | ordinary rollout        | unchanged (§4)              |
+| Population                                 | What is known    | Rule                           |
+| ------------------------------------------ | ---------------- | ------------------------------ |
+| **rewrites** — rows the DELETE removes     | they **did** run | must be `safe`, nothing less   |
+| **the hole** — entries with no row         | nobody knows     | `errors` ok, `mutates` refused |
+| the forward tail above the high-water mark | ordinary rollout | unchanged (§4)                 |
 
 `errors` is tolerable in the hole for the reason it is tolerable in any rollout:
 `migrate()` is one transaction, so the run rolls back whole and Postgres's own
@@ -213,13 +213,13 @@ truncate past 0246, replay
 ```
 
 and because nothing can put the deleted rows back, a truncation that then cannot
-replay leaves the tenant under-claiming further than it started with no run that
+replay leaves the workspace under-claiming further than it started with no run that
 can ever succeed. **That is why the refusal happens before the DELETE**, and it
 is asserted as such: the refusal tests check that the ledger is byte-for-byte
 untouched.
 
 A fourth refusal covers rows the truncation would delete that _this build does
-not bundle_ — a tenant ahead of the image. Nothing here could rewrite them, so
+not bundle_ — a workspace ahead of the image. Nothing here could rewrite them, so
 healing would delete evidence permanently; run the heal from the image that
 carries them.
 
@@ -259,7 +259,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS …  → SUCCEEDS
 Pinned by `__tests__/schema-ops.test.ts`. This is the fact the heal ordering
 rests on, so it is measured rather than assumed.
 
-### A fresh tenant, end to end
+### A fresh workspace, end to end
 
 ```
 inst_p10_fleet_a  OK [reconciled]  ledger 0->228  applied=228 healed=0 post=true  164530ms
@@ -354,21 +354,21 @@ bundle, so it ends at 229 rows — ahead of the code, and correctly so.
 
 ### Two migrators, one fleet
 
-Ten tenants set claimable, `attempts` reset to 0, two `run --concurrency 3`
+Ten workspaces set claimable, `attempts` reset to 0, two `run --concurrency 3`
 processes started together:
 
 ```
 migrator A  claimed=4   t2, t3, t4, p10-old
 migrator B  claimed=6   alpha, bravo, t1, fleet-a, fleet-b, fleet-c
 
-attempts | tenants
-       1 |      10        <- every tenant claimed exactly once
+attempts | workspaces
+       1 |      10        <- every workspace claimed exactly once
 ```
 
 Note the durations: 2–6 s each rather than the 25–165 s a real reconcile takes.
 That is the cheap path — nothing to apply and clean post-conditions, so the
 executor is never started and no index is rebuilt. A pass over an
-already-reconciled fleet costs one query per tenant, which is what keeps §10.7's
+already-reconciled fleet costs one query per workspace, which is what keeps §10.7's
 cost model intact.
 
 ### Why the gate exists at all
@@ -421,7 +421,7 @@ existed to be behind. Its replacement is held out of the rollout by a `blocked`
 intent row rather than by a note asking people not to migrate it.)
 
 The gate-off row is the control: without it, a 503 would be equally consistent
-with the tenant being broken for some unrelated reason.
+with the workspace being broken for some unrelated reason.
 
 Reproduce with `scripts/fleet-migrator.ts` and the runbook in §7.
 
@@ -440,8 +440,8 @@ SELECT md5(t::text) FROM (SELECT
       FROM information_schema.columns WHERE table_name='settings')             AS settings_cols,
    (SELECT col_description('settings'::regclass, ordinal_position::int)
       FROM information_schema.columns
-     WHERE table_name='settings' AND column_name='cloud_tenant_id')            AS col_comment,
-   (SELECT cloud_tenant_id FROM settings LIMIT 1)                              AS stamp
+     WHERE table_name='settings' AND column_name='cloud_workspace_key')            AS col_comment,
+   (SELECT cloud_workspace_key FROM settings LIMIT 1)                              AS stamp
 ) t
 ```
 
@@ -451,22 +451,22 @@ data, the column's shape, the column's comment and the stamp itself.
 ```
 BEFORE   digest D0                     stamp = inst_gauntlet_neon_t1
 psql -f 0251_settings_cloud_tenant_id.sql
-         NOTICE: column "cloud_tenant_id" of relation "settings" already exists, skipping
+         NOTICE: column "cloud_workspace_key" of relation "settings" already exists, skipping
 AFTER    digest D0   ← unchanged       stamp = inst_gauntlet_neon_t1
 ```
 
 With the controls that make "unchanged" mean something:
 
 ```
-COMMENT ON COLUMN settings.cloud_tenant_id IS 'CONTROL'   → digest CHANGES
+COMMENT ON COLUMN settings.cloud_workspace_key IS 'CONTROL'   → digest CHANGES
 replay 0251                                               → digest returns to D0
-UPDATE settings SET cloud_tenant_id = … || '_CONTROL'     → digest CHANGES
+UPDATE settings SET cloud_workspace_key = … || '_CONTROL'     → digest CHANGES
 restore                                                   → digest returns to D0
 ```
 
 The instrument moves on a comment change and on a value change. It did not move
 on the replay. (The literal digests are omitted deliberately: they are specific
-to one tenant's data at one moment, so a reader re-running this will get
+to one workspace's data at one moment, so a reader re-running this will get
 different values — what has to match is _before equals after_, and _control
 differs from both_.)
 
@@ -484,11 +484,11 @@ thing.
 
 Two properties, and the second is the one that is easy to get wrong.
 
-- **A tenant below the floor degrades alone.** 503 for that tenant, with
+- **A workspace below the floor degrades alone.** 503 for that workspace, with
   `Retry-After`, a distinct log line and a distinct message — never confused with
   a fingerprint refusal, which means "wrong database" and is a security event.
-- **A tenant _ahead_ of the code is served normally.** During a rollout the new
-  image migrates a tenant that not-yet-restarted replicas are still serving.
+- **A workspace _ahead_ of the code is served normally.** During a rollout the new
+  image migrates a workspace that not-yet-restarted replicas are still serving.
   Refusing it there would turn every rollout into an outage on the way in. This
   is why `getMigrationStatus()`'s bundled-⊆-applied semantics are kept
   deliberately rather than "fixed".
@@ -499,9 +499,9 @@ fleet has proved it — five databases whose newest row is `0248` while later
 migrations are physically present. `max(created_at) >= floor` would read a
 gapped ledger as satisfied.
 
-The gate reads the **tenant's own ledger**, not the control plane's
+The gate reads the **workspace's own ledger**, not the control plane's
 `current_version`. The control row is a belief, only as fresh as the last
-reconcile; the tenant's ledger is what the failing query will actually be issued
+reconcile; the workspace's ledger is what the failing query will actually be issued
 against.
 
 Unset `MIN_SCHEMA_VERSION` means no floor. A value naming no bundled migration
@@ -513,9 +513,9 @@ that is off while every dashboard says it is on.
 ```bash
 # what a run WOULD apply, whether the ledger has a hole in it, and whether any
 # of it is replay-dangerous. Reports the refusal an operator would get, if any.
-bun run scripts/fleet-migrator.ts plan --tenant inst_x
+bun run scripts/fleet-migrator.ts plan --workspace inst_x
 
-# create intent rows for active tenants that have none, at this build's version
+# create intent rows for active workspaces that have none, at this build's version
 bun run scripts/fleet-migrator.ts enrol
 
 # stage a rollout
@@ -524,11 +524,11 @@ bun run scripts/fleet-migrator.ts run --cohort canary
 bun run scripts/fleet-migrator.ts run --concurrency 8
 
 bun run scripts/fleet-migrator.ts status
-bun run scripts/fleet-migrator.ts block --tenant inst_x --reason "under investigation"
+bun run scripts/fleet-migrator.ts block --workspace inst_x --reason "under investigation"
 ```
 
 Exit codes are the contract, because a `deploy.cronSchedule` service is judged on
-them: `0` all claimed tenants reconciled or already current · `1` at least one
+them: `0` all claimed workspaces reconciled or already current · `1` at least one
 failed, halt and read · `2` the invocation was wrong.
 
 ### Configuration is validated at boot, and a bad value exits
@@ -545,7 +545,7 @@ caches the module-evaluation error, and every route 500s forever —
 `/api/health/live` included, so a supervisor watching liveness sees a process
 that is up and answering. Measured in that state: the process kept its socket
 open and made **7,417 connection attempts** to the database it had just declared
-itself unfit to serve. On a pooled fleet each of those wakes a tenant's Neon
+itself unfit to serve. On a pooled fleet each of those wakes a workspace's Neon
 compute, so one mistyped variable becomes a fleet-wide cost problem.
 
 Measured after the change, with the good-config row as the control:
@@ -570,16 +570,16 @@ times.
 
 ### Environment
 
-| Variable                         | Meaning                                                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Variable                         | Meaning                                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `QUACKBACK_ROLE=migrator`        | serves nothing, runs no queues. `shouldRunWorkers()` is an allowlist, so this role starts neither the job tier nor the sweepers |
-| `QUACKBACK_TENANCY=pooled`       | required; the registry is the tenant source                                                                               |
-| `QUACKBACK_CONTROL_DATABASE_URL` | where `cp_tenant_schema_state` lives                                                                                      |
-| `MIN_SCHEMA_VERSION`             | the serving floor. Read by the **web** role, not by this one                                                              |
+| `QUACKBACK_TENANCY=pooled`       | required; the registry is the workspace source                                                                                  |
+| `QUACKBACK_CONTROL_DATABASE_URL` | where `cp_workspace_schema_state` lives                                                                                         |
+| `MIN_SCHEMA_VERSION`             | the serving floor. Read by the **web** role, not by this one                                                                    |
 
 ### Connections
 
-The migrator builds its own connection from the tenant record's **`directUrl`**,
+The migrator builds its own connection from the workspace record's **`directUrl`**,
 and refuses a DSN whose host looks like a transaction-mode pooler.
 
 **The usual justification for that is wrong, and the real one is worse.**
@@ -613,21 +613,21 @@ So the mutex does not fail cleanly. **It fails open non-deterministically,
 depending on which backend the pooler happens to hand you** — which is worse
 than a mutex that never works, because it works in testing. A migrator run
 through the pooler therefore loses its serialisation _sometimes_, and strands a
-lock that blocks every subsequent direct run of the same tenant _always_.
+lock that blocks every subsequent direct run of the same workspace _always_.
 
 **A related finding that reaches past this piece:** the pooler runs no session
 reset between clients. A `statement_timeout=7654ms` set by one client was read
 back by a _different_ client landing on the same backend. Any per-session `SET`
 through the pooled endpoint is shared state, not client state.
 
-It does **not** go through the tenant pool cache, for two reasons that are both
+It does **not** go through the workspace pool cache, for two reasons that are both
 correctness: the pool cache terminates at the _pooled_ endpoint, and it asserts
 the §3 fingerprint on checkout — which a freshly provisioned database has not
 been stamped for yet. A migrator that could only run against already-stamped
 databases could not do the job provisioning needs it for.
 
 **A migrator holds a direct session-mode connection for the duration of a
-tenant's migration, which keeps that tenant's Neon compute awake.** That is
+workspace's migration, which keeps that workspace's Neon compute awake.** That is
 unavoidable and bounded; it is also why the migrator is a separate role from the
 pooled web tier, whose whole cost model depends on going silent.
 
@@ -636,7 +636,7 @@ pooled web tier, whose whole cost model depends on going silent.
 **Every measurement in the table above was taken against an idle database.** The
 one below was not, and it is the difference that matters.
 
-A tenant being reconciled has a **live worker tier**. Its job poller holds ROW
+A workspace being reconciled has a **live worker tier**. Its job poller holds ROW
 EXCLUSIVE on `job_queue` more or less continuously, and `0253_job_queue` both
 builds indexes on that table (SHARE) and replaces its wake trigger (`DROP
 TRIGGER IF EXISTS job_queue_wake_trg` / `CREATE TRIGGER`, SHARE ROW EXCLUSIVE).
@@ -663,14 +663,14 @@ The wait is unbounded, and the migration transaction has already touched
 another session holds a conflicting one — the shape that becomes a deadlock
 rather than a queue as soon as the poller wants something the migrator holds.
 Nothing is corrupted either way (the transaction rolls back whole), but it can
-stall or fail a rollout at random on any tenant whose worker is busy.
+stall or fail a rollout at random on any workspace whose worker is busy.
 
 So the fleet migrator sets `lock_timeout` for the lineage —
 `DEFAULT_MIGRATE_LOCK_TIMEOUT_MS`, 30 s. **This does not prevent the contention;
 it bounds it.** A `55P03` rolls the run back, the reconciler records it with the
 migration named in the message, and the lease's existing backoff retries — which
 is a better retry than a new one, because it counts against `max_attempts` and so
-cannot loop forever against a tenant whose worker never goes quiet.
+cannot loop forever against a workspace whose worker never goes quiet.
 
 Three deliberate choices:
 
@@ -680,14 +680,14 @@ Three deliberate choices:
 - **Off by default in `runMigrations`.** The boot path (`migrate.ts`) keeps its
   historical unbounded wait; a self-hosted install migrating its own database at
   startup has no fleet to protect and no reconciler to retry it.
-- **No quiescing of the worker tier.** Draining a tenant's jobs before migrating
+- **No quiescing of the worker tier.** Draining a workspace's jobs before migrating
   it would be a larger mechanism than the problem, and the timeout plus the
   existing retry already turns the failure into a bounded, named, self-clearing
   one.
 
 ### Sizing the lease
 
-The lease must outlive the slowest tenant migration. Measured on a 0.25 CU Neon
+The lease must outlive the slowest workspace migration. Measured on a 0.25 CU Neon
 compute, a fresh database:
 
 | step                                      | elapsed    |
@@ -700,8 +700,8 @@ compute, a fresh database:
 
 The index builds dominate, on empty tables, because each `CREATE INDEX
 CONCURRENTLY` is several round trips and several catalogue transactions. The
-default lease is 15 minutes and the heartbeat a third of that. On a large tenant,
-raise it — and note that the reaper's terminal branch means a tenant whose
+default lease is 15 minutes and the heartbeat a third of that. On a large workspace,
+raise it — and note that the reaper's terminal branch means a workspace whose
 migration reliably outlives its lease will exhaust `max_attempts` and stop being
 claimed, which is the correct outcome and needs an operator, not a longer retry.
 
@@ -723,12 +723,12 @@ claimed, which is the correct outcome and needs an operator, not a longer retry.
   and by a database `CHECK`.
 - **Record `succeeded` below the target.** A migrator whose bundle is older than
   the target would otherwise apply everything it has, observe a lower version,
-  and mark the tenant reconciled — and the row would then be _unclaimable_,
+  and mark the workspace reconciled — and the row would then be _unclaimable_,
   because the claim narrows on `current_version < target_version`. The rollout
   would report complete having skipped it. Refused in code and by the same
   `CHECK`. Found by a test rather than by reasoning.
-- **Migrate a tenant the request path would refuse.** Tenants are read through
-  `listActiveTenants`, the same reader with the same contract validation, so a
+- **Migrate a workspace the request path would refuse.** Workspaces are read through
+  `listActiveWorkspaces`, the same reader with the same contract validation, so a
   half-written record cannot become a migrated one.
 - **Replay a data-mutating migration onto a database with a non-empty ledger**,
   without an explicit `--allow-mutating-replay`.
@@ -741,11 +741,11 @@ claimed, which is the correct outcome and needs an operator, not a longer retry.
 ALTER TABLE "job_queue" DROP CONSTRAINT "job_queue_status_check";
 ALTER TABLE "job_queue" DROP CONSTRAINT "job_queue_max_attempts_check";
 ALTER TABLE "job_queue" DROP CONSTRAINT "job_queue_lease_shape_check";
-ALTER TABLE "settings" DROP COLUMN "cloud_tenant_id";
+ALTER TABLE "settings" DROP COLUMN "cloud_workspace_key";
 ```
 
 All four are raw-SQL-owned objects absent from the Drizzle TS schema —
-`settings.cloud_tenant_id` from `0251` and the three `job_queue` CHECKs from
+`settings.cloud_workspace_key` from `0251` and the three `job_queue` CHECKs from
 `0253` — and they reproduce **byte-identical** on the branch that introduced
 them, with none of this piece's code present.
 
@@ -782,15 +782,15 @@ drift is not.
   observations — is what the CP has to implement, and it is enforced by
   `CHECK`s rather than by convention, so a CP writer cannot get it wrong
   quietly.
-- **A tenant already recorded at its target cannot be claimed, so it cannot be
+- **A workspace already recorded at its target cannot be claimed, so it cannot be
   healed by a plain `run`.** The claim narrows on
-  `current_version < target_version`, and a tenant with a hole was recorded at
+  `current_version < target_version`, and a workspace with a hole was recorded at
   the target by a run that healed nothing — which is exactly the state the two
-  live tenants are in. The reason it is broken is the reason nothing will look at
+  live workspaces are in. The reason it is broken is the reason nothing will look at
   it again.
 
-  `plan --tenant X` reports the hole regardless of claim state, and
-  `run --tenant X` now reads the tenant's own ledger before agreeing with an
+  `plan --workspace X` reports the hole regardless of claim state, and
+  `run --workspace X` now reads the workspace's own ledger before agreeing with an
   `already_current` verdict and exits 1 naming the missing migrations. Clearing
   the observation so the reconciler can claim it is a **control-plane write**,
   and deliberately not a command here: `current_version` is an observation this
@@ -798,12 +798,13 @@ drift is not.
   CP's own migration `0049`, in another repository, and shipping an `UPDATE`
   against constraints that cannot be read or tested from here is how a repair
   tool becomes an incident. The write an operator needs is
-  `UPDATE cp_tenant_schema_state SET current_version = NULL, status = 'pending',
-  attempts = 0 WHERE tenant_id = ...` — status and version together, because the
+  `UPDATE cp_workspace_schema_state SET current_version = NULL, status = 'pending',
+attempts = 0 WHERE workspace_key = ...` — status and version together, because the
   `CHECK` couples them. Making that a first-class command belongs with the CP
   work that owns the table.
+
 - **Neon-branch preflight (§10.8) is not built.** `plan` reports the replay set
   and its verdicts against the live database, which is the cheap half; dry-running
-  a release against a branch of the largest and oldest tenant is not.
+  a release against a branch of the largest and oldest workspace is not.
 - **`required` vs `deferred` migration classes (§10.7) are not built.** Every
   migration is eager today, so a fleet-wide rollout wakes every suspended compute.

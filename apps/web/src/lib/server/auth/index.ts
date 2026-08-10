@@ -18,11 +18,11 @@ import { config } from '@/lib/server/config'
 import { activeSecretKey } from '@/lib/server/secret-key'
 import { logger } from '@/lib/server/logger'
 import {
-  getCurrentTenant,
-  getTenantScope,
-  runWithTenantScope,
-} from '@/lib/server/tenancy/tenant-context'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+  getCurrentWorkspace,
+  getWorkspaceScope,
+  runWithWorkspaceScope,
+} from '@/lib/server/workspaces/workspace-context'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
@@ -42,23 +42,23 @@ const STASH_TTL_MS = 30_000
  * a sign-in link for an account its recipient does not own.
  */
 function makeStash<T>() {
-  const m = new TenantKeyedCache<{ value: T; ts: number }>()
+  const m = new WorkspaceKeyedCache<{ value: T; ts: number }>()
   return {
     set(key: string, value: T) {
       const k = key.toLowerCase()
       m.set(k, { value, ts: Date.now() })
       // The sweep is what stops an undrained token living in heap for the life
       // of the process, so it has to keep firing. A timer callback runs with no
-      // ambient scope, where every tenant-keyed read resolves to the
-      // single-tenant namespace — it would miss the entry it was armed for and
+      // ambient scope, where every workspace-keyed read resolves to the
+      // single-workspace namespace — it would miss the entry it was armed for and
       // delete an unrelated one. Re-entering the scope that armed it is the
       // only way the sweep addresses the same entry `set` just wrote.
-      const scope = getTenantScope()
+      const scope = getWorkspaceScope()
       const sweep = () => {
         const s = m.get(k)
         if (s && Date.now() - s.ts >= STASH_TTL_MS) m.delete(k)
       }
-      setTimeout(() => (scope ? runWithTenantScope(scope, sweep) : sweep()), STASH_TTL_MS)
+      setTimeout(() => (scope ? runWithWorkspaceScope(scope, sweep) : sweep()), STASH_TTL_MS)
     },
     take(key: string): T | undefined {
       const k = key.toLowerCase()
@@ -100,36 +100,36 @@ export const getOTP = (purpose: OtpPurpose, email: string) => otpStash.take(otpK
 type AuthInstance = Awaited<ReturnType<typeof createAuth>>['instance']
 
 /**
- * The built auth instance, per tenant.
+ * The built auth instance, per workspace.
  *
  * The instance closes over a database adapter, a set of registered OAuth
  * providers, this workspace's trusted origins and its base URL — everything
  * that decides who may sign in and where they land. One shared instance in a
- * pooled process authenticates every tenant against whichever tenant built it.
+ * pooled process authenticates every workspace against whichever workspace built it.
  *
  * The version guard has to be partitioned with it. `auth_config_version` is a
  * small per-workspace counter, so two workspaces sitting on the same number is
- * routine rather than unlikely; compared across tenants it reads "unchanged"
+ * routine rather than unlikely; compared across workspaces it reads "unchanged"
  * and hands back a cached instance built for someone else.
  */
-const authInstances = new TenantKeyedCache<AuthInstance>(256)
+const authInstances = new WorkspaceKeyedCache<AuthInstance>(256)
 // Cross-pod invalidation: the version of `settings.auth_config_version`
 // at the time the cached instance was built. Compared per-request against
 // the current value (via the existing settings cache, no extra DB
 // round-trip). Mismatch → rebuild, other pods' writes propagate.
-const authConfigVersions = new TenantKeyedCache<number>(256)
+const authConfigVersions = new WorkspaceKeyedCache<number>(256)
 const AUTH_CACHE_KEY = 'instance'
 
-const rateLimitCounters = new TenantKeyedCache<RateLimit>(20_000)
+const rateLimitCounters = new WorkspaceKeyedCache<RateLimit>(20_000)
 
 /**
- * Rate-limit counters, partitioned by tenant.
+ * Rate-limit counters, partitioned by workspace.
  *
  * Exported for the isolation tests: the leak this replaces is invisible from
  * outside (a 429 looks the same whichever workspace's traffic earned it), so
  * the only way to assert the separation is to read the counters directly.
  */
-export const tenantRateLimitStorage = {
+export const workspaceRateLimitStorage = {
   async get(key: string): Promise<RateLimit | null> {
     return rateLimitCounters.get(key) ?? null
   },
@@ -138,9 +138,9 @@ export const tenantRateLimitStorage = {
   },
 }
 
-/** Test seam: forget the active tenant's rate-limit counters. */
-export function __resetRateLimitCountersForTenant(): void {
-  rateLimitCounters.clearTenant()
+/** Test seam: forget the active workspace's rate-limit counters. */
+export function __resetRateLimitCountersForWorkspace(): void {
+  rateLimitCounters.clearWorkspace()
 }
 
 async function createAuth() {
@@ -168,7 +168,7 @@ async function createAuth() {
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders } = await import('./auth-providers')
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { listIdentityProviders, getIdentityProviderCredentials } =
     await import('@/lib/server/domains/settings/identity-providers.service')
   const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
@@ -195,11 +195,14 @@ async function createAuth() {
   const trustedProviders: string[] = []
   const genericOAuthConfigs: GenericOAuthConfig[] = []
 
-  // Tier limits + tenant settings are independent reads — fire them
+  // Tier limits + workspace settings are independent reads — fire them
   // together to avoid stacking Redis round-trips on every auth-instance
-  // rebuild. tenantSettings still drives the social-provider surface
+  // rebuild. workspaceSettings still drives the social-provider surface
   // filter below; OIDC config now comes from the identity_provider list.
-  const [tierLimits, tenantSettings] = await Promise.all([getTierLimits(), getTenantSettings()])
+  const [tierLimits, workspaceSettings] = await Promise.all([
+    getTierLimits(),
+    getWorkspaceSettings(),
+  ])
 
   // OIDC providers (single sign-on + portal custom OIDC) are registered
   // from the identity_provider list — the single source of truth. Each
@@ -324,7 +327,7 @@ async function createAuth() {
   // partitioned per-role at the auth-instance level. Password and
   // magic-link aren't covered here (they're global Better-Auth features,
   // not entries in AUTH_PROVIDERS).
-  const unifiedOAuthConfig = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
+  const unifiedOAuthConfig = (workspaceSettings?.authConfig?.oauth ?? {}) as Record<
     string,
     boolean | undefined
   >
@@ -345,7 +348,7 @@ async function createAuth() {
       clientSecret: creds.clientSecret,
       mapProfileToUser: mapProfileClaims,
     }
-    // Add provider-specific fields (e.g., tenantId for Microsoft, issuer for GitLab)
+    // Add provider-specific fields (e.g., workspaceKey for Microsoft, issuer for GitLab)
     for (const field of provider.platformCredentials) {
       if (field.key !== 'clientId' && field.key !== 'clientSecret' && creds[field.key]) {
         providerConfig[field.key] = creds[field.key]
@@ -356,8 +359,8 @@ async function createAuth() {
   }
 
   // BASE_URL is required for auth callbacks and redirects. Under pooled
-  // tenancy `config.baseUrl` is the tenant's own pinned origin, and this
-  // instance is cached per tenant, so the callback origin and the cookie
+  // tenancy `config.baseUrl` is the workspace's own pinned origin, and this
+  // instance is cached per workspace, so the callback origin and the cookie
   // `secure` flag below follow the hostname the request arrived on.
   const baseURL = config.baseUrl
 
@@ -365,13 +368,16 @@ async function createAuth() {
   // is absent from this list — closed but invisibly, which is why §8 calls
   // TRUSTED_ORIGINS load-bearing.
   //
-  // Under pooled tenancy the list is the tenant's own hostnames and nothing
+  // Under pooled tenancy the list is the workspace's own hostnames and nothing
   // else. The process-wide TRUSTED_ORIGINS is a fleet value: honouring it here
-  // would make one tenant's origin trusted on every other tenant, which is a
-  // cross-tenant weakening of exactly the check that exists to prevent one.
-  const currentTenant = getCurrentTenant()
-  const trustedOrigins = currentTenant
-    ? [baseURL, ...currentTenant.routing.hostnames.map((h) => `${new URL(baseURL).protocol}//${h}`)]
+  // would make one workspace's origin trusted on every other workspace, which is a
+  // cross-workspace weakening of exactly the check that exists to prevent one.
+  const currentWorkspace = getCurrentWorkspace()
+  const trustedOrigins = currentWorkspace
+    ? [
+        baseURL,
+        ...currentWorkspace.routing.hostnames.map((h) => `${new URL(baseURL).protocol}//${h}`),
+      ]
     : [
         baseURL,
         ...(process.env.TRUSTED_ORIGINS?.split(',')
@@ -396,7 +402,7 @@ async function createAuth() {
     // takes precedence over that map entirely. Entry expiry lives in the
     // library's own window arithmetic (`lastRequest` vs the rule's window), so
     // this only has to hold and bound; the cache evicts oldest-first.
-    rateLimit: { customStorage: tenantRateLimitStorage },
+    rateLimit: { customStorage: workspaceRateLimitStorage },
     // Route the library's internal logging through pino, redacted. Without it
     // those lines bypass the app logger entirely — unstructured, uncorrelated,
     // and on a resolution failure carrying the whole user-info payload
@@ -440,9 +446,9 @@ async function createAuth() {
     baseURL,
 
     // Trusted origins for CORS/CSRF protection. Built above: TRUSTED_ORIGINS
-    // (comma-separated) adds extra origins on a single-tenant install — useful
+    // (comma-separated) adds extra origins on a single-workspace install — useful
     // for dev/test where BASE_URL differs from the browser origin (e.g. ngrok +
-    // localhost) — and a pooled tenant gets its own hostnames instead.
+    // localhost) — and a pooled workspace gets its own hostnames instead.
     trustedOrigins,
 
     // Tell Better-Auth about non-standard columns on `user` so the
@@ -692,7 +698,7 @@ async function createAuth() {
         // `?? true` also covers cached settings serialized before the key
         // existed.
         allowDynamicClientRegistration:
-          tenantSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
+          workspaceSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
 
         // Identity scopes plus the shared capability vocabulary (the same
@@ -837,7 +843,7 @@ async function createAuth() {
     ],
   })
 
-  return { instance, authConfigVersion: tenantSettings?.settings?.authConfigVersion ?? 0 }
+  return { instance, authConfigVersion: workspaceSettings?.settings?.authConfigVersion ?? 0 }
 }
 
 /**
@@ -857,8 +863,8 @@ export async function getAuth(): Promise<AuthInstance> {
   // Skip the version check when no instance is cached yet — the build
   // path below records the version after creation.
   if (instance && builtVersion !== undefined) {
-    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-    const t = await getTenantSettings()
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const t = await getWorkspaceSettings()
     const current = t?.settings?.authConfigVersion
     if (typeof current === 'number' && current !== builtVersion) {
       resetAuth()
@@ -875,7 +881,7 @@ export async function getAuth(): Promise<AuthInstance> {
 }
 
 /**
- * Reset the active tenant's auth instance so it's re-created on next access.
+ * Reset the active workspace's auth instance so it's re-created on next access.
  * Call after changing auth provider credentials in the DB.
  */
 export function resetAuth(): void {

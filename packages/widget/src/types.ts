@@ -1,4 +1,4 @@
-// Tenant Quackback URL — e.g. "https://feedback.acme.com"
+// Workspace Quackback URL — e.g. "https://feedback.acme.com"
 export type InstanceUrl = string
 
 /**
@@ -22,7 +22,7 @@ export const WIDGET_LOCALES = [
 
 /** Passed to `Quackback("init", ...)` or `Quackback.init(...)`. */
 export interface InitOptions {
-  /** Tenant Quackback instance URL — required when using the npm package. */
+  /** Workspace Quackback instance URL — required when using the npm package. */
   instanceUrl: InstanceUrl
   placement?: 'left' | 'right'
   defaultBoard?: string

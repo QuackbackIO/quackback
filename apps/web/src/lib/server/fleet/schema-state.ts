@@ -1,5 +1,5 @@
 /**
- * `cp_tenant_schema_state` — the control plane's migration intent, read and
+ * `cp_workspace_schema_state` — the control plane's migration intent, read and
  * written by the app (SAAS-HOSTING-STACK.md §10.3).
  *
  * The direction of the arrows is the whole design: **the control plane records
@@ -20,18 +20,18 @@
  *
  * The one property worth restating here because it matters more for migration
  * than for jobs: **`attempts` is incremented by the CLAIM.** A migrator killed
- * halfway through a tenant has already spent an attempt, so a tenant whose
+ * halfway through a workspace has already spent an attempt, so a workspace whose
  * migration reliably kills the process cannot loop — it exhausts `max_attempts`
- * and goes terminal with a diagnosis. Without that, a poisonous tenant would
+ * and goes terminal with a diagnosis. Without that, a poisonous workspace would
  * wake its Neon compute forever, which is the exact cost the architecture exists
  * to avoid.
  *
  * ## The connection
  *
  * The control database is reached through `getControlSql()`, the same tiny,
- * long-lived, non-tenant connection the registry reader uses. It is a direct
+ * long-lived, non-workspace connection the registry reader uses. It is a direct
  * connection by construction: the control plane is a single always-warm
- * Postgres, not a per-tenant Neon compute behind a transaction pooler.
+ * Postgres, not a per-workspace Neon compute behind a transaction pooler.
  */
 import { sql } from 'drizzle-orm'
 import { createDbFromSql, type Database } from '@quackback/db/client'
@@ -45,18 +45,18 @@ import {
   leaseReapSql,
   type LeaseHandle,
 } from '@/lib/server/jobs/lease'
-import { getControlSql } from '@/lib/server/tenancy/registry'
+import { getControlSql } from '@/lib/server/workspaces/registry'
 
 const log = logger.child({ component: 'fleet-schema-state' })
 
-export const SCHEMA_STATE_TABLE = 'cp_tenant_schema_state'
+export const SCHEMA_STATE_TABLE = 'cp_workspace_schema_state'
 
 /**
  * A drizzle handle over the control connection.
  *
  * Built lazily and memoised: `getControlSql()` throws when
  * `QUACKBACK_CONTROL_DATABASE_URL` is unset, and a module-level call would make
- * importing this file fail on a single-tenant install that will never use it.
+ * importing this file fail on a single-workspace install that will never use it.
  */
 let controlDbMemo: Database | null = null
 export function controlDb(): Database {
@@ -71,8 +71,8 @@ export function __setControlDbForTests(db: Database | null): void {
 
 export type SchemaStateStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'blocked'
 
-export interface ClaimedTenant extends LeaseHandle {
-  tenantId: string
+export interface ClaimedWorkspace extends LeaseHandle {
+  workspaceKey: string
   targetVersion: number
   currentVersion: number | null
   cohort: string
@@ -83,7 +83,7 @@ export interface ClaimedTenant extends LeaseHandle {
 
 interface ClaimRow {
   id: string | number | bigint
-  tenant_id: string
+  workspace_key: string
   target_version: string | number
   current_version: string | number | null
   cohort: string
@@ -93,32 +93,32 @@ interface ClaimRow {
   locked_until: Date | string
 }
 
-export interface ClaimTenantsInput {
+export interface ClaimWorkspacesInput {
   limit: number
   leaseMs: number
   workerId: string
   /** Restrict to one rollout cohort. Omitted means every cohort. */
   cohort?: string
-  /** Restrict to one tenant. Used by the CLI's single-tenant mode. */
-  tenantId?: string
+  /** Restrict to one workspace. Used by the CLI's single-workspace mode. */
+  workspaceKey?: string
 }
 
 /**
- * Claim up to `limit` tenants that are behind their target.
+ * Claim up to `limit` workspaces that are behind their target.
  *
  * The extra predicate is the only thing this adds to the shared claim: a row
  * whose `current_version` already meets `target_version` is not claimable, so a
  * reconciler pass over an already-reconciled fleet costs one query and wakes no
- * tenant computes. That matters — §10.7's whole point is that eagerly migrating
+ * workspace computes. That matters — §10.7's whole point is that eagerly migrating
  * the fleet wakes every suspended Neon compute.
  */
-export async function claimTenants(input: ClaimTenantsInput): Promise<ClaimedTenant[]> {
+export async function claimWorkspaces(input: ClaimWorkspacesInput): Promise<ClaimedWorkspace[]> {
   if (input.limit < 1) return []
 
   const filters = [
     sql`(current_version IS NULL OR current_version < target_version)`,
     input.cohort ? sql`cohort = ${input.cohort}` : null,
-    input.tenantId ? sql`tenant_id = ${input.tenantId}` : null,
+    input.workspaceKey ? sql`workspace_key = ${input.workspaceKey}` : null,
   ].filter((f): f is NonNullable<typeof f> => f !== null)
 
   const where = filters.reduce((acc, f, i) => (i === 0 ? f : sql`${acc} AND ${f}`))
@@ -130,14 +130,14 @@ export async function claimTenants(input: ClaimTenantsInput): Promise<ClaimedTen
       limit: input.limit,
       leaseMs: input.leaseMs,
       workerId: input.workerId,
-      returning: sql`j.id, j.tenant_id, j.target_version, j.current_version, j.cohort,
+      returning: sql`j.id, j.workspace_key, j.target_version, j.current_version, j.cohort,
                      j.attempts, j.max_attempts, j.lease_token, j.locked_until`,
     })
   )
 
   return getExecuteRows<ClaimRow>(result).map((row) => ({
     id: String(row.id),
-    tenantId: row.tenant_id,
+    workspaceKey: row.workspace_key,
     targetVersion: Number(row.target_version),
     currentVersion: row.current_version === null ? null : Number(row.current_version),
     cohort: row.cohort,
@@ -148,14 +148,14 @@ export async function claimTenants(input: ClaimTenantsInput): Promise<ClaimedTen
   }))
 }
 
-/** Push the lease forward while a tenant is still migrating. False = lease lost. */
-export async function heartbeatTenant(handle: LeaseHandle, leaseMs: number): Promise<boolean> {
+/** Push the lease forward while a workspace is still migrating. False = lease lost. */
+export async function heartbeatWorkspace(handle: LeaseHandle, leaseMs: number): Promise<boolean> {
   const result = await controlDb().execute(leaseHeartbeatSql(SCHEMA_STATE_TABLE, handle, leaseMs))
   return getExecuteRows(result).length > 0
 }
 
 export interface ObservedSchema {
-  /** Newest applied journal `when` observed in the tenant database. */
+  /** Newest applied journal `when` observed in the workspace database. */
   version: number
   /** Ledger row count. Diagnostic only — see the column comment. */
   appliedCount: number
@@ -164,28 +164,28 @@ export interface ObservedSchema {
 }
 
 /**
- * Record a reconciled tenant.
+ * Record a reconciled workspace.
  *
  * Two things it refuses, both mirrored by database `CHECK`s so a hand-run
  * `UPDATE` during an incident cannot get past them either:
  *
- * - **Success without a verified post-condition verdict.** A tenant whose
+ * - **Success without a verified post-condition verdict.** A workspace whose
  *   migrations all applied and whose indexes are invalid is not reconciled.
  * - **Success below the target.** A migrator whose bundle is older than the
  *   version the control plane asked for would otherwise apply everything it
  *   has, observe a lower version, and record `succeeded` — and the row would
  *   then be *unclaimable*, because the claim narrows on
  *   `current_version < target_version`. The rollout would report complete
- *   having silently skipped the tenant.
+ *   having silently skipped the workspace.
  */
-export async function completeTenant(
+export async function completeWorkspace(
   handle: LeaseHandle,
   observed: ObservedSchema
 ): Promise<boolean> {
   if (!observed.postconditionsOk) {
     throw new Error(
-      'completeTenant called with failing post-conditions. A complete migration ledger is ' +
-        'not evidence that the database is correct; report this through failTenant so the ' +
+      'completeWorkspace called with failing post-conditions. A complete migration ledger is ' +
+        'not evidence that the database is correct; report this through failWorkspace so the ' +
         'diagnosis survives.'
     )
   }
@@ -210,10 +210,10 @@ export type FailOutcome = 'retrying' | 'failed' | 'lease-lost'
  * Record a failed reconcile.
  *
  * `observed` is written even on failure, because the most useful thing an
- * operator can read next to "this tenant failed" is what its schema actually
+ * operator can read next to "this workspace failed" is what its schema actually
  * looked like when it did.
  */
-export async function failTenant(
+export async function failWorkspace(
   handle: LeaseHandle,
   message: string,
   observed?: Partial<ObservedSchema>,
@@ -242,10 +242,10 @@ export interface ReapResult {
 }
 
 /** Reclaim leases whose migrator died. Same statement the job queue's reaper uses. */
-export async function reapExpiredTenantLeases(): Promise<ReapResult> {
-  const result = await controlDb().execute(leaseReapSql(SCHEMA_STATE_TABLE, sql`j.tenant_id`))
+export async function reapExpiredWorkspaceLeases(): Promise<ReapResult> {
+  const result = await controlDb().execute(leaseReapSql(SCHEMA_STATE_TABLE, sql`j.workspace_key`))
   const rows = getExecuteRows<{
-    tenant_id: string
+    workspace_key: string
     status: string
     attempts: number
     max_attempts: number
@@ -257,14 +257,14 @@ export async function reapExpiredTenantLeases(): Promise<ReapResult> {
     if (row.status === 'pending') {
       out.requeued += 1
       log.warn(
-        { tenantId: row.tenant_id, attempts: row.attempts, lostBy: row.locked_by },
-        'migrator lease expired; tenant requeued'
+        { workspaceKey: row.workspace_key, attempts: row.attempts, lostBy: row.locked_by },
+        'migrator lease expired; workspace requeued'
       )
     } else {
       out.terminated += 1
       log.error(
-        { tenantId: row.tenant_id, attempts: row.attempts, lostBy: row.locked_by },
-        'migrator lease expired with no attempts remaining — tenant failed terminally'
+        { workspaceKey: row.workspace_key, attempts: row.attempts, lostBy: row.locked_by },
+        'migrator lease expired with no attempts remaining — workspace failed terminally'
       )
     }
   }
@@ -272,7 +272,7 @@ export async function reapExpiredTenantLeases(): Promise<ReapResult> {
 }
 
 export interface SchemaStateRow {
-  tenantId: string
+  workspaceKey: string
   targetVersion: number
   currentVersion: number | null
   appliedCount: number | null
@@ -290,15 +290,15 @@ export interface SchemaStateRow {
 /** Read the whole table, for the CLI's status view and the CP's rollout page. */
 export async function listSchemaState(cohort?: string): Promise<SchemaStateRow[]> {
   const result = await controlDb().execute(sql`
-    SELECT tenant_id, target_version, current_version, applied_count, postconditions_ok,
+    SELECT workspace_key, target_version, current_version, applied_count, postconditions_ok,
            cohort, status::text AS status, attempts, max_attempts, last_error,
            locked_by, locked_until, last_verified_at
       FROM ${sql.identifier(SCHEMA_STATE_TABLE)}
      ${cohort ? sql`WHERE cohort = ${cohort}` : sql``}
-     ORDER BY tenant_id
+     ORDER BY workspace_key
   `)
   return getExecuteRows<Record<string, unknown>>(result).map((r) => ({
-    tenantId: String(r.tenant_id),
+    workspaceKey: String(r.workspace_key),
     targetVersion: Number(r.target_version),
     currentVersion: r.current_version === null ? null : Number(r.current_version),
     appliedCount: r.applied_count === null ? null : Number(r.applied_count),
@@ -315,7 +315,7 @@ export async function listSchemaState(cohort?: string): Promise<SchemaStateRow[]
 }
 
 /**
- * Write intent: what version this cohort of tenants should reach.
+ * Write intent: what version this cohort of workspaces should reach.
  *
  * This is the control plane's half of the contract and it is deliberately the
  * only writer of `target_version`. Resetting `status` to `pending` here is what
@@ -324,7 +324,7 @@ export async function listSchemaState(cohort?: string): Promise<SchemaStateRow[]
  * exactly the moment it is legitimate to clear it.
  *
  * **`blocked` is preserved, alongside `running`.** An earlier version reset it,
- * which meant a routine target bump silently un-halted a tenant somebody had
+ * which meant a routine target bump silently un-halted a workspace somebody had
  * deliberately taken out of the rollout — and cleared the reason they recorded
  * for doing it. A block is a human decision and only a human should lift it
  * (`fleet-migrator block` / an explicit status change), so it survives every
@@ -332,11 +332,11 @@ export async function listSchemaState(cohort?: string): Promise<SchemaStateRow[]
  */
 export async function setTargetVersion(input: {
   targetVersion: number
-  tenantIds?: string[]
+  workspaceKeys?: string[]
   cohort?: string
 }): Promise<number> {
-  const scope = input.tenantIds
-    ? sql`tenant_id = ANY(${sql.raw(`ARRAY[${input.tenantIds.map((t) => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`)})`
+  const scope = input.workspaceKeys
+    ? sql`workspace_key = ANY(${sql.raw(`ARRAY[${input.workspaceKeys.map((t) => `'${t.replace(/'/g, "''")}'`).join(',')}]::text[]`)})`
     : input.cohort
       ? sql`cohort = ${input.cohort}`
       : sql`true`
@@ -344,7 +344,7 @@ export async function setTargetVersion(input: {
   const result = await controlDb().execute(sql`
     UPDATE ${sql.identifier(SCHEMA_STATE_TABLE)}
     SET target_version = ${input.targetVersion},
-        -- Only a tenant that is actually BEHIND the new target goes back to
+        -- Only a workspace that is actually BEHIND the new target goes back to
         -- pending. Resetting unconditionally left a fleet reading "10 pending"
         -- when every one of them was already at the target and none was
         -- claimable: the claim narrows on current_version < target_version, so
@@ -370,43 +370,43 @@ export async function setTargetVersion(input: {
                        ELSE NULL
                      END
     WHERE ${scope}
-    RETURNING tenant_id
+    RETURNING workspace_key
   `)
   return getExecuteRows(result).length
 }
 
 /**
- * Create the intent row for a tenant that does not have one.
+ * Create the intent row for a workspace that does not have one.
  *
- * Idempotent, and never lowers an existing target: a tenant that already has a
+ * Idempotent, and never lowers an existing target: a workspace that already has a
  * row is under the control plane's management and this must not quietly reset
  * a rollout that is in flight.
  */
 export async function ensureSchemaStateRow(input: {
-  tenantId: string
+  workspaceKey: string
   targetVersion: number
   cohort?: string
   maxAttempts?: number
 }): Promise<boolean> {
   const result = await controlDb().execute(sql`
     INSERT INTO ${sql.identifier(SCHEMA_STATE_TABLE)}
-      (tenant_id, target_version, cohort, max_attempts)
-    VALUES (${input.tenantId}, ${input.targetVersion}, ${input.cohort ?? 'default'},
+      (workspace_key, target_version, cohort, max_attempts)
+    VALUES (${input.workspaceKey}, ${input.targetVersion}, ${input.cohort ?? 'default'},
             ${input.maxAttempts ?? 3})
-    ON CONFLICT (tenant_id) DO NOTHING
-    RETURNING tenant_id
+    ON CONFLICT (workspace_key) DO NOTHING
+    RETURNING workspace_key
   `)
   return getExecuteRows(result).length > 0
 }
 
 /**
- * Why a named tenant was not claimed.
+ * Why a named workspace was not claimed.
  *
- * `run --tenant X` claiming nothing is ambiguous in a way that matters: it
- * happens when the tenant is already current (success), when it is blocked
+ * `run --workspace X` claiming nothing is ambiguous in a way that matters: it
+ * happens when the workspace is already current (success), when it is blocked
  * (deliberate), when another migrator holds it (transient), and when nobody
  * ever enrolled it (a real gap). Reporting `claimed=0` and exiting 0 for all
- * four turns *"migrate this tenant now"* — which is what provisioning calls —
+ * four turns *"migrate this workspace now"* — which is what provisioning calls —
  * into a silent, successful-looking no-op.
  *
  * Read AFTER a claim attempt returns nothing, so it explains a fact rather than
@@ -421,15 +421,15 @@ export type UnclaimedReason =
   | { kind: 'not_due'; detail: string }
   | { kind: 'unknown'; detail: string }
 
-export async function explainUnclaimed(tenantId: string): Promise<UnclaimedReason> {
+export async function explainUnclaimed(workspaceKey: string): Promise<UnclaimedReason> {
   const rows = await listSchemaState()
-  const row = rows.find((r) => r.tenantId === tenantId)
+  const row = rows.find((r) => r.workspaceKey === workspaceKey)
   if (!row) {
     return {
       kind: 'no_intent_row',
       detail:
-        `${tenantId} has no row in ${SCHEMA_STATE_TABLE}, so the reconciler cannot see it. ` +
-        'Run `enrol` (fleet-wide) or insert intent for this tenant. Note that a tenant absent ' +
+        `${workspaceKey} has no row in ${SCHEMA_STATE_TABLE}, so the reconciler cannot see it. ` +
+        'Run `enrol` (fleet-wide) or insert intent for this workspace. Note that a workspace absent ' +
         'from this table is invisible to a rollout, which is how "fleet complete" gets reported ' +
         'having skipped one.',
     }
@@ -438,7 +438,7 @@ export async function explainUnclaimed(tenantId: string): Promise<UnclaimedReaso
     return {
       kind: 'blocked',
       detail:
-        `${tenantId} is blocked and will not be claimed by anything: ` +
+        `${workspaceKey} is blocked and will not be claimed by anything: ` +
         `${row.lastError ?? '(no reason recorded)'}. Lift it deliberately; a target bump ` +
         'will not.',
     }
@@ -447,21 +447,21 @@ export async function explainUnclaimed(tenantId: string): Promise<UnclaimedReaso
     return {
       kind: 'held_by_another',
       detail:
-        `${tenantId} is leased by ${row.lockedBy ?? 'another migrator'} until ` +
+        `${workspaceKey} is leased by ${row.lockedBy ?? 'another migrator'} until ` +
         `${row.lockedUntil?.toISOString() ?? 'unknown'}. Wait for it, or for the reaper.`,
     }
   }
   if (row.currentVersion !== null && row.currentVersion >= row.targetVersion) {
     return {
       kind: 'already_current',
-      detail: `${tenantId} is already at its target (${row.targetVersion}); nothing to do.`,
+      detail: `${workspaceKey} is already at its target (${row.targetVersion}); nothing to do.`,
     }
   }
   if (row.status === 'failed') {
     return {
       kind: 'terminal',
       detail:
-        `${tenantId} has exhausted its attempts (${row.attempts}/${row.maxAttempts}) and is ` +
+        `${workspaceKey} has exhausted its attempts (${row.attempts}/${row.maxAttempts}) and is ` +
         `terminal: ${row.lastError ?? '(no reason recorded)'}. Raise the target, or fix the ` +
         'cause; it will not be retried on its own.',
     }
@@ -469,19 +469,19 @@ export async function explainUnclaimed(tenantId: string): Promise<UnclaimedReaso
   return {
     kind: 'not_due',
     detail:
-      `${tenantId} is ${row.status} but was not claimable on this pass — most likely its ` +
+      `${workspaceKey} is ${row.status} but was not claimable on this pass — most likely its ` +
       'run_at is in the future after a backoff. Retry shortly.',
   }
 }
 
-/** Take a tenant out of claiming entirely — a halted rollout, an investigation. */
-export async function blockTenant(tenantId: string, reason: string): Promise<boolean> {
+/** Take a workspace out of claiming entirely — a halted rollout, an investigation. */
+export async function blockWorkspace(workspaceKey: string, reason: string): Promise<boolean> {
   const result = await controlDb().execute(sql`
     UPDATE ${sql.identifier(SCHEMA_STATE_TABLE)}
     SET status = 'blocked', last_error = ${reason},
         lease_token = NULL, locked_until = NULL, locked_by = NULL
-    WHERE tenant_id = ${tenantId} AND status <> 'running'
-    RETURNING tenant_id
+    WHERE workspace_key = ${workspaceKey} AND status <> 'running'
+    RETURNING workspace_key
   `)
   return getExecuteRows(result).length > 0
 }

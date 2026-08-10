@@ -13,10 +13,10 @@ import { DISABLED_CLOUD_CONFIG, ENTITLEMENT_KEYS, PLAN_IDS, type CloudConfig } f
 import { resolveCloudConfig } from '../cloud.service'
 import { isEntitled } from '../entitlements'
 
-const hoisted = vi.hoisted(() => ({ mockGetTenantSettings: vi.fn() }))
+const hoisted = vi.hoisted(() => ({ mockGetWorkspaceSettings: vi.fn() }))
 
 vi.mock('../../settings.service', () => ({
-  getTenantSettings: hoisted.mockGetTenantSettings,
+  getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
 }))
 
 describe('resolveCloudConfig — every "not configured" input resolves to disabled', () => {
@@ -94,7 +94,7 @@ describe('every entitlement in the catalogue is granted when cloud is off', () =
 describe('the gate is a no-op end to end on an unconfigured install', () => {
   beforeEach(() => {
     vi.resetModules()
-    hoisted.mockGetTenantSettings.mockReset()
+    hoisted.mockGetWorkspaceSettings.mockReset()
   })
 
   // Reflects the three real read outcomes a workspace with no cloud config
@@ -106,8 +106,8 @@ describe('the gate is a no-op end to end on an unconfigured install', () => {
     ['a row with cloud = NULL', { settings: { id: 'ws_1', cloud: null } }],
   ]
 
-  it.each(readOutcomes)('requireEntitlement never throws with %s', async (_label, tenant) => {
-    hoisted.mockGetTenantSettings.mockResolvedValue(tenant)
+  it.each(readOutcomes)('requireEntitlement never throws with %s', async (_label, workspace) => {
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue(workspace)
     const { requireEntitlement, hasEntitlement, listEntitlements } = await import('../entitlements')
     for (const key of ENTITLEMENT_KEYS) {
       await expect(requireEntitlement(key)).resolves.toBeUndefined()
@@ -119,7 +119,7 @@ describe('the gate is a no-op end to end on an unconfigured install', () => {
   })
 
   it('a failed settings read still grants rather than 500s the request', async () => {
-    hoisted.mockGetTenantSettings.mockRejectedValue(new Error('database unavailable'))
+    hoisted.mockGetWorkspaceSettings.mockRejectedValue(new Error('database unavailable'))
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
   })

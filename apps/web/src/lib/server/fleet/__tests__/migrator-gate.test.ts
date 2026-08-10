@@ -1,5 +1,5 @@
 /**
- * The three decisions the reconciler makes before it touches a tenant's schema:
+ * The three decisions the reconciler makes before it touches a workspace's schema:
  * *what would drizzle apply*, *does this ledger have a hole in it*, and *is any
  * of it dangerous to apply twice*.
  *
@@ -46,7 +46,7 @@ const withoutRows = (...prefixes: string[]) => {
 }
 
 /**
- * The shape measured on two live tenants: a high-water mark at `0253` with rows
+ * The shape measured on two live workspaces: a high-water mark at `0253` with rows
  * absent for `0249`, `0250`, `0252`, `0256` and `0257`, while the database
  * physically carried some of them and was serving 500s.
  */
@@ -104,8 +104,8 @@ describe('ledgerGapFor', () => {
     expect(ledgerGapFor(ledger(ALL_WHEN.slice(0, cutoff + 1)))).toBeNull()
   })
 
-  it('is null for a tenant ahead of this build, whose extra rows are not holes', () => {
-    // A tenant a newer image has already migrated past keeps being served (§10.2).
+  it('is null for a workspace ahead of this build, whose extra rows are not holes', () => {
+    // A workspace a newer image has already migrated past keeps being served (§10.2).
     // Its ledger carries a `when` this build has never heard of, and that must
     // not read as drift.
     expect(ledgerGapFor(ledger([...ALL_WHEN, latestBundledVersion() + 1_000]))).toBeNull()
@@ -159,7 +159,7 @@ describe('planFor', () => {
 
   it('is exactly replaySetFor whenever the ledger has no hole — the control', () => {
     // Unchanged behaviour is the property that matters most here: every ordinary
-    // rollout, every fresh database and every already-current tenant has to be
+    // rollout, every fresh database and every already-current workspace has to be
     // routed exactly as it was before the heal existed.
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
     for (const applied of [
@@ -202,7 +202,7 @@ describe('gapHealVerdict', () => {
     // Truncating past 0246 puts 0247 back in the replay set, and 0247's row was
     // there — so it ran, and re-running it is not a risk, it is a certainty of
     // failure. Because nothing here inserts a ledger row, a truncation that then
-    // cannot replay leaves the tenant further under-claimed with no run that can
+    // cannot replay leaves the workspace further under-claimed with no run that can
     // ever succeed. That is why the refusal has to come before the DELETE.
     const verdict = verdictFor(withoutRows('0246'))
     expect(verdict.ok).toBe(false)
@@ -230,14 +230,14 @@ describe('gapHealVerdict', () => {
     expect(verdict.ok).toBe(false)
     if (verdict.ok) throw new Error('unreachable')
     expect(verdict.detail).toContain(String(ahead))
-    expect(verdict.detail).toContain('This tenant is ahead of this image')
+    expect(verdict.detail).toContain('This workspace is ahead of this image')
   })
 })
 
 describe('replayGateVerdict', () => {
   it('lets a fresh database through even though its replay set is full of writes', () => {
     // The whole lineage from 0000_initial. Refusing it would refuse every new
-    // tenant, and there is nothing to apply twice on an empty ledger.
+    // workspace, and there is nothing to apply twice on an empty ledger.
     const tags = replaySetFor(ledger([]))
     const verdicts = verdictsFor(tags)
     expect(verdicts.some((v) => v.verdict === 'mutates')).toBe(true)
@@ -262,7 +262,7 @@ describe('replayGateVerdict', () => {
   })
 
   it('lets an ordinary rollout through — errors-on-replay is not dangerous', () => {
-    // The realistic case: a tenant at 0248 and a build shipping 0253. Most of
+    // The realistic case: a workspace at 0248 and a build shipping 0253. Most of
     // what lies between is plain DDL that would error on a second run, and
     // migrate()'s transaction bounds that. A gate that refused it would refuse
     // every rollout this system exists to perform.
@@ -276,7 +276,7 @@ describe('replayGateVerdict', () => {
   })
 
   it('this fleet’s actual drift — a ledger at 0248 carrying everything since — passes the gate', () => {
-    // Five live gauntlet tenant databases are in exactly this state, because
+    // Five live gauntlet workspace databases are in exactly this state, because
     // every builder applied with `psql -f`, which never writes the ledger. The
     // window grows with every migration the branch adds, and it is listed
     // rather than derived on purpose: if one of these ever stops being

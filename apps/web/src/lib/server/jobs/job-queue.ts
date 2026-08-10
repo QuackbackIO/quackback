@@ -55,15 +55,15 @@
  * fleet migrator's claim loop is the same primitive rather than a second one
  * (SAAS-HOSTING-STACK.md §10.3: *"Fleet migration is its second consumer, not a
  * new subsystem"*). Nothing about the semantics moved with them — this file
- * still owns the queue's shape, the tenant assertion and the enqueue path, and
+ * still owns the queue's shape, the workspace assertion and the enqueue path, and
  * the kill-matrix proof still runs through here, which is what keeps `lease.ts`
  * honest.
  *
- * ## The tenant assertion
+ * ## The workspace assertion
  *
- * The queue is per-tenant because the table lives in the tenant's own database —
+ * The queue is per-workspace because the table lives in the workspace's own database —
  * there is no shared queue to route out of. That is a structural property, but
- * §3's whole point is that a wrong-tenant answer passes every other check in the
+ * §3's whole point is that a wrong-workspace answer passes every other check in the
  * system without erroring, so structure alone is not evidence. Every claimed row
  * is checked against the ambient scope and a mismatch is refused loudly and made
  * terminal, never executed. The check lives inside `claimJobs` rather than in
@@ -76,7 +76,7 @@ import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
-import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import {
   leaseClaimGroupedSql,
   leaseCompleteSql,
@@ -91,14 +91,14 @@ const log = logger.child({ component: 'job-queue' })
 /** The table the lease statements operate on. */
 const TABLE = 'job_queue'
 
-/** Postgres `undefined_table`. The tenant has not run migration 0253 yet. */
+/** Postgres `undefined_table`. The workspace has not run migration 0253 yet. */
 export const UNDEFINED_TABLE = '42P01'
 
 export class JobQueueMissingError extends Error {
   constructor() {
     super(
       'job_queue does not exist in this database. Migration 0253 has not been applied here; ' +
-        'the queue tier skips this tenant rather than crash-looping (expand lands before the ' +
+        'the queue tier skips this workspace rather than crash-looping (expand lands before the ' +
         'code that reads it — SAAS-HOSTING-STACK.md §5, §10.5).'
     )
     this.name = 'JobQueueMissingError'
@@ -112,7 +112,7 @@ export function isMissingJobQueue(err: unknown): boolean {
 }
 
 /**
- * The earliest instant this tenant's queue has work waiting for.
+ * The earliest instant this workspace's queue has work waiting for.
  *
  * Read by the tier on the connection it is **about to drop**, which is the point
  * of it: a tier that goes idle has to know when to come back, and the only
@@ -185,7 +185,7 @@ export interface ClaimedJob {
    */
   dedupeKey: string | null
   payload: Record<string, unknown>
-  tenantId: string | null
+  workspaceKey: string | null
   attempts: number
   maxAttempts: number
   leaseToken: string
@@ -198,7 +198,7 @@ interface ClaimRow {
   queue: string
   dedupe_key: string | null
   payload: Record<string, unknown> | null
-  tenant_id: string | null
+  workspace_key: string | null
   attempts: number
   max_attempts: number
   lease_token: string
@@ -217,8 +217,8 @@ export function __resetJobWorkerIdForTests(): void {
   workerIdMemo = null
 }
 
-function currentTenantId(): string | null {
-  return getCurrentTenant()?.tenantId ?? null
+function currentWorkspaceKey(): string | null {
+  return getCurrentWorkspace()?.workspaceKey ?? null
 }
 
 function asDate(value: Date | string): Date {
@@ -226,12 +226,12 @@ function asDate(value: Date | string): Date {
 }
 
 /**
- * Put a job on this tenant's queue.
+ * Put a job on this workspace's queue.
  *
- * `tenant_id` is stamped from the ambient scope, which is also what the claim
- * asserts against. There is no way to enqueue for a different tenant, because
- * there is no shared queue and no tenant parameter — you would have to open that
- * tenant's scope, at which point you are writing into its own database.
+ * `workspace_key` is stamped from the ambient scope, which is also what the claim
+ * asserts against. There is no way to enqueue for a different workspace, because
+ * there is no shared queue and no workspace parameter — you would have to open that
+ * workspace's scope, at which point you are writing into its own database.
  */
 export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResult> {
   const jobId = generateId('job')
@@ -241,12 +241,12 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   }
 
   const result = await db.execute(sql`
-    INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
+    INSERT INTO job_queue (job_id, queue, dedupe_key, workspace_key, payload, run_at, max_attempts)
     VALUES (
       ${jobId},
       ${input.queue},
       ${input.dedupeKey ?? null},
-      ${currentTenantId()},
+      ${currentWorkspaceKey()},
       ${JSON.stringify(input.payload ?? {})}::jsonb,
       ${input.runAt ? input.runAt.toISOString() : sql`now()`},
       ${maxAttempts}
@@ -301,8 +301,8 @@ export async function enqueueJobs(
   })
 
   const result = await db.execute(sql`
-    INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
-    SELECT x.job_id, x.queue, x.dedupe_key, ${currentTenantId()}, x.payload, x.run_at, x.max_attempts
+    INSERT INTO job_queue (job_id, queue, dedupe_key, workspace_key, payload, run_at, max_attempts)
+    SELECT x.job_id, x.queue, x.dedupe_key, ${currentWorkspaceKey()}, x.payload, x.run_at, x.max_attempts
     FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(
       job_id text, queue text, dedupe_key text, payload jsonb,
       run_at timestamptz, max_attempts int
@@ -413,7 +413,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
         runnable.map((s) => [s.queue, { limit: s.limit, leaseMs: s.leaseMs }])
       ),
       workerId: jobWorkerId(),
-      returning: sql`j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.tenant_id,
+      returning: sql`j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.workspace_key,
               j.attempts, j.max_attempts, j.lease_token, j.locked_until`,
     })
   )
@@ -425,7 +425,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
   const rows = getExecuteRows<ClaimRow>(result).sort((a, b) =>
     BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0
   )
-  const expected = currentTenantId()
+  const expected = currentWorkspaceKey()
   const claimed: ClaimedJob[] = []
 
   for (const row of rows) {
@@ -435,30 +435,30 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
       queue: row.queue,
       dedupeKey: row.dedupe_key,
       payload: row.payload ?? {},
-      tenantId: row.tenant_id,
+      workspaceKey: row.workspace_key,
       attempts: row.attempts,
       maxAttempts: row.max_attempts,
       leaseToken: row.lease_token,
       lockedUntil: asDate(row.locked_until),
     }
 
-    if (job.tenantId !== expected) {
-      // Refuse loudly and terminally. This row is not another tenant's job —
-      // it is a corrupt row in THIS tenant's database — but running it would be
-      // a cross-tenant execution, which is the one outcome the whole design
+    if (job.workspaceKey !== expected) {
+      // Refuse loudly and terminally. This row is not another workspace's job —
+      // it is a corrupt row in THIS workspace's database — but running it would be
+      // a cross-workspace execution, which is the one outcome the whole design
       // exists to make impossible.
       log.error(
         {
           jobId: job.jobId,
           queue: job.queue,
-          rowTenantId: job.tenantId,
-          scopeTenantId: expected,
+          rowWorkspaceKey: job.workspaceKey,
+          scopeWorkspaceKey: expected,
         },
-        'job REFUSED: row tenant does not match the tenant scope that claimed it'
+        'job REFUSED: row workspace does not match the workspace scope that claimed it'
       )
       await terminate(
         job,
-        `tenant mismatch: row is stamped ${job.tenantId ?? 'null'}, scope is ${expected ?? 'null'}`
+        `workspace mismatch: row is stamped ${job.workspaceKey ?? 'null'}, scope is ${expected ?? 'null'}`
       )
       continue
     }

@@ -9,10 +9,10 @@
  *                        unchanged); just don't route user traffic to it.
  * QUACKBACK_ROLE=all     Both — the default, matching single-container
  *                        self-host deployments.
- * QUACKBACK_ROLE=migrator Reconcile tenant schemas toward the control plane's
+ * QUACKBACK_ROLE=migrator Reconcile workspace schemas toward the control plane's
  *                        recorded intent, then exit (SAAS-HOSTING-STACK.md
  *                        §10.3). Serves no traffic and runs no queues: it holds
- *                        a DIRECT session-mode connection per tenant it is
+ *                        a DIRECT session-mode connection per workspace it is
  *                        working, which is the one thing that must never share
  *                        a process with the pooled web tier, because holding a
  *                        connection open is exactly what stops a Neon compute
@@ -37,7 +37,7 @@ export type ProcessRole = (typeof PROCESS_ROLES)[number]
  * into the exact topology the design forbids: measured, `QUACKBACK_ROLE=banana`
  * — and `MIGRATOR`, and `Migrator` — booted the Postgres job tier, the outbox
  * relay and the sweepers together. A typo in a deployment manifest is not a
- * licence to run every background subsystem against every tenant.
+ * licence to run every background subsystem against every workspace.
  *
  * `web` is the closed direction: it serves HTTP and starts nothing. A fleet
  * that briefly runs no background work is degraded and obvious; a fleet where

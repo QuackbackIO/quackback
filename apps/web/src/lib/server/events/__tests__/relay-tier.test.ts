@@ -3,7 +3,7 @@
  *
  * This property lives here rather than in the live harness because it is about
  * what happens when something is WRONG, and a live fleet where everything works
- * cannot show it: a tenant the tier refuses must cost that tenant its relay and
+ * cannot show it: a workspace the tier refuses must cost that workspace its relay and
  * nothing else.
  *
  * Where a resolved hook job LANDS is pinned in `relay.test.ts`, against the real
@@ -11,39 +11,39 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-interface FakeTenant {
-  tenantId: string
+interface FakeWorkspace {
+  workspaceKey: string
   revision: number
   database: { directUrl: string; pooledUrl: string }
 }
 
-const tenant = (id: string): FakeTenant => ({
-  tenantId: id,
+const workspace = (id: string): FakeWorkspace => ({
+  workspaceKey: id,
   revision: 1,
   database: { directUrl: `postgres://direct/${id}`, pooledUrl: `postgres://pooled/${id}` },
 })
 
 interface TierRun {
-  tenantIds: string[]
+  workspaceKeys: string[]
   drainedFor: string[]
   poolsOpenedFor: string[]
   /** Every attempt, refused ones included — so a retry storm is countable. */
   poolAttempts: string[]
   attachedFor: string[]
-  refusedFor: Array<{ tenantId: string; code: string | null }>
+  refusedFor: Array<{ workspaceKey: string; code: string | null }>
   schemaMissingFor: string[]
 }
 
 /**
  * Boot the real tier against a stubbed fleet.
  *
- * `refuse` names tenants whose direct pool throws — the shape a fingerprint
+ * `refuse` names workspaces whose direct pool throws — the shape a fingerprint
  * mismatch, an unresolvable credential or a dead database all take. The code it
  * throws with decides whether the tier ever tries again, so the fixture carries
  * a real one rather than a bare `Error`.
  */
 async function runTier(opts: {
-  tenants: FakeTenant[]
+  workspaces: FakeWorkspace[]
   registryRefused?: string[]
   refuse?: string[]
   /** Refusal code the stubbed pool throws with. Terminal by default. */
@@ -58,54 +58,54 @@ async function runTier(opts: {
   const poolsOpenedFor: string[] = []
   const poolAttempts: string[] = []
   const refuse = new Set(opts.refuse ?? [])
-  const refuseCode = opts.refuseCode ?? 'workspace_id_mismatch'
+  const refuseCode = opts.refuseCode ?? 'self_reported_workspace_id_mismatch'
   const missing = new Set(opts.leaderTableMissingFor ?? [])
 
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
-  vi.doMock('@/lib/server/tenancy/mode', () => ({
+  vi.doMock('@/lib/server/workspaces/mode', () => ({
     isPooledTenancy: () => true,
     POOLED_TENANCY: 'pooled',
   }))
   vi.doMock('@/lib/server/config', () => ({
     config: { isPooledTenancy: true, databaseUrl: 'postgres://direct/single' },
   }))
-  vi.doMock('@/lib/server/tenancy/registry', () => ({
-    listActiveTenants: async () => ({
-      tenants: opts.tenants,
-      refused: (opts.registryRefused ?? []).map((id) => ({ tenantId: id, code: 'invalid_record' })),
+  vi.doMock('@/lib/server/workspaces/registry', () => ({
+    listActiveWorkspaces: async () => ({
+      workspaces: opts.workspaces,
+      refused: (opts.registryRefused ?? []).map((id) => ({ workspaceKey: id, code: 'invalid_record' })),
     }),
   }))
-  vi.doMock('@/lib/server/tenancy/pool-cache', () => ({
-    resolveTenantPassword: async () => 'pw',
-    openTenantDirectPool: async (t: FakeTenant) => {
-      poolAttempts.push(t.tenantId)
-      if (refuse.has(t.tenantId)) {
-        throw Object.assign(new Error(`REFUSED [${refuseCode}] ${t.tenantId}`), {
+  vi.doMock('@/lib/server/workspaces/pool-cache', () => ({
+    resolveWorkspacePassword: async () => 'pw',
+    openWorkspaceDirectPool: async (t: FakeWorkspace) => {
+      poolAttempts.push(t.workspaceKey)
+      if (refuse.has(t.workspaceKey)) {
+        throw Object.assign(new Error(`REFUSED [${refuseCode}] ${t.workspaceKey}`), {
           code: refuseCode,
         })
       }
-      poolsOpenedFor.push(t.tenantId)
+      poolsOpenedFor.push(t.workspaceKey)
       return {
         sql: {},
-        db: { __tenant: t.tenantId },
+        db: { __workspace: t.workspaceKey },
         secrets: { secretKey: 'k', storage: null },
         close: async () => {},
       }
     },
   }))
-  vi.doMock('@/lib/server/tenancy/tenant-context', () => ({
+  vi.doMock('@/lib/server/workspaces/workspace-context', () => ({
     // Mirrors the real constructor's contract rather than stubbing it away:
     // secrets are an input it refuses to go without, and never a field on what
     // it hands back. A stub that skipped the refusal would let this suite pass
     // over a relay loop scoped with no resolved SECRET_KEY.
-    createTenantScope: (init: Record<string, unknown>) => {
+    createWorkspaceScope: (init: Record<string, unknown>) => {
       const secrets = init.secrets as { secretKey?: string } | undefined
-      if (!secrets?.secretKey) throw new Error('createTenantScope: no resolved SECRET_KEY')
+      if (!secrets?.secretKey) throw new Error('createWorkspaceScope: no resolved SECRET_KEY')
       const scope = { ...init }
       delete scope.secrets
       return scope
     },
-    runWithTenantScope: async (scope: { tenant: FakeTenant }, fn: () => unknown) => fn(),
+    runWithWorkspaceScope: async (scope: { workspace: FakeWorkspace }, fn: () => unknown) => fn(),
   }))
   vi.doMock('@/lib/server/jobs/wake', () => ({
     JOB_WAKE_CHANNEL: 'quackback_job_wake',
@@ -117,10 +117,10 @@ async function runTier(opts: {
   vi.doMock('../relay-leader', () => {
     class Missing extends Error {}
     return {
-      claimRelayLease: async (db: { __tenant?: string }) => {
-        if (db.__tenant && missing.has(db.__tenant)) throw new Missing('no table')
+      claimRelayLease: async (db: { __workspace?: string }) => {
+        if (db.__workspace && missing.has(db.__workspace)) throw new Missing('no table')
         if (opts.claimFails) return null
-        drainedFor.push(db.__tenant ?? '__single__')
+        drainedFor.push(db.__workspace ?? '__single__')
         return { owner: 'o', fence: '1', expiresAt: new Date(Date.now() + 30_000) }
       },
       renewRelayLease: async () => ({
@@ -143,31 +143,31 @@ async function runTier(opts: {
   await mod.stopRelayTier()
   vi.resetModules()
   return {
-    tenantIds: status.tenants.map((t) => t.tenantId).sort(),
+    workspaceKeys: status.workspaces.map((t) => t.workspaceKey).sort(),
     drainedFor: [...new Set(drainedFor)].sort(),
     poolsOpenedFor: poolsOpenedFor.sort(),
     poolAttempts,
-    attachedFor: status.tenants
+    attachedFor: status.workspaces
       .filter((t) => t.attached)
-      .map((t) => t.tenantId)
+      .map((t) => t.workspaceKey)
       .sort(),
-    refusedFor: status.tenants
+    refusedFor: status.workspaces
       .filter((t) => t.refusedCode !== null)
-      .map((t) => ({ tenantId: t.tenantId, code: t.refusedCode }))
-      .sort((a, b) => a.tenantId.localeCompare(b.tenantId)),
-    schemaMissingFor: status.tenants
+      .map((t) => ({ workspaceKey: t.workspaceKey, code: t.refusedCode }))
+      .sort((a, b) => a.workspaceKey.localeCompare(b.workspaceKey)),
+    schemaMissingFor: status.workspaces
       .filter((t) => t.schemaMissing)
-      .map((t) => t.tenantId)
+      .map((t) => t.workspaceKey)
       .sort(),
   }
 }
 
 beforeEach(() => vi.resetModules())
 
-describe('a tenant the tier refuses does not stop the fleet', () => {
-  it('a refused pool costs that tenant its relay and nothing else', async () => {
+describe('a workspace the tier refuses does not stop the fleet', () => {
+  it('a refused pool costs that workspace its relay and nothing else', async () => {
     const run = await runTier({
-      tenants: [tenant('t-a'), tenant('t-bad'), tenant('t-b')],
+      workspaces: [workspace('t-a'), workspace('t-bad'), workspace('t-b')],
       refuse: ['t-bad'],
     })
     expect(run.poolsOpenedFor).toEqual(['t-a', 't-b'])
@@ -180,14 +180,14 @@ describe('a tenant the tier refuses does not stop the fleet', () => {
 
   it('a record the registry itself refuses is skipped and the rest still run', async () => {
     const run = await runTier({
-      tenants: [tenant('t-a'), tenant('t-b')],
+      workspaces: [workspace('t-a'), workspace('t-b')],
       registryRefused: ['t-invalid'],
     })
     expect(run.attachedFor).toEqual(['t-a', 't-b'])
   })
 
-  it('every tenant refused is not an exception — the tier stays up holding nothing', async () => {
-    const run = await runTier({ tenants: [tenant('t-a')], refuse: ['t-a'] })
+  it('every workspace refused is not an exception — the tier stays up holding nothing', async () => {
+    const run = await runTier({ workspaces: [workspace('t-a')], refuse: ['t-a'] })
     expect(run.attachedFor).toEqual([])
     expect(run.poolsOpenedFor).toEqual([])
   })
@@ -196,16 +196,16 @@ describe('a tenant the tier refuses does not stop the fleet', () => {
 /**
  * The retry storm, and why the loop must stay in the status.
  *
- * Measured on a live fleet: two tenants refused with `app_secret_no_resolver`
+ * Measured on a live fleet: two workspaces refused with `app_secret_no_resolver`
  * were reconnected once per second, one of them the busiest database in the
  * fleet at 70% active for zero work. A refusal no retry can fix has to stop
  * being retried — and has to keep saying so, or the operator loses the only
- * signal that a tenant is not being served.
+ * signal that a workspace is not being served.
  */
 describe('a refusal no retry can fix stops being retried, and stays visible', () => {
   it('a terminal refusal is attempted once and then left alone', async () => {
     const run = await runTier({
-      tenants: [tenant('t-bad')],
+      workspaces: [workspace('t-bad')],
       refuse: ['t-bad'],
       refuseCode: 'app_secret_no_resolver',
       // Long enough for a 1s-poll loop to have reconnected several times.
@@ -217,7 +217,7 @@ describe('a refusal no retry can fix stops being retried, and stays visible', ()
 
   it('a transient refusal is retried, so the two are not the same wait', async () => {
     const run = await runTier({
-      tenants: [tenant('t-slow')],
+      workspaces: [workspace('t-slow')],
       refuse: ['t-slow'],
       // Not in any terminal list: a compute that is still starting.
       refuseCode: 'CONNECT_TIMEOUT',
@@ -226,23 +226,23 @@ describe('a refusal no retry can fix stops being retried, and stays visible', ()
     expect(run.poolAttempts.length).toBeGreaterThan(1)
   })
 
-  it('a refused tenant is still reported — it is not silently dropped', async () => {
+  it('a refused workspace is still reported — it is not silently dropped', async () => {
     const run = await runTier({
-      tenants: [tenant('t-a'), tenant('t-bad')],
+      workspaces: [workspace('t-a'), workspace('t-bad')],
       refuse: ['t-bad'],
       refuseCode: 'app_secret_no_resolver',
     })
-    expect(run.tenantIds).toEqual(['t-a', 't-bad'])
-    expect(run.refusedFor).toEqual([{ tenantId: 't-bad', code: 'app_secret_no_resolver' }])
+    expect(run.workspaceKeys).toEqual(['t-a', 't-bad'])
+    expect(run.refusedFor).toEqual([{ workspaceKey: 't-bad', code: 'app_secret_no_resolver' }])
   })
 
   it('a database without migration 0256 is skipped, not crash-looped', async () => {
     const run = await runTier({
-      tenants: [tenant('t-a'), tenant('t-b')],
+      workspaces: [workspace('t-a'), workspace('t-b')],
       leaderTableMissingFor: ['t-a'],
     })
     // Both loops exist; only the one that can elect a leader drains.
-    expect(run.tenantIds).toEqual(['t-a', 't-b'])
+    expect(run.workspaceKeys).toEqual(['t-a', 't-b'])
     expect(run.drainedFor).toEqual(['t-b'])
     // And it must be RECOGNISED as a missing schema rather than logged as an
     // unexplained failure every poll interval. Without this assertion the two
@@ -251,10 +251,10 @@ describe('a refusal no retry can fix stops being retried, and stays visible', ()
     expect(run.schemaMissingFor).toEqual(['t-a'])
   })
 
-  it('CONTROL: with nothing refused, every tenant drains', async () => {
+  it('CONTROL: with nothing refused, every workspace drains', async () => {
     // Without this, every assertion above is equally consistent with a tier that
     // drains nothing at all.
-    const run = await runTier({ tenants: [tenant('t-a'), tenant('t-b')] })
+    const run = await runTier({ workspaces: [workspace('t-a'), workspace('t-b')] })
     expect(run.drainedFor).toEqual(['t-a', 't-b'])
     expect(run.schemaMissingFor).toEqual([])
   })

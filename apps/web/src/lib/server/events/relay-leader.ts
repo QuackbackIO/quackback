@@ -1,5 +1,5 @@
 /**
- * Outbox relay leader election, as a lease row in the tenant's own database.
+ * Outbox relay leader election, as a lease row in the workspace's own database.
  *
  * ## Why this replaced `pg_try_advisory_lock`
  *
@@ -23,7 +23,7 @@
  * The relay tier terminates at the **direct** endpoint, so none of that applies
  * to it today. That is exactly the argument this module refuses to rely on: a
  * registry record whose `db_direct_url` is in fact a pooler is a one-character
- * mistake, and it would silently elect two leaders for one tenant rather than
+ * mistake, and it would silently elect two leaders for one workspace rather than
  * failing. Correctness should not be one config field deep.
  *
  * ## What replaces it
@@ -50,7 +50,7 @@
  * Draining is idempotent regardless (deterministic job ids, `published_at IS
  * NULL` as the read filter), so a lost fence costs a wasted pass and never a
  * double delivery. The fence is what makes "two replicas do not both drain one
- * tenant" an observable fact rather than an inference from idempotency.
+ * workspace" an observable fact rather than an inference from idempotency.
  */
 import { sql as raw } from 'drizzle-orm'
 import { hostname } from 'os'
@@ -58,7 +58,7 @@ import { randomUUID } from 'crypto'
 import type { Database } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 
-/** The only lease this table holds today. One row per tenant database. */
+/** The only lease this table holds today. One row per workspace database. */
 export const OUTBOX_LEASE = 'outbox'
 
 /** Postgres `undefined_table` — the relay-leader migration has not run here. */
@@ -125,7 +125,7 @@ function toLease(row: LeaseRow): RelayLease {
  * Returns `null` when another owner holds a live lease — the caller is a
  * follower and must not drain.
  *
- * @param db    the tenant's own database handle (the lease lives with the data)
+ * @param db    the workspace's own database handle (the lease lives with the data)
  * @param ttlMs how long the lease is held before another replica may take it
  */
 export async function claimRelayLease(

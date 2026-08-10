@@ -24,8 +24,8 @@ beforeEach(() => {
   getMigrationStatus.mockResolvedValue({ upToDate: true, bundledCount: 1, appliedCount: 1 })
   getJobTierStatus.mockReturnValue({
     running: true,
-    tenants: [
-      { tenantId: 't1', inFlight: 0, schemaMissing: false, attached: true, refusedCode: null },
+    workspaces: [
+      { workspaceKey: 't1', inFlight: 0, schemaMissing: false, attached: true, refusedCode: null },
     ],
   })
 })
@@ -68,8 +68,8 @@ describe('GET /api/health/ready', () => {
       inFlight: 0,
       schemaMissing: 0,
       // Two counters the cost model needs and nothing else reports. `attached`
-      // is how an operator sees that idle tenants really did let go — detaching
-      // has no other symptom. `refused` is how a tenant that has stopped being
+      // is how an operator sees that idle workspaces really did let go — detaching
+      // has no other symptom. `refused` is how a workspace that has stopped being
       // retried stays visible; it deliberately does not fail the probe, because
       // a bad registry record is not this replica's fault.
       attached: 1,
@@ -133,7 +133,7 @@ describe('GET /api/health/ready', () => {
     // pooled replica running no consumer at all reported
     // `workers ok:true total:0` while every queue accumulated silently. This is
     // the case that reading has to fail.
-    getJobTierStatus.mockReturnValue({ running: false, tenants: [] })
+    getJobTierStatus.mockReturnValue({ running: false, workspaces: [] })
     const res = await handleReadinessProbe()
     expect(res.status).toBe(503)
     const body = await res.json()
@@ -142,7 +142,7 @@ describe('GET /api/health/ready', () => {
 
   it('stays ready on a web-role replica, which is not supposed to run the tier', async () => {
     vi.stubEnv('QUACKBACK_ROLE', 'web')
-    getJobTierStatus.mockReturnValue({ running: false, tenants: [] })
+    getJobTierStatus.mockReturnValue({ running: false, workspaces: [] })
     const res = await handleReadinessProbe()
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -150,12 +150,12 @@ describe('GET /api/health/ready', () => {
     vi.unstubAllEnvs()
   })
 
-  it('reports how many tenant loops the tier is serving', async () => {
+  it('reports how many workspace loops the tier is serving', async () => {
     getJobTierStatus.mockReturnValue({
       running: true,
-      tenants: [
-        { tenantId: 'a', inFlight: 2, schemaMissing: false },
-        { tenantId: 'b', inFlight: 1, schemaMissing: true },
+      workspaces: [
+        { workspaceKey: 'a', inFlight: 2, schemaMissing: false },
+        { workspaceKey: 'b', inFlight: 1, schemaMissing: true },
       ],
     })
     const res = await handleReadinessProbe()

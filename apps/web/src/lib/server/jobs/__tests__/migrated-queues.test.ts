@@ -8,8 +8,8 @@
  * second is decoration a refactor can drop unnoticed.
  *
  * **The schedule gate.** `email-imap` refuses to schedule under pooled tenancy:
- * its mailbox is process-wide configuration while the queue is per tenant, so
- * scheduling it on every tenant's loop would have each tenant poll the same
+ * its mailbox is process-wide configuration while the queue is per workspace, so
+ * scheduling it on every workspace's loop would have each workspace poll the same
  * mailbox and ingest the same message into its own database. Nothing else in
  * the suite would notice that refusal disappearing.
  */
@@ -40,8 +40,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   ),
 }))
 
-vi.mock('@/lib/server/tenancy/tenant-context', () => ({
-  getCurrentTenant: () => null,
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () => null,
 }))
 
 let pooled = false
@@ -119,15 +119,15 @@ describe('the email-imap schedule gate', () => {
     expect(isEmailImapPollable()).toBe(false)
   })
 
-  it('is open on a single-tenant install with a mailbox', () => {
+  it('is open on a single-workspace install with a mailbox', () => {
     imapEnv = { configured: '1' }
     pooled = false
     expect(isEmailImapPollable()).toBe(true)
   })
 
   it('is REFUSED under pooled tenancy even with a mailbox configured', () => {
-    // One shared mailbox polled from every tenant's loop would ingest the same
-    // message into every tenant's database. It fails closed rather than
+    // One shared mailbox polled from every workspace's loop would ingest the same
+    // message into every workspace's database. It fails closed rather than
     // silently fanning a mailbox out across the fleet.
     imapEnv = { configured: '1' }
     pooled = true

@@ -135,7 +135,7 @@ describe('the real corpus', () => {
   })
 
   it('0251 and 0253 — the two this fleet must replay — are safe', () => {
-    // These are the migrations five live tenant databases carry without a
+    // These are the migrations five live workspace databases carry without a
     // ledger row, so the reconciler will replay exactly these. If either ever
     // stops being replay-safe, healing those databases stops being free and
     // this test is where that is noticed.
@@ -156,7 +156,7 @@ describe('the real corpus', () => {
   })
 
   it('0000_initial is errors, not mutates — atomicity, not danger', () => {
-    // Every fresh tenant replays it. Classifying it as dangerous would refuse
+    // Every fresh workspace replays it. Classifying it as dangerous would refuse
     // provisioning; classifying it as safe would be a lie. It errors, which is
     // both true and harmless under a transactional migrate().
     const r = assessReplaySafety(

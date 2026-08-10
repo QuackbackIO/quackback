@@ -7,7 +7,7 @@ import {
 } from '@/lib/shared/conversation/presence'
 
 /**
- * Stable, tenant-global query key — presence is the same for every visitor, so
+ * Stable, workspace-global query key — presence is the same for every visitor, so
  * it is NOT keyed by session. The widget loader seeds this via
  * `queryClient.setQueryData` for an SSR-correct first paint (see widget/index).
  */

@@ -4,11 +4,11 @@
  *
  * This file owns what a drain IS: read order, the reaction-loop depth ceiling,
  * the strict-resolution retry budget, and at-least-once emission. Where the
- * drain RUNS — one loop per tenant, on direct session-mode connections, elected
+ * drain RUNS — one loop per workspace, on direct session-mode connections, elected
  * by a lease rather than an advisory lock — is `relay-tier.ts`
  * (SAAS-HOSTING-STACK.md §7.3).
  *
- * Flow: a committed `emit()` fires `pg_notify('outbox_wake')`; the tenant's
+ * Flow: a committed `emit()` fires `pg_notify('outbox_wake')`; the workspace's
  * leader loop (one per database, elected by the lease in `relay-leader.ts`)
  * wakes, reads unpublished rows in `id` order, resolves targets via the resolver
  * registry, enqueues one job per target with a DETERMINISTIC job id, then stamps
@@ -29,7 +29,7 @@ import { resolveTargets } from './resolvers/registry'
 import type { DomainEvent, EventActorType } from './envelope'
 import type { HookTarget } from './hook-types'
 import { toLegacyEvent } from './to-legacy-event'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { EvtId } from '@quackback/ids'
 
 const log = logger.child({ component: 'outbox-relay' })
@@ -102,7 +102,7 @@ export interface DrainResult {
 export const MAX_STRICT_RESOLVE_ATTEMPTS = 10
 
 /**
- * Per tenant, because `events.id` is a per-database bigserial.
+ * Per workspace, because `events.id` is a per-database bigserial.
  *
  * Two workspaces both have an event 5, and they are not the same row. Shared,
  * one workspace's ten failed resolutions spend another workspace's retry budget
@@ -110,7 +110,7 @@ export const MAX_STRICT_RESOLVE_ATTEMPTS = 10
  * **drops that event's targets** on its first attempt. The budget exists
  * precisely so that does not happen without ten tries first.
  */
-const strictAttempts = new TenantKeyedCache<number>(20_000)
+const strictAttempts = new WorkspaceKeyedCache<number>(20_000)
 
 /** Keys are bigints; the cache is string-keyed, so name the conversion once. */
 const attemptKey = (id: bigint): string => id.toString()
@@ -152,15 +152,15 @@ export async function drainOnce(
   // smallest still-unpublished id belongs to a row some leader already
   // published — prune them so leadership churn can't leak entries.
   //
-  // Both branches address only the ACTIVE tenant's ledger. A fleet-wide
+  // Both branches address only the ACTIVE workspace's ledger. A fleet-wide
   // `clear()` here would reset every other workspace's retry budgets because
   // this one happened to have an empty outbox.
   if (rows.length > 0) {
-    for (const key of strictAttempts.tenantKeys()) {
+    for (const key of strictAttempts.workspaceKeys()) {
       if (BigInt(key) < rows[0].id) strictAttempts.delete(key)
     }
   } else {
-    strictAttempts.clearTenant()
+    strictAttempts.clearWorkspace()
   }
 
   let enqueued = 0
@@ -259,10 +259,10 @@ export async function relayLagSeconds(): Promise<number> {
 // for the rest — which is why the pooled branch refused to start at all rather
 // than run a 15-second retry loop that delivered nothing.
 //
-// `relay-tier.ts` replaces it with one loop per tenant, each owning its own
+// `relay-tier.ts` replaces it with one loop per workspace, each owning its own
 // direct connection, its own doorbell, its own lease and its own counters in a
 // closure. There is no shared object left to key wrongly. The state that
-// remains in this file is `strictAttempts`, which is tenant-keyed because
+// remains in this file is `strictAttempts`, which is workspace-keyed because
 // `events.id` is a per-database bigserial.
 //
 // See `RELAY.md` for the whole tier, and `relay-leader.ts` for why the advisory

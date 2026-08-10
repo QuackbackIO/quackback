@@ -436,7 +436,7 @@ function normalizeTaskResolutions(value: unknown): OutcomeTaskResolutions | unde
  * Pure, deterministic V1-to-V2 normalizer. Reads never write; the normalized
  * representation is persisted by the next setup-state mutation.
  *
- * Completed V1 tenants are marked as already having seen the handoff so an
+ * Completed V1 workspaces are marked as already having seen the handoff so an
  * upgrade cannot unexpectedly redirect an established workspace back into
  * onboarding. The epoch fallback is intentionally stable for rows that lack a
  * completion timestamp.

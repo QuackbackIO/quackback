@@ -64,11 +64,11 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
     await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()
   return {
     ...actual,
-    // The real getTenantSettings assembles a large blob through Redis. Only
+    // The real getWorkspaceSettings assembles a large blob through Redis. Only
     // the raw row matters to the entitlement path, so this reads it straight
     // from the test transaction — the resolve, precedence and refusal logic
     // downstream is entirely unmocked.
-    getTenantSettings: async () => {
+    getWorkspaceSettings: async () => {
       const db = (await import('@/lib/server/__tests__/db-test-fixture')).testDb
       const row = await db.query.settings.findFirst()
       return row ? { settings: row } : null
@@ -76,15 +76,11 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
   }
 })
 
-const { writeCloudConfig } = await import(
-  '@/lib/server/domains/settings/cloud/cloud.service'
-)
-const { requireEntitlement, hasEntitlement } = await import(
-  '@/lib/server/domains/settings/cloud/entitlements'
-)
-const { getTierLimits, invalidateTierLimitsCache } = await import(
-  '@/lib/server/domains/settings/tier-limits.service'
-)
+const { writeCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+const { requireEntitlement, hasEntitlement } =
+  await import('@/lib/server/domains/settings/cloud/entitlements')
+const { getTierLimits, invalidateTierLimitsCache } =
+  await import('@/lib/server/domains/settings/tier-limits.service')
 const { EntitlementRequiredError } = await import('@/lib/server/errors/entitlement-error')
 const { handleBillingWebhook } = await import('../webhook.service')
 const { signWebhookPayload } = await import('../provider/signature')
@@ -97,7 +93,10 @@ const { billableQuantities, checkoutLineItems } = await import('../seat-sync')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
-    await db.select({ cloud: settings.cloud, revision: settings.cloudRevision }).from(settings).limit(0)
+    await db
+      .select({ cloud: settings.cloud, revision: settings.cloudRevision })
+      .from(settings)
+      .limit(0)
   },
 })
 
@@ -182,11 +181,7 @@ function makeStub(calls: StubCalls, status = 'active', quantities = { ...INITIAL
   } as unknown as BillingProviderClient
 }
 
-function deliver(
-  body: Record<string, unknown>,
-  client: BillingProviderClient,
-  now = new Date()
-) {
+function deliver(body: Record<string, unknown>, client: BillingProviderClient, now = new Date()) {
   const raw = JSON.stringify(body)
   const signature = signWebhookPayload(raw, WEBHOOK_SECRET, Math.floor(now.getTime() / 1000))
   return handleBillingWebhook(raw, signature, { client, now })
@@ -250,7 +245,9 @@ async function addLiteTeammates(count: number): Promise<void> {
   }
   for (let i = 0; i < count; i++) {
     const userId = createId('user')
-    await testDb.insert(user).values({ id: userId, name: `pm${i}`, email: `${userId}@example.test` })
+    await testDb
+      .insert(user)
+      .values({ id: userId, name: `pm${i}`, email: `${userId}@example.test` })
     const principalId = createId('principal')
     await testDb.insert(principal).values({
       id: principalId,
@@ -287,7 +284,8 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       entitlement: 'customDomain',
       currentPlan: 'free',
       requiredPlan: 'pro',
-      message: 'Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.',
+      message:
+        'Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.',
     })
     // The Free plan's numeric limits landed too, from the same catalogue.
     expect(await getTierLimits()).toMatchObject({ maxBoards: 2, aiTokensPerMonth: null })
@@ -399,7 +397,10 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       },
       makeStub(calls, 'active', settled)
     )
-    expect(replay).toEqual({ status: 200, body: { received: true, handled: false, duplicate: true } })
+    expect(replay).toEqual({
+      status: 200,
+      body: { received: true, handled: false, duplicate: true },
+    })
     expect(calls.updates).toHaveLength(1)
 
     await deliver(
@@ -444,7 +445,9 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     const row = await testDb.query.settings.findFirst()
     expect(row?.cloud).toMatchObject({ enabled: true, plan: 'free' })
     // The subscription reference is cleared, not left dangling.
-    expect((row?.cloud as { billing?: { subscriptionRef?: string | null } })?.billing?.subscriptionRef).toBeNull()
+    expect(
+      (row?.cloud as { billing?: { subscriptionRef?: string | null } })?.billing?.subscriptionRef
+    ).toBeNull()
     expect(await currentSubscriptionRef()).toBeNull()
     expect(await getTierLimits()).toMatchObject({ maxBoards: 2 })
   })
@@ -1179,8 +1182,8 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     // a webhook. Without this the file's declaration would last until the
     // next provider event and then silently vanish.
     await testDb.update(settings).set({ managedFieldPaths: ['cloud.enabled', 'cloud.plan'] })
-    await expect(
-      writeCloudConfig({ plan: 'pro' }, { writer: 'billing' })
-    ).rejects.toThrow(/managed by the declarative config file/i)
+    await expect(writeCloudConfig({ plan: 'pro' }, { writer: 'billing' })).rejects.toThrow(
+      /managed by the declarative config file/i
+    )
   })
 })

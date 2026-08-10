@@ -15,7 +15,7 @@
  *     timestamp tolerance (`provider/signature.ts`). Nothing past this point
  *     trusts the request.
  *  2. **Ownership** — the event's subject must be *this workspace's*
- *     customer. See below; this is the check whose absence is a cross-tenant
+ *     customer. See below; this is the check whose absence is a cross-workspace
  *     defect rather than a robustness gap.
  *  3. **Idempotency** — the `billing_webhook_events` table, keyed by the
  *     provider's own event id. The claim is an upsert guarded on
@@ -34,8 +34,8 @@
  *
  * A webhook endpoint subscribes to event **types**, never to customers, and
  * the endpoint secret authenticates the *endpoint* rather than the subject.
- * Under one operator account with a per-tenant endpoint URL, every tenant's
- * endpoint receives every other tenant's subscription events, each correctly
+ * Under one operator account with a per-workspace endpoint URL, every workspace's
+ * endpoint receives every other workspace's subscription events, each correctly
  * signed for the endpoint that receives it. "Correctly signed" therefore
  * means "really from the provider", never "about us".
  *
@@ -223,7 +223,10 @@ export async function handleBillingWebhook(
     // idempotency table — the exact way an idempotency guard turns into a
     // silent data-loss bug.
     await releaseClaim(event.id)
-    log.error({ err: error, providerEventId: event.id, type: event.type }, 'webhook handling failed')
+    log.error(
+      { err: error, providerEventId: event.id, type: event.type },
+      'webhook handling failed'
+    )
     return { status: 500, body: { error: 'handler_failed' } }
   }
 }
@@ -344,7 +347,7 @@ async function dispatch(
 
   // Cheap pre-filter, purely to avoid burning provider quota.
   //
-  // Under one operator account every tenant receives every other tenant's
+  // Under one operator account every workspace receives every other workspace's
   // events, so without this each workspace would spend a `getSubscription`
   // (and sometimes a `getCustomer`) on every event belonging to every other
   // workspace — N-times amplification against a per-account rate limit that
@@ -354,7 +357,11 @@ async function dispatch(
   // refuse, never approve. A payload claiming our customer still goes to the
   // authoritative check below.
   const claimedCustomer = str(event.data?.object?.customer)
-  if (identity.customerRef !== null && claimedCustomer !== null && claimedCustomer !== identity.customerRef) {
+  if (
+    identity.customerRef !== null &&
+    claimedCustomer !== null &&
+    claimedCustomer !== identity.customerRef
+  ) {
     logForeign(event, claimedCustomer, identity.customerRef)
     return 'foreign'
   }
@@ -476,7 +483,7 @@ async function ownsSubscription(
 
 function logForeign(event: ProviderEvent, eventCustomer: string | null, ours: string | null): void {
   // Warn, not debug. This is expected traffic on a shared operator account,
-  // but a sudden change in its volume or a burst against one tenant is worth
+  // but a sudden change in its volume or a burst against one workspace is worth
   // seeing, and silence here is what made the original defect invisible.
   log.warn(
     {

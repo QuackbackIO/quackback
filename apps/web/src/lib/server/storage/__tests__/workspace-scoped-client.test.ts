@@ -9,7 +9,7 @@
  * was issued", never as "the call threw".
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { workspaceIdFor } from '@/lib/server/__tests__/tenant-scope'
+import { workspaceIdFor } from '@/lib/server/__tests__/workspace-scope'
 
 const mockConfig = {
   s3Bucket: 'env-bucket',
@@ -25,7 +25,7 @@ const mockConfig = {
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
 /**
- * The scoped tests never reach this — a tenant scope carries its own verified
+ * The scoped tests never reach this — a workspace scope carries its own verified
  * `settings.id`. It is here for the unscoped assertions, which drive it into
  * the pooled refusal on purpose.
  */
@@ -96,17 +96,17 @@ const {
 } = await import('../s3')
 const { composeNamespacedKey, StorageNamespaceViolation, WORKSPACE_NAMESPACE_ROOT } =
   await import('../namespace')
-const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
+const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
 
 const PUBLIC_KEY = 'logos/2026/08/brand.png'
 const PRIVATE_KEY = 'attachments/2026/08/contract.pdf'
 const BYTES = Buffer.from([1, 2, 3])
 
-/** Both tenants pointed at ONE bucket — §9's fleet bucket, where the prefix is the whole boundary. */
+/** Both workspaces pointed at ONE bucket — §9's fleet bucket, where the prefix is the whole boundary. */
 const FLEET = { storage: { bucket: 'fleet-bucket' } }
 
-const nameFor = (tenantId: string, key: string) =>
-  `${WORKSPACE_NAMESPACE_ROOT}/${workspaceIdFor(tenantId)}/${key}`
+const nameFor = (workspaceKey: string, key: string) =>
+  `${WORKSPACE_NAMESPACE_ROOT}/${workspaceIdFor(workspaceKey)}/${key}`
 
 beforeEach(() => {
   sent.length = 0
@@ -117,32 +117,32 @@ beforeEach(() => {
 
 describe('every command is namespaced', () => {
   it('writes into the calling workspace namespace', async () => {
-    await withTenant('tenant-alpha', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'))
+    await withWorkspace('workspace-alpha', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'))
 
     expect(sent).toHaveLength(1)
-    expect(sent[0]!.Key).toBe(nameFor('tenant-alpha', PUBLIC_KEY))
-    expect(sent[0]!.Bucket).toBe('tenant-alpha-bucket')
+    expect(sent[0]!.Key).toBe(nameFor('workspace-alpha', PUBLIC_KEY))
+    expect(sent[0]!.Bucket).toBe('workspace-alpha-bucket')
   })
 
   it('reads, presigns and deletes through the same namespace', async () => {
-    await withTenant('tenant-alpha', () => getS3Object(PUBLIC_KEY))
-    await withTenant('tenant-alpha', () => deleteObject(PUBLIC_KEY))
-    await withTenant('tenant-alpha', () => generatePresignedGetUrl(PUBLIC_KEY, 60))
-    await withTenant('tenant-alpha', () => generatePresignedUploadUrl(PUBLIC_KEY, 'image/png'))
+    await withWorkspace('workspace-alpha', () => getS3Object(PUBLIC_KEY))
+    await withWorkspace('workspace-alpha', () => deleteObject(PUBLIC_KEY))
+    await withWorkspace('workspace-alpha', () => generatePresignedGetUrl(PUBLIC_KEY, 60))
+    await withWorkspace('workspace-alpha', () => generatePresignedUploadUrl(PUBLIC_KEY, 'image/png'))
 
     expect(sent.map((c) => c.Key)).toEqual([
-      nameFor('tenant-alpha', PUBLIC_KEY),
-      nameFor('tenant-alpha', PUBLIC_KEY),
+      nameFor('workspace-alpha', PUBLIC_KEY),
+      nameFor('workspace-alpha', PUBLIC_KEY),
     ])
     expect(presigned.map((c) => c.Key)).toEqual([
-      nameFor('tenant-alpha', PUBLIC_KEY),
-      nameFor('tenant-alpha', PUBLIC_KEY),
+      nameFor('workspace-alpha', PUBLIC_KEY),
+      nameFor('workspace-alpha', PUBLIC_KEY),
     ])
   })
 
   it('cannot collide two workspaces on one key in one bucket', async () => {
-    await withTenant('tenant-alpha', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
-    await withTenant('tenant-bravo', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
+    await withWorkspace('workspace-alpha', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
+    await withWorkspace('workspace-bravo', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
 
     expect(sent).toHaveLength(2)
     const [alpha, bravo] = sent as [(typeof sent)[number], (typeof sent)[number]]
@@ -151,10 +151,10 @@ describe('every command is namespaced', () => {
     expect(bravo.Bucket).toBe('fleet-bucket')
     expect(alpha.Key).not.toBe(bravo.Key)
     expect(
-      alpha.Key.startsWith(`${WORKSPACE_NAMESPACE_ROOT}/${workspaceIdFor('tenant-bravo')}/`)
+      alpha.Key.startsWith(`${WORKSPACE_NAMESPACE_ROOT}/${workspaceIdFor('workspace-bravo')}/`)
     ).toBe(false)
     expect(
-      bravo.Key.startsWith(`${WORKSPACE_NAMESPACE_ROOT}/${workspaceIdFor('tenant-alpha')}/`)
+      bravo.Key.startsWith(`${WORKSPACE_NAMESPACE_ROOT}/${workspaceIdFor('workspace-alpha')}/`)
     ).toBe(false)
   })
 
@@ -162,36 +162,36 @@ describe('every command is namespaced', () => {
     // The narrowing removed `getS3Config` from the module's exports, so this is
     // now observed where it is used rather than where it was returned.
     //
-    // A tenant no other test in this file touches. The client cache is keyed by
-    // connection parameters, so reusing a tenant would let this pass on a client
+    // A workspace no other test in this file touches. The client cache is keyed by
+    // connection parameters, so reusing a workspace would let this pass on a client
     // an earlier test constructed — evidence about that test, not this one.
-    await withTenant('tenant-charlie', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
+    await withWorkspace('workspace-charlie', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
 
     expect(clientCredentials).toHaveLength(1)
-    expect(clientCredentials[0]!.accessKeyId).toBe('AK-tenant-charlie')
+    expect(clientCredentials[0]!.accessKeyId).toBe('AK-workspace-charlie')
     expect(clientCredentials[0]!.accessKeyId).not.toBe('env-access-key')
   })
 })
 
 describe('the stored key stays namespace-free', () => {
   it('returns the bare key and a bare public URL from an upload', async () => {
-    const result = await withTenant('tenant-alpha', () =>
+    const result = await withWorkspace('workspace-alpha', () =>
       generatePresignedUploadUrl(PUBLIC_KEY, 'image/png')
     )
 
     expect(result.key).toBe(PUBLIC_KEY)
-    expect(result.publicUrl).toBe(`https://assets-tenant-alpha.example.com/${PUBLIC_KEY}`)
+    expect(result.publicUrl).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
     expect(result.publicUrl).not.toContain(`${WORKSPACE_NAMESPACE_ROOT}/`)
     // …while the object it will be PUT to IS namespaced.
     expect(presigned).toHaveLength(1)
-    expect(presigned[0]!.Key).toBe(nameFor('tenant-alpha', PUBLIC_KEY))
+    expect(presigned[0]!.Key).toBe(nameFor('workspace-alpha', PUBLIC_KEY))
   })
 
   it('keeps isPublicStorageKey classifying on the stored key', async () => {
     // Prefixing the *stored* key is what would have turned every public asset
     // private, because the classifier reads segment 0. It still reads
     // `logos`, and the object name still reads `w`.
-    const client = await withTenant('tenant-alpha', () => currentWorkspaceStorage())
+    const client = await withWorkspace('workspace-alpha', () => currentWorkspaceStorage())
 
     expect(isPublicStorageKey(PUBLIC_KEY)).toBe(true)
     expect(isPublicStorageKey(PRIVATE_KEY)).toBe(false)
@@ -209,25 +209,25 @@ describe('a key that would escape never reaches a command', () => {
 
   it('refuses a traversal on the write path', async () => {
     await neverReachesTheBucket('upload', () =>
-      withTenant('tenant-alpha', () => uploadObject('../../escape.png', BYTES, 'image/png'))
+      withWorkspace('workspace-alpha', () => uploadObject('../../escape.png', BYTES, 'image/png'))
     )
   })
 
   it('refuses an absolute key on the read path', async () => {
     await neverReachesTheBucket('read', () =>
-      withTenant('tenant-alpha', () => getS3Object('/etc/passwd'))
+      withWorkspace('workspace-alpha', () => getS3Object('/etc/passwd'))
     )
   })
 
   it('refuses an empty key on the delete path', async () => {
     // An empty key composes to the namespace itself, which under a fleet bucket
     // is a request shaped like "everything belonging to this workspace".
-    await neverReachesTheBucket('delete', () => withTenant('tenant-alpha', () => deleteObject('')))
+    await neverReachesTheBucket('delete', () => withWorkspace('workspace-alpha', () => deleteObject('')))
   })
 
   it('refuses percent-encoded traversal on the presign path', async () => {
     await neverReachesTheBucket('presign', () =>
-      withTenant('tenant-alpha', () => generatePresignedGetUrl('..%2f..%2fother/x.png', 60))
+      withWorkspace('workspace-alpha', () => generatePresignedGetUrl('..%2f..%2fother/x.png', 60))
     )
   })
 })
@@ -266,19 +266,19 @@ describe('there is no exported way to name a workspace', () => {
     // The test that did not exist, and whose absence let the hole through: no
     // test called into storage from outside a scope. `db` throwing is exactly
     // what the pooled Proxy does when nothing is resolved.
-    const { TenantScopeMissingError } = await import('@/lib/server/tenancy/tenant-context')
+    const { WorkspaceScopeMissingError } = await import('@/lib/server/workspaces/workspace-context')
     findFirst.mockImplementation(() => {
-      throw new TenantScopeMissingError('A `db` call was made with no tenant resolved.')
+      throw new WorkspaceScopeMissingError('A `db` call was made with no workspace resolved.')
     })
 
     await expect(uploadObject(PUBLIC_KEY, BYTES, 'image/png')).rejects.toThrow(
-      TenantScopeMissingError
+      WorkspaceScopeMissingError
     )
-    await expect(getS3Object(PUBLIC_KEY)).rejects.toThrow(TenantScopeMissingError)
-    await expect(deleteObject(PUBLIC_KEY)).rejects.toThrow(TenantScopeMissingError)
-    await expect(generatePresignedGetUrl(PUBLIC_KEY, 60)).rejects.toThrow(TenantScopeMissingError)
+    await expect(getS3Object(PUBLIC_KEY)).rejects.toThrow(WorkspaceScopeMissingError)
+    await expect(deleteObject(PUBLIC_KEY)).rejects.toThrow(WorkspaceScopeMissingError)
+    await expect(generatePresignedGetUrl(PUBLIC_KEY, 60)).rejects.toThrow(WorkspaceScopeMissingError)
     await expect(generatePresignedUploadUrl(PUBLIC_KEY, 'image/png')).rejects.toThrow(
-      TenantScopeMissingError
+      WorkspaceScopeMissingError
     )
 
     expect(sent).toHaveLength(0)
@@ -290,29 +290,29 @@ describe('there is no exported way to name a workspace', () => {
     // the bucket and credentials on every call. Held across a scope boundary
     // that composed workspace A's prefix against workspace B's bucket, which in
     // one shared bucket is A's objects reached through B's client.
-    // Two tenants no other test in this file touches. The SDK client is memoised
-    // by connection parameters, so reusing a tenant would serve a client an
+    // Two workspaces no other test in this file touches. The SDK client is memoised
+    // by connection parameters, so reusing a workspace would serve a client an
     // earlier test built and the credential assertion would report on that.
     const GOLF = { storage: { bucket: 'golf-bucket' } }
     const HOTEL = { storage: { bucket: 'hotel-bucket' } }
 
-    const client = await withTenant('tenant-golf', () => currentWorkspaceStorage(), GOLF)
+    const client = await withWorkspace('workspace-golf', () => currentWorkspaceStorage(), GOLF)
 
     // Hotel issues its own command FIRST, so a client for hotel exists and is
     // cached. Without this the straddle is only half-observable: the captured
     // client would be rebuilt from its captured config either way, and a cache
-    // keyed by the asking tenant would look correct because nothing was there to
+    // keyed by the asking workspace would look correct because nothing was there to
     // hand back. This is the state where a wrong key returns a wrong client.
-    await withTenant('tenant-hotel', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
+    await withWorkspace('workspace-hotel', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
 
-    await withTenant('tenant-hotel', () => client.put(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
+    await withWorkspace('workspace-hotel', () => client.put(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
 
     expect(sent).toHaveLength(2)
     const straddled = sent[1]!
-    expect(straddled.Key).toBe(nameFor('tenant-golf', PUBLIC_KEY))
+    expect(straddled.Key).toBe(nameFor('workspace-golf', PUBLIC_KEY))
     expect(straddled.Bucket, 'the captured client took the later scope bucket').toBe('golf-bucket')
     expect(straddled.via, 'the captured client signed through the later scope client').toBe(
-      'AK-tenant-golf'
+      'AK-workspace-golf'
     )
   })
 
@@ -376,7 +376,7 @@ describe('the module exports no way to address the bucket', () => {
     expect(nullary.length).toBeGreaterThan(0)
 
     for (const [name, fn] of nullary) {
-      const result = withTenant('tenant-alpha', () => (fn as () => unknown)())
+      const result = withWorkspace('workspace-alpha', () => (fn as () => unknown)())
       if (result && typeof result === 'object') {
         expect(result, `${name} returns a bucket`).not.toHaveProperty('bucket')
       }
@@ -389,25 +389,25 @@ describe('token verification through the narrowed accessor', () => {
    * Every workspace holding the SAME storage secret — which under §9's one fleet
    * credential is not the pessimistic case, it is the case. It matters that this
    * fixture is shared: with per-workspace secrets these two tests would pass
-   * because the keys differ, and would keep passing with the tenant binding torn
+   * because the keys differ, and would keep passing with the workspace binding torn
    * out. The binding has to be the only thing separating them or they are
    * asserting something else.
    */
   const SHARED = { secrets: { storage: { accessKeyId: 'fleet', secretAccessKey: 'fleet-secret' } } }
 
-  const mintFor = async (tenantId: string) => {
+  const mintFor = async (workspaceKey: string) => {
     mockConfig.s3Proxy = true
-    const { uploadUrl } = await withTenant(
-      tenantId,
+    const { uploadUrl } = await withWorkspace(
+      workspaceKey,
       () => generatePresignedUploadUrl(PUBLIC_KEY, 'image/png'),
       SHARED
     )
     return new URL(uploadUrl).searchParams
   }
 
-  const verifyAs = (tenantId: string, params: URLSearchParams) =>
-    withTenant(
-      tenantId,
+  const verifyAs = (workspaceKey: string, params: URLSearchParams) =>
+    withWorkspace(
+      workspaceKey,
       () =>
         verifyProxyUploadToken(
           getStorageSigningSecret(),
@@ -420,14 +420,14 @@ describe('token verification through the narrowed accessor', () => {
     )
 
   it('verifies a proxy upload token this test minted', async () => {
-    const params = await mintFor('tenant-alpha')
+    const params = await mintFor('workspace-alpha')
 
-    expect(verifyAs('tenant-alpha', params)).toBe(true)
+    expect(verifyAs('workspace-alpha', params)).toBe(true)
   })
 
   it('refuses that same token under another workspace on one shared secret', async () => {
-    const params = await mintFor('tenant-alpha')
+    const params = await mintFor('workspace-alpha')
 
-    expect(verifyAs('tenant-bravo', params)).toBe(false)
+    expect(verifyAs('workspace-bravo', params)).toBe(false)
   })
 })

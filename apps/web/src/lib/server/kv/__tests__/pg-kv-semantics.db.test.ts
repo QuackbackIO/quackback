@@ -11,10 +11,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
   ensureKvSchema,
-  withRealTenant,
-  tenantPair,
+  withRealWorkspace,
+  workspacePair,
   uniqueKey,
-  cleanupTenants,
+  cleanupWorkspaces,
   closeHarness,
   testSql,
 } from './harness'
@@ -29,14 +29,14 @@ import {
   rateBucketRetryAfter,
 } from '../pg-kv'
 
-const [T] = tenantPair()
+const [T] = workspacePair()
 
 beforeAll(async () => {
   await ensureKvSchema()
 })
 
 afterAll(async () => {
-  await cleanupTenants(T)
+  await cleanupWorkspaces(T)
   await closeHarness()
 })
 
@@ -44,62 +44,62 @@ afterAll(async () => {
 async function expire(key: string): Promise<void> {
   await testSql()`
     UPDATE kv_store SET expires_at = now() - interval '1 second'
-    WHERE tenant_id = ${T} AND key = ${key}
+    WHERE workspace_key = ${T} AND key = ${key}
   `
 }
 
 describe('GET / SET / DEL', () => {
   it('round-trips a structured value', async () => {
     const key = uniqueKey('cache')
-    await withRealTenant(T, () => kvSet(key, { a: 1, b: ['x'] }, 60))
-    expect(await withRealTenant(T, () => kvGet(key))).toEqual({ a: 1, b: ['x'] })
+    await withRealWorkspace(T, () => kvSet(key, { a: 1, b: ['x'] }, 60))
+    expect(await withRealWorkspace(T, () => kvGet(key))).toEqual({ a: 1, b: ['x'] })
   })
 
   it('an expired key reads as absent even before anything sweeps it', async () => {
     const key = uniqueKey('cache')
-    await withRealTenant(T, () => kvSet(key, 'v', 60))
+    await withRealWorkspace(T, () => kvSet(key, 'v', 60))
     await expire(key)
-    expect(await withRealTenant(T, () => kvGet(key))).toBeNull()
+    expect(await withRealWorkspace(T, () => kvGet(key))).toBeNull()
     // The row is still there — expiry is a predicate, not a deletion. If this
     // ever passes only because a sweeper ran, the TTL semantics have moved.
     const rows = await testSql()<{ n: string }[]>`
-      SELECT count(*)::text AS n FROM kv_store WHERE tenant_id = ${T} AND key = ${key}
+      SELECT count(*)::text AS n FROM kv_store WHERE workspace_key = ${T} AND key = ${key}
     `
     expect(rows[0].n).toBe('1')
   })
 
   it('SET overwrites both value and TTL, as Redis SET does', async () => {
     const key = uniqueKey('cache')
-    await withRealTenant(T, () => kvSet(key, 'first', 60))
+    await withRealWorkspace(T, () => kvSet(key, 'first', 60))
     await expire(key)
-    await withRealTenant(T, () => kvSet(key, 'second', 60))
-    expect(await withRealTenant(T, () => kvGet(key))).toBe('second')
+    await withRealWorkspace(T, () => kvSet(key, 'second', 60))
+    expect(await withRealWorkspace(T, () => kvGet(key))).toBe('second')
   })
 
   it('DEL removes several keys and ignores an empty list', async () => {
     const a = uniqueKey('cache')
     const b = uniqueKey('cache')
-    await withRealTenant(T, () => kvSet(a, 1, 60))
-    await withRealTenant(T, () => kvSet(b, 2, 60))
-    await withRealTenant(T, () => kvDel())
-    expect(await withRealTenant(T, () => kvGet(a))).toBe(1)
-    await withRealTenant(T, () => kvDel(a, b))
-    expect(await withRealTenant(T, () => kvGet(a))).toBeNull()
-    expect(await withRealTenant(T, () => kvGet(b))).toBeNull()
+    await withRealWorkspace(T, () => kvSet(a, 1, 60))
+    await withRealWorkspace(T, () => kvSet(b, 2, 60))
+    await withRealWorkspace(T, () => kvDel())
+    expect(await withRealWorkspace(T, () => kvGet(a))).toBe(1)
+    await withRealWorkspace(T, () => kvDel(a, b))
+    expect(await withRealWorkspace(T, () => kvGet(a))).toBeNull()
+    expect(await withRealWorkspace(T, () => kvGet(b))).toBeNull()
   })
 
   it('rejects a non-positive TTL rather than writing an already-expired row', async () => {
     const key = uniqueKey('cache')
-    await expect(withRealTenant(T, () => kvSet(key, 'v', 0))).rejects.toThrow(/positive/)
+    await expect(withRealWorkspace(T, () => kvSet(key, 'v', 0))).rejects.toThrow(/positive/)
   })
 
   it('null round-trips as null rather than becoming a miss', async () => {
     const key = uniqueKey('cache')
-    await withRealTenant(T, () => kvSet(key, null, 60))
+    await withRealWorkspace(T, () => kvSet(key, null, 60))
     // A stored null is indistinguishable from a miss through kvGet, which is
     // exactly what Redis's `JSON.parse('null')` did. Pinned so a later change to
     // `jsonb 'null'` handling is a visible decision.
-    expect(await withRealTenant(T, () => kvGet(key))).toBeNull()
+    expect(await withRealWorkspace(T, () => kvGet(key))).toBeNull()
   })
 })
 
@@ -108,7 +108,7 @@ describe('SET NX EX', () => {
     for (let attempt = 0; attempt < 5; attempt++) {
       const key = uniqueKey('lock')
       const results = await Promise.all(
-        Array.from({ length: 20 }, (_, i) => withRealTenant(T, () => kvSetNx(key, i, 30)))
+        Array.from({ length: 20 }, (_, i) => withRealWorkspace(T, () => kvSetNx(key, i, 30)))
       )
       expect(results.filter(Boolean).length, `attempt ${attempt}`).toBe(1)
     }
@@ -116,11 +116,11 @@ describe('SET NX EX', () => {
 
   it('an expired holder loses the key to the next claimant', async () => {
     const key = uniqueKey('lock')
-    expect(await withRealTenant(T, () => kvSetNx(key, 'a', 30))).toBe(true)
-    expect(await withRealTenant(T, () => kvSetNx(key, 'b', 30))).toBe(false)
+    expect(await withRealWorkspace(T, () => kvSetNx(key, 'a', 30))).toBe(true)
+    expect(await withRealWorkspace(T, () => kvSetNx(key, 'b', 30))).toBe(false)
     await expire(key)
-    expect(await withRealTenant(T, () => kvSetNx(key, 'b', 30))).toBe(true)
-    expect(await withRealTenant(T, () => kvGet(key))).toBe('b')
+    expect(await withRealWorkspace(T, () => kvSetNx(key, 'b', 30))).toBe(true)
+    expect(await withRealWorkspace(T, () => kvGet(key))).toBe('b')
   })
 })
 
@@ -133,7 +133,7 @@ describe('get-or-create', () => {
       const key = uniqueKey('visitor:salt')
       const values = await Promise.all(
         Array.from({ length: 20 }, (_, i) =>
-          withRealTenant(T, () => kvGetOrCreate(key, `salt-${attempt}-${i}`, 60))
+          withRealWorkspace(T, () => kvGetOrCreate(key, `salt-${attempt}-${i}`, 60))
         )
       )
       expect(new Set(values).size, `attempt ${attempt}: ${new Set(values).size} distinct`).toBe(1)
@@ -142,10 +142,10 @@ describe('get-or-create', () => {
 
   it('mints a new value once the old one expires', async () => {
     const key = uniqueKey('visitor:salt')
-    const first = await withRealTenant(T, () => kvGetOrCreate(key, 'one', 60))
+    const first = await withRealWorkspace(T, () => kvGetOrCreate(key, 'one', 60))
     expect(first).toBe('one')
     await expire(key)
-    expect(await withRealTenant(T, () => kvGetOrCreate(key, 'two', 60))).toBe('two')
+    expect(await withRealWorkspace(T, () => kvGetOrCreate(key, 'two', 60))).toBe('two')
   })
 })
 
@@ -154,7 +154,7 @@ describe('rate buckets', () => {
     const key = uniqueKey('rl')
     const results = await Promise.all(
       Array.from({ length: 20 }, () =>
-        withRealTenant(T, () => incrementRateBucket({ key, windowSeconds: 60 }))
+        withRealWorkspace(T, () => incrementRateBucket({ key, windowSeconds: 60 }))
       )
     )
     expect(Math.max(...results.map((r) => r.count))).toBe(20)
@@ -164,36 +164,38 @@ describe('rate buckets', () => {
 
   it('resets to 1 when the window has elapsed, and does not extend a live window', async () => {
     const key = uniqueKey('rl')
-    await withRealTenant(T, () => incrementRateBucket({ key, windowSeconds: 3600 }))
-    const second = await withRealTenant(T, () => incrementRateBucket({ key, windowSeconds: 3600 }))
+    await withRealWorkspace(T, () => incrementRateBucket({ key, windowSeconds: 3600 }))
+    const second = await withRealWorkspace(T, () =>
+      incrementRateBucket({ key, windowSeconds: 3600 })
+    )
     expect(second.count).toBe(2)
     // Redis's EXPIRE NX: a later hit in the window must not push the window out.
     const windowText = async () =>
       (
         await testSql()<{ w: string }[]>`
           SELECT window_expires_at::text AS w FROM rate_bucket
-          WHERE tenant_id = ${T} AND key = ${key}
+          WHERE workspace_key = ${T} AND key = ${key}
         `
       )[0].w
     const before = await windowText()
-    await withRealTenant(T, () => incrementRateBucket({ key, windowSeconds: 3600 }))
+    await withRealWorkspace(T, () => incrementRateBucket({ key, windowSeconds: 3600 }))
     expect(await windowText()).toBe(before)
 
     await testSql()`
       UPDATE rate_bucket SET window_expires_at = now() - interval '1 second'
-      WHERE tenant_id = ${T} AND key = ${key}
+      WHERE workspace_key = ${T} AND key = ${key}
     `
     expect(
-      (await withRealTenant(T, () => incrementRateBucket({ key, windowSeconds: 60 }))).count
+      (await withRealWorkspace(T, () => incrementRateBucket({ key, windowSeconds: 60 }))).count
     ).toBe(1)
   })
 
   it('the batch form returns counts in input order, one round trip', async () => {
     const a = uniqueKey('rl')
     const b = uniqueKey('rl')
-    await withRealTenant(T, () => incrementRateBucket({ key: a, windowSeconds: 60 }))
-    await withRealTenant(T, () => incrementRateBucket({ key: a, windowSeconds: 60 }))
-    const out = await withRealTenant(T, () =>
+    await withRealWorkspace(T, () => incrementRateBucket({ key: a, windowSeconds: 60 }))
+    await withRealWorkspace(T, () => incrementRateBucket({ key: a, windowSeconds: 60 }))
+    const out = await withRealWorkspace(T, () =>
       incrementRateBuckets([
         { key: a, windowSeconds: 60 },
         { key: b, windowSeconds: 60 },
@@ -207,7 +209,7 @@ describe('rate buckets', () => {
     // caller checking a per-principal and a per-IP bucket that name the same
     // key would take the whole request down without the collapse.
     const key = uniqueKey('rl')
-    const out = await withRealTenant(T, () =>
+    const out = await withRealWorkspace(T, () =>
       incrementRateBuckets([
         { key, windowSeconds: 60 },
         { key, windowSeconds: 60 },
@@ -218,9 +220,11 @@ describe('rate buckets', () => {
 
   it('retry-after reports the live window, and the window size when absent', async () => {
     const key = uniqueKey('rl')
-    expect(await withRealTenant(T, () => rateBucketRetryAfter({ key, windowSeconds: 45 }))).toBe(45)
-    await withRealTenant(T, () => incrementRateBucket({ key, windowSeconds: 600 }))
-    const retry = await withRealTenant(T, () => rateBucketRetryAfter({ key, windowSeconds: 45 }))
+    expect(await withRealWorkspace(T, () => rateBucketRetryAfter({ key, windowSeconds: 45 }))).toBe(
+      45
+    )
+    await withRealWorkspace(T, () => incrementRateBucket({ key, windowSeconds: 600 }))
+    const retry = await withRealWorkspace(T, () => rateBucketRetryAfter({ key, windowSeconds: 45 }))
     expect(retry).toBeGreaterThan(590)
     expect(retry).toBeLessThanOrEqual(600)
   })

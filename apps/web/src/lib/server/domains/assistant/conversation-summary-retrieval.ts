@@ -18,7 +18,7 @@
  * `visitorPrincipalId = <the current conversation's customer>`, always, on
  * every surface. Without it, one customer's support history would leak into
  * another customer's answer, which is a severe breach — worse than getting
- * the audience ceiling wrong, since the mistake crosses tenants' own
+ * the audience ceiling wrong, since the mistake crosses workspaces' own
  * customers rather than merely over-sharing content tier.
  *
  * `retrieveConversationSummaries` enforces this by refusing to run at all

@@ -2,9 +2,9 @@
  * The `MIN_SCHEMA_VERSION` gate, both directions.
  *
  * The two directions are not symmetric and the second is the one that is easy
- * to get wrong: refusing a tenant that is *behind* is obviously required, but
- * **serving a tenant that is ahead** is what makes a rollout possible at all —
- * during one, the new image migrates a tenant that not-yet-restarted replicas
+ * to get wrong: refusing a workspace that is *behind* is obviously required, but
+ * **serving a workspace that is ahead** is what makes a rollout possible at all —
+ * during one, the new image migrates a workspace that not-yet-restarted replicas
  * are still serving.
  *
  * Everything here uses the real bundled journal rather than a fixture, because
@@ -26,7 +26,7 @@ import {
   assertSchemaFloorConfigured,
   configuredSchemaFloor,
   SCHEMA_FLOOR_MISCONFIGURED_CODE,
-  TenantSchemaFloorRefusal,
+  WorkspaceSchemaFloorRefusal,
 } from '../schema-floor'
 
 function ledger(versions: number[]): AppliedLedger {
@@ -50,7 +50,7 @@ describe('evaluateSchemaFloor', () => {
 
   it('accepts a database AHEAD of the code — the rollout direction', () => {
     // Every bundled migration, plus two the build has never heard of. This is
-    // exactly what a tenant migrated by the next image looks like to this one.
+    // exactly what a workspace migrated by the next image looks like to this one.
     const ahead = [...allWhens, latestBundledVersion() + 1000, latestBundledVersion() + 2000]
     const verdict = evaluateSchemaFloor(ledger(ahead), floor)
     expect(verdict.ok).toBe(true)
@@ -113,7 +113,7 @@ describe('configuredSchemaFloor', () => {
   it('the throw carries a code, so it is not mistaken for a fingerprint refusal', () => {
     // Without this the error funnelled into `pool_unavailable` and the request
     // path reported it as a wrong-database near-miss. Measured before the fix:
-    // MIN_SCHEMA_VERSION=9999 503'd every tenant under the cross-tenant alarm.
+    // MIN_SCHEMA_VERSION=9999 503'd every workspace under the cross-workspace alarm.
     __resetSchemaFloorMemo()
     try {
       configuredSchemaFloor({ MIN_SCHEMA_VERSION: '9999' } as NodeJS.ProcessEnv)
@@ -125,9 +125,9 @@ describe('configuredSchemaFloor', () => {
 })
 
 describe('assertSchemaFloorConfigured', () => {
-  it('refuses at boot rather than once per tenant at pool checkout', () => {
+  it('refuses at boot rather than once per workspace at pool checkout', () => {
     // The placement is the fix. Resolving lazily meant an unresolvable floor
-    // surfaced as every tenant failing, long after the deploy went green and
+    // surfaced as every workspace failing, long after the deploy went green and
     // with the readiness probe still reporting 200.
     __resetSchemaFloorMemo()
     expect(() =>
@@ -142,9 +142,9 @@ describe('assertSchemaFloorConfigured', () => {
   })
 })
 
-describe('TenantSchemaFloorRefusal', () => {
+describe('WorkspaceSchemaFloorRefusal', () => {
   it('carries a code distinct from a fingerprint refusal, and names what is missing', () => {
-    const err = new TenantSchemaFloorRefusal('inst_x', {
+    const err = new WorkspaceSchemaFloorRefusal('inst_x', {
       ok: false,
       missing: ['0251_settings_cloud_tenant_id'],
       floorTag: '0251_settings_cloud_tenant_id',
@@ -153,6 +153,6 @@ describe('TenantSchemaFloorRefusal', () => {
     expect(err.message).toContain('0251_settings_cloud_tenant_id')
     // A fingerprint refusal means "wrong database" and is a security event; this
     // means "right database, mid-rollout". The strings must not be confusable.
-    expect(err.message).not.toContain('workspace_id_mismatch')
+    expect(err.message).not.toContain('self_reported_workspace_id_mismatch')
   })
 })

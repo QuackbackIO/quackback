@@ -28,7 +28,7 @@ import {
 } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
-import { withTenantSweepReentrancyGuard } from '@/lib/server/sweep-lock'
+import { withWorkspaceSweepReentrancyGuard } from '@/lib/server/sweep-lock'
 import type { PostId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
@@ -211,7 +211,7 @@ const SWEEP_ABORT_AFTER_EMPTY_BATCHES = 2
  * changed, and processes them in batches until none remain. See #180 for why
  * the sweep needs an attempted-set, circuit breaker, and reentrancy guard.
  *
- * The reentrancy guard is keyed by tenant (`withTenantSweepReentrancyGuard`):
+ * The reentrancy guard is keyed by workspace (`withWorkspaceSweepReentrancyGuard`):
  * a process-wide boolean would let whichever workspace this fleet pass reached
  * first suppress every other workspace's sweep for as long as it runs.
  */
@@ -221,7 +221,7 @@ export async function refreshStaleSummaries(): Promise<void> {
   // circuit breaker trips.
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !getChatModel('summary'))
     return
-  await withTenantSweepReentrancyGuard('summary_sweep', _doSweep)
+  await withWorkspaceSweepReentrancyGuard('summary_sweep', _doSweep)
 }
 
 async function _doSweep(): Promise<void> {

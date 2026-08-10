@@ -10,7 +10,7 @@
  * Deliberately does NOT look up whether an account exists at the
  * supplied email — that would leak account presence to anyone who can
  * POST to this endpoint. Branching is purely on email-domain match
- * against the tenant's verified domain.
+ * against the workspace's verified domain.
  */
 
 import { createServerFn } from '@tanstack/react-start'
@@ -43,14 +43,14 @@ export type LookupAuthMethodsResult =
 export const lookupAuthMethodsFn = createServerFn({ method: 'POST' })
   .validator(lookupAuthMethodsInput)
   .handler(async ({ data }): Promise<LookupAuthMethodsResult> => {
-    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
     const { listIdentityProviders } =
       await import('@/lib/server/domains/settings/identity-providers.service')
     const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
     const { resolveLoginRouting } = await import('./auth-routing')
 
-    const tenant = await getTenantSettings()
-    const methodsConfig = tenant?.publicAuthConfig?.oauth ?? {}
+    const workspace = await getWorkspaceSettings()
+    const methodsConfig = workspace?.publicAuthConfig?.oauth ?? {}
 
     // Build the liveness snapshot routing needs. `getRegisteredOidcProviderIds`
     // already applies the full gate (enabled + credential present + tier) and

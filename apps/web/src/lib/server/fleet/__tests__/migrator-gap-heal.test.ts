@@ -7,11 +7,11 @@
  * and that is a property of the driver and of these 233 SQL files, not of our
  * arithmetic about them.
  *
- * The state under test is one that happened. Two live tenants had a high-water
+ * The state under test is one that happened. Two live workspaces had a high-water
  * mark at `0253` with rows absent for `0249`, `0250`, `0252`, `0256` and `0257`,
  * `settings.cloud` physically missing, and every page returning 500 — while the
  * reconciler reported `OK [reconciled] post=true` and the post-condition check
- * reported `ok=true`. Both instruments agreed the tenant was fine. The fixtures
+ * reported `ok=true`. Both instruments agreed the workspace was fine. The fixtures
  * below reproduce that ledger exactly and assert that neither instrument says so
  * any more.
  *
@@ -20,15 +20,15 @@
  * - **Every test gets its own database**, copied from one fully migrated
  *   template. Nothing here touches the shared `quackback_test`, and no assertion
  *   counts rows it does not own.
- * - **`migrateTenant` is the subject, not a re-implementation of it.** The only
- *   seam is the tenant's password: `withPassword` is a pure string function, so
+ * - **`migrateWorkspace` is the subject, not a re-implementation of it.** The only
+ *   seam is the workspace's password: `withPassword` is a pure string function, so
  *   a descriptor pointing at the scratch database and a stubbed password
  *   resolver put the real function on a real database with its real gates.
  * - **"Unchanged" is only ever asserted about quiescent things.** The catalogue
  *   digest reads `information_schema.columns` and `pg_index`, and the ledger
  *   check reads `drizzle.__drizzle_migrations` — none of which any tier writes
  *   in the background. Row counts of `job_queue` or the kv tables could not
- *   answer "did anything change" on a live tenant, so they are not used to
+ *   answer "did anything change" on a live workspace, so they are not used to
  *   answer it here either.
  */
 import { randomUUID } from 'node:crypto'
@@ -43,12 +43,12 @@ import {
   truncateAppliedLedger,
 } from '@quackback/db/schema-version'
 
-// The migrator resolves a tenant's password through the pool cache, which wants
+// The migrator resolves a workspace's password through the pool cache, which wants
 // a control database and a secrets vendor. Everything else on the path — the DSN
 // assembly, both gates, the truncation, the executor, the post-run check — is
 // the real code.
-vi.mock('@/lib/server/tenancy/pool-cache', () => ({
-  resolveTenantPassword: async () => 'password',
+vi.mock('@/lib/server/workspaces/pool-cache', () => ({
+  resolveWorkspacePassword: async () => 'password',
 }))
 
 /**
@@ -89,8 +89,8 @@ vi.mock('@quackback/db/migrate', async (importOriginal) => {
   }
 })
 
-const { ledgerGapFor, migrateTenant, planFor, replaySetFor } = await import('../migrator')
-type TenantDescriptor = Parameters<typeof migrateTenant>[0]
+const { ledgerGapFor, migrateWorkspace, planFor, replaySetFor } = await import('../migrator')
+type WorkspaceDescriptor = Parameters<typeof migrateWorkspace>[0]
 
 const ADMIN_URL =
   process.env.DRIFT_CHECK_DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/postgres'
@@ -103,14 +103,14 @@ const created: string[] = []
 const dsnFor = (db: string) => ADMIN_URL.replace(/\/[^/]+$/, `/${db}`)
 
 /** A descriptor whose direct URL carries no password, so `withPassword` supplies one. */
-const tenantOn = (db: string): TenantDescriptor =>
+const workspaceOn = (db: string): WorkspaceDescriptor =>
   ({
-    tenantId: `inst_gapheal_${db.slice(-6)}`,
+    workspaceKey: `inst_gapheal_${db.slice(-6)}`,
     database: {
       directUrl: dsnFor(db).replace(/:\/\/([^:@]+):[^@]*@/, '://$1@'),
       credentialRef: 'literal://unused',
     },
-  }) as unknown as TenantDescriptor
+  }) as unknown as WorkspaceDescriptor
 
 /** A copy of the fully migrated template, for one test to ruin however it likes. */
 async function scratch(): Promise<string> {
@@ -148,7 +148,7 @@ const ledgerOf = (db: string) => withSql(db, (sql) => readAppliedLedger(sql))
  * A digest of the things a migration run is supposed to leave alone.
  *
  * Deliberately catalogue-only. The trap this avoids is real: an instrument that
- * reads hot tables cannot answer "did anything change", because on a live tenant
+ * reads hot tables cannot answer "did anything change", because on a live workspace
  * the worker tier writes `job_queue` and the kv tables continuously. Column
  * shapes and index validity are written by DDL and by nothing else.
  */
@@ -176,7 +176,7 @@ beforeAll(async () => {
   await admin.unsafe(`DROP DATABASE IF EXISTS ${TEMPLATE} WITH (FORCE)`)
   await admin.unsafe(`CREATE DATABASE ${TEMPLATE}`)
   // The full production path — extensions, lineage, concurrent indexes, seed and
-  // verify — so a copy of it is a tenant that is genuinely correct, and the
+  // verify — so a copy of it is a workspace that is genuinely correct, and the
   // post-condition check has something honest to pass on.
   await runMigrations(dsnFor(TEMPLATE), {})
 }, 180_000)
@@ -206,7 +206,7 @@ describe('a hole the whole of which is replay-safe', () => {
     expect(planFor(before).tags).toHaveLength(7)
     const digestBefore = await catalogueDigest(db)
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(true)
     expect(result.code).toBe('healed_ledger_gap')
@@ -232,7 +232,7 @@ describe('a hole the whole of which is replay-safe', () => {
     // "this database was behind".
     const db = await scratch()
     await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).not.toBe('reconciled')
     expect(result.code).not.toBe('already_current')
     expect(result.detail).toContain('healed a ledger gap')
@@ -250,7 +250,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
     await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
     executor.pretendItRan = true
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('migration_failed')
@@ -264,7 +264,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
   it('is not a check that cannot fail: the same run un-stubbed reports the heal', async () => {
     const db = await scratch()
     await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).toBe('healed_ledger_gap')
   }, 120_000)
 })
@@ -275,7 +275,7 @@ describe('a hole that must not be healed', () => {
     await dropLedgerRows(db, '0246')
     const before = await ledgerOf(db)
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('refused_ledger_gap')
@@ -299,7 +299,7 @@ describe('a hole that must not be healed', () => {
     )
     const before = await ledgerOf(db)
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('refused_ledger_gap')
@@ -320,7 +320,7 @@ describe('a hole that must not be healed', () => {
         [whenOf('0006'), whenOf('0012')]
       )
     )
-    const result = await migrateTenant(tenantOn(db), { allowMutatingReplay: true })
+    const result = await migrateWorkspace(workspaceOn(db), { allowMutatingReplay: true })
     expect(result.code).toBe('refused_ledger_gap')
     expect(result.detail).toContain('0006_thick_arclight')
   }, 120_000)
@@ -331,7 +331,7 @@ describe('the ledgers that are not holes — the controls', () => {
     const db = await scratch()
     await dropLedgerRows(db, '0256', '0257')
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(true)
     // `reconciled`, not `healed_ledger_gap`: no truncation, no gap, the ordinary
@@ -347,7 +347,7 @@ describe('the ledgers that are not holes — the controls', () => {
     await admin.unsafe(`CREATE DATABASE ${db}`)
     created.push(db)
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(true)
     expect(result.code).toBe('reconciled')
@@ -363,7 +363,7 @@ describe('the ledgers that are not holes — the controls', () => {
     const digestBefore = await catalogueDigest(db)
     const before = await ledgerOf(db)
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.code).toBe('already_current')
     expect(result.gap).toBeNull()
@@ -372,7 +372,7 @@ describe('the ledgers that are not holes — the controls', () => {
     expect(await catalogueDigest(db)).toBe(digestBefore)
   }, 120_000)
 
-  it('a tenant ahead of this build is served, not healed', async () => {
+  it('a workspace ahead of this build is served, not healed', async () => {
     // Its ledger carries a `when` this image has never heard of. That is not a
     // hole, and a heal here would delete a row nothing could write back.
     const db = await scratch()
@@ -382,7 +382,7 @@ describe('the ledgers that are not holes — the controls', () => {
         [latestBundledVersion() + 1_000]
       )
     )
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).toBe('already_current')
     expect(result.gap).toBeNull()
   }, 120_000)
@@ -407,17 +407,17 @@ describe('what the post-condition check can now see', () => {
     )
     // The control that makes the finding attributable: the checks that existed
     // before are unmoved by a dropped column, which is exactly why they reported
-    // a broken tenant as correct.
+    // a broken workspace as correct.
     expect(report.observed.invalidIndexes).toEqual(clean.observed.invalidIndexes)
     expect(report.observed.extensions).toEqual(clean.observed.extensions)
     expect(report.observed.missingIndexes).toEqual(clean.observed.missingIndexes)
   }, 120_000)
 
-  it('refuses the tenant whose ledger is complete and whose schema is not', async () => {
+  it('refuses the workspace whose ledger is complete and whose schema is not', async () => {
     const db = await scratch()
     await withSql(db, (sql) => sql.unsafe(`ALTER TABLE settings DROP COLUMN cloud`))
 
-    const result = await migrateTenant(tenantOn(db))
+    const result = await migrateWorkspace(workspaceOn(db))
 
     // Nothing to apply and nothing to heal, so the ledger has no complaint. The
     // catalogue does, and it is now the one that decides.
@@ -433,7 +433,7 @@ describe('the lock a replay of 0253 has to take', () => {
    * trigger, and both want a lock that conflicts with the ROW EXCLUSIVE the job
    * poller holds while it claims work. On a fresh rollout the table does not
    * exist yet so nothing contends; on a *replay* — which is what healing a hole
-   * spanning 0253 does — the tenant's worker tier is live. Measured against the
+   * spanning 0253 does — the workspace's worker tier is live. Measured against the
    * fleet, that pair does not queue politely.
    */
   async function replayFrom0253(db: string, lockTimeoutMs?: number) {

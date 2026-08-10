@@ -1,5 +1,5 @@
 /**
- * The §4 sites that are NOT tenant-keyed, and the evidence for each.
+ * The §4 sites that are NOT workspace-keyed, and the evidence for each.
  *
  * "Proven not shared" is a claim, and a claim with no test behind it is a
  * comment. Every site here is one §4.1 or §4.2 names, kept process-wide
@@ -11,22 +11,22 @@
  *
  * - `domains/ai/config.ts` `openai` — built from env-only values §8 established
  *   are fleet-wide. Evidence: the constructor receives exactly the configured
- *   key and base URL, and receives them identically under two tenants.
+ *   key and base URL, and receives them identically under two workspaces.
  * - `packages/email` `smtpTransporter` / `resendClient` — same argument for the
- *   transports, plus the part that is genuinely per-tenant (the From address)
+ *   transports, plus the part that is genuinely per-workspace (the From address)
  *   is read per send rather than baked into the transport.
  * - `routes/api/health.ready.ts` `migrationsKnownUpToDate` — a memo that would
- *   cache the first tenant it saw forever. Evidence: under pooled tenancy the
+ *   cache the first workspace it saw forever. Evidence: under pooled workspaces the
  *   check returns before reading it.
  * - `events/relay.ts` leader state — only correct for one database. Evidence:
- *   the relay refuses to start under pooled tenancy.
+ *   the relay refuses to start under pooled workspaces.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   openaiCtorArgs: [] as unknown[],
   aiConfig: { openaiApiKey: 'sk-fleet', openaiBaseUrl: 'https://gateway.example.com/v1' },
-  tenancy: 'single' as 'single' | 'pooled',
+  workspaces: 'single' as 'single' | 'pooled',
   migrationStatusCalls: 0,
   relayLogs: [] as string[],
 }))
@@ -47,13 +47,13 @@ vi.mock('@/lib/server/config', () => ({
       return hoisted.aiConfig.openaiBaseUrl
     },
     get isPooledTenancy() {
-      return hoisted.tenancy === 'pooled'
+      return hoisted.workspaces === 'pooled'
     },
   },
 }))
 
 const { getOpenAI, isAiClientConfigured } = await import('../domains/ai/config')
-const { withTenant } = await import('./tenant-scope')
+const { withWorkspace } = await import('./workspace-scope')
 
 beforeEach(() => {
   hoisted.openaiCtorArgs.length = 0
@@ -61,7 +61,7 @@ beforeEach(() => {
 
 describe('the AI client is fleet-wide, and that is checkable', () => {
   it('is constructed from the configured key and base URL and nothing else', () => {
-    withTenant('tenant-alpha', () => getOpenAI())
+    withWorkspace('workspace-alpha', () => getOpenAI())
 
     // Exactly two fields. A workspace value reaching the client would have to
     // arrive as a third, or as a different value below.
@@ -70,13 +70,13 @@ describe('the AI client is fleet-wide, and that is checkable', () => {
     ])
   })
 
-  it('hands two tenants the same instance, deliberately', () => {
-    const alpha = withTenant('tenant-alpha', () => getOpenAI())
-    const bravo = withTenant('tenant-bravo', () => getOpenAI())
+  it('hands two workspaces the same instance, deliberately', () => {
+    const alpha = withWorkspace('workspace-alpha', () => getOpenAI())
+    const bravo = withWorkspace('workspace-bravo', () => getOpenAI())
 
     expect(alpha).toBe(bravo)
     // …and built once. Partitioning it would open one upstream connection pool
-    // per tenant for a client every tenant configures identically.
+    // per workspace for a client every workspace configures identically.
     expect(hoisted.openaiCtorArgs.length).toBeLessThanOrEqual(1)
   })
 
@@ -98,21 +98,21 @@ describe('the email transports are fleet-wide', () => {
       delete process.env.EMAIL_SMTP_HOST
       delete process.env.EMAIL_RESEND_API_KEY
       delete process.env.RESEND_API_KEY
-      expect(withTenant('tenant-alpha', () => email.getEmailProvider())).toBe('console')
-      expect(withTenant('tenant-bravo', () => email.getEmailProvider())).toBe('console')
+      expect(withWorkspace('workspace-alpha', () => email.getEmailProvider())).toBe('console')
+      expect(withWorkspace('workspace-bravo', () => email.getEmailProvider())).toBe('console')
 
       process.env.EMAIL_SMTP_HOST = 'smtp.example.com'
-      // The provider answer does not move with the tenant, because no tenant
+      // The provider answer does not move with the workspace, because no workspace
       // value is an input to it.
-      expect(withTenant('tenant-alpha', () => email.getEmailProvider())).toBe('smtp')
-      expect(withTenant('tenant-bravo', () => email.getEmailProvider())).toBe('smtp')
+      expect(withWorkspace('workspace-alpha', () => email.getEmailProvider())).toBe('smtp')
+      expect(withWorkspace('workspace-bravo', () => email.getEmailProvider())).toBe('smtp')
     } finally {
       process.env = previous
     }
   })
 })
 
-describe('the readiness memo cannot go blind under pooled tenancy', () => {
+describe('the readiness memo cannot go blind under pooled workspaces', () => {
   it('never reads the migration status when pooled, so the memo is never set', async () => {
     vi.resetModules()
     const probe = async (pooled: boolean) => {
@@ -126,7 +126,7 @@ describe('the readiness memo cannot go blind under pooled tenancy', () => {
           return { upToDate: true }
         },
       }))
-      vi.doMock('@/lib/server/tenancy/mode', () => ({
+      vi.doMock('@/lib/server/workspaces/mode', () => ({
         isPooledTenancy: () => pooled,
         POOLED_TENANCY: 'pooled',
       }))
@@ -137,7 +137,7 @@ describe('the readiness memo cannot go blind under pooled tenancy', () => {
         getProcessRole: () => 'web',
         shouldRunWorkers: () => false,
       }))
-      vi.doMock('@/lib/server/tenancy/registry', () => ({
+      vi.doMock('@/lib/server/workspaces/registry', () => ({
         // Sync, returning the tagged-template `sql` — the shape the probe uses.
         getControlSql: () => () => Promise.resolve([{ '?column?': 1 }]),
         // The probe no longer opens its own connection on every poll: it reads
@@ -154,29 +154,29 @@ describe('the readiness memo cannot go blind under pooled tenancy', () => {
       return { status: response.status, calls: hoisted.migrationStatusCalls }
     }
 
-    // The control first: single-tenant DOES read the status, so "zero reads"
+    // The control first: single-workspace DOES read the status, so "zero reads"
     // below is the pooled branch rather than a broken mock.
     expect(await probe(false)).toEqual({ status: 200, calls: 1 })
 
-    // §10.5: fleet readiness stops asserting anything about tenant schemas.
-    // Not reading it is what stops the memo caching one tenant's answer for
+    // §10.5: fleet readiness stops asserting anything about workspace schemas.
+    // Not reading it is what stops the memo caching one workspace's answer for
     // the fleet during exactly the rolling migration it exists to catch.
     expect(await probe(true)).toEqual({ status: 200, calls: 0 })
     vi.resetModules()
   })
 })
 
-describe('the relay is per tenant, not one leader for whichever database this process holds', () => {
+describe('the relay is per workspace, not one leader for whichever database this process holds', () => {
   // What this replaces. Piece 4 pinned that `startOutboxRelay()` REFUSED under
-  // pooled tenancy, because its five module-scope variables (`running`,
+  // pooled workspaces, because its five module-scope variables (`running`,
   // `leadership`, `pollTimer`, `retryTimer`, `draining`) and its session-level
   // advisory lock all described exactly ONE database. That refusal was the
   // correct answer while there was no fan-out. The fan-out now exists, so the
   // property worth pinning has moved: not "it declines", but "it opens one loop
-  // per tenant and never a single shared one".
+  // per workspace and never a single shared one".
 
-  const tenant = (id: string) => ({
-    tenantId: id,
+  const workspace = (id: string) => ({
+    workspaceKey: id,
     revision: 1,
     database: { directUrl: `postgres://direct/${id}`, pooledUrl: `postgres://pooled/${id}` },
   })
@@ -187,37 +187,37 @@ describe('the relay is per tenant, not one leader for whichever database this pr
     const listeners: Array<{ url: string; channel: string }> = []
 
     vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
-    vi.doMock('@/lib/server/tenancy/mode', () => ({
+    vi.doMock('@/lib/server/workspaces/mode', () => ({
       isPooledTenancy: () => pooled,
       POOLED_TENANCY: 'pooled',
     }))
     vi.doMock('@/lib/server/config', () => ({
       config: { isPooledTenancy: pooled, databaseUrl: 'postgres://direct/single' },
     }))
-    vi.doMock('@/lib/server/tenancy/registry', () => ({
-      listActiveTenants: async () => ({ tenants: [tenant('t-a'), tenant('t-b')], refused: [] }),
+    vi.doMock('@/lib/server/workspaces/registry', () => ({
+      listActiveWorkspaces: async () => ({ workspaces: [workspace('t-a'), workspace('t-b')], refused: [] }),
     }))
-    vi.doMock('@/lib/server/tenancy/pool-cache', () => ({
-      resolveTenantPassword: async () => 'pw',
-      openTenantDirectPool: async (t: { tenantId: string }) => ({
+    vi.doMock('@/lib/server/workspaces/pool-cache', () => ({
+      resolveWorkspacePassword: async () => 'pw',
+      openWorkspaceDirectPool: async (t: { workspaceKey: string }) => ({
         sql: {},
-        db: { __tenant: t.tenantId },
+        db: { __workspace: t.workspaceKey },
         secrets: { secretKey: 'k', storage: null },
         close: async () => {},
       }),
     }))
-    vi.doMock('@/lib/server/tenancy/tenant-context', () => ({
+    vi.doMock('@/lib/server/workspaces/workspace-context', () => ({
       // Mirrors the real constructor: secrets go in, no secrets come out, and a
       // scope with no resolved SECRET_KEY is refused rather than built.
-      createTenantScope: (init: Record<string, unknown>) => {
+      createWorkspaceScope: (init: Record<string, unknown>) => {
         const secrets = init.secrets as { secretKey?: string } | undefined
-        if (!secrets?.secretKey) throw new Error('createTenantScope: no resolved SECRET_KEY')
+        if (!secrets?.secretKey) throw new Error('createWorkspaceScope: no resolved SECRET_KEY')
         const scope = { ...init }
         delete scope.secrets
         return scope
       },
-      runWithTenantScope: async (scope: { tenant: { tenantId: string } }, fn: () => unknown) => {
-        scopes.push(scope.tenant.tenantId)
+      runWithWorkspaceScope: async (scope: { workspace: { workspaceKey: string } }, fn: () => unknown) => {
+        scopes.push(scope.workspace.workspaceKey)
         return fn()
       },
     }))
@@ -254,9 +254,9 @@ describe('the relay is per tenant, not one leader for whichever database this pr
     return { status, listeners }
   }
 
-  it('opens one loop per tenant, each on that tenant own direct DSN', async () => {
+  it('opens one loop per workspace, each on that workspace own direct DSN', async () => {
     const { status, listeners } = await runTier(true)
-    expect(status.tenants.map((t) => t.tenantId).sort()).toEqual(['t-a', 't-b'])
+    expect(status.workspaces.map((t) => t.workspaceKey).sort()).toEqual(['t-a', 't-b'])
     // Direct, never pooled: through a transaction pooler the LISTEN registers
     // and nothing is ever delivered.
     expect(listeners.map((l) => l.url).sort()).toEqual([
@@ -266,11 +266,11 @@ describe('the relay is per tenant, not one leader for whichever database this pr
     expect(new Set(listeners.map((l) => l.channel))).toEqual(new Set(['outbox_wake']))
   })
 
-  it('single-tenant runs exactly one loop, so the fan-out above is the pooled branch', async () => {
+  it('single-workspace runs exactly one loop, so the fan-out above is the pooled branch', async () => {
     // The control. Without it "two loops" could mean the tier always makes two,
     // and the assertion above would hold for the wrong reason.
     const { status, listeners } = await runTier(false)
-    expect(status.tenants.map((t) => t.tenantId)).toEqual(['__single__'])
+    expect(status.workspaces.map((t) => t.workspaceKey)).toEqual(['__single__'])
     expect(listeners.map((l) => l.url)).toEqual(['postgres://direct/single'])
   })
 })

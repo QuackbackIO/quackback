@@ -1,10 +1,10 @@
 # The Postgres job queue
 
-Background work on Postgres, per tenant, with leases. This is the substrate that
+Background work on Postgres, per workspace, with leases. This is the substrate that
 replaces Redis for the background tier (`SAAS-HOSTING-STACK.md` §7).
 
 `QUACKBACK_TENANCY=single` — the default and every self-hosted install — gets one
-loop, no tenant scope, and the same seven sweeps on the same cadences they have
+loop, no workspace scope, and the same seven sweeps on the same cadences they have
 always run on. Nothing here needs a registry or a control plane.
 
 ---
@@ -90,32 +90,32 @@ decided this worker was dead while it was still working. That means either a
 lease shorter than the work or a stalled process, and both are worth seeing, so
 it logs at error rather than retrying quietly.
 
-## 4. The tenant boundary
+## 4. The workspace boundary
 
-The queue is per-tenant **because the table lives in the tenant's own database**.
+The queue is per-workspace **because the table lives in the workspace's own database**.
 There is no shared queue, so there is no routing decision to get wrong and no
-tenant parameter on `enqueueJob` — to enqueue for a tenant you must be in that
-tenant's scope, at which point you are writing into its database.
+workspace parameter on `enqueueJob` — to enqueue for a workspace you must be in that
+workspace's scope, at which point you are writing into its database.
 
 That is a structural argument, and §3 of the plan is precisely the observation
-that a wrong-tenant answer passes every structural check without erroring. So the
+that a wrong-workspace answer passes every structural check without erroring. So the
 structure is not trusted on its own:
 
-- every row is stamped with the tenant that enqueued it;
+- every row is stamped with the workspace that enqueued it;
 - **every claim asserts that stamp against the ambient scope**, and a mismatch is
   refused loudly and made terminal — never executed;
 - the assertion lives inside `claimJobs`, not in each caller, so there is no
   version of "forgot to assert".
 
-Demonstrated on a live two-tenant fleet with a database per tenant
-(`scripts/job-tenant-proof.ts run`): jobs enqueued for each tenant executed only
-against that tenant's own database (confirmed by `neon.branch_id`, not by name),
-zero cross-tenant observations in both orderings, and a row planted in one
-tenant's queue but stamped for the other was refused:
+Demonstrated on a live two-workspace fleet with a database per workspace
+(`scripts/job-workspace-proof.ts run`): jobs enqueued for each workspace executed only
+against that workspace's own database (confirmed by `neon.branch_id`, not by name),
+zero cross-workspace observations in both orderings, and a row planted in one
+workspace's queue but stamped for the other was refused:
 
 ```
-job REFUSED: row tenant does not match the tenant scope that claimed it
-last_error = tenant mismatch: row is stamped inst_…bravo, scope is inst_…alpha
+job REFUSED: row workspace does not match the workspace scope that claimed it
+last_error = workspace mismatch: row is stamped inst_…bravo, scope is inst_…alpha
 ```
 
 ## 5. The wake, and the connection it needs
@@ -125,7 +125,7 @@ now. A listener on a session-mode connection wakes in milliseconds instead of
 waiting out the poll interval.
 
 **`LISTEN` does not survive a transaction-mode pooler, and the obvious health
-check lies about it.** Measured on Neon for this channel, on two tenants:
+check lies about it.** Measured on Neon for this channel, on two workspaces:
 
 | endpoint | notify actually delivered | `pg_listening_channels()` says |
 | -------- | ------------------------- | ------------------------------ |
@@ -138,7 +138,7 @@ not on the one that does. (The mechanism is connection multiplexing:
 `postgres.js` puts `LISTEN` on its own connection, which the pooler may or may
 not share with the query asking the question.) So:
 
-- the listener is built from the tenant's **direct** DSN, never from the pool
+- the listener is built from the workspace's **direct** DSN, never from the pool
   cache — the same shape `events/relay-tier.ts` uses for the outbox relay;
 - `WakeListener.verify()` sends a real NOTIFY from a _second_ connection and
   waits for it. Nothing here asks the catalogue whether it is registered, and
@@ -171,23 +171,23 @@ Two properties follow, and both match what the repeatable jobs did:
 
 The runner then sleeps to the next slot rather than re-asking every second — the
 schedule is deterministic, and a tick that finds nothing is pure traffic against
-a per-tenant database.
+a per-workspace database.
 
 `cron.ts` supports the standard five-field syntax and **throws on anything else**
 rather than falling back to a permissive reading. A mis-parsed cron expression
 changes a sweep's cadence with no error anywhere, which is not a failure mode a
 scheduler should be able to have.
 
-### The scheduler's memory is per tenant, and that is structural
+### The scheduler's memory is per workspace, and that is structural
 
-`ScheduleState` is created by each tenant loop and **passed in**. It was a
-module-scope `Map` keyed on the schedule name, and that is a cross-tenant defect:
-one process runs one loop per tenant, so whichever tenant reached a slot first
-advanced a counter every other tenant then read as "already done". Measured live
-on two Neon tenants, each minute's sweep landed on exactly one of them. It
+`ScheduleState` is created by each workspace loop and **passed in**. It was a
+module-scope `Map` keyed on the schedule name, and that is a cross-workspace defect:
+one process runs one loop per workspace, so whichever workspace reached a slot first
+advanced a counter every other workspace then read as "already done". Measured live
+on two Neon workspaces, each minute's sweep landed on exactly one of them. It
 affected all seven sweeps, and only `page-view-partitions` had a backstop.
 
-Keying the map by tenant would have fixed the instance. Making the state a
+Keying the map by workspace would have fixed the instance. Making the state a
 parameter fixes the class — there is no shared object left to key wrongly, and
 the compiler names every caller that has to decide whose state it is.
 
@@ -237,19 +237,19 @@ the next day's run restores it.
 
 ## 7. Shape of the tier
 
-`tier.ts` runs **one loop per tenant**, each with its own listener.
-`tenancy/fleet.ts` already answers "iterate all tenants per tick", and that is the
+`tier.ts` runs **one loop per workspace**, each with its own listener.
+`tenancy/fleet.ts` already answers "iterate all workspaces per tick", and that is the
 right answer for a periodic sweep and the wrong one for a queue: the latency of an
-on-demand job would become the tick interval times the tenant count, and the whole
+on-demand job would become the tick interval times the workspace count, and the whole
 point of the doorbell is that a job enqueued now starts now.
 
-The cost is one session-mode connection per tenant, permanently. That is the tier
+The cost is one session-mode connection per workspace, permanently. That is the tier
 §7.3 describes — always warm, direct connections, physically separate from the
 pooled web tier — and it carries §6's corollary: **this tier holds connections
-open by design, so it must never share a compute with tenants you expect to
+open by design, so it must never share a compute with workspaces you expect to
 suspend.** Sizing it for a large fleet belongs with the relay-tier work.
 
-A tenant whose database has not yet run migration `0253` is **skipped with a
+A workspace whose database has not yet run migration `0253` is **skipped with a
 warning**, not crash-looped. §5's ordering rule is that expand lands before the
 code that reads it; a queue tier that died on a mid-rollout fleet would turn that
 ordering into an outage.
@@ -270,9 +270,9 @@ has not loaded the full application config.
 `QUACKBACK_ROLE=web` does not start the tier, the same gate `startOutboxRelay`
 uses.
 
-## 9. Tenant scope, and the shape this must not reproduce
+## 9. Workspace scope, and the shape this must not reproduce
 
-A BullMQ `Worker` constructed inside a request's tenant scope **inherits that
+A BullMQ `Worker` constructed inside a request's workspace scope **inherits that
 scope for every job it ever processes** — the constructor captures the
 AsyncLocalStorage context, and the queue modules that armed lazily on first
 enqueue armed inside whatever request reached them first. Measured on the
@@ -282,7 +282,7 @@ is what outlived them.
 This queue does not have that shape, and it is worth being precise about why
 rather than asserting it:
 
-- **`tier.ts` opens a fresh `withTenantScopeById(...)` around every pass.** The
+- **`tier.ts` opens a fresh `withWorkspaceScopeById(...)` around every pass.** The
   scope a handler runs in belongs to the pass that is running it. There is no
   long-lived worker object holding one.
 - **The heartbeat timer is created inside that scope and cleared before the pass
@@ -290,13 +290,13 @@ rather than asserting it:
   outlive it.
 - **Handler modules are imported once at tier start, before any scope is open**
   (`primeJobHandlers()`). That closes the quieter version of the same risk: a
-  dynamic `import()` executed inside a tenant scope would run the module's top
-  level under that tenant's connection.
+  dynamic `import()` executed inside a workspace scope would run the module's top
+  level under that workspace's connection.
 
   **That guarantee reaches exactly as far as the static import graph, and an
   earlier version of this document overstated it.** Priming loads the seven
   handler _wrapper_ modules; three of them deferred their sweep modules to call
-  time, which is inside the per-pass tenant scope — and `resolveHandler`'s
+  time, which is inside the per-pass workspace scope — and `resolveHandler`'s
   warning could not see it, because it only guards the outer import. Proven on
   the pooled fleet with a top-level probe in `sla.sweep.ts`: `(module not
 imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
@@ -315,7 +315,7 @@ imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
   `pending-actions.service` 2) — ordinary lazy loading, none of it
   queue-specific. So the guarantee is: **the wrappers and their static graph load
   before any scope opens.** Deeper than that, a call-time import runs under
-  whatever scope its caller has, which for a request is the _correct_ tenant; the
+  whatever scope its caller has, which for a request is the _correct_ workspace; the
   hazard is only that the module is then shared process-wide, and only if it
   captured scope-dependent state at its top level.
 
@@ -382,7 +382,7 @@ The first cohort drained **serially**: claim a batch, run it to completion, then
 go round and tick the schedule. `latestSlotAtOrBefore` returns only the slot
 bracketing _now_, so slots that elapse while the loop is inside a long job are
 **dropped, not delayed** — under BullMQ the delayed entry lived in Redis and ran
-late. Observed live on the first cohort: a tenant whose loop sat inside a 125 s
+late. Observed live on the first cohort: a workspace whose loop sat inside a 125 s
 drain had its 11:10 slot **simply absent**, and took every slot after.
 
 That was negligible while every sweep was sub-second. It stopped being
@@ -394,7 +394,7 @@ so a running job never stands between a per-minute sweep and its slot. Three
 shapes were available and the other two were rejected for reasons worth keeping:
 
 - **Per-queue loops** multiply the poll traffic by the queue count against a
-  per-tenant database, and this tier already holds a connection per tenant open
+  per-workspace database, and this tier already holds a connection per workspace open
   by design (§7). One loop keeps one poll, one listener and one claim query per
   pass whatever the queue count.
 - **A separate tier for the slow queues** splits the deployment on a property
@@ -423,11 +423,11 @@ the dropped slots rather than asserting them. The run refuses to report a
 result if the control does not lose a slot, because "no slots lost" is also
 what a harness that cannot see a lost slot would print.
 
-`JOB_MAX_CONCURRENCY` caps one tenant loop's total in-flight jobs. It defaults
+`JOB_MAX_CONCURRENCY` caps one workspace loop's total in-flight jobs. It defaults
 to the **sum of every definition's `concurrency`**, which is exactly what the
 reference allowed (one `Worker` per queue at its own concurrency), so the
 default binds nothing. It exists because a pooled process runs one loop per
-tenant, and an operator sizing connections cares about the product.
+workspace, and an operator sizing connections cares about the product.
 
 ### What the move fixed rather than preserved
 
@@ -438,16 +438,16 @@ tenant, and an operator sizing connections cares about the product.
   the trigger was retried to exhaustion. A `dedupe_key` column has no such rule.
   (The same defect hit `workflow-wait:${runId}`, the legacy two-part key a run
   parked before waits were sequence-keyed still used.)
-- **Redis held every tenant's payloads in one un-namespaced list per queue.**
+- **Redis held every workspace's payloads in one un-namespaced list per queue.**
   Its shared connection set no key prefix and every queue name was a
   compile-time constant, so any consumer that ever attached would drain all
-  tenants from one list with no tenant discriminator. The queue table lives in the tenant's own
+  workspaces from one list with no workspace discriminator. The queue table lives in the workspace's own
   database, and the claim asserts the row's stamp against the ambient scope.
 - **Readiness could not see a missing consumer.** `ok = failed === 0` over
   eagerly-initialised workers reported `workers ok:true total:0` on a replica
   that had constructed none, because a worker never built is not _failed_. A
   worker-role process whose tier is not running is now unready, and the payload
-  reports how many tenant loops it is serving.
+  reports how many workspace loops it is serving.
 - **`segment-evaluation`'s schedules stopped being a second copy.** They were
   repeatable jobs written into Redis, which had to be _restored_ at boot in case
   Redis had been cleared. They are now derived from `segments` rows on every
@@ -488,7 +488,7 @@ reference, repeatably. The cause was a leftover server from an earlier step
 still attached to the same database, draining the same `job_queue` under an
 environment with no S3 keys. Postgres queues have no per-consumer namespace,
 so any process pointed at the database is a consumer — which is the same
-property that makes the queue per-tenant, seen from the other side.
+property that makes the queue per-workspace, seen from the other side.
 
 ### Nothing is still Redis
 
@@ -499,15 +499,15 @@ longer read, and no service provisions a Redis. `policy/no-bullmq/` keeps the
 queue package out.
 
 **`email-imap` refuses to schedule under pooled tenancy** and says so at error.
-Its mailbox is process-wide configuration while the queue is per tenant, so
-scheduling it on every tenant's loop would have each tenant poll the _same_
+Its mailbox is process-wide configuration while the queue is per workspace, so
+scheduling it on every workspace's loop would have each workspace poll the _same_
 mailbox and ingest the same message into its own database. Not a regression: the
 BullMQ worker was never started under pooled tenancy either.
 
 **The outbox relay is still not started under pooled tenancy.** It needs a
-session-mode connection for `LISTEN` and `pg_advisory_lock` per tenant, which is
+session-mode connection for `LISTEN` and `pg_advisory_lock` per workspace, which is
 the relay-tier piece's work. Its _enqueue_ is now this queue's, so what it needs
-is a per-tenant loop of exactly the shape `tier.ts` already runs.
+is a per-workspace loop of exactly the shape `tier.ts` already runs.
 
 ## 11. Running the evidence
 
@@ -522,15 +522,15 @@ DATABASE_URL=... bun run scripts/job-lease-proof.ts long-lease --work-seconds 18
 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
 JOB_WAKE_DISABLED=1 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
 
-# the tenant boundary and the per-tenant scheduler, on a real pooled fleet.
+# the workspace boundary and the per-workspace scheduler, on a real pooled fleet.
 # This is the only harness with a cron schedule — job-lease-proof.ts is
-# single-tenant and could not see a cross-tenant scheduler defect at all.
-env $(cat pooled.env) bun run scripts/job-tenant-proof.ts run --a <id> --b <id>
-env $(cat pooled.env) bun run scripts/job-tenant-proof.ts listen-endpoints
+# single-workspace and could not see a cross-workspace scheduler defect at all.
+env $(cat pooled.env) bun run scripts/job-workspace-proof.ts run --a <id> --b <id>
+env $(cat pooled.env) bun run scripts/job-workspace-proof.ts listen-endpoints
 
-# the eight migrated queues, on a real two-tenant fleet: real producers, the
+# the eight migrated queues, on a real two-workspace fleet: real producers, the
 # real registry, both orderings, and a positive control that fails the run if
-# any queue produced no effect in either tenant
+# any queue produced no effect in either workspace
 env $(cat pooled.env) bun run scripts/job-eight-proof.ts run --a <id> --b <id>
 
 # what the serial drain cost, with the serial shape itself as the control

@@ -1,30 +1,30 @@
 /**
- * The eight migrated queues, on a real two-tenant pooled fleet.
+ * The eight migrated queues, on a real two-workspace pooled fleet.
  *
- * `job-tenant-proof.ts` established the boundary with a synthetic queue. This
+ * `job-workspace-proof.ts` established the boundary with a synthetic queue. This
  * one runs the **real registry** — every definition's real name, concurrency,
  * `maxAttempts`, lease and backoff — and enqueues through each queue's **real
  * producer function**, so what is exercised is the code the app calls.
  *
  * Every handler is wrapped rather than replaced: the wrapper records
- * `getCurrentTenant()`, `current_database()` and `neon.branch_id` into a
+ * `getCurrentWorkspace()`, `current_database()` and `neon.branch_id` into a
  * scratch table **in whichever database `db` actually resolved to**, and then
- * calls the real handler. A cross-tenant execution is observable two
+ * calls the real handler. A cross-workspace execution is observable two
  * independent ways, neither needing the other to be trusted:
  *
- *   1. an effect row appears in a tenant's database for a job enqueued into a
- *      different tenant's database; or
- *   2. an effect row's recorded scope does not match the tenant that owns the
+ *   1. an effect row appears in a workspace's database for a job enqueued into a
+ *      different workspace's database; or
+ *   2. an effect row's recorded scope does not match the workspace that owns the
  *      database the row is sitting in.
  *
  * Both orderings are run, because a last-writer-wins cache is asymmetric and
- * testing one direction leaves detection to whichever tenant happened to write
+ * testing one direction leaves detection to whichever workspace happened to write
  * second.
  *
- * **The positive control matters as much as the verdict.** "Zero cross-tenant
+ * **The positive control matters as much as the verdict.** "Zero cross-workspace
  * observations" is also what a run in which nothing executed would report, so
  * the run fails unless every one of the eight produced an effect in *both*
- * tenants. If the control does not fire, that is the signal to look at.
+ * workspaces. If the control does not fire, that is the signal to look at.
  *
  * Usage:
  *   env $(cat pooled.env) bun run scripts/job-eight-proof.ts run --a <id> --b <id>
@@ -34,9 +34,9 @@ import { sql } from 'drizzle-orm'
 import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
-import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
-import { withTenantScopeById } from '@/lib/server/tenancy/fleet'
-import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { listActiveWorkspaces, type WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
+import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import {
   JOB_DEFINITIONS,
   __setJobDefinitionsForTests,
@@ -77,7 +77,7 @@ const EFFECTS = `
     job_id text NOT NULL,
     queue text NOT NULL,
     enqueued_for text NOT NULL,
-    scope_tenant_id text,
+    scope_workspace_key text,
     db_name text NOT NULL,
     branch_id text,
     at timestamptz NOT NULL DEFAULT now()
@@ -88,15 +88,15 @@ interface EffectRow {
   job_id: string
   queue: string
   enqueued_for: string
-  scope_tenant_id: string | null
+  scope_workspace_key: string | null
   db_name: string
   branch_id: string | null
 }
 
-async function effectsIn(tenantId: string): Promise<EffectRow[]> {
-  return withTenantScopeById(tenantId, 'script', async () => {
+async function effectsIn(workspaceKey: string): Promise<EffectRow[]> {
+  return withWorkspaceScopeById(workspaceKey, 'script', async () => {
     const res = await db.execute(sql`
-      SELECT job_id, queue, enqueued_for, scope_tenant_id, db_name, branch_id
+      SELECT job_id, queue, enqueued_for, scope_workspace_key, db_name, branch_id
       FROM gauntlet_eight_effects ORDER BY id
     `)
     return getExecuteRows<EffectRow>(res)
@@ -110,15 +110,15 @@ function instrumentedDefinitions(marker: string): JobDefinition[] {
     handler: async () => {
       const real = await def.handler()
       return async (job) => {
-        const scope = getCurrentTenant()?.tenantId ?? null
+        const scope = getCurrentWorkspace()?.workspaceKey ?? null
         await db.execute(sql`
           INSERT INTO gauntlet_eight_effects
-            (job_id, queue, enqueued_for, scope_tenant_id, db_name, branch_id)
+            (job_id, queue, enqueued_for, scope_workspace_key, db_name, branch_id)
           SELECT ${job.jobId}, ${job.queue},
                  ${String((job.payload as { enqueuedFor?: string }).enqueuedFor ?? marker)},
                  ${scope}, current_database(), current_setting('neon.branch_id', true)
         `)
-        // Then the real handler. Most of these have no fixture in a bare tenant
+        // Then the real handler. Most of these have no fixture in a bare workspace
         // database and will throw; the row above is written first precisely so
         // the boundary is observable regardless of the domain outcome.
         await real(job)
@@ -127,9 +127,9 @@ function instrumentedDefinitions(marker: string): JobDefinition[] {
   }))
 }
 
-function probeEvent(tenantId: string): EventData {
+function probeEvent(workspaceKey: string): EventData {
   return {
-    id: `evt-eightproof-${tenantId}-${Date.now()}`,
+    id: `evt-eightproof-${workspaceKey}-${Date.now()}`,
     type: 'post.created',
     timestamp: new Date().toISOString(),
     actor: { type: 'service', displayName: 'eight-proof' },
@@ -145,8 +145,8 @@ function probeEvent(tenantId: string): EventData {
  * schedule under pooled tenancy on purpose — see its module header. Both are
  * enqueued directly so the queue is still exercised end to end.
  */
-async function enqueueAllEight(tenantId: string): Promise<void> {
-  const tag = { enqueuedFor: tenantId }
+async function enqueueAllEight(workspaceKey: string): Promise<void> {
+  const tag = { enqueuedFor: workspaceKey }
   await enqueueHookJobsWithIds([
     {
       name: 'post.created:__post_merge_recheck__',
@@ -154,18 +154,18 @@ async function enqueueAllEight(tenantId: string): Promise<void> {
       // this exercises the real dispatch path without a fixture.
       data: {
         hookType: '__post_merge_recheck__',
-        event: probeEvent(tenantId),
+        event: probeEvent(workspaceKey),
         target: null,
         config: {},
         ...tag,
       },
-      jobId: `eightproof:${tenantId}:events`,
+      jobId: `eightproof:${workspaceKey}:events`,
     },
   ])
   await enqueueJob({
     queue: 'segment-evaluation',
     payload: { segmentId: 'segment_eightproof_missing', ...tag },
-    dedupeKey: `eightproof:${tenantId}:segment`,
+    dedupeKey: `eightproof:${workspaceKey}:segment`,
     maxAttempts: 3,
   })
   await enqueueHelpCenterTranslateJob({
@@ -177,11 +177,11 @@ async function enqueueAllEight(tenantId: string): Promise<void> {
   await enqueueJob({
     queue: 'email-imap',
     payload: tag,
-    dedupeKey: `eightproof:${tenantId}:imap`,
+    dedupeKey: `eightproof:${workspaceKey}:imap`,
     maxAttempts: 1,
   })
-  await enqueueWorkflowDispatch({ ...probeEvent(tenantId), ...tag } as never)
-  await scheduleWorkflowResume(`wfr_eightproof_${tenantId}`, 0, 1)
+  await enqueueWorkflowDispatch({ ...probeEvent(workspaceKey), ...tag } as never)
+  await scheduleWorkflowResume(`wfr_eightproof_${workspaceKey}`, 0, 1)
   await enqueueImportCommitJob({
     runId: 'imprun_eightproof_missing',
     source: 'csv',
@@ -195,23 +195,23 @@ async function enqueueAllEight(tenantId: string): Promise<void> {
   } as never)
 }
 
-async function pickTenants(): Promise<[TenantDescriptor, TenantDescriptor]> {
-  const { tenants, refused } = await listActiveTenants()
+async function pickWorkspaces(): Promise<[WorkspaceDescriptor, WorkspaceDescriptor]> {
+  const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) console.log('refused registry records:', refused)
-  const pick = (id: string | undefined, fallback: TenantDescriptor): TenantDescriptor => {
+  const pick = (id: string | undefined, fallback: WorkspaceDescriptor): WorkspaceDescriptor => {
     if (!id) return fallback
-    const found = tenants.find((t) => t.tenantId === id)
-    if (!found) throw new Error(`tenant ${id} is not active in the registry`)
+    const found = workspaces.find((t) => t.workspaceKey === id)
+    if (!found) throw new Error(`workspace ${id} is not active in the registry`)
     return found
   }
-  const a = pick(flag('a'), tenants[0])
-  const b = pick(flag('b'), tenants[1])
-  if (a.tenantId === b.tenantId) throw new Error('the two tenants must differ')
+  const a = pick(flag('a'), workspaces[0])
+  const b = pick(flag('b'), workspaces[1])
+  if (a.workspaceKey === b.workspaceKey) throw new Error('the two workspaces must differ')
   return [a, b]
 }
 
-async function resetTenant(t: TenantDescriptor): Promise<void> {
-  await withTenantScopeById(t.tenantId, 'script', async () => {
+async function resetWorkspace(t: WorkspaceDescriptor): Promise<void> {
+  await withWorkspaceScopeById(t.workspaceKey, 'script', async () => {
     await db.execute(sql.raw(EFFECTS))
     await db.execute(sql`DELETE FROM gauntlet_eight_effects`)
     await db.execute(sql`DELETE FROM job_queue WHERE dedupe_key LIKE 'eightproof:%'`)
@@ -222,25 +222,29 @@ async function resetTenant(t: TenantDescriptor): Promise<void> {
 }
 
 async function run(): Promise<void> {
-  const [a, b] = await pickTenants()
-  console.log(`tenants: ${a.tenantId} | ${b.tenantId}`)
-  for (const t of [a, b]) await resetTenant(t)
+  const [a, b] = await pickWorkspaces()
+  console.log(`workspaces: ${a.workspaceKey} | ${b.workspaceKey}`)
+  for (const t of [a, b]) await resetWorkspace(t)
 
   __setJobDefinitionsForTests(instrumentedDefinitions('unmarked'))
   await startJobTier()
   console.log(
     'job tier started; loops =',
-    getJobTierStatus().tenants.map((t) => t.tenantId)
+    getJobTierStatus().workspaces.map((t) => t.workspaceKey)
   )
 
-  // Both orderings. One tenant at a time, so a cross-tenant execution has an
+  // Both orderings. One workspace at a time, so a cross-workspace execution has an
   // unambiguous direction rather than being a race between two writers.
   for (const [first, second] of [
     [a, b],
     [b, a],
-  ] as Array<[TenantDescriptor, TenantDescriptor]>) {
-    await withTenantScopeById(first.tenantId, 'script', () => enqueueAllEight(first.tenantId))
-    console.log(`enqueued all eight for ${first.tenantId} only (paired with ${second.tenantId})`)
+  ] as Array<[WorkspaceDescriptor, WorkspaceDescriptor]>) {
+    await withWorkspaceScopeById(first.workspaceKey, 'script', () =>
+      enqueueAllEight(first.workspaceKey)
+    )
+    console.log(
+      `enqueued all eight for ${first.workspaceKey} only (paired with ${second.workspaceKey})`
+    )
     await new Promise((r) => setTimeout(r, 20_000))
     for (const t of [a, b]) await resetJobRowsIfSecondPass(t, first === b)
   }
@@ -249,19 +253,19 @@ async function run(): Promise<void> {
   await stopJobTier()
 
   const effects = new Map<string, EffectRow[]>()
-  for (const t of [a, b]) effects.set(t.tenantId, await effectsIn(t.tenantId))
+  for (const t of [a, b]) effects.set(t.workspaceKey, await effectsIn(t.workspaceKey))
 
-  let crossTenant = 0
+  let crossWorkspace = 0
   const covered = new Map<string, Set<string>>()
   for (const [owner, rows] of effects) {
     for (const row of rows) {
-      const wrongScope = row.scope_tenant_id !== owner
+      const wrongScope = row.scope_workspace_key !== owner
       const wrongOwner = row.enqueued_for !== 'unmarked' && row.enqueued_for !== owner
       if (wrongScope || wrongOwner) {
-        crossTenant += 1
+        crossWorkspace += 1
         console.log(
-          `CROSS-TENANT: row in ${owner}'s database (${row.db_name}, branch ${row.branch_id}) ` +
-            `queue=${row.queue} scope=${row.scope_tenant_id} enqueuedFor=${row.enqueued_for}`
+          `CROSS-WORKSPACE: row in ${owner}'s database (${row.db_name}, branch ${row.branch_id}) ` +
+            `queue=${row.queue} scope=${row.scope_workspace_key} enqueuedFor=${row.enqueued_for}`
         )
       }
       if (!covered.has(owner)) covered.set(owner, new Set())
@@ -269,11 +273,11 @@ async function run(): Promise<void> {
     }
   }
 
-  console.log('\nPER-TENANT EXECUTION (the positive control)')
-  console.log('queue                   ' + [a, b].map((t) => t.tenantId).join('  '))
+  console.log('\nPER-WORKSPACE EXECUTION (the positive control)')
+  console.log('queue                   ' + [a, b].map((t) => t.workspaceKey).join('  '))
   const missing: string[] = []
   for (const queue of EIGHT) {
-    const cells = [a, b].map((t) => (covered.get(t.tenantId)?.has(queue) ? 'ran' : 'MISSING'))
+    const cells = [a, b].map((t) => (covered.get(t.workspaceKey)?.has(queue) ? 'ran' : 'MISSING'))
     if (cells.includes('MISSING')) missing.push(queue)
     console.log(`${queue.padEnd(24)}${cells.join('   ')}`)
   }
@@ -286,25 +290,28 @@ async function run(): Promise<void> {
     )
   }
 
-  console.log(`\ncross-tenant observations: ${crossTenant}`)
+  console.log(`\ncross-workspace observations: ${crossWorkspace}`)
   if (missing.length > 0) {
     console.log(
-      `INCONCLUSIVE — these queues produced no effect in one or both tenants: ${missing.join(', ')}. ` +
-        `Zero cross-tenant observations is what a run in which nothing executed also reports.`
+      `INCONCLUSIVE — these queues produced no effect in one or both workspaces: ${missing.join(', ')}. ` +
+        `Zero cross-workspace observations is what a run in which nothing executed also reports.`
     )
     process.exit(3)
   }
-  if (crossTenant > 0) {
-    console.log('FAIL — a job executed against the wrong tenant’s database.')
+  if (crossWorkspace > 0) {
+    console.log('FAIL — a job executed against the wrong workspace’s database.')
     process.exit(1)
   }
-  console.log('PASS — all eight executed in both tenants, zero cross-tenant observations.')
+  console.log('PASS — all eight executed in both workspaces, zero cross-workspace observations.')
 }
 
-/** Between the two orderings, clear the first tenant's rows so dedupe keys are free. */
-async function resetJobRowsIfSecondPass(t: TenantDescriptor, secondPass: boolean): Promise<void> {
+/** Between the two orderings, clear the first workspace's rows so dedupe keys are free. */
+async function resetJobRowsIfSecondPass(
+  t: WorkspaceDescriptor,
+  secondPass: boolean
+): Promise<void> {
   if (secondPass) return
-  await withTenantScopeById(t.tenantId, 'script', async () => {
+  await withWorkspaceScopeById(t.workspaceKey, 'script', async () => {
     await db.execute(sql`DELETE FROM job_queue WHERE dedupe_key LIKE 'eightproof:%'`)
     await db.execute(
       sql`DELETE FROM job_queue WHERE queue IN ('workflow-wait','workflow-dispatch')`
@@ -313,9 +320,9 @@ async function resetJobRowsIfSecondPass(t: TenantDescriptor, secondPass: boolean
 }
 
 async function cleanup(): Promise<void> {
-  const [a, b] = await pickTenants()
+  const [a, b] = await pickWorkspaces()
   for (const t of [a, b]) {
-    await withTenantScopeById(t.tenantId, 'script', async () => {
+    await withWorkspaceScopeById(t.workspaceKey, 'script', async () => {
       await db.execute(sql`DROP TABLE IF EXISTS gauntlet_eight_effects`)
       await db.execute(sql`DELETE FROM job_queue WHERE dedupe_key LIKE 'eightproof:%'`)
     })

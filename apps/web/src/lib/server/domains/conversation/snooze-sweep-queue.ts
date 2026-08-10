@@ -5,14 +5,14 @@
  *
  * Runs on the Postgres job queue (`lib/server/jobs`). Schedule and retry policy
  * live in `jobs/definitions.ts`. Every collaborator is imported statically so
- * `primeJobHandlers()` loads it outside any tenant scope — see
+ * `primeJobHandlers()` loads it outside any workspace scope — see
  * sla-breach-sweep-queue.ts for why that matters.
  */
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
-import { dueWithin, registerTenantDeadline } from '@/lib/server/jobs/deadlines'
+import { dueWithin, registerWorkspaceDeadline } from '@/lib/server/jobs/deadlines'
 import {
   ASSUMED_RESOLUTION_INACTIVITY_MINUTES,
   finalizeStaleAssistantInvolvements,
@@ -23,12 +23,12 @@ import { sweepDueSnoozedConversations } from './conversation.service'
 const log = logger.child({ component: 'snooze-sweep' })
 
 /**
- * When this tenant's snooze tick next has anything to do — or null, if it never
+ * When this workspace's snooze tick next has anything to do — or null, if it never
  * does.
  *
  * Three independent clocks ride this one job, so the answer is the earliest of
  * three, and **all three must be here**. A deadline source left out would be one
- * whose work is silently deferred to the rescan interval on an idle tenant,
+ * whose work is silently deferred to the rescan interval on an idle workspace,
  * which is the failure mode this whole mechanism has to not have. Each arm
  * mirrors its sweep's own predicate exactly:
  *
@@ -39,7 +39,7 @@ const log = logger.child({ component: 'snooze-sweep' })
  * - `expireStalePendingActions` expires `status='proposed' AND expires_at < now`
  *
  * One statement rather than three round trips, each arm on the partial index its
- * sweep already scans. `LEAST` ignores NULLs, so a tenant with only one kind of
+ * sweep already scans. `LEAST` ignores NULLs, so a workspace with only one kind of
  * pending work gets that one's instant rather than null.
  */
 async function nextSnoozeTickAt(): Promise<Date | null> {
@@ -58,7 +58,7 @@ async function nextSnoozeTickAt(): Promise<Date | null> {
   return value === null ? null : value instanceof Date ? value : new Date(value)
 }
 
-registerTenantDeadline('snooze-sweep', nextSnoozeTickAt)
+registerWorkspaceDeadline('snooze-sweep', nextSnoozeTickAt)
 
 /**
  * The cron gate: is any of the three clocks due inside the next slot?

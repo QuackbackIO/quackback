@@ -41,7 +41,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
     await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()
   return {
     ...actual,
-    getTenantSettings: async () => {
+    getWorkspaceSettings: async () => {
       const db = (await import('@/lib/server/__tests__/db-test-fixture')).testDb
       const row = await db.query.settings.findFirst()
       return row ? { settings: row } : null
@@ -61,7 +61,10 @@ const { getBillingConfig, resetBillingConfigCache } = await import('../billing.c
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
-    await db.select({ cloud: settings.cloud, revision: settings.cloudRevision }).from(settings).limit(0)
+    await db
+      .select({ cloud: settings.cloud, revision: settings.cloudRevision })
+      .from(settings)
+      .limit(0)
   },
 })
 
@@ -118,7 +121,11 @@ function stub(): BillingProviderClient {
       },
     ]),
     listPaymentMethods: vi.fn(async () => [
-      { id: 'pm_1', type: 'card', card: { brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030 } },
+      {
+        id: 'pm_1',
+        type: 'card',
+        card: { brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030 },
+      },
     ]),
     updateSubscriptionItems: vi.fn(),
     reportMeterEvent: vi.fn(),
@@ -208,13 +215,15 @@ describe.skipIf(!fixture.available)('billing references never reach the client',
 
   it('strips the whole cloud block from the client settings payload', async () => {
     const row = await testDb.query.settings.findFirst()
-    const tenant = { ...row, settings: row } as unknown as Record<string, unknown>
+    const workspace = { ...row, settings: row } as unknown as Record<string, unknown>
 
-    const redacted = redactSettingsForClient(tenant as never)
+    const redacted = redactSettingsForClient(workspace as never)
     expect(leaks(redacted, [SECRETS.customerRef, SECRETS.subscriptionRef])).toEqual([])
     // And the key itself is gone, at both levels the redactor walks.
     expect(redacted).not.toHaveProperty('cloud')
-    expect((redacted as { settings?: Record<string, unknown> }).settings).not.toHaveProperty('cloud')
+    expect((redacted as { settings?: Record<string, unknown> }).settings).not.toHaveProperty(
+      'cloud'
+    )
   })
 
   it('keeps provider identifiers and credentials out of the billing page payload', async () => {

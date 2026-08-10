@@ -67,7 +67,7 @@ describe('the sweep inventory', () => {
     expect(sweepLockNames(startupSource).size).toBe(0)
   })
 
-  it('arms every exported job function from the single-tenant schedule', async () => {
+  it('arms every exported job function from the single-workspace schedule', async () => {
     const armed = scheduledJobFns(startupSource)
     expect(armed.size).toBeGreaterThan(0)
 

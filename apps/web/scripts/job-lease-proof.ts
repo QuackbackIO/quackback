@@ -20,7 +20,7 @@
  * Side effects are recorded in a scratch table this script creates and drops
  * (`gauntlet_job_effects`); it is not part of the schema.
  *
- * Usage (single-tenant; DATABASE_URL selects the database):
+ * Usage (single-workspace; DATABASE_URL selects the database):
  *
  *   bun run scripts/job-lease-proof.ts kill-matrix
  *   bun run scripts/job-lease-proof.ts long-lease --work-seconds 180
@@ -452,12 +452,12 @@ async function wakeLatency(): Promise<void> {
 
   await startJobTier()
   const status = getJobTierStatus()
-  if (!status.running || status.tenants.length === 0) {
+  if (!status.running || status.workspaces.length === 0) {
     console.log('tier did not start — is QUACKBACK_ROLE=web?')
     process.exit(2)
   }
   console.log(
-    `tier running; loops=${status.tenants.length} ` +
+    `tier running; loops=${status.workspaces.length} ` +
       `poll_interval_ms=${runnerConfig().pollIntervalMs} ` +
       `doorbell=${wakeDisabled() ? 'DISABLED (poll only)' : 'enabled'}`
   )

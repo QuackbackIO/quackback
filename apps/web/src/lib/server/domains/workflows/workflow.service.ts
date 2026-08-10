@@ -13,7 +13,7 @@ import { db, eq, and, isNull, inArray, asc, workflows, type Workflow } from '@/l
 import type { WorkflowClass, WorkflowStatus } from '@/lib/server/db'
 import type { WorkflowId, PrincipalId } from '@quackback/ids'
 import { positionCaseSql } from '@/lib/server/utils'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { WorkflowGraph, WorkflowNode } from './graph'
 import { ATTRIBUTE_FIELD_PREFIX, type WorkflowCondition } from './condition.evaluator'
 import {
@@ -232,7 +232,7 @@ export async function listLiveWorkflowsForTrigger(triggerType: string): Promise<
 const HAS_LIVE_WORKFLOW_CACHE_TTL_MS = 30_000
 
 /**
- * Per tenant, because the answer is a fact about one workspace's rows.
+ * Per workspace, because the answer is a fact about one workspace's rows.
  *
  * The two failure directions are not symmetric and both are silent. A shared
  * `true` from a workspace that has workflows makes a workspace with none pay
@@ -241,7 +241,7 @@ const HAS_LIVE_WORKFLOW_CACHE_TTL_MS = 30_000
  * running them** — the gate is read before the enqueue, so nothing dispatches,
  * nothing errors, and no run row is ever written to notice was missing.
  */
-const hasLiveWorkflowCache = new TenantKeyedCache<{ value: boolean; expiresAt: number }>(2_048)
+const hasLiveWorkflowCache = new WorkspaceKeyedCache<{ value: boolean; expiresAt: number }>(2_048)
 const HAS_LIVE_KEY = 'has-live'
 
 /**
@@ -251,7 +251,7 @@ const HAS_LIVE_KEY = 'has-live'
  * cache is module-level mutable state that would otherwise leak a value
  * cached by an earlier case into a later one.
  *
- * Clears the ACTIVE tenant's entry only: a workspace toggling a workflow says
+ * Clears the ACTIVE workspace's entry only: a workspace toggling a workflow says
  * nothing about anyone else's, and dropping the fleet's entries would turn one
  * admin's click into a fleet-wide re-query storm on the hottest path there is.
  */
@@ -343,13 +343,13 @@ function collectAttributeKeysFromGraph(graph: unknown, into: Set<string>): void 
 const LIVE_ATTRIBUTE_KEYS_CACHE_TTL_MS = 30_000
 
 /**
- * Per tenant: these keys are read out of one workspace's stored workflow
+ * Per workspace: these keys are read out of one workspace's stored workflow
  * graphs. Shared, one workspace's attribute vocabulary decides which
  * conversation attributes another workspace re-classifies mid-conversation —
  * spending its AI budget on keys its own workflows never branch on, while the
  * keys they do branch on go stale.
  */
-const liveAttributeKeysCache = new TenantKeyedCache<{
+const liveAttributeKeysCache = new WorkspaceKeyedCache<{
   keys: ReadonlySet<string>
   expiresAt: number
 }>(2_048)

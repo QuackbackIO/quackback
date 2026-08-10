@@ -11,8 +11,8 @@
  *
  * | Consumer | Table | Database |
  * | --- | --- | --- |
- * | `job-queue.ts` | `job_queue` | the tenant's own |
- * | `fleet/schema-state.ts` | `cp_tenant_schema_state` | the control plane's |
+ * | `job-queue.ts` | `job_queue` | the workspace's own |
+ * | `fleet/schema-state.ts` | `cp_workspace_schema_state` | the control plane's |
  *
  * They cannot share a *function*, because they run against different databases
  * with different row shapes. They can share the statements, and the statements
@@ -61,7 +61,7 @@ export interface LeaseClaimInput {
   table: string
   /**
    * Extra predicate ANDed onto the three universal ones. The fleet migrator
-   * narrows by cohort and by whether the tenant's recorded version already
+   * narrows by cohort and by whether the workspace's recorded version already
    * matches its target.
    */
   where?: SQL
@@ -321,7 +321,7 @@ export function leaseTerminateSql(table: string, handle: LeaseHandle, reason: st
  * `max_attempts = 1` row that was claimed has `attempts = 1`, so it lands in
  * the terminal branch and is never handed back — which is what stops a process
  * death from turning an at-most-once import into a double import, or a
- * half-finished tenant migration into an unbounded retry loop.
+ * half-finished workspace migration into an unbounded retry loop.
  *
  * `RETURNING` names the columns both consumers log. `extraReturning` appends a
  * consumer's own columns — widening the one reaper rather than writing a
@@ -334,7 +334,7 @@ export function leaseReapSql(table: string, extraReturning?: SQL): SQL {
   // `locked_by` is read in a CTE rather than from `RETURNING`, because
   // `RETURNING` reports POST-update values and this statement sets `locked_by`
   // to NULL — so the log line naming who lost the lease always said `null`.
-  // Measured on a real reaped tenant, not inferred. The outer WHERE repeats the
+  // Measured on a real reaped workspace, not inferred. The outer WHERE repeats the
   // predicate so the CTE's snapshot cannot let a second reaper act on a row the
   // first has already adjudicated.
   return sql`

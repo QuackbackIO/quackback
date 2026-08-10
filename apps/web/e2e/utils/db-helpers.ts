@@ -68,7 +68,7 @@ export function getOtpCode(email: string, _host?: string): string {
 /**
  * Enable (or disable) the conversation surfaces: the supportInbox flag, the
  * widget messenger (master + surface + tab), and the portal Support tab.
- * Also busts the cached tenant settings so the change is live at once.
+ * Also busts the cached workspace settings so the change is live at once.
  */
 export function setSupportSurfaces(enabled: boolean = true): void {
   runScript('set-support-surfaces.ts', [enabled ? 'on' : 'off'], 'set support surfaces')

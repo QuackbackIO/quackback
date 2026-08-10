@@ -54,8 +54,8 @@ export {
   DEFAULT_HELP_CENTER_SEO_CONFIG,
 } from './settings.types'
 
-// Consolidated tenant settings type (in types.ts to avoid server dep leak via barrel)
-export type { TenantSettings, SettingsBrandingData } from './settings.types'
+// Consolidated workspace settings type (in types.ts to avoid server dep leak via barrel)
+export type { WorkspaceSettings, SettingsBrandingData } from './settings.types'
 
 // Verified-domain type — no DB dependency, safe for client-side consumption
 export type { VerifiedDomain } from './settings.types'

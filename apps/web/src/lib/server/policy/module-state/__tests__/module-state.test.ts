@@ -143,9 +143,9 @@ describe('the ledger is a decision record, not a rubber stamp', () => {
     expect(ids.length).toBe(new Set(ids).size)
   })
 
-  it('every tenant-scoped-key entry names the code composing its key', () => {
+  it('every workspace-scoped-key entry names the code composing its key', () => {
     const missing = MODULE_STATE_LEDGER.filter(
-      (e) => e.category === 'tenant-scoped-key' && !e.keyedBy
+      (e) => e.category === 'workspace-scoped-key' && !e.keyedBy
     )
     expect(missing.map(siteId)).toEqual([])
   })

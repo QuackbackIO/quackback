@@ -2,8 +2,8 @@
  * Running claimed work — the half of the queue that executes outside a
  * transaction.
  *
- * Everything in this module assumes an open tenant scope: `db` resolves to the
- * tenant's pool, and `job_queue` is that tenant's own table. `tier.ts` owns
+ * Everything in this module assumes an open workspace scope: `db` resolves to the
+ * workspace's pool, and `job_queue` is that workspace's own table. `tier.ts` owns
  * opening the scope and the timers; this file owns what happens inside one.
  *
  * The load-bearing property is that **no transaction is open while a handler
@@ -17,7 +17,7 @@
  * including a worker process that has not loaded the full application config.
  */
 import { logger } from '@/lib/server/logger'
-import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import {
   claimJobs,
   completeJob,
@@ -68,12 +68,12 @@ export interface RunnerConfig {
   /** How long terminal rows are kept. Must exceed any live cron slot key. */
   retentionMs: number
   /**
-   * Ceiling on jobs running at once in one tenant's loop.
+   * Ceiling on jobs running at once in one workspace's loop.
    *
    * Defaults to the sum of every definition's `concurrency`, which is exactly
    * what the reference allowed (one BullMQ `Worker` per queue, each at its own
-   * concurrency), so the default binds nothing and single-tenant behaviour does
-   * not move. It exists because a pooled process runs one loop per tenant, and
+   * concurrency), so the default binds nothing and single-workspace behaviour does
+   * not move. It exists because a pooled process runs one loop per workspace, and
    * a fleet operator sizing connections cares about the product, not the term.
    */
   maxConcurrency: number
@@ -117,34 +117,34 @@ export function activeQueueNames(): string[] {
  * Handler modules, imported once and memoised.
  *
  * The reason this exists is a hazard measured on the BullMQ side of the house: a
- * `Worker` constructed inside a request's tenant scope inherits that scope for
+ * `Worker` constructed inside a request's workspace scope inherits that scope for
  * every job it ever processes, because the scope is AsyncLocalStorage and the
  * constructor captured it. It was not a theoretical shape — the queue modules
  * that armed lazily on first enqueue armed inside whatever request reached them
  * first. No such module is left, but the *import* hazard below outlives them.
  *
  * This queue does not have that shape — `tier.ts` opens a fresh
- * `withTenantScopeById(...)` around every pass, so a handler always runs inside
+ * `withWorkspaceScopeById(...)` around every pass, so a handler always runs inside
  * the scope of the job it is running, never one captured earlier. But the
  * *import* is a second, quieter version of the same risk: `def.handler()` is a
  * dynamic import, and a module executing top-level work would run it inside
- * whichever tenant's scope happened to trigger the first import.
+ * whichever workspace's scope happened to trigger the first import.
  *
  * `primeJobHandlers()` closes that by importing every module once, at tier
- * start, **before any tenant scope is open**. The memo is then a pure function
+ * start, **before any workspace scope is open**. The memo is then a pure function
  * lookup. A miss still resolves rather than failing — a direct `runJob` in a
  * test must work — but it says so, because a miss in a running tier means a
- * module is being imported under a tenant scope.
+ * module is being imported under a workspace scope.
  */
 const handlerMemo = new Map<string, JobHandler>()
 
 export async function primeJobHandlers(): Promise<void> {
-  if (getCurrentTenant()) {
+  if (getCurrentWorkspace()) {
     // Priming is the thing that must happen OUTSIDE a scope. If a caller has one
     // open, priming here would defeat its own purpose silently.
     log.error(
-      'primeJobHandlers() was called inside a tenant scope — handler modules would ' +
-        'be imported under that tenant. Prime before opening any scope.'
+      'primeJobHandlers() was called inside a workspace scope — handler modules would ' +
+        'be imported under that workspace. Prime before opening any scope.'
     )
     return
   }
@@ -166,10 +166,10 @@ export function resetJobHandlers(): void {
 async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
   const memo = handlerMemo.get(def.name)
   if (memo) return memo
-  if (getCurrentTenant()) {
+  if (getCurrentWorkspace()) {
     log.warn(
       { queue: def.name },
-      'job handler module imported inside a tenant scope — prime handlers at tier start'
+      'job handler module imported inside a workspace scope — prime handlers at tier start'
     )
   }
   const handler = await def.handler()
@@ -294,10 +294,10 @@ export interface DrainResult {
  * the slot bracketing now, so a two-minute job costs the per-minute
  * `snooze-sweep` and `sla-breach-sweep` two runs each, silently.
  *
- * **Why a pool rather than per-queue loops.** Fifteen loops per tenant would
- * multiply the poll traffic by fifteen against a per-tenant database, and the
+ * **Why a pool rather than per-queue loops.** Fifteen loops per workspace would
+ * multiply the poll traffic by fifteen against a per-workspace database, and the
  * database is the scarce thing here — §6's corollary is that this tier already
- * holds a connection per tenant open by design. One loop keeps one poll, one
+ * holds a connection per workspace open by design. One loop keeps one poll, one
  * listener and one claim query per pass, whatever the queue count.
  *
  * **Why per-queue caps rather than one pool size.** The reference gave each
@@ -359,7 +359,7 @@ export interface DispatchResult {
 export async function dispatchPass(opts: {
   pool: JobPool
   config: RunnerConfig
-  /** Runs one job, in whatever tenant scope the caller owns. */
+  /** Runs one job, in whatever workspace scope the caller owns. */
   run: (job: ClaimedJob) => Promise<'succeeded' | 'failed' | 'retrying'>
   /** Called as each job settles, so the loop can claim the freed slot at once. */
   onSettled?: (queue: string, outcome: 'succeeded' | 'failed' | 'retrying') => void
@@ -433,7 +433,7 @@ export interface ScheduleTickResult {
    * healthy race. `attempted` is this scheduler's own decision, and it is the
    * only way to tell "another replica got there first" apart from "this
    * scheduler never considered the slot due at all", which is what shared
-   * scheduler state produced across tenants.
+   * scheduler state produced across workspaces.
    */
   attempted: number
   enqueued: number
@@ -455,16 +455,16 @@ function cronFor(pattern: string): ParsedCron {
 /**
  * One scheduler's memory of the last slot it has accounted for, per schedule.
  *
- * **This is per tenant, and it is passed in rather than held here, because the
- * module-scope version of it was a real cross-tenant defect.** One process runs
- * one loop per tenant; a `Map` keyed on the schedule name alone is shared by all
- * of them, so whichever tenant's loop reached a slot first advanced a counter
- * every other tenant then read as "already done" — and the rest silently never
- * enqueued that slot. Measured live on two Neon tenants: each minute's sweep
- * landed on one tenant, never both. It affected all seven sweeps.
+ * **This is per workspace, and it is passed in rather than held here, because the
+ * module-scope version of it was a real cross-workspace defect.** One process runs
+ * one loop per workspace; a `Map` keyed on the schedule name alone is shared by all
+ * of them, so whichever workspace's loop reached a slot first advanced a counter
+ * every other workspace then read as "already done" — and the rest silently never
+ * enqueued that slot. Measured live on two Neon workspaces: each minute's sweep
+ * landed on one workspace, never both. It affected all seven sweeps.
  *
  * That is the §4.1 process-global-state hazard, introduced by the piece meant to
- * remove it. Keying the map by tenant would fix the instance; making the state a
+ * remove it. Keying the map by workspace would fix the instance; making the state a
  * parameter fixes the class, because there is no longer a shared object for the
  * next scheduler to key wrongly.
  *
@@ -487,7 +487,7 @@ export interface ScheduleState {
   readonly seen: Map<string, number>
 }
 
-/** A scheduler's own state. One per tenant loop — never shared between them. */
+/** A scheduler's own state. One per workspace loop — never shared between them. */
 export function createScheduleState(): ScheduleState {
   return { seen: new Map<string, number>() }
 }
@@ -563,7 +563,7 @@ export async function runScheduleTick(
    * first pass, and a first pass deliberately adopts the current slot rather
    * than running it (or every process restart would replay one of everything).
    * A gate that opens is therefore always a first pass, and the work never runs
-   * — measured against a real tenant, a snooze due in ninety seconds was never
+   * — measured against a real workspace, a snooze due in ninety seconds was never
    * swept at all. Harmless while gates flipped for a minute at a time; fatal
    * once a gate can stay shut for hours.
    *

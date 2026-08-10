@@ -76,7 +76,7 @@ describe('PUT /api/storage/* (proxy upload)', () => {
 
   it('reports the proxy refusal even when storage is also unusable', async () => {
     // Order matters: a deployment with proxy uploads off should say so rather
-    // than blaming the tenant's credentials, or an operator chases the wrong
+    // than blaming the workspace's credentials, or an operator chases the wrong
     // fault.
     mockConfig.s3Proxy = false
     mockIsS3Usable.mockReturnValue(false)

@@ -6,13 +6,13 @@
  * e2e suite's magic-link admin sign-in (global-setup) would be refused with
  * magic_link_method_not_allowed. This script flips the method on, bumps
  * auth_config_version (so a running server drops its cached auth instance),
- * and busts the Redis-cached tenant settings.
+ * and busts the Redis-cached workspace settings.
  *
  * Idempotent; safe to run before every e2e session.
  *
  * Usage: bun enable-magic-link-method.ts
  */
-import { openDb, bustTenantSettings, parseJson } from './_lib'
+import { openDb, bustWorkspaceSettings, parseJson } from './_lib'
 
 const sql = openDb()
 
@@ -31,7 +31,7 @@ try {
         auth_config_version = auth_config_version + 1
     WHERE id = ${id}`
 
-  await bustTenantSettings(sql)
+  await bustWorkspaceSettings(sql)
 
   console.log(JSON.stringify({ magicLink: true }))
   await sql.end()

@@ -91,7 +91,7 @@ export interface BillingOverview {
    *
    * Surfaced rather than left in logs because the failure is invisible to the
    * only party who can fix it: a repricing fires across the whole book at
-   * once, and nobody watches a per-tenant pod's warn stream. While it is
+   * once, and nobody watches a per-workspace pod's warn stream. While it is
    * `drifted`, seat *creation* is paused (updates continue), and if the plan
    * itself could not be resolved the previously stored plan is being held
    * rather than downgraded.

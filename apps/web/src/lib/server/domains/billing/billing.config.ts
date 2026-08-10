@@ -43,7 +43,7 @@ export const BILLING_PROVIDER = 'hosted-subscriptions' as const
  *
  * A customer created outside this module carries no stamp, so it is never
  * adopted. That is the intended failure direction — a loud refusal an
- * operator can diagnose, rather than a silent cross-tenant adoption.
+ * operator can diagnose, rather than a silent cross-workspace adoption.
  */
 export const WORKSPACE_STAMP_KEY = 'quackback_workspace'
 
@@ -67,7 +67,11 @@ export const BILLING_METERS = ['fullSeat', 'liteSeat', 'copilotSeat', 'resolvedO
 export type BillingMeter = (typeof BILLING_METERS)[number]
 
 /** The quantity meters, i.e. the ones pushed as subscription-item quantities. */
-export const SEAT_METERS = ['fullSeat', 'liteSeat', 'copilotSeat'] as const satisfies readonly BillingMeter[]
+export const SEAT_METERS = [
+  'fullSeat',
+  'liteSeat',
+  'copilotSeat',
+] as const satisfies readonly BillingMeter[]
 
 export type SeatMeter = (typeof SEAT_METERS)[number]
 
@@ -152,7 +156,7 @@ export interface BillingConfig {
  *
  * Memoised on the resolved value, and the memo is a module-scope cache — the
  * one kind SAAS-HOSTING-STACK.md §4.4 warns about. It is safe here only
- * because this is fleet-wide configuration, identical for every tenant, in
+ * because this is fleet-wide configuration, identical for every workspace, in
  * the same class as `config.openaiApiKey`. Anything per-workspace must not
  * join it.
  */
@@ -212,12 +216,17 @@ function resolveBillingConfig(): BillingConfig | null {
   let catalogue: BillingCatalogue
   try {
     const parsed = catalogueSchema.parse(JSON.parse(rawCatalogue))
-    const unknown = Object.keys(parsed).filter((id) => !(PLAN_IDS as readonly string[]).includes(id))
+    const unknown = Object.keys(parsed).filter(
+      (id) => !(PLAN_IDS as readonly string[]).includes(id)
+    )
     if (unknown.length > 0) {
       // Refuse rather than drop. A price id filed under a plan the product
       // cannot model would resolve to no plan on the next subscription read,
       // silently downgrading a paying workspace to Free.
-      log.error({ unknown }, 'BILLING_PRICES names plans the product does not model. Billing stays off.')
+      log.error(
+        { unknown },
+        'BILLING_PRICES names plans the product does not model. Billing stays off.'
+      )
       return null
     }
     catalogue = parsed as BillingCatalogue
@@ -233,10 +242,7 @@ function resolveBillingConfig(): BillingConfig | null {
 
   const returnUrl = process.env.BILLING_RETURN_URL || undefined
 
-  log.info(
-    { livemode, plans: Object.keys(catalogue).sort() },
-    'billing configured'
-  )
+  log.info({ livemode, plans: Object.keys(catalogue).sort() }, 'billing configured')
 
   return {
     provider: BILLING_PROVIDER,

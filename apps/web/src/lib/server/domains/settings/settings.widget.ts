@@ -60,7 +60,7 @@ export function externalWidgetOriginHostname(request: Request): string | null {
 }
 
 /**
- * Record external widget installation evidence without touching the tenant
+ * Record external widget installation evidence without touching the workspace
  * settings cache. The conditional update makes first/last-seen behavior and
  * the 15-minute throttle atomic under concurrent public requests.
  */
@@ -266,7 +266,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
 
 /**
  * Resolve the messenger config, deep-merged over defaults so callers always see
- * welcome/offline copy even for tenants whose stored config predates messenger.
+ * welcome/offline copy even for workspaces whose stored config predates messenger.
  */
 export async function getMessengerConfig(): Promise<MessengerConfig> {
   const widget = await getWidgetConfig()
@@ -335,7 +335,7 @@ export function generateWidgetSecret(): string {
   return 'wgt_' + randomBytes(32).toString('hex')
 }
 
-/** Get the widget secret (admin only — never expose in TenantSettings) */
+/** Get the widget secret (admin only — never expose in WorkspaceSettings) */
 export async function getWidgetSecret(): Promise<string | null> {
   try {
     const org = await requireSettings()

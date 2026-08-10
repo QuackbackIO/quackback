@@ -33,7 +33,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
     await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()
   return {
     ...actual,
-    getTenantSettings: async () => {
+    getWorkspaceSettings: async () => {
       const db = (await import('@/lib/server/__tests__/db-test-fixture')).testDb
       const row = await db.query.settings.findFirst()
       return row ? { settings: row } : null
@@ -48,7 +48,10 @@ import type { BillingProviderClient } from '../provider/client'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
-    await db.select({ id: billingWebhookEvents.providerEventId }).from(billingWebhookEvents).limit(0)
+    await db
+      .select({ id: billingWebhookEvents.providerEventId })
+      .from(billingWebhookEvents)
+      .limit(0)
     await db.select({ revision: settings.cloudRevision }).from(settings).limit(0)
   },
 })

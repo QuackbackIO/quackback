@@ -38,12 +38,13 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-// The tenant assertion reads the ambient scope. A settable stub lets a test
+// The workspace assertion reads the ambient scope. A settable stub lets a test
 // stand a row's stamp and the scope's identity against each other, which is the
 // only way to exercise the refusal.
-let currentTenantId: string | null = null
-vi.mock('@/lib/server/tenancy/tenant-context', () => ({
-  getCurrentTenant: () => (currentTenantId === null ? null : { tenantId: currentTenantId }),
+let currentWorkspaceKey: string | null = null
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () =>
+    currentWorkspaceKey === null ? null : { workspaceKey: currentWorkspaceKey },
 }))
 
 import {
@@ -73,7 +74,7 @@ beforeAll(async () => {
 })
 
 afterEach(() => {
-  currentTenantId = null
+  currentWorkspaceKey = null
 })
 
 afterAll(async () => {
@@ -342,44 +343,44 @@ describe('the fencing token', () => {
   })
 })
 
-describe('the tenant assertion', () => {
-  it('stamps the enqueueing tenant and accepts a matching claim', async () => {
-    const q = queue('tenant-match')
-    currentTenantId = 'inst_alpha'
+describe('the workspace assertion', () => {
+  it('stamps the enqueueing workspace and accepts a matching claim', async () => {
+    const q = queue('workspace-match')
+    currentWorkspaceKey = 'inst_alpha'
     await enqueueJob({ queue: q })
-    expect((await rowsFor(q))[0].tenant_id).toBe('inst_alpha')
+    expect((await rowsFor(q))[0].workspace_key).toBe('inst_alpha')
 
     const claimed = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     expect(claimed).toHaveLength(1)
-    expect(claimed[0].tenantId).toBe('inst_alpha')
+    expect(claimed[0].workspaceKey).toBe('inst_alpha')
   })
 
-  it('refuses a row stamped for another tenant, terminally, without returning it', async () => {
-    const q = queue('tenant-mismatch')
-    currentTenantId = 'inst_alpha'
+  it('refuses a row stamped for another workspace, terminally, without returning it', async () => {
+    const q = queue('workspace-mismatch')
+    currentWorkspaceKey = 'inst_alpha'
     await enqueueJob({ queue: q })
 
     // The row is now in THIS database claiming to belong to somebody else — the
     // shape a mis-routed write or a restored dump produces. Running it would be
-    // a cross-tenant execution.
-    await testSql()`UPDATE job_queue SET tenant_id = 'inst_bravo' WHERE queue = ${q}`
+    // a cross-workspace execution.
+    await testSql()`UPDATE job_queue SET workspace_key = 'inst_bravo' WHERE queue = ${q}`
 
     const claimed = await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })
     expect(claimed).toHaveLength(0)
 
     const [row] = await rowsFor(q)
     expect(row.status).toBe('failed')
-    expect(row.last_error).toMatch(/tenant mismatch/)
+    expect(row.last_error).toMatch(/workspace mismatch/)
     // It stays refused rather than becoming claimable on the next pass.
     expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 
-  it('refuses a tenant-stamped row when no tenant scope is open', async () => {
-    const q = queue('tenant-unscoped')
-    currentTenantId = 'inst_alpha'
+  it('refuses a workspace-stamped row when no workspace scope is open', async () => {
+    const q = queue('workspace-unscoped')
+    currentWorkspaceKey = 'inst_alpha'
     await enqueueJob({ queue: q })
 
-    currentTenantId = null
+    currentWorkspaceKey = null
     expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
     expect((await rowsFor(q))[0].status).toBe('failed')
   })

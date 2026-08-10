@@ -1,10 +1,10 @@
 /**
- * The storage proxy cache must be partitioned by tenant.
+ * The storage proxy cache must be partitioned by workspace.
  *
  * It holds file BYTES keyed by storage key, in process memory. Storage keys are
- * per-bucket and the bucket is the tenant boundary, so one process serving two
- * tenants shares a key namespace *in its own heap* — and a hit returns the
- * other tenant's file with a 200 and no error. Unlike the `Vary` work this is
+ * per-bucket and the bucket is the workspace boundary, so one process serving two
+ * workspaces shares a key namespace *in its own heap* — and a hit returns the
+ * other workspace's file with a 200 and no error. Unlike the `Vary` work this is
  * not an edge-cache concern: it needs no CDN and no misconfiguration, only a
  * key that appears in two buckets, which is exactly what an import or a
  * migration produces.
@@ -23,18 +23,18 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
-import { SINGLE_TENANT_NAMESPACE } from '@/lib/server/tenancy/tenant-keyed'
+import { createWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
+import { SINGLE_WORKSPACE_NAMESPACE } from '@/lib/server/workspaces/workspace-keyed'
 import { proxyCacheKey } from '../$'
 
 const ROUTE = join(dirname(fileURLToPath(import.meta.url)), '..', '$.ts')
 
-function scope(tenantId: string) {
-  // Secrets are an input to `createTenantScope()` rather than a field on the
+function scope(workspaceKey: string) {
+  // Secrets are an input to `createWorkspaceScope()` rather than a field on the
   // result, and it refuses one with no resolved `SECRET_KEY`. Nothing below
-  // reads them; the cache key is derived from the tenant id alone.
-  return createTenantScope({
-    tenant: { tenantId },
+  // reads them; the cache key is derived from the workspace id alone.
+  return createWorkspaceScope({
+    workspace: { workspaceKey },
     db: {},
     sql: {},
     origin: 'test',
@@ -43,36 +43,36 @@ function scope(tenantId: string) {
 }
 
 describe('proxyCacheKey', () => {
-  it('gives two tenants different keys for the SAME storage key', () => {
+  it('gives two workspaces different keys for the SAME storage key', () => {
     const key = 'logos/2026/02/abc123-logo.png'
-    const a = runWithTenantScope(scope('inst_a'), () => proxyCacheKey(key))
-    const b = runWithTenantScope(scope('inst_b'), () => proxyCacheKey(key))
+    const a = runWithWorkspaceScope(scope('inst_a'), () => proxyCacheKey(key))
+    const b = runWithWorkspaceScope(scope('inst_b'), () => proxyCacheKey(key))
     expect(a).not.toBe(b)
     expect(a).toContain('inst_a')
     expect(b).toContain('inst_b')
   })
 
-  it('is stable within one tenant, so the cache still caches', () => {
+  it('is stable within one workspace, so the cache still caches', () => {
     const key = 'uploads/2026/02/x.png'
-    const first = runWithTenantScope(scope('inst_a'), () => proxyCacheKey(key))
-    const second = runWithTenantScope(scope('inst_a'), () => proxyCacheKey(key))
+    const first = runWithWorkspaceScope(scope('inst_a'), () => proxyCacheKey(key))
+    const second = runWithWorkspaceScope(scope('inst_a'), () => proxyCacheKey(key))
     expect(first).toBe(second)
   })
 
-  it('uses the single-tenant namespace with no scope, so self-hosted is unchanged', () => {
-    expect(proxyCacheKey('avatars/a.png')).toBe(`${SINGLE_TENANT_NAMESPACE} avatars/a.png`)
+  it('uses the single-workspace namespace with no scope, so self-hosted is unchanged', () => {
+    expect(proxyCacheKey('avatars/a.png')).toBe(`${SINGLE_WORKSPACE_NAMESPACE} avatars/a.png`)
   })
 
-  it('cannot be collided by a storage key that embeds another tenant id', () => {
-    // The separator has to make `<tenant> <key>` unambiguous: without it,
-    // tenant `a` with key `b/x` and tenant `ab` with key `/x` would collide.
-    const a = runWithTenantScope(scope('a'), () => proxyCacheKey('b/x'))
-    const b = runWithTenantScope(scope('ab'), () => proxyCacheKey('/x'))
+  it('cannot be collided by a storage key that embeds another workspace id', () => {
+    // The separator has to make `<workspace> <key>` unambiguous: without it,
+    // workspace `a` with key `b/x` and workspace `ab` with key `/x` would collide.
+    const a = runWithWorkspaceScope(scope('a'), () => proxyCacheKey('b/x'))
+    const b = runWithWorkspaceScope(scope('ab'), () => proxyCacheKey('/x'))
     expect(a).not.toBe(b)
   })
 })
 
-describe('every proxyCache access is tenant-keyed', () => {
+describe('every proxyCache access is workspace-keyed', () => {
   const source = readFileSync(ROUTE, 'utf8')
 
   it('finds the cache accesses it is guarding', () => {

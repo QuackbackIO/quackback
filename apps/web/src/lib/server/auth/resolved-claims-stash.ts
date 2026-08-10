@@ -20,7 +20,7 @@
  */
 
 /**
- * ## Why the stash is keyed by tenant
+ * ## Why the stash is keyed by workspace
  *
  * Not on SAAS-HOSTING-STACK.md §4.1's list, and it is the same hazard as the
  * entry heading it. The key is `providerId + accountId`, and neither half is
@@ -28,18 +28,18 @@
  * is the IdP's subject, the same string for the same human in every workspace
  * they belong to. So one person signing into two workspaces at once has the
  * second sign-in drain claims resolved against the first, and those claims are
- * the input to role provisioning. Cross-tenant claim injection into role
+ * the input to role provisioning. Cross-workspace claim injection into role
  * assignment, and silent: the role mapping runs normally, just against another
  * workspace's `groups`.
  */
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
-import { getTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
+import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
 
 const TTL_MS = 30_000
 
 type Entry = { claims: Record<string, unknown>; ts: number }
 
-const entries = new TenantKeyedCache<Entry>(4_096)
+const entries = new WorkspaceKeyedCache<Entry>(4_096)
 
 function key(providerId: string, accountId: string): string {
   // NUL separator written as an escape, never as a raw byte: a literal NUL
@@ -60,15 +60,15 @@ export function stashResolvedClaims(
   // policy, say) cannot leave claims resident.
   //
   // The sweep re-enters the scope that armed it. A timer callback runs with no
-  // ambient scope, where every tenant-keyed read resolves to the single-tenant
+  // ambient scope, where every workspace-keyed read resolves to the single-workspace
   // namespace, so an unscoped sweep would miss the entry it was armed for and
   // delete an unrelated one. Same reasoning as the magic-link stash's sweep.
-  const scope = getTenantScope()
+  const scope = getWorkspaceScope()
   const sweep = () => {
     const held = entries.get(k)
     if (held && Date.now() - held.ts >= TTL_MS) entries.delete(k)
   }
-  setTimeout(() => (scope ? runWithTenantScope(scope, sweep) : sweep()), TTL_MS).unref?.()
+  setTimeout(() => (scope ? runWithWorkspaceScope(scope, sweep) : sweep()), TTL_MS).unref?.()
 }
 
 /** Take the stashed claims, if this identity resolved in this request. */

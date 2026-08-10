@@ -7,7 +7,7 @@
  *
  * This function existed already and was already parameterised by connection
  * string, already idempotent, already chaining `migrate()` into
- * `seedSystemData()`. Three gaps were measured against live tenants on
+ * `seedSystemData()`. Three gaps were measured against live workspaces on
  * 2026-08-08, and the first was worse than a gap:
  *
  * 1. **It never issued `CREATE EXTENSION vector`, and no migration file does
@@ -16,7 +16,7 @@
  *    CLI created the extension.
  * 2. **It never called the concurrent-index step**, so the 4 HNSW and 3 trigram
  *    indexes silently did not exist. No error — an absent index is not an error,
- *    it is a slow tenant.
+ *    it is a slow workspace.
  * 3. **An interrupted `CREATE INDEX CONCURRENTLY` leaves an *invalid* index**,
  *    `IF NOT EXISTS` then treats it as present, and the next run exits 0. So the
  *    heal cannot be "re-run and hope": invalid indexes are dropped *before* the
@@ -58,7 +58,7 @@
  *
  * So a migrator run through the pooler does not merely lose its own
  * serialisation: it strands a lock that wedges every subsequent direct run of
- * the same tenant. That is why the pooled endpoint is refused up front rather
+ * the same workspace. That is why the pooled endpoint is refused up front rather
  * than allowed to half-work — see {@link assertSessionModeDsn}.
  */
 import { drizzle } from 'drizzle-orm/postgres-js'
@@ -142,7 +142,7 @@ export interface RunMigrationsOptions {
    * reconciler records the failure with its diagnosis, and the lease's own
    * backoff retries — which is a better retry than a new one here, because it
    * counts against `max_attempts` and therefore cannot loop forever against a
-   * tenant whose worker never goes quiet.
+   * workspace whose worker never goes quiet.
    */
   lockTimeoutMs?: number
   /** Progress callback, so a reconciler can report which step a kill landed in. */
@@ -165,7 +165,7 @@ export class PooledDsnRefused extends Error {
         'The migration advisory lock is session-scoped, and a pooled session outlives the ' +
         'client: measured on Neon, the lock survives disconnect, does not exclude a second ' +
         'pooled client, and then BLOCKS the direct endpoint until the stranded backend is ' +
-        "terminated by hand. Use the tenant record's directUrl."
+        "terminated by hand. Use the workspace record's directUrl."
     )
     this.name = 'PooledDsnRefused'
   }
@@ -175,7 +175,7 @@ export class PooledDsnRefused extends Error {
  * Refuse a pooled endpoint before it half-works.
  *
  * Neon's pooled endpoint host carries a `-pooler` suffix, and the same
- * signal is what the control plane's own `cp_tenant_registry_direct_not_pooler_ck`
+ * signal is what the control plane's own `cp_workspace_registry_direct_not_pooler_ck`
  * constraint checks — so a record that passed the CP's write gate cannot fail
  * this one, and a hand-edited DSN cannot silently strand a lock.
  *
@@ -269,7 +269,7 @@ export async function runMigrations(
     if (seed) {
       onStep('seed')
       // Seed the reference data every workspace needs (statuses, roles,
-      // permissions). Idempotent — re-running on a seeded tenant is a no-op.
+      // permissions). Idempotent — re-running on a seeded workspace is a no-op.
       await seedSystemData(database)
     }
 

@@ -3,11 +3,11 @@
 A regression harness that pins **which hand-written SQL migrations carry
 destructive DDL**, and fails CI when a new one ships without an explicit
 sign-off naming the release it's safe after. It exists because Quackback is
-moving from one-pod-per-tenant (where code and schema always ship together,
+moving from one-pod-per-workspace (where code and schema always ship together,
 so a breaking migration is safe) to a pooled fleet, where **one code version
-serves tenants on two schema versions for the duration of every rollout**
+serves workspaces on two schema versions for the duration of every rollout**
 (see `SAAS-HOSTING-STACK.md` §10). A `DROP COLUMN` that ships in the same
-release as the code that stops reading it takes down every tenant still on
+release as the code that stops reading it takes down every workspace still on
 the old schema.
 
 The discipline this enforces is **expand/contract**: additive change ships
@@ -169,9 +169,9 @@ keyword regex as if they were live code.
 ## Grandfathering history
 
 All 226 migrations in `packages/db/drizzle` were written before this linter
-existed, under the old one-pod-per-tenant assumption where destructive
+existed, under the old one-pod-per-workspace assumption where destructive
 migrations were safe. Forcing them into churn (retroactively annotating 29
-files, none of which are being re-shipped) would not make any tenant safer
+files, none of which are being re-shipped) would not make any workspace safer
 — it would just be busywork. They're grandfathered wholesale in
 [`grandfathered.ts`](./grandfathered.ts), a **hand-derived, frozen** list —
 built by reading every migration, not by running the scanner and copying its

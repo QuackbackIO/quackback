@@ -1,38 +1,38 @@
 /**
- * The job tier — one always-warm loop per tenant.
+ * The job tier — one always-warm loop per workspace.
  *
  * Composition, and nothing more: `runner.ts` decides what happens inside a
- * tenant scope, `wake.ts` owns the doorbell, and this file owns the scopes, the
- * timers and the tenant list.
+ * workspace scope, `wake.ts` owns the doorbell, and this file owns the scopes, the
+ * timers and the workspace list.
  *
- * ## Why per-tenant loops rather than one fleet pass
+ * ## Why per-workspace loops rather than one fleet pass
  *
- * `tenancy/fleet.ts` already answers "iterate all tenants per tick", and that is
+ * `workspaces/fleet.ts` already answers "iterate all workspaces per tick", and that is
  * the right answer for a periodic sweep. It is the wrong answer for a queue: the
  * latency of an on-demand job would become the tick interval times the number of
- * tenants, and the whole point of the NOTIFY doorbell is that a job enqueued now
- * starts now. So each tenant gets its own loop and its own listener, and the
- * fleet iteration is reduced to *discovering* tenants rather than driving work.
+ * workspaces, and the whole point of the NOTIFY doorbell is that a job enqueued now
+ * starts now. So each workspace gets its own loop and its own listener, and the
+ * fleet iteration is reduced to *discovering* workspaces rather than driving work.
  *
- * The cost of that choice used to be one session-mode connection per tenant on
+ * The cost of that choice used to be one session-mode connection per workspace on
  * this process, **permanently** — the shape §7.3 describes and §6's corollary
  * tolerated ("this tier holds connections open by design, so it must never share
- * a compute with tenants you expect to suspend"). Measured, that corollary meant
- * no tenant could ever suspend: a doorbell held for 14h33m per tenant, and the
+ * a compute with workspaces you expect to suspend"). Measured, that corollary meant
+ * no workspace could ever suspend: a doorbell held for 14h33m per workspace, and the
  * pooled entries the poll kept renewing behind it, on databases doing no work.
  *
- * So the connection is now held **while the tenant is doing something** and
+ * So the connection is now held **while the workspace is doing something** and
  * released when it is not — the doorbell, and the pooled entry in the request
  * cache with it, because releasing only the listener leaves the poll holding the
- * compute awake and saves nothing. `tenancy/idle.ts` owns that policy and its
+ * compute awake and saves nothing. `workspaces/idle.ts` owns that policy and its
  * numbers; this file owns applying it to the queue without losing the property
  * that a job enqueued now starts now.
  *
  * ## What "doing something" means here, and why the scheduler does not count
  *
  * This tier's own schedules must not count. `snooze-sweep` and `sla-breach-sweep`
- * are written `* * * * *`, and if enqueuing them counted as the tenant being
- * busy then every tenant would be busy forever and nothing would ever detach —
+ * are written `* * * * *`, and if enqueuing them counted as the workspace being
+ * busy then every workspace would be busy forever and nothing would ever detach —
  * the loop would be measuring its own heartbeat. So work this loop created for
  * itself is subtracted: only claims beyond what the scheduler just enqueued, and
  * signals from outside the tier, reset the idle clock.
@@ -45,12 +45,12 @@
  * The subtraction alone would not have been enough. A per-minute schedule that
  * still *enqueued* every minute would keep the compute awake through the work it
  * created, whatever this loop called it. `jobs/deadlines.ts` is the other half:
- * those two schedules are gated on the tenant actually having a clock running,
- * so a tenant with nothing pending enqueues nothing, and a tenant with a
+ * those two schedules are gated on the workspace actually having a clock running,
+ * so a workspace with nothing pending enqueues nothing, and a workspace with a
  * deadline three days out is woken at the deadline rather than 4,320 times
  * before it.
  *
- * ## Single-tenant installs are unchanged in shape
+ * ## Single-workspace installs are unchanged in shape
  *
  * Under `QUACKBACK_TENANCY=single` there is one loop, no scope, and the listener
  * uses `DATABASE_URL` — which for a self-hosted install already is a direct,
@@ -61,25 +61,25 @@ import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
-import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
-import { resolveTenantPassword } from '@/lib/server/tenancy/pool-cache'
-import { withTenantScopeById } from '@/lib/server/tenancy/fleet'
+import { listActiveWorkspaces, type WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
+import { resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
+import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import {
   idleDetachDisabled,
-  onTenantActivity,
-  tenantIdlePolicy,
+  onWorkspaceActivity,
+  workspaceIdlePolicy,
   type ReattachReason,
-  type TenantIdlePolicy,
-} from '@/lib/server/tenancy/idle'
+  type WorkspaceIdlePolicy,
+} from '@/lib/server/workspaces/idle'
 import {
-  isTenantQuarantined,
-  noteTenantRefusal,
-  noteTenantServed,
+  isWorkspaceQuarantined,
+  noteWorkspaceRefusal,
+  noteWorkspaceServed,
   quarantineRetryAt,
   refusalCode,
   reportQuarantine,
-} from '@/lib/server/tenancy/quarantine'
-import { earliestTenantDeadline } from './deadlines'
+} from '@/lib/server/workspaces/quarantine'
+import { earliestWorkspaceDeadline } from './deadlines'
 import { earliestPendingJobAt, isMissingJobQueue } from './job-queue'
 import {
   awaitPool,
@@ -101,31 +101,31 @@ import { openWakeListener, type WakeListener } from './wake'
 const log = logger.child({ component: 'job-tier' })
 
 /**
- * How often the pooled tier re-reads the tenant list while it is serving anyone.
+ * How often the pooled tier re-reads the workspace list while it is serving anyone.
  *
  * This read goes to the **control** database, which is now expected to suspend
  * when the fleet goes quiet, so a fixed 60-second timer would be the client that
- * keeps it awake for ever — the same defect as the tenant doorbells, one level
- * up. While any tenant is attached the fleet is doing something and the control
+ * keeps it awake for ever — the same defect as the workspace doorbells, one level
+ * up. While any workspace is attached the fleet is doing something and the control
  * database is being read on the request path anyway, so 60 seconds costs
  * nothing; once every loop has detached, the interval stretches to the rescan
- * interval so the control compute can go down with the tenants.
+ * interval so the control compute can go down with the workspaces.
  */
-const TENANT_REFRESH_MS = 60_000
+const WORKSPACE_REFRESH_MS = 60_000
 
-/** Sentinel tenant id for a single-tenant install. Never a real tenant id. */
+/** Sentinel workspace id for a single-workspace install. Never a real workspace id. */
 const SINGLE = '__single__'
 
-interface TenantLoop {
-  tenantId: string
+interface WorkspaceLoop {
+  workspaceKey: string
   stop(): Promise<void>
-  /** Called by the wake listener when a NOTIFY arrives for this tenant. */
+  /** Called by the wake listener when a NOTIFY arrives for this workspace. */
   ring(): void
-  /** Something outside this tier opened a scope for this tenant. */
+  /** Something outside this tier opened a scope for this workspace. */
   signal(): void
   /** Latest registry view, so a revision change is seen without a restart. */
-  observe(tenant: TenantDescriptor): void
-  /** True while this loop holds any connection to the tenant database. */
+  observe(workspace: WorkspaceDescriptor): void
+  /** True while this loop holds any connection to the workspace database. */
   isAttached(): boolean
 }
 
@@ -135,7 +135,7 @@ interface LoopStats {
   succeeded: number
   failed: number
   scheduled: number
-  /** Slots this tenant's scheduler decided were due, whoever won the write. */
+  /** Slots this workspace's scheduler decided were due, whoever won the write. */
   scheduleAttempts: number
   requeued: number
   terminated: number
@@ -148,11 +148,11 @@ interface LoopStats {
   /** High-water mark of `inFlight`, for sizing the tier. */
   peakInFlight: number
   /**
-   * True while this loop holds connections to the tenant database.
+   * True while this loop holds connections to the workspace database.
    *
    * The counterpart to `poolsEvicted` in the pool cache, and a first-class field
    * for the same reason: detaching has no functional symptom either. A fleet
-   * where this reads `true` for every tenant for ever is a fleet paying for
+   * where this reads `true` for every workspace for ever is a fleet paying for
    * every compute, and nothing else would say so.
    */
   attached: boolean
@@ -160,16 +160,16 @@ interface LoopStats {
   reattaches: number
   /** Why the most recent re-attach happened. `rescan` repeatedly is a smell. */
   lastReattachReason: ReattachReason | null
-  /** Set while this tenant is refused and not being retried. */
+  /** Set while this workspace is refused and not being retried. */
   refusedCode: string | null
 }
 
-const loops = new Map<string, TenantLoop>()
+const loops = new Map<string, WorkspaceLoop>()
 const stats = new Map<string, LoopStats>()
 let running = false
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 let unsubscribeActivity: (() => void) | null = null
-/** When this process last read the fleet's tenant list from the control database. */
+/** When this process last read the fleet's workspace list from the control database. */
 let lastFleetReadAt = 0
 
 function emptyStats(): LoopStats {
@@ -196,7 +196,7 @@ function emptyStats(): LoopStats {
 }
 
 /**
- * One tenant's loop: schedule → dispatch → wait for a wake, a freed slot, or
+ * One workspace's loop: schedule → dispatch → wait for a wake, a freed slot, or
  * the poll interval.
  *
  * The wait is a race between the doorbell and the poll. If the doorbell is lost
@@ -215,19 +215,19 @@ function emptyStats(): LoopStats {
  * silently lose two runs. Measured before and after; see JOBS.md §10.
  */
 function startLoop(opts: {
-  tenantId: string
+  workspaceKey: string
   config: RunnerConfig
-  idle: TenantIdlePolicy
-  /** Latest registry view. Null under single tenancy, where nothing detaches. */
-  tenant: TenantDescriptor | null
-  /** Builds this tenant's doorbell. Returns null when it could not be attached. */
+  idle: WorkspaceIdlePolicy
+  /** Latest registry view. Null under single workspaces, where nothing detaches. */
+  workspace: WorkspaceDescriptor | null
+  /** Builds this workspace's doorbell. Returns null when it could not be attached. */
   openListener: (ring: () => void) => Promise<WakeListener | null>
   /** Told when the registry view changes, so the next attach uses the new one. */
-  onObserve?: (tenant: TenantDescriptor) => void
+  onObserve?: (workspace: WorkspaceDescriptor) => void
   scoped: <T>(body: () => Promise<T>) => Promise<T>
-}): TenantLoop {
+}): WorkspaceLoop {
   const s = emptyStats()
-  stats.set(opts.tenantId, s)
+  stats.set(opts.workspaceKey, s)
 
   let stopped = false
   let wakeResolve: (() => void) | null = null
@@ -236,15 +236,15 @@ function startLoop(opts: {
   let nextMaintenanceAt = 0
 
   /**
-   * Single-tenant installs never detach.
+   * Single-workspace installs never detach.
    *
    * There is one database, it is `DATABASE_URL`, and the request path shares the
    * very pool this would be releasing. Nothing about a self-hosted Postgres is
    * billed for idleness, so the whole trade has no upside there and a real
    * downside: a doorbell that comes and goes on the one database everything uses.
    */
-  const canDetach = opts.tenant !== null && !idleDetachDisabled(opts.idle)
-  let descriptor: TenantDescriptor | null = opts.tenant
+  const canDetach = opts.workspace !== null && !idleDetachDisabled(opts.idle)
+  let descriptor: WorkspaceDescriptor | null = opts.workspace
   let listener: WakeListener | null = null
   let attached = false
   /** Last time something happened that this loop did not cause itself. */
@@ -253,8 +253,8 @@ function startLoop(opts: {
    * Jobs this loop's own scheduler has enqueued and not yet seen claimed.
    *
    * The subtraction that keeps the tier from measuring its own heartbeat: two
-   * schedules fire every minute for every tenant, so without this the claim they
-   * produce would read as the tenant being busy, for ever.
+   * schedules fire every minute for every workspace, so without this the claim they
+   * produce would read as the workspace being busy, for ever.
    */
   let selfEnqueued = 0
   let detachedAt = 0
@@ -264,13 +264,13 @@ function startLoop(opts: {
   let signalled = false
   /** Doorbell verification is per DSN, so it runs once per revision, not per attach. */
   let verifiedRevision: number | null = null
-  // This loop's own scheduler memory. Per tenant by construction: the state is
-  // created here, inside the closure, so there is nothing for a second tenant's
+  // This loop's own scheduler memory. Per workspace by construction: the state is
+  // created here, inside the closure, so there is nothing for a second workspace's
   // loop to share. See runner.ts's ScheduleState for what sharing it cost.
   const schedule = createScheduleState()
-  // This loop's bounded worker pool. Per tenant for the same reason the
-  // scheduler state is: one process runs one loop per tenant, and a shared pool
-  // would let a busy tenant consume another's slots.
+  // This loop's bounded worker pool. Per workspace for the same reason the
+  // scheduler state is: one process runs one loop per workspace, and a shared pool
+  // would let a busy workspace consume another's slots.
   const pool = createJobPool()
 
   /** End the current wait without claiming a doorbell arrived. */
@@ -286,7 +286,7 @@ function startLoop(opts: {
    * Ends the wait, and deliberately does **not** touch `lastExternalAt`. The
    * `job_queue` insert trigger rings for any insert, including the two schedules
    * this loop fires every minute, so treating a ring as evidence of outside
-   * activity would keep every tenant permanently warm. The claim it leads to is
+   * activity would keep every workspace permanently warm. The claim it leads to is
    * what decides that, and the subtraction above is how.
    */
   const ring = () => {
@@ -296,11 +296,11 @@ function startLoop(opts: {
   }
 
   /**
-   * Something outside this tier opened a scope for the tenant.
+   * Something outside this tier opened a scope for the workspace.
    *
    * Ends the wait **only when detached**. This fires on every request, so an
    * attached loop that woke on it would run a claim query per request rather
-   * than per poll interval — a tenant at 100 req/s would drive a hundred passes
+   * than per poll interval — a workspace at 100 req/s would drive a hundred passes
    * a second against its own database. An attached loop already has the
    * doorbell, which is the signal that says there is work rather than merely
    * that someone is here; all this needs to do while attached is keep the idle
@@ -329,47 +329,47 @@ function startLoop(opts: {
     })
 
   /**
-   * Take hold of the tenant: prove it is servable, then open its doorbell.
+   * Take hold of the workspace: prove it is servable, then open its doorbell.
    *
    * The order is the fix for the second half of the measured defect. The doorbell
-   * needs no credentials, so it used to attach happily to tenants whose secrets
-   * could not be resolved at all — two of the four measured tenants held a
+   * needs no credentials, so it used to attach happily to workspaces whose secrets
+   * could not be resolved at all — two of the four measured workspaces held a
    * permanent `LISTEN` on a database this fleet was refusing once per second.
-   * Proving the tenant first means a refused tenant costs no connection at all.
+   * Proving the workspace first means a refused workspace costs no connection at all.
    */
   const attach = async (reason: ReattachReason): Promise<boolean> => {
-    if (descriptor && isTenantQuarantined(descriptor)) return false
+    if (descriptor && isWorkspaceQuarantined(descriptor)) return false
     try {
       // An empty body still builds and verifies the pool, which is the whole
-      // question being asked. Under single tenancy `scoped` is identity and this
+      // question being asked. Under single workspaces `scoped` is identity and this
       // is a no-op, which is correct: there is nothing to refuse.
       await opts.scoped(async () => {})
     } catch (err) {
       const code = refusalCode(err)
       s.refusedCode = code
       if (descriptor) {
-        const entry = noteTenantRefusal(descriptor, code, errText(err))
+        const entry = noteWorkspaceRefusal(descriptor, code, errText(err))
         if (entry.disposition === 'transient') {
           log.warn(
-            { tenantId: opts.tenantId, code, attempts: entry.attempts },
-            'job tier could not open a scope for this tenant; backing off and retrying'
+            { workspaceKey: opts.workspaceKey, code, attempts: entry.attempts },
+            'job tier could not open a scope for this workspace; backing off and retrying'
           )
         }
       } else {
-        log.error({ err, tenantId: opts.tenantId }, 'job tier could not open a scope')
+        log.error({ err, workspaceKey: opts.workspaceKey }, 'job tier could not open a scope')
       }
       return false
     }
 
-    if (descriptor) noteTenantServed(descriptor.tenantId)
+    if (descriptor) noteWorkspaceServed(descriptor.workspaceKey)
     s.refusedCode = null
     listener = await opts.openListener(ring)
     if (listener && descriptor && verifiedRevision !== descriptor.revision) {
       verifiedRevision = descriptor.revision
-      verifyDoorbell(listener, opts.tenantId)
+      verifyDoorbell(listener, opts.workspaceKey)
     } else if (listener && !descriptor && verifiedRevision === null) {
       verifiedRevision = 0
-      verifyDoorbell(listener, opts.tenantId)
+      verifyDoorbell(listener, opts.workspaceKey)
     }
 
     attached = true
@@ -378,10 +378,10 @@ function startLoop(opts: {
     deadlineAt = null
     // Tick the schedule on the next pass whatever `nextSlotAt` last said.
     //
-    // Measured: without this a tenant woken for its own deadline enqueued
+    // Measured: without this a workspace woken for its own deadline enqueued
     // nothing and went straight back to sleep. `nextScheduleAt` is the minimum
     // next slot over the schedules that actually ticked, and a schedule the gate
-    // turned off contributes no slot at all — so a tenant whose only pending
+    // turned off contributes no slot at all — so a workspace whose only pending
     // work was a gated sweep was told to come back at some *other* queue's next
     // slot, which could be five minutes or a day away. The deadline is the
     // reason this loop is awake; the tick is what acts on it.
@@ -389,13 +389,13 @@ function startLoop(opts: {
     if (reason !== 'boot') {
       s.reattaches += 1
       s.lastReattachReason = reason
-      log.info({ tenantId: opts.tenantId, reason }, 'job tier re-attached to tenant')
+      log.info({ workspaceKey: opts.workspaceKey, reason }, 'job tier re-attached to workspace')
     }
     return true
   }
 
   /**
-   * Let go of everything this loop holds for the tenant.
+   * Let go of everything this loop holds for the workspace.
    *
    * The deadline read happens **before** the connections close, on the one this
    * loop is about to drop, because it is the last chance to ask. Without it a
@@ -407,7 +407,7 @@ function startLoop(opts: {
    * and ending a pool out from under a request that is mid-flight would trade a
    * cost problem for a correctness one. It does not need evicting: the only
    * reason it survived was this loop touching it once per second, and once that
-   * stops, `sweepIdlePools` drops it on its own within `tenantPoolIdleSeconds`
+   * stops, `sweepIdlePools` drops it on its own within `workspacePoolIdleSeconds`
    * — which is the mechanism that module already documents and the reason its
    * threshold sits below this one.
    */
@@ -425,11 +425,11 @@ function startLoop(opts: {
       // already been enqueued for a future instant — a hook retry, a scheduled
       // publish. The deadline providers cover work that has not been enqueued at
       // all and never will be until a clock says so: a snooze expiring, an SLA
-      // breach falling due. Reading only the first would let a detached tenant
+      // breach falling due. Reading only the first would let a detached workspace
       // sleep straight through its own SLA.
       const [queued, clocked] = await opts.scoped(async () => [
         await earliestPendingJobAt(),
-        await earliestTenantDeadline(),
+        await earliestWorkspaceDeadline(),
       ])
       const candidates = [queued, clocked].filter((d): d is Date => d !== null)
       if (candidates.length > 0) {
@@ -439,7 +439,7 @@ function startLoop(opts: {
       // Not fatal: losing the deadline costs latency on delayed work, which the
       // rescan still bounds. Losing the detach would cost the compute.
       if (!isMissingJobQueue(err)) {
-        log.warn({ err, tenantId: opts.tenantId }, 'could not read the queue deadline on detach')
+        log.warn({ err, workspaceKey: opts.workspaceKey }, 'could not read the queue deadline on detach')
       }
     }
 
@@ -447,11 +447,11 @@ function startLoop(opts: {
     await held?.close().catch(() => {})
     log.info(
       {
-        tenantId: opts.tenantId,
+        workspaceKey: opts.workspaceKey,
         deadline_at: deadlineAt ? new Date(deadlineAt).toISOString() : null,
         idle_ms: detachedAt - lastExternalAt,
       },
-      'job tier detached from tenant — doorbell released, poll stopped'
+      'job tier detached from workspace — doorbell released, poll stopped'
     )
   }
 
@@ -479,7 +479,7 @@ function startLoop(opts: {
         signalled = false
         if (!(await attach(reason))) {
           if (!running || stopped) break
-          const retryAt = descriptor ? quarantineRetryAt(descriptor.tenantId) : null
+          const retryAt = descriptor ? quarantineRetryAt(descriptor.workspaceKey) : null
           await waitForWork(retryAt ? Math.max(250, retryAt - Date.now()) : 1_000)
           continue
         }
@@ -495,11 +495,11 @@ function startLoop(opts: {
             s.scheduled += tick.enqueued
             s.scheduleAttempts += tick.attempted
             // Remember what we made for ourselves, so claiming it back does not
-            // read as the tenant being busy.
+            // read as the workspace being busy.
             selfEnqueued += tick.enqueued
             // Sleep until the next slot rather than re-asking every second: the
             // schedule is deterministic, so a tick that finds nothing is pure
-            // traffic against a per-tenant database.
+            // traffic against a per-workspace database.
             nextScheduleAt = tick.nextSlotAt ? tick.nextSlotAt.getTime() : now + 60_000
           }
           if (now >= nextMaintenanceAt) {
@@ -554,13 +554,13 @@ function startLoop(opts: {
           if (!s.schemaMissing) {
             s.schemaMissing = true
             log.warn(
-              { tenantId: opts.tenantId },
+              { workspaceKey: opts.workspaceKey },
               'job_queue is absent in this database (migration 0253 not applied); ' +
-                'skipping this tenant rather than crash-looping'
+                'skipping this workspace rather than crash-looping'
             )
           }
         } else {
-          log.error({ err, tenantId: opts.tenantId }, 'job tier pass failed')
+          log.error({ err, workspaceKey: opts.workspaceKey }, 'job tier pass failed')
         }
       }
       if (!running || stopped) break
@@ -577,26 +577,26 @@ function startLoop(opts: {
   }
 
   void runWithLogContext(
-    { request_id: crypto.randomUUID(), route: 'jobs:tier', tenant_id: opts.tenantId },
+    { request_id: crypto.randomUUID(), route: 'jobs:tier', workspace_key: opts.workspaceKey },
     loop
-  ).catch((err) => log.error({ err, tenantId: opts.tenantId }, 'job tier loop exited'))
+  ).catch((err) => log.error({ err, workspaceKey: opts.workspaceKey }, 'job tier loop exited'))
 
   return {
-    tenantId: opts.tenantId,
+    workspaceKey: opts.workspaceKey,
     ring,
     signal,
-    observe(tenant) {
-      const changed = descriptor !== null && descriptor.revision !== tenant.revision
-      descriptor = tenant
-      opts.onObserve?.(tenant)
+    observe(workspace) {
+      const changed = descriptor !== null && descriptor.revision !== workspace.revision
+      descriptor = workspace
+      opts.onObserve?.(workspace)
       // A changed record is the signal that a refusal may have been repaired,
       // and it is worthless if nobody is awake to act on it. A quarantined loop
       // is asleep on the terminal backoff — fifteen minutes by default — so
       // without this an operator's fix lands and then sits, which measured as a
-      // repaired tenant still refused eighty seconds later.
+      // repaired workspace still refused eighty seconds later.
       //
-      // Through `nudge`, not `signal`: a record changing is not the tenant being
-      // used, and counting it as activity would hold an otherwise-quiet tenant
+      // Through `nudge`, not `signal`: a record changing is not the workspace being
+      // used, and counting it as activity would hold an otherwise-quiet workspace
       // attached every time the control plane touched its row.
       if (changed && !attached) nudge()
     },
@@ -615,7 +615,7 @@ function startLoop(opts: {
       // is a failed import rather than one that runs again on the next boot.
       // The caller's shutdown budget (startup.ts, 30s) bounds the wait.
       await awaitPool(pool)
-      stats.delete(opts.tenantId)
+      stats.delete(opts.workspaceKey)
     },
   }
 }
@@ -633,7 +633,7 @@ function errText(err: unknown): string {
  * `LISTEN` registration and then delivers nothing, and `pg_listening_channels()`
  * reports the registration as present the whole time. A tier that attached and
  * assumed would run on the poll interval forever without a word. One NOTIFY
- * round trip per tenant at boot buys the difference between "slower than you
+ * round trip per workspace at boot buys the difference between "slower than you
  * think" and "you know why".
  *
  * Deliberately not awaited by the caller: the queue is correct on the poll
@@ -645,22 +645,22 @@ function verifyDoorbell(listener: WakeListener, label: string): void {
     .then((ok) => {
       if (ok) return
       log.error(
-        { tenant: label },
-        'job wake doorbell attached but delivered nothing — this tenant is running on the ' +
+        { workspace: label },
+        'job wake doorbell attached but delivered nothing — this workspace is running on the ' +
           'poll interval alone. A pooled DSN produces exactly this; the listener needs the ' +
           'direct endpoint.'
       )
     })
-    .catch((err) => log.warn({ err, tenant: label }, 'could not verify the job wake doorbell'))
+    .catch((err) => log.warn({ err, workspace: label }, 'could not verify the job wake doorbell'))
 }
 
-function startSingleTenantLoop(cfg: RunnerConfig, idle: TenantIdlePolicy): void {
+function startSingleWorkspaceLoop(cfg: RunnerConfig, idle: WorkspaceIdlePolicy): void {
   const holder: { ring: (() => void) | null } = { ring: null }
   const loop = startLoop({
-    tenantId: SINGLE,
+    workspaceKey: SINGLE,
     config: cfg,
     idle,
-    tenant: null,
+    workspace: null,
     openListener: async (ring) => {
       holder.ring = ring
       if (wakeDisabled()) {
@@ -686,38 +686,38 @@ function startSingleTenantLoop(cfg: RunnerConfig, idle: TenantIdlePolicy): void 
   loops.set(SINGLE, loop)
 }
 
-function startTenantLoop(
-  tenant: TenantDescriptor,
+function startWorkspaceLoop(
+  workspace: WorkspaceDescriptor,
   cfg: RunnerConfig,
-  idle: TenantIdlePolicy
+  idle: WorkspaceIdlePolicy
 ): void {
   const holder: { ring: (() => void) | null } = { ring: null }
   /**
    * The descriptor every re-attach reads, not the one this call closed over.
    *
-   * The scoped passes go through `withTenantScopeById`, which re-resolves from
+   * The scoped passes go through `withWorkspaceScopeById`, which re-resolves from
    * the registry cache and so was never stale — but the doorbell's DSN and
    * credential were, and a loop that now outlives many attachments would keep
    * reconnecting its listener to the endpoint the record no longer names.
    */
-  let current = tenant
+  let current = workspace
   const loop = startLoop({
-    tenantId: tenant.tenantId,
+    workspaceKey: workspace.workspaceKey,
     config: cfg,
     idle,
-    tenant,
+    workspace,
     onObserve: (next) => {
       current = next
     },
-    // Opened per attach rather than once at boot, and only after the tenant has
+    // Opened per attach rather than once at boot, and only after the workspace has
     // been proven servable. A doorbell needs no credentials, so opening it first
-    // is what let two unservable tenants each hold a permanent `LISTEN`.
+    // is what let two unservable workspaces each hold a permanent `LISTEN`.
     openListener: async (ring) => {
       holder.ring = ring
       if (wakeDisabled()) {
         log.warn(
-          { tenantId: tenant.tenantId },
-          'JOB_WAKE_DISABLED=1 — no doorbell; this tenant runs on the poll interval alone'
+          { workspaceKey: workspace.workspaceKey },
+          'JOB_WAKE_DISABLED=1 — no doorbell; this workspace runs on the poll interval alone'
         )
         return null
       }
@@ -726,47 +726,47 @@ function startTenantLoop(
           // Direct, never pooled. Through a transaction pooler the registration
           // is accepted and nothing is ever delivered — see wake.ts.
           directUrl: current.database.directUrl,
-          password: () => resolveTenantPassword(current),
-          label: current.tenantId,
+          password: () => resolveWorkspacePassword(current),
+          label: current.workspaceKey,
           onWake: () => holder.ring?.(),
         })
       } catch (err) {
         log.error(
-          { err, tenantId: tenant.tenantId },
-          'could not attach the job wake listener; this tenant runs on the poll fallback only'
+          { err, workspaceKey: workspace.workspaceKey },
+          'could not attach the job wake listener; this workspace runs on the poll fallback only'
         )
         return null
       }
     },
-    scoped: (body) => withTenantScopeById(tenant.tenantId, 'queue', body),
+    scoped: (body) => withWorkspaceScopeById(workspace.workspaceKey, 'queue', body),
   })
-  loops.set(tenant.tenantId, loop)
+  loops.set(workspace.workspaceKey, loop)
 }
 
-async function refreshTenantLoops(cfg: RunnerConfig, idle: TenantIdlePolicy): Promise<void> {
-  const { tenants, refused } = await listActiveTenants()
+async function refreshWorkspaceLoops(cfg: RunnerConfig, idle: WorkspaceIdlePolicy): Promise<void> {
+  const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) {
-    log.error({ refused }, 'job tier skipping tenants with invalid registry records')
+    log.error({ refused }, 'job tier skipping workspaces with invalid registry records')
   }
-  const wanted = new Set(tenants.map((t) => t.tenantId))
+  const wanted = new Set(workspaces.map((t) => t.workspaceKey))
 
-  for (const [tenantId, loop] of loops) {
-    if (wanted.has(tenantId)) continue
-    log.info({ tenantId }, 'tenant left the active set — stopping its job loop')
+  for (const [workspaceKey, loop] of loops) {
+    if (wanted.has(workspaceKey)) continue
+    log.info({ workspaceKey }, 'workspace left the active set — stopping its job loop')
     await loop.stop()
-    loops.delete(tenantId)
+    loops.delete(workspaceKey)
   }
 
-  for (const tenant of tenants) {
-    const existing = loops.get(tenant.tenantId)
+  for (const workspace of workspaces) {
+    const existing = loops.get(workspace.workspaceKey)
     if (existing) {
       // The revision the loop compares against when deciding whether a refusal
       // is still the same refusal. Without this a record repaired by the control
       // plane would stay quarantined until the process restarted.
-      existing.observe(tenant)
+      existing.observe(workspace)
       continue
     }
-    startTenantLoop(tenant, cfg, idle)
+    startWorkspaceLoop(workspace, cfg, idle)
   }
 
   // On the one cadence that exists whether or not anything is wrong.
@@ -774,40 +774,40 @@ async function refreshTenantLoops(cfg: RunnerConfig, idle: TenantIdlePolicy): Pr
 }
 
 /**
- * Re-arm the tenant refresh, deciding at FIRE time whether to actually read.
+ * Re-arm the workspace refresh, deciding at FIRE time whether to actually read.
  *
  * The read goes to the control database, which is now expected to suspend when
  * the fleet goes quiet, so a fixed minute timer would be the client that keeps
- * it awake for ever — the same defect as the tenant doorbells, one level up.
+ * it awake for ever — the same defect as the workspace doorbells, one level up.
  *
  * The first version chose the *interval* instead, stretching it to the rescan
  * interval whenever nothing was attached. That was wrong in a way only a
  * measurement showed: the choice is made when the timer is armed, and at boot it
  * is armed before any loop has finished attaching, so the fleet permanently read
- * its tenant list once every fifteen minutes. A record repaired by an operator
+ * its workspace list once every fifteen minutes. A record repaired by an operator
  * then sat unnoticed for that long, which is the one thing quarantine promised
  * it would not do.
  *
  * So the timer always fires on the minute and the *read* is what is conditional:
  * free while the fleet is doing something, skipped while it is not, and forced
- * once per rescan interval regardless so a newly provisioned tenant is still
+ * once per rescan interval regardless so a newly provisioned workspace is still
  * discovered on a fleet that is otherwise asleep.
  */
-function scheduleTenantRefresh(cfg: RunnerConfig, idle: TenantIdlePolicy): void {
+function scheduleWorkspaceRefresh(cfg: RunnerConfig, idle: WorkspaceIdlePolicy): void {
   if (!running) return
   refreshTimer = setTimeout(() => {
     if (!running) return
     const anyAttached = [...loops.values()].some((l) => l.isAttached())
     const overdue = Date.now() - lastFleetReadAt >= idle.rescanIntervalMs
     if (!anyAttached && !overdue) {
-      scheduleTenantRefresh(cfg, idle)
+      scheduleWorkspaceRefresh(cfg, idle)
       return
     }
     lastFleetReadAt = Date.now()
-    void refreshTenantLoops(cfg, idle)
-      .catch((err) => log.error({ err }, 'job tier tenant refresh failed'))
-      .finally(() => scheduleTenantRefresh(cfg, idle))
-  }, TENANT_REFRESH_MS)
+    void refreshWorkspaceLoops(cfg, idle)
+      .catch((err) => log.error({ err }, 'job tier workspace refresh failed'))
+      .finally(() => scheduleWorkspaceRefresh(cfg, idle))
+  }, WORKSPACE_REFRESH_MS)
   refreshTimer.unref?.()
 }
 
@@ -823,28 +823,28 @@ export async function startJobTier(): Promise<void> {
   }
   running = true
   const cfg = runnerConfig()
-  const idle = tenantIdlePolicy()
+  const idle = workspaceIdlePolicy()
 
-  // Import every handler module before a single tenant scope is open, so no
-  // module can execute its top level under one tenant's connection. See
+  // Import every handler module before a single workspace scope is open, so no
+  // module can execute its top level under one workspace's connection. See
   // runner.ts's primeJobHandlers for the shape this is guarding against.
   await primeJobHandlers()
 
-  // A scope opened by anything that is not a tier means the tenant's compute is
+  // A scope opened by anything that is not a tier means the workspace's compute is
   // already awake and being used, so a detached loop should come straight back.
-  unsubscribeActivity = onTenantActivity((tenantId) => loops.get(tenantId)?.signal())
+  unsubscribeActivity = onWorkspaceActivity((workspaceKey) => loops.get(workspaceKey)?.signal())
 
   if (!config.isPooledTenancy) {
-    startSingleTenantLoop(cfg, idle)
-    log.info({ poll_interval_ms: cfg.pollIntervalMs }, 'job tier started (single tenant)')
+    startSingleWorkspaceLoop(cfg, idle)
+    log.info({ poll_interval_ms: cfg.pollIntervalMs }, 'job tier started (single workspace)')
     return
   }
 
-  await refreshTenantLoops(cfg, idle)
-  scheduleTenantRefresh(cfg, idle)
+  await refreshWorkspaceLoops(cfg, idle)
+  scheduleWorkspaceRefresh(cfg, idle)
   log.info(
     {
-      tenants: loops.size,
+      workspaces: loops.size,
       poll_interval_ms: cfg.pollIntervalMs,
       idle_detach_ms: idle.detachAfterMs,
       idle_rescan_ms: idle.rescanIntervalMs,
@@ -872,12 +872,12 @@ export async function stopJobTier(): Promise<void> {
 
 export interface JobTierStatus {
   running: boolean
-  tenants: Array<{ tenantId: string } & LoopStats>
+  workspaces: Array<{ workspaceKey: string } & LoopStats>
 }
 
 export function getJobTierStatus(): JobTierStatus {
   return {
     running,
-    tenants: [...stats.entries()].map(([tenantId, s]) => ({ tenantId, ...s })),
+    workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),
   }
 }

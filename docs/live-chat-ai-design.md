@@ -129,7 +129,7 @@ Copilot phase 1 needs **no** schema changes.
   the cheap/fast tier for suggestions and a stronger tier for the resolution
   agent — configurable.
 - Cost: log every call through `usage-log.ts`; enforce `enforceAiTokenBudget`
-  before each call so a tenant can't exceed their AI budget. Gate the whole
+  before each call so a workspace can't exceed their AI budget. Gate the whole
   feature with `assertTierFeature('liveChatAi')` (a new `TierFeatureFlags` key)
   for cloud/plan gating, in addition to the per-workspace feature flag.
 
