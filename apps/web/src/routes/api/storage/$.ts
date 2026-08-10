@@ -99,8 +99,27 @@ function isNotFound(error: unknown): boolean {
 
 const KEY_PREFIX = '/api/storage/'
 
+/**
+ * The stored key this request is asking for, or null if it is not one.
+ *
+ * `decodeURIComponent` throws `URIError` on a malformed escape — `%c0%ae`, a
+ * lone `%`, a truncated `%2` — and this runs *outside* the try/catch below, so
+ * the route answered 500 for input a caller controls. Worse for this change: a
+ * 500 here means the storage boundary's own "malformed percent-encoding"
+ * refusal is never reached from the only route that decodes, so the refusal
+ * looked covered and was unreachable.
+ *
+ * Undecodable is not a server fault and not a missing object; it is a key that
+ * does not name anything, which is the same answer as `..` — null, and the
+ * caller sends 400.
+ */
 function extractKey(url: URL): string | null {
-  const key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  let key: string
+  try {
+    key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  } catch {
+    return null
+  }
   return key && !key.includes('..') ? key : null
 }
 

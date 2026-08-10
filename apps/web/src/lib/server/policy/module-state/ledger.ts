@@ -208,12 +208,29 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   {
     file: 'apps/web/src/lib/server/storage/s3.ts',
     name: 's3Clients',
-    category: 'tenant-keyed',
+    category: 'content-addressed',
     owner: 'Piece 18 (saas/tenant-secrets)',
     reason:
-      "The S3/R2 client. Shared, every tenant's uploads, presigned URLs and private reads resolve " +
-      "against the first tenant's bucket, and succeed cleanly because R2 has no notion of tenant. " +
-      "Partitioned by Piece 5; the CREDENTIALS each client is built with are Piece 18's.",
+      'The S3/R2 client, keyed by the connection parameters it is built from — region, endpoint, ' +
+      'path style, and a hash of the credential pair. A cross-tenant hit therefore returns a ' +
+      'client constructed from byte-identical arguments to the ones the asking tenant would have ' +
+      'passed, which is the only thing an SDK client is: a signer and a connection pool. It was ' +
+      'keyed by the active tenant, which sounds stricter and was in fact weaker — a client is not ' +
+      'a function of who asked, so a WorkspaceStorage captured under one scope and used under ' +
+      "another picked up the LATER scope's client, reaching its own bucket through somebody " +
+      "else's endpoint and credentials. The bucket is no longer read from here at all: it is " +
+      'captured with the credentials at construction.',
+  },
+  {
+    file: 'apps/web/src/lib/server/storage/workspace-scope.ts',
+    name: 'workspaceIds',
+    category: 'tenant-keyed',
+    reason:
+      'The resolved storage namespace — `settings.id`, which every object name in the bucket is ' +
+      'composed from. Shared, one workspace composes another workspace prefix, and under one ' +
+      'fleet bucket that reads another customer objects with no error and no alarm: §3 exactly, ' +
+      'on the storage surface. This was a bare module-level binding in the first revision of ' +
+      'that file, which is how it reached review unledgered.',
   },
   {
     file: 'apps/web/src/lib/server/sweep-lock.ts',

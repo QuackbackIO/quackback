@@ -24,8 +24,25 @@ const mockConfig = {
 }
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
-/** Every command the SDK was actually handed, in this test. */
-const sent: Array<{ Bucket: string; Key: string }> = []
+/**
+ * The scoped tests never reach this — a tenant scope carries its own verified
+ * `settings.id`. It is here for the unscoped assertions, which drive it into
+ * the pooled refusal on purpose.
+ */
+const findFirst = vi.fn(async () => ({ id: 'workspace_01kzf9848he8h86ct48hanask6' }))
+vi.mock('@/lib/server/db', () => ({
+  db: { query: { settings: { findFirst: () => findFirst() } } },
+}))
+
+/**
+ * Every command the SDK was actually handed, in this test.
+ *
+ * `via` records the access key of the client the command went out through.
+ * Without it a command can be checked for the right bucket and the right key
+ * while having been signed by somebody else's client, which is exactly the half
+ * of the scope-straddle a first version of these tests could not see.
+ */
+const sent: Array<{ Bucket: string; Key: string; via: string }> = []
 /** Every command that was presigned rather than sent. */
 const presigned: Array<{ Bucket: string; Key: string }> = []
 /** The credentials each client was constructed with. */
@@ -36,9 +53,10 @@ vi.mock('@aws-sdk/client-s3', () => ({
     credentials: { accessKeyId: string; secretAccessKey: string }
   }) {
     clientCredentials.push(cfg.credentials)
+    const via = cfg.credentials.accessKeyId
     return {
       send: async (command: { input: { Bucket: string; Key: string } }) => {
-        sent.push(command.input)
+        sent.push({ ...command.input, via })
         return {
           Body: { transformToWebStream: () => new ReadableStream() },
           ContentType: 'image/png',
@@ -66,6 +84,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 }))
 
 const {
+  currentWorkspaceStorage,
   deleteObject,
   generatePresignedGetUrl,
   generatePresignedUploadUrl,
@@ -74,10 +93,9 @@ const {
   isPublicStorageKey,
   uploadObject,
   verifyProxyUploadToken,
-  workspaceStorage,
 } = await import('../s3')
-const { StorageNamespaceViolation, WORKSPACE_NAMESPACE_ROOT } = await import('../namespace')
-const { WorkspaceStorageScopeMismatch } = await import('../workspace-scope')
+const { composeNamespacedKey, StorageNamespaceViolation, WORKSPACE_NAMESPACE_ROOT } =
+  await import('../namespace')
 const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
 
 const PUBLIC_KEY = 'logos/2026/08/brand.png'
@@ -127,10 +145,7 @@ describe('every command is namespaced', () => {
     await withTenant('tenant-bravo', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
 
     expect(sent).toHaveLength(2)
-    const [alpha, bravo] = sent as [
-      { Bucket: string; Key: string },
-      { Bucket: string; Key: string },
-    ]
+    const [alpha, bravo] = sent as [(typeof sent)[number], (typeof sent)[number]]
     // Same bucket — so the names are the only thing keeping these apart.
     expect(alpha.Bucket).toBe('fleet-bucket')
     expect(bravo.Bucket).toBe('fleet-bucket')
@@ -147,9 +162,9 @@ describe('every command is namespaced', () => {
     // The narrowing removed `getS3Config` from the module's exports, so this is
     // now observed where it is used rather than where it was returned.
     //
-    // A tenant no other test in this file touches, because the client cache is
-    // keyed by tenant: reusing one would let this pass on a client an earlier
-    // test constructed, which is evidence about that test rather than this one.
+    // A tenant no other test in this file touches. The client cache is keyed by
+    // connection parameters, so reusing a tenant would let this pass on a client
+    // an earlier test constructed — evidence about that test, not this one.
     await withTenant('tenant-charlie', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
 
     expect(clientCredentials).toHaveLength(1)
@@ -176,9 +191,7 @@ describe('the stored key stays namespace-free', () => {
     // Prefixing the *stored* key is what would have turned every public asset
     // private, because the classifier reads segment 0. It still reads
     // `logos`, and the object name still reads `w`.
-    const client = withTenant('tenant-alpha', () =>
-      workspaceStorage(workspaceIdFor('tenant-alpha'))
-    )
+    const client = await withTenant('tenant-alpha', () => currentWorkspaceStorage())
 
     expect(isPublicStorageKey(PUBLIC_KEY)).toBe(true)
     expect(isPublicStorageKey(PRIVATE_KEY)).toBe(false)
@@ -219,50 +232,119 @@ describe('a key that would escape never reaches a command', () => {
   })
 })
 
-describe('the namespace and the bucket come from the same scope', () => {
-  it('refuses a client for a workspace the active scope does not own', () => {
-    // The escape route the factory would otherwise open: placement and
-    // credentials come from the ambient scope, so composing another workspace's
-    // prefix here would address that workspace's objects in a shared bucket.
-    expect(() =>
-      withTenant('tenant-alpha', () => workspaceStorage(workspaceIdFor('tenant-bravo')))
-    ).toThrow(WorkspaceStorageScopeMismatch)
-    expect(sent).toHaveLength(0)
+describe('there is no exported way to name a workspace', () => {
+  it('does not export the factory at all', async () => {
+    // The finding this replaces. `workspaceStorage()` used to be exported behind
+    // a guard that compared its argument to the ambient scope — and skipped the
+    // comparison when there was no scope, which is precisely the state a pooled
+    // background job is in. An unscoped caller could name any workspace and
+    // reach the fleet bucket with the fleet credential.
+    //
+    // A guard could not repair it: "no scope" is also every self-hosted
+    // install, where the unscoped path is correct and resolves through `db`. So
+    // the export went instead, and this assertion is the whole control.
+    const module = (await import('../s3')) as Record<string, unknown>
+
+    expect(module).not.toHaveProperty('workspaceStorage')
   })
 
-  it('allows a client for the workspace the active scope does own', () => {
-    // The positive control for the assertion above.
-    const client = withTenant('tenant-alpha', () =>
-      workspaceStorage(workspaceIdFor('tenant-alpha'))
+  it('exposes exactly one client factory, and it takes no arguments', async () => {
+    // The shape behind the name. An export that returns a client must have no
+    // parameter for a caller to supply a workspace through — that is the whole
+    // difference between the surface that was reviewable and the one that was
+    // not. Asserted on arity rather than by invoking every export, because
+    // calling arbitrary exports to see what comes back is a test that performs
+    // the side effects it is meant to be auditing.
+    const module = await import('../s3')
+
+    expect(module).not.toHaveProperty('workspaceStorage')
+    expect(module.currentWorkspaceStorage).toBeTypeOf('function')
+    expect(module.currentWorkspaceStorage.length).toBe(0)
+  })
+
+  it('is unreachable unscoped in a pooled process, on every command', async () => {
+    // The test that did not exist, and whose absence let the hole through: no
+    // test called into storage from outside a scope. `db` throwing is exactly
+    // what the pooled Proxy does when nothing is resolved.
+    const { TenantScopeMissingError } = await import('@/lib/server/tenancy/tenant-context')
+    findFirst.mockImplementation(() => {
+      throw new TenantScopeMissingError('A `db` call was made with no tenant resolved.')
+    })
+
+    await expect(uploadObject(PUBLIC_KEY, BYTES, 'image/png')).rejects.toThrow(
+      TenantScopeMissingError
     )
-    expect(client.workspaceId).toBe(workspaceIdFor('tenant-alpha'))
+    await expect(getS3Object(PUBLIC_KEY)).rejects.toThrow(TenantScopeMissingError)
+    await expect(deleteObject(PUBLIC_KEY)).rejects.toThrow(TenantScopeMissingError)
+    await expect(generatePresignedGetUrl(PUBLIC_KEY, 60)).rejects.toThrow(TenantScopeMissingError)
+    await expect(generatePresignedUploadUrl(PUBLIC_KEY, 'image/png')).rejects.toThrow(
+      TenantScopeMissingError
+    )
+
+    expect(sent).toHaveLength(0)
+    expect(presigned).toHaveLength(0)
+  })
+
+  it('binds the bucket at construction, so a captured client cannot straddle a scope', async () => {
+    // `WorkspaceStorage` fixes its workspace at construction but used to re-read
+    // the bucket and credentials on every call. Held across a scope boundary
+    // that composed workspace A's prefix against workspace B's bucket, which in
+    // one shared bucket is A's objects reached through B's client.
+    // Two tenants no other test in this file touches. The SDK client is memoised
+    // by connection parameters, so reusing a tenant would serve a client an
+    // earlier test built and the credential assertion would report on that.
+    const GOLF = { storage: { bucket: 'golf-bucket' } }
+    const HOTEL = { storage: { bucket: 'hotel-bucket' } }
+
+    const client = await withTenant('tenant-golf', () => currentWorkspaceStorage(), GOLF)
+
+    // Hotel issues its own command FIRST, so a client for hotel exists and is
+    // cached. Without this the straddle is only half-observable: the captured
+    // client would be rebuilt from its captured config either way, and a cache
+    // keyed by the asking tenant would look correct because nothing was there to
+    // hand back. This is the state where a wrong key returns a wrong client.
+    await withTenant('tenant-hotel', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
+
+    await withTenant('tenant-hotel', () => client.put(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
+
+    expect(sent).toHaveLength(2)
+    const straddled = sent[1]!
+    expect(straddled.Key).toBe(nameFor('tenant-golf', PUBLIC_KEY))
+    expect(straddled.Bucket, 'the captured client took the later scope bucket').toBe('golf-bucket')
+    expect(straddled.via, 'the captured client signed through the later scope client').toBe(
+      'AK-tenant-golf'
+    )
   })
 
   it('does not accept an unbranded string as a namespace', () => {
-    // The assertions here are the `@ts-expect-error` directives and the gate is
-    // `bun run typecheck`: if the parameter ever loosens to `string`, every one
-    // of them becomes unused and the build fails. Nothing is invoked, and the
-    // `expect` at the end is deliberately not the test — the type is erased at
-    // runtime, so there is no runtime behaviour here that could go red.
+    // The type-level half, moved to `composeNamespacedKey` — the exported
+    // function that still takes a `WorkspaceId`, and the one place a namespace
+    // is chosen. The assertions are the `@ts-expect-error` directives and the
+    // gate is `bun run typecheck`; the `expect` is deliberately not the test,
+    // because the type is erased at runtime.
     const fromARequest: string = 'workspace_01kzf9848he8h86ct48hanask6'
 
     const wouldNotCompile = () => [
       // @ts-expect-error a plain `string` is not a WorkspaceId — anything that
       // came off a request, a header or a route parameter is this type.
-      workspaceStorage(fromARequest),
+      composeNamespacedKey(fromARequest, PUBLIC_KEY),
       // @ts-expect-error a slug is not a WorkspaceId.
-      workspaceStorage('acme'),
+      composeNamespacedKey('acme', PUBLIC_KEY),
       // @ts-expect-error an empty value is not a WorkspaceId.
-      workspaceStorage(''),
-      // @ts-expect-error another entity's id is not a WorkspaceId.
-      workspaceStorage('post_01h455vb4pex5vsknk084sn02q'),
+      composeNamespacedKey('', PUBLIC_KEY),
+      // @ts-expect-error another entity id is not a WorkspaceId.
+      composeNamespacedKey('post_01h455vb4pex5vsknk084sn02q', PUBLIC_KEY),
     ]
 
-    // The honest limit, recorded rather than hidden: `TypeId<'workspace'>` is
-    // `` `workspace_${string}` ``, so a *hand-written literal* with the right
-    // prefix does typecheck. That is what the scope check above is for — the
-    // type stops a value flowing in from outside, and the scope stops a
-    // hand-written one naming somebody else.
+    // The limit, recorded rather than implied, because a reviewer found the
+    // previous wording overclaimed it: `TypeId<'workspace'>` is
+    // `` `workspace_${string}` ``, a template-literal type and not a nominal
+    // brand. A hand-written literal typechecks, and so does
+    // `` composeNamespacedKey(`workspace_${req.params.ws}`, key) `` — with no
+    // cast and no error. The type stops a bare `string`; it does not stop
+    // interpolation, and nothing about it is load-bearing for isolation. What
+    // is load-bearing is that no export hands out a client for a named
+    // workspace at all, which the two assertions above pin.
     expect(wouldNotCompile).toBeTypeOf('function')
   })
 })

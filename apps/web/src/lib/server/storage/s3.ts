@@ -18,11 +18,12 @@
  *
  * ## Every object name is composed for one workspace
  *
- * Nothing below addresses the bucket directly. {@link workspaceStorage} takes a
- * `WorkspaceId` and returns the only thing that can issue a command; its methods
- * take the *stored* key and compose `w/<workspaceId>/` internally. See
- * `namespace.ts` for why that identifier and not another, and
- * `workspace-scope.ts` for where it comes from and what an unscoped access does.
+ * Nothing below addresses the bucket directly. {@link currentWorkspaceStorage}
+ * returns the only thing that can issue a command; its methods take the *stored*
+ * key and compose `w/<workspaceId>/` internally. It is the only export that
+ * yields a client, and the factory behind it is deliberately private — see
+ * `workspace-scope.ts` for the hole that was, and `namespace.ts` for why the
+ * identifier is `settings.id` and not something else.
  *
  * The exported helpers (`uploadObject`, `getS3Object`, `deleteObject`, the two
  * presigners) keep the signatures ~20 call sites already use and resolve the
@@ -68,13 +69,9 @@ import type { WorkspaceId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { sniffImageMime } from '@/lib/server/content/magic-bytes'
 import { getCurrentTenant, getTenantScope } from '@/lib/server/tenancy/tenant-context'
-import {
-  currentTenantNamespace,
-  SINGLE_TENANT_NAMESPACE,
-  TenantKeyedCache,
-} from '@/lib/server/tenancy/tenant-keyed'
+import { currentTenantNamespace, SINGLE_TENANT_NAMESPACE } from '@/lib/server/tenancy/tenant-keyed'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
-import { assertWorkspaceIsInScope, currentWorkspaceId } from './workspace-scope'
+import { currentWorkspaceId } from './workspace-scope'
 
 // ============================================================================
 // Configuration
@@ -342,17 +339,42 @@ let _s3Module: S3Module | null = null
 let _presignerModule: PresignerModule | null = null
 
 /**
- * One client per tenant. The client is built FROM a bucket, an endpoint and a
- * credential pair, so a process-wide one is a handle on whichever tenant
- * happened to upload first — every later tenant's upload then lands in that
- * bucket, under a key that reads as valid from both sides.
+ * One client per set of connection parameters.
  *
- * The bound is a client count, not a correctness limit: eviction only costs the
- * evicted tenant a rebuild on its next upload, so it is sized to sit above the
- * tenant count one pod realistically serves rather than to be exact.
+ * This used to be keyed by the ambient tenant, which was correct only while a
+ * client was built and used inside one scope. It is not a property of the
+ * client: an SDK client is a signer and a connection pool built from a region,
+ * an endpoint and a credential pair, and nothing else. Keying it by *who was
+ * asking* meant a `WorkspaceStorage` captured under one scope and used under
+ * another picked up the other scope's client — its own bucket reached through
+ * somebody else's endpoint and credentials.
+ *
+ * Keyed by the parameters instead, the value is a pure function of the key, so
+ * a hit across two scopes is byte-identical to what the asking scope would have
+ * built. Under §9's one fleet credential that is one client for the fleet, which
+ * is the correct number; under per-tenant credentials the keys differ and so do
+ * the clients.
+ *
+ * The bound is a client count, not a correctness limit: eviction only costs a
+ * rebuild on the next command.
  */
-const s3Clients = new TenantKeyedCache<S3ClientInstance>(256)
-const S3_CLIENT_KEY = 'client'
+const s3Clients = new Map<string, S3ClientInstance>()
+const MAX_S3_CLIENTS = 256
+
+/**
+ * A stable name for one set of connection parameters.
+ *
+ * The non-secret half is spelled out so a cache key is legible during an
+ * incident; the credential pair is hashed rather than embedded, because this
+ * string is a Map key that a future debug log would be all too willing to print.
+ */
+function connectionKey(cfg: S3Config): string {
+  const credential = createHash('sha256')
+    .update(`${cfg.accessKeyId}\u0000${cfg.secretAccessKey}`)
+    .digest('hex')
+    .slice(0, 16)
+  return `${cfg.region}|${cfg.endpoint ?? ''}|${cfg.forcePathStyle}|${credential}`
+}
 
 /**
  * Get the AWS S3 module singleton.
@@ -374,12 +396,18 @@ async function getPresignerModule(): Promise<PresignerModule> {
   return _presignerModule
 }
 
-/** Get the S3 client for the active tenant, building it on first use. */
-async function getS3Client(): Promise<S3ClientInstance> {
-  const existing = s3Clients.get(S3_CLIENT_KEY)
+/**
+ * The S3 client for one set of connection parameters, building it on first use.
+ *
+ * Takes the config rather than resolving it, so the caller decides *when* the
+ * ambient scope was read. {@link workspaceStorage} reads it once, at
+ * construction; nothing re-reads it mid-operation.
+ */
+async function getS3Client(s3Config: S3Config): Promise<S3ClientInstance> {
+  const key = connectionKey(s3Config)
+  const existing = s3Clients.get(key)
   if (existing) return existing
 
-  const s3Config = getS3Config()
   const { S3Client } = await getS3Module()
 
   const client = new S3Client({
@@ -391,7 +419,12 @@ async function getS3Client(): Promise<S3ClientInstance> {
       secretAccessKey: s3Config.secretAccessKey,
     },
   })
-  s3Clients.set(S3_CLIENT_KEY, client)
+  s3Clients.set(key, client)
+  while (s3Clients.size > MAX_S3_CLIENTS) {
+    const oldest = s3Clients.keys().next()
+    if (oldest.done) break
+    s3Clients.delete(oldest.value)
+  }
 
   return client
 }
@@ -427,20 +460,36 @@ export interface WorkspaceStorage {
 }
 
 /**
- * A client bound to one workspace.
+ * A client bound to one workspace and to one set of connection parameters.
  *
- * `workspaceId` is required and branded, so a slug, a hostname, a
- * workspace-shaped string lifted off a request, or an empty value is a compile
- * error rather than a namespace. The only supported way to obtain one is
- * {@link currentWorkspaceId}, which resolves it from the verified tenant scope —
- * see `workspace-scope.ts`.
+ * **Not exported, and that is the fix for the hole this function used to be.**
+ * An earlier revision exported it and guarded it by comparing `workspaceId`
+ * against the ambient scope — which skipped the comparison when there was no
+ * scope, so an unscoped caller in a pooled process could name any workspace and
+ * reach the fleet bucket with the fleet credential. The refusal that makes an
+ * unscoped access safe lives in {@link currentWorkspaceId}, and this function
+ * did not call it.
  *
- * Placement and credentials come from that same ambient scope, which is why the
- * id is checked against it: a client holding one workspace's prefix and
- * another's bucket is a cross-tenant capability wearing the right shape.
+ * A guard cannot repair that, because "no scope" is a legitimate state: it is
+ * every self-hosted install, and that path resolves correctly by reading its own
+ * `settings.id`. So the fix is to remove the choice rather than to police it —
+ * {@link currentWorkspaceStorage} is the only door, and it always resolves.
+ *
+ * Nor could the type system have carried it. `TypeId<'workspace'>` is
+ * `` `workspace_${string}` ``, a template-literal type and not a nominal brand,
+ * so `` workspaceStorage(`workspace_${req.params.ws}`) `` compiles with no cast
+ * and no error. The branded parameter is a real constraint on a *literal*
+ * mistake and no constraint at all on an interpolated one.
+ *
+ * Placement and credentials are read **once, here**, from the scope that is
+ * active at construction. They used to be re-read inside every method, so a
+ * client held across a scope boundary composed its own workspace's prefix
+ * against whichever bucket the *later* scope named — which in one shared bucket
+ * is somebody else's objects. Capturing them binds the whole client, not just
+ * its prefix, to the scope that built it.
  */
-export function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
-  assertWorkspaceIsInScope(workspaceId)
+function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
+  const connection = getS3Config()
 
   /**
    * Compose, then verify — in one place, before the name reaches any command.
@@ -459,11 +508,11 @@ export function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
 
     async presignPut(key, contentType, expiresIn) {
       const Key = objectName(key)
-      const client = await getS3Client()
+      const client = await getS3Client(connection)
       const { PutObjectCommand } = await getS3Module()
       const { getSignedUrl } = await getPresignerModule()
       const command = new PutObjectCommand({
-        Bucket: getStoragePlacement().bucket,
+        Bucket: connection.bucket,
         Key,
         ContentType: contentType,
       })
@@ -472,11 +521,11 @@ export function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
 
     async put(key, body, contentType) {
       const Key = objectName(key)
-      const client = await getS3Client()
+      const client = await getS3Client(connection)
       const { PutObjectCommand } = await getS3Module()
       await client.send(
         new PutObjectCommand({
-          Bucket: getStoragePlacement().bucket,
+          Bucket: connection.bucket,
           Key,
           ContentType: contentType,
           Body: body,
@@ -486,10 +535,10 @@ export function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
 
     async get(key) {
       const Key = objectName(key)
-      const client = await getS3Client()
+      const client = await getS3Client(connection)
       const { GetObjectCommand } = await getS3Module()
       const response = (await client.send(
-        new GetObjectCommand({ Bucket: getStoragePlacement().bucket, Key })
+        new GetObjectCommand({ Bucket: connection.bucket, Key })
       )) as {
         Body?: { transformToWebStream(): ReadableStream<Uint8Array> }
         ContentType?: string
@@ -503,11 +552,11 @@ export function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
 
     async presignGet(key, expiresIn, downloadName) {
       const Key = objectName(key)
-      const client = await getS3Client()
+      const client = await getS3Client(connection)
       const { GetObjectCommand } = await getS3Module()
       const { getSignedUrl } = await getPresignerModule()
       const command = new GetObjectCommand({
-        Bucket: getStoragePlacement().bucket,
+        Bucket: connection.bucket,
         Key,
         ...(downloadName
           ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
@@ -518,9 +567,9 @@ export function workspaceStorage(workspaceId: WorkspaceId): WorkspaceStorage {
 
     async remove(key) {
       const Key = objectName(key)
-      const client = await getS3Client()
+      const client = await getS3Client(connection)
       const { DeleteObjectCommand } = await getS3Module()
-      await client.send(new DeleteObjectCommand({ Bucket: getStoragePlacement().bucket, Key }))
+      await client.send(new DeleteObjectCommand({ Bucket: connection.bucket, Key }))
     },
   }
 }

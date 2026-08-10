@@ -37,6 +37,31 @@ beforeEach(() => {
   getS3Object.mockClear()
 })
 
+describe('handleStorageGet — a key that will not decode', () => {
+  it('answers 400 rather than 500 for a malformed percent escape', async () => {
+    // `decodeURIComponent` throws URIError on `%c0%ae`, and the decode sits
+    // OUTSIDE this route's try/catch, so a caller-controlled path produced a
+    // 500. It also meant the storage boundary's own "malformed
+    // percent-encoding" refusal was unreachable from the one route that
+    // decodes — the refusal existed and nothing could ever reach it.
+    for (const path of ['/api/storage/%c0%ae', '/api/storage/logos/%', '/api/storage/logos/%2']) {
+      const res = await get(path)
+      expect(res.status, path).toBe(400)
+      await expect(res.json(), path).resolves.toEqual({ error: 'Invalid storage key' })
+    }
+    expect(getS3Object).not.toHaveBeenCalled()
+  })
+
+  it('still serves a key that decodes', async () => {
+    // The positive control: without it the assertion above passes against a
+    // route that 400s on everything.
+    mockConfig.s3Proxy = true
+    const res = await get('/api/storage/logos/decodes%20fine.gif')
+    expect(res.status).toBe(200)
+    expect(getS3Object).toHaveBeenCalledWith('logos/decodes fine.gif')
+  })
+})
+
 describe('handleStorageGet — proxy response headers', () => {
   it('sends nosniff on proxied responses (S3_PROXY=true)', async () => {
     mockConfig.s3Proxy = true

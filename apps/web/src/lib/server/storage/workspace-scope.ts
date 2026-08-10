@@ -43,23 +43,56 @@
  * answer, because there the unscoped database is its own.
  *
  * Note what this deliberately does *not* depend on: nothing here calls
- * `currentTenantNamespace()`. Its `_` fallback is the thing being replaced, not
- * the thing being guarded, so a change to that function cannot move the
- * namespace out from under storage.
+ * `currentTenantNamespace()` to decide a namespace. Its `_` fallback is the
+ * thing being replaced, not the thing being guarded, so a change to that
+ * function cannot move the namespace out from under storage.
+ *
+ * ## Why that refusal is only real if this is the only door
+ *
+ * All of the above describes {@link currentWorkspaceId}. It is worth nothing
+ * unless every storage client comes through it, and for one revision that was
+ * false: `workspaceStorage()` was exported and guarded instead by comparing its
+ * argument against the ambient scope. With no scope there was nothing to compare
+ * against, so the guard passed, and an unscoped caller in a pooled process could
+ * name any workspace and address the fleet bucket with the fleet credential.
+ *
+ * The lesson is worth keeping, because the guard read as careful: **a check
+ * that is skipped in the state it exists to police is not a weaker version of
+ * the control, it is the absence of one.** "No scope" was that state, and the
+ * check could not police it, because no scope is also the legitimate state of
+ * every self-hosted install. So the repair was structural — the factory stopped
+ * being exported, and this function became the only way to obtain a client.
  */
 import { fromUuid, type WorkspaceId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
 import { getTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
 
 /**
- * The unscoped process's own workspace, memoised for the life of the process.
+ * The resolved workspace, memoised per tenant.
  *
- * Safe to hold forever and safe to hold un-partitioned: it is only ever
- * populated by the branch that ran with no tenant scope, and that branch cannot
- * complete in a pooled process — the `db` read it depends on throws first. So
- * this can only ever hold the id of a process that serves exactly one workspace.
+ * `settings.id` is a primary key on a singleton row, so this is a constant
+ * rather than a cache with a staleness question — the only reason it exists is
+ * that the unscoped branch would otherwise issue a query per storage command,
+ * and the proxy read path is per asset request.
+ *
+ * A `TenantKeyedCache` rather than a bare module-level binding, and the reason
+ * is the ledger rather than convenience. §4.4's control on module-scope state
+ * verifies three of its six categories against the source; the honest category
+ * for a bare binding here would have been `refuses-pooled`, which the scanner
+ * checks by requiring `isPooledTenancy` in the declaring file — and this file
+ * deliberately never asks which tenancy mode is configured. Rather than write a
+ * category the scanner cannot check, the state takes the shape the scanner can:
+ * partitioned by the active tenant, which is what it needs to be anyway.
+ *
+ * Note the distinction this relies on and does not blur. `TenantKeyedCache`
+ * keys under `_` with no scope, and that is exactly the fallback this module
+ * refuses to compose into a bucket. As a **cache key** in one process's heap
+ * `_` is correct and is the sanctioned use; as a **bucket prefix** it is a real,
+ * shared directory with no owner. Same literal, two different jobs.
  */
-let unscopedWorkspaceId: WorkspaceId | null = null
+const workspaceIds = new TenantKeyedCache<WorkspaceId>(256)
+const WORKSPACE_ID_MEMO = 'workspace-id'
 
 /** A process holds a scope but its database will not say who it is. */
 export class WorkspaceNamespaceUnresolvable extends Error {
@@ -69,22 +102,6 @@ export class WorkspaceNamespaceUnresolvable extends Error {
         `from settings.id, so storage has nothing to address until that is known.`
     )
     this.name = 'WorkspaceNamespaceUnresolvable'
-  }
-}
-
-/** A client was asked to compose a namespace the active scope does not own. */
-export class WorkspaceStorageScopeMismatch extends Error {
-  readonly requested: WorkspaceId
-  readonly scoped: WorkspaceId
-  constructor(requested: WorkspaceId, scoped: WorkspaceId) {
-    super(
-      `Refusing a storage client for ${requested}: the active tenant scope is ${scoped}. ` +
-        `Placement and credentials come from the scope, so this client would compose one ` +
-        `workspace's prefix against another workspace's bucket.`
-    )
-    this.name = 'WorkspaceStorageScopeMismatch'
-    this.requested = requested
-    this.scoped = scoped
   }
 }
 
@@ -119,34 +136,25 @@ export function scopedWorkspaceId(): WorkspaceId | null {
 }
 
 /**
- * Refuse a client whose namespace and whose bucket would come from different
- * tenants.
- *
- * A client's placement and credentials are resolved from the ambient scope, so
- * `workspaceStorage(B)` called inside A's request would compose `t/B/…` against
- * A's bucket with A's credentials — which, in one fleet bucket, is B's objects
- * with no error and no alarm. The check is total exactly where it matters: a
- * second workspace only exists in a pooled process, and in a pooled process any
- * successful resolution came from a scope, because the alternative reads a
- * database that is not there.
- */
-export function assertWorkspaceIsInScope(workspaceId: WorkspaceId): void {
-  const scoped = scopedWorkspaceId()
-  if (scoped !== null && scoped !== workspaceId) {
-    throw new WorkspaceStorageScopeMismatch(workspaceId, scoped)
-  }
-}
-
-/**
  * The workspace whose namespace this call must compose into.
  *
- * The only supported source for the argument to `workspaceStorage()`.
+ * **The only way a storage client is ever built.** `workspaceStorage()` is not
+ * exported, so there is no path to the bucket that skips this function — which
+ * matters because this is where the refusal lives. An earlier revision exported
+ * the factory behind a scope-equality guard, and that guard skipped its
+ * comparison when there was no scope: an unscoped caller in a pooled process
+ * could name any workspace and reach the fleet bucket with the fleet credential,
+ * because it never came through here and so never read `db`.
  */
 export async function currentWorkspaceId(): Promise<WorkspaceId> {
-  const scoped = scopedWorkspaceId()
-  if (scoped) return scoped
+  const memo = workspaceIds.get(WORKSPACE_ID_MEMO)
+  if (memo) return memo
 
-  if (unscopedWorkspaceId) return unscopedWorkspaceId
+  const scoped = scopedWorkspaceId()
+  if (scoped) {
+    workspaceIds.set(WORKSPACE_ID_MEMO, scoped)
+    return scoped
+  }
 
   // No scope. In a pooled process this line throws TenantScopeMissingError from
   // the `db` Proxy and never returns — which is the refusal, and it is the
@@ -159,6 +167,6 @@ export async function currentWorkspaceId(): Promise<WorkspaceId> {
   if (!row?.id) {
     throw new WorkspaceNamespaceUnresolvable('this database has no settings row')
   }
-  unscopedWorkspaceId = row.id
+  workspaceIds.set(WORKSPACE_ID_MEMO, row.id)
   return row.id
 }

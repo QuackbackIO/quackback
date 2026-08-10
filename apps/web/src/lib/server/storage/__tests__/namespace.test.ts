@@ -1,7 +1,7 @@
 /**
  * The namespace algebra: compose, then verify.
  *
- * This is the isolation boundary in a shared bucket. `t/<workspaceId>/` is the
+ * This is the isolation boundary in a shared bucket. `w/<workspaceId>/` is the
  * only thing separating one customer's objects from another's, so the interesting
  * assertions here are not "the happy path works" but "every way of arriving
  * outside the namespace is refused, and refused by throwing rather than by
