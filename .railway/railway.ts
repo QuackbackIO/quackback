@@ -287,12 +287,27 @@ export default defineRailway(() => {
   // role is a command: `fleet-migrator.mjs` is bundled into the same image (see
   // APP_IMAGE), so the build that owns these migrations is the build that
   // applies them, by construction rather than by scheduling.
+  //
+  // `enrol` before `run`, because a workspace with no intent row is invisible:
+  // `run` claims from `cp_workspace_schema_state` and provisioning does not
+  // write it, so a workspace created after the last enrolment would never be
+  // looked at again. The migrator has a name for this and calls it a real gap
+  // (`explainUnclaimed`'s `no_intent_row`). Enrolling is idempotent
+  // (`ON CONFLICT DO NOTHING`), covers only registry-`active` workspaces, and
+  // seeds `current_version` NULL rather than assuming the workspace is current —
+  // so the new row is genuinely reconciled rather than asserted. It seeds the
+  // target at THIS image's bundle tip, which under one pinned digest is exactly
+  // the version the serving tier is on.
+  //
+  // Chained with `&&` so a failed enrolment stops the run instead of quietly
+  // reconciling a fleet it could not enumerate. `sh -c` because the platform
+  // does not expand a bare shell operator.
   const migrator = service('quackback-migrator', {
     ...appBuild,
     deploy: {
       restartPolicyType: 'NEVER',
       cronSchedule: '47 2 * * *',
-      startCommand: 'bun /app/fleet-migrator.mjs run',
+      startCommand: 'sh -c "bun /app/fleet-migrator.mjs enrol && bun /app/fleet-migrator.mjs run"',
     },
     env: { ...fleetEnv, QUACKBACK_ROLE: 'migrator' },
   })
