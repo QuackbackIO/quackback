@@ -609,10 +609,18 @@ describe('schedule gating and dynamic schedules', () => {
     expect(closed.attempted).toBe(0)
     expect(await rowsFor(q)).toHaveLength(0)
 
+    // The first tick after the gate opens RUNS. A shut gate spends its slots
+    // silently rather than forgetting them, so the schedule has a memory to be
+    // newer than.
+    //
+    // It used to skip that slot: a schedule with no state reads as a first pass,
+    // and a first pass adopts rather than runs (or a restart would replay one of
+    // everything). Losing one minute of a per-minute cron was invisible. Losing
+    // the first slot of a gate that can now stay shut for hours means the work
+    // never runs at all — measured against a real tenant, a snooze due in ninety
+    // seconds was never swept.
     enabled = true
-    // Re-seeded on the first open tick (there is no state for it yet), then due.
-    await runScheduleTick(state, new Date(base.getTime() + 180_000))
-    const open = await runScheduleTick(state, new Date(base.getTime() + 240_000))
+    const open = await runScheduleTick(state, new Date(base.getTime() + 180_000))
     expect(open.attempted).toBe(1)
     expect(await rowsFor(q)).toHaveLength(1)
   })

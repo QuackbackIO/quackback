@@ -11,7 +11,7 @@
  * that instant already spent, enqueues nothing, and recomputes a deadline now in
  * the past — a reconnect loop that no enqueue counter can see.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   __resetTenantDeadlinesForTests,
   dueWithin,
@@ -88,5 +88,60 @@ describe('the wake instant a detaching tier records', () => {
     registerTenantDeadline('none', async () => null)
     const wake = await earliestTenantDeadline(at('2026-08-10T12:00:00.000Z').getTime())
     expect(wake?.toISOString()).toBe('2026-08-10T13:01:00.000Z')
+  })
+})
+
+/**
+ * The slot memory a shut gate must not lose.
+ *
+ * `runScheduleTick` drops the remembered slot of any schedule it did not see
+ * this pass, so that a deleted segment or an unconfigured mailbox does not leak
+ * one forever. A gate that says "not due" used to look identical to that — and
+ * the first pass after it reopened adopted the current slot without running it,
+ * because a schedule with no memory is a schedule that has never run.
+ *
+ * Harmless while a gate flipped for a minute at a time. Fatal once a gate can
+ * stay shut for hours: measured against a real tenant, a snooze due in ninety
+ * seconds was never swept at all, because every wake was a first pass.
+ */
+describe('a gated-off schedule keeps its slot memory', () => {
+  it('runs on the first slot after the gate opens, rather than adopting it', async () => {
+    vi.resetModules()
+    let due = false
+    const enqueued: string[] = []
+    vi.doMock('../job-queue', () => ({
+      enqueueJob: async (input: { queue: string }) => {
+        enqueued.push(input.queue)
+        return { jobId: 'job_x', inserted: true }
+      },
+      isMissingJobQueue: () => false,
+    }))
+    vi.doMock('../definitions', async (importOriginal) => {
+      const actual = await importOriginal<Record<string, unknown>>()
+      const only = [
+        {
+          name: 'gated',
+          cron: '* * * * *',
+          handler: async () => async () => {},
+          cronEnabled: async () => due,
+        },
+      ]
+      return { ...actual, JOB_DEFINITIONS: only, jobDefinitions: () => only }
+    })
+    const runner = await import('../runner')
+    const state = runner.createScheduleState()
+
+    // Shut. Nothing is enqueued — and nothing is forgotten either.
+    await runner.runScheduleTick(state, at('2026-08-10T12:00:00.000Z'))
+    await runner.runScheduleTick(state, at('2026-08-10T12:01:00.000Z'))
+    expect(enqueued).toEqual([])
+
+    // Open. 12:02 is a new slot relative to the 12:01 the shut gate still
+    // remembers, so it runs. Without that memory this reads as a first pass and
+    // adopts 12:02 in silence.
+    due = true
+    await runner.runScheduleTick(state, at('2026-08-10T12:02:00.000Z'))
+    expect(enqueued).toEqual(['gated'])
+    vi.resetModules()
   })
 })

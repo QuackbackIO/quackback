@@ -551,6 +551,35 @@ export async function runScheduleTick(
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
   }
 
+  /**
+   * Spend this slot without running anything.
+   *
+   * What a shut `cronEnabled` gate means: this slot had nothing to do, which is
+   * the same as having done it. Recording it is what makes the *next* slot new
+   * when the gate opens.
+   *
+   * Without this the gate was silently self-defeating. A schedule that never
+   * ticks never records a slot, so it has no memory; a pass with no memory is a
+   * first pass, and a first pass deliberately adopts the current slot rather
+   * than running it (or every process restart would replay one of everything).
+   * A gate that opens is therefore always a first pass, and the work never runs
+   * — measured against a real tenant, a snooze due in ninety seconds was never
+   * swept at all. Harmless while gates flipped for a minute at a time; fatal
+   * once a gate can stay shut for hours.
+   *
+   * `live` and `nextSlotAt` are maintained for the same reason: a gated-off
+   * schedule is not one that has gone away, and its next slot is still when the
+   * gate should be asked again.
+   */
+  const adopt = (stateKey: string, pattern: string): void => {
+    const cron = cronFor(pattern)
+    live.add(stateKey)
+    const slot = latestSlotAtOrBefore(cron, now)
+    if (slot) state.seen.set(stateKey, slot.getTime())
+    const next = nextSlotAfter(cron, now)
+    if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
+  }
+
   for (const def of jobDefinitions()) {
     if (def.cron) {
       // A disabled schedule writes nothing, rather than enqueueing a job whose
@@ -566,6 +595,7 @@ export async function runScheduleTick(
         }
       }
       if (enabled) await tick(def, def.name, def.name, def.cron, {})
+      else adopt(def.name, def.cron)
     }
 
     if (def.dynamicSchedules) {
