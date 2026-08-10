@@ -161,6 +161,52 @@ export function isKeyCustodyFailureCode(code: string): code is IdentityFailure {
   return IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'key'
 }
 
+/**
+ * The second question about a refusal: can retrying ever fix it?
+ *
+ * A separate axis from the subject above, and it has to be, because the two do
+ * not correlate. The subject decides which alarm an operator reads; this decides
+ * whether the fleet should keep asking. Measured consequence of not having it:
+ * a tenant refused for a configuration reason was reconnected **once per
+ * second**, holding its compute at 70% active for zero work, indefinitely.
+ *
+ * Every code here is `terminal`, and that is a finding rather than a shortcut.
+ * Each one is an accusation about a *record* or a *key* — the database in front
+ * of us is not the one the registry named, or the key we hold is not the one its
+ * ciphertext was written under. Neither is a state a connection attempt changes.
+ * The map is exhaustive anyway, for the same reason the subject map is: a new
+ * code cannot be added to `IdentityFailure` without someone deciding this
+ * question, and a code that genuinely IS transient (a read that failed because
+ * the compute was still starting, say) must not inherit "terminal" by default.
+ */
+const IDENTITY_FAILURE_RETRYABILITY = {
+  settings_row_missing: 'terminal',
+  settings_not_singleton: 'terminal',
+  stamp_missing: 'terminal',
+  stamp_tenant_mismatch: 'terminal',
+  workspace_id_mismatch: 'terminal',
+  neon_identity_unavailable: 'terminal',
+  neon_project_mismatch: 'terminal',
+  neon_branch_mismatch: 'terminal',
+  stamp_source_conflict: 'terminal',
+  secret_key_canary_missing: 'terminal',
+  secret_key_canary_mismatch: 'terminal',
+  secret_key_stored_ciphertext_mismatch: 'terminal',
+  secret_key_custody_unproven: 'terminal',
+} as const satisfies Record<IdentityFailure, 'terminal' | 'transient'>
+
+/**
+ * True when a refusal code names a state no reconnection can change.
+ *
+ * Returns false for anything it does not recognise, which is the fail-open
+ * direction on purpose: an unknown code that is really terminal costs a bounded
+ * backoff, while an unknown code wrongly called terminal costs a tenant its
+ * service until an operator notices.
+ */
+export function isTerminalRefusalCode(code: string): boolean {
+  return IDENTITY_FAILURE_RETRYABILITY[code as IdentityFailure] === 'terminal'
+}
+
 export type IdentityVerdict = { ok: true } | { ok: false; code: IdentityFailure; detail: string }
 
 /** Thrown by the pool cache when a tenant database fails its own fingerprint. */

@@ -87,6 +87,39 @@ export async function runFleetPass(
 }
 
 /**
+ * A scope that could not be opened, with the reason still attached.
+ *
+ * This used to be a bare `Error` with the kind interpolated into its message,
+ * and the loss was not cosmetic: `acquireTenantScope` classifies every refusal
+ * with a `code`, and a caller that has to parse prose to recover it cannot tell
+ * `app_secret_no_resolver` — which no retry will ever fix — from a compute that
+ * is merely still starting. The job tier reconnecting once per second to a
+ * tenant refused for the former is precisely what this class exists to let it
+ * stop doing.
+ */
+export class TenantScopeUnavailableError extends Error {
+  readonly tenantId: string
+  readonly kind: string
+  readonly code: string
+  constructor(
+    tenantId: string,
+    origin: TenantScopeOrigin,
+    kind: string,
+    code: string,
+    detail?: string
+  ) {
+    super(
+      `Cannot open a ${origin} scope for tenant ${tenantId}: ${kind}` +
+        (detail ? ` — ${detail}` : '')
+    )
+    this.name = 'TenantScopeUnavailableError'
+    this.tenantId = tenantId
+    this.kind = kind
+    this.code = code
+  }
+}
+
+/**
  * Run `body` inside one named tenant's scope.
  *
  * For work that already knows its tenant: a queue job carrying `tenantId` in its
@@ -101,9 +134,12 @@ export async function withTenantScopeById<T>(
 ): Promise<T> {
   const acquisition = await acquireScopeForTenantId(tenantId, origin)
   if (acquisition.kind !== 'ok') {
-    throw new Error(
-      `Cannot open a ${origin} scope for tenant ${tenantId}: ${acquisition.kind}` +
-        ('detail' in acquisition ? ` — ${acquisition.detail}` : '')
+    throw new TenantScopeUnavailableError(
+      tenantId,
+      origin,
+      acquisition.kind,
+      'code' in acquisition ? acquisition.code : acquisition.kind,
+      'detail' in acquisition ? acquisition.detail : undefined
     )
   }
   return runWithTenantScope(acquisition.scope, body)

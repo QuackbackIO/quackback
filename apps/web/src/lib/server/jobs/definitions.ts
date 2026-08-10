@@ -169,11 +169,23 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // The cron stays per-minute and the gate is what changed, which is the whole
+    // point: an SLA breach is still noticed within a minute of falling due, and
+    // a tenant with no running clock no longer wakes its compute 1,440 times a
+    // day to be told so. `deadlines.ts` explains why an interval was the wrong
+    // knob and why this one cannot make anything later than it is today.
     name: 'sla-breach-sweep',
     cron: '* * * * *',
     maxAttempts: 3,
     handler: () =>
       import('@/lib/server/domains/sla/sla-breach-sweep-queue').then((m) => m.runSlaBreachSweep),
+    // Same module as the handler, deliberately: one module owns both what this
+    // queue does and when it has anything to do, so the gate cannot be primed
+    // separately from the work it gates.
+    cronEnabled: () =>
+      import('@/lib/server/domains/sla/sla-breach-sweep-queue').then((m) =>
+        m.isSlaBreachSweepDue()
+      ),
   },
   {
     name: 'snooze-sweep',
@@ -181,6 +193,10 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     maxAttempts: 3,
     handler: () =>
       import('@/lib/server/domains/conversation/snooze-sweep-queue').then((m) => m.runSnoozeSweep),
+    cronEnabled: () =>
+      import('@/lib/server/domains/conversation/snooze-sweep-queue').then((m) =>
+        m.isSnoozeSweepDue()
+      ),
   },
   {
     name: 'workflow-sweep',

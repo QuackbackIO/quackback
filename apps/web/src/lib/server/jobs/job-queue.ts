@@ -111,6 +111,31 @@ export function isMissingJobQueue(err: unknown): boolean {
   return code === UNDEFINED_TABLE
 }
 
+/**
+ * The earliest instant this tenant's queue has work waiting for.
+ *
+ * Read by the tier on the connection it is **about to drop**, which is the point
+ * of it: a tier that goes idle has to know when to come back, and the only
+ * honest answer is the one the database gives before the lights go out. Without
+ * this a delayed job — a hook retry five minutes out, a scheduled publish —
+ * would sit until whatever generic rescan happened to fire, turning "runs at
+ * 14:05" into "runs some time after 14:05".
+ *
+ * Null means nothing is pending at all, which is the only state in which the
+ * tier may sleep on its safety-net interval alone. A row already due comes back
+ * as a past timestamp rather than as null, and the caller treats that as "wake
+ * immediately" — the fail-safe direction, since the alternative is a due job
+ * that nobody is coming back for.
+ */
+export async function earliestPendingJobAt(): Promise<Date | null> {
+  const result = await db.execute(sql`
+    SELECT min(run_at) AS run_at FROM job_queue WHERE status = 'pending'
+  `)
+  const rows = getExecuteRows<{ run_at: Date | string | null }>(result)
+  const value = rows[0]?.run_at ?? null
+  return value === null ? null : asDate(value)
+}
+
 export interface EnqueueJobInput {
   queue: string
   payload?: Record<string, unknown>
