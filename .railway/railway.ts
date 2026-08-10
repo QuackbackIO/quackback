@@ -34,7 +34,7 @@
  * a variable set through the CLI is live but not durable — the next apply, once
  * it is safe to run, removes anything this file does not name.
  */
-import { bucket, defineRailway, preserve, project, service } from 'railway/iac'
+import { bucket, defineRailway, preserve, project, redis, service } from 'railway/iac'
 
 /** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
  * is declared intent only — `plan` never diffs placement and `apply` never
@@ -80,6 +80,10 @@ export default defineRailway(() => {
     bucket('qb-neon-t1', { region: 'iad' }),
     bucket('qb-neon-t2', { region: 'iad' }),
     bucket('qb-neon-t4', { region: 'iad' }),
+    // The control plane's own test workspaces, created through the API like the
+    // rest. Same rule: absent here means deleted on the next apply.
+    bucket('qb-cp-t1', { region: 'iad' }),
+    bucket('qb-cp-t2crit', { region: 'iad' }),
   ]
 
   /** Everything every app service needs, whatever its role. */
@@ -125,7 +129,7 @@ export default defineRailway(() => {
     // zero — `boot-config.ts` resolves it as the first statement of `server.ts`
     // and exits 1. Declared on every app service because the check runs on pool
     // checkout, which the worker and cron roles also perform.
-    MIN_SCHEMA_VERSION: '0257_pg_kv_presence_realtime',
+    MIN_SCHEMA_VERSION: '0258_workspace_key_columns',
 
     // Fleet-level secrets, set out of band and never written to source.
     SECRET_KEY: preserve(),
@@ -142,6 +146,29 @@ export default defineRailway(() => {
     // opens, and two different roots produce ciphertext nobody can open rather
     // than an error.
     QUACKBACK_FLEET_ROOT_KEY: preserve(),
+
+    // Service-to-service auth for the fleet's internal endpoints. Secret, set
+    // out of band. Undeclared, it was on the delete list of every apply.
+    QUACKBACK_FLEET_INTERNAL_TOKEN: preserve(),
+
+    // Redis is no longer read by the app, but the variable and the database
+    // both still exist, and anything absent from this file is a deletion.
+    // Preserved rather than removed so that retiring Redis stays a deliberate
+    // act instead of a side effect of the next apply.
+    REDIS_URL: preserve(),
+
+    // Per-workspace `SECRET_KEY`s, under the `env://QUACKBACK_TENANT_SECRET_*`
+    // scheme. The comment above says the derived scheme means "a tenant costs
+    // no fleet variable" — true for workspaces provisioned that way, and these
+    // two predate it. They are enumerated for exactly the reason the workspace
+    // buckets are: undeclared, `apply` deletes them, and a workspace whose
+    // SECRET_KEY is gone refuses every request with `app_secret_unresolvable`.
+    //
+    // The variable NAME still says `TENANT` because it is a wire name: it is
+    // quoted verbatim in each registry record's `app_secrets_ref` and pinned by
+    // a CHECK constraint. Renaming it is a migration, not a rename.
+    QUACKBACK_TENANT_SECRET_INST_GAUNTLET_NEON_T1_D7D62CFD_APP: preserve(),
+    QUACKBACK_TENANT_SECRET_INST_GAUNTLET_NEON_T2_24488091_APP: preserve(),
 
     // A real fleet hostname, never `https://${{RAILWAY_PUBLIC_DOMAIN}}`: with a
     // wildcard custom domain attached that variable is the literal string
@@ -227,7 +254,66 @@ export default defineRailway(() => {
     env: { ...fleetEnv, QUACKBACK_ROLE: 'web' },
   })
 
+  // The control plane. Built from the OTHER repository and deployed by uploading
+  // its source, so this file cannot describe how to build it — `empty()` says
+  // "this service exists and its source is managed elsewhere" rather than
+  // claiming a build that would be wrong.
+  //
+  // It is declared for one reason: without it, `railway config plan` proposed
+  // "Delete service quackback-control-plane", and the file that exists to make
+  // infrastructure reproducible was instead the thing that would remove it.
+  // Its variables are all secrets or cross-repo values, so every one is
+  // preserved.
+  const controlPlane = service('quackback-control-plane', {
+    // No `source`. Not an omission: this service's source is an upload from the
+    // other repository, which this file cannot describe, and setting `empty()`
+    // here made the plan propose CHANGING source.type — the file editing the
+    // thing it exists to leave alone. Omitting it leaves the source unmanaged.
+    //
+    // Every variable is preserved rather than declared, because every one is a
+    // secret, a cross-repo value, or set by the platform. Declaring the names is
+    // still necessary: undeclared, each was on the delete list.
+    env: {
+      ADMIN_API_TOKEN: preserve(),
+      ADMIN_EMAILS: preserve(),
+      BASE_URL: preserve(),
+      BETTER_AUTH_SECRET: preserve(),
+      CLUSTER_ENV: preserve(),
+      CP_ROLE: preserve(),
+      DATABASE_URL: preserve(),
+      NEON_API_KEY: preserve(),
+      NEON_ORG_ID: preserve(),
+      NEON_PROJECT_PREFIX: preserve(),
+      NEON_REGION_ID: preserve(),
+      NODE_ENV: preserve(),
+      PORT: preserve(),
+      PROVISIONER_SECRET: preserve(),
+      QUACKBACK_BASE_DOMAIN: preserve(),
+      QUACKBACK_FLEET_ROOT_KEY: preserve(),
+      QUACKBACK_MIGRATOR_COMMAND: preserve(),
+      QUACKBACK_MIGRATOR_TIMEOUT_MS: preserve(),
+      RAILWAY_DOCKERFILE_PATH: preserve(),
+      REDIS_URL: preserve(),
+      STRIPE_SECRET_KEY: preserve(),
+      STRIPE_WEBHOOK_SECRET: preserve(),
+    },
+  })
+
+  // Retained, not used. The app removed its Redis dependency, but the database
+  // still exists and deleting it is a decision rather than a consequence.
+  const cache = redis('Redis')
+
   return project('quackback-pooled-gauntlet', {
-    resources: [web, worker, cronDaily, cronHourly, sleeper, uploads, ...workspaceBuckets],
+    resources: [
+      web,
+      worker,
+      cronDaily,
+      cronHourly,
+      sleeper,
+      controlPlane,
+      cache,
+      uploads,
+      ...workspaceBuckets,
+    ],
   })
 })
