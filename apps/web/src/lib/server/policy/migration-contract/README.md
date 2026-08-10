@@ -107,6 +107,45 @@ Write the guard's DDL out literally. `EXECUTE format('ALTER TABLE …')` would
 work at runtime and would hide the statement from the destructive-DDL scanner
 above, which reads inside dollar-quoted blocks on purpose.
 
+## The other direction: `REPLAY_OVERRIDES`
+
+`@replay: guarded-by` lets a human make a verdict kinder. `REPLAY_OVERRIDES`, in
+the same file, is the only way to make one **stricter**, and it exists because
+the classifier has one structural blind spot: it judges each migration against
+the schema _that file_ expects, while a replay happens against the schema the
+_whole lineage_ produced. `DROP TABLE IF EXISTS x` is a no-op in isolation and
+drops a live table once a later migration has put `x` back;
+`CREATE INDEX IF NOT EXISTS … ON y` is a no-op in isolation and has nothing to
+build on once a later migration has dropped `y`. Two bundled migrations are in
+exactly those two states.
+
+```ts
+{
+  tag: '0091_drop_conversation_tags',
+  verdict: 'mutates',
+  why: '… 0127_conversation_tags_rename puts it back, so a replay drops a live table …',
+  stillFailsWith: /conversation_tags/,
+}
+```
+
+The asymmetry with the annotation is the point:
+
+- **It can only refuse.** `verdict` excludes `safe` in the type and the override
+  is applied as the worse of the two verdicts, so "override it to safe" is
+  unwritable rather than merely unused.
+- **Adding one is cheap, removing one is not.** Delete an entry and its
+  migration returns to the replay-safe set that
+  `__tests__/lineage-double-apply.db.test.ts` re-applies to a migrated database,
+  where it fails by name. An entry cannot be dropped to make something green.
+- **A stale entry is named too.** The same test refuses an entry whose shape
+  reading has caught up with it, or whose replay no longer fails — so the list
+  cannot rot into exemptions nobody has re-checked.
+
+The fix this is standing in for is object lifetimes across the whole corpus; see
+the header of `replay-safety.ts`. Until then the correction lives on the
+classifier rather than in each caller, so the fleet migrator's gap heal, its
+replay gate and the CLI preflight all inherit it from one place.
+
 ## What counts as destructive
 
 Detected, at minimum per the brief, plus three additions:

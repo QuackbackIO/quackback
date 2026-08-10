@@ -332,6 +332,110 @@ describe('a hole that must not be healed', () => {
   }, 120_000)
 })
 
+describe('a hole whose truncation span reaches a verdict the classifier gets wrong', () => {
+  /**
+   * A ledger that stops at `top` with the row for `hole` missing.
+   *
+   * Deleting everything *above* `top` is what makes the fixture sharp. The
+   * truncation point is the earliest missing entry, and every applied row at or
+   * above it must be replay-safe for the heal to proceed — so a ledger running
+   * all the way to the tip would be refused on account of the dozens of ordinary
+   * `errors` migrations in between, and the refusal would say nothing about the
+   * one migration under test. Pulling the high-water mark down to `top` leaves
+   * `rewrites` holding exactly one tag, which is the only way "it refused
+   * naming that migration" can mean what it says.
+   */
+  async function ledgerStoppingAt(db: string, top: string, hole: string): Promise<void> {
+    await withSql(db, (sql) =>
+      sql.unsafe(
+        `DELETE FROM drizzle.__drizzle_migrations
+          WHERE created_at > $1::bigint OR created_at = $2::bigint`,
+        [whenOf(top), whenOf(hole)]
+      )
+    )
+  }
+
+  /**
+   * Both cases run with `allowMutatingReplay`, which is not incidental.
+   *
+   * That flag is an operator asserting the ledger is honest, and it disables the
+   * *other* gate — so with it on, this gate is the only thing standing between a
+   * false `safe` verdict and a DELETE. It is also the realistic posture: an
+   * operator healing a hole this deep has already been refused once by the
+   * replay gate and reached for the flag. Before the verdict was corrected, both
+   * of these truncated the ledger and then failed on the replay, leaving the
+   * workspace under-claiming further than it started with no run that could ever
+   * succeed.
+   */
+  const healing = { allowMutatingReplay: true } as const
+
+  it('refuses a span that would rewrite 0091, and names it', async () => {
+    const db = await scratch()
+    await ledgerStoppingAt(db, '0091', '0090')
+    const before = await ledgerOf(db)
+    const digestBefore = await catalogueDigest(db)
+
+    const result = await migrateWorkspace(workspaceOn(db), healing)
+
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe('refused_ledger_gap')
+    // Named, and the only candidate: one row would be rewritten and it is this
+    // one, so the refusal cannot be crediting an unrelated migration.
+    expect(result.gap!.rewrites).toEqual(['0091_drop_conversation_tags'])
+    expect(result.detail).toContain('0091_drop_conversation_tags')
+    expect(result.detail).toContain('1 of those migration(s) are recorded as having run')
+    // And it refused for the reason the override records, not merely because
+    // something about the span was unpalatable.
+    expect(result.detail).toContain('0127_conversation_tags_rename puts it back')
+
+    // The property that matters more than the refusal: nothing was withdrawn.
+    // A truncation here is unrecoverable — drizzle would fail on the replay
+    // every time and nothing in this codebase inserts a ledger row.
+    const after = await ledgerOf(db)
+    expect(after.count).toBe(before.count)
+    expect(after.max).toBe(before.max)
+    expect(await catalogueDigest(db)).toBe(digestBefore)
+  }, 120_000)
+
+  it('refuses a span that would rewrite 0207, and names it', async () => {
+    const db = await scratch()
+    await ledgerStoppingAt(db, '0207', '0206')
+    const before = await ledgerOf(db)
+
+    const result = await migrateWorkspace(workspaceOn(db), healing)
+
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe('refused_ledger_gap')
+    expect(result.gap!.rewrites).toEqual(['0207_index_tuning'])
+    expect(result.detail).toContain('0207_index_tuning')
+    expect(result.detail).toContain('1 of those migration(s) are recorded as having run')
+    expect(result.detail).toContain('0217_drop_feedback_pipeline drops it')
+
+    const after = await ledgerOf(db)
+    expect(after.count).toBe(before.count)
+    expect(after.max).toBe(before.max)
+  }, 120_000)
+
+  it('still heals a span that reaches neither — the refusal is not over-broad', async () => {
+    // The failure mode on the other side. A gate that refused every heal would
+    // read as safe and turn the repair tool into a permanent block, which is its
+    // own outage: these ledgers are the state five live workspace databases are
+    // actually in.
+    const db = await scratch()
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
+
+    const result = await migrateWorkspace(workspaceOn(db), healing)
+
+    expect(result.ok).toBe(true)
+    expect(result.code).toBe('healed_ledger_gap')
+    // Asserted rather than assumed: this span genuinely contains neither of the
+    // corrected verdicts, so its passing is a control and not a coincidence.
+    expect(result.replaySet).not.toContain('0091_drop_conversation_tags')
+    expect(result.replaySet).not.toContain('0207_index_tuning')
+    expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
+  }, 120_000)
+})
+
 describe('the ledgers that are not holes — the controls', () => {
   it('a contiguous ledger behind the tip migrates exactly as it did before', async () => {
     const db = await scratch()

@@ -51,7 +51,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { runMigrations } from '@quackback/db/migrate'
 import { BUNDLED_MIGRATIONS, MIGRATIONS_DIR } from '@quackback/db/schema-version'
-import { assessReplaySafety } from '../replay-safety'
+import { REPLAY_OVERRIDES, assessReplaySafety } from '../replay-safety'
 
 const ADMIN_URL =
   process.env.DRIFT_CHECK_DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/postgres'
@@ -91,44 +91,26 @@ const REPLAY_SAFE = BUNDLED_MIGRATIONS.filter(
 ).map((m) => m.tag)
 
 /**
- * `safe` verdicts this test measured and found false, the first time anything
- * ran the lineage twice.
+ * The `safe` verdicts this test measured and found false, read from
+ * `REPLAY_OVERRIDES` rather than kept here.
  *
- * Both are the same defect, and it is a defect in the classifier rather than in
- * these two files: `assessReplaySafety` reads one migration in isolation, so it
- * judges `DROP … IF EXISTS` and `CREATE INDEX IF NOT EXISTS` against the schema
- * that file expects. A replay happens against the schema the **whole lineage**
- * produced, in which a later migration may have recreated the object one of
- * them drops or dropped the table one of them indexes.
+ * They used to be a list in this file, which meant the only code that knew two
+ * verdicts were wrong was the code that could not act on it: the fleet
+ * migrator's gap heal truncates a live ledger on the strength of a `safe`
+ * verdict and had never heard of them. They now live on the classifier, which
+ * refuses them at source, and this file's job changed with them — from
+ * *recording* the finding to *re-earning* it.
  *
- * They are recorded rather than fixed because closing the hole means teaching
- * the classifier about object lifetimes across 234 files, which is not a change
- * to make as a side effect of a rename. What is not deferred is knowing about
- * them: the second test below re-runs each one and fails if it ever stops
- * failing, so this list can only shrink, and it cannot rot into a set of
- * exemptions nobody has re-checked.
+ * Both directions are checked below, and between them the list can only shrink
+ * honestly:
  *
- * `0091` is the one that matters. Its verdict is `safe`, which is the strict
- * bucket `gapHealVerdict` demands before it truncates a ledger — and the
- * statement it is vouching for is `DROP TABLE IF EXISTS conversation_tags`
- * against a database where `0127` put that table back. It fails here only
- * because a foreign key happens to depend on the table. Nothing in the
- * classifier makes that luck; a `DROP … IF EXISTS` that succeeds on replay is
- * the `mutates` class, not the `safe` one.
+ * - Delete an entry and its migration returns to `REPLAY_SAFE`, where the first
+ *   test replays it against a fully migrated database and it fails, by name. So
+ *   an entry cannot be removed to make anything green.
+ * - Keep an entry the classifier has learned to see for itself, or one whose
+ *   replay no longer fails, and the second test names it as no longer earned.
  */
-const KNOWN_FALSE_SAFE_CLAIMS: { tag: string; error: RegExp; why: string }[] = [
-  {
-    tag: '0091_drop_conversation_tags',
-    error: /conversation_tags/,
-    why: '0127 recreates the table this drops, so a replay drops a live table rather than skipping',
-  },
-  {
-    tag: '0207_index_tuning',
-    error: /pipeline_log/,
-    why: '0217 drops the table this indexes, so IF NOT EXISTS has no relation to check against',
-  },
-]
-const FALSE_SAFE_TAGS = new Set(KNOWN_FALSE_SAFE_CLAIMS.map((c) => c.tag))
+const OVERRIDDEN = REPLAY_OVERRIDES.map((o) => o.tag)
 
 /**
  * Run one migration file the way drizzle would: split on its statement
@@ -206,7 +188,6 @@ describe('the second application of the lineage', () => {
     const failures: string[] = []
     await withSql(db, async (sql) => {
       for (const tag of REPLAY_SAFE) {
-        if (FALSE_SAFE_TAGS.has(tag)) continue
         try {
           await applyAgain(sql, tag)
           applied.push(tag)
@@ -235,33 +216,63 @@ describe('the second application of the lineage', () => {
     expect(REPLAY_SAFE.length).toBeGreaterThan(30)
     expect(REPLAY_SAFE).toContain('0258_workspace_key_columns')
     expect(statements).toBeGreaterThan(50)
+
+    // And the pass above only means anything because the overridden migrations
+    // were never in it. This is the classifier's refusal arriving here rather
+    // than a skip list in this file quietly standing in for it.
+    for (const tag of OVERRIDDEN) expect(REPLAY_SAFE).not.toContain(tag)
   }, 300_000)
 
-  it('still fails on every claim already known to be false', async () => {
-    // The list only shrinks. An entry that stopped failing would mean either
-    // the classifier learned to see the case (delete the entry) or the file
-    // changed under it (look again) — and either way, leaving it here would
-    // turn a measured finding into an exemption nobody re-checks.
+  it('re-earns every reviewed override, so the list can only shrink', async () => {
+    // Three things have to hold for an entry to still be pulling its weight, and
+    // dropping any one of them turns the override from a measurement into an
+    // exemption nobody re-checks:
+    //
+    //   1. the shape reading still says `safe` — otherwise the classifier now
+    //      sees the case unaided and the entry is dead weight;
+    //   2. the override is what refuses it, so something downstream is actually
+    //      being protected;
+    //   3. the replay still fails, the way the entry says it does.
     const db = await scratch()
+    const stale: string[] = []
     const unexpectedlyFine: string[] = []
-    for (const claim of KNOWN_FALSE_SAFE_CLAIMS) {
-      expect(REPLAY_SAFE, `${claim.tag} is no longer classified safe`).toContain(claim.tag)
+
+    for (const override of REPLAY_OVERRIDES) {
+      const report = assessReplaySafety(override.tag, sqlOf(override.tag))
+      if (report.shapeVerdict !== 'safe') {
+        stale.push(
+          `${override.tag}: the classifier now reads this as ${report.shapeVerdict} on its own — ` +
+            'delete the override'
+        )
+        continue
+      }
+      expect(report.verdict, override.tag).toBe(override.verdict)
+      expect(report.override, override.tag).toBe(override)
+
       // Rolled back: this one is measuring that the replay fails, and a
       // half-applied drop would poison the rest of the loop.
       const error = await withSql(db, (sql) =>
         sql
           .begin(async (tx) => {
-            await applyAgain(tx as unknown as postgres.Sql, claim.tag)
+            await applyAgain(tx as unknown as postgres.Sql, override.tag)
           })
           .then(
             () => null,
             (e: Error) => e
           )
       )
-      if (error === null) unexpectedlyFine.push(`${claim.tag} (${claim.why})`)
-      else expect(error.message, claim.tag).toMatch(claim.error)
+      if (error === null) unexpectedlyFine.push(`${override.tag} — ${override.why}`)
+      else expect(error.message, override.tag).toMatch(override.stillFailsWith)
     }
+
+    expect(stale, `\n${stale.join('\n')}\n`).toEqual([])
     expect(unexpectedlyFine, `\n${unexpectedlyFine.join('\n')}\n`).toEqual([])
+
+    // Every entry names a migration this build actually ships. A tag that has
+    // been renamed or removed matches nothing in `assessReplaySafety`, so the
+    // override would be silently inert rather than wrong.
+    const bundled = new Set(BUNDLED_MIGRATIONS.map((m) => m.tag))
+    expect(OVERRIDDEN.filter((tag) => !bundled.has(tag))).toEqual([])
   }, 120_000)
 
   it('is a check that can fail: replaying a migration outside that set errors', async () => {

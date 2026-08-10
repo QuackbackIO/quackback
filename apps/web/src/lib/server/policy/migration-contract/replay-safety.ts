@@ -86,6 +86,21 @@
  *
  * Anything malformed, dangling, or attached to the wrong kind of statement is
  * reported as mutating. The failure direction is always "refuse the replay".
+ *
+ * ## The thing this file reads that it cannot see
+ *
+ * Everything above judges one migration against the schema **that file**
+ * expects. A replay happens against the schema the **whole lineage** produced,
+ * and those differ whenever a later migration moves the object an earlier one
+ * names. `DROP TABLE IF EXISTS x` is `safe` in isolation and drops a live table
+ * once a later migration has put `x` back; `CREATE INDEX IF NOT EXISTS … ON y`
+ * is `safe` in isolation and has no relation to build on once a later migration
+ * has dropped `y`.
+ *
+ * Closing that properly means teaching this file object lifetimes across the
+ * whole corpus. Until someone does, the individual known-wrong verdicts are
+ * corrected by name in {@link REPLAY_OVERRIDES} — see its own comment for why
+ * that lives here rather than in each caller.
  */
 import { maskForAnnotations, stripNoise } from './scan'
 
@@ -114,17 +129,143 @@ import { maskForAnnotations, stripNoise } from './scan'
 export type ReplayVerdict = 'safe' | 'errors' | 'mutates'
 
 export interface ReplayStatementFinding {
-  /** 1-based line in the original file. */
+  /**
+   * 1-based line in the original file, or **0** for a finding that is about the
+   * file rather than about a statement in it — which today means exactly one
+   * thing, a {@link ReplayOverride}. A reviewed override contradicts the
+   * lineage's effect on the file as a whole, not a line of it, and inventing a
+   * line number for it would point an operator at a statement that is innocent
+   * when read on its own.
+   */
   line: number
   /** First ~120 characters of the statement, for the operator's diagnosis. */
   excerpt: string
   reason: string
 }
 
+/**
+ * A verdict a reviewer has corrected by hand, because the shape reading above
+ * is right about the file and wrong about the lineage.
+ *
+ * ### Why this is here and not in the callers
+ *
+ * It was in a test. `__tests__/lineage-double-apply.db.test.ts` measured both of
+ * the entries below by applying the whole lineage twice, wrote them down, and
+ * skipped them — so the only code that knew these two verdicts were false was
+ * the code that had no way to act on them. `gapHealVerdict` in the fleet
+ * migrator, which truncates a live workspace's ledger on the strength of a `safe`
+ * verdict, did not know they existed. Correcting the verdict at its source is
+ * what makes the heal, the replay gate and the CLI preflight all right at once,
+ * instead of three lists that can drift apart.
+ *
+ * ### The three properties that keep this from becoming an exemption list
+ *
+ * 1. **It can only ever refuse.** `verdict` excludes `safe` in the type, and the
+ *    override is applied by taking the *worse* of the two verdicts, so an entry
+ *    can raise `safe` to `mutates` and can never lower anything. An override
+ *    that waves a replay through is not merely discouraged, it is unwritable.
+ * 2. **Each entry says why in a form a reviewer can check** — which later
+ *    migration falsifies the shape reading, and what the replay does instead.
+ *    Not a tag and a shrug.
+ * 3. **Each entry is re-earned on every run of the double-apply test.** Deleting
+ *    one puts its migration back in that test's replay-safe set, where it is
+ *    re-applied against a fully migrated database and fails — named, with the
+ *    error. So an entry cannot be dropped to make something green; it can only
+ *    be dropped once the replay genuinely stops failing, which is the same
+ *    evidence that put it here. `stillFailsWith` is what that test matches, so
+ *    the entry carries its own falsification condition.
+ */
+export interface ReplayOverride {
+  /** Bundled migration tag. A trailing `.sql` is accepted and ignored. */
+  readonly tag: string
+  /**
+   * The verdict to impose in place of the shape reading.
+   *
+   * `safe` is absent from this type on purpose. See property 1 above: the point
+   * of the exclusion is that "override it to safe" cannot be expressed, rather
+   * than being expressible and merely unused.
+   */
+  readonly verdict: Exclude<ReplayVerdict, 'safe'>
+  /** Why the shape reading is wrong here, naming the migration that falsifies it. */
+  readonly why: string
+  /**
+   * What replaying this against a fully migrated database does today, measured.
+   *
+   * Matched by `lineage-double-apply.db.test.ts` against the real error, so this
+   * is the entry's own expiry condition: when the replay stops failing this way,
+   * the test says so by name rather than the entry quietly outliving its reason.
+   */
+  readonly stillFailsWith: RegExp
+}
+
+/**
+ * The corrected verdicts. Both entries are the same defect — a file judged
+ * against the schema it expects rather than the schema the lineage produced —
+ * and both were measured, not reasoned about.
+ *
+ * Adding an entry is meant to be cheap: measure it, write down which later
+ * migration is responsible, done. Removing one is not, and cannot be: see
+ * property 3 on {@link ReplayOverride}.
+ */
+export const REPLAY_OVERRIDES: readonly ReplayOverride[] = [
+  {
+    tag: '0091_drop_conversation_tags',
+    verdict: 'mutates',
+    why:
+      '`DROP TABLE IF EXISTS conversation_tags` is only a no-op while that table is absent, and ' +
+      '0127_conversation_tags_rename puts it back (renaming chat_tags into the freed name). A ' +
+      'replay therefore targets a live table rather than skipping: it succeeds and destroys, ' +
+      'which is the mutates class. It fails today only because a foreign key from ' +
+      'conversation_tag_assignments happens to depend on it, and that is luck rather than a ' +
+      'property of the classifier.',
+    stillFailsWith: /conversation_tags/,
+  },
+  {
+    tag: '0207_index_tuning',
+    verdict: 'mutates',
+    why:
+      '`CREATE INDEX IF NOT EXISTS … ON pipeline_log` is only a no-op while that table exists, ' +
+      'and 0217_drop_feedback_pipeline drops it, so on replay there is no relation for IF NOT ' +
+      'EXISTS to find and the statement errors. Refused as mutates rather than errors because ' +
+      'the gap heal treats the two differently and only mutates is refused in both populations: ' +
+      'an errors verdict here would still let a heal delete the ledger rows and then fail on ' +
+      'every replay forever, with nothing able to write them back.',
+    stillFailsWith: /pipeline_log/,
+  },
+]
+
+/** How bad each verdict is, so an override can be applied as "the worse of the two". */
+const SEVERITY: Record<ReplayVerdict, number> = { safe: 0, errors: 1, mutates: 2 }
+
+/** Tags are written with and without the `.sql` suffix around here; both mean one migration. */
+function normaliseTag(tag: string): string {
+  return tag.replace(/\.sql$/i, '')
+}
+
+const OVERRIDE_BY_TAG = new Map(REPLAY_OVERRIDES.map((o) => [normaliseTag(o.tag), o]))
+
+/** The reviewed correction for a migration, if it has one. */
+export function replayOverrideFor(tag: string): ReplayOverride | null {
+  return OVERRIDE_BY_TAG.get(normaliseTag(tag)) ?? null
+}
+
 export interface ReplaySafetyReport {
   tag: string
-  /** The worst verdict across the file's statements. */
+  /**
+   * The answer callers act on: the worst verdict across the file's statements,
+   * raised by a {@link ReplayOverride} where one applies.
+   */
   verdict: ReplayVerdict
+  /**
+   * What the statement shapes alone said, before any override.
+   *
+   * Carried so the override can be checked for still being load-bearing: an
+   * entry whose `shapeVerdict` has caught up with it is redundant and should be
+   * deleted. Never gate on this — it is the reading that is known to be wrong.
+   */
+  shapeVerdict: ReplayVerdict
+  /** The reviewed correction applied to this file, if any. */
+  override: ReplayOverride | null
   /** Statements that would change data on a second run. Empty unless `mutates`. */
   mutating: ReplayStatementFinding[]
   /** Statements that would error on a second run. Bounded by migrate()'s transaction. */
@@ -342,8 +483,12 @@ function statementBelow(statements: readonly SplitStatement[], line: number): nu
 /**
  * Classify one migration file.
  *
- * `tag` is only carried through to the report; the verdict comes entirely from
- * `sql`, so a caller cannot get a different answer by renaming a file.
+ * The verdict comes from `sql` alone, except where `tag` names an entry in
+ * {@link REPLAY_OVERRIDES} — the one place the file's identity is load-bearing,
+ * because the thing an override knows is what the *rest of the lineage* did to
+ * this file's objects, which is not in this file's text. The suffix is
+ * normalised so `0091_drop_conversation_tags` and `0091_drop_conversation_tags.sql`
+ * cannot get different answers.
  */
 export function assessReplaySafety(tag: string, sqlText: string): ReplaySafetyReport {
   const stripped = stripNoise(sqlText)
@@ -432,9 +577,42 @@ export function assessReplaySafety(tag: string, sqlText: string): ReplaySafetyRe
     })
   }
 
-  const verdict: ReplayVerdict =
+  const shapeVerdict: ReplayVerdict =
     mutating.length > 0 ? 'mutates' : erroring.length > 0 ? 'errors' : 'safe'
-  return { tag, verdict, mutating, erroring, vouched, statementCount: statements.length }
+
+  // The worse of the two, never the override alone. Taking the maximum is what
+  // makes "an override can only be more conservative" a property of the code
+  // rather than a rule about how the list is written: an `errors` entry cannot
+  // talk a `mutates` file down, and the type has already ruled out `safe`.
+  const override = replayOverrideFor(tag)
+  const verdict =
+    override && SEVERITY[override.verdict] > SEVERITY[shapeVerdict]
+      ? override.verdict
+      : shapeVerdict
+
+  // The reason travels with the verdict, in the list every caller already reads,
+  // so a refusal names *why* without any of them learning about overrides. The
+  // migrator's refusal text prints `mutating[0].reason` verbatim.
+  if (override && verdict !== shapeVerdict) {
+    const finding: ReplayStatementFinding = {
+      line: 0,
+      excerpt: `reviewed replay override for ${normaliseTag(tag)}`,
+      reason: override.why,
+    }
+    if (verdict === 'mutates') mutating.push(finding)
+    else erroring.push(finding)
+  }
+
+  return {
+    tag,
+    verdict,
+    shapeVerdict,
+    override,
+    mutating,
+    erroring,
+    vouched,
+    statementCount: statements.length,
+  }
 }
 
 function normaliseIdent(raw: string): string {
