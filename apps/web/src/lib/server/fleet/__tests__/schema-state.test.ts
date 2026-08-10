@@ -11,7 +11,7 @@
  * verbatim rather than from a hand-written CREATE TABLE, because the constraints
  * *are* half of what is being tested — a fixture that re-typed them could pass
  * against a table the control plane will never have. The only thing stubbed is
- * the `cp_workspace_registry` the foreign key points at, which lives in the other
+ * the `cp_tenant_registry` the foreign key points at, which lives in the other
  * repository and is not what these tests are about.
  *
  * Each run gets its own scratch database, so nothing here depends on the shared
@@ -65,11 +65,25 @@ beforeAll(async () => {
 
   // The FK target. Stubbed to its primary key only: the real table is the
   // control plane's and is not under test here.
-  await sql.unsafe(`CREATE TABLE cp_workspace_registry (workspace_key text PRIMARY KEY)`)
+  //
+  // Named `cp_tenant_registry`, not `cp_workspace_registry`, and that is not an
+  // oversight. This suite applies migration 0049 verbatim, and 0049 was written
+  // before the rename: its REFERENCES clause names the old table. A historical
+  // migration is a fixed artefact — renaming the stub to match today's
+  // vocabulary makes the FK point at a table that does not exist in this
+  // scratch database. The control plane's own 0054 renames the real table and
+  // leaves a view behind; this stub stands in for neither.
+  await sql.unsafe(`CREATE TABLE cp_tenant_registry (tenant_id text PRIMARY KEY)`)
   const migration = readFileSync(MIGRATION_SQL_PATH, 'utf8')
   for (const statement of migration.split('--> statement-breakpoint')) {
     if (statement.trim() !== '') await sql.unsafe(statement)
   }
+  // 0049 creates the pre-rename names because that is what it said when it was
+  // written. The control plane's 0054 is what moves them, and the code under
+  // test speaks the post-0054 vocabulary — so reproduce 0054's effect on the one
+  // table this suite exercises rather than editing a historical migration.
+  await sql.unsafe(`ALTER TABLE cp_tenant_schema_state RENAME TO cp_workspace_schema_state`)
+  await sql.unsafe(`ALTER TABLE cp_workspace_schema_state RENAME COLUMN tenant_id TO workspace_key`)
   __setControlDbForTests(createDbFromSql(sql))
 }, 60_000)
 
@@ -82,11 +96,11 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await sql`DELETE FROM cp_workspace_schema_state`
-  await sql`DELETE FROM cp_workspace_registry`
+  await sql`DELETE FROM cp_tenant_registry`
 })
 
 async function register(...ids: string[]) {
-  for (const id of ids) await sql`INSERT INTO cp_workspace_registry (workspace_key) VALUES (${id})`
+  for (const id of ids) await sql`INSERT INTO cp_tenant_registry (tenant_id) VALUES (${id})`
 }
 
 describe('claiming', () => {

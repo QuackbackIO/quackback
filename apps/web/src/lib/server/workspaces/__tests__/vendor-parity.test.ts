@@ -35,7 +35,7 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': '69872f4b0350941fdddf94275c9bcc8d35d40526b27f86cfbd2d70081c99a6ee',
+  'contract.ts': '23a144b7426230c578c1bc7a3264ea7bbf6bcde576c52964a65cd2a68a60d2c7',
   'secret-ref.ts': 'cf001176eafcbe9838ad5d86ba7d6cd30e338d4a6b0cb3439d6de7884045bc99',
   // Sealing and derivation, vendored for a sharper reason than the others: the
   // control plane seals a value and a fleet replica opens it. Drift here is not
@@ -44,7 +44,8 @@ const VENDORED = {
   // permanently unrecoverable. The digest is the only thing standing between a
   // one-line "tidy-up" in one repo and data loss in the other.
   'fleet-secrets.ts': '79546d6d139ee4f76dfee7d62c413b6f19acf6e23bd7e44e5962bbde0a4f40fc',
-  'workspace-secret-resolution.ts': 'd02b7e7033437226506c107b28937378ca9bcc84f37ec2738ccc2066d25c74c0',
+  'workspace-secret-resolution.ts':
+    'd02b7e7033437226506c107b28937378ca9bcc84f37ec2738ccc2066d25c74c0',
 } as const
 
 /** Where the control plane lives when this machine has a checkout of it. */

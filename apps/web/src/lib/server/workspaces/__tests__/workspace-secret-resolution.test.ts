@@ -50,7 +50,11 @@ describe('the happy path', () => {
   it('derives the workspace’s SECRET_KEY and opens its storage credentials', () => {
     const resolved = resolve()
     expect(resolved.secretKey).toBe(
-      deriveWorkspaceSecret(ROOT, { generation: 1, workspaceKey: WORKSPACE, purpose: 'app-secrets' })
+      deriveWorkspaceSecret(ROOT, {
+        generation: 1,
+        workspaceKey: WORKSPACE,
+        purpose: 'app-secrets',
+      })
     )
     expect(resolved.storage).toEqual(CREDS)
     expect(resolved.storageProblem).toBeNull()
@@ -152,11 +156,13 @@ describe('SECRET_KEY failures refuse the workspace', () => {
     const bravos = workspaceAppSecretVariable('inst_bravo')
     expect(() =>
       resolve({ appSecretsRef: `env://${bravos}`, env: { [bravos]: 'shared-key-000000000000000' } })
-    ).toThrow(/must be held in QUACKBACK_WORKSPACE_SECRET_INST_ALPHA_/)
+    ).toThrow(/must be held in QUACKBACK_TENANT_SECRET_INST_ALPHA_/)
   })
 
   it('gives two workspaces different variable names, so they cannot collide', () => {
-    expect(workspaceAppSecretVariable('inst_alpha')).not.toBe(workspaceAppSecretVariable('inst_bravo'))
+    expect(workspaceAppSecretVariable('inst_alpha')).not.toBe(
+      workspaceAppSecretVariable('inst_bravo')
+    )
     // The normalisation is lossy, so the digest is what separates these two.
     expect(workspaceAppSecretVariable('inst_a-b')).not.toBe(workspaceAppSecretVariable('inst_a_b'))
   })
@@ -168,7 +174,11 @@ describe('storage failures degrade storage only', () => {
     const resolved = resolveWorkspaceSecretsFromRefs({
       workspaceKey: WORKSPACE,
       appSecretsRef: `env://${variable}`,
-      storageCredentialRef: sealedStorageRef(WORKSPACE, 1, 'a-different-fleet-root-key-000000000000'),
+      storageCredentialRef: sealedStorageRef(
+        WORKSPACE,
+        1,
+        'a-different-fleet-root-key-000000000000'
+      ),
       rootKey: ROOT,
       env: { [variable]: 'an-operator-supplied-secret-key-000' },
     })

@@ -73,7 +73,7 @@ describe('deriveKey under a workspace scope', () => {
    * because the info string already carried the workspace. Pinned rather than
    * computed, so it cannot follow the source.
    */
-  const WORKSPACE_KEY_HEX = 'd19dda6f2de70250e1975bc33f5405acff503e1a574c3c110aede0d02aac2547'
+  const WORKSPACE_KEY_HEX = 'f2815cfebf7d0231764fc1feec104cedab2dd2ebef4148b736a6e4139903e27f'
 
   it('derives from the WORKSPACE’s own SECRET_KEY, not the fleet-wide one', () => {
     const sealed = sealWith(WORKSPACE_KEY_HEX, 'alpha-oauth-refresh-token')

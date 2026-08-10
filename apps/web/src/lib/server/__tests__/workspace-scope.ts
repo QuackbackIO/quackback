@@ -10,7 +10,10 @@
 import { createHash } from 'node:crypto'
 import { fromUuid, type WorkspaceId } from '@quackback/ids'
 import type { WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
-import { createWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
+import {
+  createWorkspaceScope,
+  runWithWorkspaceScope,
+} from '@/lib/server/workspaces/workspace-context'
 import type { ResolvedWorkspaceSecrets } from '@/lib/server/workspaces/vendor/workspace-secret-resolution'
 
 type StorageOverrides = Partial<WorkspaceDescriptor['storage']>
@@ -83,14 +86,14 @@ export function makeWorkspaceDescriptor(
       directUrl: `postgresql://app@db.example.com/${workspaceKey}`,
       name: workspaceKey,
       role: 'app',
-      credentialRef: 'env://QUACKBACK_WORKSPACE_SECRET_DB',
+      credentialRef: 'env://QUACKBACK_TENANT_SECRET_DB',
     },
     fingerprint: {
       expectedWorkspaceKey: workspaceKey,
       expectedSelfReportedWorkspaceId: workspaceUuidFor(workspaceKey),
       stampedAt: '2026-01-01T00:00:00.000Z',
     },
-    secrets: { appSecretsRef: 'env://QUACKBACK_WORKSPACE_SECRET_APP' },
+    secrets: { appSecretsRef: 'env://QUACKBACK_TENANT_SECRET_APP' },
     storage: {
       provider: 'r2',
       bucket: `${workspaceKey}-bucket`,
@@ -98,7 +101,7 @@ export function makeWorkspaceDescriptor(
       region: 'auto',
       forcePathStyle: false,
       publicUrl: `https://assets-${workspaceKey}.example.com`,
-      credentialRef: 'env://QUACKBACK_WORKSPACE_SECRET_STORAGE',
+      credentialRef: 'env://QUACKBACK_TENANT_SECRET_STORAGE',
       ...(overrides.storage ?? {}),
     },
     email: { from: `support@${host}` },

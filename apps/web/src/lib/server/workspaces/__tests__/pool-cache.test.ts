@@ -16,7 +16,7 @@ import { deriveWorkspaceSecret, sealSecretKeyCanary } from '../vendor/fleet-secr
 
 /** The fleet root this fixture derives every workspace's SECRET_KEY from. */
 const ROOT_KEY = 'pool-cache-test-fleet-root-key-0123456789'
-const STORAGE_ENV_VAR = 'QUACKBACK_WORKSPACE_SECRET_STORAGE_TEST'
+const STORAGE_ENV_VAR = 'QUACKBACK_TENANT_SECRET_STORAGE_TEST'
 
 /** The canary a workspace's own derived key opens. */
 function canaryFor(workspaceKey: string): string {
@@ -84,7 +84,7 @@ function descriptor(id: string, revision = 1) {
       directUrl: `postgresql://role_${id}@direct.example/${id}`,
       name: id,
       role: `role_${id}`,
-      credentialRef: 'env://QUACKBACK_WORKSPACE_SECRET_TEST',
+      credentialRef: 'env://QUACKBACK_TENANT_SECRET_TEST',
     },
     fingerprint: { expectedWorkspaceKey: id, expectedSelfReportedWorkspaceId: 'w', stampedAt: 's' },
     secrets: { appSecretsRef: `derived+hkdf://v1/${id}/app-secrets` },
@@ -101,7 +101,7 @@ async function loadCache() {
   vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
   vi.stubEnv('DATABASE_URL', '')
   vi.stubEnv('QUACKBACK_CONTROL_DATABASE_URL', 'postgresql://u@localhost:5432/control')
-  vi.stubEnv('QUACKBACK_WORKSPACE_SECRET_TEST', 'hunter2')
+  vi.stubEnv('QUACKBACK_TENANT_SECRET_TEST', 'hunter2')
   vi.stubEnv('QUACKBACK_FLEET_ROOT_KEY', ROOT_KEY)
   vi.stubEnv(STORAGE_ENV_VAR, '{"accessKeyId":"AK","secretAccessKey":"SK-0123456789abcdef"}')
   return import('../pool-cache')
@@ -358,9 +358,9 @@ describe('workspace pool cache', () => {
     // Left to the driver, a throwing password provider surfaces fifteen seconds
     // later as CONNECT_TIMEOUT — slow, and naming the wrong cause.
     const cache = await loadCache()
-    vi.stubEnv('QUACKBACK_WORKSPACE_SECRET_TEST', '')
+    vi.stubEnv('QUACKBACK_TENANT_SECRET_TEST', '')
     await expect(cache.acquireWorkspacePool(descriptor('t1'))).rejects.toThrow(
-      /QUACKBACK_WORKSPACE_SECRET_TEST, which is unset/
+      /QUACKBACK_TENANT_SECRET_TEST, which is unset/
     )
     expect(cache.getPoolCacheStats().live).toBe(0)
   })

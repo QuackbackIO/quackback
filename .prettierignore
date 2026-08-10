@@ -18,4 +18,4 @@ apps/web/src/lib/server/policy/migration-contract/CONTRACT.md
 # repos independently reading the same prose is how one ends up with a slightly
 # more forgiving version, and the forgiving one serves the wrong tenant.
 # Changes belong in the control plane, then get re-vendored.
-apps/web/src/lib/server/tenancy/vendor/
+apps/web/src/lib/server/workspaces/vendor/
