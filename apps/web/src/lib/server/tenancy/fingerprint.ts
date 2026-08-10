@@ -57,6 +57,7 @@ import {
   type PhysicalFailure,
 } from './physical-identity'
 import { verifySecretKeyCanary } from './vendor/fleet-secrets'
+import { probeStoredCiphertext, type StoredCiphertextProbe } from './stored-ciphertext'
 
 /** Where the tenant id was read from, for the refusal log. */
 export type StampSource = 'column' | 'metadata' | 'none'
@@ -72,6 +73,15 @@ export interface TenantIdentityObservation extends ObservedFingerprint {
    * migration 0252.
    */
   secretCanary: string | null
+  /**
+   * The same key, tried against ciphertext this database was already holding.
+   *
+   * The canary is minted by whoever last took custody, so it attests only that
+   * this process holds the key the canary was sealed with. This is the fact it
+   * cannot supply: whether that key is the one the tenant's *stored* data was
+   * written under. See `stored-ciphertext.ts` for which value is sampled.
+   */
+  storedCiphertext: StoredCiphertextProbe
 }
 
 export type IdentityFailure =
@@ -80,6 +90,8 @@ export type IdentityFailure =
   | 'stamp_source_conflict'
   | 'secret_key_canary_missing'
   | 'secret_key_canary_mismatch'
+  | 'secret_key_stored_ciphertext_mismatch'
+  | 'secret_key_custody_unproven'
 
 /**
  * What each refusal code is actually an accusation about.
@@ -111,6 +123,8 @@ const IDENTITY_FAILURE_SUBJECT = {
   stamp_source_conflict: 'database',
   secret_key_canary_missing: 'key',
   secret_key_canary_mismatch: 'key',
+  secret_key_stored_ciphertext_mismatch: 'key',
+  secret_key_custody_unproven: 'key',
 } as const satisfies Record<IdentityFailure, 'database' | 'key'>
 
 /**
@@ -161,26 +175,79 @@ export class TenantFingerprintRefusal extends Error {
   }
 }
 
+interface SettingsIdentityRow {
+  id: string
+  metadata: string | null
+  cloud_tenant_id: string | null
+  cloud_secret_canary: string | null
+  stored_ciphertext: string | null
+}
+
+/**
+ * The settings read, with a sample of the tenant's own ciphertext riding along.
+ *
+ * The sample is a correlated subquery in the *same statement*, so the evidence
+ * the key check needs costs no extra round trip on the checkout path.
+ *
+ * `jwks` is created by migration 0001, one step behind `settings` itself, so a
+ * database that has this query's `FROM` but not its subquery is one that never
+ * finished provisioning. That is still not a reason to hard-fail: this is the
+ * first thing a pooled process does with a tenant database, and refusing to even
+ * look because a table arrived a migration later is how an ordering problem
+ * becomes an outage. So the one error that means exactly that — `42P01`,
+ * undefined table — falls back to the settings-only read, and the tenant is
+ * reported as having nothing sampled rather than as suspect.
+ *
+ * The oldest key is sampled, not the newest, and that is the load-bearing
+ * detail. A rotation writes a new row under whatever key is in force, so a
+ * fleet holding the wrong key would mint a fresh row it *can* open and the check
+ * would congratulate itself. The oldest row is the one written furthest back,
+ * under the custody this database's data actually belongs to.
+ */
+async function readSettingsIdentity(sql: Sql): Promise<SettingsIdentityRow[]> {
+  // LIMIT 2 rather than count(*): one round trip, and it distinguishes 0, 1 and
+  // "more than one", which is all the verdict needs.
+  try {
+    return (await sql`
+      SELECT s.id::text AS id,
+             s.metadata,
+             (to_jsonb(s) ->> 'cloud_tenant_id')     AS cloud_tenant_id,
+             (to_jsonb(s) ->> 'cloud_secret_canary') AS cloud_secret_canary,
+             (SELECT j.private_key
+                FROM jwks j
+               ORDER BY j.created_at ASC, j.id ASC
+               LIMIT 1)                              AS stored_ciphertext
+        FROM settings s
+       LIMIT 2
+    `) as unknown as SettingsIdentityRow[]
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code !== '42P01') throw err
+    const rows = (await sql`
+      SELECT s.id::text AS id,
+             s.metadata,
+             (to_jsonb(s) ->> 'cloud_tenant_id')     AS cloud_tenant_id,
+             (to_jsonb(s) ->> 'cloud_secret_canary') AS cloud_secret_canary
+        FROM settings s
+       LIMIT 2
+    `) as unknown as Omit<SettingsIdentityRow, 'stored_ciphertext'>[]
+    return rows.map((row) => ({ ...row, stored_ciphertext: null }))
+  }
+}
+
 /**
  * Read what a tenant database says about itself. Observations only, never a
  * verdict — the verdict lives in exactly one place.
+ *
+ * `secretKey` is the key this process resolved for the tenant and is about to
+ * put into service. It is taken here rather than at the verdict because opening
+ * a sample is I/O-shaped and the verdict is a pure function; what crosses the
+ * boundary is which of four things happened, never the plaintext.
  */
-export async function observeTenantIdentity(sql: Sql): Promise<TenantIdentityObservation> {
-  // LIMIT 2 rather than count(*): one round trip, and it distinguishes 0, 1 and
-  // "more than one", which is all the verdict needs.
-  const rows = (await sql`
-    SELECT s.id::text AS id,
-           s.metadata,
-           (to_jsonb(s) ->> 'cloud_tenant_id')     AS cloud_tenant_id,
-           (to_jsonb(s) ->> 'cloud_secret_canary') AS cloud_secret_canary
-      FROM settings s
-     LIMIT 2
-  `) as unknown as Array<{
-    id: string
-    metadata: string | null
-    cloud_tenant_id: string | null
-    cloud_secret_canary: string | null
-  }>
+export async function observeTenantIdentity(
+  sql: Sql,
+  secretKey: string
+): Promise<TenantIdentityObservation> {
+  const rows = await readSettingsIdentity(sql)
 
   const physical = await observePhysicalIdentity(sql)
 
@@ -193,6 +260,12 @@ export async function observeTenantIdentity(sql: Sql): Promise<TenantIdentityObs
       stampSource: 'none',
       stampSourceConflict: null,
       secretCanary: null,
+      // `unobserved`, not `absent`: nothing was sampled here, and claiming this
+      // database holds nothing would be asserting a fact nobody checked. A
+      // database with no single settings row is refused on that ground first, so
+      // the key question never arises — but the fail-closed value is still the
+      // correct one to carry.
+      storedCiphertext: { kind: 'unobserved' },
     }
   }
 
@@ -223,8 +296,34 @@ export async function observeTenantIdentity(sql: Sql): Promise<TenantIdentityObs
     stampSource,
     stampSourceConflict: conflict,
     secretCanary: normalise(row.cloud_secret_canary),
+    storedCiphertext: await probeStoredCiphertext(secretKey, row.stored_ciphertext),
   }
 }
+
+/**
+ * The repair, stated so it is true whichever custody scheme the record names.
+ *
+ * The old text sent every operator to `establish-tenant-secrets.ts`. That script
+ * repairs exactly one kind of tenant. `establishTenantAppSecrets` computes a
+ * derived ref unconditionally and only *warns* that it is replacing the one it
+ * was handed — so on a tenant whose `appSecretsRef` says `env://` or
+ * `openbao+kv://`, following that instruction repoints the record at a third key
+ * and stamps a canary under it. The tenant then holds ciphertext from key A, a
+ * record naming key C, and a canary certifying C: the mismatch stops being
+ * repairable rather than being repaired.
+ *
+ * An error that tells an operator to do the wrong thing is worse than one that
+ * says nothing, so the condition is named rather than assumed.
+ */
+const CUSTODY_REPAIR_ADVICE =
+  `Stamp the canary under the key this tenant's appSecretsRef ALREADY names — do not let a ` +
+  `tool pick the key. The control plane's establish-tenant-secrets script is only that tool ` +
+  `for a tenant already on derived+hkdf://: it computes a derived ref and replaces whatever ` +
+  `the record named, so running it against an env:// or openbao+kv:// tenant points the ` +
+  `record at a THIRD key and stamps a canary under it.\n` +
+  `  bun run src/scripts/establish-tenant-secrets.ts --tenant-id <id>   # derived+hkdf:// only\n` +
+  `Provisioning will not do it either: it returns early on an already-registered tenant, ` +
+  `before the custody step.`
 
 /**
  * Does the key this process resolved match the key this database's ciphertext
@@ -240,23 +339,37 @@ export async function observeTenantIdentity(sql: Sql): Promise<TenantIdentityObs
  * reason: "no evidence" and "good evidence" must not produce the same outcome
  * when the thing at stake is whether new ciphertext is about to be written under
  * a key that will not open it again.
+ *
+ * ## Two facts, because the canary alone answers a different question
+ *
+ * The canary is minted by whoever last took custody. Opening it proves this
+ * process holds the key the canary was sealed with, and nothing whatsoever about
+ * the data already in the database — so a custody change that re-stamps the
+ * canary certifies the new key over ciphertext the new key cannot open. That is
+ * not a hypothetical: it is what shipped, and it surfaced as an untyped 500 on
+ * every authenticated request rather than as a refusal here.
+ *
+ * So `storedCiphertext` is a second, independent fact, and the canary is no
+ * longer sufficient on its own. It defaults to `unobserved`, which refuses: a
+ * caller that rules without gathering evidence gets the same answer as a caller
+ * with bad evidence, which is the fail-closed direction and the one the old
+ * shape of this function got wrong.
  */
 export function evaluateSecretKeyCanary(
   tenantId: string,
   secretKey: string,
-  observedCanary: string | null
+  observedCanary: string | null,
+  storedCiphertext: StoredCiphertextProbe = { kind: 'unobserved' }
 ): IdentityVerdict {
   if (!observedCanary) {
     return {
       ok: false,
       code: 'secret_key_canary_missing',
       detail:
-        `settings.cloud_secret_canary is absent, so nothing proves this fleet holds the key ` +
-        `this database's stored ciphertext was written under. Repair with the control plane's ` +
-        `establish-tenant-secrets script:\n` +
-        `  bun run src/scripts/establish-tenant-secrets.ts --tenant-id ${tenantId}\n` +
-        `Provisioning will NOT do it: it returns early on an already-registered tenant, before ` +
-        `the custody step.`,
+        `settings.cloud_secret_canary is absent for ${tenantId}, so nothing records which key ` +
+        `this database's stored ciphertext was written under. Absent is not greenfield: it ` +
+        `means no record, and the data is there either way. ` +
+        CUSTODY_REPAIR_ADVICE,
     }
   }
   if (!verifySecretKeyCanary(secretKey, tenantId, observedCanary)) {
@@ -266,10 +379,45 @@ export function evaluateSecretKeyCanary(
       detail:
         `the SECRET_KEY this process resolved does not open settings.cloud_secret_canary. ` +
         `Serving would write new ciphertext under a key that cannot read the old — refusing. ` +
-        `Check the fleet root key and the generation in this tenant's appSecretsRef.`,
+        `Check the fleet root key, and the scheme and generation in this tenant's ` +
+        `appSecretsRef. ` +
+        CUSTODY_REPAIR_ADVICE,
     }
   }
-  return { ok: true }
+
+  switch (storedCiphertext.kind) {
+    case 'unopenable':
+      return {
+        ok: false,
+        code: 'secret_key_stored_ciphertext_mismatch',
+        detail:
+          `the SECRET_KEY this process resolved opens settings.cloud_secret_canary but does NOT ` +
+          `open ${storedCiphertext.source}, which this database was already holding. The canary ` +
+          `is newer than the data: custody moved and the canary was re-stamped over a database ` +
+          `nobody re-encrypted. Re-stamping again repeats exactly that and makes it permanent. ` +
+          `Restore custody of the key the stored ciphertext was written under, or re-encrypt ` +
+          `this database under the key now in force and stamp the canary last.`,
+      }
+    case 'unobserved':
+      return {
+        ok: false,
+        code: 'secret_key_custody_unproven',
+        detail:
+          `settings.cloud_secret_canary opened, but no ciphertext was sampled from this ` +
+          `database to corroborate it. The canary attests possession of the key it was itself ` +
+          `sealed with; on its own it says nothing about the key the stored data was written ` +
+          `under. This is a caller that ruled without gathering evidence, not a tenant fault.`,
+      }
+    case 'absent':
+      // Nothing sealed under this key exists yet, so there is nothing a wrong
+      // key could fail to open and nothing serving can damage that is not
+      // already damaged. Saying so out loud rather than letting it fall out of
+      // a falsy check: this is the one state where a canary on its own is
+      // enough, and it is enough because the risk it guards has no subject.
+      return { ok: true }
+    case 'opened':
+      return { ok: true }
+  }
 }
 
 /**

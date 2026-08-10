@@ -275,10 +275,18 @@ async function verifyTenantDatabase(
   // the one descriptor this function was handed.
   const secrets = await resolveTenantSecrets(tenant)
 
-  const observed = await observeTenantIdentity(sql)
+  // The resolved key goes in with the read: the identity question includes
+  // whether this key opens ciphertext the database is already holding, and that
+  // has to be answered from a sample rather than from the minted canary alone.
+  const observed = await observeTenantIdentity(sql, secrets.secretKey)
   const verdict = evaluateTenantIdentity(tenant.fingerprint, tenant.physical, observed)
   const keyVerdict = verdict.ok
-    ? evaluateSecretKeyCanary(tenant.tenantId, secrets.secretKey, observed.secretCanary)
+    ? evaluateSecretKeyCanary(
+        tenant.tenantId,
+        secrets.secretKey,
+        observed.secretCanary,
+        observed.storedCiphertext
+      )
     : verdict
   if (keyVerdict.ok) {
     // §10.5's compatibility gate, in the same pass and cached the same way: this
@@ -294,6 +302,11 @@ async function verifyTenantDatabase(
         stampSource: observed.stampSource,
         neonBranchId: observed.physical.neonBranchId,
         storageResolved: secrets.storage !== null,
+        // Which of the four evidence states the key check cleared on. A fleet
+        // where this reads `absent` everywhere is a fleet where the canary is
+        // again the only thing being checked, and that is worth being able to
+        // see rather than infer.
+        storedCiphertext: observed.storedCiphertext,
       },
       'tenant database fingerprint verified'
     )

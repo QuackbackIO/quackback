@@ -242,6 +242,27 @@ describe('resolveTenantAndContinue', () => {
     }
   })
 
+  it('a stale-ciphertext refusal names the key, by that code and not by a list', async () => {
+    // The loop above iterates a derived list, so it would keep passing if the
+    // new code were never added to it. This names the code the stored-ciphertext
+    // check produces, so the routing is asserted for that code specifically
+    // rather than for whatever the list happens to hold.
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'refused',
+      tenantId: 'inst_a',
+      code: 'secret_key_stored_ciphertext_mismatch',
+      detail: 'the canary opens but jwks.private_key does not',
+    })
+    const res = (await serve('t1.localhost')) as Response
+    expect(res.status).toBe(503)
+    const [, message] = silentLog.error.mock.calls.at(-1)!
+    expect(message).toContain('do not belong to each other')
+    expect(message).not.toContain('fingerprint')
+    expect(message).not.toContain('could not open a verified connection')
+    // And nothing operator-facing reaches the visitor.
+    expect(await res.text()).not.toContain('jwks')
+  })
+
   it('every failure code is classified as exactly one of the two subjects', async () => {
     // The compile-time map already forces a new code to be classified. This is
     // the runtime half: that the two derived lists partition it rather than

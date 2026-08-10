@@ -121,6 +121,9 @@ describe('tenant pool cache', () => {
       stampSource: 'none',
       stampSourceConflict: null,
       secretCanary: null,
+      // The ordinary healthy tenant: the resolved key opens ciphertext the
+      // database was already holding. Cases below override it.
+      storedCiphertext: { kind: 'opened', source: 'jwks.private_key' },
     }
     // `clearAllMocks` clears calls but keeps implementations, so a verdict or an
     // observation stubbed by one case would silently govern every later one.
@@ -287,6 +290,44 @@ describe('tenant pool cache', () => {
     )
   })
 
+  it('refuses a tenant whose key opens the canary but not its own stored ciphertext', async () => {
+    // The measured failure, at the layer that is supposed to catch it. Custody
+    // moved and the canary was re-stamped under the new key over a database
+    // nobody re-encrypted, so the canary opens and the data does not. Serving
+    // this tenant is how it became eighteen hours of untyped 500s instead of
+    // one refusal at checkout.
+    const cache = await loadCache()
+    const fp = await import('../fingerprint')
+    vi.mocked(fp.observeTenantIdentity).mockImplementation((async (sql: { dsn?: string }) => ({
+      ...((await defaultObservation(sql)) as Record<string, unknown>),
+      storedCiphertext: { kind: 'unopenable', source: 'jwks.private_key' },
+    })) as never)
+
+    await expect(cache.acquireTenantPool(descriptor('t1'))).rejects.toThrow(
+      /secret_key_stored_ciphertext_mismatch/
+    )
+    expect(cache.getPoolCacheStats().live).toBe(0)
+    expect(cache.getPoolCacheStats().refusals).toBe(1)
+    expect(ended).toHaveLength(1)
+  })
+
+  it('serves a tenant that has nothing encrypted yet — absence is not a refusal', async () => {
+    // A workspace that has never signed anything holds no ciphertext, so there
+    // is nothing a wrong key could fail to open and nothing serving can damage.
+    // Refusing here would turn "brand new tenant" into an outage, which is the
+    // opposite of what the check is for.
+    const cache = await loadCache()
+    const fp = await import('../fingerprint')
+    vi.mocked(fp.observeTenantIdentity).mockImplementation((async (sql: { dsn?: string }) => ({
+      ...((await defaultObservation(sql)) as Record<string, unknown>),
+      storedCiphertext: { kind: 'absent', source: 'jwks.private_key', reason: 'no-row' },
+    })) as never)
+
+    const pool = await cache.acquireTenantPool(descriptor('t1'))
+    expect(pool.secrets.secretKey).toBeTruthy()
+    await cache.closeAllTenantPools()
+  })
+
   it('serves when the canary DOES open — the positive control for both refusals', async () => {
     const cache = await loadCache()
     const pool = await cache.acquireTenantPool(descriptor('t1'))
@@ -344,7 +385,10 @@ describe('tenant pool cache', () => {
   it('keeps prepared statements on', async () => {
     const cache = await loadCache()
     await cache.acquireTenantPool(descriptor('t1'))
-    const options = (postgresFactory.mock.calls[0]?.[1] ?? {}) as { prepare?: boolean; idle_timeout?: number }
+    const options = (postgresFactory.mock.calls[0]?.[1] ?? {}) as {
+      prepare?: boolean
+      idle_timeout?: number
+    }
     expect(options.prepare).toBe(true)
     // And the idle timeout must be well under Neon's 300s suspend window and
     // Railway's 600s sleep window, or nothing ever goes quiet.
