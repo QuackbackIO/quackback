@@ -262,11 +262,41 @@ entrypoint, because that role is a command rather than a server. Its schedule is
 a convergence pass, not the trigger: a run only touches a workspace recorded
 below its target version, and the target only moves when an operator moves it.
 
-**Cron service logs are not readable through the API or `railway logs`.** Both
-return empty for `quackback-cron-hourly`, which certainly runs. So an empty log
-is not evidence a scheduled run did not happen, and a rollout cannot use it to
-decide anything — read `cp_workspace_schema_state` instead, which is where the
-migrator records what it did.
+### Reading a cron service's logs, and three things that make it look impossible
+
+Cron logs are perfectly readable. Getting to them took three wrong turns, all of
+which produce the same empty output:
+
+1. **`railway logs` streams by default** and prints nothing for a service that is
+   not currently running — which a cron service almost never is. Pass `--lines`
+   (or `--since`) to fetch history instead.
+2. **`railway logs` defaults to the most recent successful deployment**, and a
+   deployment created after the last scheduled run has no logs of its own. Every
+   service looks silent for a while after any `apply`.
+3. **The `environmentLogs` GraphQL query ignores `afterDate`** and returns the
+   OLDEST entries up to `afterLimit`, so a small limit shows you last week and
+   nothing else. Raise the limit and read the tail:
+
+```bash
+railway api 'query($eid: String!, $filter: String) {
+  environmentLogs(environmentId: $eid, afterLimit: 5000, filter: $filter) {
+    timestamp message } }' \
+  --variables '{"eid":"<env-id>","filter":"@service:<service-id>"}'
+```
+
+**Scheduled runs lag their slot by three to four minutes.** Measured twice: a
+`24 * * * *` slot started at `:27:13`, a `41 * * * *` slot at `:44:59`. Checking
+a minute after the slot reads as a failure when nothing has failed.
+
+**A redeploy does not run a cron service.** Six redeploys of
+`quackback-migrator` produced six `Stopping Container` lines and no run; only the
+scheduled slot produced `Starting Container`. This matters for the release
+pipeline: deploying a digest to the migrator service is not a way to trigger it.
+
+**Changing the schedule or deploying appears to cost the next slot.**
+`quackback-cron-hourly` was deployed at `20:43` and did not run at `21:23`; given
+a fresh schedule it ran normally. Worth knowing before reading a missed sweep as
+a fault.
 
 ## Notes
 
