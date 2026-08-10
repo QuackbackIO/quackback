@@ -54,6 +54,10 @@ export function makeTenantSecrets(
 ): ResolvedTenantSecrets {
   return {
     secretKey: `test-secret-key-for-${tenantId}-0123456789abcdef`,
+    // Per-tenant like the key itself. A constant here would let a fixture pass
+    // the stamp comparison that the production resolver would fail, which is
+    // the same reason the key above is derived from the tenant id.
+    provenance: { refScheme: 'env', generation: 0, material: `test-material-${tenantId}` },
     storage: {
       accessKeyId: `AK-${tenantId}`,
       secretAccessKey: `SK-${tenantId}-0123456789abcdef`,

@@ -22,37 +22,37 @@ import {
   type SecretRefField,
 } from '../vendor/secret-ref'
 
-describe('openbao+kv is confined to apps/<tenant>', () => {
-  it('refuses the fleet-wide platform tree', () => {
+describe('the openbao schemes are gone, not merely confined', () => {
+  /**
+   * This suite used to assert that `openbao+kv://` was CONFINED to
+   * `apps/<tenant>`, because `openbao+kv://secret/platform/ai` — the fleet's
+   * shared AI credential — had been in policy by the artifact's own rules, and
+   * was inert only because nothing could dereference the scheme.
+   *
+   * Migration 0051 removed the openbao schemes from the vocabulary entirely, so
+   * the original hazard is now unreachable for a stronger reason: the ref does
+   * not parse at all. The assertions are kept rather than deleted, because
+   * "cannot be spelled" is the guarantee that replaced "must be confined", and
+   * a suite that simply lost its subject would not notice the scheme coming
+   * back.
+   */
+  it('refuses the fleet-wide platform tree it was written for', () => {
     expect(isValidSecretRef('openbao+kv://secret/platform/ai')).toBe(false)
     expect(isValidSecretRef('openbao+kv://secret/platform/integrations')).toBe(false)
-    expect(() => parseSecretRef('openbao+kv://secret/platform/ai')).toThrow(/confined/)
   })
 
-  it('refuses anything outside the apps/ prefix, and any extra segment', () => {
-    for (const ref of [
-      'openbao+kv://apps',
-      'openbao+kv://apps/',
-      'openbao+kv://apps/tenant/extra',
-      'openbao+kv://appsfoo/tenant',
-      'openbao+kv://../secret/platform/ai',
-      'openbao+kv://apps/../../secret/platform/ai',
-      'openbao+kv://APPS/tenant',
-    ]) {
-      expect(isValidSecretRef(ref), ref).toBe(false)
+  it('refuses even the shape that used to be in policy', () => {
+    expect(isValidSecretRef('openbao+kv://apps/neon-t1')).toBe(false)
+    expect(isValidSecretRef('openbao+kv://apps/inst_gauntlet_alpha')).toBe(false)
+    expect(isValidSecretRef('openbao+static-role://qb_role')).toBe(false)
+    expect(() => parseSecretRef('openbao+kv://apps/neon-t1')).toThrow()
+  })
+
+  it('allows no field to name one', () => {
+    for (const field of ['database', 'appSecrets', 'storage'] as SecretRefField[]) {
+      expect(allowedSchemesFor(field)).not.toContain('openbao+kv')
+      expect(allowedSchemesFor(field)).not.toContain('openbao+static-role')
     }
-  })
-
-  it('still accepts the shape the control plane has always written', () => {
-    // The positive control. Without it a confinement that rejected everything
-    // would look identical to a confinement that works, and it would take a
-    // fleet-wide outage to tell them apart.
-    expect(parseSecretRef('openbao+kv://apps/neon-t1')).toMatchObject({
-      scheme: 'openbao+kv',
-      path: 'apps/neon-t1',
-      tenantSegment: 'neon-t1',
-    })
-    expect(isValidSecretRef('openbao+kv://apps/inst_gauntlet_alpha')).toBe(true)
   })
 })
 
@@ -111,21 +111,21 @@ describe('per-field policy', () => {
     // A database credential is issued by a provider or a vault. It is never a
     // value this system chooses, so nothing derivable belongs here.
     ['database', 'neon+role://proj-1/br-abc/qb_role', true],
-    ['database', 'openbao+static-role://qb_role', true],
+    ['database', 'openbao+static-role://qb_role', false],
     ['database', 'env://QUACKBACK_TENANT_SECRET_DB', true],
     ['database', 'openbao+kv://apps/tenant', false],
     ['database', 'derived+hkdf://v1/t/app-secrets', false],
     ['database', 'sealed+aead://v1/t/storage/' + 'A'.repeat(20), false],
 
     ['appSecrets', 'derived+hkdf://v1/t/app-secrets', true],
-    ['appSecrets', 'openbao+kv://apps/tenant', true],
+    ['appSecrets', 'openbao+kv://apps/tenant', false],
     ['appSecrets', 'env://QUACKBACK_TENANT_SECRET_APP', true],
     // Names a Postgres role, which is not an app-secret bundle.
     ['appSecrets', 'openbao+static-role://qb_role', false],
     ['appSecrets', 'neon+role://proj-1/br-abc/qb_role', false],
 
     ['storage', 'sealed+aead://v1/t/storage/' + 'A'.repeat(20), true],
-    ['storage', 'openbao+kv://apps/tenant', true],
+    ['storage', 'openbao+kv://apps/tenant', false],
     ['storage', 'env://QUACKBACK_TENANT_SECRET_STORAGE', true],
     // A scheme that would silently invent a plausible-looking key pair for a
     // real bucket is worse than one that refuses.
@@ -143,12 +143,8 @@ describe('per-field policy', () => {
   })
 
   it('states the policy as data, so the three enforcement points cannot drift', () => {
-    expect(allowedSchemesFor('database')).toEqual([
-      'openbao+static-role',
-      'neon+role',
-      'env',
-    ])
-    expect(allowedSchemesFor('appSecrets')).toEqual(['derived+hkdf', 'openbao+kv', 'env'])
-    expect(allowedSchemesFor('storage')).toEqual(['sealed+aead', 'openbao+kv', 'env'])
+    expect(allowedSchemesFor('database')).toEqual(['neon+role', 'env'])
+    expect(allowedSchemesFor('appSecrets')).toEqual(['derived+hkdf', 'env'])
+    expect(allowedSchemesFor('storage')).toEqual(['sealed+aead', 'env'])
   })
 })

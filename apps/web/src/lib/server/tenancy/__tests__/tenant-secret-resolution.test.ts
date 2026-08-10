@@ -13,10 +13,7 @@
  *    integration into an outage.
  */
 import { describe, expect, it } from 'vitest'
-import {
-  deriveTenantSecret,
-  sealTenantSecret,
-} from '../vendor/fleet-secrets'
+import { deriveTenantSecret, sealTenantSecret } from '../vendor/fleet-secrets'
 import {
   encodeStorageCredentials,
   resolveTenantSecretsFromRefs,
@@ -85,9 +82,9 @@ describe('a ref must name the tenant whose record carries it', () => {
   it('refuses an app-secrets ref naming another tenant', () => {
     // Without this, a row that named another tenant would derive that tenant's
     // key — the §3 wrong-pool failure moved to the secret, and just as quiet.
-    expect(() =>
-      resolve({ appSecretsRef: 'derived+hkdf://v1/inst_bravo/app-secrets' })
-    ).toThrow(/names tenant inst_bravo but sits on the record for inst_alpha/)
+    expect(() => resolve({ appSecretsRef: 'derived+hkdf://v1/inst_bravo/app-secrets' })).toThrow(
+      /names tenant inst_bravo but sits on the record for inst_alpha/
+    )
   })
 
   it('reports a storage ref naming another tenant as a storage problem', () => {
@@ -101,11 +98,16 @@ describe('a ref must name the tenant whose record carries it', () => {
 
 describe('SECRET_KEY failures refuse the tenant', () => {
   it('refuses a scheme this process cannot resolve, by name', () => {
-    expect(() => resolve({ appSecretsRef: 'openbao+kv://apps/alpha' })).toThrow(
+    // A scheme that PARSES but has no app-secret resolver. It used to be
+    // `openbao+kv://`, which 0051 removed from the vocabulary altogether — so
+    // that ref now dies one layer earlier, in the parser, and would no longer
+    // exercise this path at all. `neon+role://` is well-formed and legal in the
+    // database column, which is exactly the mistake worth refusing by name.
+    expect(() => resolve({ appSecretsRef: 'neon+role://proj-1/br-abc/qb_role' })).toThrow(
       TenantSecretResolutionError
     )
-    expect(() => resolve({ appSecretsRef: 'openbao+kv://apps/alpha' })).toThrow(
-      /no resolver for 'openbao\+kv:\/\/' app secrets/
+    expect(() => resolve({ appSecretsRef: 'neon+role://proj-1/br-abc/qb_role' })).toThrow(
+      /no resolver for 'neon\+role:\/\/' app secrets/
     )
   })
 
@@ -176,9 +178,13 @@ describe('storage failures degrade storage only', () => {
   })
 
   it('reports a scheme with no resolver as a problem', () => {
-    const resolved = resolve({ storageCredentialRef: 'openbao+kv://apps/alpha' })
+    // Parses, but storage has no resolver for it: a derived key pair for a real
+    // bucket would be a plausible-looking credential no provider accepts, which
+    // is why the scheme is absent from the storage policy rather than merely
+    // unimplemented. Degrades storage instead of refusing the tenant.
+    const resolved = resolve({ storageCredentialRef: 'derived+hkdf://v1/alpha/storage' })
     expect(resolved.storage).toBeNull()
-    expect(resolved.storageProblem).toMatch(/no resolver for 'openbao\+kv:\/\/'/)
+    expect(resolved.storageProblem).toMatch(/no resolver for 'derived\+hkdf:\/\/'/)
   })
 
   it('refuses a sealed payload that is not a credential pair', () => {

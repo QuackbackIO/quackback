@@ -44,6 +44,11 @@ export interface TenantStorageCredentials {
 export interface ResolvedTenantSecrets {
   /** The tenant's `SECRET_KEY`. Never the fleet-wide one. */
   secretKey: string
+  /**
+   * How the key was obtained, for the stamp written beside the canary and for
+   * the serve-time comparison against it.
+   */
+  provenance: { refScheme: string; generation: number; material: string }
   /** Null when storage could not be resolved; see {@link storageProblem}. */
   storage: TenantStorageCredentials | null
   /** Why storage is null, in operator-readable terms. Null when storage resolved. */
@@ -62,7 +67,16 @@ export class TenantSecretResolutionError extends Error {
 export interface TenantSecretResolutionInput {
   tenantId: string
   appSecretsRef: SecretRef
-  storageCredentialRef: SecretRef
+  /**
+   * Optional, because a tenant on the fleet bucket has no credential of its own
+   * and its isolation is in the object key rather than in a key pair. Absent
+   * resolves to `storage: null` with **no** problem: the caller falls back to
+   * the fleet credential. That distinction is the whole point of making it
+   * optional rather than letting an unset `env://` ref stand in for "none" —
+   * the unset ref produced a `storageProblem`, and a problem is what makes the
+   * app answer 503.
+   */
+  storageCredentialRef?: SecretRef
   /** The fleet root, or null in a process that holds none. */
   rootKey: string | null
   env?: Record<string, string | undefined>
@@ -81,12 +95,20 @@ export interface TenantSecretResolutionInput {
 export function resolveTenantSecretsFromRefs(
   input: TenantSecretResolutionInput,
 ): ResolvedTenantSecrets {
-  const secretKey = resolveAppSecretKey(input)
+  const app = resolveAppSecretKey(input)
   const storage = resolveStorageCredentials(input)
-  return { secretKey, storage: storage.value, storageProblem: storage.problem }
+  return {
+    secretKey: app.secretKey,
+    provenance: app.provenance,
+    storage: storage.value,
+    storageProblem: storage.problem,
+  }
 }
 
-function resolveAppSecretKey(input: TenantSecretResolutionInput): string {
+function resolveAppSecretKey(input: TenantSecretResolutionInput): {
+  secretKey: string
+  provenance: ResolvedTenantSecrets['provenance']
+} {
   const ref = input.appSecretsRef
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
@@ -95,11 +117,18 @@ function resolveAppSecretKey(input: TenantSecretResolutionInput): string {
       assertPurpose(parsed.purpose, 'app-secrets', ref)
       const rootKey = requireRootKey(ref, input.rootKey)
       try {
-        return deriveTenantSecret(rootKey, {
-          generation: parsed.generation,
-          tenantId: parsed.tenantId,
-          purpose: 'app-secrets',
-        })
+        return {
+          secretKey: deriveTenantSecret(rootKey, {
+            generation: parsed.generation,
+            tenantId: parsed.tenantId,
+            purpose: 'app-secrets',
+          }),
+          provenance: {
+            refScheme: 'derived+hkdf',
+            generation: parsed.generation,
+            material: rootKey,
+          },
+        }
       } catch (err) {
         throw asResolutionError(err, ref)
       }
@@ -131,7 +160,11 @@ function resolveAppSecretKey(input: TenantSecretResolutionInput): string {
           `${redactRef(ref)} names ${parsed.variable}, which is unset`,
         )
       }
-      return value
+      return {
+        secretKey: value,
+        // No generation: an env ref names a variable, not a rotation counter.
+        provenance: { refScheme: 'env', generation: 0, material: value },
+      }
     }
     default:
       // Named rather than generic: "no resolver" and "wrong scheme" are
@@ -148,6 +181,11 @@ function resolveStorageCredentials(
   input: TenantSecretResolutionInput,
 ): { value: TenantStorageCredentials | null; problem: string | null } {
   const ref = input.storageCredentialRef
+  // No ref is not a failed resolution. Returning a problem here would be
+  // indistinguishable from a ref that exists and cannot be dereferenced, and the
+  // app turns a problem into a 503 — which is precisely the state a fleet-bucket
+  // tenant is supposed to be out of.
+  if (ref === undefined) return { value: null, problem: null }
   try {
     const parsed = parseSecretRef(ref)
     switch (parsed.scheme) {

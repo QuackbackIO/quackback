@@ -47,7 +47,7 @@ const ROW: {
   db_name: 'qb_neon_t1',
   db_role: 'qb_neon_t1',
   db_credential_ref: 'neon+role://tiny-credit-36813255/br-weathered-lake-aupi87in/qb_neon_t1',
-  app_secrets_ref: 'openbao+kv://apps/neon-t1',
+  app_secrets_ref: 'derived+hkdf://v1/inst_gauntlet_neon_t1/app-secrets',
   workspace_id: '019fe1ca-596e-7ff7-9edf-feecc2ce41b8',
   fingerprint_stamped_at: '2026-08-08T14:32:43.928Z',
   storage: {
@@ -57,7 +57,7 @@ const ROW: {
     region: 'auto',
     forcePathStyle: false,
     publicUrl: 'https://neon-t1.quackback.co.uk/api/storage',
-    credentialRef: 'openbao+kv://apps/neon-t1',
+    credentialRef: 'env://QUACKBACK_TENANT_SECRET_INST_GAUNTLET_NEON_T1_STORAGE',
   },
   email_from: 'Quackback Cloud <noreply@notifications.quackback.io>',
   ai_enabled: false,
@@ -82,6 +82,22 @@ function assertCarriesNoDsn(value: unknown): void {
 }
 
 describe('interpretRow', () => {
+  it('accepts a record whose storage names no credential of its own', () => {
+    // The pooled default: one fleet bucket, isolation in the key prefix, so
+    // there is no per-tenant credential to name. This must parse as a healthy
+    // record rather than a malformed one, because the app turns a storage
+    // *problem* into a 503 and "no credential" is not a problem.
+    const r = row()
+    // `storage` is `unknown` on the row type on purpose: this is raw database
+    // input and `interpretRow` is the thing that gives it a shape.
+    const storage = { ...(r.storage as Record<string, unknown>) }
+    delete storage.credentialRef
+    const result = interpretRow({ ...r, storage }, 't1.localhost')
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.tenant.storage.credentialRef).toBeUndefined()
+  })
+
   it('accepts a complete, active record and attaches the physical placement', () => {
     const result = interpretRow(row(), 't1.localhost')
     expect(result.kind).toBe('ok')
@@ -134,7 +150,10 @@ describe('interpretRow', () => {
     // the fleet, the platform's own public domain is that literal string, and a
     // baseUrl derived from it would poison cookies, email links and every
     // absolute asset URL.
-    const result = interpretRow(row({ base_url: 'https://someone-else.example.com' }), 't1.localhost')
+    const result = interpretRow(
+      row({ base_url: 'https://someone-else.example.com' }),
+      't1.localhost'
+    )
     expect(result.kind).toBe('invalid')
   })
 
@@ -165,7 +184,10 @@ describe('interpretRow', () => {
   })
 
   it('refuses a credential ref outside the known schemes', () => {
-    const result = interpretRow(row({ db_credential_ref: 'env://AWS_SECRET_ACCESS_KEY' }), 't1.localhost')
+    const result = interpretRow(
+      row({ db_credential_ref: 'env://AWS_SECRET_ACCESS_KEY' }),
+      't1.localhost'
+    )
     expect(result.kind).toBe('invalid')
   })
 

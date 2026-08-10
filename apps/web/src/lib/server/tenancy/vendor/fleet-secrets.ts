@@ -302,3 +302,93 @@ function canaryKey(secretKey: string): Buffer {
     hkdfSync('sha256', secretKey, HKDF_SALT, 'quackback:fleet:canary:v1', KEY_LENGTH),
   )
 }
+
+// =============================================================================
+// Stamp provenance
+// =============================================================================
+
+/**
+ * What a canary was stamped with, recorded in plaintext beside it.
+ *
+ * The canary proves possession and publishes nothing — which is exactly right,
+ * and exactly why a mismatch is undiagnosable. A sealed constant cannot tell you
+ * which key sealed it, so "this key does not open it" is the whole of what a
+ * replica can say. Recovering the answer meant sweeping every piece of secret
+ * material on a machine against every generation, and concluding "the key is
+ * lost" when that sweep came back empty — which was wrong, and one step from an
+ * unnecessary re-key that would have destroyed another team's work.
+ *
+ * So the *provenance* is recorded next to the canary in the clear. None of it is
+ * secret: a scheme name, an integer, an ISO timestamp, and a domain-separated
+ * tag of the key material.
+ */
+export type SecretStampProvenance = {
+  v: 1
+  /** The ref scheme in force when this canary was written. */
+  refScheme: string
+  /** Root generation for a derived ref; 0 when the scheme carries no generation. */
+  generation: number
+  /**
+   * A tag of the material the key came from — the fleet root for a derived ref,
+   * the literal for an `env://` one.
+   */
+  materialFingerprint: string
+  stampedAt: string
+}
+
+/**
+ * A comparable, non-reversible tag for secret material.
+ *
+ * Deliberately NOT a bare `sha256(material)`. This run's logs, scratchpad files
+ * and handover notes are full of `sha256sum` fingerprints of keys, and a bare
+ * hash stored in a database would be directly comparable with all of them —
+ * turning a diagnostic aid into a way to confirm a guessed key against material
+ * fingerprinted somewhere else entirely. Domain separation removes that: the tag
+ * is comparable only with other tags computed for this purpose.
+ *
+ * An operator compares theirs with `verify-tenant-secrets.ts`, which prints it.
+ */
+export function secretMaterialFingerprint(material: string): string {
+  if (typeof material !== 'string' || material === '') return 'none'
+  return Buffer.from(
+    hkdfSync('sha256', material, HKDF_SALT, 'quackback:fleet:material-fingerprint:v1', 8),
+  ).toString('hex')
+}
+
+/** Build the provenance for a stamp about to be written. */
+export function buildStampProvenance(input: {
+  refScheme: string
+  generation: number
+  material: string
+  now?: Date
+}): SecretStampProvenance {
+  return {
+    v: 1,
+    refScheme: input.refScheme,
+    generation: input.generation,
+    materialFingerprint: secretMaterialFingerprint(input.material),
+    stampedAt: (input.now ?? new Date()).toISOString(),
+  }
+}
+
+/** Parse stored provenance. Never throws; unreadable is indistinguishable from absent. */
+export function parseStampProvenance(raw: string | null | undefined): SecretStampProvenance | null {
+  if (!raw) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  const p = parsed as Partial<SecretStampProvenance>
+  if (p?.v !== 1) return null
+  if (typeof p.refScheme !== 'string' || p.refScheme === '') return null
+  if (typeof p.materialFingerprint !== 'string') return null
+  return {
+    v: 1,
+    refScheme: p.refScheme,
+    generation: typeof p.generation === 'number' ? p.generation : 0,
+    materialFingerprint: p.materialFingerprint,
+    stampedAt: typeof p.stampedAt === 'string' ? p.stampedAt : '',
+  }
+}

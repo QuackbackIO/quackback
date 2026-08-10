@@ -232,12 +232,9 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
       }
       return value
     }
-    case 'openbao+static-role':
-      throw new Error(`${redactRef(ref)} needs an OpenBao reader; this process has none configured`)
-    case 'openbao+kv':
     case 'derived+hkdf':
     case 'sealed+aead':
-      // All three name an APPLICATION secret. A database password is issued by a
+      // Both name an APPLICATION secret. A database password is issued by a
       // provider or a vault and is never a value this system chooses, so a
       // derived one would be a plausible-looking string that no server accepts.
       throw new Error(`${parsed.scheme}:// refs hold application secrets, not database credentials`)

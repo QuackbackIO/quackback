@@ -9,14 +9,11 @@
  *
  * Schemes:
  *
- *   openbao+static-role://<role>   the OpenBao-rotated Postgres serving
- *                                  credential (`database/static-creds/<role>`).
- *                                  This is why the record carries `dbRole`:
- *                                  OpenBao rotates the password out from under
- *                                  a live pool, so the pool cache must be able
- *                                  to re-resolve and reconnect (§6).
- *   neon+role://<proj>/<br>/<role> the password Neon already holds.
- *   openbao+kv://apps/<tenant>     KV v2 path holding the app secret bundle.
+ *   neon+role://<proj>/<br>/<role> the password Neon already holds, revealed
+ *                                  through the Management API. This is why the
+ *                                  record carries `dbRole`: a rotation lands
+ *                                  under a live pool, so the pool cache must be
+ *                                  able to re-resolve and reconnect (§6).
  *   derived+hkdf://v<g>/<t>/<p>    derived from the fleet root — nothing stored.
  *   sealed+aead://v<g>/<t>/<p>/<b> sealed under the fleet root — the blob is the
  *                                  reference, so it is read atomically with the
@@ -25,22 +22,14 @@
  *
  * `env://` exists because a small operator-managed fleet can genuinely deliver
  * per-tenant secrets as sealed platform variables, and because it lets the
- * registry be exercised end to end without OpenBao. It does not scale to
- * thousands of tenants and is not the production path.
+ * registry be exercised end to end with no external secret store at all. It does
+ * not scale to thousands of tenants and is not the production path.
  *
  * ## Namespace confinement is part of the scheme, not a caller's job
  *
- * A ref comes out of a database. It is input. `env://` has always been confined
- * to `QUACKBACK_TENANT_SECRET_*` for that reason — otherwise a mistaken or
+ * A ref comes out of a database. It is input. `env://` is confined to
+ * `QUACKBACK_TENANT_SECRET_*` for that reason — otherwise a mistaken or
  * tampered row saying `env://STRIPE_SECRET_KEY` resolves happily.
- *
- * `openbao+kv://` did not have the equivalent: it blocked traversal and nothing
- * else, so `openbao+kv://secret/platform/ai` — the fleet's shared AI credential,
- * a path no tenant record has any business naming — was in policy by the
- * artifact's own rules. That was inert only for as long as no resolver existed
- * for the scheme. It is now confined to `apps/<tenant>`, which is exactly what
- * `openbao.ts`'s `tenantSecretPath()` writes and the only shape the control
- * plane has ever produced.
  *
  * ## Which field may name which scheme
  *
@@ -64,8 +53,6 @@
 export type SecretRef = string
 
 export const SECRET_REF_SCHEMES = [
-  'openbao+static-role',
-  'openbao+kv',
   'neon+role',
   'derived+hkdf',
   'sealed+aead',
@@ -75,8 +62,6 @@ export const SECRET_REF_SCHEMES = [
 export type SecretRefScheme = (typeof SECRET_REF_SCHEMES)[number]
 
 export type ParsedSecretRef =
-  | { scheme: 'openbao+static-role'; role: string }
-  | { scheme: 'openbao+kv'; path: string; tenantSegment: string }
   | { scheme: 'neon+role'; projectId: string; branchId: string; role: string }
   | { scheme: 'derived+hkdf'; generation: number; tenantId: string; purpose: string }
   | {
@@ -97,19 +82,18 @@ export type ParsedSecretRef =
 export type SecretRefField = 'database' | 'appSecrets' | 'storage'
 
 const FIELD_POLICY: Record<SecretRefField, readonly SecretRefScheme[]> = {
-  // A serving Postgres password. `openbao+kv` is absent deliberately: the KV
-  // bundle is the app-secret blob, `resolveDbCredential` has always refused it,
-  // and a scheme the resolver refuses must not be committable in the column.
-  database: ['openbao+static-role', 'neon+role', 'env'],
+  // A serving Postgres password. `derived+hkdf` and `sealed+aead` are absent
+  // deliberately: a database password is issued by a provider, never chosen by
+  // us, and a scheme the resolver refuses must not be committable in the column.
+  database: ['neon+role', 'env'],
   // SECRET_KEY and the app-internal bearer tokens. `derived+hkdf` is the default:
-  // these are values we choose, so nothing has to carry them. `openbao+static-role`
-  // is absent — it names a Postgres role, which is not an app-secret bundle.
-  appSecrets: ['derived+hkdf', 'openbao+kv', 'env'],
+  // these are values we choose, so nothing has to carry them.
+  appSecrets: ['derived+hkdf', 'env'],
   // Provider-issued object-storage keys. Cloudflare mints them, so they cannot be
   // derived and must be carried; `derived+hkdf` is absent because a scheme that
   // silently invents a plausible-looking key pair for a real bucket is worse than
   // one that refuses.
-  storage: ['sealed+aead', 'openbao+kv', 'env'],
+  storage: ['sealed+aead', 'env'],
 }
 
 /** The schemes `field` may name. */
@@ -158,22 +142,6 @@ export function isValidSecretRef(ref: unknown): ref is SecretRef {
 const ENV_REF_PREFIX = 'QUACKBACK_TENANT_SECRET_'
 const ENV_REF_NAME_RE = /^QUACKBACK_TENANT_SECRET_[A-Z0-9_]+$/
 
-/** Postgres identifier shape — the role name goes into an OpenBao path. */
-const ROLE_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/
-
-/**
- * `apps/<tenant>` and nothing else.
- *
- * The old rule was "any path without `..`", which is traversal prevention rather
- * than confinement: `secret/platform/ai` contains no traversal, names the
- * fleet's shared AI credential, and was in policy. One segment under a fixed
- * `apps/` prefix is exactly what `openbao.ts` `tenantSecretPath()` writes, so
- * nothing legitimate is lost, and the fleet-wide `secret/platform/*` tree
- * becomes inexpressible rather than merely unlikely.
- */
-const KV_APPS_PREFIX = 'apps/'
-const KV_TENANT_SEGMENT_RE = /^[a-z0-9][a-z0-9_-]{0,62}$/
-
 /** `derived+hkdf://v<generation>/<tenantId>/<purpose>`. */
 const DERIVED_REF_RE = /^v([1-9][0-9]{0,3})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})\/([a-z][a-z-]{0,31})$/
 
@@ -207,24 +175,6 @@ export function parseSecretRef(ref: SecretRef): ParsedSecretRef {
   if (rest === '') throw new SecretRefError(`secret ref ${scheme}:// has an empty body`)
 
   switch (scheme) {
-    case 'openbao+static-role':
-      if (!ROLE_RE.test(rest)) throw new SecretRefError(`not a Postgres role name: ${rest}`)
-      return { scheme, role: rest }
-    case 'openbao+kv': {
-      if (!rest.startsWith(KV_APPS_PREFIX)) {
-        throw new SecretRefError(
-          `openbao+kv refs are confined to '${KV_APPS_PREFIX}<tenant>'; got ${rest}`,
-        )
-      }
-      const segment = rest.slice(KV_APPS_PREFIX.length)
-      if (!KV_TENANT_SEGMENT_RE.test(segment)) {
-        throw new SecretRefError(
-          `openbao+kv refs are confined to '${KV_APPS_PREFIX}<tenant>' with one path segment; ` +
-            `got ${rest}`,
-        )
-      }
-      return { scheme, path: rest, tenantSegment: segment }
-    }
     case 'derived+hkdf': {
       const m = DERIVED_REF_RE.exec(rest)
       if (!m) throw new SecretRefError(`not a derived secret reference: ${rest}`)
@@ -256,19 +206,6 @@ export function parseSecretRef(ref: SecretRef): ParsedSecretRef {
     default:
       throw new SecretRefError(`unsupported secret-ref scheme: ${scheme}`)
   }
-}
-
-/** Build a static-role ref for a Postgres role. */
-export function staticRoleRef(role: string): SecretRef {
-  if (!ROLE_RE.test(role)) throw new SecretRefError(`not a Postgres role name: ${role}`)
-  return `openbao+static-role://${role}`
-}
-
-/** Build a KV ref for an OpenBao path. Confined to `apps/<tenant>`. */
-export function kvRef(path: string): SecretRef {
-  const ref = `openbao+kv://${path}`
-  parseSecretRef(ref)
-  return ref
 }
 
 /**
@@ -332,13 +269,12 @@ export function envRef(variable: string): SecretRef {
  * pointing at the app-secret bundle cannot be dereferenced through this path.
  *
  * `readStaticCreds` is injected rather than imported so this stays testable
- * without an OpenBao client, and so callers outside the CP pod (scripts) can
+ * without a Neon client, and so callers outside the control plane (scripts) can
  * supply their own.
  */
 export async function resolveDbCredential(
   ref: SecretRef,
   deps: {
-    readStaticCreds: (role: string) => Promise<{ username: string; password: string }>
     /**
      * Reveal the password Neon holds for a role. Injected rather than imported
      * so this module stays free of the Neon client, and so a process that never
@@ -354,11 +290,6 @@ export async function resolveDbCredential(
 ): Promise<{ username: string; password: string }> {
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
-    case 'openbao+static-role': {
-      const creds = await deps.readStaticCreds(parsed.role)
-      if (!creds?.password) throw new SecretRefError(`no password at ${redactRef(ref)}`)
-      return creds
-    }
     case 'neon+role': {
       if (!deps.readNeonRolePassword) {
         throw new SecretRefError(
@@ -380,7 +311,6 @@ export async function resolveDbCredential(
       // The username is the record's dbRole; env refs carry only the password.
       return { username: '', password }
     }
-    case 'openbao+kv':
     case 'derived+hkdf':
     case 'sealed+aead':
       // Every one of these names an application secret. Refusing by name rather
@@ -396,8 +326,8 @@ export async function resolveDbCredential(
  * Inject a password into a password-less DSN.
  *
  * The registry stores `scheme://role@host/db`; a client needs
- * `scheme://role:password@host/db`. Percent-encoding matters — OpenBao's
- * rotated passwords are generated, and a `/`, `@` or `#` in one silently
+ * `scheme://role:password@host/db`. Percent-encoding matters — a provider's
+ * generated password can contain a `/`, `@` or `#`, and any of them silently
  * reshapes the URL into a connection somewhere else.
  */
 export function withPassword(dsn: string, password: string): string {

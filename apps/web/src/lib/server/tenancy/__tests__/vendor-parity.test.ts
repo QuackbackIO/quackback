@@ -35,16 +35,16 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': 'a70f5c052d10713a7e01a28e502ba019fc49e51d15784cd1acbf091514797a29',
-  'secret-ref.ts': 'e4c714c7ff097e94c5e27fd5cc95d31e4656de657a60c9953e2c897bf48f567a',
+  'contract.ts': '44a1b5ee59470a1624d8ae3fccf164db1c77051ef620e7241b8bde6b36c01db1',
+  'secret-ref.ts': 'f377bb9a0cfe8f4176fd832aa21419f1d3589d964d041f5d6e12250ead865248',
   // Sealing and derivation, vendored for a sharper reason than the others: the
   // control plane seals a value and a fleet replica opens it. Drift here is not
   // a wrong answer, it is ciphertext nobody can open — and for SECRET_KEY that
   // means integration tokens, webhook secrets and custom-action headers are
   // permanently unrecoverable. The digest is the only thing standing between a
   // one-line "tidy-up" in one repo and data loss in the other.
-  'fleet-secrets.ts': 'c9da2db5c7060c1c77a19e3344e728e044d339d8cdcabfac503b9577842bccb4',
-  'tenant-secret-resolution.ts': '0ff468aa302a1574a152e3959f10bfcd7462c0941d29ed669b3e71ca7ab9ce0b',
+  'fleet-secrets.ts': '3c461e0fdda0e2260d484eb5fd1b6b87a833605f44ba90cf1e2784846424e65c',
+  'tenant-secret-resolution.ts': '3ae4b04983563fb4a9653c35e576f55e184666fee15e037067adc3b875ed23a6',
 } as const
 
 /** Where the control plane lives when this machine has a checkout of it. */

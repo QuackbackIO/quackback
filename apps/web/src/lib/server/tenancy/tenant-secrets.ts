@@ -130,7 +130,9 @@ export async function resolveTenantSecrets(
     log.error(
       {
         tenantId: tenant.tenantId,
-        ref: redactRef(tenant.storage.credentialRef),
+        // A problem implies a ref: an absent credential resolves to `null` with
+        // no problem, because a fleet-bucket tenant is meant to have none.
+        ref: tenant.storage.credentialRef ? redactRef(tenant.storage.credentialRef) : 'none',
         problem: secrets.storageProblem,
       },
       'tenant storage credentials are unresolvable — storage will answer 503 for this tenant'

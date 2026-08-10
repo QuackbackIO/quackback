@@ -74,7 +74,21 @@ export type TenantStorage = {
    * origin follow whichever hostname the visitor happened to use.
    */
   publicUrl: string
-  credentialRef: SecretRef
+  /**
+   * Optional, and its absence is the pooled default rather than an omission.
+   *
+   * A tenant on the fleet bucket has no credential of its own: the bucket is
+   * shared and every object name is composed under that tenant's own prefix, so
+   * the isolation is in the key rather than in the key pair. The app reads this
+   * field when it is present and falls back to the fleet `S3_*` credential when
+   * it is not, which is why "absent" has to be representable here rather than
+   * expressed as an env ref pointing at a variable nobody sets.
+   *
+   * Present still means fully validated: a ref that exists must name its own
+   * tenant and match a supported scheme, because a malformed ref is a different
+   * thing from no ref at all.
+   */
+  credentialRef?: SecretRef
 }
 
 /**
@@ -208,7 +222,7 @@ export const secretRefSchema = z
  * The same parser, plus the per-field scheme policy.
  *
  * A scheme being implementable is not the same as it being appropriate here.
- * `openbao+kv://` holds the app-secret bundle and the database resolver has
+ * a derived or sealed ref holds an application secret and the database resolver has
  * always refused it, so it must not be committable in `db_credential_ref`; a
  * scheme that cannot carry a provider-issued key pair must not be committable in
  * the storage credential. Stating that once, in `secret-ref.ts`, keeps the
@@ -230,7 +244,9 @@ export const tenantStorageSchema = z.object({
   region: z.string().min(1),
   forcePathStyle: z.boolean(),
   publicUrl: z.string().url(),
-  credentialRef: fieldRefSchema('storage'),
+  // Optional, but not weakened: `.optional()` admits absence and nothing else,
+  // so a ref that IS supplied still has to satisfy `fieldRefSchema` in full.
+  credentialRef: fieldRefSchema('storage').optional(),
 })
 
 export const tenantRecordSchema = z.object({
@@ -335,6 +351,10 @@ export function checkTenantRecordInvariants(record: TenantRecord): string[] {
     ['app secrets', record.secrets.appSecretsRef, 'app-secrets'],
     ['storage credential', record.storage.credentialRef, 'storage'],
   ] as const) {
+    // Absent is not unnamed. A fleet-bucket tenant carries no storage ref at
+    // all, and asking "does this ref name its tenant?" of a ref that does not
+    // exist would report every pooled tenant as misconfigured.
+    if (ref === undefined) continue
     const named = tenantNamedBySecretRef(ref, record.tenantId, purpose)
     if (named !== null) problems.push(`${label} ref ${named}`)
   }
