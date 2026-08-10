@@ -11,15 +11,26 @@
  * what makes the ~56 readers correct without touching them.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+// Static, while every test below re-imports `runWithTenantScope` after
+// `vi.resetModules()`. That the two module instances still agree on one scope is
+// the `Symbol.for` property `tenant-context.ts` documents, and it now covers the
+// secrets slot as well as the scope slot.
+import { createTenantScope } from '@/lib/server/tenancy/tenant-context'
+
 function stubBaseEnv(): void {
   // Vitest leaks Vite's own `BASE_URL=/` into process.env, which is not a URL.
   vi.stubEnv('BASE_URL', 'https://fleet.example.com')
   vi.stubEnv('SECRET_KEY', 'a'.repeat(64))
 }
 
-/** A scope carrying only what `config.baseUrl` and the auth origin list read. */
+/**
+ * A scope carrying only what `config.baseUrl` and the auth origin list read —
+ * plus the secrets `createTenantScope()` requires. This suite never reads them,
+ * but a scope that could exist without a resolved `SECRET_KEY` is exactly what
+ * the constructor refuses, so the fixture supplies one as a real scope does.
+ */
 function scopeFor(tenantId: string, primary: string, hostnames: string[] = [primary]) {
-  return {
+  return createTenantScope({
     tenant: {
       tenantId,
       revision: 1,
@@ -28,7 +39,8 @@ function scopeFor(tenantId: string, primary: string, hostnames: string[] = [prim
     db: {},
     sql: {},
     origin: 'test',
-  } as never
+    secrets: { secretKey: 'b'.repeat(64), storage: null, storageProblem: 'not read here' },
+  } as never)
 }
 
 describe('config.baseUrl', () => {

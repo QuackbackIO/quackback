@@ -68,7 +68,11 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { WorkspaceId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { sniffImageMime } from '@/lib/server/content/magic-bytes'
-import { getCurrentTenant, getTenantScope } from '@/lib/server/tenancy/tenant-context'
+import {
+  getCurrentTenant,
+  getWorkspaceStorageCredential,
+  requireTenantScope,
+} from '@/lib/server/tenancy/tenant-context'
 import { currentTenantNamespace, SINGLE_TENANT_NAMESPACE } from '@/lib/server/tenancy/tenant-keyed'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
 import { currentWorkspaceId } from './workspace-scope'
@@ -179,6 +183,12 @@ export class StorageUnavailableError extends Error {
  * scope, which is what lets this stay synchronous — `buildPublicUrl` and every
  * gate below are called from hundreds of places that cannot await.
  *
+ * Read through `getWorkspaceStorageCredential()`, which yields the credential
+ * and nothing else. The scope no longer exposes a `secrets` field at all, so
+ * this module holds the storage keys and never the workspace `SECRET_KEY`, and
+ * the bucket still arrives separately from {@link getStoragePlacement}. Nothing
+ * here receives both halves in one call.
+ *
  * When a tenant's credentials did not resolve this throws
  * {@link StorageUnavailableError}, and it never falls back to the fleet-wide
  * environment keys. That fallback is the specific thing this must not do: it
@@ -186,8 +196,8 @@ export class StorageUnavailableError extends Error {
  * credentials that might well open it.
  */
 function resolveStorageCredentials(): StorageCredentials {
-  const scope = getTenantScope()
-  if (!scope) {
+  const resolved = getWorkspaceStorageCredential()
+  if (!resolved) {
     if (!config.s3AccessKeyId || !config.s3SecretAccessKey) {
       throw new Error(
         'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
@@ -195,14 +205,11 @@ function resolveStorageCredentials(): StorageCredentials {
     }
     return { accessKeyId: config.s3AccessKeyId, secretAccessKey: config.s3SecretAccessKey }
   }
-  const resolved = scope.secrets.storage
-  if (!resolved) {
-    throw new StorageUnavailableError(
-      scope.tenant.tenantId,
-      scope.secrets.storageProblem ?? 'no credentials were resolved for this tenant'
-    )
-  }
-  return resolved
+  if (resolved.ok) return resolved.credential
+  // A credential result at all means a scope is active, so the identity read is
+  // total. Asserted rather than defaulted: a placeholder tenant id in this
+  // message would be indistinguishable from a real one nobody recognises.
+  throw new StorageUnavailableError(requireTenantScope().tenant.tenantId, resolved.problem)
 }
 
 /**
@@ -231,8 +238,9 @@ export function isS3Configured(): boolean {
  */
 export function isS3Usable(): boolean {
   if (!isS3Configured()) return false
-  const scope = getTenantScope()
-  return scope ? scope.secrets.storage !== null : true
+  // `null` is "no scope", where addressability was already the whole question.
+  const resolved = getWorkspaceStorageCredential()
+  return resolved === null || resolved.ok
 }
 
 /**

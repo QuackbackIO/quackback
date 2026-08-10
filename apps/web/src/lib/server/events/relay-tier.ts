@@ -87,7 +87,7 @@ import {
   refusalCode,
   reportQuarantine,
 } from '@/lib/server/tenancy/quarantine'
-import { runWithTenantScope, type TenantScope } from '@/lib/server/tenancy/tenant-context'
+import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
 import { drainOnce, type DrainResult } from './relay'
 import {
   claimRelayLease,
@@ -774,13 +774,13 @@ function startTenantLoop(
     // refused here for the same reason and with the same message.
     openAttachment: async () => {
       const pool = await openTenantDirectPool(current)
-      const scope: TenantScope = {
+      const scope = createTenantScope({
         tenant: current,
         db: pool.db,
         sql: pool.sql,
         secrets: pool.secrets,
         origin: 'relay',
-      }
+      })
       return {
         db: pool.db,
         scoped: (body) => runWithTenantScope(scope, body),

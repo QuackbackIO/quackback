@@ -26,7 +26,10 @@ import type { Database } from '@quackback/db/client'
 import type { Sql } from 'postgres'
 import { getLogContext, runWithLogContext, setLogContext } from '@/lib/server/log-context'
 import type { TenantDescriptor } from './registry'
-import type { ResolvedTenantSecrets } from './vendor/tenant-secret-resolution'
+import type {
+  ResolvedTenantSecrets,
+  TenantStorageCredentials,
+} from './vendor/tenant-secret-resolution'
 
 /**
  * `Symbol.for` rather than a module-private symbol: the dev server can evaluate
@@ -34,6 +37,21 @@ import type { ResolvedTenantSecrets } from './vendor/tenant-secret-resolution'
  * the middleware and the `db` trap two different slots on the same store.
  */
 const TENANT_SCOPE_KEY = Symbol.for('quackback.tenantScope')
+
+/**
+ * Where a scope's secrets actually sit.
+ *
+ * Same `Symbol.for` reasoning as {@link TENANT_SCOPE_KEY}, and for a sharper
+ * reason: a module-private symbol under double evaluation would let the reader
+ * find a scope but not its `SECRET_KEY`, and the reader's null branch is
+ * `config.secretKey` — a silent fleet-wide key under a per-tenant scope, which
+ * is the one outcome `secret-key.ts` exists to make impossible.
+ *
+ * Non-enumerable, so the property survives neither a spread, a `JSON.stringify`,
+ * an `Object.keys` walk nor a structured log of the scope. It is reachable by
+ * anyone who computes the same `Symbol.for` — see the seal suite's closing note.
+ */
+const SCOPE_SECRETS_KEY = Symbol.for('quackback.tenantScope.secrets')
 
 /** Why a scope exists. Only for logging and the scope audit; never a policy input. */
 export type TenantScopeOrigin =
@@ -45,21 +63,55 @@ export type TenantScopeOrigin =
   | 'migration'
   | 'test'
 
+/**
+ * The scope every caller sees: which tenant, which database, why.
+ *
+ * **No secrets on the shape, and none on the object.** This tenant's
+ * `SECRET_KEY` and storage credentials are still resolved on the same
+ * pool-checkout pass as the fingerprint and still ride on the scope — that is
+ * what lets the synchronous readers (`activeSecretKey`, every storage gate)
+ * answer without awaiting, and it is why a scope existing at all means the
+ * `SECRET_KEY` half resolved. What changed is who can reach them: they sit
+ * under {@link SCOPE_SECRETS_KEY}, and the only things that read that slot are
+ * the two purpose-named accessors below.
+ *
+ * The shape this replaces handed every holder of a scope the storage credential
+ * pair, which under one fleet bucket is an addressing capability for the whole
+ * bucket. Of the callers that hold a scope, two want secrets and the rest want
+ * the tenant's identity or a null check.
+ *
+ * Build one with {@link createTenantScope}. A plain object literal is not a
+ * scope: {@link runWithTenantScope} refuses it.
+ */
 export interface TenantScope {
   readonly tenant: TenantDescriptor
   /** Drizzle handle bound to this tenant's pool. What `db` resolves to. */
   readonly db: Database
   /** The underlying postgres.js handle, for raw/session-level work. */
   readonly sql: Sql
+  readonly origin: TenantScopeOrigin
+}
+
+/**
+ * What a scope is built from. `secrets` is an **input**, never a field.
+ *
+ * Spelled as a separate type rather than `TenantScope & { secrets }` so that
+ * widening `TenantScope` back to carry secrets cannot happen by editing one
+ * interface: the constructor would still have to be changed to copy them onto
+ * the object, and the seal suite calls every nullary export to check nothing
+ * does.
+ */
+export interface TenantScopeInit {
+  readonly tenant: TenantDescriptor
+  readonly db: Database
+  readonly sql: Sql
+  readonly origin: TenantScopeOrigin
   /**
-   * This tenant's `SECRET_KEY` and storage credentials, resolved on the same
-   * pool-checkout pass as the fingerprint and carried here so the synchronous
-   * readers (`deriveKey`, `buildPublicUrl`, every storage gate) never have to
-   * await. The scope only exists when the SECRET_KEY half resolved, so any code
-   * holding a scope is holding a real per-tenant key.
+   * Resolved on this checkout — `tenancy/tenant-secrets.ts`. Required, because
+   * "a scope exists" is the fact the rest of the app reads as "this tenant's
+   * `SECRET_KEY` resolved".
    */
   readonly secrets: ResolvedTenantSecrets
-  readonly origin: TenantScopeOrigin
 }
 
 export class TenantScopeMissingError extends Error {
@@ -74,7 +126,65 @@ export class TenantScopeMissingError extends Error {
   }
 }
 
+/** A scope was made ambient without the secrets a scope is supposed to prove. */
+export class TenantScopeSecretsMissingError extends Error {
+  constructor(tenantId: string) {
+    super(
+      `The scope for tenant ${tenantId} carries no resolved secrets. Only ` +
+        'createTenantScope() can build a scope, and it requires a resolved SECRET_KEY, ' +
+        'so this one was assembled as a plain object. Serving it would read the ' +
+        'fleet-wide SECRET_KEY under a per-tenant scope and write this tenant’s ' +
+        'ciphertext under a key that is not its own.'
+    )
+    this.name = 'TenantScopeSecretsMissingError'
+  }
+}
+
 type ScopeCarrier = Record<PropertyKey, unknown>
+
+/**
+ * Build a scope. The only thing that can.
+ *
+ * Refusing an unresolved `SECRET_KEY` here is what makes "a scope exists" mean
+ * "this tenant's key resolved" at runtime rather than only in the type. It was
+ * the type that carried that guarantee before, and the type is exactly what
+ * stops carrying it once `secrets` leaves the shape.
+ */
+export function createTenantScope(init: TenantScopeInit): TenantScope {
+  if (typeof init.secrets?.secretKey !== 'string' || init.secrets.secretKey === '') {
+    throw new TenantScopeSecretsMissingError(init.tenant.tenantId)
+  }
+  const scope: TenantScope = {
+    tenant: init.tenant,
+    db: init.db,
+    sql: init.sql,
+    origin: init.origin,
+  }
+  Object.defineProperty(scope, SCOPE_SECRETS_KEY, {
+    value: init.secrets,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  })
+  return Object.freeze(scope)
+}
+
+/**
+ * The secrets a scope carries. Module-private, and the only reader of the slot.
+ *
+ * Null means "no scope" — the self-hosted path, where the callers fall back to
+ * process configuration. A scope that exists but holds nothing is not a null;
+ * it throws, because the null branch of both callers is a fleet-wide value and
+ * answering it for a tenant is the failure this module is built to refuse.
+ */
+function scopeSecrets(scope: TenantScope | null): ResolvedTenantSecrets | null {
+  if (!scope) return null
+  const held = (scope as unknown as ScopeCarrier)[SCOPE_SECRETS_KEY] as
+    | ResolvedTenantSecrets
+    | undefined
+  if (!held) throw new TenantScopeSecretsMissingError(scope.tenant.tenantId)
+  return held
+}
 
 /** The active tenant scope, or null outside one. */
 export function getTenantScope(): TenantScope | null {
@@ -84,7 +194,9 @@ export function getTenantScope(): TenantScope | null {
 }
 
 /** The active tenant scope, or throw. */
-export function requireTenantScope(detail = 'A tenant-scoped operation was attempted.'): TenantScope {
+export function requireTenantScope(
+  detail = 'A tenant-scoped operation was attempted.'
+): TenantScope {
   const scope = getTenantScope()
   if (!scope) throw new TenantScopeMissingError(detail)
   return scope
@@ -107,14 +219,62 @@ export function getCurrentTenant(): TenantDescriptor | null {
 }
 
 /**
- * The active tenant's resolved secrets, or null outside a tenant scope.
+ * The active workspace's `SECRET_KEY`, or null outside a scope.
  *
- * Null means "single tenant", not "unresolved": a pooled scope cannot be created
+ * One of the two ways out of the secrets slot, and it yields a single string:
+ * no bucket, no endpoint, no storage credential. `secret-key.ts` is the only
+ * caller, and `activeSecretKey()` is the only thing the rest of the app sees.
+ *
+ * Null means "single tenant", not "unresolved": a scope cannot be created
  * without a resolved `SECRET_KEY`. Callers read `config.secretKey` on null,
  * which is the self-hosted path and is unchanged.
+ *
+ * Synchronous, and it must stay that way. `activeSecretKey()` is called from
+ * session verification, token signing and `encryption.ts` — hundreds of sites
+ * that cannot await — which is why the value is resolved at pool checkout and
+ * carried, rather than fetched here.
  */
-export function getCurrentTenantSecrets(): ResolvedTenantSecrets | null {
-  return getTenantScope()?.secrets ?? null
+export function getWorkspaceSecretKey(): string | null {
+  return scopeSecrets(getTenantScope())?.secretKey ?? null
+}
+
+/**
+ * The active workspace's storage credential, or why there is none.
+ *
+ * The other way out of the slot, and deliberately **not** a way to address an
+ * object: it carries no bucket, no endpoint and no region. Those live on the
+ * descriptor and are reached through `getCurrentTenant()`, so no single call
+ * hands back a credential and the thing it opens. It carries no `SECRET_KEY`
+ * either, so the storage module never holds the session key it has no use for.
+ *
+ * `null` is "no scope" and is distinct from `{ ok: false }`, which is "this
+ * workspace's credential reference did not resolve". They are different
+ * questions with different answers: the first falls back to process
+ * configuration, the second must never.
+ */
+export type WorkspaceStorageCredential =
+  | { readonly ok: true; readonly credential: TenantStorageCredentials }
+  | { readonly ok: false; readonly problem: string }
+
+export function getWorkspaceStorageCredential(): WorkspaceStorageCredential | null {
+  const secrets = scopeSecrets(getTenantScope())
+  if (!secrets) return null
+  if (!secrets.storage) {
+    return {
+      ok: false,
+      problem: secrets.storageProblem ?? 'no storage credential was resolved for this workspace',
+    }
+  }
+  // Copied rather than handed out by reference: the scope's own credential is
+  // frozen to everything that cannot reach the slot, and returning the live
+  // object would quietly make it writable again through this door.
+  return {
+    ok: true,
+    credential: {
+      accessKeyId: secrets.storage.accessKeyId,
+      secretAccessKey: secrets.storage.secretAccessKey,
+    },
+  }
 }
 
 /**
@@ -134,8 +294,14 @@ export function getCurrentTenantSecrets(): ResolvedTenantSecrets | null {
  * Nesting a *different* tenant inside an existing scope is refused. It has no
  * legitimate use, and permitting it would mean a helper could quietly re-point
  * the database mid-request.
+ *
+ * A scope that carries no secrets is refused here too, at the door rather than
+ * at the first `activeSecretKey()` deep inside auth. `TenantScope` no longer
+ * declares `secrets`, so an object literal now satisfies the type; this is what
+ * stops it satisfying the system.
  */
 export function runWithTenantScope<T>(scope: TenantScope, fn: () => T): T {
+  scopeSecrets(scope)
   const parent = getLogContext() as ScopeCarrier | undefined
   const existing = parent?.[TENANT_SCOPE_KEY] as TenantScope | undefined
   if (existing && existing.tenant.tenantId !== scope.tenant.tenantId) {

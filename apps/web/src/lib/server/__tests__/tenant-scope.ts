@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto'
 import { fromUuid, type WorkspaceId } from '@quackback/ids'
 import type { TenantDescriptor } from '@/lib/server/tenancy/registry'
-import { runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
 import type { ResolvedTenantSecrets } from '@/lib/server/tenancy/vendor/tenant-secret-resolution'
 
 type StorageOverrides = Partial<TenantDescriptor['storage']>
@@ -114,13 +114,13 @@ export function withTenant<T>(
   }
 ): T {
   return runWithTenantScope(
-    {
+    createTenantScope({
       tenant: makeTenantDescriptor(tenantId, overrides),
       db: {} as never,
       sql: {} as never,
       secrets: makeTenantSecrets(tenantId, overrides?.secrets ?? {}),
       origin: 'test',
-    },
+    }),
     fn
   )
 }

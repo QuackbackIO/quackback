@@ -33,6 +33,19 @@ function stubBaseEnv(): void {
   vi.stubEnv('SECRET_KEY', 'a'.repeat(64))
 }
 
+/**
+ * The secrets every scope now has to be built with.
+ *
+ * This suite is about the trap, not about custody, but `createTenantScope()` is
+ * the only door and it refuses a scope with no resolved `SECRET_KEY` — so a
+ * fixture scope has to carry one, exactly as a real one does.
+ */
+const FIXTURE_SECRETS = {
+  secretKey: 'f'.repeat(64),
+  storage: null,
+  storageProblem: 'this suite never touches storage',
+}
+
 /** A stand-in for a Drizzle handle that records what `this` was at call time. */
 function makeHandle(label: string) {
   return {
@@ -123,15 +136,17 @@ describe('db proxy — pooled tenancy', () => {
 
   it('resolves the active scope’s handle, bound', async () => {
     const { db } = await import('@/lib/server/db')
-    const { runWithTenantScope } = await import('@/lib/server/tenancy/tenant-context')
+    const { createTenantScope, runWithTenantScope } =
+      await import('@/lib/server/tenancy/tenant-context')
 
     const scopedHandle = makeHandle('tenant-a')
-    const scope = {
+    const scope = createTenantScope({
       tenant: { tenantId: 'inst_a' },
       db: scopedHandle,
       sql: {},
       origin: 'test',
-    } as never
+      secrets: FIXTURE_SECRETS,
+    } as never)
 
     runWithTenantScope(scope, () => {
       const returned = (db as unknown as { select: () => unknown }).select()
@@ -144,12 +159,19 @@ describe('db proxy — pooled tenancy', () => {
     // This is the whole piece in one assertion: one `db` import, two tenants,
     // two connections, decided by the ambient scope.
     const { db } = await import('@/lib/server/db')
-    const { runWithTenantScope } = await import('@/lib/server/tenancy/tenant-context')
+    const { createTenantScope, runWithTenantScope } =
+      await import('@/lib/server/tenancy/tenant-context')
 
     const a = makeHandle('tenant-a')
     const b = makeHandle('tenant-b')
     const scopeFor = (id: string, handle: unknown) =>
-      ({ tenant: { tenantId: id }, db: handle, sql: {}, origin: 'test' }) as never
+      createTenantScope({
+        tenant: { tenantId: id },
+        db: handle,
+        sql: {},
+        origin: 'test',
+        secrets: FIXTURE_SECRETS,
+      } as never)
 
     const seenA = runWithTenantScope(scopeFor('inst_a', a), () =>
       (db as unknown as { select: () => unknown }).select()
@@ -165,11 +187,18 @@ describe('db proxy — pooled tenancy', () => {
 
   it('leaves the scope behind when the scope closes', async () => {
     const { db } = await import('@/lib/server/db')
-    const { runWithTenantScope } = await import('@/lib/server/tenancy/tenant-context')
+    const { createTenantScope, runWithTenantScope } =
+      await import('@/lib/server/tenancy/tenant-context')
     const a = makeHandle('tenant-a')
 
     runWithTenantScope(
-      { tenant: { tenantId: 'inst_a' }, db: a, sql: {}, origin: 'test' } as never,
+      createTenantScope({
+        tenant: { tenantId: 'inst_a' },
+        db: a,
+        sql: {},
+        origin: 'test',
+        secrets: FIXTURE_SECRETS,
+      } as never),
       () => (db as unknown as { select: () => unknown }).select()
     )
 
@@ -184,11 +213,18 @@ describe('db proxy — pooled tenancy', () => {
     // query. AsyncLocalStorage.run is the only thing that scopes an async
     // subtree correctly.
     const { db } = await import('@/lib/server/db')
-    const { runWithTenantScope } = await import('@/lib/server/tenancy/tenant-context')
+    const { createTenantScope, runWithTenantScope } =
+      await import('@/lib/server/tenancy/tenant-context')
     const a = makeHandle('tenant-a')
 
     const result = await runWithTenantScope(
-      { tenant: { tenantId: 'inst_a' }, db: a, sql: {}, origin: 'test' } as never,
+      createTenantScope({
+        tenant: { tenantId: 'inst_a' },
+        db: a,
+        sql: {},
+        origin: 'test',
+        secrets: FIXTURE_SECRETS,
+      } as never),
       async () => {
         await new Promise((r) => setTimeout(r, 10))
         return (db as unknown as { select: () => unknown }).select()
@@ -199,9 +235,16 @@ describe('db proxy — pooled tenancy', () => {
   })
 
   it('refuses to re-scope an active context to a different tenant', async () => {
-    const { runWithTenantScope } = await import('@/lib/server/tenancy/tenant-context')
+    const { createTenantScope, runWithTenantScope } =
+      await import('@/lib/server/tenancy/tenant-context')
     const scopeFor = (id: string) =>
-      ({ tenant: { tenantId: id }, db: makeHandle(id), sql: {}, origin: 'test' }) as never
+      createTenantScope({
+        tenant: { tenantId: id },
+        db: makeHandle(id),
+        sql: {},
+        origin: 'test',
+        secrets: FIXTURE_SECRETS,
+      } as never)
 
     expect(() =>
       runWithTenantScope(scopeFor('inst_a'), () =>
