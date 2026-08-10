@@ -81,6 +81,82 @@ describe('assessReplaySafety — the dangerous class', () => {
   })
 })
 
+/**
+ * The `-- @replay: guarded-by …` claim.
+ *
+ * The annotation exists so a human can assert the one thing this file cannot
+ * see: that a `DO` block's body is guarded and therefore a no-op on a second
+ * run. Every test here is about the ways that claim must NOT work, because the
+ * only interesting question about an escape hatch is how narrow it is. The
+ * claim being honoured at all is one case; the other six are refusals.
+ */
+describe('assessReplaySafety — the vouched-for DO block', () => {
+  const GUARDED = `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_attribute WHERE attname = 'a') THEN
+      ALTER TABLE "t" RENAME COLUMN "a" TO "b";
+    END IF; END $$;`
+
+  it('is mutates without the annotation, and safe with it', () => {
+    // Both halves in one test on purpose: the annotation's whole effect is the
+    // difference between these two, and a test that only asserted the second
+    // would pass just as well if the DO block had never been dangerous.
+    expect(assess(GUARDED).verdict).toBe('mutates')
+
+    const vouchedFor = assess(`-- @replay: guarded-by the old column still existing\n${GUARDED}`)
+    expect(vouchedFor.verdict).toBe('safe')
+    expect(vouchedFor.mutating).toEqual([])
+    // The claim is carried into the report rather than absorbed into a verdict
+    // that silently got kinder — a migrator log can say whose claim this was.
+    expect(vouchedFor.vouched).toHaveLength(1)
+    expect(vouchedFor.vouched[0]!.reason).toBe('the old column still existing')
+  })
+
+  it('cannot launder a write this scanner can read for itself', () => {
+    // The property that keeps the annotation from being a general-purpose
+    // override: attached to an INSERT, it does not merely fail to help — it is
+    // reported, so a misuse cannot sit unnoticed in a file that passes anyway.
+    const r = assess(`-- @replay: guarded-by nothing at all\nINSERT INTO "t" ("id") VALUES ('a');`)
+    expect(r.verdict).toBe('mutates')
+    expect(r.mutating.some((m) => /may only vouch for a DO block/.test(m.reason))).toBe(true)
+    expect(r.vouched).toEqual([])
+  })
+
+  it.each([
+    ['no `guarded-by`', '-- @replay: safe', /malformed @replay annotation/],
+    ['`guarded-by` with no rationale', '-- @replay: guarded-by', /malformed @replay annotation/],
+    ['a near-miss keyword', '-- @replay: guarded by the column', /malformed @replay annotation/],
+  ])('refuses %s', (_name, annotation, reason) => {
+    const r = assess(`${annotation}\n${GUARDED}`)
+    expect(r.verdict).toBe('mutates')
+    expect(r.mutating.some((m) => reason.test(m.reason))).toBe(true)
+  })
+
+  it('refuses an annotation that sits below the statement it means to cover', () => {
+    const r = assess(`${GUARDED}\n-- @replay: guarded-by the old column still existing`)
+    expect(r.verdict).toBe('mutates')
+    expect(r.mutating.some((m) => /vouches for no statement/.test(m.reason))).toBe(true)
+  })
+
+  it('refuses an annotation buried inside the block it means to cover', () => {
+    // A natural authoring mistake, and it has to fail: an annotation inside a
+    // dollar-quoted body is exactly the text this file has decided not to read.
+    const r = assess(`DO $$ BEGIN
+      -- @replay: guarded-by the old column still existing
+      PERFORM 1;
+    END $$;`)
+    expect(r.verdict).toBe('mutates')
+    expect(r.mutating.some((m) => /vouches for no statement/.test(m.reason))).toBe(true)
+  })
+
+  it('does not read a claim out of a string literal or a block comment', () => {
+    const r = assess(
+      `COMMENT ON TABLE "t" IS '-- @replay: guarded-by a lie';\n` +
+        `/* -- @replay: guarded-by another lie */\n${GUARDED}`
+    )
+    expect(r.verdict).toBe('mutates')
+    expect(r.vouched).toEqual([])
+  })
+})
+
 describe('assessReplaySafety — tokenizer reuse', () => {
   it('ignores DDL keywords inside comments and string literals', () => {
     const sql = `
@@ -100,6 +176,19 @@ describe('assessReplaySafety — tokenizer reuse', () => {
       END;
       $fn$ LANGUAGE plpgsql;`
     expect(splitStatements(stripNoise(sql))).toHaveLength(1)
+  })
+
+  it('reports the line the SQL starts on, not the line the file does', () => {
+    // `stripNoise` blanks a header comment to spaces rather than deleting it, so
+    // a statement under one begins after a long run of whitespace. Reporting
+    // that as line 1 mislocates the finding in every migration in this
+    // repository (all of them open with prose), and it is what an annotation's
+    // "directly above this statement" window is measured against.
+    const sql = `-- a header\n-- that runs on\n\nSELECT 1;\nUPDATE "t" SET x = 1;`
+    expect(splitStatements(stripNoise(sql)).map((s) => [s.line, s.endLine])).toEqual([
+      [4, 4],
+      [5, 5],
+    ])
   })
 })
 
@@ -145,6 +234,29 @@ describe('the real corpus', () => {
       expect(r.mutating).toEqual([])
       expect(r.erroring).toEqual([])
     }
+  })
+
+  it('0258 is safe, and its safety is a claim rather than a shape', () => {
+    // The one migration in the corpus whose verdict rests on an annotation. If
+    // the annotation is ever dropped, moved, or the guard unwrapped, this goes
+    // red here before the fleet migrator refuses a heal in production.
+    const r = assessReplaySafety(
+      '0258_workspace_key_columns',
+      readFileSync(join(MIGRATIONS_DIR, '0258_workspace_key_columns.sql'), 'utf8')
+    )
+    expect(r.verdict).toBe('safe')
+    expect(r.vouched).toHaveLength(1)
+    expect(r.vouched[0]!.excerpt).toMatch(/^DO \$\$/)
+  })
+
+  it('no other migration leans on a @replay claim', () => {
+    // The annotation is an escape hatch, so how many statements are through it
+    // is a number worth watching. A second one is not forbidden — it just has
+    // to be noticed and argued for here rather than accumulating quietly.
+    const vouching = files.filter(
+      (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
+    )
+    expect(vouching).toEqual(['0258_workspace_key_columns.sql'])
   })
 
   it('0006 — a CTE INSERT — is caught as mutating', () => {

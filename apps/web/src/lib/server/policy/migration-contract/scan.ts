@@ -214,7 +214,8 @@ export function stripNoise(sql: string): string {
 
 /**
  * Mask string literals and block comments (blank them) for locating
- * `@contract` annotations, but pass `--` line comments through verbatim.
+ * `@contract` (and, in `replay-safety.ts`, `@replay`) annotations, but pass
+ * `--` line comments through verbatim.
  * Unlike `stripNoise`, the annotation itself lives inside the comment we'd
  * otherwise blank, and it may legitimately trail real DDL on the same line
  * (`ALTER TABLE ... DROP COLUMN x; -- @contract: safe-after 1.0.0`) rather
@@ -224,7 +225,7 @@ export function stripNoise(sql: string): string {
  * as "start a string" — the whole comment span is skipped as one unit by
  * the `--` branch below before any string-literal check runs on it.
  */
-function maskForAnnotations(sql: string): string {
+export function maskForAnnotations(sql: string): string {
   let out = ''
   let i = 0
   const n = sql.length

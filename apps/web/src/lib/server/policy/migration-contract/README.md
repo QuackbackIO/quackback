@@ -61,6 +61,52 @@ judgment call the annotation records, not something static analysis can
 check. It exists to force the question to be asked and the answer to be
 written down, not to adjudicate it.
 
+## The other annotation: `-- @replay: guarded-by`
+
+`replay-safety.ts` answers a different question — _would running this migration
+a second time change anything?_ — for the fleet migrator, whose gap-heal
+truncates a ledger and replays the span forward against a database that already
+carries the effects. It classifies each statement `safe`, `errors` or
+`mutates`, and refuses only `mutates`.
+
+A `DO $$ … $$` block is refused, because its body is opaque to the tokenizer and
+could contain any write. That default is correct and is not going to be softened
+by teaching the tokenizer plpgsql: `stripNoise` already has one known recall hole
+around dollar-quoted text, and a deeper parser would deepen it.
+
+The escape is an explicit claim instead, on the line above the statement:
+
+```sql
+-- @replay: guarded-by the old column still existing; the rename is skipped once it is gone
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('kv_store') AND attname = 'tenant_id' AND NOT attisdropped) THEN
+    ALTER TABLE "kv_store" RENAME COLUMN "tenant_id" TO "workspace_key";
+  END IF;
+END $$;
+```
+
+`guarded-by` is a required literal and the rationale after it is required too:
+what a reviewer has to check is _which_ guard, and an annotation that does not
+say is not reviewable. This is the same reason `safe-after 0.0.0` is rejected.
+
+Three things keep it a claim rather than a loophole:
+
+- **It only reaches a `DO` block.** Above an `INSERT`, an `UPDATE` or anything
+  else the classifier can read for itself, the file is refused _and_ the
+  misplacement is reported by name. The annotation can never launder a write.
+- **It is scoped to one statement**, unlike `@contract`, which covers the file.
+  It has to sit in the comment block directly above the statement it vouches
+  for — an annotation inside a preceding statement, or trailing the last one,
+  vouches for nothing and is reported.
+- **It is checked.** `__tests__/lineage-double-apply.db.test.ts` applies the
+  lineage to a scratch database, then re-applies every migration the classifier
+  calls `safe` and asserts the catalogue does not move. Writing the comment does
+  not make the claim true; that test is what does or does not confirm it.
+
+Write the guard's DDL out literally. `EXECUTE format('ALTER TABLE …')` would
+work at runtime and would hide the statement from the destructive-DDL scanner
+above, which reads inside dollar-quoted blocks on purpose.
+
 ## What counts as destructive
 
 Detected, at minimum per the brief, plus three additions:

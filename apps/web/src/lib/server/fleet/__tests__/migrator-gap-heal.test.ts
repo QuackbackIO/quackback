@@ -4,7 +4,7 @@
  * `migrator-gate.test.ts` decides *whether* a hole may be closed; nothing pure
  * can establish that closing it works, because the claim is about what Drizzle's
  * migrator does with a `drizzle.__drizzle_migrations` table it did not expect —
- * and that is a property of the driver and of these 233 SQL files, not of our
+ * and that is a property of the driver and of these 234 SQL files, not of our
  * arithmetic about them.
  *
  * The state under test is one that happened. Two live workspaces had a high-water
@@ -14,6 +14,12 @@
  * reported `ok=true`. Both instruments agreed the workspace was fine. The fixtures
  * below reproduce that ledger exactly and assert that neither instrument says so
  * any more.
+ *
+ * The fixtures withhold every migration this branch adds after `0257` as well.
+ * The measured shape is a high-water mark at `0253` with a forward tail above
+ * it; a newer migration whose row a fixture kept would push the mark past that
+ * tail, folding the tail into the hole and quietly substituting a different
+ * shape that still parses.
  *
  * ## Method
  *
@@ -197,13 +203,13 @@ afterEach(() => {
 describe('a hole the whole of which is replay-safe', () => {
   it('is healed, and the rows that come back are written by drizzle', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
 
     const before = await ledgerOf(db)
     // The instrument that could not see this, kept as the control: it reports a
-    // two-migration tail on a ledger that is missing seven.
-    expect(replaySetFor(before)).toHaveLength(2)
-    expect(planFor(before).tags).toHaveLength(7)
+    // three-migration tail on a ledger that is missing eight.
+    expect(replaySetFor(before)).toHaveLength(3)
+    expect(planFor(before).tags).toHaveLength(8)
     const digestBefore = await catalogueDigest(db)
 
     const result = await migrateWorkspace(workspaceOn(db))
@@ -215,8 +221,8 @@ describe('a hole the whole of which is replay-safe', () => {
       '0250_billing',
       '0252_settings_cloud_secret_canary',
     ])
-    // Seven executed, not two — and the ledger ends complete.
-    expect(result.replaySet).toHaveLength(7)
+    // Eight executed, not three — and the ledger ends complete.
+    expect(result.replaySet).toHaveLength(8)
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
     expect(ledgerGapFor(result.after!)).toBeNull()
     expect(result.postconditions!.ok).toBe(true)
@@ -231,7 +237,7 @@ describe('a hole the whole of which is replay-safe', () => {
     // "this database was wrong" has to be distinguishable from one that means
     // "this database was behind".
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
     const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).not.toBe('reconciled')
     expect(result.code).not.toBe('already_current')
@@ -247,14 +253,14 @@ describe('the run has to do what it planned, not merely report that it did', () 
     // nothing repaired, with the post-condition verdict green beside it. The
     // truncation still really happens, so the ledger the check reads is real.
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
     executor.pretendItRan = true
 
     const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('migration_failed')
-    expect(result.detail).toContain('the ledger does not record 7 of the 7')
+    expect(result.detail).toContain('the ledger does not record 8 of the 8')
     expect(result.detail).toContain('0249_settings_cloud')
     // Green post-conditions do not rescue it. That combination — a passing
     // catalogue verdict over an unapplied plan — is the exact false green.
@@ -263,7 +269,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
 
   it('is not a check that cannot fail: the same run un-stubbed reports the heal', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
     const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).toBe('healed_ledger_gap')
   }, 120_000)
@@ -329,7 +335,7 @@ describe('a hole that must not be healed', () => {
 describe('the ledgers that are not holes — the controls', () => {
   it('a contiguous ledger behind the tip migrates exactly as it did before', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0256', '0257')
+    await dropLedgerRows(db, '0256', '0257', '0258')
 
     const result = await migrateWorkspace(workspaceOn(db))
 
@@ -338,7 +344,11 @@ describe('the ledgers that are not holes — the controls', () => {
     // rollout path untouched.
     expect(result.code).toBe('reconciled')
     expect(result.gap).toBeNull()
-    expect(result.replaySet).toEqual(['0256_outbox_relay_leader', '0257_pg_kv_presence_realtime'])
+    expect(result.replaySet).toEqual([
+      '0256_outbox_relay_leader',
+      '0257_pg_kv_presence_realtime',
+      '0258_workspace_key_columns',
+    ])
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
   }, 120_000)
 

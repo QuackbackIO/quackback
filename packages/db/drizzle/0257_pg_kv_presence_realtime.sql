@@ -113,10 +113,17 @@ CREATE TABLE IF NOT EXISTS "presence_stream" (
   CONSTRAINT "presence_stream_pkey" PRIMARY KEY ("tenant_id", "principal_id", "stream_id")
 );
 
--- Serves `listOnlineAgentIds()` / `isAnyAgentOnline()`, the two reads on the
--- conversation-routing path.
-CREATE INDEX IF NOT EXISTS "presence_stream_agents_idx"
-  ON "presence_stream" ("tenant_id", "heartbeat_at") WHERE "is_agent";
+-- `presence_stream_agents_idx`, which serves `listOnlineAgentIds()` /
+-- `isAnyAgentOnline()`, is created by 0258 and not here. It is the only
+-- statement in this file that named a column rather than a relation, and 0258
+-- renames that column. `CREATE INDEX IF NOT EXISTS` resolves its column list
+-- before it checks whether the index name is taken, so it does not skip -- it
+-- raises `column "tenant_id" does not exist` -- against a database where the
+-- rename has already happened. That would abort every replay of this file, and
+-- the fleet migrator replays this file: no later migration can repair it,
+-- because a later migration runs after the statement that failed. Creating it
+-- on the far side of the rename is the only ordering in which both a fresh
+-- install and a replay work.
 
 CREATE INDEX IF NOT EXISTS "presence_stream_heartbeat_idx"
   ON "presence_stream" ("heartbeat_at");

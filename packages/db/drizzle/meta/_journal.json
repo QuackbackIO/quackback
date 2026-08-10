@@ -1632,6 +1632,13 @@
       "tag": "0257_pg_kv_presence_realtime",
       "breakpoints": true,
       "idx": 232
+    },
+    {
+      "version": "7",
+      "when": 1785700000018,
+      "tag": "0258_workspace_key_columns",
+      "breakpoints": true,
+      "idx": 233
     }
   ]
 }

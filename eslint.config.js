@@ -26,6 +26,11 @@ const dbReexportFiles = [
   // Its tests assert against the same layer, and a test forced through the
   // re-export would be asserting about a different object than the one shipped.
   '**/src/lib/server/fleet/__tests__/**',
+  // Applies the bundled lineage twice to a scratch database to check the
+  // replay-safety classifier's `safe` verdicts against Postgres. Its subject is
+  // the migration executor and the journal — the two things the re-export layer
+  // does not carry, because they operate on a database rather than through one.
+  '**/src/lib/server/policy/migration-contract/__tests__/lineage-double-apply.db.test.ts',
 ]
 
 // `no-restricted-imports` fragments, shared because flat config REPLACES a

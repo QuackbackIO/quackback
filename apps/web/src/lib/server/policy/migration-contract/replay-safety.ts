@@ -51,8 +51,43 @@
  * re-tokenised, so the two agree about what is a comment and what is a string —
  * and so the dollar-quoted-literal limitation documented there is one
  * limitation rather than two.
+ *
+ * ## The one thing a human may assert that this cannot see
+ *
+ * A `DO $$ … $$` block is opaque here and is refused (`mutates`) for that
+ * reason. That is the right default, and teaching this file to parse plpgsql
+ * would be the wrong fix: the sibling scanner already carries one recall hole
+ * around dollar-quoted text, and a deeper parser would deepen it rather than
+ * close it.
+ *
+ * So the escape is not a smarter parser, it is an **explicit claim a reviewer
+ * signs**, in the same shape as the destructive-DDL linter's
+ * `-- @contract: safe-after X.Y.Z`:
+ *
+ * ```sql
+ * -- @replay: guarded-by the old column still existing; the rename is skipped once it is gone
+ * DO $$ BEGIN IF EXISTS (…) THEN ALTER TABLE … RENAME COLUMN … ; END IF; END $$;
+ * ```
+ *
+ * Three properties are what make it a claim rather than a loophole:
+ *
+ * 1. **It only reaches a `DO` block.** Put it above an `INSERT`, an `UPDATE` or
+ *    anything else in `MUTATING_SHAPES` and the file is refused *and* the
+ *    misplacement is reported. The annotation can never launder a write this
+ *    file can actually read.
+ * 2. **It is scoped to one statement**, not to the file — it must sit in the
+ *    comment block directly above the statement it vouches for. `@contract` is
+ *    file-scoped because its subject (a release) genuinely is; this one's
+ *    subject is a guard, and a guard is a property of a single statement.
+ * 3. **It is checked, not trusted.** `__tests__/lineage-double-apply.db.test.ts`
+ *    re-applies every migration this file calls `safe` to an already-migrated
+ *    database and asserts the catalogue does not move. A wrong annotation turns
+ *    that test red; nothing about writing the comment makes the claim true.
+ *
+ * Anything malformed, dangling, or attached to the wrong kind of statement is
+ * reported as mutating. The failure direction is always "refuse the replay".
  */
-import { stripNoise } from './scan'
+import { maskForAnnotations, stripNoise } from './scan'
 
 /**
  * What a second run of this migration does to a database where it already ran.
@@ -94,6 +129,13 @@ export interface ReplaySafetyReport {
   mutating: ReplayStatementFinding[]
   /** Statements that would error on a second run. Bounded by migrate()'s transaction. */
   erroring: ReplayStatementFinding[]
+  /**
+   * Statements an author vouched for with `-- @replay: guarded-by …`, and would
+   * otherwise be refused. Non-empty means this file's verdict rests partly on a
+   * human claim, which is worth seeing in a migrator log rather than inferring
+   * from a verdict that silently got kinder.
+   */
+  vouched: ReplayStatementFinding[]
   /** How many statements were examined; 0 means the file had no DDL at all. */
   statementCount: number
 }
@@ -132,8 +174,10 @@ const SAFE_SHAPES: { re: RegExp; why: string }[] = [
  *
  * Deliberately greedy. A `DO $$ … $$` block is listed because its body is
  * opaque to this tokenizer and could contain any of the others — refusing to
- * reason about it is the only honest reading. `WITH … INSERT` is listed because
- * `0006_thick_arclight` is exactly that shape and would duplicate rows.
+ * reason about it is the only honest reading, and the only way out is the
+ * `-- @replay: guarded-by …` claim described in the file header, not a cleverer
+ * regex. `WITH … INSERT` is listed because `0006_thick_arclight` is exactly that
+ * shape and would duplicate rows.
  */
 const MUTATING_SHAPES: { re: RegExp; why: string }[] = [
   { re: /^INSERT\s+INTO\b/i, why: 'INSERT with no ON CONFLICT re-inserts on replay' },
@@ -148,21 +192,53 @@ const MUTATING_SHAPES: { re: RegExp; why: string }[] = [
   { re: /^ALTER\s+SEQUENCE\b[\s\S]*\bRESTART\b/i, why: 'sequence restart re-runs on replay' },
 ]
 
+export interface SplitStatement {
+  text: string
+  /** 1-based line the statement's text starts on. */
+  line: number
+  /**
+   * 1-based line its terminating `;` sits on.
+   *
+   * Only used to bound where an annotation may live: the comment block
+   * "directly above" statement _n_ is everything after statement _n-1_ ends. A
+   * `-- @replay:` comment written *inside* a preceding statement therefore
+   * attaches to nothing, rather than silently jumping the gap to the next one.
+   */
+  endLine: number
+}
+
 /**
- * Split noise-stripped SQL into statements, keeping each one's line number.
+ * Split noise-stripped SQL into statements, keeping each one's line span.
  *
  * Dollar-quoted bodies are kept whole: a `$$ … $$` function body contains
  * semicolons that are not statement terminators, and splitting inside one would
  * turn a single `CREATE OR REPLACE FUNCTION` into a dozen unrecognisable
  * fragments — all of which would be refused, which is safe but useless.
  */
-export function splitStatements(stripped: string): { text: string; line: number }[] {
-  const out: { text: string; line: number }[] = []
+export function splitStatements(stripped: string): SplitStatement[] {
+  const out: SplitStatement[] = []
   let buf = ''
   let line = 1
   let startLine = 1
+  /**
+   * Whether `buf` holds any non-whitespace yet. `stripNoise` blanks comments to
+   * spaces rather than deleting them, so the run of "whitespace" before a
+   * statement is usually its header comment — often dozens of lines of it. This
+   * flag is what moves `startLine` past that to the line the SQL really starts
+   * on, which the previous version only did for the second statement onward and
+   * so reported every file's first statement as line 1.
+   */
+  let started = false
   let i = 0
   let dollarTag: string | null = null
+
+  /** Record the first non-blank character's line, once per statement. */
+  const opened = () => {
+    if (!started) {
+      startLine = line
+      started = true
+    }
+  }
 
   while (i < stripped.length) {
     const ch = stripped[i]!
@@ -170,6 +246,7 @@ export function splitStatements(stripped: string): { text: string; line: number 
     if (dollarTag === null) {
       const m = /^\$([A-Za-z_]\w*)?\$/.exec(stripped.slice(i))
       if (m) {
+        opened()
         dollarTag = m[0]
         buf += m[0]
         i += m[0].length
@@ -184,23 +261,82 @@ export function splitStatements(stripped: string): { text: string; line: number 
 
     if (ch === '\n') line++
     if (ch === ';' && dollarTag === null) {
-      if (buf.trim() !== '') out.push({ text: buf.trim(), line: startLine })
+      if (buf.trim() !== '') out.push({ text: buf.trim(), line: startLine, endLine: line })
       buf = ''
+      started = false
       i++
-      // Skip forward to the next non-space so the next statement's line number
-      // is where its text starts, not where the previous semicolon was.
-      while (i < stripped.length && /\s/.test(stripped[i]!)) {
-        if (stripped[i] === '\n') line++
-        i++
-      }
-      startLine = line
       continue
     }
+    if (!/\s/.test(ch)) opened()
     buf += ch
     i++
   }
-  if (buf.trim() !== '') out.push({ text: buf.trim(), line: startLine })
+  if (buf.trim() !== '') out.push({ text: buf.trim(), line: startLine, endLine: line })
   return out
+}
+
+/** Any `-- @replay:` comment, well-formed or not. Nothing else may claim the prefix. */
+const REPLAY_ANNOTATION_LINE = /--\s*@replay:/i
+/**
+ * The only accepted form. `guarded-by` is a required literal rather than free
+ * text so a half-remembered spelling fails loudly instead of reading as a
+ * different, unrecognised claim; the prose after it is required too, because
+ * the thing a reviewer has to check is *which* guard, and an annotation that
+ * does not say is not reviewable. Mirrors `@contract`'s rejection of
+ * `safe-after 0.0.0`: syntactically a version, but not one anybody could check.
+ */
+const VALID_REPLAY_ANNOTATION = /--\s*@replay:\s*guarded-by\s+(\S.*?)\s*$/i
+
+/** The only statement shape an annotation may vouch for — see the file header. */
+const VOUCHABLE_SHAPE = /^DO\b/i
+
+interface ParsedReplayAnnotation {
+  line: number
+  /** Prose after `guarded-by`, or null when the line does not parse. */
+  rationale: string | null
+  /** The comment as written, from `--` onward, for the operator's diagnosis. */
+  raw: string
+}
+
+/**
+ * Locate `-- @replay:` comments, well-formed or not.
+ *
+ * Reads `maskForAnnotations` output rather than raw text so a `@replay:` inside
+ * a string literal or a block comment can never be mistaken for a claim, and
+ * reuses the sibling scanner's masker rather than a second one so the two agree
+ * about what a comment is.
+ */
+export function parseReplayAnnotations(sqlText: string): ParsedReplayAnnotation[] {
+  const out: ParsedReplayAnnotation[] = []
+  const lines = maskForAnnotations(sqlText).split('\n')
+  for (let idx = 0; idx < lines.length; idx++) {
+    const text = lines[idx]!
+    if (!REPLAY_ANNOTATION_LINE.test(text)) continue
+    const valid = VALID_REPLAY_ANNOTATION.exec(text)
+    out.push({
+      line: idx + 1,
+      rationale: valid ? valid[1]! : null,
+      raw: text.slice(text.indexOf('--')).trim(),
+    })
+  }
+  return out
+}
+
+/**
+ * Which statement an annotation sits above, or -1 for none.
+ *
+ * The window for statement _n_ runs from the line after statement _n-1_ ends
+ * through statement _n_'s own first line. That closes the two gaps that would
+ * otherwise make placement meaningless: an annotation buried inside an earlier
+ * statement's body attaches to nothing, and one trailing the last statement in
+ * the file attaches to nothing either.
+ */
+function statementBelow(statements: readonly SplitStatement[], line: number): number {
+  for (let i = 0; i < statements.length; i++) {
+    const from = i === 0 ? 1 : statements[i - 1]!.endLine + 1
+    if (line >= from && line <= statements[i]!.line) return i
+  }
+  return -1
 }
 
 /**
@@ -215,9 +351,57 @@ export function assessReplaySafety(tag: string, sqlText: string): ReplaySafetyRe
   const droppedTriggers = new Set<string>()
   const mutating: ReplayStatementFinding[] = []
   const erroring: ReplayStatementFinding[] = []
+  const vouched: ReplayStatementFinding[] = []
 
-  for (const stmt of statements) {
+  // Resolve the annotations first, so the statement loop only has to ask
+  // "is this one vouched for?" — and so an annotation that vouches for nothing
+  // is a finding in its own right rather than a comment nobody reads.
+  const vouchedByIndex = new Map<number, string>()
+  for (const ann of parseReplayAnnotations(sqlText)) {
+    const excerpt = ann.raw.slice(0, 120)
+    if (ann.rationale === null) {
+      mutating.push({
+        line: ann.line,
+        excerpt,
+        reason:
+          'malformed @replay annotation; the only accepted form is ' +
+          '`-- @replay: guarded-by <what the guard tests>`',
+      })
+      continue
+    }
+    const target = statementBelow(statements, ann.line)
+    if (target === -1) {
+      mutating.push({
+        line: ann.line,
+        excerpt,
+        reason:
+          '@replay annotation vouches for no statement; it must sit in the comment block ' +
+          'directly above the statement it covers',
+      })
+      continue
+    }
+    const flat = statements[target]!.text.replace(/\s+/g, ' ').trim()
+    if (!VOUCHABLE_SHAPE.test(flat)) {
+      mutating.push({
+        line: ann.line,
+        excerpt,
+        reason:
+          '@replay annotation is attached to a statement this scanner can read for itself ' +
+          `(\`${flat.slice(0, 60)}\`); it may only vouch for a DO block, whose body is opaque here`,
+      })
+      continue
+    }
+    vouchedByIndex.set(target, ann.rationale)
+  }
+
+  for (const [index, stmt] of statements.entries()) {
     const flat = stmt.text.replace(/\s+/g, ' ').trim()
+
+    const rationale = vouchedByIndex.get(index)
+    if (rationale !== undefined) {
+      vouched.push({ line: stmt.line, excerpt: flat.slice(0, 120), reason: rationale })
+      continue
+    }
 
     const dropTrigger = /^DROP\s+TRIGGER\s+IF\s+EXISTS\s+("?[\w.]+"?)/i.exec(flat)
     if (dropTrigger) droppedTriggers.add(normaliseIdent(dropTrigger[1]!))
@@ -250,7 +434,7 @@ export function assessReplaySafety(tag: string, sqlText: string): ReplaySafetyRe
 
   const verdict: ReplayVerdict =
     mutating.length > 0 ? 'mutates' : erroring.length > 0 ? 'errors' : 'safe'
-  return { tag, verdict, mutating, erroring, statementCount: statements.length }
+  return { tag, verdict, mutating, erroring, vouched, statementCount: statements.length }
 }
 
 function normaliseIdent(raw: string): string {

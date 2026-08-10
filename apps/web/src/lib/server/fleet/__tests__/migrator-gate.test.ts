@@ -49,8 +49,14 @@ const withoutRows = (...prefixes: string[]) => {
  * The shape measured on two live workspaces: a high-water mark at `0253` with rows
  * absent for `0249`, `0250`, `0252`, `0256` and `0257`, while the database
  * physically carried some of them and was serving 500s.
+ *
+ * Everything the branch adds after `0257` is withheld here too. The measurement
+ * is a high-water mark at `0253` with a forward tail above it, and a newer
+ * migration whose row this fixture kept would move the mark past the tail --
+ * turning the tail into part of the hole and quietly replacing the measured
+ * shape with a different one that happens to still parse.
  */
-const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257')
+const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257', '0258')
 
 describe('replaySetFor', () => {
   it('is everything on a database that has never been migrated', () => {
@@ -145,6 +151,7 @@ describe('planFor', () => {
     expect(replaySetFor(applied)).toEqual([
       '0256_outbox_relay_leader',
       '0257_pg_kv_presence_realtime',
+      '0258_workspace_key_columns',
     ])
     expect(planFor(applied).tags).toEqual([
       '0249_settings_cloud',
@@ -154,6 +161,7 @@ describe('planFor', () => {
       '0253_job_queue',
       '0256_outbox_relay_leader',
       '0257_pg_kv_presence_realtime',
+      '0258_workspace_key_columns',
     ])
   })
 
@@ -292,6 +300,7 @@ describe('replayGateVerdict', () => {
       '0253_job_queue',
       '0256_outbox_relay_leader',
       '0257_pg_kv_presence_realtime',
+      '0258_workspace_key_columns',
     ])
     expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)).toEqual({
       ok: true,
