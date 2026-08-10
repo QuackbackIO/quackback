@@ -64,18 +64,45 @@
  * cannot survive.
  */
 
-import { control, describeResponse, blocked, decide } from './helpers'
+import { control, crossOriginRedirectControl, describeResponse, blocked, decide } from './helpers'
 import { SETTINGS_ROW_SQL, typeId, type SettingsRow } from '../db'
 import { admissibleTokens, colourTokens } from '../vocabulary'
-import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
+import type { ControlOutcome, Probe, ProbeContext, ProbeResponse, TenantHandle } from '../types'
 
-/** Public surfaces whose content is derived from the cached settings row. */
+/**
+ * Public surfaces whose content is derived from the cached settings row.
+ *
+ * `follow` is set where the surface answers a canonicalising redirect rather
+ * than a document. `GET /` on this app answers `307 → /?sort=trending` with a
+ * ZERO-BYTE body, so with redirects unfollowed this probe judged an empty
+ * string: the planted identity token, the workspace name and the branding are
+ * all one hop away. The whole planted-identity layer — the suite's own answer
+ * to three rounds of false greens — contributed nothing to a run, and the only
+ * thing that noticed was the admissibility gate below refusing to certify a
+ * host it had never caught serving its own token.
+ *
+ * Redirects are followed same-origin only (`http.ts`). A probe that chased
+ * alpha's redirect onto bravo's host and then reported "no foreign markers"
+ * would be judging bravo's page and calling it alpha's.
+ */
 const SETTINGS_SURFACES = [
-  { path: '/api/widget/config.json', label: 'widget public config' },
-  { path: '/', label: 'portal document' },
+  { path: '/api/widget/config.json', label: 'widget public config', follow: false },
+  { path: '/', label: 'portal document', follow: true },
 ]
 
 const INTERLEAVE_ROUNDS = 3
+
+/**
+ * One LEAK reason for every exit from this probe.
+ *
+ * Each early return used to carry its own — including one that was the empty
+ * string — so a leak already recorded when the probe stopped would have been
+ * reported with no explanation of what it was.
+ */
+const LEAK_REASON =
+  'a settings-derived response carried the other tenant’s planted identity token or stored ' +
+  'identity, or a tenant’s own identity moved between interleaved reads — the signature of a ' +
+  'cache keyed without a tenant segment'
 
 /**
  * Every string that could identify this tenant in a served response — the
@@ -171,7 +198,7 @@ export const p06SettingsCache: Probe = {
         // `decide()` yields ERROR. The pass text is filled in anyway: if a
         // future edit removed the guarding control, an empty PASS reason would
         // be considerably worse than a slightly wrong one.
-        leakReason: 'a settings-derived response crossed the tenant boundary',
+        leakReason: LEAK_REASON,
         onPass: {
           observed: 'the probe returned before it could compare both tenants',
           reason: 'no settings-derived surface was compared',
@@ -203,7 +230,7 @@ export const p06SettingsCache: Probe = {
       return decide({
         attempted,
         controls,
-        leakReason: 'a settings-derived response crossed the tenant boundary',
+        leakReason: LEAK_REASON,
         onPass: {
           observed: 'the probe returned before it could compare both tenants',
           reason: 'no settings-derived surface was compared',
@@ -230,10 +257,16 @@ export const p06SettingsCache: Probe = {
 
     for (const surface of SETTINGS_SURFACES) {
       const rounds: Array<{ alphaBody: string; bravoBody: string }> = []
+      const reads: Array<{ slot: string; res: ProbeResponse; otherBaseUrl: string }> = []
 
       for (let round = 0; round < INTERLEAVE_ROUNDS; round++) {
-        const a = await alpha.http.request(surface.path, { omitCookies: true })
-        const b = await bravo.http.request(surface.path, { omitCookies: true })
+        const read = { omitCookies: true, followRedirects: surface.follow }
+        const a = await alpha.http.request(surface.path, read)
+        const b = await bravo.http.request(surface.path, read)
+        reads.push(
+          { slot: 'alpha', res: a, otherBaseUrl: bravo.baseUrl },
+          { slot: 'bravo', res: b, otherBaseUrl: alpha.baseUrl }
+        )
         if (a.status >= 500 || b.status >= 500) {
           controls.push(
             control(
@@ -246,12 +279,40 @@ export const p06SettingsCache: Probe = {
           return decide({
             attempted,
             controls,
-            leakReason: '',
-            onPass: { observed: '', reason: '' },
+            leakReason: LEAK_REASON,
+            blindReason:
+              'a judged surface answered 5xx, so its content could not be compared. A crash is ' +
+              'not a refusal and is never a pass.',
+            onPass: {
+              observed: 'the probe returned before it could compare both tenants',
+              reason: 'no settings-derived surface was compared',
+            },
             evidence,
           })
         }
         rounds.push({ alphaBody: a.text, bravoBody: b.text })
+      }
+
+      // A host that answered by sending the client to another origin did not
+      // serve this surface, and the body being judged is not its own. Fails
+      // closed as `visibility` (ERROR), or as `negative` (LEAK) when the origin
+      // it pointed at is the other tenant under test.
+      const redirectControl = crossOriginRedirectControl(surface.label, reads)
+      if (redirectControl) {
+        controls.push(redirectControl)
+        return decide({
+          attempted,
+          controls,
+          leakReason: LEAK_REASON,
+          blindReason:
+            'a judged surface was answered with a redirect to another origin, which was not ' +
+            'followed. The probe therefore never read the surface it was going to judge.',
+          onPass: {
+            observed: 'the probe returned before it could compare both tenants',
+            reason: 'no settings-derived surface was compared',
+          },
+          evidence,
+        })
       }
 
       // Own identity = derived own tokens + the planted token. The union is
@@ -433,10 +494,7 @@ export const p06SettingsCache: Probe = {
     return decide({
       attempted,
       controls,
-      leakReason:
-        'a settings-derived response carried the other tenant’s planted identity token or stored ' +
-        'identity, or a tenant’s own identity moved between interleaved reads — the signature of a ' +
-        'cache keyed without a tenant segment',
+      leakReason: LEAK_REASON,
       onPass: {
         observed:
           `each host served its own planted identity token (${plantedSurfaces.alpha.length + plantedSurfaces.bravo.length} ` +

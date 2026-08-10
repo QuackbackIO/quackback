@@ -54,6 +54,12 @@ describe('P01 session cookie replay', () => {
   })
 })
 
+/** A fleet that signs storage capabilities over the pooled, tenant-bound message. */
+const POOLED_BINDINGS = {
+  alpha: { tenantId: 'tnt_a' },
+  bravo: { tenantId: 'tnt_b' },
+}
+
 describe('P03 storage read token', () => {
   it('passes when each tenant holds its own storage secret', async () => {
     const outcome = await p03StorageToken.run(makeContext(new FakeFleet()))
@@ -64,7 +70,7 @@ describe('P03 storage read token', () => {
     const fleet = new FakeFleet({ sharedStorageSecret: true })
     const outcome = await p03StorageToken.run(makeContext(fleet))
     expect(outcome.verdict).toBe('LEAK')
-    expect(failedNegatives(outcome)).toContain("alpha's capability → bravo (same key)")
+    expect(failedNegatives(outcome)).toContain("alpha's capability as issued → bravo (same key)")
     // The invariant must be flagged too — it is the root cause, not a symptom.
     const invariant = outcome.controls.find((c) => c.kind === 'invariant')
     expect(invariant?.ok).toBe(false)
@@ -76,6 +82,67 @@ describe('P03 storage read token', () => {
     const outcome = await p03StorageToken.run(makeContext(fleet, config))
     expect(outcome.verdict).toBe('ERROR')
     expect(outcome.reason).toContain('positive control failed')
+  })
+
+  it('catches a shared secret through an OBSERVATION, not just the operator-typed invariant', async () => {
+    // Defect 4. `storageReadSig` signs `tenantBind('read|<key>')`, so once
+    // tenant ids are supplied a capability minted for alpha can never verify on
+    // bravo whatever the secret is — the plain replay is refused by arithmetic,
+    // and the only remaining detector was an `invariant` comparing two strings
+    // the operator typed. The interchange attempt holds the key AND the binding
+    // constant and varies only the secret, so it can fail, and here it does.
+    const fleet = new FakeFleet({ sharedStorageSecret: true })
+    const outcome = await p03StorageToken.run(makeContext(fleet))
+    const interchange = outcome.controls.filter(
+      (c) => c.attemptId === 'storage-secret-interchange'
+    )
+    expect(interchange).toHaveLength(2)
+    expect(interchange.every((c) => !c.ok)).toBe(true)
+    expect(interchange[0].detail).toContain('verifies on bravo')
+  })
+
+  it('says out loud when the plain replay is over-determined rather than reporting a clean pass', async () => {
+    // A probe that knows it cannot fail must not report as though it could.
+    // With per-tenant bindings the replay is refused by the message mismatch,
+    // and the control's own detail says so instead of reading 'refused with 403'.
+    const fleet = new FakeFleet({}, POOLED_BINDINGS)
+    const outcome = await p03StorageToken.run(
+      makeContext(fleet, baseConfig(fleet, { alphaTenantId: 'tnt_a', bravoTenantId: 'tnt_b' }))
+    )
+    expect(outcome.verdict).toBe('PASS')
+    const replay = outcome.controls.find(
+      (c) => c.label === "alpha's capability as issued → bravo (same key)"
+    )
+    expect(replay?.detail).toContain('OVER-DETERMINED')
+    expect(outcome.observed).toContain('secret-interchange attempt is what carried the verdict')
+  })
+
+  it('still catches a shared secret when per-tenant bindings are in force', async () => {
+    // The condition the pooled fleet will actually be in: bindings separate the
+    // messages, so the replay cannot fail — and the shared secret is caught
+    // anyway, because the interchange attempt signs the message bravo verifies.
+    const fleet = new FakeFleet({ sharedStorageSecret: true }, POOLED_BINDINGS)
+    const outcome = await p03StorageToken.run(
+      makeContext(fleet, baseConfig(fleet, { alphaTenantId: 'tnt_a', bravoTenantId: 'tnt_b' }))
+    )
+    expect(outcome.verdict).toBe('LEAK')
+    expect(failedNegatives(outcome)).toContain(
+      "alpha's SECRET against bravo's own message (same key, bravo's binding)"
+    )
+  })
+
+  it('fails the positive control loudly when a supplied tenant id does not match the deployment', async () => {
+    // The binding is calibrated against the host rather than assumed, so a
+    // wrong --alpha-tenant-id cannot silently make every negative unfailable.
+    // This fleet signs the unbound message, and the probe finds that out.
+    const fleet = new FakeFleet()
+    const outcome = await p03StorageToken.run(
+      makeContext(fleet, baseConfig(fleet, { alphaTenantId: 'tnt_wrong' }))
+    )
+    expect(outcome.verdict).toBe('PASS')
+    const positive = outcome.controls.find((c) => c.label === "alpha's own capability → alpha")
+    expect(positive?.ok).toBe(true)
+    expect(positive?.detail).toContain('unbound')
   })
 })
 

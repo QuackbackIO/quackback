@@ -37,8 +37,33 @@ This is centralized deliberately. An earlier version let each probe pick its own
 failing controls with a local filter, and one of those filters dropped
 `invariant` failures from the decision — so a probe could observe a shared
 secret, record it, print it, and still return `PASS`. Classifying a control is
-now the whole of a probe's verdict logic; there is no filter that can record a
-signal without counting it.
+now the whole of a probe's verdict logic.
+
+**Every exit from a probe goes through `decide()`, including the early ones.**
+That sentence used to read "there is no filter that can record a signal without
+counting it", and it was not true. Seven of the nine probes returned through a
+bare `error()` constructor that hard-coded `verdict: 'ERROR'` while passing the
+controls recorded so far along for display. A failed `invariant` is a LEAK by
+the table above — so P03 could write _"IDENTICAL — every read capability minted
+for either tenant verifies against both, by construction"_ into its own output
+and return `ERROR` with `LEAK: 0`, because a later positive control also failed
+and the early return got there first. On a real fleet with one storage secret
+serving both tenants, that run says "could not run" rather than "cross-tenant
+capability found", and exits 1 instead of 2.
+
+`error()` is gone. Probes stop early with `halt()`, which records the stopping
+condition as a failed `visibility` control and hands everything to `decide()`;
+`decide()`'s precedence already puts LEAK above ERROR, and the blindness is
+demoted to a note appended to the leak. `blocked()` does the same when it is
+handed a control that already failed — "not executed" must not be able to
+swallow an observation. A test in `__tests__/end-to-end.test.ts` scans
+`probes/*.ts` for a hand-built `verdict:` literal, so the escape hatch cannot
+be reopened.
+
+The same rule now applies to the runner: a tripwire hit upgrades **any**
+non-LEAK verdict, not only `PASS`. A foreign marker in a response body is a
+cross-tenant observation whether or not the probe that made the request also
+managed to finish.
 
 **Tenant identity is planted, not derived.** The suite does not infer what
 makes a tenant distinguishable from the values each tenant happens to have
@@ -73,11 +98,45 @@ already-symmetric probe. This is not tidiness: an email-keyed credential stash
 is last-writer-wins, so testing one direction leaves detection to whichever
 tenant's value happens to survive.
 
-**Every response is scanned for the other tenant's markers.** Probes assert on
-what they attacked; the tripwire catches what the probe author did not think to
-check. Its vocabulary is the planted identity tokens, the per-tenant canary
-strings, and tenant-unique TypeIDs, none of which can collide or appear in
-ordinary chrome. A tripwire hit overrides a probe's own `PASS`.
+**Every response is scanned for the other tenant's markers, including the
+responses to the deliberate attempts.** Probes assert on what they attacked; the
+tripwire catches what the probe author did not think to check. Its vocabulary is
+the planted identity tokens, the per-tenant canary strings, and tenant-unique
+TypeIDs, none of which can collide or appear in ordinary chrome. A tripwire hit
+overrides whatever the probe concluded.
+
+The `expectsForeignMarkers` flag used to exempt an exchange from collection
+entirely — and **every** deliberate cross-tenant attempt in the suite sets it,
+so the tripwire's real coverage was incidental traffic only. It was switched off
+on precisely the replays it exists to backstop, leaving those covered by
+whatever each probe author had coded a check for: P01, P05 and P08 call
+`markersPresent` themselves; P02, P03, P04, P06 and P07 call nothing. The flag
+now only labels a hit `deliberate`. Echo suppression is instead done on the one
+basis that is sound — a marker the harness itself put on the wire is never
+counted — and "the wire" means the whole request: url, body, headers (a replayed
+cookie or Bearer credential travels nowhere else) and any base64url payload
+inside them (a signed token's claims). `record()`'s hits are also carried back
+on `ProbeResponse.tripwireHits`, which `http.ts` previously discarded.
+
+**A probe must judge a surface that actually carries the evidence.** `GET /`
+answers `307 → /?sort=trending` with a **zero-byte body**, and `GET /admin`
+answers `307 → /?auth=signin…` the same way, because the route's search schema
+canonicalises before it renders. With redirects unfollowed, every probe that
+"read the portal document" read an empty string and reported it clean — so the
+planted identity token, the whole answer to three previous rounds of false
+greens, contributed nothing to a run. The only thing that noticed was P06's
+admissibility gate refusing to certify hosts it had never caught serving their
+own token.
+
+Document reads therefore set `followRedirects`, and `http.ts` follows them by
+hand rather than with `redirect: 'follow'` for one reason: **a redirect that
+leaves the tenant's own origin is never followed.** A probe that chased alpha's
+redirect onto bravo's host and then reported "no foreign markers in alpha's
+document" would be reading bravo's page and calling it alpha's, which is worse
+than reading nothing. A refused cross-origin redirect becomes a failed
+`visibility` control (the surface could not be judged), or a failed `negative`
+when the origin it pointed at is the other tenant under test — being handed
+across the boundary is itself the finding. Every hop is tripwire-scanned.
 
 ## The colliding fixture
 
@@ -225,7 +284,7 @@ flag to pass — never a silent skip.
 | ------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **P01** | session   | A session minted by alpha authenticates nothing on bravo — not as a cookie, not as a raw Bearer token, and not on an authenticated SSR document.                                                                                          |
 | **P02** | session   | A magic-link token or sign-in OTP minted by one tenant establishes no session on the other, _while the other tenant holds its own live credential for the identical address_, and each tenant's own credential resolves to its own user.  |
-| **P03** | storage   | A private-object read capability minted with one tenant's storage secret is refused by the other for the identical object key — i.e. the tenants do not share a storage secret.                                                           |
+| **P03** | storage   | A private-object read capability minted with one tenant’s storage secret is refused by the other for the identical object key, and one tenant’s secret does not verify against the other’s own signed message — i.e. the tenants do not share a storage secret. |
 | **P04** | widget    | A widget SSO token signed with one tenant's widget secret mints no session in the other, and a widget session token issued by one resolves to no user in the other.                                                                       |
 | **P05** | api       | A REST API key issued by one tenant is rejected with 401 by the other, and returns neither the issuer's rows (wrong pool) nor the target's (wrong credential accepted).                                                                   |
 | **P06** | cache     | Settings-derived public surfaces read in a tight interleave never serve one tenant's planted identity token, stored identity, branding or configuration under the other's hostname — and each host provably serves its own planted token. |
@@ -255,12 +314,38 @@ generic, and asserts neither host ever serves the other's in place of its own.
 Stability across the interleave is measured on those tokens rather than on raw
 bytes, so a CSP nonce or a timestamp cannot manufacture a false `LEAK`.
 
-**P03 uses the same object key against both tenants.** A signature is bound to
-its key, so signing alpha's key and presenting it for bravo's key would be
-refused by arithmetic rather than by isolation. Holding the key constant isolates
-the only variable that matters: the secret. The object need not exist — the
-handler verifies the capability before it touches storage, so a rejected
-signature is a clean 403 and an accepted one falls through to the object path.
+**P03 holds constant everything except the secret — the binding as well as the
+key.** A signature is bound to its key, so signing alpha's key and presenting it
+for bravo's key would be refused by arithmetic rather than by isolation. That
+argument was already in the probe for the object key; it applies equally to the
+tenant binding, and it was not being applied there. Under pooled tenancy the
+signed message is `tenantBind('read|<key>')`, which prefixes `t:<tenantId>|`
+(`storage/s3.ts`), so once tenant ids are supplied alpha's capability can never
+verify on bravo **whatever the secret is** — the messages differ. The negative
+control could not fail, and detection rested entirely on an `invariant`
+comparing two strings the operator typed rather than two facts read from the
+fleet.
+
+So P03 now makes two attempts in each direction:
+
+| Attempt                       | What is presented                                              | What its failure means                          |
+| ----------------------------- | -------------------------------------------------------------- | ----------------------------------------------- |
+| `storage-read-capability`     | alpha's capability exactly as alpha's own URLs carry it         | a URL from one tenant is honoured by the other  |
+| `storage-secret-interchange`  | the message **bravo** verifies, HMAC'd with **alpha's** secret  | the two tenants share a storage secret          |
+
+The second is the one that can fail once binding is in force, and it is the
+condition §9 depends on being false. When the bindings differ, the first
+attempt's own detail text says it is over-determined rather than reporting a
+bare "refused with 403" — a probe that knows it cannot fail must not read as
+though it could.
+
+The binding each host verifies is **calibrated against that host**, not assumed
+from the flags: the probe mints under each candidate message and keeps the one
+the tenant's own deployment accepts. A `--alpha-tenant-id` that does not match
+then fails the positive control loudly instead of quietly making every negative
+unfailable. The object need not exist — the handler verifies the capability
+before it touches storage, so a rejected signature is a clean 403 and an
+accepted one falls through to the object path.
 
 ## What is not fully exercisable today
 
@@ -286,17 +371,48 @@ and query scoping that are already shared-or-not regardless of process topology.
 P03 in particular directly tests the property §9 relies on to justify
 bucket-per-tenant.
 
-Two further gaps, stated plainly:
+## Surfaces and families no probe can judge
+
+Distinct from the pooling caveats above: those are probes that run but whose
+`PASS` is over-determined today. These are things nothing in the suite looks at
+at all. A future reader needs this list more than any of the green ticks.
 
 - **Presence signals are covered only at the row level.** P08 scans bravo's
   database for alpha's markers, which catches persisted presence, but it does not
   open an SSE stream and watch for a cross-tenant presence event. The untenanted
   `AGENTS_ZSET = 'conversation:presence:agents'` key §7.4 named is gone —
   presence is `presence_stream`, keyed on `tenant_id` with `is_agent` a column —
-  but the live SSE path is still not directly probed.
+  but the live SSE path is still not directly probed. No probe opens a stream of
+  any kind.
 - **P06 cannot see a cache that is shared but not observable.** It reads the
   public surfaces that settings feed; a cached value with no public projection
-  (webhook rows, registered auth providers) is out of its reach over HTTP.
+  (webhook rows, registered auth providers, resolved platform credentials) is out
+  of its reach over HTTP, and the database scan reads stored rows rather than
+  what a process is holding.
+- **The judged HTTP surfaces are three.** `/`, `/b/<slug>` and
+  `/api/widget/config.json`, plus `/admin` for P01. The help centre, changelog,
+  status pages, roadmap, the whole `/api/v1` surface beyond boards and posts, and
+  every authenticated admin route other than the shell are unjudged. A settings
+  leak that reached only `/hc` would not be seen.
+- **Nothing probes outbound traffic.** A webhook, an email or a workflow
+  connector firing against the wrong tenant's destination is invisible here:
+  every probe observes responses to requests it made itself, plus rows.
+  P07 detects a cross-tenant background WRITE, not a cross-tenant SEND.
+- **Storage is probed only for the capability, never for the object.** P03
+  establishes that the read token does not transfer. Whether the two tenants'
+  objects live in the same bucket, and whether a key from one is reachable in the
+  other once a valid capability exists, is not tested — the probe deliberately
+  uses a key that need not exist.
+- **P03's plain-replay negative cannot fail under pooled binding.** It says so
+  in its own output, and the interchange attempt carries the verdict, but the
+  replay itself is ceremonial once tenant ids are in force.
+- **File-level and queue-level isolation of the worker tier is inferred, not
+  observed.** P07 asks "did a row land in the other database", which is the
+  right question, but it cannot see which worker process ran the job.
+- **A leak that renders identically in both tenants and touches no marker is
+  invisible by construction.** That is the price of the colliding fixture: the
+  markers are the only discriminator, so a cross-tenant read of a field carrying
+  none of them (a timestamp, a counter, an aggregate) passes.
 
 ## Self-tests
 
@@ -342,6 +458,21 @@ execute at all, P07's blind guard was satisfied by fixture data, and P06 reporte
 imported by a test. Every case here asserts on the report and the exit code,
 including that a clean run and a leaking run do not produce identical output,
 and that a per-request nonce does not manufacture a `LEAK`.
+
+The round-5 block covers the four ways the suite could not fail at all: that a
+judged document is read past the canonicalising `307` (and that the planted
+token is consequently observable, which it was not); that a redirect off the
+tenant's own origin is refused and named rather than followed; that a failed
+`invariant` surfaces as `LEAK` even when the probe had to stop early; and that
+a tripwire hit on a deliberate cross-tenant attempt is counted. It also scans
+`probes/*.ts` for a hand-built `verdict:` literal, which is what keeps
+"every exit goes through `decide()`" true rather than merely currently-so.
+
+**The fake fleet now reproduces the canonicalising redirect** (`/` → `307`
+`/?sort=trending`, `/admin` → `307` `/?auth=signin…`, both zero-byte) and the
+pooled storage binding (`t:<tenantId>|read|<key>`). Its being *more forgiving
+than the fleet it stands in for* is what let the redirect defect live: the
+planted token rendered in every test and in no real run.
 
 `__tests__/tripwire.test.ts` covers both tripwire failure modes: missing a real
 marker, and flagging the harness's own echo. It also pins `markerSearchForms`,

@@ -14,8 +14,14 @@
  *     alpha must succeed before "alpha's credential was refused by bravo" means
  *     anything. Without it, a suite scores a dead server as perfectly isolated.
  *  2. Every response the harness receives is scanned against the other tenant's
- *     marker vocabulary (canaries + tenant-unique ids). A probe cannot pass by
- *     failing to look at the one field that leaked.
+ *     marker vocabulary (canaries + tenant-unique ids) — including the responses
+ *     to the deliberate cross-tenant attempts, which were once exempt and are
+ *     where a leak is most likely to be. A probe cannot pass by failing to look
+ *     at the one field that leaked.
+ *  3. A probe must judge a surface that actually carries the evidence. `GET /`
+ *     answers a zero-byte 307 to its canonical URL, so document reads follow
+ *     redirects — same-origin only, because a response from another host cannot
+ *     be evidence about this one.
  */
 
 /** Which of the two synthetic tenants a thing belongs to. */
@@ -57,8 +63,14 @@ export type Capability =
  *
  * The four kinds exist so that one shared rule — `decide()` in `probes/helpers.ts`
  * — can map controls to a verdict for every probe. Classifying a control is
- * therefore the whole of a probe's verdict logic; there is no per-probe filter
- * that can quietly drop a signal from the decision.
+ * therefore the whole of a probe's verdict logic.
+ *
+ * That only holds if EVERY exit goes through `decide()`, including the early
+ * ones. It did not: seven probes returned through a bare `error()` that
+ * hard-coded ERROR while carrying the recorded controls along for display, so a
+ * failed `invariant` — a LEAK by the table above — could be printed and not
+ * counted. Probes now stop early with `halt()`, which records the stopping
+ * condition as a failed `visibility` control and defers to `decide()`.
  *
  * - `positive`   the mechanism works within its own tenant. Failure → ERROR,
  *                because a refusal from the other tenant proves nothing until
@@ -186,10 +198,26 @@ export interface Exchange {
   url: string
   status: number
   requestBody: string
+  /**
+   * Headers the harness sent. Part of the echo-suppression haystack: a replayed
+   * cookie or Bearer credential travels here and nowhere else, so a marker
+   * reflected back out of one is the harness seeing its own handiwork.
+   */
+  requestHeaders: Record<string, string>
   responseText: string
   responseHeaders: Record<string, string>
   durationMs: number
-  /** Suppress tripwire scanning — set when the probe deliberately sends a foreign marker. */
+  /**
+   * The probe deliberately sent a foreign tenant's marker on this exchange.
+   *
+   * This does NOT suppress tripwire scanning. It once did, and because every
+   * deliberate cross-tenant attempt sets it, the tripwire's coverage was reduced
+   * to incidental traffic — the exact replays it exists to backstop were the
+   * ones it ignored. Echo suppression is done properly instead, by never
+   * counting a marker the harness itself put on the wire (url, body, headers,
+   * or a base64url payload inside any of them). The flag now only labels the
+   * resulting hits as `deliberate`.
+   */
   expectsForeignMarkers: boolean
 }
 
@@ -209,6 +237,12 @@ export interface TripwireHit {
   excerpt: string
   /** True when the marker was a credential and its value has been withheld. */
   redacted: boolean
+  /**
+   * True when the probe deliberately made this cross-tenant attempt, false when
+   * the hit landed on incidental traffic. Both count identically toward the
+   * verdict; this only tells a reader which kind of exchange found it.
+   */
+  deliberate: boolean
 }
 
 /** Everything a probe is handed. */
@@ -268,7 +302,20 @@ export interface ProbeRequestInit {
   method?: string
   headers?: Record<string, string>
   body?: string | FormData
-  /** Default true. Set false to inspect a 3xx rather than follow it. */
+  /**
+   * Follow same-origin redirects to the surface that actually carries content.
+   *
+   * Default FALSE, because for the credential probes the 3xx *is* the signal
+   * (a storage read token answers 302, a magic-link verify answers 302) and
+   * following it would both discard the evidence and forward a credential.
+   *
+   * Set TRUE on document reads. `GET /` on a tenant answers `307 → /?sort=trending`
+   * with a zero-byte body, and `GET /admin` answers `307 → /?auth=signin…`, so a
+   * probe that judged the unfollowed response judged nothing at all: the planted
+   * identity token, the workspace name and every fixture id live on the page the
+   * redirect points at. Cross-origin redirects are never followed — see
+   * `ProbeResponse.crossOriginRedirect`.
+   */
   followRedirects?: boolean
   /** Do not send the jar's cookies on this request. */
   omitCookies?: boolean
@@ -286,7 +333,32 @@ export interface ProbeResponse {
   headers: Record<string, string>
   text: string
   json<T = unknown>(): T | null
+  /** The URL this body actually came from — the last hop when redirects were followed. */
   url: string
+  /**
+   * Foreign-tenant markers the tripwire found in this exchange, across every hop.
+   *
+   * Surfaced because it was previously discarded: `record()` already returned
+   * the hits and `http.ts` threw them away, so a probe could only ever see what
+   * its own author thought to check for. A probe may raise its own control from
+   * these; the runner counts them regardless.
+   */
+  tripwireHits: TripwireHit[]
+  /** Same-origin redirect targets that were followed, in order. Empty when none were. */
+  redirectChain: string[]
+  /**
+   * Set to the target URL when a redirect pointed off this tenant's own origin
+   * and was therefore NOT followed.
+   *
+   * Following one would be worse than not following it at all: a probe that
+   * chased alpha's redirect onto bravo's host and then reported "no foreign
+   * markers in alpha's document" would be reading bravo's page and calling it
+   * alpha's. When the target is the other tenant under test, the host handed
+   * the client across the boundary and that is itself the finding.
+   */
+  crossOriginRedirect?: string
+  /** Set when the redirect chain hit the hop limit without reaching a final response. */
+  redirectLimitExceeded?: boolean
 }
 
 /** Direct database access for probes that must observe row-level state. */

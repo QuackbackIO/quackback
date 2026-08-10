@@ -18,9 +18,20 @@
  *
  * Echo suppression: a probe that deliberately sends a foreign marker (searching
  * bravo for alpha's canary, replaying alpha's cookie to bravo) will see that
- * marker reflected in an error body or a query echo. Those exchanges are marked
- * `expectsForeignMarkers`, and any marker present in the request itself is never
- * counted as a hit.
+ * marker reflected in an error body or a query echo. Suppression is done on the
+ * only basis that is actually sound — a marker the harness itself put on the
+ * wire is never counted — and the wire means the whole request: the url, the
+ * body, the headers (a replayed cookie or Bearer credential travels nowhere
+ * else), and any base64url payload embedded in them (an id inside a signed
+ * token's claims).
+ *
+ * What suppression must NOT be is a per-exchange opt-out. `expectsForeignMarkers`
+ * used to return the hits to the caller and drop them from the collection, and
+ * because EVERY deliberate cross-tenant attempt sets that flag, the tripwire's
+ * real coverage was reduced to incidental traffic — it was switched off on
+ * precisely the replays it exists to backstop, leaving them covered only by
+ * whatever each probe author had thought to check. The flag now labels a hit
+ * `deliberate` and changes nothing else.
  */
 
 import type { Exchange, TenantMarkers, TenantSlot, TripwireHit, TripwireRecorder } from './types'
@@ -75,6 +86,38 @@ function buildVocabulary(markers: TenantMarkers): VocabularyEntry[] {
 const REDACTED = '<redacted>'
 
 /**
+ * Substrings long enough to be a base64url-encoded payload rather than a word.
+ * JWT segments and opaque session values both match; ordinary prose does not.
+ */
+const ENCODED_SEGMENT = /[A-Za-z0-9_-]{16,}/g
+
+/**
+ * Everything the harness put on the wire for this exchange, plus whatever falls
+ * out of base64url-decoding the token-shaped parts of it.
+ *
+ * The decode matters because a marker can travel by a route a literal
+ * substring check cannot see: a widget SSO token carries `sub` inside a
+ * base64url payload, so the id is genuinely present in the request while
+ * appearing nowhere in it verbatim. Without the decode, an error body echoing
+ * that id back would be counted as a leak on a perfectly isolated fleet — and
+ * the response to that false positive would be to switch the tripwire off
+ * again, which is how this defect happened the first time.
+ */
+function sentHaystack(exchange: Exchange): string {
+  const literal = [
+    exchange.url,
+    exchange.requestBody,
+    ...Object.values(exchange.requestHeaders ?? {}),
+  ].join('\n')
+  const decoded: string[] = []
+  for (const segment of literal.match(ENCODED_SEGMENT) ?? []) {
+    const text = Buffer.from(segment, 'base64url').toString('utf8')
+    if (text) decoded.push(text)
+  }
+  return `${literal}\n${decoded.join('\n')}`
+}
+
+/**
  * Build the recorder. Both tenants' marker sets are supplied; a response served
  * by one tenant is scanned against the *other* tenant's vocabulary only.
  */
@@ -97,7 +140,7 @@ export function createTripwire(alpha: TenantMarkers, bravo: TenantMarkers): Trip
       if (foreignVocabulary.length === 0) return []
 
       // Anything the harness itself put on the wire cannot count as a leak.
-      const sent = `${exchange.url}\n${exchange.requestBody}`
+      const sent = sentHaystack(exchange)
       const found: TripwireHit[] = []
 
       for (const entry of foreignVocabulary) {
@@ -114,16 +157,14 @@ export function createTripwire(alpha: TenantMarkers, bravo: TenantMarkers): Trip
           status: exchange.status,
           excerpt: entry.sensitive ? excerpt.split(entry.value).join(REDACTED) : excerpt,
           redacted: entry.sensitive,
+          deliberate: exchange.expectsForeignMarkers,
         })
       }
 
-      // `expectsForeignMarkers` covers the case where a marker travels by a
-      // route the request-body check cannot see (a replayed session cookie, a
-      // signed token whose payload embeds an id). The exchange is still
-      // recorded and still scanned, so the probe can inspect `found` itself
-      // and decide — it just does not raise a suite-level tripwire hit.
-      if (exchange.expectsForeignMarkers) return found
-
+      // Deliberate and incidental hits are collected identically. A marker the
+      // host served but the harness never sent has no innocent explanation,
+      // and the exchanges where a probe went looking for one are exactly where
+      // it is most likely to be found.
       collected.push(...found)
       return found
     },

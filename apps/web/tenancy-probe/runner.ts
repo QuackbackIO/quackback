@@ -165,18 +165,24 @@ export async function runSuite(
     try {
       const outcome = await probe.run(ctx)
       const hits = tripwire.hitsSince(hitsBefore)
-      // A tripwire hit overrides a self-reported PASS. A probe that concluded
-      // "refused" while a foreign marker sat in a response body it did not
-      // inspect is exactly the blind spot the tripwire exists to cover.
-      const verdict: Verdict =
-        hits.length > 0 && outcome.verdict === 'PASS' ? 'LEAK' : outcome.verdict
+      // A tripwire hit overrides whatever the probe concluded. A probe that
+      // concluded "refused" while a foreign marker sat in a response body it
+      // did not inspect is exactly the blind spot the tripwire exists to cover.
+      //
+      // It overrides ERROR and BLOCKED too, not only PASS. `decide()`'s own
+      // precedence is that LEAK outranks ERROR — a cross-tenant observation is
+      // evidence regardless of what else went wrong — and a marker the host
+      // served but the harness never sent is such an observation. Reporting
+      // "could not run" over it would lose the finding and drop the exit code
+      // from 2 to 1.
+      const verdict: Verdict = hits.length > 0 && outcome.verdict !== 'LEAK' ? 'LEAK' : outcome.verdict
       results.push({
         ...base,
         ...outcome,
         verdict,
         reason:
-          verdict === 'LEAK' && outcome.verdict === 'PASS'
-            ? `the probe's own checks passed, but the response tripwire caught ${hits.length} foreign marker(s) in responses this probe made: ${hits.map((h) => `${h.markerOwner}.${h.markerName} served by ${h.servedBy} at ${h.url}`).join('; ')}`
+          verdict === 'LEAK' && outcome.verdict !== 'LEAK'
+            ? `the probe returned ${outcome.verdict} (${outcome.reason}), but the response tripwire caught ${hits.length} foreign marker(s) in responses this probe made: ${hits.map((h) => `${h.markerOwner}.${h.markerName} served by ${h.servedBy} at ${h.url}`).join('; ')}`
             : outcome.reason,
         durationMs: Date.now() - probeStart,
         tripwireHits: hits,

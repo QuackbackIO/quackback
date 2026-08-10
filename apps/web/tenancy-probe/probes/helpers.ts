@@ -54,27 +54,85 @@ export function leak(args: {
   return { verdict: 'LEAK', ...args }
 }
 
-export function error(args: {
+/**
+ * Stop the probe early, WITHOUT bypassing the classification rule.
+ *
+ * This replaces a bare `error()` constructor, and the reason is the defect it
+ * caused. Seven of the nine probes returned through an early `error(...)` that
+ * hard-coded `verdict: 'ERROR'` while passing along the controls recorded so
+ * far. So a probe could record a failed `invariant` — which the whole suite
+ * documents as a LEAK, because a violated invariant IS a cross-tenant
+ * capability — and then report `ERROR` with `LEAK: 0` because some later
+ * positive control also failed. Demonstrated live on P03: with one storage
+ * secret serving both slots it wrote the words "IDENTICAL — every read
+ * capability minted for either tenant verifies against both, by construction"
+ * into its own output and returned "could not run".
+ *
+ * `halt` records the stopping condition as a failed `visibility` control and
+ * hands everything to `decide()`, whose precedence already says LEAK outranks
+ * ERROR. A probe that stops early now still reports what it already saw.
+ */
+export function halt(args: {
   attempted: string
-  observed: string
+  /** Everything recorded before the probe had to stop. Never discarded. */
+  controls: ControlOutcome[]
+  /** The stopping condition, recorded as a failed `visibility` control. */
+  stopped: { label: string; detail: string }
+  /** The ERROR-branch reason: why this probe cannot conclude anything. */
   reason: string
-  controls?: ControlOutcome[]
+  /** The LEAK-branch reason, used when a control already failed. */
+  leakReason: string
   evidence?: Record<string, unknown>
 }): ProbeOutcome {
-  return { verdict: 'ERROR', controls: [], ...args }
+  return decide({
+    attempted: args.attempted,
+    controls: [
+      ...args.controls,
+      control('visibility', args.stopped.label, false, args.stopped.detail),
+    ],
+    blindReason: args.reason,
+    leakReason: args.leakReason,
+    // Unreachable: the visibility control above always fails. Filled in anyway,
+    // so that if a future edit ever removed it, an empty PASS reason would not
+    // be the result.
+    onPass: {
+      observed: 'the probe stopped before it could compare the two tenants',
+      reason: 'no cross-tenant comparison was completed',
+    },
+    evidence: args.evidence,
+  })
 }
 
+/**
+ * The probe cannot run because a declared input was not supplied.
+ *
+ * Distinct from `halt`: BLOCKED means nothing was attempted, so there are no
+ * observations to weigh. If a caller has already recorded a failing control,
+ * that is an observation and it must be adjudicated rather than filed under
+ * "not executed" — so it is routed through `decide()` like everything else.
+ */
 export function blocked(args: {
   attempted: string
   reason: string
   controls?: ControlOutcome[]
 }): ProbeOutcome {
+  const controls = args.controls ?? []
+  if (controls.some((c) => !c.ok)) {
+    return halt({
+      attempted: args.attempted,
+      controls,
+      stopped: { label: 'the probe had every input it needs', detail: args.reason },
+      reason: args.reason,
+      leakReason:
+        'a cross-tenant observation was already recorded before the probe ran out of inputs',
+    })
+  }
   return {
     verdict: 'BLOCKED',
     attempted: args.attempted,
     observed: 'not executed',
     reason: args.reason,
-    controls: args.controls ?? [],
+    controls,
   }
 }
 
@@ -101,6 +159,8 @@ export function decide(args: {
   onPass: { observed: string; reason: string }
   /** Prefix for the LEAK reason; the failing controls are appended. */
   leakReason: string
+  /** Replaces the generic ERROR reason when the probe can say something sharper. */
+  blindReason?: string
   evidence?: Record<string, unknown>
 }): ProbeOutcome {
   const failed = args.controls.filter((c) => !c.ok)
@@ -128,8 +188,9 @@ export function decide(args: {
       attempted: args.attempted,
       observed: blind.map((c) => `${c.label}: ${c.detail}`).join(' | '),
       reason:
+        args.blindReason ??
         'the probe could not establish that it was capable of seeing a leak, so its silence is not ' +
-        'evidence of isolation. Fix the failing control(s) above and re-run.',
+          'evidence of isolation. Fix the failing control(s) above and re-run.',
       controls: args.controls,
       evidence: args.evidence,
     }
@@ -146,23 +207,53 @@ export function decide(args: {
 }
 
 /**
- * A probe fails closed only if the positive control held. This wraps the common
- * shape: "the mechanism works inside its own tenant, and refused across."
+ * Adjudicate a redirect the client refused to follow because it left the
+ * tenant's own origin.
+ *
+ * Two outcomes, and the difference matters. If the refused target is the OTHER
+ * tenant under test, this host handed the client across the tenant boundary,
+ * which is a cross-tenant observation in its own right — `negative`. Any other
+ * foreign origin (an identity provider, a CDN) leaves the probe unable to read
+ * the surface it was going to judge — `visibility`, so ERROR rather than a
+ * quiet pass.
+ *
+ * Returns `null` when both hosts served the surface themselves. Evaluated for
+ * both hosts in one control, so it needs no `attemptId`: there is no direction
+ * for it to be missing.
  */
-export function requirePositiveControl(
-  positive: ControlOutcome,
-  attempted: string
-): ProbeOutcome | null {
-  if (positive.ok) return null
-  return error({
-    attempted,
-    observed: positive.detail,
-    reason:
-      `the positive control failed, so a refusal from the other tenant proves nothing — ` +
-      `the credential or endpoint under test does not work even within its own tenant. ` +
-      `Fix this before reading any verdict from this probe.`,
-    controls: [positive],
-  })
+export function crossOriginRedirectControl(
+  surfaceLabel: string,
+  reads: Array<{ slot: string; res: ProbeResponse; otherBaseUrl: string }>
+): ControlOutcome | null {
+  const offending = reads.filter((r) => r.res.crossOriginRedirect)
+  if (offending.length === 0) return null
+
+  const toOtherTenant = offending.filter(
+    (r) => new URL(r.res.crossOriginRedirect!).origin === new URL(r.otherBaseUrl).origin
+  )
+  const describe = (r: (typeof offending)[number]) =>
+    `${r.slot} redirected ${surfaceLabel} to ${r.res.crossOriginRedirect}`
+
+  if (toOtherTenant.length > 0) {
+    return control(
+      'negative',
+      `${surfaceLabel} is served by the host that was asked for it`,
+      false,
+      `REDIRECTED ACROSS THE TENANT BOUNDARY — ${toOtherTenant.map(describe).join('; ')}. ` +
+        'The redirect was not followed: a document fetched from the other tenant cannot be ' +
+        "evidence about this one, and being sent there is itself the finding.",
+      'both'
+    )
+  }
+
+  return control(
+    'visibility',
+    `${surfaceLabel} is served by the host that was asked for it`,
+    false,
+    `${offending.map(describe).join('; ')} — the redirect was NOT followed, because a response ` +
+      'from another origin cannot be judged as this tenant’s. This probe therefore never read ' +
+      'the surface it was going to judge.'
+  )
 }
 
 /**

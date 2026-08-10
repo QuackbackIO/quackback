@@ -20,12 +20,16 @@ import {
   redeemMagicLinkOn,
   verifyOtpOn,
 } from '../auth-flows'
-import { blocked, control, dirFrom, decide, error } from './helpers'
+import { blocked, control, dirFrom, decide, halt } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, ProbeOutcome, TenantHandle } from '../types'
 
 function expectedUserId(handle: TenantHandle): string | undefined {
   return handle.markers.ids.adminUserId
 }
+
+const LEAK_REASON =
+  'a sign-in credential minted by one tenant established a session on the other. With the ' +
+  'colliding admin address this produces a session that looks entirely legitimate.'
 
 export const p02MagicLinkOtp: Probe = {
   id: 'P02',
@@ -65,20 +69,32 @@ export const p02MagicLinkOtp: Probe = {
     const mintedB = await mintAndReadMagicLinkOn(bravo.http, bravo.db, email)
 
     if (mintedA.sendStatus === 429 || mintedB.sendStatus === 429) {
-      return error({
+      return halt({
         attempted,
-        observed: `magic-link send rate-limited (alpha ${mintedA.sendStatus}, bravo ${mintedB.sendStatus})`,
+        controls,
+        stopped: {
+          label: 'a magic link could be minted on both tenants',
+          detail: `magic-link send rate-limited (alpha ${mintedA.sendStatus}, bravo ${mintedB.sendStatus})`,
+        },
         reason:
           'the sign-in rate limiter refused to mint a credential, so the cross-tenant redemption was ' +
           'never attempted. This is not a pass. Clear the sign-in rate limit and re-run.',
+        leakReason: LEAK_REASON,
+        evidence,
       })
     }
     if (!mintedA.token || !mintedB.token) {
-      return error({
+      return halt({
         attempted,
-        observed: `alpha: ${mintedA.detail}; bravo: ${mintedB.detail}`,
+        controls,
+        stopped: {
+          label: 'a live magic-link row exists on both tenants',
+          detail: `alpha: ${mintedA.detail}; bravo: ${mintedB.detail}`,
+        },
         reason:
           'could not obtain a live magic-link token on both tenants, so the probe cannot execute',
+        leakReason: LEAK_REASON,
+        evidence,
       })
     }
     evidence.bothTenantsHeldLiveMagicLinkRows = true
@@ -236,9 +252,7 @@ export const p02MagicLinkOtp: Probe = {
     return decide({
       attempted,
       controls,
-      leakReason:
-        'a sign-in credential minted by one tenant established a session on the other. With the ' +
-        'colliding admin address this produces a session that looks entirely legitimate.',
+      leakReason: LEAK_REASON,
       onPass: {
         observed:
           'each tenant held a live magic-link row and OTP for the identical address; cross-tenant ' +

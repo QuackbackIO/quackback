@@ -27,11 +27,15 @@ import {
   type ScanResult,
 } from '../db-scan'
 import { markerSearchForms } from '../db'
-import { blocked, control, decide, dirFrom, describeResponse, error } from './helpers'
+import { blocked, control, decide, dirFrom, describeResponse, halt } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
 
 /** How long to let queues and the outbox relay settle before scanning. */
 const SETTLE_MS = 4000
+
+const JOB_LEAK_REASON =
+  'background work driven by one tenant left rows in the other tenant’s database. Under a ' +
+  'shared worker tier this is silent — the write succeeds and nothing errors.'
 
 async function settle(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms))
@@ -110,13 +114,17 @@ export const p07BackgroundJob: Probe = {
         body: JSON.stringify({ content: handle.fixture.postBody }),
       })
       if (update.status >= 400) {
-        return error({
+        return halt({
           attempted,
-          observed: `${handle.slot}: ${describeResponse(update, 300)}`,
+          controls,
+          stopped: {
+            label: 'the write that drives background work was accepted on both tenants',
+            detail: `${handle.slot}: ${describeResponse(update, 300)}`,
+          },
           reason:
             'the write that was supposed to enqueue background work was rejected, so nothing was ' +
             'enqueued and no conclusion about job routing is available',
-          controls,
+          leakReason: JOB_LEAK_REASON,
         })
       }
     }
@@ -157,14 +165,18 @@ export const p07BackgroundJob: Probe = {
         )
       )
       if (derived.length === 0) {
-        return error({
+        return halt({
           attempted,
-          observed: `${ownerSlot} scan matched ${describeHits(ownScan.hits) || 'nothing'} outside the fixture tables`,
+          controls,
+          stopped: {
+            label: `${ownerSlot}'s own database gained an observable derived row`,
+            detail: `${ownerSlot} scan matched ${describeHits(ownScan.hits) || 'nothing'} outside the fixture tables`,
+          },
           reason:
             'the write produced no observable derived rows in its own database within the settle window, ' +
             'so this probe is blind: an absence of rows in the other tenant would be equally explained ' +
             'by there being no background work at all. Not a pass.',
-          controls,
+          leakReason: JOB_LEAK_REASON,
         })
       }
 
@@ -192,9 +204,7 @@ export const p07BackgroundJob: Probe = {
     return decide({
       attempted,
       controls,
-      leakReason:
-        'background work driven by one tenant left rows in the other tenant’s database. Under a ' +
-        'shared worker tier this is silent — the write succeeds and nothing errors.',
+      leakReason: JOB_LEAK_REASON,
       onPass: {
         observed:
           `both tenants gained derived rows (${[...derivedTables].join(', ')}) and neither database ` +

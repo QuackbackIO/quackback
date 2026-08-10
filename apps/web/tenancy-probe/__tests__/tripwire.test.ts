@@ -27,6 +27,7 @@ function exchange(over: Partial<Exchange> = {}): Exchange {
     url: 'https://bravo.test/api/widget/search',
     status: 200,
     requestBody: '',
+    requestHeaders: {},
     responseText: '{}',
     responseHeaders: {},
     durationMs: 1,
@@ -83,12 +84,50 @@ describe('createTripwire', () => {
     expect(tripwire.hitCount()).toBe(0)
   })
 
-  it('still returns the hit to the caller when expectsForeignMarkers is set, but does not collect it', () => {
+  it('COUNTS a hit on an exchange marked expectsForeignMarkers, and labels it deliberate', () => {
+    // The defect this pins: the flag used to return the hit and drop it from
+    // the collection. Every deliberate cross-tenant attempt in the suite sets
+    // it, so the tripwire was switched off on exactly the replays it exists to
+    // backstop — its real coverage was incidental traffic only.
     const tripwire = createTripwire(alpha, bravo)
     const hits = tripwire.record(
       exchange({ expectsForeignMarkers: true, responseText: 'qbprobecanaryalpha' })
     )
     expect(hits).toHaveLength(1)
+    expect(hits[0].deliberate).toBe(true)
+    expect(tripwire.hitCount()).toBe(1)
+  })
+
+  it('does not flag an echo of a marker the harness put in a request header', () => {
+    // A replayed session cookie or Bearer credential travels in a header and
+    // nowhere else, so the header is part of "what the harness put on the wire".
+    const tripwire = createTripwire(alpha, bravo)
+    tripwire.record(
+      exchange({
+        expectsForeignMarkers: true,
+        requestHeaders: { cookie: `probe=${alpha.ids.postId}` },
+        responseText: `{"error":"unknown session ${alpha.ids.postId}"}`,
+      })
+    )
+    expect(tripwire.hitCount()).toBe(0)
+  })
+
+  it('does not flag an echo of a marker the harness sent inside a base64url token payload', () => {
+    // A signed identify token carries `sub` inside a base64url payload, so the
+    // id is genuinely present in the request while appearing nowhere in it
+    // verbatim. Without the decode this would be a false LEAK on a correct
+    // fleet — and the response to that would be to switch the tripwire off,
+    // which is how it went blind the first time.
+    const payload = Buffer.from(JSON.stringify({ sub: alpha.ids.postId })).toString('base64url')
+    const tripwire = createTripwire(alpha, bravo)
+    tripwire.record(
+      exchange({
+        method: 'POST',
+        expectsForeignMarkers: true,
+        requestBody: JSON.stringify({ ssoToken: `header.${payload}.sig` }),
+        responseText: `{"error":{"code":"TOKEN_INVALID","sub":"${alpha.ids.postId}"}}`,
+      })
+    )
     expect(tripwire.hitCount()).toBe(0)
   })
 

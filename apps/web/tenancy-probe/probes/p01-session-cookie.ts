@@ -16,14 +16,14 @@
 
 import {
   control,
+  crossOriginRedirectControl,
   decide,
   dirFrom,
   describeResponse,
-  error,
+  halt,
   markersPresent,
-  requirePositiveControl,
 } from './helpers'
-import type { Probe, ProbeContext, TenantHandle } from '../types'
+import type { ControlOutcome, Probe, ProbeContext, ProbeResponse, TenantHandle } from '../types'
 
 interface SessionBody {
   session?: { id?: string; userId?: string } | null
@@ -60,12 +60,18 @@ export const p01SessionCookie: Probe = {
       "sign in as the workspace admin on alpha, then replay alpha's session cookie, its raw " +
       "session token as a Bearer credential, and an authenticated document request against bravo's hostname"
 
+    const leakReason0 = 'a credential issued by one tenant was honoured by the other'
     const alphaCookie = alpha.adminCookies
     if (!alphaCookie) {
-      return error({
+      return halt({
         attempted,
-        observed: 'alpha has no admin session cookie',
+        controls: [],
+        stopped: {
+          label: 'alpha holds an admin session cookie to replay',
+          detail: 'alpha has no admin session cookie',
+        },
         reason: 'preflight did not establish an admin session on alpha',
+        leakReason: leakReason0,
       })
     }
 
@@ -82,10 +88,20 @@ export const p01SessionCookie: Probe = {
         ? `authenticated as user ${ownUser}`
         : `no user returned (${describeResponse(ownRes)}) — the replayed cookie does not even work at home`
     )
-    const bail = requirePositiveControl(positive, attempted)
-    if (bail) return bail
+    if (!positive.ok) {
+      return halt({
+        attempted,
+        controls: [],
+        stopped: { label: positive.label, detail: positive.detail },
+        reason:
+          'the positive control failed, so a refusal from the other tenant proves nothing — the ' +
+          'credential under test does not work even within its own tenant. Fix this before reading ' +
+          'any verdict from this probe.',
+        leakReason: leakReason0,
+      })
+    }
 
-    const controls = [positive]
+    const controls: ControlOutcome[] = [positive]
     const evidence: Record<string, unknown> = { alphaUserId: ownUser }
 
     // --- negatives, in BOTH directions --------------------------------------
@@ -99,10 +115,12 @@ export const p01SessionCookie: Probe = {
     // when it accepted alpha's cookie is the difference between "served alpha's
     // database" and "authenticated alpha against bravo's account".
     let cookieUser: string | null = null
+    /** The admin-shell reads, for the joint cross-origin-redirect adjudication. */
+    const adminReads: Array<{ slot: string; res: ProbeResponse; otherBaseUrl: string }> = []
 
-    for (const [fromSlot, toSlot, to, cookie] of [
-      ['alpha', 'bravo', bravo, alphaCookie],
-      ['bravo', 'alpha', alpha, bravoCookie],
+    for (const [fromSlot, toSlot, from, to, cookie] of [
+      ['alpha', 'bravo', alpha, bravo, alphaCookie],
+      ['bravo', 'alpha', bravo, alpha, bravoCookie],
     ] as const) {
       if (!cookie) {
         controls.push(
@@ -174,7 +192,15 @@ export const p01SessionCookie: Probe = {
 
       const docClient = ctx.newClient(to)
       docClient.setCookieHeader(cookie)
-      const docRes = await docClient.request('/admin', { expectsForeignMarkers: true })
+      // `followRedirects` because on this app the admin shell answers an
+      // unauthenticated (or wrong-tenant) request with `307 → /?auth=signin…`
+      // and a ZERO-BYTE body. Judging the unfollowed response scanned an empty
+      // string for foreign markers and found none, every single time.
+      const docRes = await docClient.request('/admin', {
+        expectsForeignMarkers: true,
+        followRedirects: true,
+      })
+      adminReads.push({ slot: to.slot, res: docRes, otherBaseUrl: from.baseUrl })
       const foreignMarkers = markersPresent(
         docRes.text,
         fromSlot === 'alpha' ? alpha.markers : bravo.markers
@@ -193,6 +219,9 @@ export const p01SessionCookie: Probe = {
       )
       evidence[`${toSlot}AdminDocMarkers`] = foreignMarkers
     }
+
+    const redirectControl = crossOriginRedirectControl('GET /admin', adminReads)
+    if (redirectControl) controls.push(redirectControl)
 
     const identityNote =
       cookieUser && cookieUser === ownUser

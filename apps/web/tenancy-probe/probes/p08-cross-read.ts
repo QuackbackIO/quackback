@@ -22,9 +22,21 @@ import {
   type ScanResult,
 } from '../db-scan'
 import { markerSearchForms } from '../db'
-import { control, decide, dirFrom, describeResponse, error, markersPresent } from './helpers'
-import type { ControlOutcome, Probe, ProbeContext } from '../types'
+import {
+  control,
+  crossOriginRedirectControl,
+  decide,
+  dirFrom,
+  describeResponse,
+  halt,
+  markersPresent,
+} from './helpers'
+import type { ControlOutcome, Probe, ProbeContext, ProbeResponse } from '../types'
 import { FIXTURE } from '../fixtures'
+
+const READ_LEAK_REASON =
+  'bravo returned or stored data belonging to alpha. Because the two tenants collide on every ' +
+  'human-readable field, this would be invisible to any check that did not compare ids.'
 
 interface WidgetSearchBody {
   data?: { posts?: Array<{ id: string; title: string; board?: { id: string; slug: string } }> }
@@ -68,14 +80,19 @@ export const p08CrossRead: Probe = {
       )
     )
     if (!ownFound) {
-      return error({
+      return halt({
         attempted,
-        observed: describeResponse(ownSearch, 300),
+        controls,
+        stopped: {
+          label: `alpha search for "${FIXTURE.postTitle}" returns alpha's fixture post`,
+          detail: describeResponse(ownSearch, 300),
+        },
         reason:
           'the positive control failed: alpha’s public search does not return alpha’s own fixture ' +
           'post. Either the board is not publicly visible or the post has not been indexed. Until ' +
           'that is fixed, a clean result from bravo is not evidence of isolation.',
-        controls,
+        leakReason: READ_LEAK_REASON,
+        evidence,
       })
     }
 
@@ -140,12 +157,26 @@ export const p08CrossRead: Probe = {
     }
 
     // --- negative: portal documents on the shared board slug, both ways -----
+    //
+    // `followRedirects` because the portal root answers `307 → /?sort=trending`
+    // with a ZERO-BYTE body: the canonicalising redirect is where the search
+    // defaults are applied, and the document — with the workspace name, the
+    // planted identity token and every rendered fixture id in it — is one hop
+    // further on. Scanning the unfollowed 307 scanned an empty string.
+    const documentReads = new Map<
+      string,
+      Array<{ slot: string; res: ProbeResponse; otherBaseUrl: string }>
+    >()
     for (const [fromSlot, from, to] of [
       ['alpha', alpha, bravo],
       ['bravo', bravo, alpha],
     ] as const) {
       for (const path of ['/', `/b/${FIXTURE.boardSlug}`]) {
-        const doc = await to.http.request(path, { omitCookies: true })
+        const doc = await to.http.request(path, { omitCookies: true, followRedirects: true })
+        documentReads.set(path, [
+          ...(documentReads.get(path) ?? []),
+          { slot: to.slot, res: doc, otherBaseUrl: from.baseUrl },
+        ])
         const found = markersPresent(doc.text, from.markers)
         controls.push(
           control(
@@ -160,6 +191,11 @@ export const p08CrossRead: Probe = {
           )
         )
       }
+    }
+
+    for (const [path, reads] of documentReads) {
+      const redirectControl = crossOriginRedirectControl(`GET ${path}`, reads)
+      if (redirectControl) controls.push(redirectControl)
     }
 
     // --- negative: each tenant's whole schema, scanned for the other --------
@@ -200,9 +236,7 @@ export const p08CrossRead: Probe = {
     return decide({
       attempted,
       controls,
-      leakReason:
-        'bravo returned or stored data belonging to alpha. Because the two tenants collide on every ' +
-        'human-readable field, this would be invisible to any check that did not compare ids.',
+      leakReason: READ_LEAK_REASON,
       onPass: {
         observed:
           `bravo's search for the colliding title returned only bravo's rows; alpha's canary matched ` +

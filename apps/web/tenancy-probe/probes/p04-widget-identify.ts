@@ -14,12 +14,16 @@
  */
 
 import { mintWidgetIdentityToken } from '../crypto'
-import { blocked, control, decide, dirFrom, describeResponse, error } from './helpers'
+import { blocked, control, decide, dirFrom, describeResponse, halt } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, ProbeResponse } from '../types'
 
 /** Colliding end-user identity. Not the admin: identify refuses team principals. */
 const VISITOR_SUB = 'tenancy-probe-visitor'
 const VISITOR_EMAIL = 'probe-visitor@example.com'
+
+const WIDGET_LEAK_REASON =
+  'widget identity crossed the tenant boundary. Anyone able to mint a token for one tenant ' +
+  'can impersonate the identically-addressed end user in the other.'
 
 interface IdentifyBody {
   sessionToken?: string
@@ -100,16 +104,24 @@ export const p04WidgetIdentify: Probe = {
     )
     if (!ownBody) {
       const code = ownRes.json<IdentifyBody>()?.error?.code
-      return error({
+      // Routed through `decide()` rather than returned as a bare ERROR: the
+      // shared-widget-secret invariant above may already have failed, and a
+      // shared signing secret is a cross-tenant capability whether or not the
+      // identify endpoint is reachable today.
+      return halt({
         attempted,
-        observed: describeResponse(ownRes, 300),
+        controls,
+        stopped: {
+          label: "alpha accepted a token signed with alpha's own widget secret",
+          detail: describeResponse(ownRes, 300),
+        },
         reason:
           code === 'WIDGET_DISABLED'
             ? 'the widget is disabled on alpha, so the identify path cannot be exercised at all. ' +
               'Enable the widget on both tenants and re-run. This is not a pass.'
             : 'the positive control failed: alpha did not accept a token signed with the secret ' +
               'supplied for alpha, so a refusal from bravo proves nothing.',
-        controls,
+        leakReason: WIDGET_LEAK_REASON,
       })
     }
 
@@ -188,9 +200,7 @@ export const p04WidgetIdentify: Probe = {
     return decide({
       attempted,
       controls,
-      leakReason:
-        'widget identity crossed the tenant boundary. Anyone able to mint a token for one tenant ' +
-        'can impersonate the identically-addressed end user in the other.',
+      leakReason: WIDGET_LEAK_REASON,
       onPass: {
         observed:
           'each tenant minted a session only for a token signed with its own secret, and neither ' +

@@ -59,6 +59,13 @@ export interface FleetLeaks {
   omitPlantedToken?: boolean
   /** Nothing responds at all. */
   offline?: boolean
+  /**
+   * Not a leak — a ROUTING failure: alpha's portal root redirects onto bravo's
+   * origin. A probe that followed it would read bravo's document and report on
+   * it as though it were alpha's, which is strictly worse than reading nothing.
+   * The client refuses to cross origins, and being sent across is the finding.
+   */
+  crossHostRedirect?: boolean
   /** The portal document carries a fresh nonce on every request. */
   perRequestNonce?: boolean
   /** Background processing is switched off: a write produces no derived rows. */
@@ -81,6 +88,15 @@ export interface FleetIdentity {
   name?: string
   theme?: string
   customCss?: string | null
+  /**
+   * Control-plane tenant id. When set, this tenant signs storage read
+   * capabilities over the POOLED message (`t:<id>|read|<key>`), reproducing
+   * `tenantBind` in `storage/s3.ts`. That binding is what makes a plain
+   * cross-tenant replay refusable by arithmetic rather than by isolation, so a
+   * fleet without it cannot exercise the case P03's interchange attempt exists
+   * for.
+   */
+  tenantId?: string
 }
 
 export interface FakeSettings {
@@ -120,6 +136,8 @@ export interface FakeTenant {
   storageSecret: string
   widgetSecret: string
   assistantPrincipalId: string
+  /** Set to sign storage capabilities over the pooled, tenant-bound message. */
+  tenantId?: string
 }
 
 /**
@@ -224,8 +242,14 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
   })
 }
 
-function storageSig(secret: string, key: string): string {
-  return createHmac('sha256', secret).update(`read|${key}`).digest('hex').slice(0, 32)
+/**
+ * Mirrors `storageReadSig` + `tenantBind`: the signed message carries the
+ * tenant when the deployment is pooled, and is the historical message byte for
+ * byte when it is not.
+ */
+function storageSig(secret: string, key: string, tenantId?: string): string {
+  const message = tenantId ? `t:${tenantId}|read|${key}` : `read|${key}`
+  return createHmac('sha256', secret).update(message).digest('hex').slice(0, 32)
 }
 
 function verifyJwt(secret: string, token: string): Record<string, unknown> | null {
@@ -268,6 +292,7 @@ export class FakeFleet {
       if (over.name !== undefined) tenant.workspaceName = over.name
       if (over.theme !== undefined) tenant.themeColor = over.theme
       if (over.customCss !== undefined) tenant.customCss = over.customCss
+      if (over.tenantId !== undefined) tenant.tenantId = over.tenantId
     }
   }
 
@@ -426,6 +451,16 @@ export class FakeFleet {
       const presented = /better-auth\.session_token=([^;]+)/.exec(cookie)?.[1]?.split('.')[0] ?? ''
       const owner = this.sessionOwner(presented)
       const leaking = this.leaks.sharedSessionStore && owner && owner.slot !== tenant.slot
+      // Mirrors the real app: a request the admin shell will not serve answers
+      // `307 → /?auth=signin…` with a ZERO-BYTE body. A probe reading the
+      // unfollowed response scans an empty string for foreign markers and finds
+      // none — every time, on every fleet, leaking or not.
+      if (!owner || (owner.slot !== tenant.slot && !leaking)) {
+        return new Response(null, {
+          status: 307,
+          headers: { location: '/?auth=signin&callbackUrl=%2Fadmin' },
+        })
+      }
       return new Response(
         `<html><body>admin shell ${leaking ? owner.canary : tenant.canary}</body></html>`,
         { status: 200, headers: { 'content-type': 'text/html' } }
@@ -492,7 +527,7 @@ export class FakeFleet {
     if (path.startsWith('/api/storage/')) {
       const key = decodeURIComponent(path.slice('/api/storage/'.length))
       const sig = url.searchParams.get('read')
-      if (sig !== storageSig(this.storageSecretFor(tenant), key)) {
+      if (sig !== storageSig(this.storageSecretFor(tenant), key, tenant.tenantId)) {
         return json({ error: 'Invalid storage read token' }, 403)
       }
       // Signature accepted; the object does not exist, so this falls through to
@@ -552,6 +587,20 @@ export class FakeFleet {
     }
 
     // ---- portal ----------------------------------------------------------
+    //
+    // The portal root CANONICALISES before it renders: the search schema
+    // defaults `sort` to `trending`, so `GET /` answers `307 → /?sort=trending`
+    // with a zero-byte body and the document lives one hop further on. This is
+    // reproduced here because its absence is what let the probes go blind — the
+    // fake fleet was more forgiving than the fleet it stands in for, so the
+    // planted identity token rendered in every test and in no real run.
+    if (path === '/' && !url.searchParams.has('sort')) {
+      const target = this.leaks.crossHostRedirect && tenant.slot === 'alpha'
+        ? `${this.other(tenant).origin}/?sort=trending`
+        : '/?sort=trending'
+      return new Response(null, { status: 307, headers: { location: target } })
+    }
+
     if (path === '/' || path.startsWith('/b/')) {
       // The portal document carries the workspace NAME and the planted portal
       // headline — matching the real app, which renders the name and the

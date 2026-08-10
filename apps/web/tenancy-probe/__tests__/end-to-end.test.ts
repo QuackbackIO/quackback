@@ -12,10 +12,14 @@
  * verdict assembly, the tripwire, the report, and the process exit code.
  */
 
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runSuite, exitCodeFor } from '../runner'
 import { ALL_PROBES } from '../probes'
+import { p01SessionCookie } from '../probes/p01-session-cookie'
 import { p02MagicLinkOtp } from '../probes/p02-magic-link-otp'
+import { p03StorageToken } from '../probes/p03-storage-token'
 import { p06SettingsCache } from '../probes/p06-settings-cache'
 import { p07BackgroundJob } from '../probes/p07-background-job'
 import {
@@ -432,6 +436,145 @@ describe('directional symmetry', () => {
         ).toBe(true)
       }
     }
+  })
+})
+
+/**
+ * Round 5. Four ways the suite could not fail, each demonstrated against the
+ * condition it is supposed to catch.
+ */
+describe('the surface a probe judges must carry the planted token (defect 1)', () => {
+  // `GET /` answers `307 → /?sort=trending` with a ZERO-BYTE body — the search
+  // schema canonicalises before it renders. With redirects unfollowed, every
+  // probe that "reads the portal document" read nothing, so the planted
+  // identity token — the suite's own answer to three earlier rounds of false
+  // greens — contributed nothing to a run. The fake fleet now reproduces the
+  // redirect, so its absence can never hide this again.
+  it('reads the document past the canonical redirect, so the planted token is observable', async () => {
+    const { report, exit } = await run({})
+    const p06 = probe(report, 'P06')
+    const evidence = p06.evidence as { plantedSurfaces: { alpha: string[]; bravo: string[] } }
+    expect(evidence.plantedSurfaces.alpha).toContain('/')
+    expect(evidence.plantedSurfaces.bravo).toContain('/')
+    expect(p06.verdict).toBe('PASS')
+    expect(exit).toBe(0)
+  })
+
+  it('catches a partial identity leak that lives only past the redirect', async () => {
+    // The round-4 plant, now behind the redirect that made the whole layer
+    // inert. Unfollowed, P06 could only report ERROR — it had never caught
+    // either host serving its own token, so it refused to certify anything.
+    const { report, exit } = await run({ partialIdentityLeak: true }, {}, ALL_PROBES, {
+      alpha: { name: 'Help Center' },
+      bravo: { name: 'Support Portal' },
+    })
+    const p06 = probe(report, 'P06')
+    expect(p06.verdict).toBe('LEAK')
+    expect(p06.observed).toContain("BRAVO SERVED ALPHA'S PLANTED TOKEN")
+    expect(exit).toBe(2)
+  })
+
+  it('judges a real admin document rather than the empty body of a 307', async () => {
+    // `GET /admin` answers `307 → /?auth=signin…` with a zero-byte body too, so
+    // P01's SSR-document negative reported "HTTP 307, no alpha markers in the
+    // document" having scanned an empty string. It said "clean" about a
+    // response it never read — on every fleet, leaking or not.
+    const { report } = await run({}, {}, [p01SessionCookie])
+    const doc = probe(report, 'P01').controls.find(
+      (c) => c.label === 'alpha cookie → bravo GET /admin'
+    )
+    expect(doc?.ok).toBe(true)
+    expect(doc?.detail).toContain('HTTP 200')
+    expect(doc?.detail).not.toContain('HTTP 307')
+  })
+
+  it('still catches an admin shell that renders the wrong tenant', async () => {
+    const { report, exit } = await run({ sharedSessionStore: true }, {}, [p01SessionCookie])
+    const doc = probe(report, 'P01').controls.find(
+      (c) => c.label === 'alpha cookie → bravo GET /admin'
+    )
+    expect(doc?.ok).toBe(false)
+    expect(doc?.detail).toContain('ALPHA MARKERS PRESENT')
+    expect(exit).toBe(2)
+  })
+
+  it('refuses to follow a redirect off the tenant’s own origin, and calls it out', async () => {
+    // A probe that chased alpha's redirect onto bravo's host and then reported
+    // "no foreign markers in alpha's document" would be reading bravo's page
+    // and calling it alpha's — strictly worse than reading nothing.
+    const { report, exit } = await run({ crossHostRedirect: true })
+    const p06 = probe(report, 'P06')
+    expect(p06.verdict).toBe('LEAK')
+    expect(p06.observed).toContain('REDIRECTED ACROSS THE TENANT BOUNDARY')
+    expect(exit).toBe(2)
+  })
+})
+
+describe('a recorded signal is always counted (defect 2)', () => {
+  it('reports a failed invariant as LEAK even when the probe had to stop early', async () => {
+    // Demonstrated live before the fix: one storage secret supplied for both
+    // slots made P03 write "IDENTICAL — every read capability minted for either
+    // tenant verifies against both, by construction" into its own output and
+    // return `verdict: ERROR, counts: { LEAK: 0 }`, because the positive
+    // control failed first and the early return hard-coded ERROR. On a real
+    // fleet with a shared storage secret that reads as "could not run".
+    const { report, exit } = await run(
+      {},
+      { alphaStorageSecret: 'one-secret-two-tenants', bravoStorageSecret: 'one-secret-two-tenants' },
+      [p03StorageToken]
+    )
+    const p03 = probe(report, 'P03')
+    expect(p03.verdict).toBe('LEAK')
+    expect(p03.observed).toContain('IDENTICAL')
+    expect(report.counts.LEAK).toBe(1)
+    expect(report.counts.ERROR).toBe(0)
+    // The blindness is not lost, it is demoted to a note on the leak.
+    expect(p03.reason).toContain('failed to establish visibility')
+    expect(exit).toBe(2)
+  })
+
+  it('leaves no probe able to construct a verdict without going through decide()', () => {
+    // The README's claim — "there is no filter that can record a signal without
+    // counting it" — is only true if a probe cannot hand-build an outcome.
+    // `error()` used to let seven of them do exactly that, so it is gone; this
+    // keeps it gone.
+    const dir = join(import.meta.dirname, '..', 'probes')
+    const offenders: string[] = []
+    for (const file of readdirSync(dir)) {
+      if (!file.startsWith('p0') || !file.endsWith('.ts')) continue
+      const source = readFileSync(join(dir, file), 'utf8')
+      if (/verdict\s*:\s*['"]/.test(source)) offenders.push(file)
+    }
+    expect(
+      offenders,
+      'a probe builds a verdict literal instead of returning decide()/halt()/blocked()'
+    ).toEqual([])
+  })
+})
+
+describe('the tripwire covers the deliberate attempts (defect 3)', () => {
+  it('records a hit on an exchange the probe deliberately made', async () => {
+    // `expectsForeignMarkers` used to drop the hit from the collection, and
+    // every deliberate cross-tenant attempt in the suite sets it — so on a
+    // fleet with a shared session store the tripwire recorded NOTHING, and the
+    // only coverage was whatever the probe author had coded a check for. Five
+    // of the nine probes code none.
+    const { report } = await run({ sharedSessionStore: true }, {}, [p01SessionCookie])
+    const hit = report.tripwireHits.find(
+      (h) => h.servedBy === 'bravo' && h.markerOwner === 'alpha' && h.url.endsWith('/admin')
+    )
+    expect(hit, JSON.stringify(report.tripwireHits)).toBeDefined()
+    expect(hit!.deliberate).toBe(true)
+  })
+
+  it('does not manufacture a hit from the harness echoing its own credential back', () => {
+    // The precision half. Every cross-tenant replay in this suite puts a
+    // foreign credential on the wire; none of them may be counted when the
+    // server reflects it.
+    return run({}, {}, ALL_PROBES).then(({ report, exit }) => {
+      expect(report.tripwireHits).toEqual([])
+      expect(exit).toBe(0)
+    })
   })
 })
 

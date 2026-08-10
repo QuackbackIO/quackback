@@ -20,10 +20,12 @@ import {
   decide,
   dirFrom,
   describeResponse,
-  error,
+  halt,
   markersPresent,
 } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext } from '../types'
+
+const API_LEAK_REASON = 'a REST API credential issued by one tenant was honoured by the other'
 
 interface BoardsBody {
   data?: Array<{ id: string; slug: string; name: string }>
@@ -86,13 +88,20 @@ export const p05ApiKey: Probe = {
       )
     )
     if (own.status !== 200 || !ownHasFixture) {
-      return error({
+      // Through `decide()`: the "keys differ" invariant is already recorded, and
+      // one API key serving both tenants is a cross-tenant capability regardless
+      // of whether the listing endpoint answered.
+      return halt({
         attempted,
-        observed: describeResponse(own, 300),
+        controls,
+        stopped: {
+          label: "alpha's key → alpha GET /api/v1/boards",
+          detail: describeResponse(own, 300),
+        },
         reason:
           'the positive control failed: alpha’s own key did not read alpha’s own boards, so a 401 ' +
           'from bravo would be indistinguishable from a dead credential.',
-        controls,
+        leakReason: API_LEAK_REASON,
       })
     }
 
@@ -183,7 +192,7 @@ export const p05ApiKey: Probe = {
     return decide({
       attempted,
       controls,
-      leakReason: 'a REST API credential issued by one tenant was honoured by the other',
+      leakReason: API_LEAK_REASON,
       onPass: {
         observed: "each tenant answered the other's API key with 401 on every endpoint tried",
         reason: 'API keys resolve only against the tenant database that issued them',

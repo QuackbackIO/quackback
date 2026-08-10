@@ -6,11 +6,19 @@
  *  1. It owns an explicit, inspectable cookie jar. Probe P01 works by lifting
  *     alpha's jar wholesale and planting it on bravo's client, so the jar has to
  *     be a first-class value rather than hidden inside `fetch`.
- *  2. Every exchange is fed to the tripwire, so a leak in a response body counts
- *     even when the probe that made the request was looking at something else.
+ *  2. Every exchange is fed to the tripwire, and the hits it returns are carried
+ *     back on the response, so a leak in a response body counts even when the
+ *     probe that made the request was looking at something else.
  *  3. Redirects are NOT followed by default. A 302 is frequently the whole
  *     signal (storage read tokens, magic-link verify), and following it would
  *     both discard the evidence and send a credential somewhere unintended.
+ *     Document reads opt in with `followRedirects`, because on this app the
+ *     document is always one hop away: `GET /` answers `307 → /?sort=trending`
+ *     with a zero-byte body. Following is done by hand rather than with
+ *     `redirect: 'follow'` for one reason — a redirect that leaves the tenant's
+ *     own origin must never be followed. Chasing alpha's redirect onto bravo's
+ *     host and then reporting "no foreign markers" would read bravo's page and
+ *     call it alpha's, which is worse than reading nothing.
  */
 
 import type {
@@ -19,6 +27,7 @@ import type {
   ProbeResponse,
   TenantHttp,
   TenantSlot,
+  TripwireHit,
   TripwireRecorder,
 } from './types'
 
@@ -132,89 +141,142 @@ export interface TenantHttpOptions {
  */
 const RESPONSE_BODY_LIMIT = 2 * 1024 * 1024
 
+/** Statuses that carry a `location` worth following. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+
+/**
+ * Hop ceiling. The app's canonicalising redirects are one hop; anything past a
+ * handful is a loop, and a loop must surface as a fact rather than as a hang.
+ */
+const MAX_REDIRECT_HOPS = 5
+
 export function createTenantHttp(options: TenantHttpOptions): TenantHttp {
   const doFetch = options.fetchImpl ?? fetch
+  const ownOrigin = new URL(options.baseUrl).origin
   let jar = new CookieJar()
 
   async function request(path: string, init: ProbeRequestInit = {}): Promise<ProbeResponse> {
-    const url = path.startsWith('http') ? path : `${options.baseUrl}${path}`
-    const method = init.method ?? 'GET'
-    const headers: Record<string, string> = { ...init.headers }
+    let url = path.startsWith('http') ? path : `${options.baseUrl}${path}`
+    let method = init.method ?? 'GET'
+    let body = init.body
 
-    if (!init.omitCookies && !jar.isEmpty()) {
-      headers.cookie = jar.header()
-    }
-    if (typeof init.body === 'string' && !headers['content-type']) {
-      headers['content-type'] = 'application/json'
-    }
+    const redirectChain: string[] = []
+    const tripwireHits: TripwireHit[] = []
+    let crossOriginRedirect: string | undefined
+    let redirectLimitExceeded: boolean | undefined
 
-    const controller = new AbortController()
-    const timeoutMs = init.timeoutMs ?? options.defaultTimeoutMs
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    const startedAt = Date.now()
+    for (let hop = 0; ; hop++) {
+      const headers: Record<string, string> = { ...init.headers }
 
-    let response: Response
-    try {
-      response = await doFetch(url, {
-        method,
-        headers,
-        body: init.body,
-        redirect: init.followRedirects === true ? 'follow' : 'manual',
-        signal: controller.signal,
-      })
-    } catch (err) {
+      if (!init.omitCookies && !jar.isEmpty()) {
+        headers.cookie = jar.header()
+      }
+      if (typeof body === 'string' && !headers['content-type']) {
+        headers['content-type'] = 'application/json'
+      }
+
+      const controller = new AbortController()
+      const timeoutMs = init.timeoutMs ?? options.defaultTimeoutMs
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      const startedAt = Date.now()
+
+      let response: Response
+      try {
+        response = await doFetch(url, {
+          method,
+          headers,
+          body,
+          // Always manual. Following is done in this loop so the origin guard
+          // below cannot be bypassed, and so every hop is tripwire-scanned.
+          redirect: 'manual',
+          signal: controller.signal,
+        })
+      } catch (err) {
+        clearTimeout(timer)
+        throw new TransportError(options.slot, url, err)
+      }
       clearTimeout(timer)
-      throw new TransportError(options.slot, url, err)
-    }
-    clearTimeout(timer)
 
-    let text: string
-    try {
-      const raw = await response.text()
-      text = raw.length > RESPONSE_BODY_LIMIT ? raw.slice(0, RESPONSE_BODY_LIMIT) : raw
-    } catch (err) {
-      throw new TransportError(options.slot, url, err)
-    }
+      let text: string
+      try {
+        const raw = await response.text()
+        text = raw.length > RESPONSE_BODY_LIMIT ? raw.slice(0, RESPONSE_BODY_LIMIT) : raw
+      } catch (err) {
+        throw new TransportError(options.slot, url, err)
+      }
 
-    // Absorption is unconditional, and `omitCookies` governs SENDING only.
-    //
-    // These were one flag once, and it made the whole magic-link/OTP family
-    // structurally incapable of executing: a redemption request must present no
-    // cookies (it is testing a bare credential) but must capture the session
-    // cookie a successful redemption issues. Sharing the flag meant the
-    // resulting session was never observed, `sessionEstablished` was always
-    // false, and the probe reported ERROR against a server that had in fact
-    // minted a session — including a server leaking one across tenants.
-    // A browser sends conditionally and always stores; so does this.
-    jar.absorb(readSetCookie(response.headers))
+      // Absorption is unconditional, and `omitCookies` governs SENDING only.
+      //
+      // These were one flag once, and it made the whole magic-link/OTP family
+      // structurally incapable of executing: a redemption request must present no
+      // cookies (it is testing a bare credential) but must capture the session
+      // cookie a successful redemption issues. Sharing the flag meant the
+      // resulting session was never observed, `sessionEstablished` was always
+      // false, and the probe reported ERROR against a server that had in fact
+      // minted a session — including a server leaking one across tenants.
+      // A browser sends conditionally and always stores; so does this.
+      jar.absorb(readSetCookie(response.headers))
 
-    const exchange: Exchange = {
-      tenant: options.slot,
-      method,
-      url,
-      status: response.status,
-      requestBody: typeof init.body === 'string' ? init.body : '',
-      responseText: text,
-      responseHeaders: headersToObject(response.headers),
-      durationMs: Date.now() - startedAt,
-      expectsForeignMarkers: init.expectsForeignMarkers === true,
-    }
-    options.tripwire.record(exchange)
-    options.onExchange?.(exchange)
+      const exchange: Exchange = {
+        tenant: options.slot,
+        method,
+        url,
+        status: response.status,
+        requestBody: typeof body === 'string' ? body : '',
+        requestHeaders: headers,
+        responseText: text,
+        responseHeaders: headersToObject(response.headers),
+        durationMs: Date.now() - startedAt,
+        expectsForeignMarkers: init.expectsForeignMarkers === true,
+      }
+      // The hits are carried back to the caller rather than dropped: a probe
+      // that never coded a check for the marker that leaked still gets to see
+      // it, and the runner counts it either way.
+      tripwireHits.push(...options.tripwire.record(exchange))
+      options.onExchange?.(exchange)
 
-    return {
-      status: response.status,
-      ok: response.status >= 200 && response.status < 300,
-      headers: exchange.responseHeaders,
-      text,
-      url,
-      json<T = unknown>(): T | null {
-        try {
-          return JSON.parse(text) as T
-        } catch {
-          return null
+      const location = response.headers.get('location')
+      const isRedirect = REDIRECT_STATUSES.has(response.status) && Boolean(location)
+
+      if (init.followRedirects === true && isRedirect) {
+        const next = new URL(location!, url)
+        if (next.origin !== ownOrigin) {
+          // Never chase a redirect off this tenant's origin. The response the
+          // caller judges must be one this host served.
+          crossOriginRedirect = next.href
+        } else if (hop >= MAX_REDIRECT_HOPS) {
+          redirectLimitExceeded = true
+        } else {
+          redirectChain.push(next.href)
+          // 307/308 preserve the method and body; everything else degrades to a
+          // bodiless GET, as a browser does.
+          if (response.status !== 307 && response.status !== 308) {
+            method = 'GET'
+            body = undefined
+          }
+          url = next.href
+          continue
         }
-      },
+      }
+
+      return {
+        status: response.status,
+        ok: response.status >= 200 && response.status < 300,
+        headers: exchange.responseHeaders,
+        text,
+        url,
+        tripwireHits,
+        redirectChain,
+        ...(crossOriginRedirect ? { crossOriginRedirect } : {}),
+        ...(redirectLimitExceeded ? { redirectLimitExceeded } : {}),
+        json<T = unknown>(): T | null {
+          try {
+            return JSON.parse(text) as T
+          } catch {
+            return null
+          }
+        },
+      }
     }
   }
 
