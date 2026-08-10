@@ -268,10 +268,15 @@ Only the two URLs and the two API keys are needed to run. Everything else widens
 coverage, and a probe whose inputs are missing reports `BLOCKED` with the exact
 flag to pass — never a silent skip.
 
+The API keys need the post view-private permission (fixture provisioning reads
+the fixture back) and the comment-moderate permission (P07 drives its background
+work by commenting on the fixture post). A key without the latter makes P07 stop
+with the rejected write quoted, not pass.
+
 | Input                                               | Unlocks                                                                                            |
 | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `--alpha` / `--bravo`                               | reachability, and every HTTP probe                                                                 |
-| `--alpha-api-key` / `--bravo-api-key`               | **fixture provisioning** (required), P05                                                           |
+| `--alpha-api-key` / `--bravo-api-key`               | **fixture provisioning** (required), P05, P07's drive write                                        |
 | `--admin-email` / `--admin-password`                | P01, P02 (defaults `admin@example.com` / `password`)                                               |
 | `--alpha-db` / `--bravo-db`                         | P02, P07, P09, and the row-level scans in P06/P08. Also reads the widget secrets automatically     |
 | `--alpha-storage-secret` / `--bravo-storage-secret` | P03                                                                                                |
@@ -280,17 +285,17 @@ flag to pass — never a silent skip.
 
 ## The probes
 
-| Id      | Family    | What a `PASS` proves                                                                                                                                                                                                                      |
-| ------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **P01** | session   | A session minted by alpha authenticates nothing on bravo — not as a cookie, not as a raw Bearer token, and not on an authenticated SSR document.                                                                                          |
-| **P02** | session   | A magic-link token or sign-in OTP minted by one tenant establishes no session on the other, _while the other tenant holds its own live credential for the identical address_, and each tenant's own credential resolves to its own user.  |
+| Id      | Family    | What a `PASS` proves                                                                                                                                                                                                                                            |
+| ------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P01** | session   | A session minted by alpha authenticates nothing on bravo — not as a cookie, not as a raw Bearer token, and not on an authenticated SSR document.                                                                                                                |
+| **P02** | session   | A magic-link token or sign-in OTP minted by one tenant establishes no session on the other, _while the other tenant holds its own live credential for the identical address_, and each tenant's own credential resolves to its own user.                        |
 | **P03** | storage   | A private-object read capability minted with one tenant’s storage secret is refused by the other for the identical object key, and one tenant’s secret does not verify against the other’s own signed message — i.e. the tenants do not share a storage secret. |
-| **P04** | widget    | A widget SSO token signed with one tenant's widget secret mints no session in the other, and a widget session token issued by one resolves to no user in the other.                                                                       |
-| **P05** | api       | A REST API key issued by one tenant is rejected with 401 by the other, and returns neither the issuer's rows (wrong pool) nor the target's (wrong credential accepted).                                                                   |
-| **P06** | cache     | Settings-derived public surfaces read in a tight interleave never serve one tenant's planted identity token, stored identity, branding or configuration under the other's hostname — and each host provably serves its own planted token. |
-| **P07** | jobs      | A write driven on alpha produces derived background rows in alpha's database and none at all in bravo's.                                                                                                                                  |
-| **P08** | read      | No public surface on bravo returns a row, id or canary belonging to alpha — including a search for a title that exists identically in both tenants.                                                                                       |
-| **P09** | assistant | Each tenant's assistant service principal is its own row, and neither database contains a reference to the other's principal id, in TypeID or uuid form.                                                                                  |
+| **P04** | widget    | A widget SSO token signed with one tenant's widget secret mints no session in the other, and a widget session token issued by one resolves to no user in the other.                                                                                             |
+| **P05** | api       | A REST API key issued by one tenant is rejected with 401 by the other, and returns neither the issuer's rows (wrong pool) nor the target's (wrong credential accepted).                                                                                         |
+| **P06** | cache     | Settings-derived public surfaces read in a tight interleave never serve one tenant's planted identity token, stored identity, branding or configuration under the other's hostname — and each host provably serves its own planted token.                       |
+| **P07** | jobs      | A write driven on alpha produces derived background rows carrying _this run's_ drive token in alpha's database and none at all in bravo's.                                                                                                                      |
+| **P08** | read      | No public surface on bravo returns a row, id or canary belonging to alpha — including a search for a title that exists identically in both tenants.                                                                                                             |
+| **P09** | assistant | Each tenant's assistant service principal is its own row, and neither database contains a reference to the other's principal id, in TypeID or uuid form.                                                                                                        |
 
 Two constructions are worth calling out because they are what make the probes
 sensitive rather than ceremonial.
@@ -328,10 +333,10 @@ fleet.
 
 So P03 now makes two attempts in each direction:
 
-| Attempt                       | What is presented                                              | What its failure means                          |
-| ----------------------------- | -------------------------------------------------------------- | ----------------------------------------------- |
-| `storage-read-capability`     | alpha's capability exactly as alpha's own URLs carry it         | a URL from one tenant is honoured by the other  |
-| `storage-secret-interchange`  | the message **bravo** verifies, HMAC'd with **alpha's** secret  | the two tenants share a storage secret          |
+| Attempt                      | What is presented                                              | What its failure means                         |
+| ---------------------------- | -------------------------------------------------------------- | ---------------------------------------------- |
+| `storage-read-capability`    | alpha's capability exactly as alpha's own URLs carry it        | a URL from one tenant is honoured by the other |
+| `storage-secret-interchange` | the message **bravo** verifies, HMAC'd with **alpha's** secret | the two tenants share a storage secret         |
 
 The second is the one that can fail once binding is in force, and it is the
 condition §9 depends on being false. When the bindings differ, the first
@@ -349,27 +354,59 @@ accepted one falls through to the object path.
 
 ## What is not fully exercisable today
 
-The pooled architecture does not exist yet. Today `alpha` and `bravo` are two
-separate processes, with separate `SECRET_KEY`s and separate databases. Several probes therefore pass today for a stronger reason
-than the one they are designed to test — the failure mode is not merely absent,
-it is unreachable.
+Compute on this fleet is **already pooled**: one service, `numReplicas: 1`, one
+region, one `SECRET_KEY`, one auth instance cache, and one shared
+`quackback-worker` with no per-tenant `DATABASE_URL`. What is still per-tenant is
+the DATABASE. That distinction is the whole of this section, and getting it
+backwards is not a harmless inaccuracy — it made the suite understate its own
+strongest evidence, describing P01's pass as over-determined by a topology the
+fleet does not have.
+
+So the caveats below are not "this probe cannot fail yet". They are the narrower
+and more durable thing: **what a pass here does not distinguish.** For the
+credential probes that residual is real and permanent while databases stay
+per-tenant — sessions and `verification` rows live in the tenant's own database,
+so a lookup routed to the wrong pool finds no row and refuses in exactly the way
+a correctly routed lookup refuses an unknown credential. Database-per-tenant
+alone explains the same silence.
 
 Each affected probe carries a `poolingCaveat`, printed in the summary next to its
 `PASS` and present in the JSON, so this can never be read as a clean bill of
-health for pooled compute.
+health.
 
-| Probe   | Why today's pass is weaker than it looks                                                                                                                                                                                                                                                                          |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **P01** | Two processes, two signing keys, two `session` tables — a refusal is over-determined. The real target is the memoised better-auth instance behind `_authConfigVersion` (`auth/index.ts:78`), a small monotonic per-tenant integer whose values can coincide. Only reachable once one process serves both tenants. |
-| **P02** | The in-process `magicLinkStash` / `otpStash` (`auth/index.ts:29-51`) are keyed by lowercased email alone. They can only collide inside one process. Today the probe exercises the database-backed `verification` path only.                                                                                       |
-| **P06** | The bare-literal `CACHE_KEYS` (`settings:tenant`, `auth:registered-providers`, …) that made this collide no longer share a namespace: the cache is `kv_store`, discriminated by the `tenant_id` column. The probe confirms the surfaces are distinguishable and self-consistent; the collision has no mechanism left to exercise. |
-| **P07** | Each tenant runs its own worker bound to one `DATABASE_URL`, so a job physically cannot reach the other database. Today the probe establishes the observation baseline and proves the scan can actually see derived rows.                                                                                         |
-| **P09** | `memoizedAssistantPrincipalId` (`assistant.orchestrator.ts:62`) is process-scoped and can only be poisoned once one process serves both tenants. Today the probe proves the two ids are distinct and unreferenced.                                                                                                |
+| Probe   | What its pass does not distinguish                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P01** | Nothing about the topology weakens this one: one process, one signing key, one better-auth instance cache, both tenants on `auth_config_version` 3 — the coinciding-counter case — and one shared admin address. It is load-bearing today. The residual is that `session` rows are per-tenant, so "resolution was correct" and "resolution was wrong and missed" produce the same refusal.                                                      |
+| **P02** | The email-keyed stashes it was written against are `TenantKeyedCache` instances now (`auth/index.ts:73-74`), so the collision has no mechanism left, and the probe never touches them anyway — it reads each tenant's credential from that tenant's `verification` table. A pass is evidence about the database-backed redemption path and the tenant-keyed auth instance serving it. Same residual as P01: `verification` rows are per-tenant. |
+| **P06** | The bare-literal `CACHE_KEYS` (`settings:tenant`, `auth:registered-providers`, …) that made this collide no longer share a namespace: the cache is `kv_store`, discriminated by the `tenant_id` column. The probe confirms the surfaces are distinguishable and self-consistent; the collision has no mechanism left to exercise.                                                                                                               |
+| **P07** | The worker tier is genuinely shared — one service, one replica, no per-tenant `DATABASE_URL` — so a misrouted job CAN reach the other database and this probe is load-bearing today. The residual is that it observes rows and not processes: it cannot see a job that ran against the wrong tenant and only READ, nor tell a correct write from a wrong-tenant write that failed.                                                              |
+| **P09** | `memoizedAssistantPrincipalId` (`assistant.orchestrator.ts:66`) is now a `TenantKeyedCache`, so poisoning needs the tenant key to be wrong or absent rather than merely shared. The probe proves the two ids are distinct and unreferenced — when both exist at all; see the note on P09 being blocked below.                                                                                                                                   |
 
 P03, P04, P05 and P08 are fully meaningful today: they test secrets, credentials
 and query scoping that are already shared-or-not regardless of process topology.
 P03 in particular directly tests the property §9 relies on to justify
 bucket-per-tenant.
+
+### P09 is blocked, and the suite cannot unblock it
+
+Neither tenant holds an assistant service principal row. It is provisioned
+lazily by `ensureAssistantPrincipal()`, which is reached only from a genuine
+assistant interaction — an assistant turn in a conversation, an AI
+classification, a Copilot question, or a workflow plan containing a `send_block`
+action. Every one of those requires the tenant to have an AI provider configured
+and the relevant feature enabled, and none of them is reachable from the REST API
+this suite provisions its fixture through.
+
+So this is **not** a gap in fixture provisioning, and it is not fixed by
+inserting a `principal` row into each tenant database. That row is one the
+application would never create, and P09 exists to detect a memoised principal id
+crossing the tenant boundary: a hand-planted principal would satisfy the probe
+while proving nothing about the memo. P09 correctly refuses to pass on the
+absence and reports `BLOCKED`, which fails the run unless the operator passes
+`--allow-blocked`.
+
+To unblock it: configure AI on both tenants and ask Quinn one question in each,
+then re-run.
 
 ## Surfaces and families no probe can judge
 
@@ -389,8 +426,16 @@ at all. A future reader needs this list more than any of the green ticks.
   (webhook rows, registered auth providers, resolved platform credentials) is out
   of its reach over HTTP, and the database scan reads stored rows rather than
   what a process is holding.
-- **The judged HTTP surfaces are three.** `/`, `/b/<slug>` and
-  `/api/widget/config.json`, plus `/admin` for P01. The help centre, changelog,
+- **The judged HTTP surfaces are three.** `/`, `/b/<slug>/posts/<postId>` and
+  `/api/widget/config.json`, plus `/admin` for P01. It was `/b/<slug>` until a
+  live run showed that URL answering **404 on both tenants** — there is no board
+  index route in the app, only `/b/$slug/posts/$postId` — so two of P08's ten
+  controls were passing against an empty page. Both halves of that were fixed:
+  the probe now reads a document that exists, and every judged document must
+  first be shown to render some tenant identity before any "contains no foreign
+  marker" conclusion is drawn from it. A surface that 404s is a failed
+  `visibility` control, which is `ERROR`, never a pass. The help centre,
+  changelog,
   status pages, roadmap, the whole `/api/v1` surface beyond boards and posts, and
   every authenticated admin route other than the shell are unjudged. A settings
   leak that reached only `/hc` would not be seen.
@@ -455,7 +500,18 @@ is the file that matters most, and it exists because probe-level tests were not
 enough: three defects survived an earlier sensitivity pass — P02 could never
 execute at all, P07's blind guard was satisfied by fixture data, and P06 reported
 `PASS` on the leak it was written to catch — and two of those probes were never
-imported by a test. Every case here asserts on the report and the exit code,
+imported by a test.
+
+Excluding `FIXTURE_TABLES` closed only the first half of P07's guard, and the
+README used to leave that sounding finished. It stops a guard being satisfied by
+the STATIC fixture — the canary the fixture writes into `boards.description`.
+It does nothing about a genuine derived row from an EARLIER run: a
+`post_activity` row, in a table no exclusion list would name, still referencing
+the same fixture post id days later. That is what happened on the live fleet, and
+the probe passed on it. Freshness is not a property of the table a row is in, so
+the exclusion could never have established it; the per-run drive token does.
+
+Every case here asserts on the report and the exit code,
 including that a clean run and a leaking run do not produce identical output,
 and that a per-request nonce does not manufacture a `LEAK`.
 
@@ -468,11 +524,25 @@ a tripwire hit on a deliberate cross-tenant attempt is counted. It also scans
 `probes/*.ts` for a hand-built `verdict:` literal, which is what keeps
 "every exit goes through `decide()`" true rather than merely currently-so.
 
+The round-6 block is about **evidence that is real but is not this run's**. It
+runs a fleet whose drive write is accepted (`< 400`) and inert, with the derived
+`post_activity` row an earlier run left still sitting in the database — the exact
+arrangement the live fleet was in when P07 reported `PASS` — and asserts `ERROR`,
+that the failing control names the stale rows, and (separately, so the premise is
+pinned rather than trusted) that the stale row really is present and really does
+reference the fixture post. It also asserts that the drive write's own row does
+not count as work having been driven, and that a judged document which does not
+render is a failed `visibility` control rather than a clean read.
+
 **The fake fleet now reproduces the canonicalising redirect** (`/` → `307`
-`/?sort=trending`, `/admin` → `307` `/?auth=signin…`, both zero-byte) and the
-pooled storage binding (`t:<tenantId>|read|<key>`). Its being *more forgiving
-than the fleet it stands in for* is what let the redirect defect live: the
-planted token rendered in every test and in no real run.
+`/?sort=trending`, `/admin` → `307` `/?auth=signin…`, both zero-byte), the
+pooled storage binding (`t:<tenantId>|read|<key>`), the **404 on `/b/<slug>`**
+(there is no board index route, only `/b/$slug/posts/$postId`), and an
+**accepted-but-inert drive write**. Its being _more forgiving than the fleet it
+stands in for_ is what let two defects live: the planted token rendered in every
+test and in no real run, and the harness had no way at all to express "the write
+was accepted and nothing happened", so the one arrangement that produced a false
+green was the one arrangement the tests could not build.
 
 `__tests__/tripwire.test.ts` covers both tripwire failure modes: missing a real
 marker, and flagging the harness's own echo. It also pins `markerSearchForms`,

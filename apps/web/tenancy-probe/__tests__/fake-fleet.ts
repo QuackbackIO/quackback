@@ -70,6 +70,29 @@ export interface FleetLeaks {
   perRequestNonce?: boolean
   /** Background processing is switched off: a write produces no derived rows. */
   noBackgroundProcessing?: boolean
+  /**
+   * The drive write is ACCEPTED but inert: it returns < 400 and writes nothing.
+   *
+   * This is the live fleet's own behaviour, and reproducing it is the point.
+   * P07 used to drive its background work by re-sending content the fixture post
+   * already had; the request was accepted and changed nothing, while a derived
+   * row left by an earlier run went on satisfying the positive control. The fake
+   * fleet could not express "accepted, but nothing happened" at all — its only
+   * negative shape was `noBackgroundProcessing`, which removes the stale rows too
+   * — so the one arrangement that produced a false green was the one arrangement
+   * the harness could not build.
+   */
+  inertDrive?: boolean
+  /**
+   * The judged board document does not render.
+   *
+   * Faithful to the real app: there is no `/b/$slug` index route — only
+   * `/b/$slug/posts/$postId` — so a bare board URL answers 404 on every
+   * deployment. This switch extends that to the post document as well, so a
+   * probe judging a surface that rendered nothing can be held to reporting a
+   * failed visibility control rather than "no foreign marker found".
+   */
+  portalDocumentNotFound?: boolean
   /** Both tenants' assistant work is attributed to one shared principal id. */
   sharedAssistantPrincipal?: boolean
   /**
@@ -277,6 +300,20 @@ export class FakeFleet {
   readonly liveMagicLinks = new Map<TenantSlot, string>()
   readonly liveOtps = new Map<TenantSlot, string>()
   private mintCounter = 1
+
+  /**
+   * `post_comments` rows written by drive writes during the run, per tenant.
+   *
+   * Held on the fleet rather than baked into the fixture rows because the drive
+   * happens AFTER the fake database is built: `defaultDbRows` hands the scan this
+   * very array, so a row appended here mid-probe is visible to a later scan. A
+   * snapshot taken at construction time could only ever show rows that predate
+   * the run, which is the exact blindness this probe was repaired for.
+   */
+  readonly driveRows: Record<TenantSlot, Record<string, Array<Record<string, string>>>> = {
+    alpha: { post_comments: [], events: [] },
+    bravo: { post_comments: [], events: [] },
+  }
 
   /** The value that survived a shared-stash collision, per credential type. */
   private stashSurvivor: { magic?: string; otp?: string } = {}
@@ -508,6 +545,33 @@ export class FakeFleet {
       if (path.startsWith('/api/v1/posts/') && method === 'PATCH') {
         return json({ data: { id: tenant.postId, title: FIXTURE.postTitle } })
       }
+      // The drive write: a comment on the fixture post. Mirrors the real
+      // endpoint's effects — a `post_comments` row plus a `comment.created`
+      // outbox row whose payload carries the comment content — collapsed into
+      // the one row shape the scan reads. Under `inertDrive` the request is
+      // still accepted and still returns 201; it simply writes nothing, which is
+      // what the live fleet's accepted-but-no-op drive looked like from outside.
+      if (path.endsWith('/comments') && path.startsWith('/api/v1/posts/') && method === 'POST') {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { content?: string }
+        const content = String(body.content ?? '')
+        if (!this.leaks.inertDrive) {
+          const postUuid = toUuid(tenant.postId)
+          // The write's OWN row, inserted in the request's transaction. It lands
+          // even where nothing processes it afterwards, which is why P07 does
+          // not count it as evidence that work was driven.
+          this.driveRows[tenant.slot].post_comments!.push({ post_id: postUuid, content })
+          if (!this.leaks.noBackgroundProcessing) {
+            // The outbox row the shared worker relay drains. Its payload carries
+            // the post reference and the comment content, so this run's drive
+            // token is findable in `events` as well as in `post_comments`.
+            this.driveRows[tenant.slot].events!.push({
+              entity_id: postUuid,
+              payload: JSON.stringify({ comment: { content }, post: { id: postUuid } }),
+            })
+          }
+        }
+        return json({ data: { id: `post_comment_${tenant.slot}`, content } }, 201)
+      }
       if (path.startsWith('/api/v1/posts/') && method === 'GET') {
         // The read-back the fixture uses so the collision gate compares stored
         // values rather than this harness's own constants.
@@ -595,13 +659,29 @@ export class FakeFleet {
     // fake fleet was more forgiving than the fleet it stands in for, so the
     // planted identity token rendered in every test and in no real run.
     if (path === '/' && !url.searchParams.has('sort')) {
-      const target = this.leaks.crossHostRedirect && tenant.slot === 'alpha'
-        ? `${this.other(tenant).origin}/?sort=trending`
-        : '/?sort=trending'
+      const target =
+        this.leaks.crossHostRedirect && tenant.slot === 'alpha'
+          ? `${this.other(tenant).origin}/?sort=trending`
+          : '/?sort=trending'
       return new Response(null, { status: 307, headers: { location: target } })
     }
 
-    if (path === '/' || path.startsWith('/b/')) {
+    // There is no board INDEX route in the app: the route tree carries
+    // `/b/$slug/posts/$postId` and nothing at `/b/$slug`, so a bare board URL
+    // answers 404 on every deployment. The fake fleet used to render a document
+    // for any path under `/b/`, which is how P08 came to judge a surface that
+    // 404s in production — two of its ten controls were passing against an empty
+    // page. Reproduced here so the harness cannot be more forgiving than the
+    // fleet it stands in for.
+    const isPostDocument = /^\/b\/[^/]+\/posts\/[^/]+$/.test(path)
+    if (path.startsWith('/b/') && !isPostDocument) {
+      return new Response('not found', { status: 404 })
+    }
+
+    if (path === '/' || isPostDocument) {
+      if (this.leaks.portalDocumentNotFound) {
+        return new Response('not found', { status: 404 })
+      }
       // The portal document carries the workspace NAME and the planted portal
       // headline — matching the real app, which renders the name and the
       // welcome-card title from portal_config and no other tenant identifier.
@@ -617,9 +697,15 @@ export class FakeFleet {
       const nonce = this.leaks.perRequestNonce
         ? `<meta name="csp-nonce" content="${Math.random()}">`
         : ''
+      // The post document additionally renders the post itself, so it carries
+      // the host's own canary the way the real page carries the post body. That
+      // is what makes it a surface capable of testifying about tenant identity
+      // at all — a document rendering none is one no "contains no foreign
+      // marker" assertion can be read from.
+      const body = isPostDocument ? ` ${fixturePostBody(source.slot)}` : ''
       return new Response(
         `<html><head>${nonce}<title>${source.workspaceName}</title></head>` +
-          `<body>${source.workspaceName}${headline}${extra}</body></html>`,
+          `<body>${source.workspaceName}${headline}${extra}${body}</body></html>`,
         { status: 200, headers: { 'content-type': 'text/html' } }
       )
     }
@@ -779,14 +865,26 @@ export interface TestContext extends ProbeContext {
 }
 
 /**
- * The rows a healthy tenant would hold: its own fixture, plus a derived
- * `post_activity` row standing in for the background work P07 looks for.
+ * The rows a healthy tenant would hold: its own fixture, the derived
+ * `post_activity` row an EARLIER run left behind, and live references to the
+ * rows this run's drive writes.
+ *
+ * The `post_activity` row is deliberately stale — it stands for the two-day-old
+ * `post.created` row that satisfied P07's positive control on the live fleet
+ * while nothing at all had happened. It is present on a healthy fleet AND on an
+ * `inertDrive` fleet, because that is the arrangement that produced the false
+ * green: real derived rows, from a run that is over.
+ *
+ * `post_comments` and `events` are handed out by REFERENCE, so rows the drive
+ * appends mid-probe are visible to a scan that runs afterwards.
  */
 export function defaultDbRows(fleet: FakeFleet, t: FakeTenant): NonNullable<FakeDbOptions['rows']> {
   const postUuid = toUuid(t.postId)
   const rows: NonNullable<FakeDbOptions['rows']> = {
     posts: [{ id: postUuid, content: fixturePostBody(t.slot) }],
     boards: [{ description: fixtureBoardDescription(t.slot) }],
+    post_comments: fleet.driveRows[t.slot].post_comments!,
+    events: fleet.driveRows[t.slot].events!,
   }
   if (!fleet.leaks.noBackgroundProcessing) {
     rows.post_activity = [{ post_id: postUuid }]

@@ -155,8 +155,16 @@ export function describeHits(hits: ScanHit[]): string {
  * Tables the static fixture itself occupies.
  *
  * A visibility guard that asks "did this write produce derived rows?" must not
- * be satisfiable by rows the fixture already put there — see the comment in
- * `probes/p07-background-job.ts`.
+ * be satisfiable by rows the fixture already put there. This closes that, and
+ * ONLY that: it is a guard against the STATIC fixture, not against age.
+ *
+ * It does nothing about a genuine derived row left by an EARLIER run — a
+ * `post_activity` or `events` row in a table no exclusion list would ever name,
+ * still referencing the same fixture post id, still sitting there days later.
+ * On the live fleet that is exactly what happened, and P07 passed on two-day-old
+ * rows while its drive wrote nothing at all. Freshness is not a property of the
+ * table a row is in, so it cannot be established here; it is established by the
+ * per-run drive token in `probes/p07-background-job.ts`.
  */
 export const FIXTURE_TABLES = new Set(['posts', 'boards'])
 

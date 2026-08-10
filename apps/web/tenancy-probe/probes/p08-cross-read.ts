@@ -56,8 +56,8 @@ export const p08CrossRead: Probe = {
     const { alpha, bravo } = ctx
     const attempted =
       `search bravo's public endpoints for the colliding post title "${FIXTURE.postTitle}" and for ` +
-      `alpha's canary, read bravo's portal documents for the shared board slug, and scan bravo's ` +
-      `database for every one of alpha's markers`
+      `alpha's canary, read bravo's portal root and its own board-scoped post document, and scan ` +
+      `bravo's database for every one of alpha's markers`
 
     const controls: ControlOutcome[] = []
     const evidence: Record<string, unknown> = {}
@@ -163,6 +163,28 @@ export const p08CrossRead: Probe = {
     // defaults are applied, and the document — with the workspace name, the
     // planted identity token and every rendered fixture id in it — is one hop
     // further on. Scanning the unfollowed 307 scanned an empty string.
+    // The judged surfaces are the portal root and the board-scoped POST
+    // document — deliberately not `/b/<slug>`, which is what this probe used to
+    // read. There is no board index route in the app (the route tree carries
+    // `/b/$slug/posts/$postId` and nothing above it), so that URL answers 404 on
+    // every deployment, and two of this probe's ten controls were passing
+    // against an empty page: "this page contains no foreign marker" is trivially
+    // true of a page with nothing on it.
+    //
+    // Pointing at a surface that renders is only half the repair, because it
+    // fixes this instance and not the class. The other half is the visibility
+    // control below: a document is allowed to testify about tenant identity only
+    // once it has been shown to carry some. If the route moves again, or the
+    // board stops being publicly visible, the probe reports that it could not
+    // see rather than reporting that there was nothing to see.
+    const surfaces: Array<{ label: string; pathFor: (h: typeof alpha) => string | null }> = [
+      { label: 'GET /', pathFor: () => '/' },
+      {
+        label: `GET /b/${FIXTURE.boardSlug}/posts/<the host's own fixture post>`,
+        pathFor: (h) =>
+          h.fixture?.postId ? `/b/${FIXTURE.boardSlug}/posts/${h.fixture.postId}` : null,
+      },
+    ]
     const documentReads = new Map<
       string,
       Array<{ slot: string; res: ProbeResponse; otherBaseUrl: string }>
@@ -171,30 +193,67 @@ export const p08CrossRead: Probe = {
       ['alpha', alpha, bravo],
       ['bravo', bravo, alpha],
     ] as const) {
-      for (const path of ['/', `/b/${FIXTURE.boardSlug}`]) {
+      for (const surface of surfaces) {
+        const path = surface.pathFor(to)
+        if (!path) {
+          controls.push(
+            control(
+              'visibility',
+              `${to.slot} ${surface.label} could be addressed`,
+              false,
+              `${to.slot} has no provisioned fixture post, so this surface has no URL to read`
+            )
+          )
+          continue
+        }
         const doc = await to.http.request(path, { omitCookies: true, followRedirects: true })
-        documentReads.set(path, [
-          ...(documentReads.get(path) ?? []),
+        documentReads.set(surface.label, [
+          ...(documentReads.get(surface.label) ?? []),
           { slot: to.slot, res: doc, otherBaseUrl: from.baseUrl },
         ])
+
+        // Did this surface render a tenant identity at all? Markers from EITHER
+        // tenant count: a host rendering the wrong tenant's identity has still
+        // rendered a document, and saying which one is the negative control's
+        // job, not this one's. What fails here is a page carrying no tenant
+        // identity whatsoever — a 404, an error shell, a zero-byte body — from
+        // which no conclusion about isolation can be drawn in either direction.
+        const identity = [
+          ...markersPresent(doc.text, to.markers),
+          ...markersPresent(doc.text, from.markers),
+        ]
+        controls.push(
+          control(
+            'visibility',
+            `${to.slot} ${surface.label} rendered a document carrying a tenant identity`,
+            doc.status === 200 && identity.length > 0,
+            doc.status === 200 && identity.length > 0
+              ? `HTTP 200, ${identity.length} tenant marker(s) rendered`
+              : `HTTP ${doc.status}, ${doc.text.length} byte(s), no marker from either tenant — ` +
+                  `"this surface contains no foreign marker" is vacuous on a document that renders ` +
+                  `no tenant identity at all, so this control is recorded as a failure to observe ` +
+                  `rather than as a clean read`
+          )
+        )
+
         const found = markersPresent(doc.text, from.markers)
         controls.push(
           control(
             'negative',
-            `${to.slot} GET ${path} contains no ${fromSlot} marker`,
+            `${to.slot} ${surface.label} contains no ${fromSlot} marker`,
             found.length === 0,
             found.length === 0
               ? `HTTP ${doc.status}, clean`
               : `HTTP ${doc.status}, ${fromSlot.toUpperCase()} MARKERS PRESENT: ${found.join(', ')}`,
             dirFrom(fromSlot),
-            `portal-document-markers:${path}`
+            `portal-document-markers:${surface.label}`
           )
         )
       }
     }
 
-    for (const [path, reads] of documentReads) {
-      const redirectControl = crossOriginRedirectControl(`GET ${path}`, reads)
+    for (const [label, reads] of documentReads) {
+      const redirectControl = crossOriginRedirectControl(label, reads)
       if (redirectControl) controls.push(redirectControl)
     }
 

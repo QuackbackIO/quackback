@@ -41,9 +41,16 @@ export const p02MagicLinkOtp: Probe = {
     'and each tenant’s own credential still resolves to its own user, not the colliding one.',
   requires: ['http', 'db', 'admin'],
   poolingCaveat:
-    'The in-process token stashes this targets (auth/index.ts:29-51) are keyed by email alone and ' +
-    'only collide when one process serves both tenants. Today the probe exercises the database-backed ' +
-    'verification path only; the stash collision itself becomes reachable when pooling lands.',
+    'The email-keyed stashes this probe was written against no longer exist as such: ' +
+    '`magicLinkStash` and `otpStash` (auth/index.ts:73-74) are TenantKeyedCache instances, so two ' +
+    'tenants sharing an address no longer share a key — and this probe never reaches them in any ' +
+    'case, because it reads each tenant’s credential out of that tenant’s own `verification` table, ' +
+    'the path a real recipient’s link travels. So a pass here is evidence about the ' +
+    'database-backed redemption path and the tenant-keyed auth instance serving it: both refuse a ' +
+    'credential the other tenant minted, in both directions, while both tenants hold a live ' +
+    'credential for the identical address. What it cannot separate is a correct refusal from a ' +
+    'wrong-pool lookup that happened to miss: `verification` rows are per-tenant, so a token ' +
+    'resolved against the wrong database finds no row and refuses exactly as it should have.',
 
   async run(ctx: ProbeContext): Promise<ProbeOutcome> {
     const { alpha, bravo, config } = ctx

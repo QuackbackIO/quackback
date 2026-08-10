@@ -22,15 +22,18 @@ import { p02MagicLinkOtp } from '../probes/p02-magic-link-otp'
 import { p03StorageToken } from '../probes/p03-storage-token'
 import { p06SettingsCache } from '../probes/p06-settings-cache'
 import { p07BackgroundJob } from '../probes/p07-background-job'
+import { p08CrossRead } from '../probes/p08-cross-read'
 import {
   FakeFleet,
   baseConfig,
   createFakeDb,
+  defaultDbRows,
   fakeSettings,
   silentLogger,
   type FleetIdentity,
   type FleetLeaks,
 } from './fake-fleet'
+import { FIXTURE } from '../fixtures'
 import { toUuid } from '@quackback/ids'
 import type { ProbeConfig, ProbeReport, TenantSlot } from '../types'
 
@@ -64,6 +67,14 @@ async function run(
         rows: {
           posts: [{ id: toUuid(tenant.postId), content: `canary ${tenant.canary}` }],
           boards: [{ description: `canary ${tenant.canary}` }],
+          // By reference: P07's drive appends here mid-run, and a scan issued
+          // afterwards has to see what the drive actually wrote rather than a
+          // snapshot taken before it ran.
+          post_comments: fleet.driveRows[slot].post_comments!,
+          events: fleet.driveRows[slot].events!,
+          // The stale derived row an earlier run left behind. Present on a
+          // healthy fleet AND on an inert one — that combination is what made
+          // P07 report PASS while its drive did nothing.
           ...(leaks.noBackgroundProcessing
             ? {}
             : { post_activity: [{ post_id: toUuid(tenant.postId) }] }),
@@ -173,7 +184,9 @@ describe('P02 magic-link and OTP', () => {
 describe('P07 background job', () => {
   it('reports ERROR, not PASS, when there is no background processing to observe', async () => {
     // The fixture writes the canary into `boards.description`, which once
-    // satisfied the "derived rows exist" guard all by itself.
+    // satisfied the "derived rows exist" guard all by itself. The drive write's
+    // own row is the same trap one level along: it lands here, because the
+    // insert is synchronous, and nothing derives from it.
     const { report, exit } = await run({ noBackgroundProcessing: true }, {}, [p07BackgroundJob])
     const p07 = probe(report, 'P07')
     expect(p07.verdict).toBe('ERROR')
@@ -181,9 +194,88 @@ describe('P07 background job', () => {
     expect(exit).toBe(1)
   })
 
+  it('does not accept the drive write’s own row as proof that work was driven', async () => {
+    const { report } = await run({ noBackgroundProcessing: true }, {}, [p07BackgroundJob])
+    const positive = probe(report, 'P07').controls.find((c) => c.kind === 'positive')
+    expect(positive?.ok).toBe(false)
+    expect(positive?.detail).toContain('post_comments')
+    expect(positive?.detail).toContain('nothing was derived from it')
+  })
+
   it('passes when derived rows exist only in the driving tenant', async () => {
     const { report } = await run({}, {}, [p07BackgroundJob])
     expect(probe(report, 'P07').verdict).toBe('PASS')
+  })
+
+  // The defect this probe was repaired for, reproduced exactly.
+  //
+  // `inertDrive` accepts the drive write (< 400, as the live fleet did) and
+  // writes nothing, while the stale `post_activity` row from an earlier run
+  // stays where it is. That is the arrangement the live fleet was actually in,
+  // and the arrangement under which P07 reported PASS: the positive control was
+  // satisfied entirely by rows two days old, and the negative rested on a write
+  // that drove no background work whatsoever.
+  describe('a drive write that is accepted but does nothing', () => {
+    it('is refused, even though real derived rows from an earlier run are still there', async () => {
+      const { report, exit } = await run({ inertDrive: true }, {}, [p07BackgroundJob])
+      const p07 = probe(report, 'P07')
+      expect(p07.verdict).toBe('ERROR')
+      expect(p07.verdict).not.toBe('PASS')
+      expect(exit).toBe(1)
+    })
+
+    it('names the stale rows as the reason it will not pass on them', async () => {
+      const { report } = await run({ inertDrive: true }, {}, [p07BackgroundJob])
+      const p07 = probe(report, 'P07')
+      const positive = p07.controls.find((c) => c.kind === 'positive')
+      expect(positive?.ok).toBe(false)
+      expect(positive?.detail).toContain('post_activity')
+      expect(positive?.detail).toContain('not written by')
+    })
+
+    it('would have passed a guard keyed on the post id, which is the whole point', async () => {
+      // Pins the premise rather than trusting it: the stale row really is
+      // present and really does reference the fixture post, so the refusal above
+      // comes from the drive token being absent and from nothing else.
+      const fleet = new FakeFleet({ inertDrive: true })
+      const rows = defaultDbRows(fleet, fleet.alpha)
+      expect(rows.post_activity).toEqual([{ post_id: toUuid(fleet.alpha.postId) }])
+      expect(rows.post_comments).toEqual([])
+    })
+  })
+})
+
+describe('P08 judged surfaces', () => {
+  it('reports ERROR, not PASS, when a judged document does not render', async () => {
+    // Two of this probe's ten controls used to pass against a 404: it read
+    // `/b/<slug>`, for which no route exists, so "this page contains no foreign
+    // marker" was true of an empty page.
+    const { report, exit } = await run({ portalDocumentNotFound: true }, {}, [p08CrossRead])
+    const p08 = probe(report, 'P08')
+    expect(p08.verdict).toBe('ERROR')
+    expect(p08.observed).toContain('rendered a document carrying a tenant identity')
+    expect(exit).toBe(1)
+  })
+
+  it('does not judge the board index URL, which 404s on every deployment', async () => {
+    // The app's route tree carries `/b/$slug/posts/$postId` and nothing above
+    // it. Pinned here so the fake fleet cannot drift back into being more
+    // forgiving than the fleet it stands in for, which is what hid this.
+    const fleet = new FakeFleet()
+    const res = await fleet.fetch(`${fleet.alpha.origin}/b/${FIXTURE.boardSlug}`)
+    expect(res.status).toBe(404)
+
+    const { report } = await run({}, {}, [p08CrossRead])
+    const judged = probe(report, 'P08')
+      .controls.filter((c) => c.label.includes('/b/'))
+      .map((c) => c.label)
+    expect(judged.length).toBeGreaterThan(0)
+    expect(judged.every((l) => l.includes('/posts/'))).toBe(true)
+  })
+
+  it('still passes on a fleet whose judged documents render', async () => {
+    const { report } = await run({}, {}, [p08CrossRead])
+    expect(probe(report, 'P08').verdict).toBe('PASS')
   })
 })
 
@@ -520,7 +612,10 @@ describe('a recorded signal is always counted (defect 2)', () => {
     // fleet with a shared storage secret that reads as "could not run".
     const { report, exit } = await run(
       {},
-      { alphaStorageSecret: 'one-secret-two-tenants', bravoStorageSecret: 'one-secret-two-tenants' },
+      {
+        alphaStorageSecret: 'one-secret-two-tenants',
+        bravoStorageSecret: 'one-secret-two-tenants',
+      },
       [p03StorageToken]
     )
     const p03 = probe(report, 'P03')

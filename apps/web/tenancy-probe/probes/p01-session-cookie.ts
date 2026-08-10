@@ -50,9 +50,15 @@ export const p01SessionCookie: Probe = {
     'or on an authenticated SSR document — and bravo never answers with alpha’s identity.',
   requires: ['http', 'admin'],
   poolingCaveat:
-    'Today alpha and bravo are separate processes with separate SECRET_KEYs and separate session ' +
-    'tables, so a refusal is over-determined. Under pooling the same process holds one better-auth ' +
-    'instance cache and one signing key, which is when this probe becomes load-bearing.',
+    'This fleet already serves both tenants from ONE process: one service, one replica, one region, ' +
+    'one SECRET_KEY and one better-auth instance cache — and both tenants currently sit on ' +
+    'auth_config_version 3, the coinciding-counter case this probe hunts, while sharing an admin ' +
+    'address. A refusal here is therefore NOT over-determined by topology, and this probe is ' +
+    'load-bearing today rather than at some later date. What remains genuinely undetermined is ' +
+    'narrower: `session` rows live in per-tenant databases, so a lookup routed to the WRONG pool ' +
+    'finds no row and refuses in exactly the way a correctly routed lookup refuses an unknown ' +
+    'token. A pass says no session crossed the boundary; it does not say tenant resolution was ' +
+    'correct, and database-per-tenant alone would explain the same silence.',
 
   async run(ctx: ProbeContext) {
     const { alpha, bravo } = ctx

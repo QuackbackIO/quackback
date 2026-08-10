@@ -71,9 +71,16 @@ export const p09AssistantPrincipal: Probe = {
         reason:
           `the assistant service principal is provisioned lazily on first use and is missing on ` +
           `${!alphaId ? 'alpha' : ''}${!alphaId && !bravoId ? ' and ' : ''}${!bravoId ? 'bravo' : ''}. ` +
-          'Send one message to the assistant in each tenant so the principal exists, then re-run. ' +
-          'Reported as blocked rather than passed: an absent principal cannot be misattributed, ' +
-          'which is not the same as isolation being proven.',
+          'It has no provisioning path this suite can drive. `ensureAssistantPrincipal()` is ' +
+          'reached only from a genuine assistant interaction — an assistant turn in a conversation, ' +
+          'an AI classification, a Copilot question, or a workflow plan containing a send_block ' +
+          'action — every one of which requires the tenant to have an AI provider configured and ' +
+          'the relevant feature enabled. No REST endpoint provisions it, so the fixture cannot, and ' +
+          'writing a principal row straight into the tenant database would be a fixture the ' +
+          'application would never create: it would satisfy this probe while proving nothing about ' +
+          'the memo that poisons it. To unblock, configure AI on both tenants and ask Quinn one ' +
+          'question in each, then re-run. Reported as blocked rather than passed: an absent ' +
+          'principal cannot be misattributed, which is not the same as isolation being proven.',
       })
     }
 

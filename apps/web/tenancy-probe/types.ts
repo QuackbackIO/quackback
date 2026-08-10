@@ -140,11 +140,19 @@ export interface ProbeResult extends ProbeOutcome {
   proves: string
   requires: Capability[]
   /**
-   * Set when today's separate-process, separate-database topology cannot
-   * exercise the real failure mode. The probe still runs and still fails closed
-   * on a genuine leak, but a PASS today is weaker evidence than a PASS under
-   * pooling. Surfaced verbatim in the report so nobody mistakes one for the
-   * other.
+   * What this probe's PASS does not distinguish.
+   *
+   * It began as "the pooled topology does not exist yet, so this failure mode is
+   * unreachable" — and outlived the topology it described. Compute is pooled
+   * now: one process, one signing key, one shared worker tier, with the database
+   * the only per-tenant thing left. Caveats written for the old world understated
+   * the suite, telling a reader that P01's pass was over-determined by separate
+   * processes that no longer exist.
+   *
+   * So a caveat states the residual instead, which is durable: what a pass here
+   * leaves open. For the credential probes that is "a wrong-pool lookup misses
+   * and refuses exactly as a correct one does", which stays true for as long as
+   * databases are per-tenant. Surfaced verbatim in the report.
    */
   poolingCaveat?: string
   durationMs: number
