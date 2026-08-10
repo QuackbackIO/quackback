@@ -345,6 +345,8 @@ function startLoop(opts: {
     live: { stopped: boolean },
     s: RelayLoopStats
   ) => Promise<WakeListener | null>
+  /** Told when the registry view changes, so the next attach uses the new one. */
+  onObserve?: (tenant: TenantDescriptor) => void
 }): RelayLoop {
   const s = stats.get(opts.tenantId) ?? emptyStats()
   stats.set(opts.tenantId, s)
@@ -642,6 +644,7 @@ function startLoop(opts: {
     signal,
     observe(tenant) {
       descriptor = tenant
+      opts.onObserve?.(tenant)
     },
     isAttached: () => attachment !== null,
     async stop() {
@@ -735,20 +738,32 @@ function startTenantLoop(
   warnIfPooled(tenant.database.directUrl, { tenantId: tenant.tenantId, use: 'the outbox relay' })
 
   const holder: { ring: (() => void) | null } = { ring: null }
+  /**
+   * The descriptor every re-attach reads, not the one this call closed over.
+   *
+   * A loop now outlives many attachments, and quarantine releases a tenant the
+   * moment its `revision` changes — so a re-attach that still used the record
+   * from boot would reconnect with the DSN and credential ref that were the
+   * reason it was refused. `observe` keeps this current.
+   */
+  let current = tenant
   const loop = startLoop({
     tenantId: tenant.tenantId,
     config: cfg,
     idle,
     tenant,
+    onObserve: (next) => {
+      current = next
+    },
     // One connection for the drain and the lease. The doorbell opens its own, so
     // an attached tenant costs this tier exactly two sockets, both session-mode,
     // and a detached one costs none. `openTenantDirectPool` runs the same §3
     // fingerprint assertion the request path runs, so a mis-pointed record is
     // refused here for the same reason and with the same message.
     openAttachment: async () => {
-      const pool = await openTenantDirectPool(tenant)
+      const pool = await openTenantDirectPool(current)
       const scope: TenantScope = {
-        tenant,
+        tenant: current,
         db: pool.db,
         sql: pool.sql,
         secrets: pool.secrets,
@@ -765,12 +780,12 @@ function startTenantLoop(
       return openListener(
         // Direct, never pooled. Through a transaction pooler the registration is
         // accepted and nothing is ever delivered — see jobs/wake.ts.
-        tenant.database.directUrl,
-        tenant.tenantId,
+        current.database.directUrl,
+        current.tenantId,
         s,
         holder,
         live,
-        () => resolveTenantPassword(tenant)
+        () => resolveTenantPassword(current)
       )
     },
   })

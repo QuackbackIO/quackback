@@ -220,6 +220,8 @@ function startLoop(opts: {
   tenant: TenantDescriptor | null
   /** Builds this tenant's doorbell. Returns null when it could not be attached. */
   openListener: (ring: () => void) => Promise<WakeListener | null>
+  /** Told when the registry view changes, so the next attach uses the new one. */
+  onObserve?: (tenant: TenantDescriptor) => void
   scoped: <T>(body: () => Promise<T>) => Promise<T>
 }): TenantLoop {
   const s = emptyStats()
@@ -372,6 +374,16 @@ function startLoop(opts: {
     s.attached = true
     lastExternalAt = Date.now()
     deadlineAt = null
+    // Tick the schedule on the next pass whatever `nextSlotAt` last said.
+    //
+    // Measured: without this a tenant woken for its own deadline enqueued
+    // nothing and went straight back to sleep. `nextScheduleAt` is the minimum
+    // next slot over the schedules that actually ticked, and a schedule the gate
+    // turned off contributes no slot at all — so a tenant whose only pending
+    // work was a gated sweep was told to come back at some *other* queue's next
+    // slot, which could be five minutes or a day away. The deadline is the
+    // reason this loop is awake; the tick is what acts on it.
+    nextScheduleAt = 0
     if (reason !== 'boot') {
       s.reattaches += 1
       s.lastReattachReason = reason
@@ -573,6 +585,7 @@ function startLoop(opts: {
     signal,
     observe(tenant) {
       descriptor = tenant
+      opts.onObserve?.(tenant)
     },
     isAttached: () => attached,
     async stop() {
@@ -666,11 +679,23 @@ function startTenantLoop(
   idle: TenantIdlePolicy
 ): void {
   const holder: { ring: (() => void) | null } = { ring: null }
+  /**
+   * The descriptor every re-attach reads, not the one this call closed over.
+   *
+   * The scoped passes go through `withTenantScopeById`, which re-resolves from
+   * the registry cache and so was never stale — but the doorbell's DSN and
+   * credential were, and a loop that now outlives many attachments would keep
+   * reconnecting its listener to the endpoint the record no longer names.
+   */
+  let current = tenant
   const loop = startLoop({
     tenantId: tenant.tenantId,
     config: cfg,
     idle,
     tenant,
+    onObserve: (next) => {
+      current = next
+    },
     // Opened per attach rather than once at boot, and only after the tenant has
     // been proven servable. A doorbell needs no credentials, so opening it first
     // is what let two unservable tenants each hold a permanent `LISTEN`.
@@ -687,9 +712,9 @@ function startTenantLoop(
         return await openWakeListener({
           // Direct, never pooled. Through a transaction pooler the registration
           // is accepted and nothing is ever delivered — see wake.ts.
-          directUrl: tenant.database.directUrl,
-          password: () => resolveTenantPassword(tenant),
-          label: tenant.tenantId,
+          directUrl: current.database.directUrl,
+          password: () => resolveTenantPassword(current),
+          label: current.tenantId,
           onWake: () => holder.ring?.(),
         })
       } catch (err) {

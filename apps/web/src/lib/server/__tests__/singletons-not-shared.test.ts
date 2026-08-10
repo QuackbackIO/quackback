@@ -140,6 +140,14 @@ describe('the readiness memo cannot go blind under pooled tenancy', () => {
       vi.doMock('@/lib/server/tenancy/registry', () => ({
         // Sync, returning the tagged-template `sql` — the shape the probe uses.
         getControlSql: () => () => Promise.resolve([{ '?column?': 1 }]),
+        // The probe no longer opens its own connection on every poll: it reads
+        // the outcome of the last real registry read and only connects when
+        // there is no recent one. A probe that connected every few seconds was
+        // the client holding the control compute awake. Both halves are stubbed
+        // here — the observation says nothing, so this fixture exercises the
+        // fallback connection, which is the branch that used to be the only one.
+        getControlReadState: () => ({ lastOkAt: 0, lastErrorAt: 0, lastError: null }),
+        probeControlDatabase: async () => {},
       }))
       const { handleReadinessProbe } = await import('@/routes/api/health.ready')
       const response = await handleReadinessProbe()

@@ -194,7 +194,7 @@ export async function handleReadinessProbe(): Promise<Response> {
     // into a fleet-wide outage. The detail — which tenant, which code, how long
     // — is on the quarantine heartbeat in the logs; this is the number that says
     // to go and read it.
-    refused: tier.tenants.filter((t) => t.refusedCode !== null).length,
+    refused: tier.tenants.filter((t) => Boolean(t.refusedCode)).length,
   }
 
   const ready = dbCheck.ok && migrationsCheck.ok && workersCheck.ok
