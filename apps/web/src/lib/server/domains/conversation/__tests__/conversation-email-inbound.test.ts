@@ -210,6 +210,27 @@ describe('parseRawEmail', () => {
     expect(parseRawEmail(raw).subject).toBe('a very long folded subject')
   })
 
+  it('keeps the TOPMOST Authentication-Results, which is the one our own MTA added', () => {
+    // Trace headers are prepended, so the first instance is the last hop: ours.
+    // Any further instance was written by an earlier hop or simply typed by the
+    // sender, and RFC 8601 §5 says a receiver ignores those. The trust gate
+    // (§4.8) turns this value into an attach-or-drop decision, so picking the
+    // wrong instance is a stranger choosing whether we treat them as verified.
+    const raw = [
+      'Authentication-Results: mx.quackback.io; spf=fail smtp.mailfrom=spoof.example;' +
+        ' dmarc=fail (p=reject dis=reject) header.from=acme.com',
+      'Received: from spoof.example by mx.quackback.io',
+      'From: "Chief Executive" <ceo@acme.com>',
+      'Subject: wire transfer',
+      'Authentication-Results: mx.quackback.io; dmarc=pass header.from=acme.com',
+      '',
+      'body',
+    ].join('\r\n')
+    expect(parseRawEmail(raw).authenticationResults).toBe(
+      'mx.quackback.io; spf=fail smtp.mailfrom=spoof.example; dmarc=fail (p=reject dis=reject) header.from=acme.com'
+    )
+  })
+
   it('parses Cc recipients from the header', () => {
     const raw = [
       'To: support@acme.com',
