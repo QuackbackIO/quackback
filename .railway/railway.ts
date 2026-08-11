@@ -67,7 +67,7 @@ import { bucket, defineRailway, image, preserve, project, redis, service } from 
  * enough for every role the rollout touches.
  */
 const APP_IMAGE =
-  'ghcr.io/quackbackio/quackback@sha256:35c39652797f5dc6db4a6a04b6bb67b417d6f4c33f69639f8895567758e34da3'
+  'ghcr.io/quackbackio/quackback@sha256:4f645f488face7c902e0a2359b1c1ed07c04261cfa59ee1fb836fc7013d8f5ee'
 
 /** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
  * is declared intent only — `plan` never diffs placement and `apply` never
@@ -132,6 +132,26 @@ export default defineRailway(() => {
     // The Neon control project (see the note above). A secret, so it is set out
     // of band and preserved here rather than written into source.
     QUACKBACK_CONTROL_DATABASE_URL: preserve(),
+
+    // Mail. The inbound domain is the apex, already onboarded to Cloudflare for
+    // both routing and sending, so a workspace address is `<mail_slug>@` on it.
+    EMAIL_INBOUND_DOMAIN: 'quackback.co.uk',
+    // The only domain Cloudflare may send from on this account. A workspace that
+    // has verified its own sending domain falls through to the provider rung per
+    // send, because Cloudflare can only sign for a zone it hosts.
+    CLOUDFLARE_EMAIL_DOMAINS: 'quackback.co.uk',
+    EMAIL_FROM: 'Quackback <noreply@quackback.co.uk>',
+    // Three secrets, all set out of band and preserved here. `preserve()` cannot
+    // bootstrap a value the platform does not already hold, so a new service
+    // needs them set before its first apply, not after.
+    //
+    // The two inbound secrets are deliberately distinct. One authenticates the
+    // edge sender's POST; the other signs the plus-address inside a reply
+    // address. Sharing them would mean a leak of either widened to both.
+    INBOUND_HMAC_SECRET: preserve(),
+    EMAIL_INBOUND_SIGNING_SECRET: preserve(),
+    CLOUDFLARE_ACCOUNT_ID: preserve(),
+    CLOUDFLARE_EMAIL_TOKEN: preserve(),
 
     // Below both Neon's suspend timeout (300 s documented, 337 s measured) and
     // Railway's 600 s sleep window. This is the number the idle-cost model
@@ -379,8 +399,11 @@ export default defineRailway(() => {
       ADMIN_EMAILS: preserve(),
       BASE_URL: preserve(),
       BETTER_AUTH_SECRET: preserve(),
+      CLOUDFLARE_ACCOUNT_ID: preserve(),
+      CLOUDFLARE_EMAIL_TOKEN: preserve(),
       CLUSTER_ENV: preserve(),
       CP_ROLE: preserve(),
+      EMAIL_FROM: preserve(),
       DATABASE_URL: preserve(),
       NEON_API_KEY: preserve(),
       NEON_ORG_ID: preserve(),
@@ -388,6 +411,11 @@ export default defineRailway(() => {
       NEON_REGION_ID: preserve(),
       NODE_ENV: preserve(),
       PORT: preserve(),
+      // Shared with the inbound Email Worker, which presents it to resolve a
+      // mail slug to the hostname that serves it. Deliberately its own
+      // credential: the per-instance token model binds a caller to one
+      // workspace, and this caller legitimately speaks for all of them.
+      MAIL_ROUTER_TOKEN: preserve(),
       PROVISIONER_SECRET: preserve(),
       QUACKBACK_BASE_DOMAIN: preserve(),
       QUACKBACK_FLEET_ROOT_KEY: preserve(),
