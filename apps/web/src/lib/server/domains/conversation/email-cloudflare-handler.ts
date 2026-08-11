@@ -19,6 +19,13 @@
  *   body:                raw MIME, untouched
  * ```
  *
+ * `x-qb-envelope-from` is sent on every delivery and read by nothing here. The
+ * author of a message is its `From:` header — that is what DMARC was evaluated
+ * against — and the envelope sender is only a bounce address, so nothing on this
+ * path has a use for it. It stays in the contract because the contract has two
+ * sides: dropping the header from one of them is how a sender and a receiver
+ * come to disagree about what is on the wire.
+ *
  * Five things are load-bearing.
  *
  * 1. THE SIGNATURE COVERS BYTES, NOT TEXT. MIME is permitted to carry 8-bit
@@ -52,17 +59,30 @@
  *    — it can be replayed at the host it was signed for, never re-aimed at
  *    another workspace's — but it does not replace the window.
  *
- * 5. THE STATUS CODE IS AN SMTP DECISION. The Worker turns what it gets back
- *    into what the sender is told: 2xx delivers, 404 is a permanent rejection,
- *    401/403 and 5xx defer for a later retry. So each refusal below is chosen
- *    for what it makes the sending mail server do, and the choice is documented
- *    where it is made.
+ * 5. THE STATUS CODE IS AN SMTP DECISION. The edge sender turns what it gets
+ *    back into what the sending mail server is told: 2xx delivers, 404 and most
+ *    other 4xx are a PERMANENT rejection, 401/403 and 5xx defer for a later
+ *    retry. So each refusal below is chosen for what it makes the sending mail
+ *    server do, and the choice is documented where it is made.
+ *
+ *    The two mistakes are not each other's mirror image, and that asymmetry
+ *    decides every ambiguous case. A deferral that should have been a bounce
+ *    costs the sender some retries and then bounces anyway; a bounce that should
+ *    have been a deferral destroys the message, and no later fix brings it back.
+ *    So a rejection here has to rest on a durable fact about the RECIPIENT —
+ *    which workspace this host is, and whether the envelope names it. Everything
+ *    an operator can change without the sender doing anything differently — a
+ *    value not set yet, a surface not switched on yet — defers, because the
+ *    retry that follows is what delivers the mail once it is changed.
  */
 import { createHmac, timingSafeEqual } from 'crypto'
 import { logger } from '@/lib/server/logger'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { MAX_EMAIL_WEBHOOK_BODY_BYTES } from './email-webhook-handler'
-import { workspaceSlugFromInboundAddress } from './conversation.email-channel'
+import {
+  isEmailInboundConfigured,
+  workspaceSlugFromInboundAddress,
+} from './conversation.email-channel'
 import { currentMailSlug } from './conversation.mail-slug'
 import { parseRawEmail } from './conversation.email-inbound'
 import { ingestParsedEmail } from './conversation.email-inbound.service'
@@ -112,28 +132,45 @@ export const INBOUND_REPLAY_TOLERANCE_SECONDS = 120
  * The media type is the whole discriminator, so it is read the way a media type
  * is defined: case-insensitively, and ignoring any parameters after `;`. A
  * request that is not this one goes to the provider webhook path untouched.
+ *
+ * A repeated `content-type` header is joined by `Headers.get` into one
+ * comma-separated value, which is not a media type and matches nothing — so a
+ * duplicated header would send raw MIME to the provider door, where it earns a
+ * 401 and an indefinite deferral for a message that was in fact perfectly
+ * signed. A media type cannot contain a comma, so the first member of that list
+ * is the value the sender set and anything after it was appended in flight.
  */
 export function isCloudflareInboundRequest(request: Request): boolean {
   const contentType = request.headers.get('content-type') ?? ''
-  return contentType.split(';')[0]!.trim().toLowerCase() === RAW_MIME_CONTENT_TYPE
+  const first = contentType.split(',')[0]!
+  return first.split(';')[0]!.trim().toLowerCase() === RAW_MIME_CONTENT_TYPE
 }
 
 /**
  * Is this deployment able to receive mail from the Worker?
  *
- * Independent of the provider webhook's gate on purpose: the two transports hold
- * different credentials and either may be configured without the other. A fleet
- * that has moved entirely to the Worker should not have to keep a provider
- * signing secret set to accept mail, and an install on the provider webhook must
- * not start accepting raw MIME because a fleet-wide value happens to exist.
+ * Strictly stronger than the provider webhook's gate, and that direction is the
+ * point: each transport authenticates its own caller with its own credential, so
+ * this door additionally requires the key its edge sender holds, and an install
+ * running only the provider webhook never starts accepting raw MIME because a
+ * fleet-wide value happens to exist. The reverse — this door opening on the
+ * provider's credential alone — is what the extra term forbids.
  *
- * The domain is required alongside the key because it is what every address this
- * install can mint is built on. A front door that accepts mail for a domain it
- * does not know it answers for can open a thread it can never issue a reply
- * address for, which is a one-way conversation rather than a working channel.
+ * What it shares with that gate is the ADDRESSING half — the domain
+ * every address this install mints is built on, and the secret that makes one
+ * unforgeable — because a front door that accepts mail it can never reply to
+ * opens a one-way conversation rather than a working channel. Both are needed
+ * for that, and the secret is the one that bites: with it unset every mint
+ * returns null, so no Reply-To is ever emitted and every plus-address that does
+ * arrive fails verification. Requiring the domain alone would gate on the value
+ * whose absence is loud and let through the one whose absence is silent.
+ *
+ * {@link isEmailInboundConfigured} is that half, asked of the module that owns
+ * the grammar rather than restated here, so the two cannot come to disagree
+ * about what a mintable address needs.
  */
 export function isCloudflareInboundConfigured(env: EnvLike = process.env): boolean {
-  return Boolean(env[INBOUND_DOMAIN_ENV] && env[INBOUND_HMAC_SECRET_ENV])
+  return isEmailInboundConfigured(env) && Boolean(env[INBOUND_HMAC_SECRET_ENV])
 }
 
 /**
@@ -217,13 +254,19 @@ export function verifyInboundSignature(opts: {
  * the label the Worker resolved. The envelope is unauthenticated and stays a
  * cross-check.
  *
- * Four rules, and they are one predicate because a rule applied in pieces is a
+ * Five rules, and they are one predicate because a rule applied in pieces is a
  * rule with a way of being applied to only some of them:
  *
  * - A signed label naming another workspace is a rejection, which is the case
  *   the pooled fleet exists to be wrong about.
  * - An absent envelope is a rejection. Mail with no envelope names no address,
  *   and the envelope is what routes it once it is accepted.
+ * - An envelope on a domain this install does not receive on is a rejection.
+ *   The label is only unique within the domain it was minted under, so a second
+ *   zone pointed at the same edge sender would make one label two workspaces'.
+ *   Checked while there is one zone rather than when a second arrives, because
+ *   the change that adds the second zone is not the change anyone would think
+ *   to audit this predicate for.
  * - An `unreadable` envelope is a rejection. It is NOT "no workspace named, so
  *   allow": a local part this grammar cannot mint is a stranger's address or an
  *   attempt at one, and a rule shaped "reject when the label is not ours" waves
@@ -232,32 +275,66 @@ export function verifyInboundSignature(opts: {
  * - An envelope whose own label disagrees with the signed one is a rejection.
  *   This is what keeps the verbatim envelope tied to the label that was signed:
  *   the envelope is forwarded unnormalised so a reply's case-sensitive
- *   sub-address survives, which also means it is the one field an attacker can
- *   still edit for free. Editing it can now only produce a refusal, never a
- *   message that routes into a workspace other than the one signed for.
+ *   sub-address survives, which also means it is the one field an attacker on
+ *   the path can still edit for free.
+ *
+ * What that last rule does and does not buy is worth being exact about. Editing
+ * the envelope cannot move a message to another workspace: the label inside it
+ * has to equal the signed one, and the signed one is in the digest. It CAN
+ * still re-aim a message WITHIN this workspace, by swapping one sub-address for
+ * another under the same label. Two things stand behind that and neither is
+ * this predicate. The sub-address carries an HMAC over the (label, id) pair, so
+ * a re-aim needs a valid signed address for the conversation being aimed at —
+ * something the attacker has to already hold rather than construct. And the
+ * ingest core binds the message to that conversation's visitor, refusing
+ * anything whose `From:` is not an address it knows for them. So the reachable
+ * case is moving a visitor's own mail between threads they are already party
+ * to, which is a routing surprise and not a disclosure.
  *
  * `ourSlug` is null only on a pooled process with no workspace scope, which can
- * name no workspace and so can accept mail for none.
+ * name no workspace and so can accept mail for none. `ourDomain` is null only
+ * when this install has no inbound domain, which the transport gate has already
+ * refused on.
  *
  * The reading is {@link workspaceSlugFromInboundAddress}, which is the same
  * algorithm the Worker normalised with. That is not an accident: if the two
  * differed, an envelope the Worker considered ours could fail the cross-check
  * here and bounce mail that was correctly routed.
+ *
+ * One thing this predicate cannot be tested for: by the time the envelope's
+ * label is compared, `signedSlug` and `ourSlug` have been proved equal, so which
+ * of the two names it is compared against is not a behavioural choice and no
+ * case can tell them apart. The rules are pinned separately instead — one case
+ * where the envelope agrees with a signed label that is not ours, one where it
+ * disagrees with a signed label that is.
  */
 export function deliveryNamesThisWorkspace(
   envelopeTo: string | null,
   signedSlug: string | null,
-  ourSlug: string | null
+  ourSlug: string | null,
+  ourDomain: string | null
 ): envelopeTo is string {
-  if (!envelopeTo || !signedSlug || !ourSlug) return false
+  if (!envelopeTo || !signedSlug || !ourSlug || !ourDomain) return false
   if (signedSlug !== ourSlug) return false
+  // Split on the LAST `@` and fold, exactly as the local part beside it is read,
+  // so a quoted local part carrying one cannot move the boundary.
+  const at = envelopeTo.lastIndexOf('@')
+  if (at < 0) return false
+  if (
+    envelopeTo
+      .slice(at + 1)
+      .trim()
+      .toLowerCase() !== ourDomain.trim().toLowerCase()
+  )
+    return false
   const named = workspaceSlugFromInboundAddress(envelopeTo)
   return named.kind === 'slug' && named.slug === signedSlug
 }
 
 /** `404`, the Worker's "this recipient does not accept mail" — a permanent
  *  rejection the sender is told about, rather than a retry that never succeeds
- *  or a silent drop. */
+ *  or a silent drop. Reserved for the one durable fact this host has about a
+ *  delivery: which workspace it is, and whether the envelope names it. */
 function notFound(): Response {
   return new Response('Not found', { status: 404 })
 }
@@ -270,9 +347,54 @@ function unauthorized(): Response {
 }
 
 /**
+ * `503`, which the Worker defers on: this host cannot take the message YET.
+ *
+ * The doctrine the edge sender applies to a signature it could not get verified
+ * — our key management is our problem, so the message waits rather than bounces
+ * — is the same doctrine our own missing configuration deserves, and for a
+ * sharper reason: the rollout that produces it is the ordinary one. The edge
+ * sender ships, the routing rule points at it, and the app's environment is set
+ * some minutes later; every message inside that window has a front door with no
+ * key behind it. A rejection there tells senders the address does not exist, and
+ * nothing done afterwards recalls a bounce. A deferral costs those senders a
+ * retry interval and delivers.
+ *
+ * 503 rather than 401, because 401 is the edge sender's phrase for "the host
+ * rejected our signature" and would send whoever reads the log after a
+ * credential that is fine. 5xx says the host, not the caller, and the reason
+ * code beside it says which.
+ */
+function serviceUnavailable(detail: string): Response {
+  return new Response(detail, { status: 503 })
+}
+
+/** Longest error text worth a log line here. Enough to name a driver fault or a
+ *  failing constraint, short of a query that echoed a message back. */
+const MAX_LOGGED_ERROR_CHARS = 200
+
+/** Anything shaped like an address, however it was quoted or bracketed. */
+const ADDRESS_LIKE_RE = /[^\s<>@,;:"()[\]\\]+@[^\s<>@,;:"()[\]\\]+/g
+
+/**
+ * An error rendered for a log line on a path that carries a stranger's mail.
+ *
+ * Two bounds rather than one, because they fail differently. Masking addresses
+ * removes the shape actually worth worrying about (a recipient echoed back by
+ * whatever threw), and truncation bounds everything it did not think of,
+ * including a body fragment carried in a query parameter. Neither is a proof
+ * that nothing personal survives, which is why the cap is short: a log line here
+ * is for naming a fault, and the operator's real diagnostic on this path is the
+ * reason code.
+ */
+function errorSummary(err: unknown): string {
+  const text = err instanceof Error ? `${err.name}: ${err.message}` : typeof err
+  return text.replace(ADDRESS_LIKE_RE, '[address]').slice(0, MAX_LOGGED_ERROR_CHARS)
+}
+
+/**
  * Verify, authorize, then ingest. The order is the security property:
  *
- * 1. Is this transport configured here at all? (no key, no front door)
+ * 1. Is this transport configured here at all? (no key, no front door yet)
  * 2. Does the request carry the whole signed set, and is its timestamp inside
  *    the replay window? (headers only)
  * 3. Is the body within the cap? (bounded read, before anything hashes it)
@@ -287,7 +409,13 @@ function unauthorized(): Response {
  * work anywhere on the fleet.
  */
 export async function handleCloudflareInboundEmail(request: Request): Promise<Response> {
-  if (!isCloudflareInboundConfigured()) return notFound()
+  if (!isCloudflareInboundConfigured()) {
+    // A deferral, not a rejection: see {@link serviceUnavailable}. An unset
+    // value is a fact about this deployment at this minute, and the message has
+    // to survive until the minute it is set.
+    log.warn({ reason: 'transport_unconfigured' }, 'inbound email deferred')
+    return serviceUnavailable('Inbound email transport is not configured')
+  }
 
   const signature = request.headers.get(SIGNATURE_HEADER)
   const timestamp = request.headers.get(TIMESTAMP_HEADER)
@@ -342,7 +470,14 @@ export async function handleCloudflareInboundEmail(request: Request): Promise<Re
   // workspace this host serves. Deliberately before everything below it,
   // because everything below it talks to a database.
   const envelopeTo = request.headers.get(ENVELOPE_TO_HEADER)
-  if (!deliveryNamesThisWorkspace(envelopeTo, signedSlug, currentMailSlug())) {
+  if (
+    !deliveryNamesThisWorkspace(
+      envelopeTo,
+      signedSlug,
+      currentMailSlug(),
+      process.env[INBOUND_DOMAIN_ENV] ?? null
+    )
+  ) {
     // 404 rather than a defer: this host's own identity is fixed for the
     // hostname the message was delivered to, so it will refuse this delivery on
     // every retry. A defer promises the sender that waiting might help, and a
@@ -353,14 +488,22 @@ export async function handleCloudflareInboundEmail(request: Request): Promise<Re
   }
 
   // Conversations gate: with no visitor surface enabled a reply has nowhere to
-  // land. Rejected rather than acked-and-dropped, unlike the provider webhook
+  // land. Refused rather than acked-and-dropped, unlike the provider webhook
   // path — that one answers a retrying HTTP client, this one answers a sending
   // mail server, and telling it "delivered" for mail that goes nowhere is the
   // silent loss this whole transport is built to avoid.
+  //
+  // A deferral rather than a rejection, though. This gate is the OR of three
+  // settings an admin flips from the app, so "off" is a state and not a property
+  // of the address: a workspace that switches a surface on an hour later gets
+  // the mail that was waiting, where a bounce would have thrown it away and told
+  // the sender the recipient does not exist. A workspace that stays off simply
+  // lets the sender's own retry schedule expire, which is the sender's decision
+  // to make rather than ours to make for it.
   const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
   if (!(await isConversationsEnabled())) {
-    log.warn({ reason: 'conversations_disabled' }, 'inbound email refused')
-    return notFound()
+    log.warn({ reason: 'conversations_disabled' }, 'inbound email deferred')
+    return serviceUnavailable('No visitor surface is enabled')
   }
 
   // Decoded only now that the bytes have been proven ours. `parseRawEmail` is
@@ -393,7 +536,14 @@ export async function handleCloudflareInboundEmail(request: Request): Promise<Re
   } catch (err) {
     // 5xx, which the Worker defers on: the message is retried rather than
     // bounced, and the Message-ID dedupe makes the redelivery a no-op.
-    log.error({ err }, 'inbound email ingest failed')
+    //
+    // Summarised rather than logged whole. Every other line on this path names
+    // a reason code and nothing else, and the reason is that the thing being
+    // handled is a stranger's mail; a raw `err` is the one value here whose text
+    // this module did not write. Redaction cannot help — it matches the KEY
+    // `email`, not a recipient echoed inside a query error or a parser naming
+    // the address it choked on.
+    log.error({ err_summary: errorSummary(err) }, 'inbound email ingest failed')
     return new Response('Ingest failed', { status: 500 })
   }
 }

@@ -339,6 +339,15 @@ describe('workspaceSlugFromInboundAddress', () => {
       'NOT_A_SLUG!!+c01kw8qxn1eeh4t2rek7varh032.sig@in.example',
       'a.very.long.customer.local.part@example.com',
       'not-an-address-at-all',
+      // A value with no `@` at all whose last character is what stands between
+      // it and a legal label. Reading it as a local part would answer `neon-t1`
+      // — one character off a real workspace — so this is the case that pins the
+      // no-`@` guard rather than leaning on the vocabulary to catch it.
+      'neon-t1x',
+      'neon-t1',
+      // An empty local part, which the vocabulary refuses on its own (see the
+      // slug tests): the guard above it is redundant here, deliberately, and
+      // this case does not pretend to pin it.
       '@in.example',
       '',
       // One address, never a header: a value carrying several is not an

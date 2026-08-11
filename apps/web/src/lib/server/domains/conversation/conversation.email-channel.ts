@@ -402,6 +402,14 @@ export type InboundAddressWorkspace = { kind: 'slug'; slug: string } | { kind: '
  * of the label is that they cannot. Anything that does not then match the slug
  * vocabulary is `unreadable`, including an address with no `@` and one with an
  * empty local part.
+ *
+ * The two halves of the `at <= 0` guard are not equally load-bearing, and the
+ * suite says which is which rather than implying both. `at === -1` IS: without
+ * it `slice(0, -1)` would read a value with no `@` as its own local part minus
+ * the last character, so `neon-t1x` would answer `neon-t1` and a bare word would
+ * name a workspace. `at === 0` is belt and braces: an empty local part is
+ * already outside the slug vocabulary, so removing that half changes no answer,
+ * and what pins it is the vocabulary test rather than a case here.
  */
 export function workspaceSlugFromInboundAddress(address: string): InboundAddressWorkspace {
   const at = address.lastIndexOf('@')

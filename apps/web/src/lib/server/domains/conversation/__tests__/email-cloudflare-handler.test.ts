@@ -1,7 +1,7 @@
 /**
  * The front door for mail delivered by the fleet's edge mail bridge.
  *
- * Three properties are worth more than the rest of this file put together.
+ * Four properties are worth more than the rest of this file put together.
  *
  * THE SIGNATURE IS OVER BYTES. A raw message is 8-bit, and a body decoded to a
  * string before hashing is a different message — so {@link VECTOR} carries a
@@ -19,9 +19,15 @@
  * limit, so a front door that authorized late would let one valid request drive
  * an unauthenticated query — and a duplicate-versus-not oracle — against every
  * workspace on the fleet. Two assertions hold the line: `ingestParsedEmail` is
- * never entered (that query lives inside it), and the `@/lib/server/db` module
- * is never touched by the handler itself (a tripwire on anyone adding a read to
- * this module later).
+ * never entered (that query lives inside it), and none of the module specifiers
+ * a query would have to arrive through is touched (see {@link dbTouches}).
+ *
+ * THE REASON CODE IS THE OPERATOR'S ONLY DIAGNOSTIC. Nothing on this path may
+ * log an address, so what an operator has when mail stops arriving is a status
+ * and a reason code. Several refusals share a status deliberately, which means a
+ * suite reading status alone cannot tell them apart either — and a check that
+ * vanished would be invisible. So the reason codes are asserted beside the
+ * statuses, and they are part of the contract rather than incidental text.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHmac } from 'crypto'
@@ -29,21 +35,108 @@ import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-sco
 
 const ingestParsedEmail = vi.fn()
 const isConversationsEnabled = vi.fn<() => Promise<boolean>>()
+
+/**
+ * Every route to the database that this module could plausibly grow, wired to
+ * record the attempt instead of serving it. Nothing before the guard may reach
+ * one, so a non-empty list is the failure.
+ *
+ * WHAT THIS IS AND IS NOT. It is a tripwire on module specifiers, not a proof
+ * that no query ran: a read that arrived through some specifier not listed here
+ * would still pass. The list is what makes it worth anything, so it is chosen
+ * rather than assumed:
+ *
+ * - `@/lib/server/db` is the single-workspace handle, and the one this file used
+ *   to watch alone. On this path it is watched for the future rather than the
+ *   present: nothing in the handler's import graph reaches it today, so on its
+ *   own this entry proves nothing at all.
+ * - `getScopedDatabase` is the POOLED per-workspace handle and never passes
+ *   through `@/lib/server/db`. It is what a query on a fleet actually uses, and
+ *   the test scope hands a stub for it, so a pre-guard read through it costs
+ *   nothing and would have gone unnoticed.
+ * - `createDb` is a handle built from scratch, which is how someone who found
+ *   both of the above inconvenient would reach a database anyway.
+ * - `rate-bucket` is the shared Redis primitive. Not a database, and listed for
+ *   the same reason as the rest: a pre-auth rate limiter is the most likely
+ *   thing to be added above the guard, and it would put an unauthenticated
+ *   caller's key into shared per-workspace state.
+ */
 const dbTouches: string[] = []
 
-// Records any property read off the database module. Nothing on the pre-ingest
-// path may read one, so a non-empty list is the failure.
-vi.mock('@/lib/server/db', () => {
+/** A module whose every property read is recorded and answered with nothing. A
+ *  caller that goes on to CALL what it read fails too, which is the same red. */
+function tripwireModule(specifier: string): Record<string, unknown> {
   const ignored = new Set(['then', '__esModule', 'default'])
   return new Proxy(
     {},
     {
       get(_target, property) {
-        if (typeof property === 'string' && !ignored.has(property)) dbTouches.push(property)
+        if (typeof property === 'string' && !ignored.has(property)) {
+          dbTouches.push(`${specifier}#${property}`)
+        }
         return undefined
       },
     }
   )
+}
+
+vi.mock('@/lib/server/db', () => tripwireModule('@/lib/server/db'))
+vi.mock('@/lib/server/utils/rate-bucket', () => tripwireModule('rate-bucket'))
+// Real module with one function wrapped: `withWorkspace` opens the scope through
+// this same specifier, so replacing it wholesale would leave the suite with no
+// workspace identity to be.
+vi.mock('@/lib/server/workspaces/workspace-context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/workspaces/workspace-context')>()
+  return {
+    ...actual,
+    getScopedDatabase: () => {
+      dbTouches.push('workspace-context#getScopedDatabase')
+      return actual.getScopedDatabase()
+    },
+  }
+})
+vi.mock('@quackback/db/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@quackback/db/client')>()
+  return {
+    ...actual,
+    createDb: (...args: Parameters<typeof actual.createDb>) => {
+      dbTouches.push('@quackback/db/client#createDb')
+      return actual.createDb(...args)
+    },
+  }
+})
+
+/**
+ * Every line this request logged, so the reason codes can be read back.
+ *
+ * A fake rather than a transport spy because the reason code is what is being
+ * asserted, not the formatting: `(fields, msg)` is the house call shape and both
+ * halves are captured. Shaped to tolerate the `(msg)` form too, since other
+ * modules in the import graph share this logger.
+ */
+type LogLine = { level: string; fields: Record<string, unknown>; msg: string }
+const logLines: LogLine[] = []
+
+vi.mock('@/lib/server/logger', () => {
+  const record =
+    (level: string) =>
+    (first?: unknown, second?: unknown): void => {
+      logLines.push({
+        level,
+        fields: typeof first === 'object' && first !== null ? { ...first } : {},
+        msg: typeof first === 'string' ? first : typeof second === 'string' ? second : '',
+      })
+    }
+  const makeLogger = (): Record<string, unknown> => ({
+    trace: record('trace'),
+    debug: record('debug'),
+    info: record('info'),
+    warn: record('warn'),
+    error: record('error'),
+    fatal: record('fatal'),
+    child: () => makeLogger(),
+  })
+  return { logger: makeLogger(), createLogger: () => makeLogger() }
 })
 vi.mock('../conversation.email-inbound.service', () => ({
   ingestParsedEmail: (...a: unknown[]) => ingestParsedEmail(...a),
@@ -67,6 +160,8 @@ import {
 import { MAX_EMAIL_WEBHOOK_BODY_BYTES } from '../email-webhook-handler'
 
 const SECRET = 'worker-inbound-test-key'
+/** The plus-address signing secret: a different key with a different job. */
+const ADDRESS_SECRET = 'whsec_dGVzdHNlY3JldA=='
 const DOMAIN = 'quackback.co.uk'
 const SLUG = mailSlugFor('neon-t1')
 const OTHER_SLUG = mailSlugFor('neon-t2')
@@ -179,14 +274,33 @@ function expectNoDatabaseWork(): void {
   expect(dbTouches).toEqual([])
 }
 
+/** The reason codes this request logged, in the order it logged them. */
+function reasons(): string[] {
+  return logLines.flatMap((line) =>
+    typeof line.fields.reason === 'string' ? [line.fields.reason] : []
+  )
+}
+
+/** Back to a clean slate mid-test, for the cases that loop over several inputs. */
+function resetBetweenCases(): void {
+  vi.clearAllMocks()
+  dbTouches.length = 0
+  logLines.length = 0
+  isConversationsEnabled.mockResolvedValue(true)
+  ingestParsedEmail.mockResolvedValue({ status: 'ingested', conversationId: 'conversation_1' })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   dbTouches.length = 0
-  vi.spyOn(console, 'warn').mockImplementation(() => {})
-  vi.spyOn(console, 'error').mockImplementation(() => {})
+  logLines.length = 0
   vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
   vi.stubEnv('INBOUND_HMAC_SECRET', SECRET)
   vi.stubEnv('EMAIL_INBOUND_DOMAIN', DOMAIN)
+  // The addressing half of the channel. Set for every case because a front door
+  // that cannot mint the reply address for what it accepts is unconfigured, not
+  // half-configured — see the configuration suite.
+  vi.stubEnv('EMAIL_INBOUND_SIGNING_SECRET', ADDRESS_SECRET)
   isConversationsEnabled.mockResolvedValue(true)
   ingestParsedEmail.mockResolvedValue({ status: 'ingested', conversationId: 'conversation_1' })
 })
@@ -256,22 +370,22 @@ describe('the signed wire contract', () => {
     )
 
     expect(res.status).toBe(401)
+    expect(reasons()).toEqual(['bad_signature'])
     expectNoDatabaseWork()
   })
 
   it('401s a signature made with the plus-address signing secret', async () => {
     // The two keys are separate on purpose: one leak must not be able to do both
     // jobs. A request signed with the address secret is a stranger here.
-    const svix = 'whsec_dGVzdHNlY3JldA=='
-    vi.stubEnv('EMAIL_INBOUND_SIGNING_SECRET', svix)
     const bytes = new TextEncoder().encode(RAW)
     const timestamp = Math.floor(Date.now() / 1000)
 
     const res = await post(
-      inboundRequest({ timestamp, signature: sign(bytes, { timestamp, secret: svix }) })
+      inboundRequest({ timestamp, signature: sign(bytes, { timestamp, secret: ADDRESS_SECRET }) })
     )
 
     expect(res.status).toBe(401)
+    expect(reasons()).toEqual(['bad_signature'])
     expectNoDatabaseWork()
   })
 
@@ -298,9 +412,7 @@ describe('the signed wire contract', () => {
     // moves, so a verifier that derived the label from the envelope instead of
     // taking the signed one would still agree with the digest.
     for (const envelopeTo of [`${SLUG}@${DOMAIN}`, `${OTHER_SLUG}@${DOMAIN}`]) {
-      vi.clearAllMocks()
-      dbTouches.length = 0
-      isConversationsEnabled.mockResolvedValue(true)
+      resetBetweenCases()
 
       const res = await post(
         inboundRequest({ mailSlug: OTHER_SLUG, signedSlug: SLUG, envelopeTo }),
@@ -308,6 +420,7 @@ describe('the signed wire contract', () => {
       )
 
       expect(res.status, envelopeTo).toBe(401)
+      expect(reasons(), envelopeTo).toEqual(['bad_signature'])
       expectNoDatabaseWork()
     }
   })
@@ -320,6 +433,7 @@ describe('the signed wire contract', () => {
     const res = await post(inboundRequest({ mailSlug: null }))
 
     expect(res.status).toBe(401)
+    expect(reasons()).toEqual(['no_mail_slug'])
     expectNoDatabaseWork()
   })
 
@@ -329,6 +443,7 @@ describe('the signed wire contract', () => {
     const res = await post(inboundRequest({ timestamp: stale }))
 
     expect(res.status).toBe(401)
+    expect(reasons()).toEqual(['stale_timestamp'])
     expectNoDatabaseWork()
   })
 
@@ -342,13 +457,19 @@ describe('the signed wire contract', () => {
     const res = await post(inboundRequest({ timestamp: future }))
 
     expect(res.status).toBe(401)
+    expect(reasons()).toEqual(['stale_timestamp'])
     expectNoDatabaseWork()
   })
 
   it('401s raw MIME carrying no signature at all', async () => {
+    // The reason code is the assertion. A missing header and a wrong digest are
+    // the same 401, so a suite that read only the status would not notice the
+    // header check disappearing — and an operator staring at a 401 could not
+    // tell an old sender from a rotated key.
     const res = await post(inboundRequest({ signature: null }))
 
     expect(res.status).toBe(401)
+    expect(reasons()).toEqual(['unsigned'])
     expectNoDatabaseWork()
   })
 
@@ -359,6 +480,9 @@ describe('the signed wire contract', () => {
     const res = await post(request)
 
     expect(res.status).toBe(401)
+    // `unsigned`, not `stale_timestamp`: an absent timestamp is an incomplete
+    // signed set, and calling it stale would point an operator at clock skew.
+    expect(reasons()).toEqual(['unsigned'])
     expectNoDatabaseWork()
   })
 
@@ -371,7 +495,33 @@ describe('the signed wire contract', () => {
     )
 
     expect(res.status).toBe(413)
+    expect(reasons()).toEqual(['body_too_large'])
     expectNoDatabaseWork()
+  })
+
+  it('refuses on the headers before it reads the body at all', async () => {
+    // Ordering, pinned by making the two refusals visibly different: an
+    // oversized body would 413 if it were read, so a 401 proves it was not.
+    // Every header-only check has to hold this, because the whole point of
+    // checking them first is that a replayed or unsignable capture costs this
+    // side no bytes — the body cap bounds what a request can spend, but only
+    // after something has decided to spend it.
+    const stale = Math.floor(Date.now() / 1000) - INBOUND_REPLAY_TOLERANCE_SECONDS - 1
+    const oversized = 'x'.repeat(MAX_EMAIL_WEBHOOK_BODY_BYTES + 1)
+
+    for (const [label, request] of [
+      ['stale_timestamp', inboundRequest({ body: oversized, timestamp: stale })],
+      ['no_mail_slug', inboundRequest({ body: oversized, mailSlug: null })],
+      ['unsigned', inboundRequest({ body: oversized, signature: null })],
+    ] as const) {
+      resetBetweenCases()
+
+      const res = await post(request)
+
+      expect(res.status, label).toBe(401)
+      expect(reasons(), label).toEqual([label])
+      expectNoDatabaseWork()
+    }
   })
 
   it('carries the envelope recipient into routing, and leaves the author alone', async () => {
@@ -399,6 +549,32 @@ describe('the signed wire contract', () => {
     expect(res.status).toBe(500)
   })
 
+  it('logs an ingest failure without shipping the message into the logs', async () => {
+    // The one value on this path whose text this module did not write. Pino's
+    // redact list matches the KEY `email`, so nothing stops an address inside
+    // `err.message` — a query echoing its parameters, or a parser naming the
+    // recipient it choked on — from being logged verbatim.
+    ingestParsedEmail.mockRejectedValue(
+      new Error(
+        `insert failed for recipient visitor@example.com <${SLUG}@${DOMAIN}>: ` + 'x'.repeat(500)
+      )
+    )
+
+    const res = await post(inboundRequest())
+
+    expect(res.status).toBe(500)
+    const failure = logLines.find((line) => line.level === 'error')!
+    const logged = JSON.stringify(failure.fields)
+    expect(logged).not.toContain('visitor@example.com')
+    expect(logged).not.toContain(`${SLUG}@${DOMAIN}`)
+    expect(logged).not.toContain('@')
+    // Bounded as well as scrubbed: masking removes the shape worth worrying
+    // about, the cap bounds whatever it did not think of.
+    expect(logged.length).toBeLessThan(400)
+    // Still a usable log line: the fault is named.
+    expect(logged).toContain('insert failed')
+  })
+
   it('acks every ingest outcome, including the drops', async () => {
     // The ingest core's refusals are policy — a blocked sender, a throttle, a
     // conversation that is gone. Bouncing on them would leak that policy to
@@ -422,6 +598,7 @@ describe('the guard', () => {
     )
 
     expect(res.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
     expectNoDatabaseWork()
   })
 
@@ -434,28 +611,82 @@ describe('the guard', () => {
     )
 
     expect(res.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
     expectNoDatabaseWork()
   })
 
-  it('404s an envelope that disagrees with the signed label, in either direction', async () => {
-    // The cross-check. The envelope is forwarded verbatim so a reply's
-    // case-sensitive sub-address survives, which makes it the one field an
-    // attacker can still edit without breaking the digest. Editing it can only
-    // produce a refusal: it can never name a workspace other than the one the
-    // edge signed for.
-    for (const [mailSlug, envelopeTo] of [
-      [SLUG, `${OTHER_SLUG}@${DOMAIN}`],
-      [OTHER_SLUG, `${SLUG}@${DOMAIN}`],
-    ]) {
-      vi.clearAllMocks()
-      dbTouches.length = 0
-      isConversationsEnabled.mockResolvedValue(true)
+  it('404s an envelope naming another workspace under a label that is ours', async () => {
+    // THE CROSS-CHECK, on its own. The envelope is forwarded verbatim so a
+    // reply's case-sensitive sub-address survives, which makes it the one field
+    // an attacker on the path can still edit without breaking the digest.
+    //
+    // This is the only shape that exercises the cross-check: the signed label
+    // has to be OURS, or the rule above it refuses first and the cross-check is
+    // never reached. Pairing it with the mirror case (a signed label that is not
+    // ours, envelope agreeing) would be pairing two different rules, and the
+    // suite would still pass with the cross-check deleted.
+    //
+    // What the cross-check does NOT do: stop the envelope being edited to
+    // another address under the SAME label. That re-aim is bounded by the
+    // plus-address HMAC and by the ingest core's From-binding, neither of which
+    // lives here.
+    const res = await post(
+      inboundRequest({ mailSlug: SLUG, envelopeTo: `${OTHER_SLUG}@${DOMAIN}` })
+    )
 
-      const res = await post(inboundRequest({ mailSlug, envelopeTo }))
+    expect(res.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
+    expectNoDatabaseWork()
+  })
+
+  it('404s an envelope on a domain this install does not receive on', async () => {
+    // The label is only unique inside the domain it was minted under. One zone
+    // in front of the edge sender makes this unreachable; a second zone makes
+    // `<our label>@<someone else's domain>` a delivery that reads as ours.
+    for (const envelopeTo of [
+      `${SLUG}@not-our-domain.test`,
+      `${SLUG}+c01kw8qxn1eeh4t2rek7varh032.sig@not-our-domain.test`,
+      `${SLUG}@sub.${DOMAIN}`,
+      `${SLUG}@`,
+    ]) {
+      resetBetweenCases()
+
+      const res = await post(inboundRequest({ envelopeTo }))
 
       expect(res.status, envelopeTo).toBe(404)
+      expect(reasons(), envelopeTo).toEqual(['not_this_workspace'])
       expectNoDatabaseWork()
     }
+  })
+
+  it('reads the domain the way it reads the label', async () => {
+    // Same normalisation on both halves of the address. A domain check that
+    // compared raw bytes would bounce mail a receiving server, and the edge
+    // sender, both considered ours.
+    for (const envelopeTo of [
+      `${SLUG}@${DOMAIN.toUpperCase()}`,
+      ` ${SLUG}@${DOMAIN} `,
+      `${SLUG}@${DOMAIN}\t`,
+    ]) {
+      resetBetweenCases()
+
+      const res = await post(inboundRequest({ envelopeTo }))
+
+      expect(res.status, envelopeTo).toBe(200)
+    }
+  })
+
+  it('404s a delivery signed for another workspace even when the envelope is ours', async () => {
+    // The mirror of the cross-check case, and a DIFFERENT rule: the signed label
+    // is the authority, so it is refused for not being ours before the envelope
+    // beside it is read at all.
+    const res = await post(
+      inboundRequest({ mailSlug: OTHER_SLUG, envelopeTo: `${SLUG}@${DOMAIN}` })
+    )
+
+    expect(res.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
+    expectNoDatabaseWork()
   })
 
   it('404s an unreadable envelope, with no database work', async () => {
@@ -471,13 +702,12 @@ describe('the guard', () => {
       'not-an-address-at-all',
       '',
     ]) {
-      vi.clearAllMocks()
-      dbTouches.length = 0
-      isConversationsEnabled.mockResolvedValue(true)
+      resetBetweenCases()
 
       const res = await post(inboundRequest({ envelopeTo }))
 
       expect(res.status, envelopeTo).toBe(404)
+      expect(reasons(), envelopeTo).toEqual(['not_this_workspace'])
       expectNoDatabaseWork()
     }
   })
@@ -486,6 +716,7 @@ describe('the guard', () => {
     const res = await post(inboundRequest({ envelopeTo: null }))
 
     expect(res.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
     expectNoDatabaseWork()
   })
 
@@ -495,6 +726,7 @@ describe('the guard', () => {
     const res = await handleCloudflareInboundEmail(inboundRequest())
 
     expect(res.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
     expectNoDatabaseWork()
   })
 
@@ -511,6 +743,7 @@ describe('the guard', () => {
     )
 
     expect(res.status).toBe(401)
+    expect(reasons()).toEqual(['bad_signature'])
     expectNoDatabaseWork()
   })
 
@@ -526,10 +759,7 @@ describe('the guard', () => {
       `${SLUG}+anything@${DOMAIN}`,
       `${SLUG}++@${DOMAIN}`,
     ]) {
-      vi.clearAllMocks()
-      dbTouches.length = 0
-      isConversationsEnabled.mockResolvedValue(true)
-      ingestParsedEmail.mockResolvedValue({ status: 'ingested' })
+      resetBetweenCases()
 
       const res = await post(inboundRequest({ envelopeTo }))
 
@@ -560,51 +790,79 @@ describe('the guard', () => {
     const res = await post(inboundRequest({ envelopeTo: `${SLUG}@evil.test@${DOMAIN}` }))
 
     expect(res.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
     expectNoDatabaseWork()
   })
 
-  it('404s when no visitor surface can receive the mail', async () => {
-    // Rejected rather than acked: this answers a sending mail server, and
-    // telling it "delivered" for mail that has nowhere to land is silent loss.
+  it('defers when no visitor surface can receive the mail', async () => {
+    // Not acked: this answers a sending mail server, and telling it "delivered"
+    // for mail that has nowhere to land is silent loss.
+    //
+    // Not rejected either, which is the sharper half. This gate is the OR of
+    // three settings an admin flips from the app, so "off" is a state and not a
+    // property of the address — and the sender is told the difference. A 503
+    // defers, so a workspace that switches a surface on gets the mail that was
+    // waiting; a 404 would have bounced it and told the sender the recipient
+    // does not accept mail, which nothing done afterwards recalls.
     isConversationsEnabled.mockResolvedValue(false)
 
     const res = await post(inboundRequest())
 
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(503)
+    expect(reasons()).toEqual(['conversations_disabled'])
     expect(ingestParsedEmail).not.toHaveBeenCalled()
   })
 })
 
 describe('deliveryNamesThisWorkspace', () => {
   it('accepts a signed label equal to ours whose envelope agrees', () => {
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG)).toBe(true)
-    expect(deliveryNamesThisWorkspace(`${SLUG}+c1.sig@${DOMAIN}`, SLUG, SLUG)).toBe(true)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(true)
+    expect(deliveryNamesThisWorkspace(`${SLUG}+c1.sig@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(true)
   })
 
   it('rejects another workspace, an absent label, an absent header and no identity', () => {
-    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, OTHER_SLUG, SLUG)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, null, SLUG)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, '', SLUG)).toBe(false)
-    expect(deliveryNamesThisWorkspace(null, SLUG, SLUG)).toBe(false)
-    expect(deliveryNamesThisWorkspace('', SLUG, SLUG)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, null)).toBe(false)
+    // Each of these fails on the LABEL rule: the envelope agrees with the signed
+    // label every time, so nothing here is the cross-check answering.
+    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, OTHER_SLUG, SLUG, DOMAIN)).toBe(
+      false
+    )
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, null, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, '', SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(null, SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace('', SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, null, DOMAIN)).toBe(false)
   })
 
   it('rejects an envelope that disagrees with the signed label, however it disagrees', () => {
-    // Naming a different workspace, and naming no workspace at all, are the same
-    // answer. Only agreement is acceptance.
-    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, SLUG, SLUG)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`NOT_A_SLUG!!@${DOMAIN}`, SLUG, SLUG)).toBe(false)
-    expect(deliveryNamesThisWorkspace('not-an-address-at-all', SLUG, SLUG)).toBe(false)
+    // The CROSS-CHECK, isolated: the signed label is ours in every case, so the
+    // label rule has already passed and only the envelope can refuse. Naming a
+    // different workspace, and naming no workspace at all, are the same answer.
+    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`NOT_A_SLUG!!@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace('not-an-address-at-all', SLUG, SLUG, DOMAIN)).toBe(false)
+  })
+
+  it('rejects an envelope on a domain this install does not receive on', () => {
+    expect(deliveryNamesThisWorkspace(`${SLUG}@elsewhere.test`, SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@sub.${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@`, SLUG, SLUG, DOMAIN)).toBe(false)
+    // No domain to answer for is no delivery to accept.
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, null)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, '')).toBe(false)
+    // Folded and trimmed on both sides, as a receiving server would.
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN.toUpperCase()}`, SLUG, SLUG, DOMAIN)).toBe(
+      true
+    )
+    expect(deliveryNamesThisWorkspace(` ${SLUG}@${DOMAIN} `, SLUG, SLUG, DOMAIN)).toBe(true)
   })
 
   it('does not let a slug-shaped label anywhere else in the value stand in for ours', () => {
     // The envelope is one address. A value carrying several is not one, and the
     // one that routed the message is not identifiable among them.
-    expect(deliveryNamesThisWorkspace(`someone@example.com, ${SLUG}@${DOMAIN}`, SLUG, SLUG)).toBe(
-      false
-    )
-    expect(deliveryNamesThisWorkspace(`<${SLUG}@${DOMAIN}>`, SLUG, SLUG)).toBe(false)
+    expect(
+      deliveryNamesThisWorkspace(`someone@example.com, ${SLUG}@${DOMAIN}`, SLUG, SLUG, DOMAIN)
+    ).toBe(false)
+    expect(deliveryNamesThisWorkspace(`<${SLUG}@${DOMAIN}>`, SLUG, SLUG, DOMAIN)).toBe(false)
   })
 })
 
@@ -682,33 +940,66 @@ describe('verifyInboundSignature', () => {
 })
 
 describe('configuration', () => {
-  it('needs an inbound domain and its own transport key', () => {
+  const CONFIGURED = {
+    EMAIL_INBOUND_DOMAIN: DOMAIN,
+    EMAIL_INBOUND_SIGNING_SECRET: ADDRESS_SECRET,
+    INBOUND_HMAC_SECRET: SECRET,
+  }
+
+  it('needs its own transport key AND the addressing half of the channel', () => {
+    // Three values, and dropping any one of them is a front door that cannot do
+    // the whole job. The signing secret is the one worth naming: with it unset
+    // every address this install mints comes back null, so mail is accepted into
+    // threads that can never issue a reply address — a one-way conversation, and
+    // a silent one, because nothing about it looks like a failure from here.
+    expect(isCloudflareInboundConfigured(CONFIGURED)).toBe(true)
+    for (const missing of Object.keys(CONFIGURED)) {
+      expect(isCloudflareInboundConfigured({ ...CONFIGURED, [missing]: undefined }), missing).toBe(
+        false
+      )
+      expect(isCloudflareInboundConfigured({ ...CONFIGURED, [missing]: '' }), missing).toBe(false)
+    }
     expect(isCloudflareInboundConfigured({})).toBe(false)
-    expect(isCloudflareInboundConfigured({ EMAIL_INBOUND_DOMAIN: DOMAIN })).toBe(false)
-    expect(isCloudflareInboundConfigured({ INBOUND_HMAC_SECRET: SECRET })).toBe(false)
-    expect(
-      isCloudflareInboundConfigured({ EMAIL_INBOUND_DOMAIN: DOMAIN, INBOUND_HMAC_SECRET: SECRET })
-    ).toBe(true)
   })
 
-  it('does not read the provider webhook secret', () => {
-    // Each transport answers for its own credential. A fleet that has moved off
-    // the provider must not have to keep its secret set to receive mail.
+  it('is not opened by the addressing secret alone', () => {
+    // Each transport authenticates its own caller with its own credential. The
+    // addressing half being present says an address can be minted and read back,
+    // never that this door's caller is who it says it is.
     expect(
       isCloudflareInboundConfigured({
         EMAIL_INBOUND_DOMAIN: DOMAIN,
-        EMAIL_INBOUND_SIGNING_SECRET: 'whsec_x',
+        EMAIL_INBOUND_SIGNING_SECRET: ADDRESS_SECRET,
       })
     ).toBe(false)
   })
 
-  it('404s the transport when it is not configured, reading nothing', async () => {
-    vi.stubEnv('INBOUND_HMAC_SECRET', '')
+  it('DEFERS the transport when it is not configured, reading nothing', async () => {
+    // The finding this suite exists for. The rollout that produces an
+    // unconfigured transport is the ordinary one — the edge sender ships, the
+    // routing rule points at it, the app's environment is set some minutes later
+    // — and a rejection in that window tells every sender the address does not
+    // exist. Nothing recalls a bounce. So an unset value has to produce a status
+    // the edge sender DEFERS on, and 5xx is that status: 404 and 4xx generally
+    // are its bounce, and its one downgrade for a refusal through a remembered
+    // route buys exactly one retry before bouncing anyway.
+    for (const unset of [
+      'INBOUND_HMAC_SECRET',
+      'EMAIL_INBOUND_DOMAIN',
+      'EMAIL_INBOUND_SIGNING_SECRET',
+    ]) {
+      resetBetweenCases()
+      vi.stubEnv('INBOUND_HMAC_SECRET', SECRET)
+      vi.stubEnv('EMAIL_INBOUND_DOMAIN', DOMAIN)
+      vi.stubEnv('EMAIL_INBOUND_SIGNING_SECRET', ADDRESS_SECRET)
+      vi.stubEnv(unset, '')
 
-    const res = await post(inboundRequest())
+      const res = await post(inboundRequest())
 
-    expect(res.status).toBe(404)
-    expectNoDatabaseWork()
+      expect(res.status, unset).toBe(503)
+      expect(reasons(), unset).toEqual(['transport_unconfigured'])
+      expectNoDatabaseWork()
+    }
   })
 })
 
@@ -733,5 +1024,28 @@ describe('isCloudflareInboundRequest', () => {
     expect(isCloudflareInboundRequest(withContentType('text/plain'))).toBe(false)
     expect(isCloudflareInboundRequest(withContentType('message/rfc822-headers'))).toBe(false)
     expect(isCloudflareInboundRequest(withContentType(null))).toBe(false)
+  })
+
+  it('reads the first member when a header was appended in flight', () => {
+    // A repeated `content-type` is joined by `Headers.get` into one
+    // comma-separated value, which is no media type and would send raw MIME to
+    // the provider door: a 401 there, and an indefinite deferral for a message
+    // that was in fact perfectly signed. A media type cannot contain a comma, so
+    // the first member is what the sender set.
+    const headers = new Headers({ 'content-type': 'message/rfc822' })
+    headers.append('content-type', 'application/json')
+    const request = new Request('http://localhost/api/chat/email/inbound', {
+      method: 'POST',
+      headers,
+      body: 'x',
+    })
+
+    expect(request.headers.get('content-type')).toContain(',')
+    expect(isCloudflareInboundRequest(request)).toBe(true)
+    // And the mirror: a provider payload with something appended stays the
+    // provider's, so this does not become a door that claims everything.
+    expect(isCloudflareInboundRequest(withContentType('application/json, message/rfc822'))).toBe(
+      false
+    )
   })
 })
