@@ -181,6 +181,40 @@ describe('emailHook', () => {
     })
   })
 
+  /**
+   * The other `sent: false`. An install with a real provider that cannot send
+   * from this identity has lost the mail — nothing delivered, nothing queued —
+   * and reporting it as success buries a misconfiguration behind a debug line
+   * that names the wrong cause. It is a failure, and not one a retry can fix.
+   */
+  describe('when no provider can send from the identity', () => {
+    it('reports failure, without retrying, for status change', async () => {
+      mockStatusChangeEmail.mockResolvedValue({ sent: false, reason: 'unsendable_identity' })
+
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'closed',
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/identity/i)
+      expect(result.shouldRetry).toBeFalsy()
+    })
+
+    it('reports failure for every sender, not just one', async () => {
+      mockNewCommentEmail.mockResolvedValue({ sent: false, reason: 'unsendable_identity' })
+
+      const result = await emailHook.run(commentCreatedEvent, baseTarget, {
+        ...baseConfig,
+        commenterName: 'Commenter',
+        commentPreview: 'Hi',
+      })
+
+      expect(result.success).toBe(false)
+    })
+  })
+
   describe('error handling', () => {
     it('returns failure with shouldRetry for network errors', async () => {
       const error = Object.assign(new Error('Connection refused'), { code: 'ECONNREFUSED' })

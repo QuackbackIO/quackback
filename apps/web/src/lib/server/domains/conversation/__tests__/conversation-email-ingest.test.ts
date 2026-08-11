@@ -12,7 +12,9 @@ import { NotFoundError } from '@/lib/shared/errors'
 // un-mocked conversation.email-channel signs + checks the conversation id).
 process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
 process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
-const REPLY_TO = inboundReplyToAddress('conversation_abc')!
+// Every inbound address names the workspace it belongs to, so the fixtures do too.
+const SLUG = 'neon-t1'
+const REPLY_TO = inboundReplyToAddress('conversation_abc', SLUG)!
 
 const sendVisitorMessage = vi.fn()
 const assertConversationSendRate = vi.fn()
@@ -26,7 +28,7 @@ const uploadObject = vi.fn()
 // Ticket reply branch (D9) seams: the ticket load + the requester-reply append
 // core are mocked (the append core is exercised for real in the tickets domain's
 // requester.service.test.ts); the cold-inbound channel resolver is spied so a
-// `tkt-` mail can be PROVEN never to fall through to cold inbound.
+// ticket mail can be PROVEN never to fall through to cold inbound.
 const loadTicketOr404 = vi.fn<(...a: unknown[]) => Promise<Record<string, unknown>>>()
 const appendInboundTicketReply = vi.fn()
 const resolveChannelAccountByRecipient = vi.fn()
@@ -742,11 +744,14 @@ describe('ingestInboundEmail', () => {
   })
 })
 
-// Reply-by-email into a ticket thread (D9). A signed `reply+tkt-…` recipient
+// Reply-by-email into a ticket thread (D9). A signed `<slug>+t…` recipient
 // routes into the ticket's requester-reply core; every rejection fails quiet and
-// a `tkt-` address can never open a conversation or fall through to cold inbound.
+// a ticket address can never open a conversation or fall through to cold inbound.
 describe('ingestInboundEmail — ticket reply branch (D9)', () => {
-  const TICKET_REPLY_TO = inboundTicketReplyToAddress('ticket_abc')!
+  // A real TypeID: the unauthenticated ticket-marker claim is a test of the
+  // exact shape the grammar mints, so a stand-in id would not be claimed at all.
+  const TICKET_ID = 'ticket_01h455vb4pex5vsknk084sn02q'
+  const TICKET_REPLY_TO = inboundTicketReplyToAddress(TICKET_ID, SLUG)!
 
   const ticketEvent = (over: Record<string, unknown> = {}) => ({
     type: 'email.received',
@@ -774,7 +779,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     }
     userRow = undefined
     loadTicketOr404.mockResolvedValue({
-      id: 'ticket_abc',
+      id: TICKET_ID,
       type: 'customer',
       requesterPrincipalId: 'principal_req',
     })
@@ -785,10 +790,10 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
   it('appends a verified reply through the requester-reply core, quoted history stripped', async () => {
     const result = await ingestInboundEmail(ticketEvent())
 
-    expect(result).toEqual({ status: 'ingested_ticket', ticketId: 'ticket_abc' })
+    expect(result).toEqual({ status: 'ingested_ticket', ticketId: TICKET_ID })
     expect(appendInboundTicketReply).toHaveBeenCalledTimes(1)
     const [ticketId, requesterId, input, principalType] = appendInboundTicketReply.mock.calls[0]
-    expect(ticketId).toBe('ticket_abc')
+    expect(ticketId).toBe(TICKET_ID)
     expect(requesterId).toBe('principal_req')
     expect(input).toMatchObject({
       content: 'Yes, still broken.', // quoted history stripped
@@ -817,7 +822,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
       })
     )
 
-    expect(result).toEqual({ status: 'ingested_ticket', ticketId: 'ticket_abc' })
+    expect(result).toEqual({ status: 'ingested_ticket', ticketId: TICKET_ID })
     expect(appendInboundTicketReply).toHaveBeenCalledTimes(1)
   })
 
@@ -825,7 +830,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     const result = await ingestInboundEmail({
       type: 'email.received',
       data: {
-        to: ['reply+tkt-abc.wrongsignature@tenaevexeo.resend.app'],
+        to: [`${SLUG}+t01h455vb4pex5vsknk084sn02q.AAAAAAAAAAAAAAAAAAAAAA@tenaevexeo.resend.app`],
         from: 'jane@example.com',
         text: 'injected as the requester',
         headers: [{ name: 'Message-ID', value: '<t-tamper@x>' }],
@@ -866,7 +871,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
 
   it('drops a non-customer ticket', async () => {
     loadTicketOr404.mockResolvedValue({
-      id: 'ticket_abc',
+      id: TICKET_ID,
       type: 'back_office',
       requesterPrincipalId: 'principal_req',
     })

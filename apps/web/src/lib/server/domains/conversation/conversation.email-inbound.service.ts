@@ -3,7 +3,7 @@
  * and append, and every front door (the Resend webhook via `ingestInboundEmail`,
  * the IMAP poller) normalizes its input to a `ParsedInboundEmail` and feeds it
  * here. A message is routed into a conversation by its plus-address
- * (`reply+<id>@domain`) first, then — for replies whose client stripped the
+ * (`<slug>+c<id>.<tag>@domain`) first, then — for replies whose client stripped the
  * plus-address — by matching its In-Reply-To/References against our stored
  * outbound Message-IDs. The visitor's stripped reply is appended through the
  * normal visitor-message path, so lifecycle (reopen), realtime publish and
@@ -34,6 +34,7 @@ import {
   type ParsedInboundEmail,
 } from './conversation.email-inbound'
 import {
+  bearsTicketMarker,
   conversationIdFromInboundAddress,
   ticketIdFromInboundAddress,
   ownEmailDomains,
@@ -73,9 +74,9 @@ export type IngestInboundResult =
   | { status: 'ingested_ticket'; ticketId: TicketId }
   | { status: 'duplicate' }
   | { status: 'no_conversation' }
-  // A signed `tkt-` address that resolved but whose target/sender failed a check
+  // A signed ticket address that resolved but whose target/sender failed a check
   // (unknown/deleted/non-customer ticket, missing requester, sender ≠ requester),
-  // or a `tkt-` address whose signature didn't verify. Always dropped — a ticket
+  // or a ticket address whose signature didn't verify. Always dropped — a ticket
   // address never creates a ticket/conversation and never reaches cold inbound.
   | { status: 'no_ticket' }
   | { status: 'empty' }
@@ -242,7 +243,7 @@ function conversationIdFromRecipients(toAddresses: string[]): string | null {
   return null
 }
 
-/** Find the verified ticket id carried by any recipient `reply+tkt-…` address. */
+/** Find the verified ticket id carried by any recipient `<slug>+t…` address. */
 function ticketIdFromRecipients(toAddresses: string[]): TicketId | null {
   for (const addr of toAddresses) {
     const id = ticketIdFromInboundAddress(addr)
@@ -251,18 +252,13 @@ function ticketIdFromRecipients(toAddresses: string[]): TicketId | null {
   return null
 }
 
-// The `reply+tkt-` marker claims a mail as ticket-destined regardless of whether
-// its signature verifies. It only matches a ticket reply-to because the marker
-// must sit immediately after `reply+`, and a conversation address puts its TypeID
-// base32 suffix there (which never begins `tkt-`) — the `-` elsewhere in a
-// base64url signature can't match this anchored prefix. Used to guarantee a
-// forged/tampered `tkt-` address is DROPPED, not reinterpreted as a conversation
-// reply or opened as cold inbound.
-const TICKET_MARKER_RE = /reply\+tkt-/i
-
-/** Does any recipient bear the `reply+tkt-` marker (verified or not)? */
+/** Does any recipient claim to be ticket-destined (verified or not)? The claim
+ *  is a property of the address grammar, so the channel module decides it —
+ *  see `bearsTicketMarker`. Used to guarantee a forged or tampered ticket
+ *  address is DROPPED, not reinterpreted as a conversation reply or opened as
+ *  cold inbound. */
 function recipientsBearTicketMarker(toAddresses: string[]): boolean {
-  return toAddresses.some((a) => TICKET_MARKER_RE.test(a))
+  return toAddresses.some((a) => bearsTicketMarker(a))
 }
 
 /**
@@ -292,13 +288,14 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
     return ingestColdInbound(parsed, { autoResponder: true })
   }
 
-  // Ticket reply branch (D9): a signed `reply+tkt-…` recipient routes straight
+  // Ticket reply branch (D9): a signed `<slug>+t…` recipient routes straight
   // into the ticket thread. Checked BEFORE conversation routing and cold inbound
-  // so a `tkt-` address can never be reinterpreted as a conversation reply nor
+  // so a ticket address can never be reinterpreted as a conversation reply nor
   // opened as a fresh cold-inbound conversation — `ingestTicketReply` always
-  // returns a terminal status. A `tkt-` mail whose signature failed to verify is
-  // still ticket-destined: drop it here rather than let a forged address fall
-  // through. Conversation addresses (no `tkt-` marker) skip this entirely.
+  // returns a terminal status. A ticket-shaped mail whose signature failed to
+  // verify is still ticket-destined: drop it here rather than let a forged
+  // address fall through. Conversation addresses (`c` marker) skip this
+  // entirely.
   const ticketId = ticketIdFromRecipients(parsed.toAddresses)
   if (ticketId) return ingestTicketReply(parsed, ticketId)
   if (recipientsBearTicketMarker(parsed.toAddresses)) {
@@ -350,7 +347,7 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   })
   if (!visitor) return { status: 'no_conversation' }
 
-  // The transport authenticates the delivery, not the SMTP sender: the reply+
+  // The transport authenticates the delivery, not the SMTP sender: the signed
   // address is visible to anyone on the email thread (CC, forward), so without
   // this check any third party could inject messages attributed to the visitor.
   // The From must match an address we know for this visitor — a linked account
@@ -532,11 +529,11 @@ async function ingestColdInbound(
 
 /**
  * Reply-by-email (D9): append a verified inbound email onto the ticket named by a
- * signed `reply+tkt-…` recipient. Fails QUIET on every rejection — unknown /
+ * signed `<slug>+t…` recipient. Fails QUIET on every rejection — unknown /
  * deleted / non-`customer` ticket, missing requester, or a sender that isn't the
  * requester — with a structured `log.warn`, never creating a ticket or a
  * conversation and never bouncing. Only reached from `ingestParsedEmail` after the
- * RFC 3834 / loop guards and only for a signature-verified `tkt-` address, so the
+ * RFC 3834 / loop guards and only for a signature-verified ticket address, so the
  * transport is trusted; the remaining trust step is proving the SMTP sender is the
  * requester (the signed address alone is visible to anyone CC'd on a ticket mail).
  */

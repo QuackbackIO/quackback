@@ -1306,7 +1306,9 @@ async function requesterFacingConfig(
   const { inboundTicketReplyToAddress } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   const from = (await resolveSendingAddress(params.assignedTeamId, 'support')) ?? undefined
-  const replyTo = inboundTicketReplyToAddress(params.ticketId) ?? undefined
+  // No mail slug to give, so no routable reply address: the ticket email then
+  // carries no Reply-To and its footer points at the portal thread.
+  const replyTo = inboundTicketReplyToAddress(params.ticketId, null) ?? undefined
   return { ...baseTicketConfig(params), from, replyTo }
 }
 

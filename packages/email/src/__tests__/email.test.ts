@@ -90,7 +90,7 @@ describe('console mode returns { sent: false }', () => {
       workspaceName: 'TestWorkspace',
       inviteLink: 'https://example.com/invite',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendWelcomeEmail returns { sent: false }', async () => {
@@ -100,7 +100,7 @@ describe('console mode returns { sent: false }', () => {
       workspaceName: 'TestWorkspace',
       dashboardUrl: 'https://example.com/dashboard',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendMagicLinkEmail returns { sent: false }', async () => {
@@ -109,7 +109,7 @@ describe('console mode returns { sent: false }', () => {
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendStatusChangeEmail returns { sent: false }', async () => {
@@ -122,7 +122,7 @@ describe('console mode returns { sent: false }', () => {
       workspaceName: 'TestWorkspace',
       unsubscribeUrl: 'https://example.com/unsubscribe',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendNewCommentEmail returns { sent: false }', async () => {
@@ -136,7 +136,7 @@ describe('console mode returns { sent: false }', () => {
       workspaceName: 'TestWorkspace',
       unsubscribeUrl: 'https://example.com/unsubscribe',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendPasswordResetEmail returns { sent: false }', async () => {
@@ -144,7 +144,7 @@ describe('console mode returns { sent: false }', () => {
       to: 'test@example.com',
       resetLink: 'https://example.com/auth/reset-password?token=abc',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendCsatRequestEmail returns { sent: false }', async () => {
@@ -160,7 +160,7 @@ describe('console mode returns { sent: false }', () => {
       ],
       workspaceName: 'TestWorkspace',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendRawEmail returns { sent: false } (custom From, prerendered html)', async () => {
@@ -171,7 +171,7 @@ describe('console mode returns { sent: false }', () => {
       html: '<p>Here is the reply.</p>',
       text: 'Here is the reply.',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendRawEmail drops a synthetic anonymous recipient', async () => {
@@ -181,6 +181,8 @@ describe('console mode returns { sent: false }', () => {
       subject: 'x',
       html: '<p>x</p>',
     })
-    expect(result).toEqual({ sent: false })
+    // Refused for the recipient, not for want of a provider: the guard runs
+    // before the ladder, so the reason names the address rather than the config.
+    expect(result).toEqual({ sent: false, reason: 'anon_recipient' })
   })
 })

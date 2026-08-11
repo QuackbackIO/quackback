@@ -1,10 +1,18 @@
 /**
  * Email sending module for Quackback
  *
- * Uses Nodemailer for SMTP or Resend API with React Email components.
- * No build step required - React components are rendered at runtime.
+ * Uses the Cloudflare Email Sending REST API, Nodemailer for SMTP, or the
+ * Resend API, with React Email components. No build step required - React
+ * components are rendered at runtime.
  *
- * Priority: SMTP (if EMAIL_SMTP_HOST set) → Resend (if EMAIL_RESEND_API_KEY set) → Console logging (dev mode)
+ * Priority: Cloudflare (if CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_EMAIL_TOKEN set)
+ * → SMTP (if EMAIL_SMTP_HOST set) → Resend (if EMAIL_RESEND_API_KEY set) →
+ * Console logging (dev mode).
+ *
+ * The order is deliberate rather than incidental. An install that has set
+ * `EMAIL_SMTP_HOST` has named the mail server it wants used and must keep it;
+ * only an install that has been given a Cloudflare account id AND a sending
+ * token gets the new path, which is a pair nobody sets by accident.
  */
 
 import { render } from '@react-email/components'
@@ -13,6 +21,13 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
+import {
+  addressDomain,
+  canCloudflareSendFrom,
+  isCloudflareEmailConfigured,
+  parseAddress,
+  sendViaCloudflare,
+} from './cloudflare'
 // Capability-bearing senders declare `to: SecureRecipient` so a contact address
 // cannot be passed to one. See ./recipient for why the classes are shaped this
 // way, and why the guarantee belongs here rather than at the call sites.
@@ -64,9 +79,43 @@ function getResendApiKey(): string | undefined {
 let smtpTransporter: Transporter | null = null
 let resendClient: Resend | null = null
 
-export type EmailResult = { sent: boolean }
+/**
+ * Why a send did not happen. Present only when `sent` is false, and the point of
+ * it is that the three cases are not interchangeable: two are the system working
+ * as configured and one is mail being lost.
+ */
+export type EmailNotSentReason =
+  /** No provider is configured at all. The message was logged as a dev preview,
+   *  which is the normal development case and not a failure. */
+  | 'no_provider'
+  /** The recipient was the synthetic anonymous placeholder address, which is
+   *  never deliverable. Refusing it is the guard doing its job. */
+  | 'anon_recipient'
+  /** A provider IS configured, but none of the rungs can send AS this identity.
+   *  The message is lost: nothing was delivered, nothing was queued, and no
+   *  retry can change the outcome until the configuration does. */
+  | 'unsendable_identity'
 
-type EmailProvider = 'smtp' | 'resend' | 'console'
+export type EmailResult = {
+  sent: boolean
+  /** Why nothing was sent, when nothing was. See {@link EmailNotSentReason}. */
+  reason?: EmailNotSentReason
+  /**
+   * Who owns the outbound `Message-ID` for this send, in three states.
+   *
+   * - **absent** — we set it, so the caller's own minted id is what went on the
+   *   wire and is what a reply will quote. Every rung but Cloudflare.
+   * - **a string** — the transport generated the id and told us which one. Store
+   *   THIS, not the minted one: the minted one was never sent.
+   * - **null** — the transport generated the id and did not tell us which one.
+   *   There is nothing to store, and no reply can be matched back by
+   *   `Message-ID`. Callers must not fall back to their minted id here; it would
+   *   record an id that exists nowhere and can only ever produce a miss.
+   */
+  messageId?: string | null
+}
+
+type EmailProvider = 'cloudflare' | 'smtp' | 'resend' | 'console'
 
 export function isEmailConfigured(): boolean {
   return getProvider() !== 'console'
@@ -78,6 +127,24 @@ export function getEmailProvider(): EmailProvider {
 }
 
 function getProvider(): EmailProvider {
+  if (isCloudflareEmailConfigured()) return 'cloudflare'
+  if (getEnv('EMAIL_SMTP_HOST')) return 'smtp'
+  if (getResendApiKey()) return 'resend'
+  return 'console'
+}
+
+/**
+ * The rung a Cloudflare-configured install falls to for one individual send.
+ *
+ * The ladder is otherwise per process. This is the single exception, and the
+ * reason is a boundary no configuration can move: Cloudflare Email Sending can
+ * only send from a domain that is a zone on Cloudflare DNS in the account
+ * holding our token. A workspace that verified its OWN domain by publishing
+ * SPF/DKIM (`email_sending_domains`) is on someone else's DNS, so mail as that
+ * identity has to leave by a different door — in a fleet, Resend. Failing the
+ * send instead would mean a workspace loses its mail the moment it brands it.
+ */
+function providerBelowCloudflare(): Exclude<EmailProvider, 'cloudflare'> {
   if (getEnv('EMAIL_SMTP_HOST')) return 'smtp'
   if (getResendApiKey()) return 'resend'
   return 'console'
@@ -165,10 +232,11 @@ export async function getReceivedEmail(
 }
 
 /**
- * The single low-level send: provider selection (SMTP → Resend → console), the
- * anon-address guard, and RFC 5322 threading. Takes EITHER a prerendered `html`
- * body or a `react` element (the branded senders pass `react`; the raw sender
- * passes `html`). Falls back to console when unconfigured.
+ * The single low-level send: provider selection (Cloudflare → SMTP → Resend →
+ * console), the anon-address guard, and RFC 5322 threading. Takes EITHER a
+ * prerendered `html` body or a `react` element (the branded senders pass
+ * `react`; the raw sender passes `html`). Falls back to console when
+ * unconfigured.
  *
  * Every send goes through here, including the console preview, so no caller has
  * to know which provider is active.
@@ -196,7 +264,7 @@ async function dispatch(
   // realEmail(), but if one slips through, drop it here rather than bounce.
   if (isSyntheticAnonEmail(options.to)) {
     log.warn('refusing to send to synthetic anonymous address')
-    return { sent: false }
+    return { sent: false, reason: 'anon_recipient' }
   }
 
   const provider = getProvider()
@@ -209,12 +277,48 @@ async function dispatch(
       { email_type: options.emailType ?? 'RawEmail', to: options.to, ...options.preview },
       '[dev] email preview (console provider)'
     )
-    return { sent: false }
+    return { sent: false, reason: 'no_provider' }
   }
 
   const from = options.from ?? getEmailFrom()
 
-  if (provider === 'smtp') {
+  // The one per-send rung decision. Everything below this line treats
+  // `effective` as the provider, so the Cloudflare branch never sees a From it
+  // cannot send as. See providerBelowCloudflare().
+  const effective =
+    provider === 'cloudflare' && !canCloudflareSendFrom(from) ? providerBelowCloudflare() : provider
+
+  if (effective === 'cloudflare') {
+    const html = options.html ?? (options.react ? await render(options.react) : undefined)
+    // Message-ID is platform-controlled, and the transport drops it on the way
+    // out. In-Reply-To and References are allowed and pass through, which is
+    // what keeps the recipient's mail client threading; what is lost is our
+    // ability to CHOOSE the id, and with it the Message-ID route home for a
+    // reply whose client stripped the plus-address. On this rung the
+    // plus-address is the routing mechanism.
+    const result = await sendViaCloudflare({
+      from: parseAddress(from),
+      to: parseAddress(options.to),
+      subject: options.subject,
+      ...(html !== undefined ? { html } : {}),
+      ...(options.text !== undefined ? { text: options.text } : {}),
+      ...(options.replyTo !== undefined ? { replyTo: parseAddress(options.replyTo) } : {}),
+      ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
+    })
+    if (result.messageId === null) {
+      // Stated plainly because it costs a routing mechanism: with no assigned
+      // id to record, a reply that arrives without our plus-address cannot be
+      // matched back to its conversation and will open a new one.
+      log.warn(
+        { provider: 'cloudflare' },
+        'send returned no message id; Message-ID reply routing is unavailable for this message'
+      )
+    }
+    log.info({ provider: 'cloudflare', message_id: result.messageId }, 'email sent')
+    return { sent: true, messageId: result.messageId }
+  }
+
+  if (effective === 'smtp') {
     const html = options.html ?? (options.react ? await render(options.react) : undefined)
     try {
       const result = await getSmtpTransporter().sendMail({
@@ -244,7 +348,7 @@ async function dispatch(
     return { sent: true }
   }
 
-  if (provider === 'resend') {
+  if (effective === 'resend') {
     // Resend renders `react` itself; a raw send supplies `html` (+ optional text).
     const body = options.react
       ? { react: options.react }
@@ -270,8 +374,18 @@ async function dispatch(
     return { sent: true }
   }
 
-  // Console mode - caller handles logging
-  return { sent: false }
+  // Only reachable when Cloudflare was the process provider, this send's From
+  // is not a domain it can send as, and nothing is configured below it. Logged
+  // as an error rather than a dev preview, and reported with a reason the caller
+  // can act on: an install with a real sending provider silently dropping a
+  // workspace's branded mail is mail loss, not a development mode, and a caller
+  // that cannot tell it apart from "no provider configured" will file it under
+  // the harmless one.
+  log.error(
+    { email_type: options.emailType ?? 'RawEmail', from_domain: addressDomain(from) },
+    'no provider can send from this identity; email not sent'
+  )
+  return { sent: false, reason: 'unsendable_identity' }
 }
 
 /**

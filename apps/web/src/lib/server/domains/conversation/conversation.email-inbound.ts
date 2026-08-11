@@ -29,7 +29,7 @@ export interface ParsedEmailAttachment {
 }
 
 export interface ParsedInboundEmail {
-  /** Recipient addresses (one is our plus-addressed `reply+<id>@domain`). */
+  /** Recipient addresses (one is our plus-addressed `<slug>+c<id>.<tag>@domain`). */
   toAddresses: string[]
   /** Cc addresses. Cold-inbound (§4.8) turns these into group participants;
    *  the reply path ignores them. Bcc never appears on a received message. */

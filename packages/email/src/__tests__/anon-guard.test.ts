@@ -54,7 +54,7 @@ describe('sendEmail anon-domain delivery guard', () => {
     })
 
     expect(sendSpy).not.toHaveBeenCalled()
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'anon_recipient' })
   })
 
   it('matches the anon domain case-insensitively', async () => {
@@ -65,7 +65,7 @@ describe('sendEmail anon-domain delivery guard', () => {
     })
 
     expect(sendSpy).not.toHaveBeenCalled()
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'anon_recipient' })
   })
 
   it('still delivers to a real address (guard is domain-specific)', async () => {

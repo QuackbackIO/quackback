@@ -213,21 +213,51 @@ export async function notifyVisitorMessage(opts: {
 export const EMAIL_SEND_RETRY_DELAYS_MS = [2000, 4000]
 
 /**
+ * Has this error positively declared that re-sending reproduces it?
+ *
+ * Opt-in, and absence means "retry". Only a transport knows which of its own
+ * failures are about the moment and which are about the message — a From on a
+ * domain the provider is not authorized to send as is the same rejection every
+ * time — so the transport says so and this honours it, without anything here
+ * having to hold a per-provider error taxonomy.
+ */
+function declaresPermanentFailure(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'retryable' in err &&
+    (err as { retryable: unknown }).retryable === false
+  )
+}
+
+/**
  * Send with a small bounded retry. The email dispatch layer THROWS on any
  * provider error, and this whole path is fire-and-forget behind a `void` call
  * whose catch only logs — so without a retry a thirty-second provider blip
  * silently loses an agent's reply, while the message row is committed and the
  * thread renders it as sent.
  *
- * Deliberately retries every thrown error rather than classifying which are
- * transient. A per-provider error taxonomy has to be hand-maintained and fails
- * CLOSED: the day the provider adds an error name, an allow-list quietly stops
- * retrying it. Two wasted calls on a genuinely terminal failure is by far the
- * cheaper mistake.
+ * Retries by default rather than classifying which errors are transient. A
+ * per-provider error taxonomy has to be hand-maintained and fails CLOSED: the
+ * day the provider adds an error name, an allow-list quietly stops retrying it.
+ * Two wasted calls on a genuinely terminal failure is by far the cheaper
+ * mistake. The one exception is an error that declares its own permanence — a
+ * transport saying "this message is wrong" rather than "not right now" — which
+ * costs nothing to honour because the default stays retry for everything that
+ * says nothing.
  *
- * The caller mints the threading headers ONCE, above this — a Message-ID minted
- * per attempt would make a provider that errors after accepting deliver two
- * mails that neither dedupe in the client nor thread together.
+ * The caller mints the threading headers ONCE, above this, so a Message-ID
+ * minted per attempt cannot make a provider that errors after accepting deliver
+ * two mails that neither dedupe in the client nor thread together. That holds
+ * only on the transports where WE own the Message-ID. On one that generates its
+ * own and rejects a caller-supplied header, every attempt necessarily carries a
+ * different id, so the transport reopens that window whatever this loop does:
+ * only the id of the attempt that RETURNS is recorded, and a mail delivered by
+ * an earlier attempt is unroutable by Message-ID. Not retrying an error that
+ * declares itself permanent is what narrows the window here, and what keeps a
+ * duplicate merely a duplicate rather than a second conversation is the
+ * plus-addressed Reply-To: it is per conversation, so it is identical on every
+ * attempt and routes a reply to either copy into the same thread.
  */
 async function sendWithRetry<T>(
   conversationId: ConversationId,
@@ -238,9 +268,10 @@ async function sendWithRetry<T>(
       return await send()
     } catch (err) {
       const delay = EMAIL_SEND_RETRY_DELAYS_MS[attempt]
-      // Out of budget: rethrow so the caller's own catch logs it as a failed
+      // Out of budget, or an error that has already told us a second attempt
+      // reproduces it: rethrow so the caller's own catch logs it as a failed
       // notification, exactly as it did before retries existed.
-      if (delay === undefined) throw err
+      if (delay === undefined || declaresPermanentFailure(err)) throw err
       log.warn(
         { err, conversation_id: conversationId, attempt: attempt + 1 },
         'conversation email send failed; retrying'
@@ -270,8 +301,11 @@ async function sendVisitorConversationEmail(opts: {
 }): Promise<void> {
   // Only advertise a reply address we can actually receive on, so a visitor's
   // email reply threads back into this conversation (inbound email channel).
+  // The workspace's mail slug is what makes an address routable on a shared
+  // inbound domain, and this caller has none to give: null yields no address,
+  // so the mail goes out with the portal footer as its only route back.
   const replyTo = isEmailInboundConfigured()
-    ? (inboundReplyToAddress(opts.conversationId) ?? undefined)
+    ? (inboundReplyToAddress(opts.conversationId, null) ?? undefined)
     : undefined
   const threading = await outboundThreading(opts.conversationId)
   // Send as the conversation's team sending address (§4.8) when configured, else
@@ -302,13 +336,21 @@ async function sendVisitorConversationEmail(opts: {
   )
   if (result && result.sent === false) {
     log.warn(
-      { conversation_id: opts.conversationId, direction: opts.direction },
-      'conversation email not sent (provider returned sent:false)'
+      { conversation_id: opts.conversationId, direction: opts.direction, reason: result.reason },
+      'conversation email not sent'
     )
   }
+  // Which Message-ID actually went out, which is not always the one we minted.
+  // A transport that owns the header generates its own and reports it back, and
+  // that is the id a reply will quote; an explicit null means it generated one
+  // it did not disclose, in which case there is nothing to record and the
+  // plus-addressed Reply-To is the only route a reply has home. Recording the
+  // minted id there would store an id that exists nowhere and guarantee a miss.
+  const outboundMessageId =
+    result?.messageId === undefined ? threading.messageId : (result.messageId ?? undefined)
   await Promise.all([
-    threading.messageId
-      ? recordOutboundEmail(threading.messageId, opts.conversationId)
+    outboundMessageId
+      ? recordOutboundEmail(outboundMessageId, opts.conversationId)
       : Promise.resolve(),
     recordEmailIdentity(opts.recipient, opts.visitorPrincipalId),
   ])

@@ -13,7 +13,7 @@ import {
   sendTicketEventEmail,
   sendNoteMentionEmail,
 } from '@quackback/email'
-import type { IncidentImpact } from '@quackback/email'
+import type { EmailResult, IncidentImpact } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
 import type {
   HookHandler,
@@ -104,7 +104,7 @@ export const emailHook: HookHandler = {
     log.debug({ event_type: event.type }, 'sending email notification')
 
     try {
-      let result: { sent: boolean }
+      let result: EmailResult
 
       if (event.type === 'post.status_changed') {
         result = await sendStatusChangeEmail({
@@ -217,7 +217,27 @@ export const emailHook: HookHandler = {
       }
 
       if (!result.sent) {
-        log.debug({ event_type: event.type }, 'email skipped, not configured')
+        // `sent: false` covers two unrelated outcomes and only one of them is
+        // benign. An install with no provider (or a refused synthetic anonymous
+        // address) skipped the send on purpose and the hook succeeded. An
+        // install that HAS a provider but cannot send from this identity lost
+        // the mail: nothing was delivered, nothing was queued, and reporting
+        // that as success buries a misconfiguration under a debug line that
+        // names the wrong cause.
+        //
+        // Reported as a hook failure rather than thrown, because throwing here
+        // would go through isRetryableError, which reads transport-shaped
+        // errors (status codes, socket codes) and would classify a
+        // configuration fact as a mystery. The failure is real and retrying it
+        // cannot help, so it is stated as exactly that.
+        if (result.reason === 'unsendable_identity') {
+          log.error(
+            { event_type: event.type },
+            'email not sent: no configured provider can send from this identity'
+          )
+          return { success: false, error: 'No configured provider can send from this identity' }
+        }
+        log.debug({ event_type: event.type, reason: result.reason }, 'email skipped, not sent')
         return { success: true }
       }
 
