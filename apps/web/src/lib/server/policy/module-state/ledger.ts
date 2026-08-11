@@ -451,11 +451,30 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'packages/email/src/index.ts',
-    name: 'resendClient',
+    name: 'inboundFetchClient',
     category: 'fleet-wide',
     reason:
-      'Built from the Resend API key, which §8 confirms the control plane writes fleet-wide into ' +
-      'every workspace.',
+      'Built from the inbound API key, which §8 confirms the control plane writes fleet-wide into ' +
+      'every workspace. Fetches an inbound body by provider id; carries no outbound mail.',
+  },
+  {
+    file: 'packages/email/src/ses.ts',
+    name: 'cachedClient',
+    category: 'fleet-wide',
+    reason:
+      'Built from EMAIL_SES_ACCESS_KEY_ID/SECRET/REGION. One fleet credential signs for every ' +
+      'workspace identity, so the client holds no workspace of its own; a cross-workspace hit ' +
+      'returns the same signer either workspace would have built. Holds an HTTP connection pool, ' +
+      'which is the reason it is cached rather than rebuilt per send.',
+  },
+  {
+    file: 'packages/email/src/ses.ts',
+    name: 'cachedClientKey',
+    category: 'fleet-wide',
+    reason:
+      'Region plus key id of the client cached beside it, so a credential change rebuilds rather ' +
+      'than being served stale. Fleet-wide for the same reason the client is, and carries no ' +
+      'secret: the key id names a principal, the secret is never part of it.',
   },
   {
     file: 'packages/email/src/index.ts',

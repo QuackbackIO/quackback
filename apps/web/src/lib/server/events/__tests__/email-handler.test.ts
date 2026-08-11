@@ -15,6 +15,11 @@ vi.mock('@quackback/email', () => ({
 vi.stubEnv('EMAIL_FROM', 'Support <support@acme.test>')
 
 import { emailHook } from '../handlers/email'
+// The real error class, from the transport module rather than the mocked
+// package entry: a hand-written stand-in for it stops tracking the shape the
+// moment the shape changes, which is how the classification regression this
+// guards against went unnoticed.
+import { SesEmailError } from '@quackback/email/ses'
 import {
   sendStatusChangeEmail,
   sendNewCommentEmail,
@@ -181,43 +186,22 @@ describe('emailHook', () => {
     })
   })
 
-  /**
-   * The other `sent: false`. An install with a real provider that cannot send
-   * from this identity has lost the mail — nothing delivered, nothing queued —
-   * and reporting it as success buries a misconfiguration behind a debug line
-   * that names the wrong cause. It is a failure, and not one a retry can fix.
-   */
-  describe('when no provider can send from the identity', () => {
-    it('reports failure, without retrying, for status change', async () => {
-      mockStatusChangeEmail.mockResolvedValue({ sent: false, reason: 'unsendable_identity' })
-
-      const result = await emailHook.run(statusChangedEvent, baseTarget, {
-        ...baseConfig,
-        previousStatus: 'open',
-        newStatus: 'closed',
-      })
-
-      expect(result.success).toBe(false)
-      expect(result.error).toMatch(/identity/i)
-      expect(result.shouldRetry).toBeFalsy()
-    })
-
-    it('reports failure for every sender, not just one', async () => {
-      mockNewCommentEmail.mockResolvedValue({ sent: false, reason: 'unsendable_identity' })
-
-      const result = await emailHook.run(commentCreatedEvent, baseTarget, {
-        ...baseConfig,
-        commenterName: 'Commenter',
-        commentPreview: 'Hi',
-      })
-
-      expect(result.success).toBe(false)
-    })
-  })
-
   describe('error handling', () => {
+    /**
+     * The error the transport really throws, not an approximation of it. A
+     * connection that is refused reaches the send path already wrapped: the
+     * socket code survives on `code`, there is no HTTP status, and the wrapper
+     * declares itself retryable. This hook reads `code`, so a transport that
+     * dropped it in favour of the SDK's generic error name would make a network
+     * blip look like a permanent failure and kill the job.
+     */
     it('returns failure with shouldRetry for network errors', async () => {
-      const error = Object.assign(new Error('Connection refused'), { code: 'ECONNREFUSED' })
+      const error = new SesEmailError(
+        'SES email send failed: connect ECONNREFUSED 127.0.0.1:443',
+        null,
+        'ECONNREFUSED',
+        true
+      )
       mockStatusChangeEmail.mockRejectedValue(error)
 
       const result = await emailHook.run(statusChangedEvent, baseTarget, {
@@ -227,8 +211,28 @@ describe('emailHook', () => {
       })
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('Connection refused')
+      expect(result.error).toBe('SES email send failed: connect ECONNREFUSED 127.0.0.1:443')
       expect(result.shouldRetry).toBe(true)
+    })
+
+    /**
+     * The same failure as it arrives if the transport keeps only the SDK's
+     * error name. Nothing downstream can tell this from a rejected message, so
+     * the job dies on the first blip — which is what this hook must never do
+     * with a recoverable one.
+     */
+    it('would not retry the same failure stripped of its socket code', async () => {
+      mockStatusChangeEmail.mockRejectedValue(
+        new SesEmailError('SES email send failed: connect ECONNREFUSED', null, 'Error', false)
+      )
+
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'closed',
+      })
+
+      expect(result.shouldRetry).toBe(false)
     })
 
     it('returns failure without retry for non-retryable errors', async () => {

@@ -51,15 +51,20 @@ async function roundTrip(options: Parameters<typeof sendRawEmail>[0]): Promise<s
 
 describe.skipIf(!available)('inbound parsing of real MTA output (round-trip)', () => {
   const saved: Record<string, string | undefined> = {}
-  const keys = ['EMAIL_SMTP_HOST', 'EMAIL_SMTP_PORT', 'EMAIL_RESEND_API_KEY', 'RESEND_API_KEY']
+  const keys = [
+    'EMAIL_SMTP_HOST',
+    'EMAIL_SMTP_PORT',
+    'EMAIL_SES_ACCESS_KEY_ID',
+    'EMAIL_SES_SECRET_ACCESS_KEY',
+  ]
 
   beforeAll(() => {
     for (const k of keys) saved[k] = process.env[k]
     process.env.EMAIL_SMTP_HOST = 'localhost'
     process.env.EMAIL_SMTP_PORT = '1025'
-    // Resend would otherwise win provider selection.
-    delete process.env.EMAIL_RESEND_API_KEY
-    delete process.env.RESEND_API_KEY
+    // SES would otherwise win provider selection.
+    delete process.env.EMAIL_SES_ACCESS_KEY_ID
+    delete process.env.EMAIL_SES_SECRET_ACCESS_KEY
   })
   afterAll(() => {
     for (const k of keys) {

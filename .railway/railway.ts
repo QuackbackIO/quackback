@@ -133,25 +133,36 @@ export default defineRailway(() => {
     // of band and preserved here rather than written into source.
     QUACKBACK_CONTROL_DATABASE_URL: preserve(),
 
-    // Mail. The inbound domain is the apex, already onboarded to Cloudflare for
-    // both routing and sending, so a workspace address is `<mail_slug>@` on it.
+    // Mail, inbound. The domain is the apex, already onboarded at the edge for
+    // routing, so a workspace address is `<mail_slug>@` on it.
     EMAIL_INBOUND_DOMAIN: 'quackback.co.uk',
-    // The only domain Cloudflare may send from on this account. A workspace that
-    // has verified its own sending domain falls through to the provider rung per
-    // send, because Cloudflare can only sign for a zone it hosts.
-    CLOUDFLARE_EMAIL_DOMAINS: 'quackback.co.uk',
     EMAIL_FROM: 'Quackback <noreply@quackback.co.uk>',
-    // Three secrets, all set out of band and preserved here. `preserve()` cannot
-    // bootstrap a value the platform does not already hold, so a new service
-    // needs them set before its first apply, not after.
-    //
-    // The two inbound secrets are deliberately distinct. One authenticates the
-    // edge sender's POST; the other signs the plus-address inside a reply
-    // address. Sharing them would mean a leak of either widened to both.
+    // Two secrets, set out of band and preserved here, and deliberately
+    // distinct: one authenticates the edge sender's POST, the other signs the
+    // plus-address inside a reply address. Sharing them would mean a leak of
+    // either widened to both.
     INBOUND_HMAC_SECRET: preserve(),
     EMAIL_INBOUND_SIGNING_SECRET: preserve(),
-    CLOUDFLARE_ACCOUNT_ID: preserve(),
-    CLOUDFLARE_EMAIL_TOKEN: preserve(),
+
+    // Mail, outbound. Both halves of the credential are required before this
+    // rung is taken at all, and a service holding neither falls to the console
+    // rung, which logs a preview and delivers nothing. That is the failure this
+    // block exists to prevent: it reports success while sending no mail.
+    //
+    // Secrets, so they are set out of band like the two above. `preserve()`
+    // cannot bootstrap a value the platform does not already hold, so all four
+    // have to exist before the first apply, not after it: an apply against a
+    // service that holds none of them succeeds and leaves the service unable to
+    // send.
+    EMAIL_SES_ACCESS_KEY_ID: preserve(),
+    EMAIL_SES_SECRET_ACCESS_KEY: preserve(),
+    // Not a secret, and not defaulted in code either: a verified sending
+    // identity belongs to one region, so a guess here is a fleet whose every
+    // send is rejected for an identity that exists in the other one. Declared
+    // literally because it is a fact about where the identities were verified,
+    // which is exactly what this file is for. It must match the region the
+    // `quackback.co.uk` identities are verified in.
+    EMAIL_SES_REGION: 'us-east-1',
 
     // Below both Neon's suspend timeout (300 s documented, 337 s measured) and
     // Railway's 600 s sleep window. This is the number the idle-cost model
@@ -429,6 +440,17 @@ export default defineRailway(() => {
       QUACKBACK_MIGRATOR_TIMEOUT_MS: preserve(),
       RAILWAY_DOCKERFILE_PATH: preserve(),
       REDIS_URL: preserve(),
+      // Outbound mail. Named apart from the object-storage credentials above
+      // and from the SDK's own default-chain names, because either collision
+      // would let an unrelated credential in the environment read as "mail is
+      // configured" and take the transport off its logged fallback.
+      // Secrets, so they are set out of band; `preserve()` cannot bootstrap a
+      // value the platform does not already hold.
+      SES_REGION: preserve(),
+      SES_ACCESS_KEY_ID: preserve(),
+      SES_SECRET_ACCESS_KEY: preserve(),
+      // Names the set SES publishes delivery events against.
+      SES_CONFIGURATION_SET: preserve(),
       STRIPE_SECRET_KEY: preserve(),
       STRIPE_WEBHOOK_SECRET: preserve(),
     },

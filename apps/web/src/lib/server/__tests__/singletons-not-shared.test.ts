@@ -96,8 +96,8 @@ describe('the email transports are fleet-wide', () => {
     const previous = { ...process.env }
     try {
       delete process.env.EMAIL_SMTP_HOST
-      delete process.env.EMAIL_RESEND_API_KEY
-      delete process.env.RESEND_API_KEY
+      delete process.env.EMAIL_SES_ACCESS_KEY_ID
+      delete process.env.EMAIL_SES_SECRET_ACCESS_KEY
       expect(withWorkspace('workspace-alpha', () => email.getEmailProvider())).toBe('console')
       expect(withWorkspace('workspace-bravo', () => email.getEmailProvider())).toBe('console')
 
@@ -195,7 +195,10 @@ describe('the relay is per workspace, not one leader for whichever database this
       config: { isPooledTenancy: pooled, databaseUrl: 'postgres://direct/single' },
     }))
     vi.doMock('@/lib/server/workspaces/registry', () => ({
-      listActiveWorkspaces: async () => ({ workspaces: [workspace('t-a'), workspace('t-b')], refused: [] }),
+      listActiveWorkspaces: async () => ({
+        workspaces: [workspace('t-a'), workspace('t-b')],
+        refused: [],
+      }),
     }))
     vi.doMock('@/lib/server/workspaces/pool-cache', () => ({
       resolveWorkspacePassword: async () => 'pw',
@@ -216,7 +219,10 @@ describe('the relay is per workspace, not one leader for whichever database this
         delete scope.secrets
         return scope
       },
-      runWithWorkspaceScope: async (scope: { workspace: { workspaceKey: string } }, fn: () => unknown) => {
+      runWithWorkspaceScope: async (
+        scope: { workspace: { workspaceKey: string } },
+        fn: () => unknown
+      ) => {
         scopes.push(scope.workspace.workspaceKey)
         return fn()
       },

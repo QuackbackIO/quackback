@@ -377,7 +377,7 @@ function EmailChannelStatusCard() {
   if (!data) return null
 
   const outboundLabel =
-    data.provider === 'smtp' ? 'SMTP' : data.provider === 'resend' ? 'Resend' : 'Not configured'
+    data.provider === 'smtp' ? 'SMTP' : data.provider === 'ses' ? 'Amazon SES' : 'Not configured'
 
   return (
     <SettingsCard

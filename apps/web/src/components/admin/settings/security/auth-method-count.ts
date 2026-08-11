@@ -31,7 +31,7 @@ const SOCIAL_PROVIDER_IDS = new Set(
 export interface AuthMethodInputs {
   /** Unified per-provider toggle state (password / magicLink / social ids). */
   oauthState: Record<string, boolean | undefined>
-  /** Whether SMTP/Resend delivery is wired — gates magic link usability. */
+  /** Whether an outbound transport is wired — gates magic link usability. */
   emailConfigured: boolean
   /** Saved-credential presence per social provider id. */
   credentialStatus: Record<string, boolean>

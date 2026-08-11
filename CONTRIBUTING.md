@@ -56,7 +56,7 @@ quackback/
 ├── packages/
 │   ├── db/                # Database (Drizzle schema, migrations)
 │   ├── ids/               # TypeID system (branded UUIDs)
-│   └── email/             # Email service (Resend + React Email)
+│   └── email/             # Email service (Amazon SES + React Email)
 ├── packages/widget/       # Embeddable widget package
 └── docker-compose.yml     # Local PostgreSQL, MinIO, and Mailpit
 ```

@@ -58,8 +58,8 @@ export function useMailpitEnv(): () => void {
     'EMAIL_SMTP_PORT',
     'EMAIL_SMTP_USER',
     'EMAIL_SMTP_PASS',
-    'EMAIL_RESEND_API_KEY',
-    'RESEND_API_KEY',
+    'EMAIL_SES_ACCESS_KEY_ID',
+    'EMAIL_SES_SECRET_ACCESS_KEY',
     'EMAIL_FROM',
   ]
   const saved: Record<string, string | undefined> = {}
@@ -69,9 +69,9 @@ export function useMailpitEnv(): () => void {
   process.env.EMAIL_SMTP_PORT = SMTP_PORT
   delete process.env.EMAIL_SMTP_USER
   delete process.env.EMAIL_SMTP_PASS
-  // Resend must be unset or it would win provider selection over SMTP.
-  delete process.env.EMAIL_RESEND_API_KEY
-  delete process.env.RESEND_API_KEY
+  // SES must be unset or it would win provider selection over SMTP.
+  delete process.env.EMAIL_SES_ACCESS_KEY_ID
+  delete process.env.EMAIL_SES_SECRET_ACCESS_KEY
   process.env.EMAIL_FROM = 'Quackback Test <test@quackback.test>'
 
   return () => {

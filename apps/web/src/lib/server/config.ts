@@ -147,7 +147,21 @@ const configSchema = z
     emailSmtpUser: z.string().optional(),
     emailSmtpPass: z.string().optional(),
     emailSmtpSecure: envBoolean,
+    /** Credential for the inbound body fetch, not for sending. */
     emailResendApiKey: z.string().optional(),
+    /**
+     * SES sending credentials. Deliberately not named `AWS_*` or `S3_*`: the
+     * object-storage keys below are a different principal against a different
+     * service, and a deployment that reused one for the other would
+     * authenticate successfully against the wrong account.
+     */
+    emailSesAccessKeyId: z.string().optional(),
+    emailSesSecretAccessKey: z.string().optional(),
+    /** Region the sending identity is verified in. Never defaulted: a verified
+     *  identity is regional, so a guess has every send rejected. */
+    emailSesRegion: z.string().optional(),
+    /** Configuration set applied to each send. Absent for a self-hoster. */
+    emailSesConfigurationSet: z.string().optional(),
 
     // S3 (optional)
     s3Endpoint: z.string().optional(),
@@ -268,6 +282,10 @@ function buildConfigFromEnv(): unknown {
     emailSmtpPass: env('EMAIL_SMTP_PASS'),
     emailSmtpSecure: env('EMAIL_SMTP_SECURE'),
     emailResendApiKey: env('EMAIL_RESEND_API_KEY'),
+    emailSesAccessKeyId: env('EMAIL_SES_ACCESS_KEY_ID'),
+    emailSesSecretAccessKey: env('EMAIL_SES_SECRET_ACCESS_KEY'),
+    emailSesRegion: env('EMAIL_SES_REGION'),
+    emailSesConfigurationSet: env('EMAIL_SES_CONFIGURATION_SET'),
 
     // S3
     s3Endpoint: env('S3_ENDPOINT'),
@@ -460,6 +478,18 @@ export const config = {
   },
   get emailResendApiKey() {
     return loadConfig().emailResendApiKey
+  },
+  get emailSesAccessKeyId() {
+    return loadConfig().emailSesAccessKeyId
+  },
+  get emailSesSecretAccessKey() {
+    return loadConfig().emailSesSecretAccessKey
+  },
+  get emailSesRegion() {
+    return loadConfig().emailSesRegion
+  },
+  get emailSesConfigurationSet() {
+    return loadConfig().emailSesConfigurationSet
   },
 
   // S3

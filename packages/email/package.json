@@ -10,9 +10,11 @@
     ".": "./src/index.ts",
     "./templates": "./src/templates/index.ts",
     "./anon": "./src/anon.ts",
-    "./recipient": "./src/recipient.ts"
+    "./recipient": "./src/recipient.ts",
+    "./ses": "./src/ses.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1107.0",
     "@quackback/logger": "workspace:*",
     "@react-email/components": "^1.0.11",
     "nodemailer": "^9.0.1",

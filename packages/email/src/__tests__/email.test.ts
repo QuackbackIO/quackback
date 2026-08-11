@@ -20,6 +20,8 @@ function withCleanEnv() {
     'EMAIL_SMTP_PORT',
     'EMAIL_SMTP_USER',
     'EMAIL_SMTP_PASS',
+    'EMAIL_SES_ACCESS_KEY_ID',
+    'EMAIL_SES_SECRET_ACCESS_KEY',
     'EMAIL_RESEND_API_KEY',
     'RESEND_API_KEY',
     'EMAIL_FROM',
@@ -55,27 +57,28 @@ describe('isEmailConfigured', () => {
     expect(isEmailConfigured()).toBe(true)
   })
 
-  it('returns true when Resend API key is set', () => {
-    process.env.EMAIL_RESEND_API_KEY = 're_test_123'
+  it('returns true when both halves of the SES credential are set', () => {
+    process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
+    process.env.EMAIL_SES_SECRET_ACCESS_KEY = 'secret'
     expect(isEmailConfigured()).toBe(true)
   })
 
-  it('returns true when RESEND_API_KEY (alternate) is set', () => {
+  it('returns false for half an SES credential', () => {
+    process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
+    expect(isEmailConfigured()).toBe(false)
+  })
+
+  it('returns false for the inbound-only key, which carries no mail out', () => {
+    process.env.EMAIL_RESEND_API_KEY = 're_test_123'
     process.env.RESEND_API_KEY = 're_test_123'
-    expect(isEmailConfigured()).toBe(true)
-  })
-
-  it('prefers SMTP over Resend when both are set', () => {
-    process.env.EMAIL_SMTP_HOST = 'smtp.example.com'
-    process.env.EMAIL_RESEND_API_KEY = 're_test_123'
-    expect(isEmailConfigured()).toBe(true)
+    expect(isEmailConfigured()).toBe(false)
   })
 })
 
 describe('getReceivedEmail', () => {
   withCleanEnv()
 
-  it('returns null when no Resend API key is configured (no API call attempted)', async () => {
+  it('returns null when no inbound API key is configured (no API call attempted)', async () => {
     await expect(getReceivedEmail('em_x')).resolves.toBeNull()
   })
 })
