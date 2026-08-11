@@ -400,7 +400,13 @@ export default defineRailway(() => {
       BASE_URL: preserve(),
       BETTER_AUTH_SECRET: preserve(),
       CLOUDFLARE_ACCOUNT_ID: preserve(),
+      // The queue carrying outbound delivery events, and the credential that
+      // pulls from it. Read AND write, because acking a message mutates the
+      // queue, so a read-only consumer would hold every event until its
+      // visibility timeout and then see it again.
+      CLOUDFLARE_EMAIL_EVENTS_QUEUE_ID: preserve(),
       CLOUDFLARE_EMAIL_TOKEN: preserve(),
+      CLOUDFLARE_QUEUES_TOKEN: preserve(),
       CLUSTER_ENV: preserve(),
       CP_ROLE: preserve(),
       EMAIL_FROM: preserve(),
