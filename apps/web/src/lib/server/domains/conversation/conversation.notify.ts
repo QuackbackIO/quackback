@@ -34,6 +34,7 @@ import {
   isEmailInboundConfigured,
   mintOutboundMessageId,
 } from './conversation.email-channel'
+import { currentMailSlug } from './conversation.mail-slug'
 import {
   priorOutboundMessageIds,
   recordOutboundEmail,
@@ -301,11 +302,11 @@ async function sendVisitorConversationEmail(opts: {
 }): Promise<void> {
   // Only advertise a reply address we can actually receive on, so a visitor's
   // email reply threads back into this conversation (inbound email channel).
-  // The workspace's mail slug is what makes an address routable on a shared
-  // inbound domain, and this caller has none to give: null yields no address,
-  // so the mail goes out with the portal footer as its only route back.
+  // The mail slug is what makes an address routable on a shared inbound domain;
+  // when there is none to mint under, no address is emitted at all and the mail
+  // goes out with the portal footer as its only route back.
   const replyTo = isEmailInboundConfigured()
-    ? (inboundReplyToAddress(opts.conversationId, null) ?? undefined)
+    ? (inboundReplyToAddress(opts.conversationId, currentMailSlug()) ?? undefined)
     : undefined
   const threading = await outboundThreading(opts.conversationId)
   // Send as the conversation's team sending address (§4.8) when configured, else

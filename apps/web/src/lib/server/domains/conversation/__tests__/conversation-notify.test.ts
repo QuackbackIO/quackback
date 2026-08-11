@@ -6,7 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
+import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 import type { Conversation } from '@/lib/server/db'
+import { conversationIdFromInboundAddress } from '../conversation.email-channel'
+import { SELF_HOSTED_MAIL_SLUG } from '../conversation.mail-slug'
 
 // Drives the team/visitor SELECT result. notifyVisitorMessage resolves the
 // `.where(...)` thenable to a team array; notifyAgentReply resolves `.limit(1)`
@@ -462,36 +465,80 @@ describe('notifyAgentReply', () => {
   describe('inbound-email Reply-To', () => {
     const prevDomain = process.env.EMAIL_INBOUND_DOMAIN
     const prevSecret = process.env.EMAIL_INBOUND_SIGNING_SECRET
+    const prevTenancy = process.env.QUACKBACK_TENANCY
+
+    /** The one Reply-To the send layer was handed, or undefined. */
+    async function replyToOf(run: (fn: () => Promise<void>) => Promise<void>): Promise<unknown> {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      await run(async () => {
+        await notifyAgentReply({
+          conversationId,
+          visitorPrincipalId,
+          content: 'here is your answer',
+          agentName: 'Agent',
+          channel: 'messenger',
+        })
+      })
+      expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+      return sendConversationMessageEmail.mock.calls[0][0].replyTo
+    }
+
+    const bare = (fn: () => Promise<void>) => fn()
 
     afterEach(() => {
       if (prevDomain === undefined) delete process.env.EMAIL_INBOUND_DOMAIN
       else process.env.EMAIL_INBOUND_DOMAIN = prevDomain
       if (prevSecret === undefined) delete process.env.EMAIL_INBOUND_SIGNING_SECRET
       else process.env.EMAIL_INBOUND_SIGNING_SECRET = prevSecret
+      if (prevTenancy === undefined) delete process.env.QUACKBACK_TENANCY
+      else process.env.QUACKBACK_TENANCY = prevTenancy
     })
 
     // An inbound address names the workspace it belongs to, because one inbound
-    // domain stands in front of a whole fleet. This caller has no mail slug to
-    // give, so there is no address to advertise and the mail's only route back
-    // is the portal link in its footer — configured inbound email does not
-    // change that. The address the grammar mints WITH a slug is round-tripped in
-    // the channel module's own suite.
-    it('omits Reply-To without a workspace mail slug, even with inbound email configured', async () => {
+    // domain can stand in front of a whole fleet. Where that name comes from is
+    // the only part that differs between a fleet replica and a self-hosted
+    // install, so all three outcomes are pinned here.
+    it('advertises an address under the active workspace’s mail slug', async () => {
       process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
       process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
-      isPrincipalOnline.mockResolvedValue(false)
-      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      process.env.QUACKBACK_TENANCY = 'pooled'
 
-      await notifyAgentReply({
-        conversationId,
-        visitorPrincipalId,
-        content: 'here is your answer',
-        agentName: 'Agent',
-        channel: 'messenger',
-      })
+      const replyTo = await replyToOf((fn) => withWorkspace('neon-t2', fn))
 
-      expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
-      expect(sendConversationMessageEmail.mock.calls[0][0].replyTo).toBeUndefined()
+      expect(replyTo).toMatch(
+        new RegExp(`^${mailSlugFor('neon-t2')}\\+c1\\.[A-Za-z0-9_-]{22}@tenaevexeo\\.resend\\.app$`)
+      )
+      // The address is not merely slug-shaped: it verifies back to this
+      // conversation, which is the whole point of advertising it.
+      expect(conversationIdFromInboundAddress(String(replyTo))).toBe(conversationId)
+    })
+
+    it('advertises the self-hosted label when there is no workspace scope', async () => {
+      // A single-workspace install owns its whole inbound domain, and `reply` is
+      // the label the grammar minted under before a fleet existed — so the mail
+      // routing an install already has keeps receiving. Falling to no address
+      // here would end reply-by-email for every self-hoster on upgrade.
+      process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
+      process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
+      delete process.env.QUACKBACK_TENANCY
+
+      const replyTo = await replyToOf(bare)
+
+      expect(replyTo).toMatch(
+        new RegExp(`^${SELF_HOSTED_MAIL_SLUG}\\+c1\\.[A-Za-z0-9_-]{22}@tenaevexeo\\.resend\\.app$`)
+      )
+      expect(conversationIdFromInboundAddress(String(replyTo))).toBe(conversationId)
+    })
+
+    it('omits Reply-To on a pooled process with no workspace resolved', async () => {
+      // The address would name no workspace, so the shared front door could not
+      // route it: better no route home than one that does not exist.
+      process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
+      process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
+      process.env.QUACKBACK_TENANCY = 'pooled'
+
+      expect(await replyToOf(bare)).toBeUndefined()
     })
 
     it('omits Reply-To when inbound email is not configured', async () => {

@@ -30,7 +30,11 @@ import postgres from 'postgres'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import type { PhysicalExpectation } from './physical-identity'
-import { validateWorkspaceRecord, type WorkspaceRecord, type WorkspaceResolution } from './vendor/contract'
+import {
+  validateWorkspaceRecord,
+  type WorkspaceRecord,
+  type WorkspaceResolution,
+} from './vendor/contract'
 
 const log = logger.child({ component: 'workspace-registry' })
 
@@ -65,6 +69,7 @@ interface RegistryRow {
   fingerprint_stamped_at: Date | string
   storage: unknown
   email_from: string
+  mail_slug: string
   ai_enabled: boolean
   revision: string | number
   neon_project_id: string | null
@@ -170,7 +175,9 @@ export function getControlSql(): postgres.Sql {
   if (controlSql) return controlSql
   const url = config.controlDatabaseUrl
   if (!url) {
-    throw new Error('QUACKBACK_CONTROL_DATABASE_URL is not set; the workspace registry cannot be read')
+    throw new Error(
+      'QUACKBACK_CONTROL_DATABASE_URL is not set; the workspace registry cannot be read'
+    )
   }
   controlSql = postgres(url, {
     max: 2,
@@ -195,13 +202,22 @@ export function __setControlSqlForTests(sql: postgres.Sql | null): void {
   controlRead.lastError = null
 }
 
-const SELECT_COLUMNS = `
+/**
+ * Exported so a test can read the column list back.
+ *
+ * A column added to {@link RegistryRow} and to {@link toRecord} but not here
+ * projects `undefined` for every workspace at once, which the contract refuses:
+ * a fleet-wide 503 on every hostname, from an omission that reads as complete in
+ * every other file that mentions the field. Nothing that takes a row as input —
+ * which is every other test in this module — can see it.
+ */
+export const SELECT_COLUMNS = `
   r.workspace_key, r.contract_version, r.state::text AS state, r.state_reason,
   r.primary_hostname, r.base_url,
   r.db_pooled_url, r.db_direct_url, r.db_name, r.db_role, r.db_credential_ref,
   r.app_secrets_ref,
   r.workspace_id, r.fingerprint_stamped_at,
-  r.storage, r.email_from, r.ai_enabled, r.revision,
+  r.storage, r.email_from, r.mail_slug, r.ai_enabled, r.revision,
   r.neon_project_id, r.neon_branch_id,
   COALESCE(
     (SELECT array_agg(h2.hostname ORDER BY h2.hostname)
@@ -286,9 +302,7 @@ export async function resolveWorkspaceById(
  * Refused records are logged and dropped rather than returned, so a caller
  * iterating the fleet cannot act on a record the request path would refuse.
  */
-export async function listActiveWorkspaces(
-  sql: postgres.Sql = getControlSql()
-): Promise<{
+export async function listActiveWorkspaces(sql: postgres.Sql = getControlSql()): Promise<{
   workspaces: WorkspaceDescriptor[]
   refused: Array<{ workspaceKey: string; problems: string[] }>
 }> {
@@ -396,7 +410,7 @@ function toRecord(row: RegistryRow): unknown {
     },
     secrets: { appSecretsRef: row.app_secrets_ref },
     storage: typeof row.storage === 'string' ? safeJson(row.storage) : row.storage,
-    email: { from: row.email_from },
+    email: { from: row.email_from, mailSlug: row.mail_slug },
     features: { aiEnabled: row.ai_enabled },
   }
 }

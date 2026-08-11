@@ -35,7 +35,12 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': '23a144b7426230c578c1bc7a3264ea7bbf6bcde576c52964a65cd2a68a60d2c7',
+  'contract.ts': 'fcb74098f76434c03868d3d64d2e2a292eff87ba34708bedc9540542fa510408',
+  // The mail slug vocabulary, which `contract.ts` imports and re-exports. It is
+  // a separate module on the control plane so the edge mail Worker can apply the
+  // same rule without pulling zod and the record schema into a workerd bundle;
+  // it is vendored here because `contract.ts` does not compile without it.
+  'mail-slug-pattern.ts': '8581d2a65c0ddbb9f27b46d0686dafaf874fc6656ea85fb0b869e76226e1f11b',
   'secret-ref.ts': 'cf001176eafcbe9838ad5d86ba7d6cd30e338d4a6b0cb3439d6de7884045bc99',
   // Sealing and derivation, vendored for a sharper reason than the others: the
   // control plane seals a value and a fleet replica opens it. Drift here is not
