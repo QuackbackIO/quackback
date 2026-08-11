@@ -108,10 +108,19 @@ export const createInboundRouteFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const teamId = await requireDefaultTeam()
+    // Record the front door that will actually deliver this route's mail, not a
+    // constant. The field is what an operator reads back when mail is not
+    // arriving, so naming a transport this deployment does not run sends the
+    // next person debugging it to the wrong provider's dashboard.
+    const { isCloudflareInboundConfigured } =
+      await import('@/lib/server/domains/conversation/email-cloudflare-handler')
     return toAccount(
       await createInboundRoute({
         owningTeamId: teamId,
-        config: { forwardingTarget: data.forwardingTarget, provider: 'resend' },
+        config: {
+          forwardingTarget: data.forwardingTarget,
+          provider: isCloudflareInboundConfigured() ? 'cloudflare' : 'resend',
+        },
       })
     )
   })

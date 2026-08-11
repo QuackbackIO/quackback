@@ -61,7 +61,12 @@ export const emailSendingDomains = pgTable(
 export interface ChannelAccountConfig {
   // inbound role
   forwardingTarget?: string
-  provider?: 'imap' | 'resend'
+  /** Which front door delivers this route's mail. `cloudflare` is the shared
+   *  inbound domain a fleet answers behind one edge mail bridge; the other two
+   *  are a per-workspace provider webhook and a polled mailbox. Free to grow: a
+   *  jsonb column with no CHECK on it, so the union is the only thing enforcing
+   *  the vocabulary and widening it is a type change, not a migration. */
+  provider?: 'imap' | 'resend' | 'cloudflare'
   imap?: { host: string; port: number; secure: boolean; user: string }
   cursor?: { uidValidity: number; lastUid: number }
   // sending role

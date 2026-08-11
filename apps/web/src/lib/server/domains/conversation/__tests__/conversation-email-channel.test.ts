@@ -314,13 +314,39 @@ describe('workspaceSlugFromInboundAddress', () => {
     })
   })
 
+  it('reads exactly what the edge reader read before it chose a host', () => {
+    // The label decides which workspace's database a stranger's mail may reach,
+    // and it is read twice: once at the edge to pick a host, once at that host
+    // to accept the delivery. The two readings have to be the same reading, so
+    // the whitespace and the last-`@` rules are pinned here rather than left to
+    // whichever caller happens to depend on them.
+    expect(workspaceSlugFromInboundAddress('  neon-t1  @in.example')).toEqual({
+      kind: 'slug',
+      slug: SLUG,
+    })
+    expect(workspaceSlugFromInboundAddress('neon-t1+@in.example')).toEqual({
+      kind: 'slug',
+      slug: SLUG,
+    })
+    // Split on the FIRST `@` and this reads as ours. It is not ours.
+    expect(workspaceSlugFromInboundAddress('neon-t1@evil.test@in.example')).toEqual({
+      kind: 'unreadable',
+    })
+  })
+
   it('reports a label this grammar cannot mint as unreadable, never as absent', () => {
     for (const address of [
       'NOT_A_SLUG!!+c01kw8qxn1eeh4t2rek7varh032.sig@in.example',
       'a.very.long.customer.local.part@example.com',
       'not-an-address-at-all',
+      '@in.example',
+      '',
+      // One address, never a header: a value carrying several is not an
+      // envelope, and the one that routed the mail is not identifiable in it.
+      'stranger@example.com, neon-t1@in.example',
+      '<neon-t1@in.example>',
     ]) {
-      expect(workspaceSlugFromInboundAddress(address)).toEqual({ kind: 'unreadable' })
+      expect(workspaceSlugFromInboundAddress(address), address).toEqual({ kind: 'unreadable' })
     }
   })
 })

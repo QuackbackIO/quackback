@@ -182,9 +182,17 @@ function signingKey(env: EnvLike): Buffer | null {
 }
 
 /**
- * Inbound email is usable only when both the receiving domain and the signing
- * secret are configured. When false, the inbound route 404s and no routable
- * Reply-To is emitted.
+ * Is the addressing half of inbound email usable — a domain to receive on and
+ * the secret that makes an address unforgeable? When false, no routable Reply-To
+ * is emitted and the provider webhook front door 404s.
+ *
+ * It is not the gate on every transport. Each front door authenticates its own
+ * caller with its own credential and answers for its own configuration: the
+ * provider webhook on this secret, the raw-MIME front door on the key its edge
+ * sender holds, the mailbox poller on the mailbox credentials it is given. What
+ * this answers is the question they share — whether an address minted here can
+ * be read back — which is why it, and not any transport's gate, decides whether
+ * a Reply-To goes out.
  *
  * Both values are process-level, and on a fleet that means fleet-wide: one
  * inbound domain and one signing secret serve every workspace behind the same
@@ -381,18 +389,26 @@ export type InboundAddressWorkspace = { kind: 'slug'; slug: string } | { kind: '
  * Read the workspace label out of an inbound address: everything left of `+`,
  * or the whole local part on a bare `<slug>@<domain>` support address.
  *
- * Pass the address the mail was DELIVERED to (the envelope recipient), not a
- * whole `To` header. A header carries other people's addresses, and a stranger's
- * local part can be slug-shaped too, so nothing here can tell which of several
- * labels is ours.
+ * Pass ONE address — the one the mail was DELIVERED to (the envelope
+ * recipient) — not a whole `To` header. A header carries other people's
+ * addresses, and a stranger's local part can be slug-shaped too, so nothing here
+ * could tell which of several labels is ours.
+ *
+ * The reading is character-for-character the one the edge reader applies before
+ * it chooses which workspace host to hand a message to: split on the LAST `@`
+ * (so a quoted local part containing one cannot move the boundary), trim, fold
+ * case, take everything before the first `+`. Two readers that normalised
+ * differently could disagree about whose mail a message is, and the whole point
+ * of the label is that they cannot. Anything that does not then match the slug
+ * vocabulary is `unreadable`, including an address with no `@` and one with an
+ * empty local part.
  */
 export function workspaceSlugFromInboundAddress(address: string): InboundAddressWorkspace {
-  for (const local of localParts(address)) {
-    const plus = local.indexOf('+')
-    const slug = (plus === -1 ? local : local.slice(0, plus)).toLowerCase()
-    if (isValidMailSlug(slug)) return { kind: 'slug', slug }
-  }
-  return { kind: 'unreadable' }
+  const at = address.lastIndexOf('@')
+  if (at <= 0) return { kind: 'unreadable' }
+  const local = address.slice(0, at).trim().toLowerCase()
+  const slug = local.split('+')[0] ?? ''
+  return isValidMailSlug(slug) ? { kind: 'slug', slug } : { kind: 'unreadable' }
 }
 
 /** `<slug>+c<id-suffix>.<tag>@<inbound-domain>`. Null when the caller has no

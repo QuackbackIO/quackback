@@ -45,5 +45,16 @@ export const MAIL_SLUG_MAX_LENGTH = 13
  * No `g` flag, deliberately: a global regex carries `lastIndex` between calls,
  * and this one is a shared module-level constant that several callers `.test()`
  * against in turn.
+ *
+ * It is a VOCABULARY, not a description of what the minter emits. `-` and `---`
+ * match it and no minted slug is ever either, because `mailSlugStem` strips
+ * boundary hyphens and collapses runs. Deliberately not tightened to close that
+ * gap: this expression is also the database CHECK and the app's vendored copy,
+ * so the three enforcers agree only while it stays one expression that is
+ * trivially the same on all three, and a hyphen-position rule stated three times
+ * in three dialects is a rule with three chances to be stated differently. The
+ * looseness costs nothing — a slug is only ever compared for equality against a
+ * unique index, never parsed — and the minter, which is the only writer, is
+ * strictly narrower.
  */
 export const MAIL_SLUG_PATTERN = new RegExp(`^[a-z0-9-]{1,${MAIL_SLUG_MAX_LENGTH}}$`)
