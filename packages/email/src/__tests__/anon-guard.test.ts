@@ -90,6 +90,7 @@ describe('sendEmail anon-domain delivery guard', () => {
     })
 
     expect(sendSpy).toHaveBeenCalledTimes(1)
+    // The id comes back exactly as the API reported it.
     expect(result).toEqual({ sent: true, messageId: 'test_id' })
   })
 })

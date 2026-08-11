@@ -15,6 +15,7 @@ import {
   conversationOutboundEmails,
 } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
+import { sesBareMessageId } from '@quackback/email/message-id'
 import { stripAngleBrackets } from './conversation.email-inbound'
 import { logger } from '@/lib/server/logger'
 
@@ -28,10 +29,48 @@ function normalizeMessageId(id: string): string {
 }
 
 /**
- * Record a Message-ID we stamped on an outbound conversation email so a later
- * reply that dropped the plus-address can still be routed back (and so the next
- * outbound mail can build its References chain). Idempotent; never throws — a
- * threading-map miss only costs the References fallback, never correctness.
+ * Every stored form a quoted Message-ID could have been written in.
+ *
+ * Normally one: the id exactly as quoted. The exception is the sending provider
+ * that assigns its own id — its API reports that id bare while its header
+ * carries the same id at a regional host, so the row holds one form and the
+ * reply quotes the other. The local part is offered as a second candidate to
+ * span that gap, and this is the mechanism the route home rests on: nothing
+ * anywhere stores a host that was inferred rather than observed, so no reply is
+ * ever lost to a guess about one.
+ *
+ * Deliberately narrow, and not a general "match on the local part" rule. The
+ * extra candidate is only produced for an id whose host is the PROVIDER's and
+ * which carries exactly one `@`, so the local part offered is a whole
+ * provider-assigned id rather than a fragment of some longer one. Ids we mint
+ * keep their host, so no workspace's id loses the domain that distinguishes it
+ * from another's. Both candidates are still exact equality against a row this
+ * workspace recorded itself, so nothing here widens what can match.
+ *
+ * The vocabulary of provider hosts is not restated here: it lives in one module
+ * that the transport composing those hosts imports too, so a change to either
+ * side cannot silently leave the other behind.
+ */
+function storedFormsOf(id: string): string[] {
+  const normalized = normalizeMessageId(id)
+  if (!normalized) return []
+  const bare = sesBareMessageId(normalized)
+  return bare ? [normalized, bare] : [normalized]
+}
+
+/**
+ * Record the Message-ID an outbound conversation email actually went out with
+ * so a later reply that dropped the plus-address can still be routed back (and
+ * so the next outbound mail can build its References chain). Idempotent; never
+ * throws — a threading-map miss only costs the References fallback, never
+ * correctness.
+ *
+ * The caller decides WHICH id that is: the one we minted on a transport that
+ * lets us set the header, the one the provider reported on a transport that
+ * does not. Stored exactly as reported, never adjusted towards the form a reply
+ * is expected to quote — that would put a guess in the column the route home
+ * compares against, and {@link storedFormsOf} reconciles the two forms at read
+ * time instead, where being wrong costs nothing.
  */
 export async function recordOutboundEmail(
   messageId: string,
@@ -47,8 +86,15 @@ export async function recordOutboundEmail(
   }
 }
 
-/** Prior outbound Message-IDs for a conversation, oldest first — the References
- *  chain for the next outbound mail. Bounded so a long thread stays cheap. */
+/**
+ * Prior outbound Message-IDs for a conversation, oldest first — the References
+ * chain for the next outbound mail. Bounded so a long thread stays cheap.
+ *
+ * Returned in the stored form, hostless ids included. A hostless token is not a
+ * legal `msg-id`, but it is the ordinary shape on the rung whose transport
+ * assigns its own ids, and that transport is the one that knows the host its
+ * header carried: it completes the token on the way out.
+ */
 export async function priorOutboundMessageIds(
   conversationId: ConversationId,
   limit = 20
@@ -72,7 +118,7 @@ export async function priorOutboundMessageIds(
 export async function resolveConversationByMessageIds(
   candidates: string[]
 ): Promise<ConversationId | null> {
-  const normalized = [...new Set(candidates.map(normalizeMessageId).filter(Boolean))]
+  const normalized = [...new Set(candidates.flatMap(storedFormsOf))]
   if (normalized.length === 0) return null
   const rows = await db
     .select({ conversationId: conversationOutboundEmails.conversationId })

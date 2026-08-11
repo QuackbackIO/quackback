@@ -121,7 +121,15 @@ function sesError(
   })
 }
 
-const DEPS = (client: SesSendClient, configurationSet?: string) => ({ client, configurationSet })
+/** A fake client and the region it stands for, which travel together. */
+const DEPS = (client: SesSendClient, configurationSet?: string) => ({
+  client,
+  region: 'us-east-1',
+  configurationSet,
+})
+
+/** The host the verified region stamps on an id it assigned. */
+const HOST = 'email.amazonses.com'
 
 /** The last command's built input, which is what the SDK would serialize. */
 function sentInput(commands: SendEmailCommand[]) {
@@ -405,16 +413,127 @@ describe('sendViaSes', () => {
 })
 
 /**
+ * The one place a regional host is composed at all. Why the completion has to
+ * happen here is in `completeThreadingIds`; what matters to these cases is what
+ * getting the host wrong costs, which is the recipient's client its grouping
+ * and nothing else. Nothing on this path is stored, and nothing on this path
+ * decides where a reply is routed.
+ */
+describe('completing the threading tokens that name an id this transport assigned', () => {
+  it('gives a bare token the host of its region and leaves a hosted one untouched', async () => {
+    const { client, commands } = acceptingClient('ses-assigned-2')
+    await sendViaSes(
+      {
+        from: 'hi@platform.test',
+        to: 'a@b.test',
+        subject: 's',
+        headers: {
+          'In-Reply-To': '<0100018f-abc>',
+          References: '<c.abc.n1@workspace-a.test> <0100018f-abc>',
+        },
+      },
+      DEPS(client)
+    )
+    expect(sentSimple(commands)?.Headers).toEqual([
+      { Name: 'In-Reply-To', Value: `<0100018f-abc@${HOST}>` },
+      {
+        Name: 'References',
+        Value: `<c.abc.n1@workspace-a.test> <0100018f-abc@${HOST}>`,
+      },
+    ])
+  })
+
+  it('composes the host of the region this client was built for', async () => {
+    const { client, commands } = acceptingClient('ses-assigned-2')
+    await sendViaSes(
+      {
+        from: 'hi@platform.test',
+        to: 'a@b.test',
+        subject: 's',
+        headers: { 'In-Reply-To': '<0100018f-abc>' },
+      },
+      { client, region: 'eu-west-2' }
+    )
+    expect(sentSimple(commands)?.Headers).toEqual([
+      { Name: 'In-Reply-To', Value: '<0100018f-abc@eu-west-2.amazonses.com>' },
+    ])
+  })
+
+  it('touches no header but the two that carry ids', async () => {
+    // A bare-looking value in some other header is somebody else's data. The
+    // rewrite is scoped by header name, not by what a value happens to look
+    // like.
+    const { client, commands } = acceptingClient('ses-assigned-2')
+    await sendViaSes(
+      {
+        from: 'hi@platform.test',
+        to: 'a@b.test',
+        subject: 's',
+        headers: { 'X-Quackback-Kind': '<reply>', 'List-Id': '<announce>' },
+      },
+      DEPS(client)
+    )
+    expect(sentSimple(commands)?.Headers).toEqual([
+      { Name: 'X-Quackback-Kind', Value: '<reply>' },
+      { Name: 'List-Id', Value: '<announce>' },
+    ])
+  })
+
+  it('leaves a token alone that no header could have carried', async () => {
+    // Completing a malformed token would turn something a client will ignore
+    // into something that looks like a real id and still names nothing.
+    const { client, commands } = acceptingClient('ses-assigned-2')
+    await sendViaSes(
+      {
+        from: 'hi@platform.test',
+        to: 'a@b.test',
+        subject: 's',
+        headers: { References: '<has space> <a@b@c>' },
+      },
+      DEPS(client)
+    )
+    expect(sentSimple(commands)?.Headers).toEqual([
+      { Name: 'References', Value: '<has space> <a@b@c>' },
+    ])
+  })
+})
+
+/**
  * Acceptance is the assigned id, not the absence of an exception. SES answers a
  * successful send with exactly one field and it is the receipt; a response
  * without it is not a send this transport can report.
  */
 describe('acceptance', () => {
-  it('accepts a response that carries a message id', async () => {
+  it('reports the assigned id exactly as the API gave it, host and all missing', async () => {
+    // Bare is what the API answers, and bare is what comes back. Reconciling
+    // that with the hosted token a reply quotes is the store's job, not this
+    // one's — see the route-home suite in the app.
     const { client } = acceptingClient('0100018f-abc')
     await expect(
       sendViaSes({ from: 'hi@platform.test', to: 'a@b.test', subject: 's' }, DEPS(client))
     ).resolves.toEqual({ messageId: '0100018f-abc' })
+  })
+
+  it('reports the same id whatever region the client was built for', async () => {
+    // The region reaches the outbound header and nothing else. A deploy in a
+    // second region records exactly what a deploy in the first would, so a
+    // region whose host we have never seen cannot cost a reply its route home.
+    const { client } = acceptingClient('0100018f-abc')
+    await expect(
+      sendViaSes(
+        { from: 'hi@platform.test', to: 'a@b.test', subject: 's' },
+        { client, region: 'eu-west-2' }
+      )
+    ).resolves.toEqual({ messageId: '0100018f-abc' })
+  })
+
+  it('takes an id that already carries a host as it stands', async () => {
+    // Defensive: a provider that starts answering with the full form is reported
+    // in that form, unaltered.
+    const { client } = acceptingClient(`0100018f-abc@${HOST}`)
+    await expect(
+      sendViaSes({ from: 'hi@platform.test', to: 'a@b.test', subject: 's' }, DEPS(client))
+    ).resolves.toEqual({ messageId: `0100018f-abc@${HOST}` })
   })
 
   it('throws on a 2xx that carries no message id, and asks to be tried again', async () => {
@@ -437,6 +556,37 @@ describe('acceptance', () => {
     ).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(SesEmailError)
     expect(error).toMatchObject({ retryable: true })
+  })
+
+  /**
+   * The check is on the SHAPE of the id, not merely on its presence, because
+   * this value is stored and later compared for equality: an id nothing could
+   * ever match is as useless as no id at all, and a caller has no way to tell
+   * the two apart after the fact.
+   */
+  it('refuses an id no header could carry and no row could be matched against', async () => {
+    const unusable: Array<[string, string]> = [
+      ['<>', 'brackets with nothing inside them'],
+      ['@email.amazonses.com', 'a host with no id in front of it'],
+      // The one that matters most to the store: it splits an id on its single
+      // `@` to decide whether the provider assigned it. Two `@` make that
+      // question unanswerable, and the answer it would guess at is what decides
+      // whether a local part alone may match a row.
+      ['a@b@email.amazonses.com', 'more than one at-sign'],
+      ['0100018f abc', 'whitespace inside the id'],
+      ['0100018f\u0001abc', 'a control character'],
+      ['0100018f-abcé', 'a character outside US-ASCII'],
+      ['0100018f<abc', 'a bracket inside the id'],
+    ]
+    for (const [assigned, why] of unusable) {
+      const { client } = acceptingClient(assigned)
+      const error: unknown = await sendViaSes(
+        { from: 'hi@platform.test', to: 'a@b.test', subject: 's' },
+        DEPS(client)
+      ).catch((e: unknown) => e)
+      expect(error, why).toBeInstanceOf(SesEmailError)
+      expect(error, why).toMatchObject({ retryable: true })
+    }
   })
 })
 
@@ -639,6 +789,30 @@ describe('dispatch on the ses rung', () => {
     ])
     // The assigned id comes back so the caller stores the id that was actually
     // sent rather than the one it minted and never got.
+    expect(result).toEqual({ sent: true, messageId: 'ses-assigned-1' })
+  })
+
+  it('completes a prior assigned id in the chain, through the env-driven path', async () => {
+    // The shape production actually takes: the store hands back the ids this
+    // transport reported, which are bare, and the region that built the client
+    // is the region whose host finishes them.
+    process.env.EMAIL_SES_REGION = 'eu-west-2'
+    const result = await sendRawEmail({
+      from: 'Support <support@platform.test>',
+      to: 'customer@example.test',
+      subject: 's',
+      html: '<p>hi</p>',
+      inReplyTo: '0100018f-abc',
+      references: ['0100018f-abc'],
+    })
+
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Headers).toEqual([
+      { Name: 'In-Reply-To', Value: '<0100018f-abc@eu-west-2.amazonses.com>' },
+      { Name: 'References', Value: '<0100018f-abc@eu-west-2.amazonses.com>' },
+    ])
+    // Recorded bare all the same: the header is where the region is guessed at,
+    // and the row is where it must not be.
     expect(result).toEqual({ sent: true, messageId: 'ses-assigned-1' })
   })
 

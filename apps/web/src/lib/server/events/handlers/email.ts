@@ -50,6 +50,17 @@ const TICKET_EMAIL_EVENT_TYPES = new Set<string>([
  * email mints a fresh Message-ID and References the root, so a ticket's emails
  * collapse into one client conversation. SLA emails carry no ticket id (they're
  * conversation-scoped agent alerts) and so thread on nothing.
+ *
+ * These ids are what we ASK for, which is not always what goes out. A transport
+ * that owns the Message-ID header replaces ours and reports back the id it
+ * assigned, and this hook has nowhere to keep that id — there is no
+ * ticket-scoped equivalent of the conversation threading map — so it is
+ * discarded. Two consequences, neither of them a routing bug: a later ticket
+ * email then References a root no client ever received, so on that transport
+ * the mails do not collapse into one thread; and no ticket email is resolvable
+ * by Message-ID. Nothing depends on the second, because a ticket reply routes
+ * on its signed `+t` address alone (see conversation.email-inbound.service.ts),
+ * never on this id.
  */
 function ticketThreading(cfg: TicketEmailConfig): {
   messageId?: string
@@ -78,6 +89,12 @@ function ticketThreading(cfg: TicketEmailConfig): {
  * teammate's client instead of a stack of unrelated mails. The root lives in a
  * namespace of its own, disjoint from the customer-facing conversation ids, so
  * an internal alert never joins the thread the customer sees.
+ *
+ * Same caveat as {@link ticketThreading}: on a transport that assigns its own
+ * Message-ID the minted id never reaches the wire and the assigned one is
+ * discarded, so the alerts thread on a root no client received. Being
+ * unroutable is the intended state here either way — the inbound map's
+ * authority is the recorded customer-facing ids alone.
  */
 function noteMentionThreading(cfg: NoteMentionEmailConfig): {
   messageId?: string

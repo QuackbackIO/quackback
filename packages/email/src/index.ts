@@ -119,8 +119,12 @@ export type EmailResult = {
    *
    * - **absent** — we set it, so the caller's own minted id is what went on the
    *   wire and is what a reply will quote. Every rung but SES.
-   * - **a string** — the transport generated the id and told us which one. Store
-   *   THIS, not the minted one: the minted one was never sent.
+   * - **a string** — the transport generated the id and told us which one, in
+   *   whatever form the transport reports it. Store THIS, not the minted one:
+   *   the minted one was never sent. It is not necessarily the literal token a
+   *   reply quotes back — SES reports its ids without the host its header
+   *   carries — so a caller comparing a quoted id to a stored one goes through
+   *   the store's resolver rather than comparing strings itself.
    * - **null** — the transport generated the id and did not tell us which one.
    *   There is nothing to store, and no reply can be matched back by
    *   `Message-ID`. Callers must not fall back to their minted id here; it would
@@ -303,12 +307,12 @@ async function dispatch(
   const html = options.html ?? (options.react ? await render(options.react) : undefined)
 
   if (provider === 'ses') {
-    // Message-ID is platform-controlled, and the transport drops it on the way
-    // out. In-Reply-To and References are allowed and pass through, which is
-    // what keeps the recipient's mail client threading; what is lost is our
-    // ability to CHOOSE the id, and with it the Message-ID route home for a
-    // reply whose client stripped the plus-address. On this rung the
-    // plus-address is the routing mechanism.
+    // Message-ID is platform-controlled: the transport drops ours on the way
+    // out and reports back the one SES assigned. In-Reply-To and References are
+    // allowed and pass through, which is what keeps the recipient's mail client
+    // threading. What is lost is our ability to CHOOSE the id; the Message-ID
+    // route home survives because the caller records the assigned one instead
+    // of the minted one.
     const result = await sendViaSes({
       from,
       to: options.to,
@@ -318,6 +322,9 @@ async function dispatch(
       ...(options.replyTo !== undefined ? { replyTo: options.replyTo } : {}),
       ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
     })
+    // The id as the provider reported it, which is what its delivery events and
+    // the threading map both name the message by. A raw inbound header quotes
+    // the same id at a host, so a search across the two has to expect the pair.
     log.info({ provider: 'ses', message_id: result.messageId }, 'email sent')
     return { sent: true, messageId: result.messageId }
   }

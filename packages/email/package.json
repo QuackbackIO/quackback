@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./templates": "./src/templates/index.ts",
     "./anon": "./src/anon.ts",
+    "./message-id": "./src/message-id.ts",
     "./recipient": "./src/recipient.ts",
     "./ses": "./src/ses.ts"
   },

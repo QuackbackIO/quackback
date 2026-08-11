@@ -96,6 +96,62 @@ describe('resolveConversationByMessageIds', () => {
     selectRows = []
     expect(await resolveConversationByMessageIds(['x@d'])).toBeNull()
   })
+
+  it('also looks for the bare form of an id the sending provider assigned', async () => {
+    // Rows for that provider hold the id without its host, because that is what
+    // its API reports and nothing composes the rest. Matching only what the
+    // reply quotes would strand every one of them.
+    selectRows = [{ conversationId: 'conversation_abc' }]
+
+    await resolveConversationByMessageIds(['<0100018F-ABC@email.amazonses.com>'])
+
+    expect(inArraySpy).toHaveBeenCalledWith('conversationOutboundEmails.messageId', [
+      '0100018f-abc@email.amazonses.com',
+      '0100018f-abc',
+    ])
+  })
+
+  /**
+   * The tolerance above is scoped to the hosts the provider stamps on its own
+   * ids. Dropping a host anywhere else would let a local part alone decide a
+   * match, and a local part alone is not what distinguishes one sending
+   * domain's ids from another's.
+   *
+   * The last two are the hosts an attacker can register: each is admitted by
+   * deleting one anchor from the recogniser's pattern, and each is a domain for
+   * sale. A lookalike with no leading label fails with or without either
+   * anchor, so it cannot stand in for them.
+   */
+  it('keeps the host on every other id, lookalikes at either end included', async () => {
+    selectRows = []
+
+    await resolveConversationByMessageIds([
+      'c.abc.n1@workspace-a.test',
+      'c.abc.n1@amazonses.com.attacker.test',
+      '0100018f-abc@evil.amazonses.com.attacker.test',
+      '0100018f-abc@evilamazonses.com',
+    ])
+
+    expect(inArraySpy).toHaveBeenCalledWith('conversationOutboundEmails.messageId', [
+      'c.abc.n1@workspace-a.test',
+      'c.abc.n1@amazonses.com.attacker.test',
+      '0100018f-abc@evil.amazonses.com.attacker.test',
+      '0100018f-abc@evilamazonses.com',
+    ])
+  })
+
+  it('offers no extra candidate for an id carrying more than one at-sign', async () => {
+    // The narrowness the doc claims, enforced: what the extra candidate may be
+    // is a WHOLE provider-assigned id, never a fragment of some longer id that
+    // happens to end at the provider's domain.
+    selectRows = []
+
+    await resolveConversationByMessageIds(['a@b@email.amazonses.com'])
+
+    expect(inArraySpy).toHaveBeenCalledWith('conversationOutboundEmails.messageId', [
+      'a@b@email.amazonses.com',
+    ])
+  })
 })
 
 describe('resolvePrincipalIdByEmail', () => {
@@ -160,5 +216,16 @@ describe('priorOutboundMessageIds', () => {
     selectRows = [{ messageId: 'newest@d' }, { messageId: 'oldest@d' }]
     const result = await priorOutboundMessageIds('conversation_abc' as never)
     expect(result).toEqual(['oldest@d', 'newest@d'])
+  })
+
+  it('keeps a hostless id in the chain for the transport to finish', async () => {
+    // A hostless row is what a provider that assigns its own id reports, and it
+    // is the ordinary case on that rung rather than a legacy one. Dropping it
+    // here would empty the chain on exactly the rung the ids come from; the
+    // transport that reported the id is the one that knows the host its header
+    // carried, and it completes the token on the way out.
+    selectRows = [{ messageId: 'newest@d' }, { messageId: '0100018f-abc' }, { messageId: 'old@d' }]
+    const result = await priorOutboundMessageIds('conversation_abc' as never)
+    expect(result).toEqual(['old@d', '0100018f-abc', 'newest@d'])
   })
 })

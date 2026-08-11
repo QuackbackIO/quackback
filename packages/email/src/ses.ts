@@ -15,17 +15,27 @@
  * ## What this transport cannot do
  *
  * `Message-ID` is platform-controlled. SES generates it and returns the
- * assigned id on the response; a caller-supplied one is dropped on the way out
- * along with Date, MIME-Version, Content-Type, Return-Path, DKIM-Signature and
- * the ARC set. Anything that needs to pin its own outbound Message-ID (the
- * conversation email channel's threading does) has to read the assigned id back
- * off the response instead of choosing it. `In-Reply-To`, `References`,
- * `List-*`, `Auto-Submitted`, `Precedence` and any `X-*` header are accepted and
- * pass through untouched.
+ * assigned id on the response; a caller-supplied one is REPLACED on the way out
+ * (not duplicated, and before the message is signed) along with Date,
+ * MIME-Version, Content-Type, Return-Path, DKIM-Signature and the ARC set.
+ * Anything that needs to pin its own outbound Message-ID (the conversation
+ * email channel's threading does) has to read the assigned id back off the
+ * response instead of choosing it. `In-Reply-To`, `References`, `List-*`,
+ * `Auto-Submitted`, `Precedence` and any `X-*` header are accepted and pass
+ * through untouched.
+ *
+ * The assigned id is reported BARE, exactly as the API gives it, because that
+ * is the only form of it we are told; the header the provider signs carries the
+ * same id at a regional host. Reconciling the two forms is the store's job, not
+ * this transport's. The one thing this transport does with the host is complete
+ * the threading tokens it is asked to send, since a bare id is not a legal
+ * `msg-id`, and that is the only place the host appears at all. See
+ * `message-id.ts` for why that split is deliberate.
  */
 import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2'
 import type { SendEmailCommandOutput } from '@aws-sdk/client-sesv2'
 import { createLogger } from '@quackback/logger'
+import { sesWireMessageId } from './message-id'
 
 const log = createLogger({ base: { service_name: 'quackback-email' } }).child({
   component: 'email-ses',
@@ -163,13 +173,80 @@ export interface SesSendRequest {
 
 export interface SesSendResult {
   /**
-   * The id SES assigned this message.
+   * The id SES assigned this message, exactly as the API reported it.
    *
-   * Never empty: a response without one is not treated as a send at all (see
-   * {@link sendViaSes}), so a caller that stores this is always storing an id
-   * that exists on the provider's side.
+   * BARE on this provider: no host, and so not the literal token a reply quotes
+   * back. Composing the missing host is deliberately not done here, because the
+   * host is a per-region inference and this value is the one that gets stored;
+   * see `sesMessageIdHost` in `message-id.ts`. It is also the form the
+   * provider's own delivery events name the message by, so the two sides
+   * already share it.
+   *
+   * Never empty and never shaped like something a header could not carry: a
+   * response that cannot produce a usable id is not treated as a send at all
+   * (see {@link sendViaSes}), so a caller that stores this is always storing an
+   * id that exists on the provider's side.
    */
   messageId: string
+}
+
+/**
+ * One character of a Message-ID.
+ *
+ * Printable US-ASCII only, with the structural characters excluded: whitespace
+ * (which would end the token), angle brackets (which delimit it), and `@`
+ * (which separates its halves and is counted separately below). Control
+ * characters and non-ASCII are out because this value reaches a header, a log
+ * line and a stored column, and none of those is a place for a byte that
+ * renders as something other than itself.
+ */
+const ID_ATOM = String.raw`[^\s<>@\x00-\x1f\x7f-\uffff]`
+
+/**
+ * An id this transport will hand back to a caller that stores it.
+ *
+ * At most one `@`, because a second one makes the id ambiguous about where its
+ * host starts — and the store's read side splits on exactly that boundary to
+ * decide whether an id is one this provider assigned. An id that arrived with
+ * two would either be rejected there or, worse, have a fragment of itself
+ * treated as a whole id.
+ */
+const ASSIGNED_MESSAGE_ID = new RegExp(String.raw`^${ID_ATOM}+(?:@${ID_ATOM}+)?$`)
+
+/**
+ * The headers whose tokens may name an id this transport assigned.
+ *
+ * Lower-cased for comparison; header names are case-insensitive on the wire.
+ */
+const THREADING_ID_HEADERS = new Set(['in-reply-to', 'references'])
+
+/**
+ * Complete the threading tokens that name ids this transport assigned.
+ *
+ * A caller threading on our own prior sends hands those ids back in the form we
+ * reported them, which on this provider is bare — and a bare token is not a
+ * `msg-id`, so it threads nothing and can lead a strict parser to discard the
+ * whole header, taking the valid tokens with it. This transport is the one
+ * place that knows the host its own ids wear on the wire, so it is the one
+ * place that can finish them.
+ *
+ * Only bracketed tokens are rewritten, which is the form every header value
+ * reaching here is built in, and only ones with no host of their own: a
+ * workspace-minted id passing through is left exactly as it was written.
+ */
+function completeThreadingIds(
+  headers: Record<string, string>,
+  region: string
+): Record<string, string> {
+  const completed: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers)) {
+    completed[name] = THREADING_ID_HEADERS.has(name.toLowerCase())
+      ? value.replace(/<([^<>]+)>/g, (whole, token: string) =>
+          ASSIGNED_MESSAGE_ID.test(token) ? `<${sesWireMessageId(token, region)}>` : whole
+        )
+      : value
+  }
+  return completed
 }
 
 /** The subset of the SES client this transport uses, so tests inject a fake. */
@@ -180,6 +257,17 @@ export interface SesSendClient {
 /** Injectable so tests never touch the network. */
 export interface SesEmailDeps {
   client: SesSendClient
+  /**
+   * The region this client is pointed at, and so the region whose host completes
+   * a threading token naming one of this transport's own ids.
+   *
+   * Carried beside the client rather than re-read from the environment at the
+   * send: the client was built for one region, and reading the region again
+   * elsewhere is how an injected client and the header composed alongside it
+   * come to describe two different deployments. Required rather than defaulted,
+   * because a default would be a second guess stacked on the first.
+   */
+  region: string
   /**
    * Names the SES configuration set applied to the send. Optional because a
    * self-hoster has no reason to create one; a fleet uses it to attach event
@@ -377,7 +465,11 @@ function configFailure(message: string): SesEmailError {
   return new SesEmailError(message, null, null, false)
 }
 
-function clientFromEnv(): SESv2Client {
+/**
+ * The client and the region it was built for, so the two cannot drift apart on
+ * the way to the send.
+ */
+function depsFromEnv(): SesEmailDeps {
   // Re-asked at the send rather than assumed from the rung: this is exported,
   // and a caller reaching it without the ladder must fail closed rather than
   // build a client that signs with nothing.
@@ -401,11 +493,7 @@ function clientFromEnv(): SESv2Client {
     cachedClient = new SESv2Client({ region, credentials })
     cachedClientKey = key
   }
-  return cachedClient
-}
-
-function depsFromEnv(): SesEmailDeps {
-  return { client: clientFromEnv(), configurationSet: sesConfigurationSet() }
+  return { client: cachedClient, region, configurationSet: sesConfigurationSet() }
 }
 
 /** Turn whatever the SDK threw into an error that says whether to try again. */
@@ -478,7 +566,10 @@ export async function sendViaSes(
   if (dropped.length > 0) {
     log.debug({ dropped_headers: dropped }, 'platform-controlled headers dropped before send')
   }
-  const headerList = Object.entries(headers).map(([Name, Value]) => ({ Name, Value }))
+  // Applied to what survived the strip, which is what actually goes out.
+  const headerList = Object.entries(completeThreadingIds(headers, deps.region)).map(
+    ([Name, Value]) => ({ Name, Value })
+  )
 
   const command = new SendEmailCommand({
     // Re-rendered rather than passed through: the API takes the whole RFC 5322
@@ -511,20 +602,25 @@ export async function sendViaSes(
     throw sendFailure(error, request.from)
   }
 
-  const messageId = typeof response.MessageId === 'string' ? response.MessageId.trim() : ''
-  if (messageId === '') {
+  // Reported as given, minus the brackets a header form would carry, and
+  // checked against what an id may contain rather than merely against being
+  // empty. This value is stored and later compared for equality, so a shape
+  // nothing could ever match is as useless as no id at all.
+  const messageId =
+    typeof response.MessageId === 'string' ? response.MessageId.trim().replace(/^<|>$/g, '') : ''
+  if (!ASSIGNED_MESSAGE_ID.test(messageId)) {
     const status =
       typeof response.$metadata?.httpStatusCode === 'number'
         ? response.$metadata.httpStatusCode
         : null
     log.error(
       { status, from_domain: addressDomain(request.from) },
-      'ses send returned no message id'
+      'ses send returned no usable message id'
     )
     // Thrown rather than returned, and retryable rather than permanent.
     //
     // Thrown, because the id is not a nicety here: it is the reply-routing
-    // mechanism on this rung, and returning an empty one would let it be
+    // mechanism on this rung, and returning an unusable one would let it be
     // recorded as the outbound Message-ID and poison every later attempt to
     // resolve a reply against it.
     //
@@ -535,7 +631,7 @@ export async function sendViaSes(
     // plus-addressed Reply-To is per conversation and identical on every
     // attempt, so both copies thread into the same place. A duplicate beats a
     // silent drop.
-    throw new SesEmailError('SES email send returned no message id', status, null, true)
+    throw new SesEmailError('SES email send returned no usable message id', status, null, true)
   }
 
   return { messageId }

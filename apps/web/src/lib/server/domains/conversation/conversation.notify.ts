@@ -343,10 +343,12 @@ async function sendVisitorConversationEmail(opts: {
   }
   // Which Message-ID actually went out, which is not always the one we minted.
   // A transport that owns the header generates its own and reports it back, and
-  // that is the id a reply will quote; an explicit null means it generated one
-  // it did not disclose, in which case there is nothing to record and the
-  // plus-addressed Reply-To is the only route a reply has home. Recording the
-  // minted id there would store an id that exists nowhere and guarantee a miss.
+  // that reported id is the one a reply resolves against — not necessarily the
+  // literal token it quotes, which the store reconciles. An explicit null means
+  // it generated one it did not disclose, in which case there is nothing to
+  // record and the plus-addressed Reply-To is the only route a reply has home.
+  // Recording the minted id there would store an id that exists nowhere and
+  // guarantee a miss.
   const outboundMessageId =
     result?.messageId === undefined ? threading.messageId : (result.messageId ?? undefined)
   await Promise.all([
