@@ -359,6 +359,7 @@ went stale the moment a queue moved.
 | `snooze-sweep`          | `* * * * *`   | 1           | 3           | 60s   |
 | `workflow-sweep`        | `*/5 * * * *` | 1           | 3           | 60s   |
 | `workflow-retention`    | `0 4 * * *`   | 1           | 3           | 60s   |
+| `spam-retention`        | `0 5 * * *`   | 1           | 3           | 60s   |
 | `analytics`             | `0 * * * *`   | 1           | 3           | 60s   |
 | `events`                | —             | 5           | 6           | 60s   |
 | `segment-evaluation`    | dynamic       | 2           | 3           | 60s   |

@@ -605,9 +605,25 @@ export type ConversationEndReason = (typeof CONVERSATION_END_REASONS)[number]
 // fallback verdict and 'manual' an agent's own filing. A plain-text column
 // whose allowed values live here as the single source of truth for the
 // Spam view's reason badge.
+//
+// The three sender_auth_* values are one family, split because they are three
+// different things to a person deciding whether to release the message:
+//   - sender_auth_failure     the MTA reported DMARC fail under a policy that
+//                             does not ask us to refuse (p=none/quarantine).
+//   - sender_auth_reject      DMARC fail under p=reject, with no validated ARC
+//                             chain. The author domain asked us to refuse it.
+//   - sender_auth_arc_rescued DMARC fail under p=reject, but our MTA validated
+//                             an ARC chain, so an intermediary vouched for a
+//                             message we cannot tie to the From domain
+//                             ourselves. The forwarding-gateway shape, and the
+//                             one most likely to be a real customer.
+// Collapsing them would erase exactly the distinction that tells an agent
+// which quarantined mail is worth releasing.
 export const CONVERSATION_SPAM_FILED_BY = [
   'auto_responder',
   'sender_auth_failure',
+  'sender_auth_reject',
+  'sender_auth_arc_rescued',
   'burst_rate',
   'ai_classifier',
   'manual',

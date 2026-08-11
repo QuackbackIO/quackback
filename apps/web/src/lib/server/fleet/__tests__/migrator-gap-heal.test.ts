@@ -203,13 +203,13 @@ afterEach(() => {
 describe('a hole the whole of which is replay-safe', () => {
   it('is healed, and the rows that come back are written by drizzle', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258', '0259')
 
     const before = await ledgerOf(db)
     // The instrument that could not see this, kept as the control: it reports a
-    // three-migration tail on a ledger that is missing eight.
-    expect(replaySetFor(before)).toHaveLength(3)
-    expect(planFor(before).tags).toHaveLength(8)
+    // four-migration tail on a ledger that is missing nine.
+    expect(replaySetFor(before)).toHaveLength(4)
+    expect(planFor(before).tags).toHaveLength(9)
     const digestBefore = await catalogueDigest(db)
 
     const result = await migrateWorkspace(workspaceOn(db))
@@ -221,8 +221,8 @@ describe('a hole the whole of which is replay-safe', () => {
       '0250_billing',
       '0252_settings_cloud_secret_canary',
     ])
-    // Eight executed, not three — and the ledger ends complete.
-    expect(result.replaySet).toHaveLength(8)
+    // Nine executed, not four — and the ledger ends complete.
+    expect(result.replaySet).toHaveLength(9)
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
     expect(ledgerGapFor(result.after!)).toBeNull()
     expect(result.postconditions!.ok).toBe(true)
@@ -237,7 +237,7 @@ describe('a hole the whole of which is replay-safe', () => {
     // "this database was wrong" has to be distinguishable from one that means
     // "this database was behind".
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258', '0259')
     const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).not.toBe('reconciled')
     expect(result.code).not.toBe('already_current')
@@ -253,14 +253,14 @@ describe('the run has to do what it planned, not merely report that it did', () 
     // nothing repaired, with the post-condition verdict green beside it. The
     // truncation still really happens, so the ledger the check reads is real.
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258', '0259')
     executor.pretendItRan = true
 
     const result = await migrateWorkspace(workspaceOn(db))
 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('migration_failed')
-    expect(result.detail).toContain('the ledger does not record 8 of the 8')
+    expect(result.detail).toContain('the ledger does not record 9 of the 9')
     expect(result.detail).toContain('0249_settings_cloud')
     // Green post-conditions do not rescue it. That combination — a passing
     // catalogue verdict over an unapplied plan — is the exact false green.
@@ -269,7 +269,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
 
   it('is not a check that cannot fail: the same run un-stubbed reports the heal', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258', '0259')
     const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).toBe('healed_ledger_gap')
   }, 120_000)
@@ -422,7 +422,7 @@ describe('a hole whose truncation span reaches a verdict the classifier gets wro
     // own outage: these ledgers are the state five live workspace databases are
     // actually in.
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258')
+    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257', '0258', '0259')
 
     const result = await migrateWorkspace(workspaceOn(db), healing)
 
@@ -439,7 +439,7 @@ describe('a hole whose truncation span reaches a verdict the classifier gets wro
 describe('the ledgers that are not holes — the controls', () => {
   it('a contiguous ledger behind the tip migrates exactly as it did before', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0256', '0257', '0258')
+    await dropLedgerRows(db, '0256', '0257', '0258', '0259')
 
     const result = await migrateWorkspace(workspaceOn(db))
 
@@ -452,6 +452,7 @@ describe('the ledgers that are not holes — the controls', () => {
       '0256_outbox_relay_leader',
       '0257_pg_kv_presence_realtime',
       '0258_workspace_key_columns',
+      '0259_conversation_spam_retention_idx',
     ])
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
   }, 120_000)

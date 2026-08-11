@@ -529,7 +529,16 @@ export async function handleCloudflareInboundEmail(request: Request): Promise<Re
     // is gone — and turning them into SMTP rejections would both leak that
     // policy to whoever probed it and bounce mail permanently for reasons that
     // are temporary. What deserves a bounce was decided above, before ingestion.
-    if (result.status !== 'ingested' && result.status !== 'ingested_ticket') {
+    // 'quarantined' is deliberately not in this branch: the message was refused
+    // but it was RETAINED, in the Spam view under an enumerated cause, and the
+    // ingest core has already logged the refusal. Calling that a drop would put
+    // the one outcome this whole path exists to stop being confused with back
+    // into the logs as if the bytes were gone.
+    if (
+      result.status !== 'ingested' &&
+      result.status !== 'ingested_ticket' &&
+      result.status !== 'quarantined'
+    ) {
       log.warn({ status: result.status }, 'dropped inbound email')
     }
     return Response.json({ status: result.status })

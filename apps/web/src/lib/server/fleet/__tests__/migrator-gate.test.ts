@@ -56,7 +56,7 @@ const withoutRows = (...prefixes: string[]) => {
  * turning the tail into part of the hole and quietly replacing the measured
  * shape with a different one that happens to still parse.
  */
-const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257', '0258')
+const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257', '0258', '0259')
 
 describe('replaySetFor', () => {
   it('is everything on a database that has never been migrated', () => {
@@ -152,6 +152,7 @@ describe('planFor', () => {
       '0256_outbox_relay_leader',
       '0257_pg_kv_presence_realtime',
       '0258_workspace_key_columns',
+      '0259_conversation_spam_retention_idx',
     ])
     expect(planFor(applied).tags).toEqual([
       '0249_settings_cloud',
@@ -162,6 +163,7 @@ describe('planFor', () => {
       '0256_outbox_relay_leader',
       '0257_pg_kv_presence_realtime',
       '0258_workspace_key_columns',
+      '0259_conversation_spam_retention_idx',
     ])
   })
 
@@ -301,6 +303,7 @@ describe('replayGateVerdict', () => {
       '0256_outbox_relay_leader',
       '0257_pg_kv_presence_realtime',
       '0258_workspace_key_columns',
+      '0259_conversation_spam_retention_idx',
     ])
     expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)).toEqual({
       ok: true,

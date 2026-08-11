@@ -215,6 +215,20 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Bounds what quarantined inbound mail can cost. Deliberately offset from
+    // the other daily sweeps rather than sharing 03:00 or 04:00: this one
+    // cascades across a conversation's whole child graph, so it is the last
+    // thing that should run concurrently with anon-sweep, which contends for
+    // the same rows from the other direction.
+    name: 'spam-retention',
+    cron: '0 5 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/conversation/spam-retention-queue').then(
+        (m) => m.runSpamRetention
+      ),
+  },
+  {
     name: 'analytics',
     cron: '0 * * * *',
     maxAttempts: 3,

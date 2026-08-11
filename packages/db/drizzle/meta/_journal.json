@@ -1639,6 +1639,13 @@
       "tag": "0258_workspace_key_columns",
       "breakpoints": true,
       "idx": 233
+    },
+    {
+      "version": "7",
+      "when": 1785700000019,
+      "tag": "0259_conversation_spam_retention_idx",
+      "breakpoints": true,
+      "idx": 234
     }
   ]
 }
