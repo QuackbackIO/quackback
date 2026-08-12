@@ -619,11 +619,18 @@ export type ConversationEndReason = (typeof CONVERSATION_END_REASONS)[number]
 //                             one most likely to be a real customer.
 // Collapsing them would erase exactly the distinction that tells an agent
 // which quarantined mail is worth releasing.
+//
+// 'mail_loop_suspected' is the same shape of judgement about a different
+// question: the ingest path's guess that this message is one of the workspace's
+// own mails coming back. It badges a message filed rather than destroyed
+// BECAUSE it is a guess — see INBOUND_REFUSAL_CAUSES in the conversation domain
+// for what the guess is made of and why it is retained.
 export const CONVERSATION_SPAM_FILED_BY = [
   'auto_responder',
   'sender_auth_failure',
   'sender_auth_reject',
   'sender_auth_arc_rescued',
+  'mail_loop_suspected',
   'burst_rate',
   'ai_classifier',
   'manual',

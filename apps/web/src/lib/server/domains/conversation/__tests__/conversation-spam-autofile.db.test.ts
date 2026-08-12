@@ -147,6 +147,7 @@ function agentActor(): Actor {
 const coldEmail = (over: Partial<ParsedInboundEmail> = {}): ParsedInboundEmail => ({
   toAddresses: ['support@quackback.io'],
   ccAddresses: [],
+  replyToAddresses: [],
   from: 'customer@acme.com',
   subject: 'Help with billing',
   text: 'My invoice looks wrong.',

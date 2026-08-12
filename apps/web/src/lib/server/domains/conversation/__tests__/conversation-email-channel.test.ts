@@ -10,6 +10,7 @@ import {
   signConversationId,
   signTicketId,
   bearsTicketMarker,
+  isOwnInboundAddress,
   workspaceSlugFromInboundAddress,
   isValidMailSlug,
   InvalidMailSlugError,
@@ -21,6 +22,7 @@ import {
   ticketRootMessageId,
   outboundMessageIdDomain,
   ownEmailDomains,
+  ownMessageIdDomains,
   inboundAcceptDomains,
   inboundMintDomain,
   invalidInboundDomainValues,
@@ -42,6 +44,23 @@ const TICKET_ID = 'ticket_01h455vb4pex5vsknk084sn02q' as TicketId
 const SLUG = 'neon-t1'
 
 const localPartOf = (address: string) => address.slice(0, address.indexOf('@'))
+
+/**
+ * The same address with one character of its TAG changed, and nothing else.
+ *
+ * The tag is bounded by the last dot of the LOCAL PART, never of the address —
+ * the domain is full of dots, and a helper that took the last one produced a
+ * string that failed for the wrong reason and would have passed against code
+ * doing no verification at all.
+ */
+function withTamperedTag(address: string): string {
+  const at = address.indexOf('@')
+  const local = address.slice(0, at)
+  const dot = local.lastIndexOf('.')
+  const tag = local.slice(dot + 1)
+  const flipped = `${tag[0] === 'A' ? 'B' : 'A'}${tag.slice(1)}`
+  return `${local.slice(0, dot + 1)}${flipped}${address.slice(at)}`
+}
 
 describe('isEmailInboundConfigured', () => {
   it('is true only when both the inbound domain and signing secret are set', () => {
@@ -592,6 +611,88 @@ describe('bearsTicketMarker', () => {
   })
 })
 
+/**
+ * "Did THIS workspace mint this address?" — the question the mail-loop guard
+ * asks once the sending transport has taken the `Message-ID` away from us.
+ *
+ * Three things have to hold at once, and each closes a different door. The tag
+ * has to verify, so the answer cannot be reached by writing an address down. The
+ * label has to be this workspace's, because the secret is fleet-wide and a
+ * neighbour's address verifies against it perfectly well. The domain has to be
+ * one we receive on, because an address is only ours if we could have minted it.
+ */
+describe('isOwnInboundAddress', () => {
+  it('recognises the conversation and ticket addresses this workspace mints', () => {
+    expect(isOwnInboundAddress(inboundReplyToAddress(REAL_ID, SLUG, ENV)!, SLUG, ENV)).toBe(true)
+    expect(isOwnInboundAddress(inboundTicketReplyToAddress(TICKET_ID, SLUG, ENV)!, SLUG, ENV)).toBe(
+      true
+    )
+  })
+
+  it('reads one out of a header value with a display name beside other addresses', () => {
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    expect(isOwnInboundAddress(`Jane <jane@example.com>, Support <${conv}>`, SLUG, ENV)).toBe(true)
+  })
+
+  it('refuses an address of ours whose tag was tampered with', () => {
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    const forged = withTamperedTag(conv)
+    // Same address in every respect a shape test can see: same label, same id,
+    // same domain, same 22-char base64url tag. Only the tag's VALUE differs, so
+    // nothing short of the HMAC can tell the two apart.
+    expect(forged).not.toBe(conv)
+    expect(forged.length).toBe(conv.length)
+    expect(conversationIdFromInboundAddress(forged, ENV)).toBeNull()
+    expect(isOwnInboundAddress(forged, SLUG, ENV)).toBe(false)
+  })
+
+  it('refuses a neighbouring workspace’s address on the same fleet', () => {
+    // The decisive one. The signing secret is fleet-wide, so this address is
+    // genuinely well-formed and genuinely verifies — it just is not OURS, and a
+    // guard that only asked "does the tag check out" would call a neighbour's
+    // mail our own and hard-drop it.
+    const neighbour = inboundReplyToAddress(REAL_ID, 'neon-t2', ENV)!
+    expect(conversationIdFromInboundAddress(neighbour, ENV)).toBe(REAL_ID)
+    expect(isOwnInboundAddress(neighbour, SLUG, ENV)).toBe(false)
+  })
+
+  it('refuses an address minted on a domain we do not receive on', () => {
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    const elsewhere = `${localPartOf(conv)}@attacker.test`
+    expect(isOwnInboundAddress(elsewhere, SLUG, ENV)).toBe(false)
+    // ...and a domain we have retired but still receive on stays ours.
+    const retiredEnv = { ...ENV, EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example' }
+    expect(isOwnInboundAddress(`${localPartOf(conv)}@old.example`, SLUG, retiredEnv)).toBe(true)
+  })
+
+  it('refuses an address signed with another install’s secret', () => {
+    const theirs = inboundReplyToAddress(REAL_ID, SLUG, OTHER_ENV)!
+    expect(isOwnInboundAddress(theirs, SLUG, ENV)).toBe(false)
+  })
+
+  it('refuses ordinary sub-addressing and a bare support address', () => {
+    for (const address of [
+      'neon-t1@tenaevexeo.resend.app',
+      'neon-t1+tuesday@tenaevexeo.resend.app',
+      'jane@example.com',
+      'me+twitter.com@gmail.com',
+    ]) {
+      expect(isOwnInboundAddress(address, SLUG, ENV)).toBe(false)
+    }
+  })
+
+  it('answers no when there is no workspace label and no secret to check against', () => {
+    // Both are the guard's fail-open direction, stated here rather than left to
+    // the caller: unrecognised means "not ours", which ingests the message. The
+    // other direction would drop it, with nothing kept.
+    const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
+    expect(isOwnInboundAddress(conv, null, ENV)).toBe(false)
+    expect(
+      isOwnInboundAddress(conv, SLUG, { EMAIL_INBOUND_DOMAIN: ENV.EMAIL_INBOUND_DOMAIN })
+    ).toBe(false)
+  })
+})
+
 describe('outbound Message-ID threading', () => {
   const FROM_ENV = { EMAIL_FROM: 'Support <noreply@acme.example>' }
 
@@ -629,16 +730,33 @@ describe('outbound Message-ID threading', () => {
     // recognising exactly the older mail most likely to still be circulating.
     //
     // The cost is stated where the set is built: this feeds a check whose branch
-    // is a HARD drop with no retention, matching on the Message-ID domain alone.
-    // Every member is therefore also a promise that no stranger's mail carries a
-    // Message-ID on it — true of a zone we operate, and the reason the extras
-    // list may only name one.
+    // is a refusal with nothing retained, matching on the Message-ID domain
+    // alone. Every member is therefore also a promise that no stranger's mail
+    // carries a Message-ID on it — true of a zone we operate, and the reason the
+    // extras list may only name one.
     const domains = ownEmailDomains({
       ...FROM_ENV,
       EMAIL_INBOUND_DOMAIN: 'x.resend.app',
       EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example',
     })
     expect(domains).toEqual(new Set(['acme.example', 'x.resend.app', 'old.example']))
+  })
+
+  it('claims a Message-ID host for a workspace only when the workspace owns it', () => {
+    // The install's domains and THIS WORKSPACE's domains are the same set only
+    // when the process serves one workspace. Pooled, every workspace's mail
+    // leaves through the same sending domain, so a host names the fleet and not
+    // the sender: read as authorship it refuses the neighbour's mail, which is
+    // the same mistake as adopting a sending provider's regional host, one level
+    // in. Nothing is given up by emptying it there, since ids are minted on that
+    // shared domain and the fleet's transport replaces them anyway.
+    const env = { ...FROM_ENV, EMAIL_INBOUND_DOMAIN: 'x.resend.app' }
+    expect(ownMessageIdDomains(env)).toEqual(new Set(['acme.example', 'x.resend.app']))
+    expect(ownMessageIdDomains({ ...env, QUACKBACK_TENANCY: 'pooled' })).toEqual(new Set())
+    // The install-level set is unchanged by tenancy: it answers a different
+    // question (what this process sends and receives on) and other readers
+    // depend on that answer.
+    expect(ownEmailDomains({ ...env, QUACKBACK_TENANCY: 'pooled' }).size).toBe(2)
   })
 
   it('holds every domain in the spelling a Message-ID actually arrives in', () => {

@@ -6,7 +6,13 @@
  * config); the conversation/message/lead writes are real. Fixture rollback.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import { createId, type PrincipalId, type TeamId, type UserId } from '@quackback/ids'
+import {
+  createId,
+  type ConversationId,
+  type PrincipalId,
+  type TeamId,
+  type UserId,
+} from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 // config is read lazily (getters), so seeding the required env before any config
@@ -16,6 +22,12 @@ import type { Actor } from '@/lib/server/policy/types'
 // absolute one unconditionally for this file's config load.
 process.env.BASE_URL = 'https://quackback.test'
 process.env.SECRET_KEY ||= 'x'.repeat(32)
+// The inbound channel has to be configured for a reply address to be minted at
+// all, and the mail-loop guard's whole question is whether an address in front
+// of it is one THIS install minted. Unconfigured, the guard is inert and a test
+// of it would pass against a guard wired to nothing.
+process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
+process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -23,6 +35,7 @@ import {
   channelAccounts,
   conversations,
   conversationMessages,
+  conversationOutboundEmails,
   principal,
   user,
   eq,
@@ -83,6 +96,12 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
 })
 
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
+import { parseRawEmail } from '../conversation.email-inbound'
+// The real minter and the real store, so a fixture that claims to be one of our
+// own mails is one the running system would have produced and recorded.
+import { inboundReplyToAddress } from '../conversation.email-channel'
+import { SELF_HOSTED_MAIL_SLUG } from '../conversation.mail-slug'
+import { recordOutboundEmail } from '../conversation.email-store'
 import { emitConversationCreated, emitMessageCreated } from '../conversation.webhooks'
 import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 import { restoreConversationFromSpam } from '../conversation.service'
@@ -134,6 +153,7 @@ async function seedInboundRoute(address: string): Promise<void> {
 const coldEmail = (over: Partial<ParsedInboundEmail> = {}): ParsedInboundEmail => ({
   toAddresses: ['support@quackback.io'],
   ccAddresses: [],
+  replyToAddresses: [],
   from: 'customer@acme.com',
   subject: 'Help with billing',
   text: 'My invoice looks wrong.',
@@ -566,6 +586,116 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
       .select({ count: sql<number>`count(*)::int` })
       .from(principal)
     expect(afterSecond).toBe(afterFirst)
+  })
+
+  // ==========================================================================
+  // The mail-loop guard, on the rung the transport it exists for delivers: raw
+  // MIME, carrying a `Message-ID` the sending provider assigned rather than one
+  // we minted. Two signals reach two different dispositions here, and the whole
+  // point of the pair is that they are NOT the same disposition.
+  // ==========================================================================
+
+  /** Our own notification, echoed back into the support inbox by a forwarding
+   *  rule. Everything that used to identify it as ours is gone from the wire
+   *  except the reply address we minted and put on it ourselves. */
+  const loopingMail = (replyTo: string): string =>
+    [
+      'From: Support <noreply@quackback.test>',
+      'To: support@quackback.io',
+      `Reply-To: Acme Support <${replyTo}>`,
+      'Subject: New reply from Acme',
+      'Message-ID: <0100019a1f4c8e21-6b2d@email.amazonses.com>',
+      'Authentication-Results: mx.quackback.io; spf=pass; dmarc=pass (p=none) header.from=quackback.test',
+      '',
+      'An agent replied to your conversation.',
+    ].join('\r\n')
+
+  // RETAINED, not destroyed. `Reply-To` is a header any sender controls, so this
+  // is our own guess about authorship rather than a fact — and a wrong guess
+  // here is unattributable as well as unrecoverable: the refusal log carries a
+  // cause and nothing else (no address may be written to it), so a customer
+  // saying "I replied and nothing happened" leaves nobody anything to match.
+  // That is the same reasoning that quarantines a sender-auth refusal above.
+  it('retains a suspected mail loop in Spam instead of destroying it', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const ours = inboundReplyToAddress(
+      createId('conversation') as ConversationId,
+      SELF_HOSTED_MAIL_SLUG
+    )!
+
+    const res = await ingestParsedEmail(parseRawEmail(loopingMail(ours)))
+
+    expect(res.status).toBe('quarantined')
+    if (res.status !== 'quarantined') return
+    expect(res.cause).toBe('mail_loop_suspected')
+
+    // The bytes had to survive, which is the whole difference from a drop.
+    const msgs = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, res.conversationId))
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].content).toBe('An agent replied to your conversation.')
+
+    const [conv] = await testDb
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, res.conversationId))
+    expect(conv.spamReason).toBe('mail_loop_suspected')
+    expect(CONVERSATION_SPAM_FILED_BY).toContain(conv.spamReason)
+    // Filed in the insert: in the Spam view and out of triage from the first
+    // instant. Retention must not cost the suppression the guard exists for —
+    // nobody is waiting on it, and it rings no bell and starts no clock.
+    expect(conv.status).toBe('closed')
+    expect(conv.endReason).toBe('spam')
+    expect(conv.waitingSince).toBeNull()
+    expect(vi.mocked(emitMessageCreated)).not.toHaveBeenCalled()
+    expect(vi.mocked(emitConversationCreated)).not.toHaveBeenCalled()
+  })
+
+  // The discriminator. This address is minted by the same code with the same
+  // fleet-wide secret and verifies perfectly; only its workspace LABEL differs.
+  // Without this case the test above would pass just as happily against a guard
+  // that accepted any address at our inbound domain, which on a shared domain is
+  // every neighbour's mail.
+  it('leaves a neighbouring workspace’s reply address alone', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const neighbours = inboundReplyToAddress(createId('conversation') as ConversationId, 'neon-t2')!
+    expect(neighbours).not.toBeNull()
+
+    const res = await ingestParsedEmail(parseRawEmail(loopingMail(neighbours)))
+
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+    const [conv] = await testDb
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, res.conversationId))
+    expect(conv.spamReason).toBeNull()
+    expect(conv.status).toBe('open')
+  })
+
+  // The exact test, and the only signal of the three that is a FACT: not an id
+  // shaped like ours, but a row this workspace wrote when its own mail went out.
+  // Recorded bare (as the sending provider's API reports it) and arriving hosted
+  // (as the header it signed carries it), so this also pins that the two forms
+  // are reconciled by the store rather than by a string match here.
+  it('hard-drops a message whose own Message-ID is one we recorded going out', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const opened = await ingestParsedEmail(coldEmail())
+    expect(opened.status).toBe('ingested')
+    if (opened.status !== 'ingested') return
+    await recordOutboundEmail('0100019a1f4c8e21-6b2d', opened.conversationId)
+    expect(await testDb.select().from(conversationOutboundEmails)).toHaveLength(1)
+
+    const res = await ingestParsedEmail(
+      coldEmail({ messageId: '<0100019a1f4c8e21-6b2d@email.amazonses.com>' })
+    )
+
+    expect(res.status).toBe('suppressed')
+    // Nothing retained, because nothing was guessed: our own mail coming back is
+    // noise at best and a self-feeding loop at worst.
+    expect(await testDb.select({ id: conversations.id }).from(conversations)).toHaveLength(1)
   })
 
   it('suppresses a blocked sender without opening a conversation', async () => {

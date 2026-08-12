@@ -141,6 +141,15 @@ vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => (
   resolveChannelAccountByRecipient: (...a: unknown[]) => resolveChannelAccountByRecipient(...a),
 }))
 
+// Which workspace this process is serving. Real in production (workspace scope
+// on a fleet, a fixed label self-hosted); pinned here to the label the fixtures
+// mint under, so the loop guard is asking the question it asks in the running
+// system rather than one that can never be answered yes.
+vi.mock('../conversation.mail-slug', () => ({
+  SELF_HOSTED_MAIL_SLUG: 'reply',
+  currentMailSlug: () => SLUG,
+}))
+
 import { ingestInboundEmail, ingestParsedEmail } from '../conversation.email-inbound.service'
 import { parseRawEmail } from '../conversation.email-inbound'
 import type { ParsedInboundEmail, ParsedEmailAttachment } from '../conversation.email-inbound'
@@ -534,6 +543,158 @@ describe('ingestInboundEmail', () => {
 
       expect(result).toEqual({ status: 'suppressed' })
     })
+
+    it('does not append our own mail returning with a reply address we minted', async () => {
+      // Our own notification, bounced back into the conversation's own reply
+      // address by a forwarding rule at the far end. The id on the wire is the
+      // FORWARDER's, which says nothing about who wrote the message; the reply
+      // address we minted and put on it ourselves is what is left.
+      //
+      // Everything else about this message says "append me": it is addressed to
+      // a plus-address that verifies, and it comes from an address this
+      // conversation's visitor is known by. Strip the reply-address signal and
+      // it lands in the thread, which is what makes the assertions below about
+      // the signal rather than about the fixture.
+      //
+      // Not appended, and not destroyed either: the signal is a guess about a
+      // header any sender controls, so the message is offered to the retention
+      // path. What retention actually stores is pinned against a real database
+      // in email-cold-inbound-ingest.test.ts.
+      const result = await ingestInboundEmail({
+        type: 'email.received',
+        data: {
+          to: [REPLY_TO],
+          from: 'jane@example.com',
+          subject: 'New reply from Acme',
+          text: 'An agent replied to your conversation.',
+          headers: [
+            { name: 'Message-ID', value: '<20260812.041233.7f31@mx.forwarder.example>' },
+            { name: 'Reply-To', value: `Acme Support <${REPLY_TO}>` },
+          ],
+        },
+      })
+
+      expect(sendVisitorMessage).not.toHaveBeenCalled()
+      // No inbound route is mocked here, so retention has nothing to attach to.
+      // The load-bearing half is that the message REACHED that path at all: a
+      // refusal with nothing retained returns before any route is looked up.
+      expect(resolveChannelAccountByRecipient).toHaveBeenCalled()
+      expect(result).toEqual({ status: 'no_conversation' })
+    })
+
+    it('ingests a stranger whose own mail leaves through the same provider (raw rung)', async () => {
+      // The case the shortcut would destroy, on the rung where it is real: the
+      // raw MIME the sending provider's own delivery carries. This customer's
+      // Message-ID host is character-for-character the one on our own mail,
+      // because the provider stamps its region's host on every account's mail.
+      // Treating that host as proof of authorship turns a loop bug into silent
+      // mail loss for every one of that provider's other customers.
+      const raw = [
+        `To: ${REPLY_TO}`,
+        'From: Billing <jane@example.com>',
+        'Subject: Re: ticket',
+        'Message-ID: <0100019a1f4c8e21-9f04@email.amazonses.com>',
+        'Reply-To: jane@example.com',
+        '',
+        'Our invoice did not arrive, can you check?',
+      ].join('\r\n')
+
+      const result = await ingestParsedEmail(parseRawEmail(raw))
+
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      expect(sendVisitorMessage).toHaveBeenCalledTimes(1)
+    })
+
+    // The exact test, and the only one of the three that is not an inference:
+    // this id is not merely shaped like one of ours, it is a row THIS workspace
+    // wrote when its own mail went out. A replier's own MTA mints its own id, so
+    // the only way to collide is to copy ours onto your own message.
+    it('drops a message whose own Message-ID is one we recorded going out', async () => {
+      // Recorded bare, as the sending provider's API reports it; arriving hosted,
+      // as the header it signed carries it. The store spans the two forms, so the
+      // test also pins that the guard asks the question through the store rather
+      // than by matching strings itself.
+      const asSent = '0100019a1f4c8e21-6b2d'
+      const asItComesBack = `<${asSent}@email.amazonses.com>`
+      resolveConversationByMessageIds.mockImplementation(async (...args: unknown[]) => {
+        const ids = args[0] as string[]
+        return ids.includes(asItComesBack) ? 'conversation_abc' : null
+      })
+
+      const result = await ingestInboundEmail({
+        ...baseEvent,
+        data: {
+          ...baseEvent.data,
+          headers: [{ name: 'Message-ID', value: asItComesBack }],
+        },
+      })
+
+      expect(result).toEqual({ status: 'suppressed' })
+      expect(sendVisitorMessage).not.toHaveBeenCalled()
+      // A fact, so it is a hard drop: nothing is offered to retention.
+      expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+      expect(resolveConversationByMessageIds).toHaveBeenCalledWith([asItComesBack])
+    })
+
+    it('asks that question of the message’s OWN id, never of the ids it quotes', async () => {
+      // Every genuine reply quotes an id we recorded — that is what threading IS.
+      // Reading the quoted ids as evidence of authorship would drop every reply
+      // whose client kept the References chain, which is nearly all of them.
+      const quoted = 'c.abc.n1@tenaevexeo.resend.app'
+      resolveConversationByMessageIds.mockImplementation(async (...args: unknown[]) => {
+        const ids = args[0] as string[]
+        return ids.includes(quoted) ? 'conversation_abc' : null
+      })
+
+      const result = await ingestInboundEmail({
+        ...baseEvent,
+        data: {
+          ...baseEvent.data,
+          headers: [
+            { name: 'Message-ID', value: '<reply-77@example.com>' },
+            { name: 'In-Reply-To', value: `<${quoted}>` },
+          ],
+        },
+      })
+
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      expect(sendVisitorMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not read a neighbouring workspace’s Message-ID as ours on a pooled fleet', async () => {
+      // One process serves every workspace behind one shared sending domain, so
+      // a Message-ID host is a fact about the FLEET and not about this workspace.
+      // Reading it as authorship hard-drops the neighbour's mail — the same
+      // mistake as trusting a sending provider's regional host, one level in.
+      vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
+      try {
+        const neighboursOwnId = '<c.01kw8qxn1eeh4t2rek7varh032.n1@tenaevexeo.resend.app>'
+        const passingThrough = await ingestInboundEmail({
+          ...baseEvent,
+          data: { ...baseEvent.data, headers: [{ name: 'Message-ID', value: neighboursOwnId }] },
+        })
+        expect(passingThrough).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+
+        // …and the fleet is not left without a guard: the id this workspace
+        // recorded itself still identifies its own mail coming back.
+        vi.clearAllMocks()
+        sendVisitorMessage.mockResolvedValue({ created: false })
+        assertConversationSendRate.mockResolvedValue(undefined)
+        const ourOwnId = '<0100019a1f4c8e21-4c17@email.amazonses.com>'
+        resolveConversationByMessageIds.mockImplementation(async (...args: unknown[]) => {
+          const ids = args[0] as string[]
+          return ids.includes(ourOwnId) ? 'conversation_abc' : null
+        })
+        const comingBack = await ingestInboundEmail({
+          ...baseEvent,
+          data: { ...baseEvent.data, headers: [{ name: 'Message-ID', value: ourOwnId }] },
+        })
+        expect(comingBack).toEqual({ status: 'suppressed' })
+        expect(sendVisitorMessage).not.toHaveBeenCalled()
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
   })
 
   describe('References fallback (plus-address stripped)', () => {
@@ -551,7 +712,15 @@ describe('ingestInboundEmail', () => {
     }
 
     it('routes via a stored outbound Message-ID when no plus-address is present', async () => {
-      resolveConversationByMessageIds.mockResolvedValue('conversation_abc')
+      // KEYED, not constant. The store is asked two different questions on this
+      // path — "is this message's own id one of ours" (authorship) and "does it
+      // quote one of ours" (routing) — and a double that answers both the same
+      // way cannot tell the two apart, so it would pass against code that
+      // confused them and dropped this reply as a loop.
+      resolveConversationByMessageIds.mockImplementation(async (...args: unknown[]) => {
+        const ids = args[0] as string[]
+        return ids.includes('c.abc.n1@tenaevexeo.resend.app') ? 'conversation_abc' : null
+      })
 
       const result = await ingestInboundEmail(strippedEvent)
 
@@ -619,6 +788,7 @@ describe('ingestInboundEmail', () => {
     const reply = (over: Partial<ParsedInboundEmail>): ParsedInboundEmail => ({
       toAddresses: [REPLY_TO],
       ccAddresses: [],
+      replyToAddresses: [],
       from: 'jane@example.com',
       subject: 'Re: ticket',
       text: 'reply body',

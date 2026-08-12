@@ -31,7 +31,23 @@
  */
 const SES_MESSAGE_ID_HOST = /^(?:[a-z0-9-]+\.)*amazonses\.com$/
 
-/** Is this host one the provider stamps on an id it assigned? */
+/**
+ * Is this host one the provider stamps on an id it assigned?
+ *
+ * NOT A TEST OF AUTHORSHIP, and the distinction is the whole reason to say so
+ * here. Every account on the region shares this host, so a true answer says the
+ * message left through this provider and nothing at all about who sent it. It
+ * exists to reconcile the two forms of an id THIS install already recorded (see
+ * {@link sesBareMessageId}), where the id itself is the evidence and the host is
+ * only the part being spanned.
+ *
+ * So it must never become the mail-loop guard's answer to "is this ours". Wired
+ * there it would read every other customer of this provider as us and take a
+ * branch that drops their mail with no retention — a wider failure than the loop
+ * it was reached for. That guard asks about something only we can produce: the
+ * reply address we minted, checked in
+ * `conversation.email-channel.ts#isOwnInboundAddress`.
+ */
 export function isSesMessageIdHost(host: string): boolean {
   return SES_MESSAGE_ID_HOST.test(host.trim().toLowerCase())
 }

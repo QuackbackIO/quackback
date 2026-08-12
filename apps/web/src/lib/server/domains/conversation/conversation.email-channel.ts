@@ -70,6 +70,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { ID_PREFIXES, type ConversationId, type TicketId } from '@quackback/ids'
 import { normalizeMailDomain } from '@/lib/server/utils/mail-domain'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { extractEmailAddress } from './conversation.email-inbound'
 
 type EnvLike = Record<string, string | undefined>
@@ -120,8 +121,10 @@ const INBOUND_DOMAIN_ENV = 'EMAIL_INBOUND_DOMAIN'
  *    their own sending domain. The list only grows in practice, so the set of
  *    zones no customer may use grows with it — and the customer who is refused
  *    never sees why. See `platformSendingDomains`.
- * 2. Inbound mail whose `Message-ID` sits on it is dropped as our own mail
- *    looping back, with no retention. See {@link ownEmailDomains}.
+ * 2. On an install that serves ONE workspace, inbound mail whose `Message-ID`
+ *    sits on it is suppressed as that workspace's own mail looping back, with
+ *    nothing retained. A pooled fleet reads no host that way, since a shared
+ *    host names no workspace. See {@link ownMessageIdDomains}.
  * 3. Nothing else. In particular it grants no workspace the right to SEND from
  *    the domain: that is a claim about a verified provider identity, which only
  *    the minting domain has, and the send guard asks for the minting domain
@@ -478,9 +481,13 @@ function inboundAddress(
 // signature is base64url and lower-casing it would fail every verification.
 const ADDR_SPEC_RE = /[^\s<>,;"]+@[^\s<>,;"]+/g
 
-/** Every local part in the value, in order of appearance. */
-function localParts(address: string): string[] {
-  return (address.match(ADDR_SPEC_RE) ?? []).map((addr) => addr.slice(0, addr.lastIndexOf('@')))
+/** Every addr-spec in the value, in order of appearance, split at the last `@`
+ *  into the two halves the readers below ask about. */
+function addrSpecs(value: string): Array<{ local: string; domain: string }> {
+  return (value.match(ADDR_SPEC_RE) ?? []).map((addr) => {
+    const at = addr.lastIndexOf('@')
+    return { local: addr.slice(0, at), domain: addr.slice(at + 1) }
+  })
 }
 
 /** One reading of a local part: what it claims, and the proof it offers. */
@@ -555,7 +562,7 @@ function verifiedIdFrom(
   prefix: string,
   env: EnvLike
 ): string | null {
-  for (const local of localParts(value)) {
+  for (const { local } of addrSpecs(value)) {
     const claim = claimFor(local, marker, prefix)
     if (claim && claimVerifies(claim, env)) return claim.id
   }
@@ -666,23 +673,17 @@ export function outboundMessageIdDomain(env: EnvLike = process.env): string | nu
 }
 
 /**
- * Domains we send from — an inbound message whose Message-ID sits on one of
- * these is our own mail looping back, so the ingest core drops it.
+ * Domains this INSTALL sends and receives on.
  *
  * Every domain we RECEIVE on, not just the one we mint on. A notification sent
  * before a domain change carries a Message-ID on the domain that was minting
- * then, and it is no less ours for having been retired since; a set that had
- * narrowed to the current mint domain would stop recognising exactly the older
- * mail most likely to still be circulating.
+ * then, and it is no less the install's for having been retired since; a set
+ * that had narrowed to the current mint domain would stop recognising exactly
+ * the older mail most likely to still be circulating.
  *
- * WHAT MEMBERSHIP COSTS, stated where the set is built. The one consumer feeds a
- * check whose branch is a HARD drop with no retention, and it matches on the
- * `Message-ID` domain alone — so every entry here is also a promise that no
- * stranger's mail legitimately carries a `Message-ID` on that domain. That
- * holds for a zone we operate and stops holding the moment one is listed that we
- * do not, which is the rule the extras list is bound by (see
- * {@link INBOUND_EXTRA_DOMAINS_ENV}): a domain we have released, or never held,
- * has no business in it.
+ * A fact about the PROCESS, which is why it is not by itself an answer to "is
+ * this message ours" — see {@link ownMessageIdDomains}, the only reader, for the
+ * workspace half of that question.
  */
 export function ownEmailDomains(env: EnvLike = process.env): Set<string> {
   const domains = inboundAcceptDomains(env)
@@ -691,6 +692,46 @@ export function ownEmailDomains(env: EnvLike = process.env): Set<string> {
   const from = normalizeMailDomain(domainOf(env[EMAIL_FROM_ENV]))
   if (from) domains.add(from)
   return domains
+}
+
+/**
+ * The `Message-ID` hosts on which an id is evidence that THIS workspace sent the
+ * message.
+ *
+ * The set the mail-loop guard's host test runs against, and it is narrower than
+ * {@link ownEmailDomains} for the same reason a reply address has to carry a
+ * workspace label: the branch it feeds is a suppression with nothing retained,
+ * so every member is a promise that no OTHER sender's mail legitimately carries
+ * a `Message-ID` there. "Other" includes the workspace next door.
+ *
+ * ONE WORKSPACE PER PROCESS — the install owns its domains outright. There is no
+ * second workspace to be confused with, so every domain it operates is evidence
+ * about it, and a self-hosted install keeps exactly the guard it has always had.
+ *
+ * POOLED — none of them. One fleet serves every workspace behind one sending
+ * domain, so a host is a fact about the FLEET: the neighbour's notifications
+ * wear the identical host, and reading it as authorship suppresses their mail
+ * with no retention and nobody to notice. That is the same mistake as adopting a
+ * sending provider's regional host, one level in. Two things answer the question
+ * there instead, and neither is a domain: the id this workspace RECORDED going
+ * out (exact, and the store owns it), and the reply address this workspace
+ * minted, which carries its label under an HMAC tag ({@link isOwnInboundAddress}).
+ *
+ * Nothing is lost on the fleet by emptying it. Ids are minted at
+ * {@link outboundMessageIdDomain} — the platform's own sending domain, shared —
+ * and the fleet's transport replaces the header id anyway, so this test had no
+ * true positive there to give up: every match it could make was somebody else's
+ * mail.
+ *
+ * A SENDING PROVIDER'S OWN HOST IS THE ONE TO REFUSE, every time it is proposed
+ * for either set. A provider that assigns the `Message-ID` itself puts its
+ * regional host on our mail, so adding that host looks like it restores the
+ * guard — and it instead promises the impossible: that host is on every
+ * account's mail on that region, so the promise above breaks for every other
+ * customer of the same provider.
+ */
+export function ownMessageIdDomains(env: EnvLike = process.env): Set<string> {
+  return isPooledTenancy(env) ? new Set() : ownEmailDomains(env)
 }
 
 /** Mint a fresh outbound Message-ID for a conversation, bare (no angle
@@ -792,9 +833,81 @@ export function ticketIdFromInboundAddress(
  * nothing else.
  */
 export function bearsTicketMarker(address: string): boolean {
-  for (const local of localParts(address)) {
+  for (const { local } of addrSpecs(address)) {
     const claim = claimFor(local, TICKET_MARKER, TICKET_PREFIX)
     if (claim && isMintedShape(claim)) return true
+  }
+  return false
+}
+
+/**
+ * Did THIS workspace mint one of the addresses in this header value?
+ *
+ * The evidence the mail-loop guard runs on. It exists because authorship used to
+ * be readable off a `Message-ID` — we minted the id, so its host was a domain we
+ * operate — and a sending provider that assigns its own id ends that. The host
+ * on the wire then belongs to the PROVIDER and is shared with every other
+ * account on its region, so it is evidence of nothing: a guard keyed on it would
+ * read any of that provider's customers' mail as our own and refuse it. That is
+ * why this asks about an address we minted and not about the host an id happens
+ * to wear.
+ *
+ * Three conditions, and dropping any one of them puts somebody else's mail
+ * inside the answer:
+ *
+ * 1. THE TAG VERIFIES. Without it the answer is reachable by typing an address
+ *    out, and the grammar is public.
+ * 2. THE LABEL IS THIS WORKSPACE'S. The signing secret is fleet-wide, so a
+ *    neighbouring workspace's address verifies against it perfectly. Their mail
+ *    forwarded into this inbox is a stranger's mail here, and refusing it is the
+ *    same mistake as trusting the provider's host, one level in.
+ * 3. THE DOMAIN IS ONE WE RECEIVE ON. The tag covers the local part alone, so
+ *    without this an address wearing our local part at any domain at all would
+ *    answer yes.
+ *
+ * Both families, because both are mail we send and either can come back.
+ *
+ * What it does NOT prove is that the sender is us: anyone we have ever emailed
+ * holds one of these addresses and can put it in a header. What it does prove is
+ * the narrower thing the guard is entitled to act on: this is a message composed
+ * against an address only this workspace could have minted.
+ *
+ * NOR DOES IT ASK WHICH conversation. Any minted address of this workspace
+ * satisfies it, including one belonging to a thread this message has nothing to
+ * do with — so anyone ever CC'd on one of our mails holds a value that answers
+ * yes. Left that way deliberately, and the reason is what the caller does with
+ * the answer: this signal RETAINS the message (files it to Spam under an
+ * enumerated cause) rather than destroying it, so a wrong yes costs a thread in
+ * a review queue instead of somebody's mail. Narrowing it would mean requiring
+ * the message's own threading chain to resolve to the same conversation, which a
+ * forwarder that strips `References` defeats and which buys nothing against the
+ * cost that is actually left.
+ */
+export function isOwnInboundAddress(
+  value: string,
+  slug: string | null,
+  env: EnvLike = process.env
+): boolean {
+  // No workspace label means no question to ask, so the answer is no and the
+  // message is ingested. That is the direction to fail in: a wrong "not ours"
+  // files one of our own mails into the inbox, where an agent sees it and closes
+  // it, while a wrong "ours" files a customer's mail to Spam, where they wait on
+  // a reply nobody knows they are owed.
+  if (slug === null) return false
+  const label = slug.trim().toLowerCase()
+  const accepted = inboundAcceptDomains(env)
+  if (accepted.size === 0) return false
+
+  for (const { local, domain } of addrSpecs(value)) {
+    const host = normalizeMailDomain(domain)
+    if (!host || !accepted.has(host)) continue
+    for (const [marker, prefix] of [
+      [CONVERSATION_MARKER, CONVERSATION_PREFIX],
+      [TICKET_MARKER, TICKET_PREFIX],
+    ] as const) {
+      const claim = claimFor(local, marker, prefix)
+      if (claim && claim.slug === label && claimVerifies(claim, env)) return true
+    }
   }
   return false
 }
