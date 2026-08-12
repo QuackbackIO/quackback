@@ -5,6 +5,7 @@ import {
   createSendingAddressFn,
   createSendingDomainFn,
   verifySendingDomainFn,
+  deleteSendingDomainFn,
   deleteChannelAccountFn,
 } from '@/lib/server/functions/channel-accounts'
 import { emailChannelKeys } from '@/lib/client/queries/channel-accounts'
@@ -32,6 +33,9 @@ export const useCreateSendingDomain = () =>
 
 export const useVerifySendingDomain = () =>
   useConfigMutation((id: string) => verifySendingDomainFn({ data: { id } }))
+
+export const useDeleteSendingDomain = () =>
+  useConfigMutation((id: string) => deleteSendingDomainFn({ data: { id } }))
 
 export const useDeleteChannelAccount = () =>
   useConfigMutation((id: string) => deleteChannelAccountFn({ data: { id } }))

@@ -80,6 +80,18 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isPortalSupportEnabled: () => isPortalSupportEnabled(),
 }))
 
+// The From a conversation's outbound mail leaves as. Mocked because its own
+// resolution (and the sending-identity guard behind it) is tested where it
+// lives; what this suite pins is that the SAME answer reaches every mail in a
+// thread. A rating prompt that arrived from the platform address on a
+// conversation answered from the customer's own support address is a thread
+// that changes identity halfway through.
+const resolveConversationFrom = vi.fn<(...a: unknown[]) => Promise<string | null>>(async () => null)
+vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', async (orig) => ({
+  ...(await orig<typeof import('@/lib/server/domains/channel-accounts/channel-account.service')>()),
+  resolveConversationFrom: (...a: unknown[]) => resolveConversationFrom(...a),
+}))
+
 // The group-thread fan-out (§4.8): which added customers a reply goes out to.
 // Default none — the pre-group-thread assertions below keep their call counts.
 const listParticipantReplyRecipients =
@@ -711,7 +723,29 @@ describe('notifyCsatRequestEmail', () => {
       ],
       workspaceName: 'Acme',
       logoUrl: undefined,
+      from: undefined,
     })
+  })
+
+  it('asks the rating from the address the thread is already being answered from', async () => {
+    // The conversation is answered as the customer's own support address, so the
+    // prompt has to arrive from there too. From the recipient's side — and from
+    // their mail client's threading — a different sender is a different
+    // conversation.
+    limitQueue = [
+      [{ channel: 'email', visitorPrincipalId }],
+      [{ type: 'user', email: 'visitor@example.com', contactEmail: null }],
+    ]
+    mintCsatEmailToken.mockReturnValue('signed-token')
+    sendCsatRequestEmail.mockResolvedValue({ sent: true })
+    resolveConversationFrom.mockResolvedValue('support@tenant-a.example')
+
+    await notifyCsatRequestEmail(conversationId, 'How did we do?')
+
+    expect(resolveConversationFrom).toHaveBeenCalledWith(conversationId)
+    expect(sendCsatRequestEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'support@tenant-a.example' })
+    )
   })
 
   it('swallows a thrown dependency (does not reject) — best-effort, same as every other notify* function', async () => {

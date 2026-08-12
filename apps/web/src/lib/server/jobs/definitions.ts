@@ -229,6 +229,25 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Verification is a claim about the present that only a schedule can keep
+    // making. A customer's ownership record, DKIM CNAMEs or MAIL FROM MX can
+    // disappear at any time, and every one of those failures is silent at the
+    // provider: mail keeps leaving, less and less able to prove who sent it.
+    // This demotes the row, which drops the workspace back to the platform
+    // sender rather than letting it keep signing on one leg.
+    //
+    // Daily, and offset from the other daily sweeps: it is bounded by outbound
+    // DNS and provider calls rather than by rows, so it should not share a
+    // minute with the passes that are bounded by the database.
+    name: 'sending-domain-recheck',
+    cron: '20 6 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/channel-accounts/sending-domain-recheck-queue').then(
+        (m) => m.runSendingDomainRecheck
+      ),
+  },
+  {
     name: 'analytics',
     cron: '0 * * * *',
     maxAttempts: 3,

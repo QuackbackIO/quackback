@@ -506,6 +506,7 @@ export type {
   EmailSendingDomain,
   ChannelAccountConfig,
   SendingDomainDnsRecord,
+  SendingDomainOwnershipRecord,
 } from '@quackback/db'
 export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
 export type { ChangelogSubscriptionSource } from '@quackback/db'

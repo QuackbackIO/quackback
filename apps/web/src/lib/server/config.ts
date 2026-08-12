@@ -162,6 +162,16 @@ const configSchema = z
     emailSesRegion: z.string().optional(),
     /** Configuration set applied to each send. Absent for a self-hoster. */
     emailSesConfigurationSet: z.string().optional(),
+    /**
+     * SES credentials for VERIFYING a customer-owned sending domain. A
+     * different principal from the sending pair above with a different grant:
+     * creating identities consumes an account-wide quota, and the send path has
+     * no business carrying that. Absent on an install that offers no
+     * customer-owned sending domains, which refuses the feature by name rather
+     * than falling back to the sending credential.
+     */
+    emailSesIdentityAccessKeyId: z.string().optional(),
+    emailSesIdentitySecretAccessKey: z.string().optional(),
 
     // S3 (optional)
     s3Endpoint: z.string().optional(),
@@ -286,6 +296,8 @@ function buildConfigFromEnv(): unknown {
     emailSesSecretAccessKey: env('EMAIL_SES_SECRET_ACCESS_KEY'),
     emailSesRegion: env('EMAIL_SES_REGION'),
     emailSesConfigurationSet: env('EMAIL_SES_CONFIGURATION_SET'),
+    emailSesIdentityAccessKeyId: env('EMAIL_SES_IDENTITY_ACCESS_KEY_ID'),
+    emailSesIdentitySecretAccessKey: env('EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY'),
 
     // S3
     s3Endpoint: env('S3_ENDPOINT'),
@@ -490,6 +502,12 @@ export const config = {
   },
   get emailSesConfigurationSet() {
     return loadConfig().emailSesConfigurationSet
+  },
+  get emailSesIdentityAccessKeyId() {
+    return loadConfig().emailSesIdentityAccessKeyId
+  },
+  get emailSesIdentitySecretAccessKey() {
+    return loadConfig().emailSesIdentitySecretAccessKey
   },
 
   // S3

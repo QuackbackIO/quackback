@@ -93,14 +93,15 @@ docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 
 ### Optional
 
-| Variable                  | Description                                                                               | Default      |
-| ------------------------- | ----------------------------------------------------------------------------------------- | ------------ |
-| `PORT`                    | Server port                                                                               | `3000`       |
-| `NODE_ENV`                | Environment                                                                               | `production` |
-| `QUACKBACK_ROLE`          | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out))                 | `all`        |
-| `SKIP_MIGRATIONS`         | Skip the startup migration step (run migrations out-of-band instead)                      | `false`      |
-| `EMAIL_SES_ACCESS_KEY_ID` | Amazon SES sending key id; needs `EMAIL_SES_SECRET_ACCESS_KEY` and `EMAIL_SES_REGION` too | -            |
-| `EMAIL_FROM`              | From address for emails                                                                   | -            |
+| Variable                           | Description                                                                                                                                                                                                                                                | Default      |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `PORT`                             | Server port                                                                                                                                                                                                                                                | `3000`       |
+| `NODE_ENV`                         | Environment                                                                                                                                                                                                                                                | `production` |
+| `QUACKBACK_ROLE`                   | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out))                                                                                                                                                                                  | `all`        |
+| `SKIP_MIGRATIONS`                  | Skip the startup migration step (run migrations out-of-band instead)                                                                                                                                                                                       | `false`      |
+| `EMAIL_SES_ACCESS_KEY_ID`          | Amazon SES sending key id; needs `EMAIL_SES_SECRET_ACCESS_KEY` and `EMAIL_SES_REGION` too                                                                                                                                                                  | -            |
+| `EMAIL_SES_IDENTITY_ACCESS_KEY_ID` | Separate SES key id used only to verify a customer-owned sending domain; needs `EMAIL_SES_IDENTITY_SECRET_ACCESS_KEY`. Grant `ses:CreateEmailIdentity`, `ses:GetEmailIdentity`, `ses:PutEmailIdentityMailFromAttributes` and NOT `ses:DeleteEmailIdentity` | -            |
+| `EMAIL_FROM`                       | From address for emails                                                                                                                                                                                                                                    | -            |
 
 ### Integrations (Optional)
 

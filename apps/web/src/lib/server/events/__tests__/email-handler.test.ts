@@ -10,6 +10,22 @@ vi.mock('@quackback/email', () => ({
   sendNoteMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
+/**
+ * The sending-identity guard, re-asked at SEND time.
+ *
+ * The target builder resolved a From when the event was enqueued; this hook
+ * runs after the queue, which can be minutes later and is certainly after a
+ * scheduled re-check could have un-verified the domain. Mocked here so this
+ * suite can pin THAT the guard runs and that its answer is what goes out — the
+ * rule it applies has its own tests.
+ */
+const permittedSendingIdentity = vi.fn<(from: string | null) => Promise<string | null>>(
+  async (from) => from
+)
+vi.mock('@/lib/server/domains/channel-accounts/outbound-identity', () => ({
+  permittedSendingIdentity: (from: string | null) => permittedSendingIdentity(from),
+}))
+
 // Threading helpers are pure but read env-derived domains; force a known domain
 // so the created-root Message-ID assertion is deterministic.
 vi.stubEnv('EMAIL_FROM', 'Support <support@acme.test>')
@@ -343,6 +359,7 @@ describe('emailHook — ticket + SLA lifecycle', () => {
   beforeEach(() => {
     mockTicketEventEmail.mockClear()
     mockTicketEventEmail.mockResolvedValue({ sent: true })
+    permittedSendingIdentity.mockReset().mockImplementation(async (from) => from)
   })
 
   it.each([
@@ -397,6 +414,34 @@ describe('emailHook — ticket + SLA lifecycle', () => {
     expect(args.messageId).toBeUndefined()
     expect(args.inReplyTo).toBeUndefined()
     expect(args.references).toBeUndefined()
+  })
+
+  it('re-asks the guard at send time, and sends as the answer it gives', async () => {
+    // Not the address the payload carried. Between enqueue and send, a domain
+    // can stop being verified — the scheduled re-check demotes one whose
+    // records have gone — and the send is the moment the claim is made.
+    permittedSendingIdentity.mockResolvedValue('support@tenant-a.example')
+    await emailHook.run(
+      evt('ticket.created'),
+      baseTarget,
+      ticketConfig({ kind: 'created', from: 'stale@tenant-a.example' })
+    )
+    expect(permittedSendingIdentity).toHaveBeenCalledWith('stale@tenant-a.example')
+    expect(mockTicketEventEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'support@tenant-a.example' })
+    )
+  })
+
+  it('falls back to the platform sender when the guard refuses', async () => {
+    // A refusal is a fallback, not a dropped mail: the message still goes, from
+    // an address that is honestly ours.
+    permittedSendingIdentity.mockResolvedValue(null)
+    await emailHook.run(
+      evt('ticket.created'),
+      baseTarget,
+      ticketConfig({ kind: 'created', from: 'support@tenant-a.example' })
+    )
+    expect(mockTicketEventEmail).toHaveBeenCalledWith(expect.objectContaining({ from: undefined }))
   })
 
   it('still rejects a genuinely unsupported type', async () => {

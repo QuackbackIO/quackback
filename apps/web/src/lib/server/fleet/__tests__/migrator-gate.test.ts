@@ -56,7 +56,7 @@ const withoutRows = (...prefixes: string[]) => {
  * turning the tail into part of the hole and quietly replacing the measured
  * shape with a different one that happens to still parse.
  */
-const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257', '0258', '0259')
+const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257', '0258', '0259', '0260')
 
 describe('replaySetFor', () => {
   it('is everything on a database that has never been migrated', () => {
@@ -153,6 +153,7 @@ describe('planFor', () => {
       '0257_pg_kv_presence_realtime',
       '0258_workspace_key_columns',
       '0259_conversation_spam_retention_idx',
+      '0260_sending_domain_reverify',
     ])
     expect(planFor(applied).tags).toEqual([
       '0249_settings_cloud',
@@ -164,6 +165,7 @@ describe('planFor', () => {
       '0257_pg_kv_presence_realtime',
       '0258_workspace_key_columns',
       '0259_conversation_spam_retention_idx',
+      '0260_sending_domain_reverify',
     ])
   })
 
@@ -276,22 +278,37 @@ describe('replayGateVerdict', () => {
     // what lies between is plain DDL that would error on a second run, and
     // migrate()'s transaction bounds that. A gate that refused it would refuse
     // every rollout this system exists to perform.
+    //
+    // Bounded at 0259 rather than run to the tip: 0260 is a data migration, and
+    // the point of THIS case is the DDL-only tail. The tail that does contain
+    // it is the case below, which is where its consequence is recorded.
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
+    const end = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0260_'))
     const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
-    const tags = replaySetFor(before)
+    const tags = replaySetFor(before).slice(0, end - cutoff - 1)
     const verdicts = verdictsFor(tags)
     expect(tags.length).toBeGreaterThan(0)
     expect(verdicts.every((v) => v.verdict !== 'mutates')).toBe(true)
     expect(replayGateVerdict(before, verdicts, false)).toEqual({ ok: true })
   })
 
-  it('this fleet’s actual drift — a ledger at 0248 carrying everything since — passes the gate', () => {
+  it('this fleet’s actual drift — a ledger at 0248 carrying everything since — no longer heals for free', () => {
     // Five live gauntlet workspace databases are in exactly this state, because
     // every builder applied with `psql -f`, which never writes the ledger. The
     // window grows with every migration the branch adds, and it is listed
     // rather than derived on purpose: if one of these ever stops being
     // replay-safe, healing those databases stops being free and this is where
     // that is noticed.
+    //
+    // **It has now happened, and this case is the notice.** 0260 demotes every
+    // sending domain verified by a check that could not tell an owner from
+    // anybody else, which is an UPDATE and therefore a write the gate will not
+    // replay unattended. Healing one of these databases is now an operator
+    // action: establish that the ledger is honest — a branch dry-run is the
+    // cheap way — and re-run with `allowMutatingReplay`. That cost is
+    // deliberate and small: no live customer sending domain exists yet, and the
+    // alternative is a workspace sending signed as a domain it never proved it
+    // owns.
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
     const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
     expect(replaySetFor(before)).toEqual([
@@ -304,8 +321,16 @@ describe('replayGateVerdict', () => {
       '0257_pg_kv_presence_realtime',
       '0258_workspace_key_columns',
       '0259_conversation_spam_retention_idx',
+      '0260_sending_domain_reverify',
     ])
-    expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)).toEqual({
+    const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) throw new Error('unreachable')
+    expect(verdict.detail).toContain('0260_sending_domain_reverify')
+
+    // And it goes through once an operator has said the ledger is honest, which
+    // is the whole point of the flag rather than of a weaker gate.
+    expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), true)).toEqual({
       ok: true,
     })
   })

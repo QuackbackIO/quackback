@@ -27,6 +27,11 @@ import { isSesEmailConfigured, sendViaSes } from './ses'
 // way, and why the guarantee belongs here rather than at the call sites.
 import type { SecureRecipient } from './recipient'
 export type { AccountEmail, SealedEmail, ContactEmail, SecureRecipient } from './recipient'
+// Senders that may leave the platform's own address declare `from: SendingIdentity`
+// for the same reason: on a shared provider account the From is a claim about
+// which workspace is speaking, and the compiler is what checks it was earned.
+import type { SendingIdentity } from './sender'
+export type { SendingIdentity } from './sender'
 import { MagicLinkEmail } from './templates/magic-link'
 import { InvitationEmail } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
@@ -256,7 +261,7 @@ export async function getReceivedEmail(
 async function dispatch(
   options: {
     /** Omit to use the workspace EMAIL_FROM; the raw sender passes its own. */
-    from?: string
+    from?: SendingIdentity
     to: string
     subject: string
     html?: string
@@ -370,7 +375,7 @@ async function sendEmail(
     /** Conversation-specific reply address (e.g. plus-addressed inbound). */
     replyTo?: string
     /** Override the workspace EMAIL_FROM (e.g. a per-team sending address). */
-    from?: string
+    from?: SendingIdentity
     /** Template name, for the dev preview line. */
     emailType?: string
     /** Extra identifying fields for the dev preview line (links, codes). */
@@ -383,7 +388,7 @@ async function sendEmail(
 /** A prerendered, custom-From email (no template). */
 export interface RawEmailOptions extends ThreadingOptions {
   /** Sender identity — e.g. a verified support sending address, not EMAIL_FROM. */
-  from: string
+  from: SendingIdentity
   to: string
   subject: string
   html: string
@@ -722,7 +727,7 @@ interface SendConversationMessageEmailParams {
   references?: string[]
   /** Send from a per-team sending address (§4.8) instead of the branded
    *  EMAIL_FROM. Absent = the workspace default. */
-  from?: string
+  from?: SendingIdentity
 }
 
 /**
@@ -837,7 +842,7 @@ export interface SendTicketEventEmailParams {
   preferencesUrl?: string
   logoUrl?: string
   /** Per-team sending address override; absent = branded EMAIL_FROM. */
-  from?: string
+  from?: SendingIdentity
   /** Per-ticket inbound reply address (reply-by-email); absent = no Reply-To. */
   replyTo?: string
   messageId?: string
@@ -1108,7 +1113,7 @@ interface SendChangelogPublishedParams {
   logoUrl?: string
   /** Send from the changelog module's sending address (§4.8) instead of the
    *  branded EMAIL_FROM. Absent = the workspace default. */
-  from?: string
+  from?: SendingIdentity
 }
 
 export async function sendChangelogPublishedEmail(
@@ -1323,6 +1328,17 @@ interface SendCsatRequestEmailParams {
   ratingUrls: readonly [string, string, string, string, string]
   workspaceName: string
   logoUrl?: string
+  /**
+   * The same From the conversation's replies go out as; absent = the workspace
+   * default.
+   *
+   * Carried rather than defaulted because this arrives in the middle of a
+   * thread. A conversation answered from the customer's own support address
+   * whose rating prompt came from the platform address is a thread that changes
+   * identity halfway through, which reads as a different sender to the person
+   * being asked and to their mail client's threading.
+   */
+  from?: SendingIdentity
 }
 
 /** Sent by the workflow engine's send_block csat path (action.executor.ts)
@@ -1332,12 +1348,13 @@ interface SendCsatRequestEmailParams {
 export async function sendCsatRequestEmail(
   params: SendCsatRequestEmailParams
 ): Promise<EmailResult> {
-  const { to, promptText, ratingUrls, workspaceName, logoUrl } = params
+  const { to, promptText, ratingUrls, workspaceName, logoUrl, from } = params
 
   return sendEmail({
     to,
     subject: `How did we do, ${workspaceName}?`,
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
+    from,
     emailType: 'CsatRequestEmail',
   })
 }

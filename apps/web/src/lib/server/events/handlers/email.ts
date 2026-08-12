@@ -32,6 +32,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import type { ConversationId } from '@quackback/ids'
 import { isRetryableError } from '../hook-utils'
+import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { logger } from '@/lib/server/logger'
 
 /** The event types whose email is one of the seven ticket-lifecycle kinds. */
@@ -185,7 +186,9 @@ export const emailHook: HookHandler = {
           unsubscribeUrl,
           preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
-          from: changelogCfg.from as string | undefined,
+          from:
+            (await permittedSendingIdentity((changelogCfg.from as string | undefined) ?? null)) ??
+            undefined,
         })
       } else if (event.type === 'status.incident_created') {
         const c = config as Record<string, unknown>
@@ -228,7 +231,19 @@ export const emailHook: HookHandler = {
         // TicketEmailConfig's field names already match SendTicketEventEmailParams;
         // spread it plus the hook-computed threading (the extra `ticketId` the
         // config carries for threading is a harmless excess property).
-        result = await sendTicketEventEmail({ to: email, ...t, ...ticketThreading(t) })
+        result = await sendTicketEventEmail({
+          to: email,
+          ...t,
+          // Re-asked HERE rather than trusted from the payload. The target
+          // builder resolved this address when the event was enqueued, and this
+          // send happens after the queue, which may be minutes later and is
+          // certainly after a re-check could have demoted the domain. Sending
+          // is the moment the claim is made, so it is the moment the claim is
+          // checked; the enqueue-time resolution stays because it decides
+          // WHICH address to try, and this decides whether it may be used.
+          from: (await permittedSendingIdentity(t.from ?? null)) ?? undefined,
+          ...ticketThreading(t),
+        })
       } else {
         return { success: false, error: `Unsupported event type: ${event.type}` }
       }

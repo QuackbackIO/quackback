@@ -477,6 +477,26 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'secret: the key id names a principal, the secret is never part of it.',
   },
   {
+    file: 'packages/email/src/ses-identity.ts',
+    name: 'cachedClient',
+    category: 'fleet-wide',
+    reason:
+      'Built from EMAIL_SES_IDENTITY_ACCESS_KEY_ID/SECRET and EMAIL_SES_REGION. One fleet ' +
+      'credential provisions identities for every workspace, so the client holds no workspace of ' +
+      'its own; a cross-workspace hit returns the same signer, against the same region, that ' +
+      'either workspace would have built. What a workspace owns about a sending domain is the ' +
+      'row and the ownership token in its own database, and neither is in here.',
+  },
+  {
+    file: 'packages/email/src/ses-identity.ts',
+    name: 'cachedClientKey',
+    category: 'fleet-wide',
+    reason:
+      'Region plus key id of the client cached beside it, so a rotated credential rebuilds rather ' +
+      'than being served stale. Fleet-wide for the same reason the client is, and carries no ' +
+      'secret: the key id names a principal, the secret is never part of it.',
+  },
+  {
     file: 'packages/email/src/index.ts',
     name: 'smtpTransporter',
     category: 'fleet-wide',

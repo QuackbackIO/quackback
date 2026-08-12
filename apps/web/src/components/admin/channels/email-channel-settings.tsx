@@ -15,6 +15,7 @@ import {
   useCreateSendingAddress,
   useCreateSendingDomain,
   useVerifySendingDomain,
+  useDeleteSendingDomain,
   useDeleteChannelAccount,
 } from '@/lib/client/mutations/channel-accounts'
 import { Button } from '@/components/ui/button'
@@ -32,6 +33,16 @@ import {
 const MODULES = ['support', 'feedback', 'changelog'] as const
 
 const fail = (msg: string) => () => toast.error(msg)
+
+/**
+ * Show what the server actually refused, falling back to the generic line.
+ *
+ * The refusals on this card name a specific fix — publish a record, verify a
+ * domain first — and swallowing them for a fixed string turns an answerable
+ * problem into a mystery.
+ */
+const reason = (fallback: string) => (error: unknown) =>
+  toast.error(error instanceof Error && error.message ? error.message : fallback)
 
 export function EmailChannelSettings() {
   const { data } = useQuery(emailChannelConfigQuery())
@@ -147,7 +158,7 @@ function SendingAddressesSection({
           onClick={() =>
             create.mutate(
               { address: address.trim(), module },
-              { onSuccess: () => setAddress(''), onError: fail('Could not add address') }
+              { onSuccess: () => setAddress(''), onError: reason('Could not add the address') }
             )
           }
         >
@@ -158,6 +169,47 @@ function SendingAddressesSection({
   )
 }
 
+/** What each record is for, in the words the person publishing it needs. */
+const PURPOSE_LABEL: Record<string, string> = {
+  ownership: 'Proves this workspace owns the domain',
+  dkim: 'Signs your mail',
+  'mail-from': 'Aligns SPF with your domain',
+}
+
+type DnsRecordView = {
+  type: string
+  host: string
+  value: string
+  purpose: string
+  priority?: number
+}
+
+/**
+ * One record, in the order a DNS provider's form asks for it: type, name, value.
+ * An MX carries its priority between the two, which is where that field sits in
+ * every DNS form and nowhere else.
+ */
+function DnsRecordRow({ record }: { record: DnsRecordView }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t py-2 first:border-t-0">
+      <Badge size="sm" variant="secondary">
+        {record.type}
+      </Badge>
+      {record.priority !== undefined && (
+        <Badge size="sm" variant="outline">
+          priority {record.priority}
+        </Badge>
+      )}
+      <span className="font-mono text-sm break-all">{record.host}</span>
+      <span className="text-sm text-muted-foreground">&rarr;</span>
+      <span className="font-mono text-sm break-all">{record.value}</span>
+      <span className="w-full text-sm text-muted-foreground">
+        {PURPOSE_LABEL[record.purpose] ?? record.purpose}
+      </span>
+    </div>
+  )
+}
+
 function SendingDomainsSection({
   domains,
 }: {
@@ -165,43 +217,61 @@ function SendingDomainsSection({
     id: string
     domain: string
     status: string
-    dnsRecords: { type: string; host: string; value: string; purpose: string }[]
+    dnsRecords: DnsRecordView[]
   }[]
 }) {
   const [domain, setDomain] = useState('')
   const create = useCreateSendingDomain()
   const verify = useVerifySendingDomain()
+  const remove = useDeleteSendingDomain()
   return (
     <SettingsCard
       title="Sending domains"
-      description="Verify SPF and DKIM so your mail is trusted and not marked as spam."
+      description="Send from your own domain. Publish these records at your DNS provider, then check them here."
     >
       <div className="space-y-3">
         {domains.map((d) => (
           <div key={d.id} className="rounded-lg border p-3">
             <div className="flex items-center gap-2">
               <span className="flex-1 font-medium">{d.domain}</span>
-              <Badge variant={d.status === 'verified' ? 'default' : 'outline'}>{d.status}</Badge>
-              {d.status !== 'verified' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={verify.isPending}
-                  onClick={() => verify.mutate(d.id, { onError: fail('Verification failed') })}
-                >
-                  Verify
-                </Button>
-              )}
+              <Badge size="sm" variant={d.status === 'verified' ? 'default' : 'outline'}>
+                {d.status}
+              </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={verify.isPending}
+                onClick={() =>
+                  verify.mutate(d.id, { onError: reason('Could not check the records') })
+                }
+              >
+                {d.status === 'verified' ? 'Re-check' : 'Check records'}
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`Remove ${d.domain}`}
+                disabled={remove.isPending}
+                onClick={() => remove.mutate(d.id, { onError: reason('Could not remove it') })}
+              >
+                <TrashIcon className="size-4" />
+              </Button>
             </div>
-            {d.status !== 'verified' && d.dnsRecords.length > 0 && (
-              <div className="mt-2 space-y-1 overflow-x-auto">
+            {/* Shown after verification too, not only before it. These records
+                have to STAY published: the ownership record is what proves the
+                domain is still this workspace's, and the scheduled re-check
+                un-verifies a domain whose records have gone. Hiding them on
+                success would tell a customer they were finished with records
+                they must not delete. */}
+            {d.dnsRecords.length > 0 && (
+              <div className="mt-2 overflow-x-auto">
+                {d.status === 'verified' && (
+                  <p className="text-sm text-muted-foreground">
+                    Keep these published. Removing them stops mail being sent from this domain.
+                  </p>
+                )}
                 {d.dnsRecords.map((r, i) => (
-                  <div
-                    key={i}
-                    className="whitespace-nowrap font-mono text-xs text-muted-foreground"
-                  >
-                    {r.type} {r.host} → {r.value}
-                  </div>
+                  <DnsRecordRow key={`${r.type}-${r.host}-${i}`} record={r} />
                 ))}
               </div>
             )}
@@ -215,7 +285,7 @@ function SendingDomainsSection({
             id="domain"
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
-            placeholder="mail.yourcompany.com"
+            placeholder="yourcompany.com"
           />
         </div>
         <Button
@@ -223,7 +293,7 @@ function SendingDomainsSection({
           onClick={() =>
             create.mutate(domain.trim(), {
               onSuccess: () => setDomain(''),
-              onError: fail('Could not add domain'),
+              onError: reason('Could not add the domain'),
             })
           }
         >

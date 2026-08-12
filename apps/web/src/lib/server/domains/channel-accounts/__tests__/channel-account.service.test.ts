@@ -22,7 +22,7 @@ import {
   getInboundRoute,
   getSendingAddress,
   getSendingDomain,
-  markSendingDomainVerified,
+  deleteSendingDomain,
   listChannelAccounts,
   softDeleteChannelAccount,
   resolveChannelAccountByRecipient,
@@ -94,21 +94,33 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     expect(await getSendingAddress(teamId, 'changelog')).toBeNull()
   })
 
-  it('creates a sending domain and toggles it verified', async () => {
+  it('creates a sending domain pending, and removing it frees the name again', async () => {
+    // Pending on creation and only ever moved by the checker: there is no
+    // manual toggle, because a status this row can be given by hand is a
+    // sending identity this workspace can grant itself.
     const teamId = await seedTeam()
     const domain = await createSendingDomain({
       owningTeamId: teamId,
       domain: 'Mail.Acme.com',
-      dnsRecords: [{ type: 'TXT', host: '@', value: 'v=spf1 include:acme -all', purpose: 'spf' }],
+      dnsRecords: [
+        {
+          type: 'TXT',
+          host: '_quackback',
+          value: 'quackback-domain-verification=6f1c2a9e4b8d0f37',
+          purpose: 'ownership',
+        },
+      ],
     })
     expect(domain.domain).toBe('mail.acme.com')
     expect(domain.status).toBe('pending')
     expect(domain.dnsRecords).toHaveLength(1)
 
-    const verified = await markSendingDomainVerified(domain.id)
-    expect(verified.status).toBe('verified')
-    expect(verified.verifiedAt).not.toBeNull()
-    expect((await getSendingDomain(domain.id))?.status).toBe('verified')
+    // A typo would otherwise hold its slot and its name forever: the unique
+    // index on (team, domain) refuses the re-add until the row is gone.
+    await deleteSendingDomain(domain.id)
+    expect(await getSendingDomain(domain.id)).toBeNull()
+    const again = await createSendingDomain({ owningTeamId: teamId, domain: 'mail.acme.com' })
+    expect(again.status).toBe('pending')
   })
 
   it('resolves a channel account by a sending address or the inbound forwarding target', async () => {

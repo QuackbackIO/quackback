@@ -2,7 +2,7 @@ import { TierLimitError } from '../../errors/tier-limit-error'
 import { aiTokensThisMonth } from '../ai/usage-counter'
 import { getTierLimits } from './tier-limits.service'
 import type { TierFeatureFlags } from './tier-limits.types'
-import { db, isNull, sql, statusComponents } from '@/lib/server/db'
+import { db, emailSendingDomains, isNull, sql, statusComponents } from '@/lib/server/db'
 
 interface EnforceCountLimitArgs {
   /** Null = unlimited. */
@@ -74,6 +74,55 @@ export async function enforceStatusComponentLimit(): Promise<void> {
         .select({ count: sql<number>`count(*)::int` })
         .from(statusComponents)
         .where(isNull(statusComponents.deletedAt))
+      return row?.count ?? 0
+    },
+  })
+}
+
+/**
+ * Refuses to add another sending domain once the plan's `maxSendingDomains`
+ * limit is reached.
+ *
+ * The only count limit here that guards something outside this workspace.
+ * Adding a sending domain creates an identity on the mail provider account
+ * every workspace shares, and that account has an identity quota — so the
+ * failure mode of no ceiling is not one workspace overspending its plan, it is
+ * one workspace exhausting a resource the rest depend on.
+ *
+ * ## The count runs on the caller's executor, on purpose
+ *
+ * Every other limit here reads and throws, and the window between the read and
+ * the create is harmless because the resource being overspent belongs to the
+ * workspace overspending it. This one is different, so the caller passes the
+ * transaction it is about to insert in and holds a lock across both — see
+ * `createSendingDomain`, which is the only caller and the only insert path. The
+ * limit is passed in for the same reason: reading it inside the transaction
+ * would put a settings query inside a lock that nothing else needs to wait on.
+ *
+ * ## Why the default is still unlimited
+ *
+ * A self-hoster runs the whole provider account and every identity on it is
+ * theirs; a ceiling there would be a number invented to constrain someone with
+ * nobody to take the resource from. On a fleet the ceiling is not optional and
+ * it is not a default: the control plane writes a `maxSendingDomains` into every
+ * tenant's tier limits, and a tenant whose limits were never written can add
+ * domains without one. That is the same posture as every other limit in this
+ * file — the mechanism is shared and the values are the deployment's — and it
+ * is why the fleet's provisioning path must write the value rather than rely on
+ * anything here.
+ */
+export async function enforceSendingDomainLimit(
+  limit: number | null,
+  exec: Pick<typeof db, 'select'>
+): Promise<void> {
+  await enforceCountLimit({
+    limit,
+    name: 'maxSendingDomains',
+    friendly: 'sending domains',
+    currentCount: async () => {
+      const [row] = await exec
+        .select({ count: sql<number>`count(*)::int` })
+        .from(emailSendingDomains)
       return row?.count ?? 0
     },
   })

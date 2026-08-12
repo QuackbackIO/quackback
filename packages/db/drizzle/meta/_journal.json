@@ -1646,6 +1646,13 @@
       "tag": "0259_conversation_spam_retention_idx",
       "breakpoints": true,
       "idx": 234
+    },
+    {
+      "version": "7",
+      "when": 1785700000020,
+      "tag": "0260_sending_domain_reverify",
+      "breakpoints": true,
+      "idx": 235
     }
   ]
 }

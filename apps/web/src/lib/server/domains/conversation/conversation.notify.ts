@@ -19,7 +19,7 @@
  *    anonymous visitor with no captured address stays unreachable either way.
  */
 import { db, eq, inArray, principal, user, conversations } from '@/lib/server/db'
-import { resolveSendingAddress } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import type { Conversation } from '@/lib/server/db'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/core'
@@ -309,14 +309,11 @@ async function sendVisitorConversationEmail(opts: {
     ? (inboundReplyToAddress(opts.conversationId, currentMailSlug()) ?? undefined)
     : undefined
   const threading = await outboundThreading(opts.conversationId)
-  // Send as the conversation's team sending address (§4.8) when configured, else
-  // the branded workspace default (EMAIL_FROM).
-  const [conv] = await db
-    .select({ assignedTeamId: conversations.assignedTeamId })
-    .from(conversations)
-    .where(eq(conversations.id, opts.conversationId))
-    .limit(1)
-  const from = (await resolveSendingAddress(conv?.assignedTeamId ?? null)) ?? undefined
+  // Reply from the address the customer wrote to when this workspace has proved
+  // it may send as that domain, else the assigned team's sending address, else
+  // the branded workspace default (EMAIL_FROM). A thread that arrived at the
+  // customer's own support address should not change identity on the way back.
+  const from = (await resolveConversationFrom(opts.conversationId)) ?? undefined
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const result = await sendWithRetry(opts.conversationId, () =>
     sendConversationMessageEmail({
@@ -586,6 +583,12 @@ export async function notifyCsatRequestEmail(
       string,
     ]
 
+    // The same From the thread's replies leave as. A rating prompt that arrived
+    // from the platform address on a conversation answered from the customer's
+    // own support address is a thread that changes identity halfway through,
+    // which is exactly what a customer-owned sending domain is bought to avoid.
+    const from = (await resolveConversationFrom(conversationId)) ?? undefined
+
     const { sendCsatRequestEmail } = await import('@quackback/email')
     await sendCsatRequestEmail({
       to: recipient,
@@ -593,6 +596,7 @@ export async function notifyCsatRequestEmail(
       ratingUrls,
       workspaceName: ctx.workspaceName,
       logoUrl: ctx.logoUrl ?? undefined,
+      from,
     })
   } catch (err) {
     log.warn({ err, conversationId }, 'csat request email failed')

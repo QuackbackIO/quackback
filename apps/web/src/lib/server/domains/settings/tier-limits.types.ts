@@ -60,6 +60,17 @@ export interface TierLimits {
   maxCustomRoles: TierLimit<number>
 
   /**
+   * Sending domains a workspace may add.
+   *
+   * A cap on a shared resource rather than on a feature. Adding one creates an
+   * identity on the mail provider account this workspace shares with every
+   * other, and that account has an identity quota: without a ceiling, one
+   * workspace adding domains in a loop degrades mail for all of them. Null =
+   * unlimited, which is right for a self-hoster on their own account.
+   */
+  maxSendingDomains: TierLimit<number>
+
+  /**
    * Monthly LLM token budget (input + output combined). All AI features
    * (summaries, merge suggestions, sentiment, future ones) draw from
    * this single budget. 0 blocks AI entirely; null = unlimited.
@@ -81,6 +92,7 @@ export const OSS_TIER_LIMITS: TierLimits = {
   maxTeamSeats: null,
   maxStatusComponents: null,
   maxCustomRoles: null,
+  maxSendingDomains: null,
 
   aiTokensPerMonth: null,
 

@@ -12,7 +12,9 @@
     "./anon": "./src/anon.ts",
     "./message-id": "./src/message-id.ts",
     "./recipient": "./src/recipient.ts",
-    "./ses": "./src/ses.ts"
+    "./sender": "./src/sender.ts",
+    "./ses": "./src/ses.ts",
+    "./ses-identity": "./src/ses-identity.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1107.0",
