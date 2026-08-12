@@ -32,6 +32,19 @@ const uploadObject = vi.fn()
 const loadTicketOr404 = vi.fn<(...a: unknown[]) => Promise<Record<string, unknown>>>()
 const appendInboundTicketReply = vi.fn()
 const resolveChannelAccountByRecipient = vi.fn()
+// The workspace's own address is a front door that needs no row, so cold inbound
+// asks for it when no row matched. Spied rather than left real: this file's db is
+// a fake, and what these cases are about is which question was asked with which
+// recipients, not what a row lookup would have answered.
+const ensurePlatformInboundRoute = vi.fn<(...a: unknown[]) => Promise<unknown>>()
+// The cold-inbound create path: sender resolution mints a lead row and the
+// conversation insert writes several tables, neither of which this file's fake
+// db stands in for. What it stores is pinned against a real database in
+// email-cold-inbound-ingest.test.ts; here the seam only has to let a message
+// REACH that path, so the drops and hand-offs before it can be asserted.
+const resolveColdInboundSender = vi.fn<(...a: unknown[]) => Promise<unknown>>()
+const createEmailConversation = vi.fn<(...a: unknown[]) => Promise<unknown>>()
+const cleanupColdInboundLead = vi.fn<(...a: unknown[]) => Promise<unknown>>()
 let conversationRow: Record<string, unknown> | undefined
 let principalRow: Record<string, unknown> | undefined
 let userRow: Record<string, unknown> | undefined
@@ -137,8 +150,22 @@ vi.mock('@/lib/server/domains/tickets/requester.service', () => ({
   appendInboundTicketReply: (...a: unknown[]) => appendInboundTicketReply(...a),
 }))
 
-vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => ({
+// Only the two functions that read or write rows are spied. `addressesPlatformInbox`
+// stays REAL through the spread: it is a pure reading of the address grammar with
+// no database in it, and a stub would get to decide by itself which recipients
+// count as this workspace's own address — which is the question these cases are
+// asserting an answer to.
+vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', async (orig) => ({
+  ...(await orig<typeof import('@/lib/server/domains/channel-accounts/channel-account.service')>()),
   resolveChannelAccountByRecipient: (...a: unknown[]) => resolveChannelAccountByRecipient(...a),
+  ensurePlatformInboundRoute: (...a: unknown[]) => ensurePlatformInboundRoute(...a),
+}))
+
+vi.mock('../conversation.email-cold-inbound', async (orig) => ({
+  ...(await orig<typeof import('../conversation.email-cold-inbound')>()),
+  resolveColdInboundSender: (...a: unknown[]) => resolveColdInboundSender(...a),
+  createEmailConversation: (...a: unknown[]) => createEmailConversation(...a),
+  cleanupColdInboundLead: (...a: unknown[]) => cleanupColdInboundLead(...a),
 }))
 
 // Which workspace this process is serving. Real in production (workspace scope
@@ -151,6 +178,7 @@ vi.mock('../conversation.mail-slug', () => ({
 }))
 
 import { ingestInboundEmail, ingestParsedEmail } from '../conversation.email-inbound.service'
+import { evaluateInboundAuth } from '../email-auth'
 import { parseRawEmail } from '../conversation.email-inbound'
 import type { ParsedInboundEmail, ParsedEmailAttachment } from '../conversation.email-inbound'
 
@@ -185,6 +213,22 @@ beforeEach(() => {
   getReceivedEmail.mockResolvedValue(null)
   resolveConversationByMessageIds.mockResolvedValue(null)
   resolvePrincipalIdByEmail.mockResolvedValue(null)
+  // No route materialises unless a case says so, which is what makes the drops
+  // below real drops. The predicate that decides whether one is even asked for
+  // is the real one, so a message not addressed to this workspace never gets
+  // this far.
+  ensurePlatformInboundRoute.mockResolvedValue(null)
+  // The verdict is the REAL evaluation of the message's own
+  // Authentication-Results, because the spam-signal layer downstream reads it
+  // and a hardcoded verdict would decide that layer's behaviour by fiat.
+  resolveColdInboundSender.mockImplementation(async (_from, authResults) => ({
+    action: 'attach',
+    principalId: 'principal_lead',
+    unverified: false,
+    verdict: evaluateInboundAuth(authResults as string | null),
+  }))
+  createEmailConversation.mockResolvedValue('conversation_cold')
+  cleanupColdInboundLead.mockResolvedValue(undefined)
   uploadImageBuffer.mockImplementation(async (bytes: Buffer, mime: string) => ({
     url: `https://quackback.ngrok.app/api/storage/chat-images/img-${bytes.length}.${mime.split('/')[1]}`,
   }))
@@ -633,6 +677,7 @@ describe('ingestInboundEmail', () => {
       expect(sendVisitorMessage).not.toHaveBeenCalled()
       // A fact, so it is a hard drop: nothing is offered to retention.
       expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+      expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
       expect(resolveConversationByMessageIds).toHaveBeenCalledWith([asItComesBack])
     })
 
@@ -694,6 +739,63 @@ describe('ingestInboundEmail', () => {
       } finally {
         vi.unstubAllEnvs()
       }
+    })
+  })
+
+  describe('the workspace front door is materialised last of all', () => {
+    // Mail to the workspace's own address, from a stranger it has blocked. The
+    // row is the workspace permanently gaining a front door, and a stranger
+    // whose message is thrown away must not be able to cause one: the write
+    // belongs after every gate that can refuse the message, not before them.
+    const coldEvent = (over: Record<string, unknown> = {}) => ({
+      type: 'email.received',
+      data: {
+        to: [`${SLUG}@tenaevexeo.resend.app`],
+        from: 'stranger@example.com',
+        subject: 'Hello',
+        text: 'Let me in.',
+        headers: [{ name: 'Message-ID', value: '<cold-1@example.com>' }],
+        ...over,
+      },
+    })
+
+    it('asks for the route only after the sender has cleared every gate', async () => {
+      const result = await ingestInboundEmail(coldEvent())
+
+      // Nothing to bind to (the route is mocked away), so the message drops —
+      // but it got as far as being resolved, which is what says the gates ran
+      // first and the write was left until it was actually needed.
+      expect(result).toEqual({ status: 'no_conversation' })
+      expect(resolveColdInboundSender).toHaveBeenCalled()
+      expect(ensurePlatformInboundRoute).toHaveBeenCalledWith([`${SLUG}@tenaevexeo.resend.app`])
+      expect(createEmailConversation).not.toHaveBeenCalled()
+    })
+
+    it('creates nothing for a blocked sender', async () => {
+      principalRow = { ...principalRow, blockedAt: new Date() }
+
+      const result = await ingestInboundEmail(coldEvent())
+
+      expect(result).toEqual({ status: 'suppressed' })
+      expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
+    })
+
+    it('creates nothing for a message with no body', async () => {
+      const result = await ingestInboundEmail(coldEvent({ text: '' }))
+
+      expect(result).toEqual({ status: 'empty' })
+      expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
+      expect(resolveColdInboundSender).not.toHaveBeenCalled()
+    })
+
+    it('creates nothing for mail addressed to somebody else entirely', async () => {
+      // The cheap half stays cheap: a message that is not ours is refused on the
+      // address grammar alone, before a single row is read or written.
+      const result = await ingestInboundEmail(coldEvent({ to: ['nobody@elsewhere.example'] }))
+
+      expect(result).toEqual({ status: 'no_conversation' })
+      expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
+      expect(resolveColdInboundSender).not.toHaveBeenCalled()
     })
   })
 
@@ -952,6 +1054,89 @@ describe('ingestInboundEmail', () => {
 })
 
 /**
+ * The lead a cold message mints, when nothing keeps the message.
+ *
+ * Sender resolution can MINT a person: a stranger writing in for the first time
+ * becomes an anonymous lead before there is a conversation to hang them on. Two
+ * ways out of the create path leave no conversation behind — no front door to
+ * bind to, and an insert that throws — and each one that forgot to take the lead
+ * with it would leave a customer record for a message the workspace never saw,
+ * accumulating one row per delivery from anyone who could reach the door.
+ *
+ * Both are asserted, and separately, because they are two call sites of one
+ * helper: a single case would keep passing with either of them deleted, which is
+ * the whole reason the two blocks being identical is not a proof that both run.
+ */
+describe('the lead a discarded cold message minted', () => {
+  const MINTED = 'principal_lead_minted'
+
+  const coldEvent = (over: Record<string, unknown> = {}) => ({
+    type: 'email.received',
+    data: {
+      to: [`${SLUG}@tenaevexeo.resend.app`],
+      from: 'stranger@example.com',
+      subject: 'Hello',
+      text: 'Is anyone there?',
+      headers: [{ name: 'Message-ID', value: '<lead-1@example.com>' }],
+      ...over,
+    },
+  })
+
+  beforeEach(() => {
+    // A first-time sender, which is the only resolution that mints anything.
+    resolveColdInboundSender.mockImplementation(async (_from, authResults) => ({
+      action: 'create',
+      principalId: MINTED,
+      unverified: true,
+      verdict: evaluateInboundAuth(authResults as string | null),
+    }))
+  })
+
+  it('discards it when the message reached no front door to bind to', async () => {
+    ensurePlatformInboundRoute.mockResolvedValue(null)
+
+    const result = await ingestInboundEmail(coldEvent())
+
+    expect(result).toEqual({ status: 'no_conversation' })
+    expect(createEmailConversation).not.toHaveBeenCalled()
+    expect(cleanupColdInboundLead).toHaveBeenCalledWith(MINTED)
+  })
+
+  it('discards it when the conversation insert throws', async () => {
+    ensurePlatformInboundRoute.mockResolvedValue({ id: 'channel_account_1', role: 'inbound' })
+    createEmailConversation.mockRejectedValueOnce(new Error('conversation insert failed'))
+
+    // The error still propagates, so the delivery is retried rather than acked:
+    // cleaning up is not the same as swallowing.
+    await expect(ingestInboundEmail(coldEvent())).rejects.toThrow('conversation insert failed')
+    expect(cleanupColdInboundLead).toHaveBeenCalledWith(MINTED)
+  })
+
+  it('leaves an existing person alone on the same two paths', async () => {
+    // The condition inside the helper. `attach` resolved to somebody this
+    // workspace already knew, and deleting them because one message could not be
+    // filed would destroy a customer over a transient insert failure.
+    resolveColdInboundSender.mockImplementation(async (_from, authResults) => ({
+      action: 'attach',
+      principalId: 'principal_known',
+      unverified: false,
+      verdict: evaluateInboundAuth(authResults as string | null),
+    }))
+
+    ensurePlatformInboundRoute.mockResolvedValue(null)
+    expect(await ingestInboundEmail(coldEvent())).toEqual({ status: 'no_conversation' })
+
+    ensurePlatformInboundRoute.mockResolvedValue({ id: 'channel_account_1', role: 'inbound' })
+    createEmailConversation.mockRejectedValueOnce(new Error('conversation insert failed'))
+    await expect(
+      ingestInboundEmail(coldEvent({ headers: [{ name: 'Message-ID', value: '<lead-2@x>' }] }))
+    ).rejects.toThrow('conversation insert failed')
+
+    expect(cleanupColdInboundLead).not.toHaveBeenCalled()
+  })
+})
+
+/**
  * Deduplicating a message that carries no `Message-ID` of its own.
  *
  * The edge bridge is invoked once per MESSAGE with every recipient that matched,
@@ -1113,6 +1298,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     })
     appendInboundTicketReply.mockResolvedValue({ message: { id: 'conversation_msg_t' } })
     resolveChannelAccountByRecipient.mockResolvedValue(undefined)
+    ensurePlatformInboundRoute.mockResolvedValue(null)
   })
 
   it('appends a verified reply through the requester-reply core, quoted history stripped', async () => {
@@ -1131,6 +1317,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     // Never routed as a conversation, never opened as cold inbound.
     expect(sendVisitorMessage).not.toHaveBeenCalled()
     expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+    expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
   })
 
   it("matches an identified requester's account email (case-insensitive)", async () => {
@@ -1170,6 +1357,47 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     expect(appendInboundTicketReply).not.toHaveBeenCalled()
     expect(sendVisitorMessage).not.toHaveBeenCalled()
     expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+    expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
+  })
+
+  it('drops a tampered signature that rides in Cc rather than To', async () => {
+    // The claim guard read `To` while cold inbound reads To ∪ Cc, so the drop
+    // and the thing it protects disagreed about what a recipient is. A forged
+    // ticket address in Cc was then reinterpreted as ordinary mail to the
+    // workspace address and opened a thread from whoever sent it.
+    const result = await ingestInboundEmail({
+      type: 'email.received',
+      data: {
+        to: ['someone-else@acme.com'],
+        cc: [`${SLUG}+t01h455vb4pex5vsknk084sn02q.AAAAAAAAAAAAAAAAAAAAAA@tenaevexeo.resend.app`],
+        from: 'jane@example.com',
+        text: 'injected as the requester',
+        headers: [{ name: 'Message-ID', value: '<t-tamper-cc@x>' }],
+      },
+    })
+
+    expect(result).toEqual({ status: 'no_ticket' })
+    expect(loadTicketOr404).not.toHaveBeenCalled()
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+    expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+    expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
+  })
+
+  it('appends a verified reply that rides in Cc, which is where a loop-in puts it', async () => {
+    // The other half of reading one recipient set: a person who Cc's the ticket
+    // address to bring support into a thread has written to the ticket, and the
+    // signature is what says so. The sender still has to be the requester.
+    const result = await ingestInboundEmail(
+      ticketEvent({
+        to: ['colleague@example.com'],
+        cc: [TICKET_REPLY_TO],
+        headers: [{ name: 'Message-ID', value: '<t-cc@x>' }],
+      })
+    )
+
+    expect(result).toEqual({ status: 'ingested_ticket', ticketId: TICKET_ID })
+    expect(appendInboundTicketReply).toHaveBeenCalledTimes(1)
   })
 
   it('drops when the sender is not the requester (never falls through to cold inbound)', async () => {
@@ -1183,6 +1411,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     expect(result).toEqual({ status: 'from_mismatch' })
     expect(appendInboundTicketReply).not.toHaveBeenCalled()
     expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+    expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
   })
 
   it('drops when the ticket is unknown or deleted', async () => {
@@ -1195,6 +1424,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
     expect(result).toEqual({ status: 'no_ticket' })
     expect(appendInboundTicketReply).not.toHaveBeenCalled()
     expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+    expect(ensurePlatformInboundRoute).not.toHaveBeenCalled()
   })
 
   it('drops a non-customer ticket', async () => {

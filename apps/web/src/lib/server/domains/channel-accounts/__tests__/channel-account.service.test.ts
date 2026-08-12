@@ -8,6 +8,12 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vites
 import { type TeamId } from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
+
+// The inbound channel's addressing half. Every reader of it reads at call time,
+// so setting it here is enough to fix the address the platform inbox derives.
+process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
+process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
 import { teams, channelAccounts, emailSendingDomains, eq } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -16,7 +22,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import {
+  ChannelAddressInUseError,
   createInboundRoute,
+  ensurePlatformInboundRoute,
+  setInboundForwardingTarget,
   createSendingAddress,
   createSendingDomain,
   getInboundRoute,
@@ -37,6 +46,12 @@ const fixture = await createDbTestFixture({
 })
 
 const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+/** A workspace named as the live fleet names one, and the address it has for
+ *  being one. Derived from the slug rather than written out, so the two sides of
+ *  every platform-inbox case here cannot drift apart. */
+const WORKSPACE = 'live-t1'
+const PLATFORM_ADDRESS = `${mailSlugFor(WORKSPACE)}@tenaevexeo.resend.app`
 
 async function seedTeam(): Promise<TeamId> {
   const [team] = await testDb
@@ -159,6 +174,173 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
 
     // ...and the partial-unique frees up, so a fresh inbound route can be created.
     await expect(createInboundRoute({ owningTeamId: teamId, config: {} })).resolves.toBeDefined()
+  })
+
+  /**
+   * The opt-in half of the design, arriving AFTER the default half already did.
+   *
+   * A workspace has one front door and the partial unique index says so, and by
+   * the time somebody configures forwarding the platform default has materialised
+   * on the first message. An insert there is a unique violation, which on this
+   * path is a person clicking a button and getting an error for doing the exact
+   * thing the product tells them to do.
+   */
+  it('adds a forwarding address to the route the platform default already created', async () => {
+    const platform = await withWorkspace(WORKSPACE, () =>
+      ensurePlatformInboundRoute([PLATFORM_ADDRESS])
+    )
+    expect(platform).not.toBeNull()
+    if (!platform) return
+    // The default route names NO address, and that is the design rather than an
+    // omission. `address` is the column the sending-address index is built over
+    // and the column the outbound From reads first, so a value here would put
+    // the workspace's one front door under a second unique constraint and
+    // shadow the customer's own verified address on the way out. The platform
+    // address is derived on both paths instead, so it cannot go stale and
+    // cannot outrank configuration.
+    expect(platform.address).toBeNull()
+    expect(platform.config.forwardingTarget).toBeUndefined()
+
+    const updated = await setInboundForwardingTarget({
+      owningTeamId: platform.owningTeamId,
+      forwardingTarget: 'support@acme.com',
+    })
+
+    // The same row, widened. Forwarding narrows nothing: the address the
+    // workspace already answered on is still there, so a customer who publishes
+    // it does not find it stops working the day they set forwarding up.
+    expect(updated.id).toBe(platform.id)
+    expect(updated.address).toBeNull()
+    expect(updated.config.forwardingTarget).toBe('support@acme.com')
+    expect(await listChannelAccounts(platform.owningTeamId)).toHaveLength(1)
+
+    // Both addresses still reach that one front door, by the two different
+    // means they are each known through: the forwarding target is a stored
+    // recipient, the platform address is derived from the workspace's slug.
+    expect((await resolveChannelAccountByRecipient(['support@acme.com']))?.id).toBe(platform.id)
+    const again = await withWorkspace(WORKSPACE, () =>
+      ensurePlatformInboundRoute([PLATFORM_ADDRESS])
+    )
+    expect(again?.id).toBe(platform.id)
+  })
+
+  it('stores a forwarding target in the one spelling the resolver looks it up by', async () => {
+    // A person types an address the way their own mail client shows it. The
+    // resolver folds the recipients it is handed before the lookup, so a stored
+    // value that was never folded is a front door that matches nothing.
+    const teamId = await seedTeam()
+    await setInboundForwardingTarget({
+      owningTeamId: teamId,
+      forwardingTarget: '  Support@Acme.COM ',
+    })
+    expect((await getInboundRoute(teamId))?.config.forwardingTarget).toBe('support@acme.com')
+    expect((await resolveChannelAccountByRecipient(['support@acme.com']))?.owningTeamId).toBe(
+      teamId
+    )
+
+    // ...and the same on the update branch, which is the one a workspace that
+    // already has a front door takes.
+    await setInboundForwardingTarget({ owningTeamId: teamId, forwardingTarget: 'Inbound@Acme.com' })
+    expect((await getInboundRoute(teamId))?.config.forwardingTarget).toBe('inbound@acme.com')
+    expect((await resolveChannelAccountByRecipient(['inbound@acme.com']))?.owningTeamId).toBe(
+      teamId
+    )
+  })
+
+  /**
+   * The mirror of the inbound direction, and the same unique index either way.
+   *
+   * `channel_accounts_sending_address_uq` covers (team, channel, address) with no
+   * module in it, so the second write of an address a workspace already holds is
+   * a 23505. Unhandled, that reaches a person as a 500 from a settings button.
+   */
+  it('re-adding a sending address moves it rather than failing the request', async () => {
+    const teamId = await seedTeam()
+    const first = await createSendingAddress({
+      owningTeamId: teamId,
+      address: 'support@acme.com',
+      module: 'support',
+    })
+
+    const moved = await createSendingAddress({
+      owningTeamId: teamId,
+      address: 'Support@Acme.com',
+      module: 'feedback',
+    })
+
+    expect(moved.id).toBe(first.id)
+    expect(moved.module).toBe('feedback')
+    expect(await listChannelAccounts(teamId)).toHaveLength(1)
+    expect(await getSendingAddress(teamId, 'support')).toBeNull()
+  })
+
+  /**
+   * The other row the same unique index can collide with, and the one an upsert
+   * must not silently swallow.
+   *
+   * `channel_accounts_sending_address_uq` spans ROLES: `address` is a column an
+   * inbound route may carry too, because a person can point a front door at an
+   * address by hand. Left to a plain upsert, adding that address as a From
+   * identity would find the inbound row, rewrite its module and config, and hand
+   * back a row whose role is still `inbound` — the workspace's one front door
+   * quietly repurposed by a settings button, and its mail stops arriving.
+   *
+   * So the update is confined to `sending` rows, no row comes back from the
+   * branch that would have rewritten the route, and the person who typed the
+   * address is told rather than obeyed.
+   */
+  it('refuses to rewrite a hand-configured inbound route into a sending identity', async () => {
+    const teamId = await seedTeam()
+    // Written directly, because this is the shape no API of ours produces: an
+    // inbound route carrying an address in the column rather than in its config.
+    const [route] = await testDb
+      .insert(channelAccounts)
+      .values({
+        owningTeamId: teamId,
+        role: 'inbound',
+        address: 'support@acme.com',
+        config: { forwardingTarget: 'support@acme.com', provider: 'resend' },
+      })
+      .returning()
+
+    await expect(
+      createSendingAddress({
+        owningTeamId: teamId,
+        // The spelling a person's mail client shows them; folded on the way in,
+        // so it collides with the stored one rather than inserting beside it.
+        address: 'Support@Acme.com',
+        module: 'support',
+      })
+    ).rejects.toBeInstanceOf(ChannelAddressInUseError)
+
+    // Not one column of the front door rewritten, and no second row: the refusal
+    // is what the route's survival rests on, not a later repair.
+    expect(await listChannelAccounts(teamId)).toEqual([route])
+    expect((await getInboundRoute(teamId))?.id).toBe(route.id)
+    expect(await getSendingAddress(teamId, 'support')).toBeNull()
+  })
+
+  it('adds the workspace platform address as a sending address beside the default route', async () => {
+    // The address the settings page advertises, added by the person reading it.
+    // The outbound guard grants exactly this one (the workspace's label on the
+    // minting domain), so a workspace refused it here would be refused the one
+    // address it is certain to be entitled to.
+    const platform = await withWorkspace(WORKSPACE, () =>
+      ensurePlatformInboundRoute([PLATFORM_ADDRESS])
+    )
+    expect(platform).not.toBeNull()
+    if (!platform) return
+
+    const sending = await createSendingAddress({
+      owningTeamId: platform.owningTeamId,
+      address: PLATFORM_ADDRESS,
+      module: 'support',
+    })
+    expect(sending.role).toBe('sending')
+    expect(sending.id).not.toBe(platform.id)
+    expect((await getSendingAddress(platform.owningTeamId, 'support'))?.address).toBe(
+      PLATFORM_ADDRESS
+    )
   })
 
   it('resolveSendingAddress: assigned team, default-team fallback, then null', async () => {

@@ -8,18 +8,20 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { ChannelAccountId, SendingDomainId, TeamId } from '@quackback/ids'
 import type { ChannelAccount, EmailSendingDomain } from '@/lib/server/db'
-import { db, eq, teams } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
+  defaultTeamId,
   getInboundRoute,
   listChannelAccounts,
   listSendingDomains,
-  createInboundRoute,
+  setInboundForwardingTarget,
   createSendingAddress,
   deleteSendingDomain,
   softDeleteChannelAccount,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
+import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import {
   SendingDomainRefusedError,
   provisionSendingDomain,
@@ -104,6 +106,17 @@ export interface EmailChannelConfigDTO {
   inboundRoute: ChannelAccountDTO | null
   sendingAddresses: ChannelAccountDTO[]
   domains: SendingDomainDTO[]
+  /**
+   * The workspace's own address, which it receives on with nothing configured.
+   *
+   * Derived on every read rather than read back off the route row, so it is the
+   * address the running process would recognise today: the row is written once
+   * and an install's inbound domain can move under it, and a stale value here
+   * would be a support address a customer publishes and nobody answers. Null
+   * when this install has no usable inbound domain, or the workspace no mail
+   * slug — in both of which there is no address to name.
+   */
+  platformAddress: string | null
 }
 
 const toAccount = (a: ChannelAccount): ChannelAccountDTO => ({
@@ -124,16 +137,6 @@ const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   verifiedAt: d.verifiedAt ? d.verifiedAt.toISOString() : null,
 })
 
-/** The workspace's default team owns email config in the v0. */
-async function defaultTeamId(): Promise<TeamId | null> {
-  const [row] = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .where(eq(teams.isDefault, true))
-    .limit(1)
-  return row?.id ?? null
-}
-
 async function requireDefaultTeam(): Promise<TeamId> {
   const teamId = await defaultTeamId()
   if (!teamId) throw new Error('No default team is configured for email.')
@@ -143,8 +146,11 @@ async function requireDefaultTeam(): Promise<TeamId> {
 export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<EmailChannelConfigDTO> => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    const platformAddress = platformInboxAddress(currentMailSlug())
     const teamId = await defaultTeamId()
-    if (!teamId) return { inboundRoute: null, sendingAddresses: [], domains: [] }
+    if (!teamId) {
+      return { inboundRoute: null, sendingAddresses: [], domains: [], platformAddress }
+    }
     const [inbound, accounts, domains] = await Promise.all([
       getInboundRoute(teamId),
       listChannelAccounts(teamId),
@@ -154,6 +160,7 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
       inboundRoute: inbound ? toAccount(inbound) : null,
       sendingAddresses: accounts.filter((a) => a.role === 'sending').map(toAccount),
       domains: domains.map(toDomain),
+      platformAddress,
     }
   }
 )
@@ -163,19 +170,13 @@ export const createInboundRouteFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
     const teamId = await requireDefaultTeam()
-    // Record the front door that will actually deliver this route's mail, not a
-    // constant. The field is what an operator reads back when mail is not
-    // arriving, so naming a transport this deployment does not run sends the
-    // next person debugging it to the wrong provider's dashboard.
-    const { isCloudflareInboundConfigured } =
-      await import('@/lib/server/domains/conversation/email-cloudflare-handler')
+    // Sets the forwarding address ON the workspace's one inbound route, which by
+    // now may already exist as the platform default. Adding forwarding is a
+    // widening, so nothing the route already answered for is given up.
     return toAccount(
-      await createInboundRoute({
+      await setInboundForwardingTarget({
         owningTeamId: teamId,
-        config: {
-          forwardingTarget: data.forwardingTarget,
-          provider: isCloudflareInboundConfigured() ? 'cloudflare' : 'resend',
-        },
+        forwardingTarget: data.forwardingTarget,
       })
     )
   })
@@ -196,6 +197,9 @@ export const createSendingAddressFn = createServerFn({ method: 'POST' })
     // is an impersonation waiting for its first reply. The send path guards this
     // too, and this is where a person is present to read the reason.
     await assertSendingIdentityPermitted(data.address.trim().toLowerCase())
+    // Re-adding an address this workspace already sends from moves it; only one
+    // already serving as the inbound route is refused, and that refusal reaches
+    // this person as its own sentence, like the identity one above it.
     return toAccount(
       await createSendingAddress({
         owningTeamId: teamId,

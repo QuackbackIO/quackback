@@ -48,7 +48,10 @@ export function EmailChannelSettings() {
   const { data } = useQuery(emailChannelConfigQuery())
   return (
     <div className="space-y-6">
-      <InboundRouteSection forwardingTarget={inboundTarget(data?.inboundRoute)} />
+      <InboundRouteSection
+        forwardingTarget={inboundTarget(data?.inboundRoute)}
+        platformAddress={data?.platformAddress ?? null}
+      />
       <SendingAddressesSection addresses={data?.sendingAddresses ?? []} />
       <SendingDomainsSection domains={data?.domains ?? []} />
     </div>
@@ -62,17 +65,28 @@ function inboundTarget(
   return typeof t === 'string' ? t : null
 }
 
-function InboundRouteSection({ forwardingTarget }: { forwardingTarget: string | null }) {
+function InboundRouteSection({
+  forwardingTarget,
+  platformAddress,
+}: {
+  forwardingTarget: string | null
+  platformAddress: string | null
+}) {
   const [value, setValue] = useState('')
   const create = useCreateInboundRoute()
   return (
     <SettingsCard
       title="Inbound route"
-      description="Forward your support inbox here so replies become conversations."
+      description="Your workspace already receives on its own address. Forward another inbox into it to bring existing mail across."
     >
+      {platformAddress && (
+        <p className="text-sm">
+          Email to <span className="font-medium">{platformAddress}</span> becomes a conversation.
+        </p>
+      )}
       {forwardingTarget ? (
         <p className="text-sm">
-          Forwarding from <span className="font-medium">{forwardingTarget}</span>
+          Also forwarding from <span className="font-medium">{forwardingTarget}</span>
         </p>
       ) : (
         <div className="flex items-end gap-2">

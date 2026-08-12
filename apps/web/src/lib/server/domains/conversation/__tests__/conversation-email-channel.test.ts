@@ -26,6 +26,8 @@ import {
   inboundAcceptDomains,
   inboundMintDomain,
   invalidInboundDomainValues,
+  platformInboxAddress,
+  isPlatformInboxRecipient,
 } from '../conversation.email-channel'
 
 // 'whsec_' + base64('testsecret') / base64('othersecret').
@@ -554,6 +556,127 @@ describe('workspaceSlugFromInboundAddress', () => {
     ]) {
       expect(workspaceSlugFromInboundAddress(address), address).toEqual({ kind: 'unreadable' })
     }
+  })
+})
+
+/**
+ * The address a workspace has before anybody configures anything. Every case
+ * here is a way of getting it wrong that would be SILENT in production: an
+ * address on a domain with no sending identity behind it, an address minted out
+ * of a value that names no domain, an address for a workspace that cannot be
+ * named, or a neighbour's mail read as our own.
+ */
+describe('the platform inbox', () => {
+  const EXTRAS = { ...ENV, EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example' }
+
+  it('is the bare support address on the MINTING domain', () => {
+    expect(platformInboxAddress(SLUG, ENV)).toBe(`${SLUG}@tenaevexeo.resend.app`)
+    // Reads back through the same parser the front door reads a delivery with,
+    // so the address written down is one the door answers for.
+    expect(workspaceSlugFromInboundAddress(platformInboxAddress(SLUG, ENV)!)).toEqual({
+      kind: 'slug',
+      slug: SLUG,
+    })
+  })
+
+  it('is never minted on an extra domain, however many are listed', () => {
+    // An extra is received on and has no verified sending identity behind it, so
+    // an address built there is a From the provider refuses. Adding one must not
+    // move where the workspace's own address lives.
+    expect(platformInboxAddress(SLUG, EXTRAS)).toBe(`${SLUG}@tenaevexeo.resend.app`)
+  })
+
+  it('is nothing at all when the mint domain names no domain', () => {
+    // The refusal `inboundMintDomain` makes is the point: it disables inbound
+    // rather than corrupting it, and a default address must not paper over it by
+    // inventing one. The typo below is the one a cutover invites.
+    expect(
+      platformInboxAddress(SLUG, { ...ENV, EMAIL_INBOUND_DOMAIN: 'a.example,b.example' })
+    ).toBe(null)
+    expect(platformInboxAddress(SLUG, { ...ENV, EMAIL_INBOUND_DOMAIN: '' })).toBe(null)
+    expect(platformInboxAddress(SLUG, { EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example' })).toBe(null)
+  })
+
+  it('is nothing at all for a workspace with no usable mail slug', () => {
+    expect(platformInboxAddress(null, ENV)).toBe(null)
+    // A malformed slug answers null rather than throwing, because this is read
+    // on the path an arriving message takes and a throw there is a redelivery
+    // loop. The loud refusal still exists on the minting path.
+    expect(platformInboxAddress('NOT_A_SLUG!!', ENV)).toBe(null)
+    expect(() => inboundReplyToAddress(REAL_ID, 'NOT_A_SLUG!!', ENV)).toThrow(InvalidMailSlugError)
+  })
+
+  it('recognises mail to the address, sub-addressed or not', () => {
+    expect(isPlatformInboxRecipient(`${SLUG}@tenaevexeo.resend.app`, SLUG, ENV)).toBe(true)
+    // Case folded and padded, as a receiving server may present it.
+    expect(
+      isPlatformInboxRecipient(`  ${SLUG.toUpperCase()}@Tenaevexeo.Resend.App `, SLUG, ENV)
+    ).toBe(true)
+    // Ordinary sub-addressing a customer does for their own filing.
+    expect(isPlatformInboxRecipient(`${SLUG}+tuesday@tenaevexeo.resend.app`, SLUG, ENV)).toBe(true)
+    // A reply address whose tag did NOT verify reaches cold inbound; it is mail
+    // to this workspace's support address and opens a new thread rather than
+    // being dropped.
+    expect(
+      isPlatformInboxRecipient(
+        `${SLUG}+c01kw8qxn1eeh4t2rek7varh032.AAAAAAAAAAAAAAAAAAAAAA@tenaevexeo.resend.app`,
+        SLUG,
+        ENV
+      )
+    ).toBe(true)
+  })
+
+  it('recognises the address inside a display name, which is how a To header carries one', () => {
+    // What the readers upstream actually hand this: `headerAddresses` (raw MIME
+    // and IMAP) and `addressArray` (a provider webhook payload) both pass an
+    // address-list ENTRY through untouched, so a header written the ordinary way
+    // arrives here still wearing its display name. Reading only the bare form
+    // drops that mail, and IMAP is the door where a display-name `To` is normal.
+    expect(
+      isPlatformInboxRecipient(`"Acme Support" <${SLUG}@tenaevexeo.resend.app>`, SLUG, ENV)
+    ).toBe(true)
+    expect(
+      isPlatformInboxRecipient(`Acme Support <${SLUG}@tenaevexeo.resend.app>`, SLUG, ENV)
+    ).toBe(true)
+    // A whole header line, which is one string when a provider hands `to` over
+    // unsplit. Ours is not the first address in it.
+    expect(
+      isPlatformInboxRecipient(
+        `Someone <someone@acme.com>, "Acme Support" <${SLUG}@tenaevexeo.resend.app>`,
+        SLUG,
+        ENV
+      )
+    ).toBe(true)
+    // The same forms for a neighbour stay refused: the reading widens what is
+    // PARSED, never what matches.
+    expect(
+      isPlatformInboxRecipient('"Acme Support" <neon-t2@tenaevexeo.resend.app>', SLUG, ENV)
+    ).toBe(false)
+    expect(isPlatformInboxRecipient(`Support <${SLUG}@evil.test>`, SLUG, ENV)).toBe(false)
+  })
+
+  it('still recognises the address on a domain retired from minting', () => {
+    // The asymmetry the extras exist for: an address is published once and
+    // written to for as long as anyone has it. Recognising it costs nothing,
+    // while minting there would produce a From with no identity behind it.
+    expect(isPlatformInboxRecipient(`${SLUG}@old.example`, SLUG, EXTRAS)).toBe(true)
+    expect(isPlatformInboxRecipient(`${SLUG}@old.example`, SLUG, ENV)).toBe(false)
+  })
+
+  it('does not recognise a neighbour, a stranger, or any other domain', () => {
+    // The signing secret and the inbound domain are both fleet-wide, so the
+    // label is the whole of what separates two workspaces. Reading a
+    // neighbour's mail as ours writes a stranger's message into this database.
+    expect(isPlatformInboxRecipient('neon-t2@tenaevexeo.resend.app', SLUG, ENV)).toBe(false)
+    expect(isPlatformInboxRecipient(`${SLUG}@evil.test`, SLUG, ENV)).toBe(false)
+    // A subdomain of an accepted domain is a different zone, and the label is
+    // unique only inside the zone it was minted under.
+    expect(isPlatformInboxRecipient(`${SLUG}@mail.tenaevexeo.resend.app`, SLUG, ENV)).toBe(false)
+    expect(isPlatformInboxRecipient(`${SLUG}@tenaevexeo.resend.app`, null, ENV)).toBe(false)
+    // Splitting on the FIRST `@` would read this as ours. It is not.
+    expect(isPlatformInboxRecipient(`${SLUG}@evil.test@tenaevexeo.resend.app`, SLUG, ENV)).toBe(
+      false
+    )
   })
 })
 

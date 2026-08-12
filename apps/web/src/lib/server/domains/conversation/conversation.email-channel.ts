@@ -617,6 +617,97 @@ export function workspaceSlugFromInboundAddress(address: string): InboundAddress
   return isValidMailSlug(slug) ? { kind: 'slug', slug } : { kind: 'unreadable' }
 }
 
+// ============================================================================
+// The platform inbox: the bare `<slug>@<domain>` address at the top of the
+// grammar. Every workspace has one from the moment it exists, because both
+// halves of it are already known — the label the front door routes on, and the
+// domain this install mints on. Nothing has to be configured for it to be the
+// workspace's address; what follows is only how to write it down and how to
+// recognise it coming back.
+// ============================================================================
+
+/**
+ * The workspace's own support address, or null when there is none to write.
+ *
+ * The MINTING domain, never an extra. An extra is a domain this install still
+ * RECEIVES on and has no verified sending identity behind, so an address built
+ * on one is a From the provider would refuse — see {@link INBOUND_EXTRA_DOMAINS_ENV}
+ * for the whole of what membership does and does not grant.
+ *
+ * Null in both of the states that have no address rather than a broken one:
+ *
+ * - NO MAIL SLUG. On a shared front door an unslugged local part names no
+ *   workspace, which is the same refusal {@link inboundAddress} makes and for the
+ *   same reason. A malformed slug answers null here rather than throwing,
+ *   because this is read on the path an arriving message takes: a throw there is
+ *   a 5xx to a delivering mail server and a redelivery loop, where null is the
+ *   mail declining to be recognised. The loud refusal still exists where a
+ *   person is present to read it — minting an outbound reply address throws
+ *   {@link InvalidMailSlugError} on the very same slug.
+ * - NO USABLE MINT DOMAIN. {@link inboundMintDomain} refuses a value naming
+ *   anything but one domain, and that refusal must not be papered over by
+ *   inventing an address on a domain nothing can deliver to.
+ */
+export function platformInboxAddress(
+  slug: string | null,
+  env: EnvLike = process.env
+): string | null {
+  if (slug === null) return null
+  const label = slug.trim().toLowerCase()
+  if (!isValidMailSlug(label)) return null
+  const domain = inboundMintDomain(env)
+  return domain ? `${label}@${domain}` : null
+}
+
+/**
+ * Was this recipient addressed to the workspace's platform inbox?
+ *
+ * The ACCEPT-set, where {@link platformInboxAddress} writes on the mint domain
+ * alone, and the asymmetry is the same one the accept-set exists for: an address
+ * is published once and written to for as long as anyone has it, so a customer
+ * who saved the address before a domain change is still writing to this
+ * workspace. Recognising that mail costs nothing — the workspace is already
+ * identified by the label — while MINTING on the retired domain would produce a
+ * From with no identity behind it.
+ *
+ * Sub-addresses count, because the label is what names the workspace and
+ * everything after `+` is the sender's own filing. A `<slug>+c…`/`<slug>+t…`
+ * address that reached this point is one whose tag did NOT verify, and treating
+ * it as ordinary mail to the support address is what the grammar already says
+ * happens to an address that resolves to no thread: a new conversation from the
+ * sender, never an append to somebody else's.
+ *
+ * Reads addr-specs out of the value, like every other reader here, because that
+ * is the form its callers are handed: both front doors take an address-list
+ * ENTRY as it stood in the header, so `"Acme Support" <slug@domain>` is the
+ * ordinary case and not an exotic one. Reading the value as a bare address
+ * instead answered no for it and the mail was dropped — invisible behind the
+ * signed-envelope door, which prepends the bare envelope recipient, and not
+ * invisible at all over IMAP, which is a self-hosted install's whole inbound
+ * channel.
+ */
+export function isPlatformInboxRecipient(
+  value: string,
+  slug: string | null,
+  env: EnvLike = process.env
+): boolean {
+  if (slug === null) return false
+  const label = slug.trim().toLowerCase()
+  const accepted = inboundAcceptDomains(env)
+  if (accepted.size === 0) return false
+
+  for (const { local, domain } of addrSpecs(value)) {
+    const host = normalizeMailDomain(domain)
+    if (!host || !accepted.has(host)) continue
+    // Re-joined and handed to the one reader of a workspace label, rather than
+    // split again here: two readings of the same address that can drift is the
+    // failure the shared reader exists to prevent.
+    const claimed = workspaceSlugFromInboundAddress(`${local}@${domain}`)
+    if (claimed.kind === 'slug' && claimed.slug === label) return true
+  }
+  return false
+}
+
 /** `<slug>+c<id-suffix>.<tag>@<inbound-domain>`. Null when the caller has no
  *  mail slug for the workspace, or when the inbound domain or signing secret is
  *  missing — the caller then sends without a Reply-To and the email footer
