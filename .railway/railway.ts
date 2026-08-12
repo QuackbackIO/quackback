@@ -67,7 +67,7 @@ import { bucket, defineRailway, image, preserve, project, redis, service } from 
  * enough for every role the rollout touches.
  */
 const APP_IMAGE =
-  'ghcr.io/quackbackio/quackback@sha256:4f645f488face7c902e0a2359b1c1ed07c04261cfa59ee1fb836fc7013d8f5ee'
+  'ghcr.io/quackbackio/quackback@sha256:68c072de28cd5986dcd828f5ce9862066ebe89e6c6e51a10a7e83cd06cdc6919'
 
 /** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
  * is declared intent only — `plan` never diffs placement and `apply` never
@@ -418,6 +418,9 @@ export default defineRailway(() => {
     // still necessary: undeclared, each was on the delete list.
     env: {
       ADMIN_API_TOKEN: preserve(),
+      // The admin MCP's own bearer credential, deliberately separate from
+      // ADMIN_API_TOKEN so revoking agent access does not revoke the admin API.
+      ADMIN_MCP_TOKEN: preserve(),
       ADMIN_EMAILS: preserve(),
       BASE_URL: preserve(),
       BETTER_AUTH_SECRET: preserve(),
@@ -447,6 +450,17 @@ export default defineRailway(() => {
       PROVISIONER_SECRET: preserve(),
       QUACKBACK_BASE_DOMAIN: preserve(),
       QUACKBACK_FLEET_ROOT_KEY: preserve(),
+      // The one bucket every workspace shares, and the credential that writes
+      // to it. Isolation lives in the key prefix, not in a per-workspace
+      // credential, so these are fleet-wide by design. Named apart from the
+      // SDK's own default-chain names so an unrelated credential in the
+      // environment cannot read as "storage is configured".
+      QUACKBACK_FLEET_STORAGE_ACCESS_KEY_ID: preserve(),
+      QUACKBACK_FLEET_STORAGE_BUCKET: preserve(),
+      QUACKBACK_FLEET_STORAGE_ENDPOINT: preserve(),
+      QUACKBACK_FLEET_STORAGE_FORCE_PATH_STYLE: preserve(),
+      QUACKBACK_FLEET_STORAGE_REGION: preserve(),
+      QUACKBACK_FLEET_STORAGE_SECRET_ACCESS_KEY: preserve(),
       QUACKBACK_MIGRATOR_COMMAND: preserve(),
       QUACKBACK_MIGRATOR_TIMEOUT_MS: preserve(),
       RAILWAY_DOCKERFILE_PATH: preserve(),
@@ -462,6 +476,10 @@ export default defineRailway(() => {
       SES_SECRET_ACCESS_KEY: preserve(),
       // Names the set SES publishes delivery events against.
       SES_CONFIGURATION_SET: preserve(),
+      // Where those events arrive. The sweep pulls bounces and complaints from
+      // here into the suppression list, so losing this name stops the fleet
+      // learning that an address is undeliverable.
+      SES_EVENTS_QUEUE_URL: preserve(),
       STRIPE_SECRET_KEY: preserve(),
       STRIPE_WEBHOOK_SECRET: preserve(),
     },
