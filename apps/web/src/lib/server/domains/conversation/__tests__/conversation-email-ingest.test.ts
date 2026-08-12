@@ -35,7 +35,33 @@ const resolveChannelAccountByRecipient = vi.fn()
 let conversationRow: Record<string, unknown> | undefined
 let principalRow: Record<string, unknown> | undefined
 let userRow: Record<string, unknown> | undefined
-let dupeRows: Array<Record<string, unknown>> = []
+/**
+ * The rows the fake db holds for the dedupe query, and the keys it was asked
+ * for.
+ *
+ * KEYED, NOT CONSTANT, and that is load-bearing. A `where` that returns the same
+ * rows whatever it was handed answers every possible key identically, so a test
+ * claiming "this message deduplicated on X" passes just as happily against code
+ * that looked X up, code that looked something else up, and code that ran the
+ * query with no key at all. The fake therefore answers only the key the query
+ * actually bound, which is the one behaviour of a real index that these tests
+ * depend on.
+ */
+let dupeRowsByKey = new Map<string, Array<Record<string, unknown>>>()
+/** Every dedupe key the ingest core bound, in order. */
+let dedupeKeysQueried: string[] = []
+
+/**
+ * The string values a drizzle `sql` fragment bound as parameters.
+ *
+ * A template's chunks are its literal pieces plus the interpolated values; the
+ * interpolated ones are the primitives, which for the dedupe query is the single
+ * key it compares against.
+ */
+function boundParams(clause: unknown): string[] {
+  const chunks = (clause as { queryChunks?: unknown[] } | null)?.queryChunks ?? []
+  return chunks.filter((chunk): chunk is string => typeof chunk === 'string')
+}
 
 vi.mock('../conversation.email-store', () => ({
   resolveConversationByMessageIds: (...a: unknown[]) => resolveConversationByMessageIds(...a),
@@ -68,10 +94,17 @@ vi.mock('../conversation.ratelimit', () => ({
 // channelAccounts landed; the operators/tables the code touches are ignored by
 // the custom select chain anyway.
 vi.mock('@/lib/server/db', async (importOriginal) => {
+  let asked: string | null = null
   const selectChain = {
     from: () => selectChain,
-    where: () => selectChain,
-    limit: async () => dupeRows,
+    where: (clause: unknown) => {
+      // Recorded rather than ignored: the key the code chose is the thing under
+      // test everywhere dedupe is asserted.
+      asked = boundParams(clause)[0] ?? null
+      if (asked !== null) dedupeKeysQueried.push(asked)
+      return selectChain
+    },
+    limit: async () => (asked === null ? [] : (dupeRowsByKey.get(asked) ?? [])),
   }
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -136,7 +169,8 @@ beforeEach(() => {
     userId: null,
   }
   userRow = undefined
-  dupeRows = []
+  dupeRowsByKey = new Map()
+  dedupeKeysQueried = []
   sendVisitorMessage.mockResolvedValue({ created: false })
   assertConversationSendRate.mockResolvedValue(undefined)
   getReceivedEmail.mockResolvedValue(null)
@@ -167,12 +201,15 @@ describe('ingestInboundEmail', () => {
   })
 
   it('is a no-op for a redelivered Message-ID (idempotency)', async () => {
-    dupeRows = [{ id: 'conversation_msg_existing' }]
+    dupeRowsByKey.set('<m-1@x>', [{ id: 'conversation_msg_existing' }])
 
     const result = await ingestInboundEmail(baseEvent)
 
     expect(result).toEqual({ status: 'duplicate' })
     expect(sendVisitorMessage).not.toHaveBeenCalled()
+    // The message's own id, unprefixed: that is what every row ingested before
+    // the transport fallback existed is filed under.
+    expect(dedupeKeysQueried).toEqual(['<m-1@x>'])
   })
 
   // Resend's `email.received` webhook is metadata-only (#320): the body must be
@@ -744,6 +781,126 @@ describe('ingestInboundEmail', () => {
   })
 })
 
+/**
+ * Deduplicating a message that carries no `Message-ID` of its own.
+ *
+ * The edge bridge is invoked once per MESSAGE with every recipient that matched,
+ * and a fault on any one of them redelivers the whole message — so a recipient
+ * that already succeeded sees it twice. Dedupe keyed on the message's own header
+ * has nothing to key on when the sender omitted one, and nothing upstream
+ * invents one, so the redelivery lands as a second copy. The transport's id is
+ * the fallback: identical on every copy of one message and stable across
+ * retries.
+ *
+ * Every case here asserts the KEY THAT WAS LOOKED UP, not merely the outcome.
+ * The fake db answers only the key the query bound (see {@link dupeRowsByKey}),
+ * so an implementation that deduplicated on the wrong value — or on nothing —
+ * fails rather than passing on a doubled-up double.
+ */
+describe('the transport id as a dedupe fallback', () => {
+  const rawWith = (headers: string[]): string =>
+    [
+      `To: ${REPLY_TO}`,
+      'From: jane@example.com',
+      'Subject: Re: ticket',
+      ...headers,
+      '',
+      'This is my reply.',
+      '',
+    ].join('\r\n')
+
+  /** A parsed message with no `Message-ID`, as the transport handed it over. */
+  function noMessageId(transportMessageId?: string): ParsedInboundEmail {
+    const parsed = parseRawEmail(rawWith([]))
+    expect(parsed.messageId).toBeNull()
+    if (transportMessageId !== undefined) parsed.transportMessageId = transportMessageId
+    return parsed
+  }
+
+  it('deduplicates a message with no Message-ID on the transport id', async () => {
+    // The first copy lands and is FILED under the namespaced transport key...
+    const first = await ingestParsedEmail(noMessageId('ses-abc-123'))
+    expect(first).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    const [input] = sendVisitorMessage.mock.calls[0] as [{ metadata: { emailMessageId?: string } }]
+    expect(input.metadata.emailMessageId).toBe('qb-transport:ses-abc-123')
+
+    // ...so the redelivery finds it. Stored key and looked-up key are the same
+    // derivation, which is the only reason the second copy matches the first.
+    vi.clearAllMocks()
+    dupeRowsByKey.set('qb-transport:ses-abc-123', [{ id: 'conversation_msg_existing' }])
+    dedupeKeysQueried = []
+
+    const second = await ingestParsedEmail(noMessageId('ses-abc-123'))
+
+    expect(second).toEqual({ status: 'duplicate' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+    expect(dedupeKeysQueried).toEqual(['qb-transport:ses-abc-123'])
+  })
+
+  it('behaves exactly as before when no transport id was carried', async () => {
+    // The other inbound front doors send no such id, and a message with neither
+    // id is as undeduplicable as it has always been: no key is looked up, no key
+    // is stored, and the message is ingested.
+    const result = await ingestParsedEmail(noMessageId())
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    expect(dedupeKeysQueried).toEqual([])
+    const [input] = sendVisitorMessage.mock.calls[0] as [{ metadata: { emailMessageId?: string } }]
+    expect(input.metadata.emailMessageId).toBeUndefined()
+  })
+
+  it('is only a fallback: a message with a Message-ID deduplicates on that', async () => {
+    // The transport id rides outside the delivery signature, so anything able to
+    // reach the door could rewrite it. It must never displace the identity the
+    // message itself carried.
+    const parsed = parseRawEmail(rawWith(['Message-ID: <real-1@example.com>']))
+    parsed.transportMessageId = 'ses-abc-123'
+
+    const result = await ingestParsedEmail(parsed)
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    expect(dedupeKeysQueried).toEqual(['<real-1@example.com>'])
+    const [input] = sendVisitorMessage.mock.calls[0] as [{ metadata: { emailMessageId?: string } }]
+    expect(input.metadata.emailMessageId).toBe('<real-1@example.com>')
+  })
+
+  it('holds the transport id in its own namespace, so it cannot name a stored Message-ID', async () => {
+    // Every Message-ID we have stored is visible to whoever was on the thread it
+    // came from. Unprefixed, a chosen transport id equal to one of them would
+    // suppress a message by matching a row it has nothing to do with.
+    dupeRowsByKey.set('<real-1@example.com>', [{ id: 'conversation_msg_existing' }])
+
+    const result = await ingestParsedEmail(noMessageId('<real-1@example.com>'))
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    expect(dedupeKeysQueried).toEqual(['qb-transport:<real-1@example.com>'])
+  })
+
+  it('applies the same fallback to a cold inbound message', async () => {
+    // A cold message opens a thread rather than appending to one, and a
+    // redelivered copy would open a SECOND thread. Same key, same derivation.
+    resolveConversationByMessageIds.mockResolvedValue(null)
+    resolveChannelAccountByRecipient.mockResolvedValue({ id: 'chan_1', role: 'inbound' })
+    const parsed = parseRawEmail(
+      [
+        'To: support@quackback.example',
+        'From: stranger@example.com',
+        'Subject: Hello',
+        '',
+        'Is anyone there?',
+        '',
+      ].join('\r\n')
+    )
+    parsed.transportMessageId = 'ses-cold-1'
+    dupeRowsByKey.set('qb-transport:ses-cold-1', [{ id: 'conversation_msg_existing' }])
+
+    const result = await ingestParsedEmail(parsed)
+
+    expect(result).toEqual({ status: 'duplicate' })
+    expect(dedupeKeysQueried).toEqual(['qb-transport:ses-cold-1'])
+  })
+})
+
 // Reply-by-email into a ticket thread (D9). A signed `<slug>+t…` recipient
 // routes into the ticket's requester-reply core; every rejection fails quiet and
 // a ticket address can never open a conversation or fall through to cold inbound.
@@ -767,7 +924,8 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    dupeRows = []
+    dupeRowsByKey = new Map()
+    dedupeKeysQueried = []
     // The requester the signed address resolves to; the From must match one of
     // its known addresses (account email → principal contact email).
     principalRow = {
@@ -900,7 +1058,7 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
   })
 
   it('is a no-op for a redelivered Message-ID (idempotency)', async () => {
-    dupeRows = [{ id: 'conversation_msg_existing' }]
+    dupeRowsByKey.set('<t-dup@x>', [{ id: 'conversation_msg_existing' }])
 
     const result = await ingestInboundEmail(
       ticketEvent({ headers: [{ name: 'Message-ID', value: '<t-dup@x>' }] })
@@ -908,6 +1066,53 @@ describe('ingestInboundEmail — ticket reply branch (D9)', () => {
 
     expect(result).toEqual({ status: 'duplicate' })
     expect(appendInboundTicketReply).not.toHaveBeenCalled()
+    expect(dedupeKeysQueried).toEqual(['<t-dup@x>'])
+  })
+
+  it('files a reply with no Message-ID under the key its redelivery will look up', async () => {
+    // THE STORE, not the read. A ticket reply carrying no Message-ID of its own
+    // deduplicates on the transport id, and that only works if the row is FILED
+    // under the same derivation the lookup spends. A store that reverted to the
+    // message's own id would write `undefined` here, the redelivery would look
+    // up the transport key, find nothing, and append the reply a second time.
+    const parsed = parseRawEmail(
+      [
+        `To: ${TICKET_REPLY_TO}`,
+        'From: jane@example.com',
+        'Subject: Re: [Ticket] still broken',
+        '',
+        'Yes, still broken.',
+        '',
+      ].join('\r\n')
+    )
+    expect(parsed.messageId).toBeNull()
+    parsed.transportMessageId = 'ses-ticket-1'
+
+    const result = await ingestParsedEmail(parsed)
+
+    expect(result).toEqual({ status: 'ingested_ticket', ticketId: TICKET_ID })
+    const [, , input] = appendInboundTicketReply.mock.calls[0] as [
+      unknown,
+      unknown,
+      { metadata: { emailMessageId?: string } },
+    ]
+    expect(input.metadata.emailMessageId).toBe('qb-transport:ses-ticket-1')
+    // The same key the read side asked for, which is what makes the pair hold.
+    expect(dedupeKeysQueried).toEqual(['qb-transport:ses-ticket-1'])
+  })
+
+  it('files a reply that has a Message-ID under that id, unprefixed', async () => {
+    // The other half: every row ingested before the fallback existed is filed
+    // under the message's own id, so re-spelling it would make today's copy of a
+    // redelivered message fail to match yesterday's row.
+    await ingestInboundEmail(ticketEvent({ headers: [{ name: 'Message-ID', value: '<t-9@x>' }] }))
+
+    const [, , input] = appendInboundTicketReply.mock.calls[0] as [
+      unknown,
+      unknown,
+      { metadata: { emailMessageId?: string } },
+    ]
+    expect(input.metadata.emailMessageId).toBe('<t-9@x>')
   })
 
   it('suppresses a reply from a blocked requester (never appends)', async () => {

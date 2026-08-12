@@ -44,6 +44,11 @@ export interface ParsedInboundEmail {
   html?: string
   /** Provider Message-ID (header preferred, email id as fallback) for dedupe. */
   messageId: string | null
+  /** The delivering transport's own id for this message, when the front door
+   *  that accepted it carries one. Only a FALLBACK dedupe key, read when
+   *  {@link messageId} is null — see {@link inboundDedupeKey}. Absent on every
+   *  front door that sends no such id, which is every one but the edge bridge. */
+  transportMessageId?: string | null
   /** Provider email id (Resend `email_id`) — used to fetch the body when the
    *  webhook payload is metadata-only (Resend `email.received`, #320). Null for
    *  the IMAP front door, which already carries the full RFC822 body. */
@@ -70,6 +75,88 @@ export interface ParsedInboundEmail {
 
 function asString(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null
+}
+
+/**
+ * The namespace a transport-supplied id is held in, so it can never be read as a
+ * `Message-ID`.
+ *
+ * The two kinds of id are stored in one column and compared with one equality,
+ * which is what lets both share the partial unique index that is the hard
+ * backstop against a double insert. Sharing a column means sharing a value
+ * space, so the two are separated by construction instead: a real `Message-ID`
+ * is stored exactly as the message carried it, and a transport id is only ever
+ * stored and only ever looked up behind this prefix.
+ *
+ * WHICH DIRECTION THIS DEFENDS. A transport id is not covered by the delivery
+ * signature, so it is chosen by whoever put it on the wire. Every `Message-ID`
+ * we have ever stored is visible to anyone who was on the thread it came from,
+ * so without the prefix a chosen transport id equal to one of them would
+ * suppress a message by matching a row it has nothing to do with. Prefixed, no
+ * chosen value can name a stored `Message-ID` at all.
+ *
+ * The mirror — a message crafted with a `Message-ID` spelled like a namespaced
+ * transport key, to suppress a later message — needs the transport's own id for
+ * that later message, assigned by the mail service at receipt and not knowable
+ * in advance. The prefix closes the direction that is free; the other one costs
+ * a guess nobody can make.
+ */
+const TRANSPORT_MESSAGE_ID_NAMESPACE = 'qb-transport:'
+
+/**
+ * Longest dedupe key worth storing, whichever kind of id it was made from.
+ *
+ * The key is written into message metadata and indexed, and a btree entry has a
+ * hard size ceiling — so an oversized value is not a bad dedupe key, it is an
+ * INSERT that throws: a 500, a retry, and a message that never lands. The cap
+ * therefore belongs to the KEY rather than to either source of one. A
+ * `Message-ID` arrives in a header nobody upstream bounds, and the transport id
+ * arrives in another; capping only the id our own sender sets would leave the
+ * exposed one uncapped in the same index.
+ *
+ * Over the cap the message is treated as offering no key at all, exactly like
+ * one that carried neither id. Truncating instead would be worse than the
+ * throw it avoids: two distinct long ids would truncate to one key, and the
+ * second message would be silently suppressed as a duplicate of the first.
+ */
+export const MAX_DEDUPE_KEY_CHARS = 255
+
+/**
+ * Longest transport id a front door should carry, so that a plausible one always
+ * fits {@link MAX_DEDUPE_KEY_CHARS} once namespaced.
+ *
+ * Derived rather than typed a second time: two independently chosen numbers for
+ * one ceiling are two numbers that can drift, and the drift would show up as a
+ * value accepted at the door that then produces no key at all.
+ */
+export const MAX_TRANSPORT_MESSAGE_ID_CHARS =
+  MAX_DEDUPE_KEY_CHARS - TRANSPORT_MESSAGE_ID_NAMESPACE.length
+
+/**
+ * The value this message deduplicates on, or null when it offers none.
+ *
+ * The message's own `Message-ID` whenever it has one, unchanged and unprefixed:
+ * that is what is already stored against every message ingested before this
+ * fallback existed, and re-spelling it would make today's copy of a redelivered
+ * message fail to match yesterday's row.
+ *
+ * The transport's id is a FALLBACK and only that. A message that carries a
+ * `Message-ID` is deduplicated on it even when a transport id is present, so the
+ * unsigned header can never displace the signed message's own identity — and a
+ * message carrying neither is exactly as undeduplicable as it was before.
+ *
+ * One derivation, spent by every reader and every writer of the key: the value
+ * looked up before an insert and the value stamped by it come from here, so the
+ * two cannot come to disagree and file one message under two spellings.
+ */
+export function inboundDedupeKey(parsed: ParsedInboundEmail): string | null {
+  if (parsed.messageId) {
+    return parsed.messageId.length <= MAX_DEDUPE_KEY_CHARS ? parsed.messageId : null
+  }
+  const transport = parsed.transportMessageId?.trim()
+  if (!transport) return null
+  const key = `${TRANSPORT_MESSAGE_ID_NAMESPACE}${transport}`
+  return key.length <= MAX_DEDUPE_KEY_CHARS ? key : null
 }
 
 /** Read a header value case-insensitively from either an array of

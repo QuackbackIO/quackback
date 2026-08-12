@@ -136,6 +136,17 @@ export default defineRailway(() => {
     // Mail, inbound. The domain is the apex, already onboarded at the edge for
     // routing, so a workspace address is `<mail_slug>@` on it.
     EMAIL_INBOUND_DOMAIN: 'quackback.co.uk',
+    // Domains the fleet still RECEIVES on after retiring them from minting, set
+    // out of band because the value changes with a mail cutover rather than with
+    // a deploy — which is exactly why it has to be declared here.
+    //
+    // Anything absent from this file is DELETED on the next apply. Deleting this
+    // one narrows the accept-set back to the minting domain, and every reply
+    // address ever issued on a retired domain then arrives at a front door that
+    // refuses it: mail that has to be replayed by hand, for a variable nobody
+    // noticed going missing. `preserve()` keeps whatever the platform holds, so
+    // a cutover set by hand survives an apply and an empty value stays empty.
+    EMAIL_INBOUND_EXTRA_DOMAINS: preserve(),
     EMAIL_FROM: 'Quackback <noreply@quackback.co.uk>',
     // Two secrets, set out of band and preserved here, and deliberately
     // distinct: one authenticates the edge sender's POST, the other signs the

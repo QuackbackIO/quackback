@@ -1006,13 +1006,16 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
   log.debug('get email channel status')
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   const { getEmailProvider } = await import('@quackback/email')
-  const { isEmailInboundConfigured } =
+  const { isEmailInboundConfigured, inboundMintDomain } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   return {
     provider: getEmailProvider(),
     fromAddress: process.env.EMAIL_FROM ?? null,
     inboundConfigured: isEmailInboundConfigured(),
-    inboundDomain: process.env.EMAIL_INBOUND_DOMAIN ?? null,
+    // The domain as every reader of it resolves it, not as it was typed. A value
+    // naming no single domain resolves to none, so this surface reports the
+    // channel unconfigured rather than echoing a string nothing can receive on.
+    inboundDomain: inboundMintDomain(),
   }
 })
 

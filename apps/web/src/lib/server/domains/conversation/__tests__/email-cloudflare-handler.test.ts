@@ -158,11 +158,18 @@ import {
   verifyInboundSignature,
 } from '../email-cloudflare-handler'
 import { MAX_EMAIL_WEBHOOK_BODY_BYTES } from '../email-webhook-handler'
+import {
+  inboundDedupeKey,
+  MAX_DEDUPE_KEY_CHARS,
+  MAX_TRANSPORT_MESSAGE_ID_CHARS,
+} from '../conversation.email-inbound'
 
 const SECRET = 'worker-inbound-test-key'
 /** The plus-address signing secret: a different key with a different job. */
 const ADDRESS_SECRET = 'whsec_dGVzdHNlY3JldA=='
 const DOMAIN = 'quackback.co.uk'
+/** A domain this install still RECEIVES on and no longer mints addresses on. */
+const RETIRED_DOMAIN = 'mail.retired.test'
 const SLUG = mailSlugFor('neon-t1')
 const OTHER_SLUG = mailSlugFor('neon-t2')
 
@@ -233,6 +240,9 @@ function inboundRequest(
     signature?: string | null
     envelopeTo?: string | null
     contentType?: string
+    /** The transport's own id. Omitted entirely unless a case sets it, so the
+     *  default request is the one every other front door sends. */
+    transportMessageId?: string
   } = {}
 ): Request {
   const source = opts.body ?? RAW
@@ -252,6 +262,9 @@ function inboundRequest(
   if (signature !== null) headers.set('x-qb-signature', signature)
   const envelopeTo = opts.envelopeTo === undefined ? `${SLUG}@${DOMAIN}` : opts.envelopeTo
   if (envelopeTo !== null) headers.set('x-qb-envelope-to', envelopeTo)
+  if (opts.transportMessageId !== undefined) {
+    headers.set('x-qb-transport-message-id', opts.transportMessageId)
+  }
   return new Request('http://neon-t1.example.com/api/chat/email/inbound', {
     method: 'POST',
     headers,
@@ -814,55 +827,310 @@ describe('the guard', () => {
   })
 })
 
+describe('the accept-set', () => {
+  /** The state a domain change leaves behind: minting on one, receiving on both. */
+  function afterTheChange(): void {
+    vi.stubEnv('EMAIL_INBOUND_DOMAIN', DOMAIN)
+    vi.stubEnv('EMAIL_INBOUND_EXTRA_DOMAINS', RETIRED_DOMAIN)
+  }
+
+  it('accepts a delivery on a retired domain the install still receives on', async () => {
+    // THE CUTOVER, stated as behaviour. Every reply address minted before the
+    // change is on the retired domain and is still sitting in somebody's mail
+    // client. A door that answered for one domain refuses each of them, and a
+    // refused delivery is one nobody has: it faults, is retried, and ends up
+    // parked on the edge sender's replay queue waiting for a person.
+    afterTheChange()
+
+    for (const envelopeTo of [
+      `${SLUG}@${RETIRED_DOMAIN}`,
+      `${SLUG}+c01kw8qxn1eeh4t2rek7varh032.sig@${RETIRED_DOMAIN}`,
+      // Read exactly as the current domain is: folded and trimmed.
+      `${SLUG}@${RETIRED_DOMAIN.toUpperCase()}`,
+      ` ${SLUG}@${RETIRED_DOMAIN} `,
+    ]) {
+      resetBetweenCases()
+
+      const res = await post(inboundRequest({ envelopeTo }))
+
+      expect(res.status, envelopeTo).toBe(200)
+      expect(ingestParsedEmail, envelopeTo).toHaveBeenCalledOnce()
+    }
+  })
+
+  it('still accepts the minting domain, so the set adds rather than replaces', async () => {
+    afterTheChange()
+
+    const res = await post(inboundRequest({ envelopeTo: `${SLUG}@${DOMAIN}` }))
+
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses a domain that is in neither, however close it looks', async () => {
+    // The set widens the door by exactly the domains named in it and by nothing
+    // else. A suffix or substring reading would make every neighbouring zone
+    // ours, which is the failure the domain rule exists to prevent: the
+    // workspace label is unique only inside the zone it was minted under.
+    afterTheChange()
+
+    for (const envelopeTo of [
+      `${SLUG}@not-our-domain.test`,
+      `${SLUG}@sub.${RETIRED_DOMAIN}`,
+      `${SLUG}@${RETIRED_DOMAIN}.evil.test`,
+      `${SLUG}@evil-${RETIRED_DOMAIN}`,
+      `${SLUG}@retired.test`,
+    ]) {
+      resetBetweenCases()
+
+      const res = await post(inboundRequest({ envelopeTo }))
+
+      expect(res.status, envelopeTo).toBe(404)
+      expect(reasons(), envelopeTo).toEqual(['not_this_workspace'])
+      expectNoDatabaseWork()
+    }
+  })
+
+  it('widens the door and not the guard: another workspace is still refused on every domain', async () => {
+    afterTheChange()
+
+    // Delivered to THIS workspace's host, signed for the other one: refused on
+    // both the current domain and the retired one.
+    for (const envelopeTo of [`${OTHER_SLUG}@${RETIRED_DOMAIN}`, `${OTHER_SLUG}@${DOMAIN}`]) {
+      resetBetweenCases()
+
+      const res = await post(inboundRequest({ mailSlug: OTHER_SLUG, envelopeTo }))
+
+      expect(res.status, envelopeTo).toBe(404)
+      expect(reasons(), envelopeTo).toEqual(['not_this_workspace'])
+      expectNoDatabaseWork()
+    }
+  })
+
+  it('is exactly the minting domain when no extras are configured', async () => {
+    // The self-hosted install, which sets one value and must keep behaving as it
+    // always has. `beforeEach` leaves the extras unset, so this is the default.
+    const res = await post(inboundRequest({ envelopeTo: `${SLUG}@${DOMAIN}` }))
+    expect(res.status).toBe(200)
+
+    resetBetweenCases()
+    const refused = await post(inboundRequest({ envelopeTo: `${SLUG}@${RETIRED_DOMAIN}` }))
+    expect(refused.status).toBe(404)
+    expect(reasons()).toEqual(['not_this_workspace'])
+  })
+
+  it('treats a blank or comma-padded extras value as no extras at all', async () => {
+    for (const extras of ['', '   ', ',', ' , , ']) {
+      resetBetweenCases()
+      vi.stubEnv('EMAIL_INBOUND_DOMAIN', DOMAIN)
+      vi.stubEnv('EMAIL_INBOUND_EXTRA_DOMAINS', extras)
+
+      const accepted = await post(inboundRequest({ envelopeTo: `${SLUG}@${DOMAIN}` }))
+      expect(accepted.status, extras).toBe(200)
+
+      resetBetweenCases()
+      const refused = await post(inboundRequest({ envelopeTo: `${SLUG}@${RETIRED_DOMAIN}` }))
+      expect(refused.status, extras).toBe(404)
+    }
+  })
+
+  it('accepts several extras, separated by commas or spaces', async () => {
+    const third = 'mail.older.test'
+    for (const extras of [
+      `${RETIRED_DOMAIN},${third}`,
+      `${RETIRED_DOMAIN}, ${third}`,
+      `${RETIRED_DOMAIN} ${third}`,
+      `  ${RETIRED_DOMAIN.toUpperCase()} , ${third}  `,
+    ]) {
+      for (const domain of [DOMAIN, RETIRED_DOMAIN, third]) {
+        resetBetweenCases()
+        vi.stubEnv('EMAIL_INBOUND_DOMAIN', DOMAIN)
+        vi.stubEnv('EMAIL_INBOUND_EXTRA_DOMAINS', extras)
+
+        const res = await post(inboundRequest({ envelopeTo: `${SLUG}@${domain}` }))
+
+        expect(res.status, `${extras} -> ${domain}`).toBe(200)
+      }
+    }
+  })
+
+  it('does not open the transport on extras alone', async () => {
+    // The extras name domains this door ANSWERS for. They say nothing about
+    // whether an address can be minted, which is what the transport gate asks,
+    // so a deployment with extras and no minting domain is still unconfigured —
+    // and unconfigured still DEFERS rather than bouncing.
+    resetBetweenCases()
+    vi.stubEnv('EMAIL_INBOUND_DOMAIN', '')
+    vi.stubEnv('EMAIL_INBOUND_EXTRA_DOMAINS', RETIRED_DOMAIN)
+
+    const res = await post(inboundRequest({ envelopeTo: `${SLUG}@${RETIRED_DOMAIN}` }))
+
+    expect(res.status).toBe(503)
+    expect(reasons()).toEqual(['transport_unconfigured'])
+    expectNoDatabaseWork()
+  })
+})
+
+describe('the transport dedupe id', () => {
+  /** A message with no `Message-ID` of its own: the case the transport id is for. */
+  const NO_MESSAGE_ID = [
+    'From: Visitor <visitor@example.com>',
+    'To: support@customer.example',
+    'Subject: Help please',
+    '',
+    'It is broken.',
+    '',
+  ].join('\r\n')
+
+  it('carries the transport id to the ingest core for a message with no Message-ID', async () => {
+    await post(inboundRequest({ body: NO_MESSAGE_ID, transportMessageId: 'ses-abc-123' }))
+
+    expect(ingestParsedEmail).toHaveBeenCalledOnce()
+    expect(ingestParsedEmail.mock.calls[0][0]).toMatchObject({
+      messageId: null,
+      transportMessageId: 'ses-abc-123',
+    })
+  })
+
+  it('carries it beside a real Message-ID too, and never over it', async () => {
+    // Plumbed unconditionally; which of the two is SPENT is the ingest core's
+    // decision, and it prefers the message's own id. Asserting that here as well
+    // would be asserting it in the wrong place.
+    await post(inboundRequest({ transportMessageId: 'ses-abc-123' }))
+
+    expect(ingestParsedEmail.mock.calls[0][0]).toMatchObject({
+      messageId: '<m-1@example.com>',
+      transportMessageId: 'ses-abc-123',
+    })
+  })
+
+  it('leaves the field unset when the header is absent, blank or implausible', async () => {
+    // The other front doors send no such header, and a message that arrives
+    // without one has to reach the ingest core exactly as it did before this
+    // header existed. An over-long value is dropped rather than trusted: it is
+    // written into indexed metadata, where an oversized entry is not a bad
+    // dedupe key but an INSERT that throws.
+    for (const transportMessageId of [
+      undefined,
+      '',
+      '   ',
+      'x'.repeat(MAX_TRANSPORT_MESSAGE_ID_CHARS + 1),
+    ]) {
+      resetBetweenCases()
+
+      await post(
+        inboundRequest({
+          body: NO_MESSAGE_ID,
+          ...(transportMessageId === undefined ? {} : { transportMessageId }),
+        })
+      )
+
+      const parsed = ingestParsedEmail.mock.calls[0][0]
+      expect(parsed.messageId, String(transportMessageId)).toBeNull()
+      expect(parsed.transportMessageId ?? null, String(transportMessageId)).toBeNull()
+    }
+  })
+
+  it('keeps a value at the ceiling, and the ceiling is the ingest core’s', async () => {
+    // The door's bound is derived from the key ceiling rather than typed a
+    // second time, so a value this door accepts always produces a key the
+    // insert can store. Two independently chosen numbers would eventually
+    // differ, and the difference would read as a message that deduplicates on
+    // nothing for no visible reason.
+    const atCeiling = 'x'.repeat(MAX_TRANSPORT_MESSAGE_ID_CHARS)
+
+    await post(inboundRequest({ body: NO_MESSAGE_ID, transportMessageId: atCeiling }))
+
+    const parsed = ingestParsedEmail.mock.calls[0][0]
+    expect(parsed.transportMessageId).toBe(atCeiling)
+    expect(inboundDedupeKey(parsed)!.length).toBeLessThanOrEqual(MAX_DEDUPE_KEY_CHARS)
+  })
+})
+
 describe('deliveryNamesThisWorkspace', () => {
+  /** The accept-set as {@link inboundAcceptDomains} builds it: folded, trimmed. */
+  const accepts = (...domains: string[]): ReadonlySet<string> => new Set(domains)
+  const OURS = accepts(DOMAIN)
+
   it('accepts a signed label equal to ours whose envelope agrees', () => {
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(true)
-    expect(deliveryNamesThisWorkspace(`${SLUG}+c1.sig@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(true)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, OURS)).toBe(true)
+    expect(deliveryNamesThisWorkspace(`${SLUG}+c1.sig@${DOMAIN}`, SLUG, SLUG, OURS)).toBe(true)
   })
 
   it('rejects another workspace, an absent label, an absent header and no identity', () => {
     // Each of these fails on the LABEL rule: the envelope agrees with the signed
     // label every time, so nothing here is the cross-check answering.
-    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, OTHER_SLUG, SLUG, DOMAIN)).toBe(
+    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, OTHER_SLUG, SLUG, OURS)).toBe(
       false
     )
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, null, SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, '', SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace(null, SLUG, SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace('', SLUG, SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, null, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, null, SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, '', SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace(null, SLUG, SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace('', SLUG, SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, null, OURS)).toBe(false)
   })
 
   it('rejects an envelope that disagrees with the signed label, however it disagrees', () => {
     // The CROSS-CHECK, isolated: the signed label is ours in every case, so the
     // label rule has already passed and only the envelope can refuse. Naming a
     // different workspace, and naming no workspace at all, are the same answer.
-    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`NOT_A_SLUG!!@${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace('not-an-address-at-all', SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${DOMAIN}`, SLUG, SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`NOT_A_SLUG!!@${DOMAIN}`, SLUG, SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace('not-an-address-at-all', SLUG, SLUG, OURS)).toBe(false)
   })
 
   it('rejects an envelope on a domain this install does not receive on', () => {
-    expect(deliveryNamesThisWorkspace(`${SLUG}@elsewhere.test`, SLUG, SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@sub.${DOMAIN}`, SLUG, SLUG, DOMAIN)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@`, SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@elsewhere.test`, SLUG, SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@sub.${DOMAIN}`, SLUG, SLUG, OURS)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@`, SLUG, SLUG, OURS)).toBe(false)
     // No domain to answer for is no delivery to accept.
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, null)).toBe(false)
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, '')).toBe(false)
-    // Folded and trimmed on both sides, as a receiving server would.
-    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN.toUpperCase()}`, SLUG, SLUG, DOMAIN)).toBe(
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, accepts())).toBe(false)
+    // Folded and trimmed on the envelope side, as a receiving server would.
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN.toUpperCase()}`, SLUG, SLUG, OURS)).toBe(
       true
     )
-    expect(deliveryNamesThisWorkspace(` ${SLUG}@${DOMAIN} `, SLUG, SLUG, DOMAIN)).toBe(true)
+    expect(deliveryNamesThisWorkspace(` ${SLUG}@${DOMAIN} `, SLUG, SLUG, OURS)).toBe(true)
+  })
+
+  it('accepts an envelope on ANY domain in the set, and only an exact member', () => {
+    // The switch this whole change exists for. Every reply address ever minted
+    // sits on the domain that was minting when it was sent, so a retired domain
+    // has to keep answering for as long as that mail circulates — while exactly
+    // one domain mints. One string here made that a cliff.
+    const both = accepts(DOMAIN, RETIRED_DOMAIN)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${RETIRED_DOMAIN}`, SLUG, SLUG, both)).toBe(true)
+    expect(deliveryNamesThisWorkspace(`${SLUG}+c1.sig@${RETIRED_DOMAIN}`, SLUG, SLUG, both)).toBe(
+      true
+    )
+    expect(deliveryNamesThisWorkspace(`${SLUG}@${DOMAIN}`, SLUG, SLUG, both)).toBe(true)
+
+    // Membership is exact. A wider set is still not a suffix rule: the label is
+    // unique only inside the zone it was minted under, so a neighbouring zone
+    // reading as ours is the failure the domain check exists to prevent.
+    expect(deliveryNamesThisWorkspace(`${SLUG}@sub.${RETIRED_DOMAIN}`, SLUG, SLUG, both)).toBe(
+      false
+    )
+    expect(
+      deliveryNamesThisWorkspace(`${SLUG}@${RETIRED_DOMAIN}.evil.test`, SLUG, SLUG, both)
+    ).toBe(false)
+    expect(deliveryNamesThisWorkspace(`${SLUG}@not-ours.test`, SLUG, SLUG, both)).toBe(false)
+
+    // And a wider domain set widens nothing about WHOSE mail this is: the label
+    // rules still answer first, on every domain in the set.
+    expect(deliveryNamesThisWorkspace(`${OTHER_SLUG}@${RETIRED_DOMAIN}`, SLUG, SLUG, both)).toBe(
+      false
+    )
+    expect(
+      deliveryNamesThisWorkspace(`${OTHER_SLUG}@${RETIRED_DOMAIN}`, OTHER_SLUG, SLUG, both)
+    ).toBe(false)
   })
 
   it('does not let a slug-shaped label anywhere else in the value stand in for ours', () => {
     // The envelope is one address. A value carrying several is not one, and the
     // one that routed the message is not identifiable among them.
     expect(
-      deliveryNamesThisWorkspace(`someone@example.com, ${SLUG}@${DOMAIN}`, SLUG, SLUG, DOMAIN)
+      deliveryNamesThisWorkspace(`someone@example.com, ${SLUG}@${DOMAIN}`, SLUG, SLUG, OURS)
     ).toBe(false)
-    expect(deliveryNamesThisWorkspace(`<${SLUG}@${DOMAIN}>`, SLUG, SLUG, DOMAIN)).toBe(false)
+    expect(deliveryNamesThisWorkspace(`<${SLUG}@${DOMAIN}>`, SLUG, SLUG, OURS)).toBe(false)
   })
 })
 

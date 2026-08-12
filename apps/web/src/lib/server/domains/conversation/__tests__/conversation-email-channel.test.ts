@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import {
   isEmailInboundConfigured,
+  isEmailInboundWebhookConfigured,
   inboundReplyToAddress,
   inboundTicketReplyToAddress,
   conversationIdFromInboundAddress,
@@ -20,6 +21,9 @@ import {
   ticketRootMessageId,
   outboundMessageIdDomain,
   ownEmailDomains,
+  inboundAcceptDomains,
+  inboundMintDomain,
+  invalidInboundDomainValues,
 } from '../conversation.email-channel'
 
 // 'whsec_' + base64('testsecret') / base64('othersecret').
@@ -53,7 +57,181 @@ describe('isEmailInboundConfigured', () => {
   })
 })
 
+/**
+ * The two halves of a domain change, and the fact that they are two.
+ *
+ * A reply address is minted once and read for as long as the mail it travelled
+ * in survives, so the set of domains the front door must ANSWER for is a
+ * superset of the one addresses are minted on — and it only ever grows. One
+ * value serving both would make a domain change a cliff: the instant it moved,
+ * every address minted before it started arriving at a door that refuses it.
+ */
+describe('inboundAcceptDomains', () => {
+  it('is exactly the minting domain when no extras are configured', () => {
+    // The self-hosted install, and the behaviour every deployment had before
+    // the extras existed.
+    expect(inboundAcceptDomains({ EMAIL_INBOUND_DOMAIN: 'in.example' })).toEqual(
+      new Set(['in.example'])
+    )
+    expect(
+      inboundAcceptDomains({ EMAIL_INBOUND_DOMAIN: 'in.example', EMAIL_INBOUND_EXTRA_DOMAINS: '' })
+    ).toEqual(new Set(['in.example']))
+    expect(inboundAcceptDomains({})).toEqual(new Set())
+  })
+
+  it('adds the extras to the minting domain rather than replacing it', () => {
+    expect(
+      inboundAcceptDomains({
+        EMAIL_INBOUND_DOMAIN: 'in.example',
+        EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example',
+      })
+    ).toEqual(new Set(['in.example', 'old.example']))
+  })
+
+  it('reads a list separated by commas, whitespace or both', () => {
+    for (const extras of [
+      'old.example,older.example',
+      'old.example, older.example',
+      'old.example older.example',
+      '  old.example ,, older.example  ',
+    ]) {
+      expect(
+        inboundAcceptDomains({
+          EMAIL_INBOUND_DOMAIN: 'in.example',
+          EMAIL_INBOUND_EXTRA_DOMAINS: extras,
+        }),
+        extras
+      ).toEqual(new Set(['in.example', 'old.example', 'older.example']))
+    }
+  })
+
+  it('folds every entry the way the front door compares a domain', () => {
+    // A receiving mail server treats a domain case-insensitively, so a set
+    // holding the other spelling would refuse mail addressed correctly.
+    expect(
+      inboundAcceptDomains({
+        EMAIL_INBOUND_DOMAIN: ' In.Example ',
+        EMAIL_INBOUND_EXTRA_DOMAINS: ' OLD.Example ',
+      })
+    ).toEqual(new Set(['in.example', 'old.example']))
+  })
+
+  it('normalises every entry the way every other reader does', () => {
+    // ONE VALUE, ONE NORMALISATION. A set that repaired a spelling the minter
+    // left raw would answer for a domain no address was built on, and the
+    // internationalised case is the one where that is not merely untidy: a mail
+    // server delivers the A-label form and nothing else, so a set holding the
+    // unicode form refuses the only spelling that can ever arrive.
+    expect(
+      inboundAcceptDomains({
+        EMAIL_INBOUND_DOMAIN: 'in.example.',
+        EMAIL_INBOUND_EXTRA_DOMAINS: 'münchen.example',
+      })
+    ).toEqual(new Set(['in.example', 'xn--mnchen-3ya.example']))
+
+    // ...and the minted address is built on that same spelling.
+    expect(
+      inboundReplyToAddress(REAL_ID, SLUG, {
+        ...ENV,
+        EMAIL_INBOUND_DOMAIN: ' In.Example. ',
+      })
+    ).toContain('@in.example')
+  })
+
+  it('refuses a minting domain that names more than one domain', () => {
+    // THE CUTOVER TYPO. One value, one meaning: a comma here used to be spent
+    // verbatim in both directions — an address minted `…@a.example,b.example`
+    // that no mail server will ever deliver to, and an accept-set holding that
+    // one string, which no envelope can ever match. Both silently wrong, and the
+    // channel still reporting itself configured.
+    const env = {
+      EMAIL_INBOUND_DOMAIN: 'a.example,b.example',
+      EMAIL_INBOUND_SIGNING_SECRET: ENV.EMAIL_INBOUND_SIGNING_SECRET,
+    }
+
+    expect(inboundAcceptDomains(env)).toEqual(new Set())
+    expect(inboundMintDomain(env)).toBeNull()
+    // Nothing is minted on it, so no reply address goes out carrying it...
+    expect(inboundReplyToAddress(REAL_ID, SLUG, env)).toBeNull()
+    expect(inboundTicketReplyToAddress(TICKET_ID, SLUG, env)).toBeNull()
+    // ...and the channel reports what is true, which is that it is not usable.
+    expect(isEmailInboundConfigured(env)).toBe(false)
+    // The provider webhook's door stays OPEN on the same value, deliberately.
+    // It 404s when it answers false, and a 404 there is a notification the
+    // provider retries for a while and then abandons — a message discarded over
+    // a variable that decides nothing about routing an arriving one. What the
+    // typo costs is the Reply-To, which is the smaller loss.
+    expect(isEmailInboundWebhookConfigured(env)).toBe(true)
+    // Said out loud, naming the variable and the value an operator typed.
+    expect(invalidInboundDomainValues(env)).toEqual([
+      { variable: 'EMAIL_INBOUND_DOMAIN', value: 'a.example,b.example' },
+    ])
+  })
+
+  it('refuses an extras entry that is not a domain, and keeps the ones that are', () => {
+    // A typo in one entry must not cost the entries beside it: those are
+    // domains real reply addresses are sitting on.
+    const env = {
+      EMAIL_INBOUND_DOMAIN: 'in.example',
+      EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example,not_a_domain!,localhost,older.example',
+    }
+
+    expect(inboundAcceptDomains(env)).toEqual(
+      new Set(['in.example', 'old.example', 'older.example'])
+    )
+    expect(invalidInboundDomainValues(env)).toEqual([
+      { variable: 'EMAIL_INBOUND_EXTRA_DOMAINS', value: 'not_a_domain!' },
+      { variable: 'EMAIL_INBOUND_EXTRA_DOMAINS', value: 'localhost' },
+    ])
+  })
+
+  it('reports nothing for a configuration with nothing wrong with it', () => {
+    expect(invalidInboundDomainValues({})).toEqual([])
+    expect(invalidInboundDomainValues({ EMAIL_INBOUND_DOMAIN: '  ' })).toEqual([])
+    expect(
+      invalidInboundDomainValues({
+        EMAIL_INBOUND_DOMAIN: 'in.example',
+        EMAIL_INBOUND_EXTRA_DOMAINS: ' old.example ,, MÜNCHEN.example ',
+      })
+    ).toEqual([])
+  })
+
+  it('is not a suffix rule', () => {
+    // The workspace label is unique only inside the zone it was minted under.
+    const set = inboundAcceptDomains({
+      EMAIL_INBOUND_DOMAIN: 'in.example',
+      EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example',
+    })
+    expect(set.has('sub.old.example')).toBe(false)
+    expect(set.has('old.example.evil.test')).toBe(false)
+  })
+})
+
 describe('minting an inbound address', () => {
+  it('mints on the minting domain alone, whatever else is accepted', () => {
+    // The other half of the asymmetry. Extras widen what is RECEIVED and must
+    // never move where an address is BUILT — a list whose first entry minted
+    // would make a domain change a reorder, where a typo silently moves minting.
+    const withExtras = { ...ENV, EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example,older.example' }
+
+    expect(inboundReplyToAddress(REAL_ID, SLUG, withExtras)).toBe(
+      inboundReplyToAddress(REAL_ID, SLUG, ENV)
+    )
+    expect(inboundReplyToAddress(REAL_ID, SLUG, withExtras)).toContain('@tenaevexeo.resend.app')
+    expect(inboundTicketReplyToAddress(TICKET_ID, SLUG, withExtras)).toContain(
+      '@tenaevexeo.resend.app'
+    )
+    // ...and the outbound Message-ID host with it.
+    expect(outboundMessageIdDomain(withExtras)).toBe('tenaevexeo.resend.app')
+    // Extras alone are not an inbound channel: there is nothing to mint on.
+    expect(
+      isEmailInboundConfigured({
+        EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example',
+        EMAIL_INBOUND_SIGNING_SECRET: ENV.EMAIL_INBOUND_SIGNING_SECRET,
+      })
+    ).toBe(false)
+  })
+
   it('builds a signed plus-address carrying the slug and the family marker', () => {
     expect(inboundReplyToAddress(REAL_ID, SLUG, ENV)).toMatch(
       /^neon-t1\+c01kw8qxn1eeh4t2rek7varh032\.[A-Za-z0-9_-]{22}@tenaevexeo\.resend\.app$/
@@ -442,6 +620,53 @@ describe('outbound Message-ID threading', () => {
   it('collects our own sending domains from EMAIL_FROM and the inbound domain', () => {
     const domains = ownEmailDomains({ ...FROM_ENV, EMAIL_INBOUND_DOMAIN: 'x.resend.app' })
     expect(domains).toEqual(new Set(['acme.example', 'x.resend.app']))
+  })
+
+  it('counts every domain we receive on as ours, not only the minting one', () => {
+    // A notification sent before a domain change carries a Message-ID on the
+    // domain that was minting then, and it is no less ours for having been
+    // retired since. A set narrowed to the current minting domain would stop
+    // recognising exactly the older mail most likely to still be circulating.
+    //
+    // The cost is stated where the set is built: this feeds a check whose branch
+    // is a HARD drop with no retention, matching on the Message-ID domain alone.
+    // Every member is therefore also a promise that no stranger's mail carries a
+    // Message-ID on it — true of a zone we operate, and the reason the extras
+    // list may only name one.
+    const domains = ownEmailDomains({
+      ...FROM_ENV,
+      EMAIL_INBOUND_DOMAIN: 'x.resend.app',
+      EMAIL_INBOUND_EXTRA_DOMAINS: 'old.example',
+    })
+    expect(domains).toEqual(new Set(['acme.example', 'x.resend.app', 'old.example']))
+  })
+
+  it('holds every domain in the spelling a Message-ID actually arrives in', () => {
+    // The comparison is against the host of an inbound Message-ID, which is
+    // A-label ASCII because that is what a mail server puts on the wire. A set
+    // holding the other spelling of the same zone recognises none of our own
+    // mail coming back, which is the loop this check exists to catch.
+    const domains = ownEmailDomains({
+      EMAIL_FROM: 'Support <noreply@MÜNCHEN.example>',
+      EMAIL_INBOUND_DOMAIN: 'IN.Example.',
+      EMAIL_INBOUND_EXTRA_DOMAINS: 'Old.Example',
+    })
+    expect(domains).toEqual(new Set(['xn--mnchen-3ya.example', 'in.example', 'old.example']))
+  })
+
+  it('mints outbound ids on that same spelling', () => {
+    expect(outboundMessageIdDomain({ EMAIL_FROM: 'Support <noreply@ACME.Example.>' })).toBe(
+      'acme.example'
+    )
+    // A value that names no domain falls through to the next candidate rather
+    // than becoming the host of every id we mint.
+    expect(
+      outboundMessageIdDomain({
+        EMAIL_FROM: 'Support <noreply@localhost>',
+        EMAIL_INBOUND_DOMAIN: 'in.example',
+      })
+    ).toBe('in.example')
+    expect(outboundMessageIdDomain({ EMAIL_INBOUND_DOMAIN: 'a.example,b.example' })).toBeNull()
   })
 })
 

@@ -9,9 +9,23 @@
  * thing that does, which is why it is tested as a rule rather than inferred from
  * a query being scoped.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { withWorkspace } from '@/lib/server/__tests__/workspace-scope'
+
+// The one query the context gathers is this workspace's verified domains. It is
+// empty here on purpose: what these cases are about is what the PLATFORM's
+// configuration grants, which is the half a verified-domain row would mask.
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const chain = { from: () => chain, where: async () => [] }
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
+    db: { select: () => chain },
+  }
+})
+
 import {
   isSendingIdentityPermitted,
+  permittedSendingIdentity,
   platformSendingDomains,
   toAsciiDomain,
   type SendingIdentityContext,
@@ -55,6 +69,11 @@ describe('a workspace cannot send from another workspace’s verified domain', (
     expect(isSendingIdentityPermitted('beta+c123.sig@mail.platform.test', workspaceB)).toBe(true)
     expect(isSendingIdentityPermitted('alpha@mail.platform.test', workspaceB)).toBe(false)
     expect(isSendingIdentityPermitted('alpha+c123.sig@mail.platform.test', workspaceB)).toBe(false)
+    // The grant is to that domain itself and not to its subtree: a verified
+    // domain covers its subdomains because a token was published inside it, and
+    // no such token was published for this one.
+    expect(isSendingIdentityPermitted('beta@sub.mail.platform.test', workspaceB)).toBe(false)
+    expect(isSendingIdentityPermitted('beta@mail.platform.test.evil.test', workspaceB)).toBe(false)
   })
 
   it('permits the platform default sender by address, never by domain', () => {
@@ -98,6 +117,27 @@ describe('platformSendingDomains', () => {
   it('is empty when neither is configured', () => {
     expect(platformSendingDomains({})).toEqual(new Set())
   })
+
+  it('collects every domain the platform receives on, not only the minting one', () => {
+    // Read by the provisioning path to refuse a workspace that tries to claim a
+    // platform domain as its own. A domain retired from minting is still one the
+    // platform's mail arrives at, so this set only ever grows and the refusal
+    // only ever tightens.
+    expect(
+      platformSendingDomains({
+        EMAIL_FROM: 'Quackback <notifications@mail.platform.test>',
+        EMAIL_INBOUND_DOMAIN: 'Inbound.Platform.Test',
+        EMAIL_INBOUND_EXTRA_DOMAINS: 'Old.Platform.Test, older.platform.test',
+      })
+    ).toEqual(
+      new Set([
+        'mail.platform.test',
+        'inbound.platform.test',
+        'old.platform.test',
+        'older.platform.test',
+      ])
+    )
+  })
 })
 
 describe('an internationalised domain is one domain, not two', () => {
@@ -130,5 +170,48 @@ describe('an internationalised domain is one domain, not two', () => {
     // be converted keeps its own text and fails the comparison instead.
     expect(toAsciiDomain('')).toBe('')
     expect(toAsciiDomain('not a domain')).toBe('not a domain')
+  })
+})
+
+/**
+ * WHICH configuration value the guard is wired to, which is a different question
+ * from what the rule says.
+ *
+ * The rule is pure and reads one domain. What decides whether a retired inbound
+ * domain grants a workspace the right to send from its own label is the wiring
+ * above it, and the two look identical from inside the rule.
+ */
+describe('the send guard reads the minting domain, not the accept-set', () => {
+  const env = {
+    QUACKBACK_TENANCY: 'pooled',
+    EMAIL_FROM: 'Quackback <notifications@mail.platform.test>',
+    EMAIL_INBOUND_DOMAIN: 'mail.platform.test',
+    EMAIL_INBOUND_EXTRA_DOMAINS: 'old.platform.test',
+  }
+
+  const permitted = (from: string): Promise<string | null> => {
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value)
+    // `neon-t1` reduces to the mail slug `neon-t1`, which is the label these
+    // addresses carry.
+    return withWorkspace('neon-t1', () => permittedSendingIdentity(from))
+  }
+
+  it('permits this workspace’s label on the minting domain', async () => {
+    await expect(permitted('neon-t1@mail.platform.test')).resolves.toBe(
+      'neon-t1@mail.platform.test'
+    )
+  })
+
+  it('refuses it on a domain the fleet only RECEIVES on', async () => {
+    // Widening the guard to the accept-set would permit this — and the send
+    // would then be rejected by the provider, which holds no verified identity
+    // for a domain retired from minting. Refused here, the caller falls back to
+    // the platform sender and the mail goes out.
+    await expect(permitted('neon-t1@old.platform.test')).resolves.toBeNull()
+  })
+
+  it('refuses another workspace’s label on either of them', async () => {
+    await expect(permitted('neon-t2@mail.platform.test')).resolves.toBeNull()
+    await expect(permitted('neon-t2@old.platform.test')).resolves.toBeNull()
   })
 })

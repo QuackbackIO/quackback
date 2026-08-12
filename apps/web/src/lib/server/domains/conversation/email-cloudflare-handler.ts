@@ -60,10 +60,13 @@
  *    another workspace's — but it does not replace the window.
  *
  * 5. THE STATUS CODE IS AN SMTP DECISION. The edge sender turns what it gets
- *    back into what the sending mail server is told: 2xx delivers, 404 and most
- *    other 4xx are a PERMANENT rejection, 401/403 and 5xx defer for a later
- *    retry. So each refusal below is chosen for what it makes the sending mail
- *    server do, and the choice is documented where it is made.
+ *    back into what the sending mail server is told: 2xx delivers, and anything
+ *    else faults, is retried, and is finally parked on its replay queue — unless
+ *    the response carries the sender's refusal marker, which makes it a
+ *    PERMANENT rejection instead. Nothing here carries that marker; the reason
+ *    is worked through where the refusals are built, below. So each refusal is
+ *    still chosen for what it makes the sending mail server do, and the choice
+ *    is documented where it is made.
  *
  *    The two mistakes are not each other's mirror image, and that asymmetry
  *    decides every ambiguous case. A deferral that should have been a bounce
@@ -80,11 +83,12 @@ import { logger } from '@/lib/server/logger'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { MAX_EMAIL_WEBHOOK_BODY_BYTES } from './email-webhook-handler'
 import {
+  inboundAcceptDomains,
   isEmailInboundConfigured,
   workspaceSlugFromInboundAddress,
 } from './conversation.email-channel'
 import { currentMailSlug } from './conversation.mail-slug'
-import { parseRawEmail } from './conversation.email-inbound'
+import { MAX_TRANSPORT_MESSAGE_ID_CHARS, parseRawEmail } from './conversation.email-inbound'
 import { ingestParsedEmail } from './conversation.email-inbound.service'
 
 type EnvLike = Record<string, string | undefined>
@@ -93,7 +97,6 @@ const log = logger.child({ component: 'conversation-email-inbound-cloudflare' })
 
 /** The transport credential. One job, so losing it costs one thing. */
 const INBOUND_HMAC_SECRET_ENV = 'INBOUND_HMAC_SECRET'
-const INBOUND_DOMAIN_ENV = 'EMAIL_INBOUND_DOMAIN'
 
 const SIGNATURE_HEADER = 'x-qb-signature'
 const TIMESTAMP_HEADER = 'x-qb-timestamp'
@@ -108,6 +111,57 @@ const TIMESTAMP_HEADER = 'x-qb-timestamp'
  */
 const MAIL_SLUG_HEADER = 'x-qb-mail-slug'
 const ENVELOPE_TO_HEADER = 'x-qb-envelope-to'
+
+/**
+ * The transport's own id for this message, for a message that carries no
+ * `Message-ID` of its own.
+ *
+ * The edge sender is invoked once per MESSAGE with every recipient that matched,
+ * and a fault on any one of them redelivers the whole message — so the
+ * recipients that already succeeded see it twice. The ingest core deduplicates
+ * on the message's own `Message-ID`, which is null when the sender omitted one,
+ * and nothing upstream synthesises one. This value is the mail service's, is
+ * identical on every copy of one message, and is stable across every retry.
+ *
+ * OUTSIDE THE DIGEST, which bounds what it may be used for. It is not signed, so
+ * anyone able to reach this door with a request it cannot forge could still
+ * rewrite it; the ingest core therefore holds it in its own namespace and reads
+ * it only when the message has no `Message-ID`, which makes the worst a rewrite
+ * can do a suppressed copy of a message that had no id to dedupe on anyway.
+ */
+const TRANSPORT_MESSAGE_ID_HEADER = 'x-qb-transport-message-id'
+
+/*
+ * WHY NO RESPONSE ON THIS PATH IS MARKED TERMINAL.
+ *
+ * The edge sender treats an unmarked 4xx as an outage: it faults, retries, and
+ * finally files the message on its replay queue for someone to look at. A 4xx
+ * carrying its refusal marker is instead a PERMANENT SMTP rejection, which
+ * destroys the message and cannot be recalled. Nothing this handler answers
+ * earns that, and the reason is structural rather than cautious.
+ *
+ * The recipient's existence was decided UPSTREAM. The edge sender resolves the
+ * workspace label to a hostname before it sends anything, so a label naming no
+ * workspace never reaches this door at all — it is refused where the routing
+ * table is. Every refusal below is therefore a DISAGREEMENT between what that
+ * table believed a moment ago and what this process knows now: a slug that has
+ * moved, a domain missing from this replica's environment, an envelope whose
+ * grammar one of the two builds reads and the other does not. Each of those is
+ * two independently deployed builds differing for a while, and each ends by
+ * itself — which is exactly the class the 401 beside `no_mail_slug` already
+ * argues deserves a retry.
+ *
+ * A configuration wipe makes the point sharply. `EMAIL_INBOUND_EXTRA_DOMAINS`
+ * is set out of band, and an infrastructure-as-code apply that does not declare
+ * it deletes it; every reply address on the retired domain then earns a refusal
+ * here. Unmarked, those messages queue and are replayed once the variable is
+ * back. Marked, they are gone.
+ *
+ * The fleet already answers an unknown hostname with a bare 404 in the workspace
+ * middleware, deliberately, for the same reason. Two 404s from one fleet whose
+ * meanings differed only by a header would be a contract nobody could reason
+ * about from the sender's side.
+ */
 
 /** The media type that tells this transport apart from the provider webhook. */
 const RAW_MIME_CONTENT_TYPE = 'message/rfc822'
@@ -262,11 +316,11 @@ export function verifyInboundSignature(opts: {
  * - An absent envelope is a rejection. Mail with no envelope names no address,
  *   and the envelope is what routes it once it is accepted.
  * - An envelope on a domain this install does not receive on is a rejection.
- *   The label is only unique within the domain it was minted under, so a second
- *   zone pointed at the same edge sender would make one label two workspaces'.
- *   Checked while there is one zone rather than when a second arrives, because
- *   the change that adds the second zone is not the change anyone would think
- *   to audit this predicate for.
+ *   The label is only unique within the domain it was minted under, so a zone
+ *   nobody put in the accept-set, pointed at the same edge sender, would make
+ *   one label two workspaces'. Membership is exact: a SUBDOMAIN of an accepted
+ *   domain is a different zone and is refused, which is what keeps the set a
+ *   list of zones we operate rather than a suffix rule.
  * - An `unreadable` envelope is a rejection. It is NOT "no workspace named, so
  *   allow": a local part this grammar cannot mint is a stranger's address or an
  *   attempt at one, and a rule shaped "reject when the label is not ours" waves
@@ -292,9 +346,18 @@ export function verifyInboundSignature(opts: {
  * to, which is a routing surprise and not a disclosure.
  *
  * `ourSlug` is null only on a pooled process with no workspace scope, which can
- * name no workspace and so can accept mail for none. `ourDomain` is null only
- * when this install has no inbound domain, which the transport gate has already
- * refused on.
+ * name no workspace and so can accept mail for none. `ourDomains` is empty only
+ * when this install has no inbound domain at all, which the transport gate has
+ * already refused on.
+ *
+ * IT IS A SET, AND THAT IS THE POINT OF IT. One domain here would make a domain
+ * change a cliff rather than a switch: every reply address ever minted is on the
+ * domain that was minting when it was sent, and the moment this stopped naming
+ * that domain, each of those addresses started earning a refusal — mail that
+ * arrives, is refused, and waits on a replay queue for somebody to notice.
+ * Accepting a set lets the retired domain keep answering indefinitely while
+ * exactly one domain mints, so the change costs nobody a reply. Minting is
+ * deliberately not asked of this function; see {@link inboundAcceptDomains}.
  *
  * The reading is {@link workspaceSlugFromInboundAddress}, which is the same
  * algorithm the Worker normalised with. That is not an accident: if the two
@@ -312,29 +375,43 @@ export function deliveryNamesThisWorkspace(
   envelopeTo: string | null,
   signedSlug: string | null,
   ourSlug: string | null,
-  ourDomain: string | null
+  ourDomains: ReadonlySet<string>
 ): envelopeTo is string {
-  if (!envelopeTo || !signedSlug || !ourSlug || !ourDomain) return false
+  if (!envelopeTo || !signedSlug || !ourSlug || ourDomains.size === 0) return false
   if (signedSlug !== ourSlug) return false
   // Split on the LAST `@` and fold, exactly as the local part beside it is read,
-  // so a quoted local part carrying one cannot move the boundary.
+  // so a quoted local part carrying one cannot move the boundary. The set was
+  // built through the same normalisation, so membership is one comparison here
+  // rather than a rule repeated per entry that could come to differ from it.
   const at = envelopeTo.lastIndexOf('@')
   if (at < 0) return false
   if (
-    envelopeTo
-      .slice(at + 1)
-      .trim()
-      .toLowerCase() !== ourDomain.trim().toLowerCase()
+    !ourDomains.has(
+      envelopeTo
+        .slice(at + 1)
+        .trim()
+        .toLowerCase()
+    )
   )
     return false
   const named = workspaceSlugFromInboundAddress(envelopeTo)
   return named.kind === 'slug' && named.slug === signedSlug
 }
 
-/** `404`, the Worker's "this recipient does not accept mail" — a permanent
- *  rejection the sender is told about, rather than a retry that never succeeds
- *  or a silent drop. Reserved for the one durable fact this host has about a
- *  delivery: which workspace it is, and whether the envelope names it. */
+/**
+ * `404`: this host does not serve the workspace this delivery names.
+ *
+ * BARE, and that is a decision rather than an omission — see the note on the
+ * refusal marker above. The status says what happened; it deliberately carries
+ * nothing that would let the edge sender turn it into a permanent SMTP
+ * rejection, because the disagreement it reports is one that ends by itself and
+ * the message has to survive until it does.
+ *
+ * A 404 rather than a deferral all the same, because it is the honest answer to
+ * "is this delivery mine": a defer would blame capacity and a 401 would blame a
+ * signature that was in fact perfect, and the operator reading the log after
+ * either would be sent after the wrong fault.
+ */
 function notFound(): Response {
   return new Response('Not found', { status: 404 })
 }
@@ -471,18 +548,10 @@ export async function handleCloudflareInboundEmail(request: Request): Promise<Re
   // because everything below it talks to a database.
   const envelopeTo = request.headers.get(ENVELOPE_TO_HEADER)
   if (
-    !deliveryNamesThisWorkspace(
-      envelopeTo,
-      signedSlug,
-      currentMailSlug(),
-      process.env[INBOUND_DOMAIN_ENV] ?? null
-    )
+    !deliveryNamesThisWorkspace(envelopeTo, signedSlug, currentMailSlug(), inboundAcceptDomains())
   ) {
-    // 404 rather than a defer: this host's own identity is fixed for the
-    // hostname the message was delivered to, so it will refuse this delivery on
-    // every retry. A defer promises the sender that waiting might help, and a
-    // 401 would blame a signature that was in fact perfect, sending whoever
-    // reads the log after the wrong fault entirely.
+    // "Not mine right now", which is not "no such recipient"; see
+    // {@link notFound} for why that answer is a bare 404.
     log.warn({ reason: 'not_this_workspace' }, 'inbound email refused')
     return notFound()
   }
@@ -520,6 +589,19 @@ export async function handleCloudflareInboundEmail(request: Request): Promise<Re
   // bounce address.
   if (!parsed.toAddresses.includes(envelopeTo)) {
     parsed.toAddresses = [envelopeTo, ...parsed.toAddresses]
+  }
+
+  // The transport's own id, carried only so the ingest core has a dedupe key for
+  // a message that arrived with no `Message-ID`. Set only when the header is
+  // present and plausible: an absent, blank or over-long value leaves the field
+  // unset, and a message with no id of its own then behaves exactly as it did
+  // before this header existed — which is what the other inbound front doors,
+  // none of which send one, depend on. The bound is the ingest core's, imported
+  // rather than restated, so a value this door accepts always yields a key that
+  // door can store.
+  const transportMessageId = request.headers.get(TRANSPORT_MESSAGE_ID_HEADER)?.trim()
+  if (transportMessageId && transportMessageId.length <= MAX_TRANSPORT_MESSAGE_ID_CHARS) {
+    parsed.transportMessageId = transportMessageId
   }
 
   try {

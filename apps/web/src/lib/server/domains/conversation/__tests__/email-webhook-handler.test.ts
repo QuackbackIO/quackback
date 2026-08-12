@@ -6,13 +6,16 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const isEmailInboundConfigured = vi.fn<() => boolean>()
+// The door's own gate, which is not the minting question: see
+// `isEmailInboundWebhookConfigured`. A mint domain this install cannot use
+// costs a Reply-To; closing this door would cost the message.
+const isEmailInboundWebhookConfigured = vi.fn<() => boolean>()
 const verifyResendWebhookSignature = vi.fn<(...a: unknown[]) => boolean>()
 const ingestInboundEmail = vi.fn()
 const isConversationsEnabled = vi.fn<() => Promise<boolean>>()
 
 vi.mock('../conversation.email-channel', () => ({
-  isEmailInboundConfigured: (...a: []) => isEmailInboundConfigured(...a),
+  isEmailInboundWebhookConfigured: (...a: []) => isEmailInboundWebhookConfigured(...a),
 }))
 vi.mock('../email-webhook-verify', () => ({
   verifyResendWebhookSignature: (...a: unknown[]) => verifyResendWebhookSignature(...a),
@@ -43,7 +46,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
   process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
-  isEmailInboundConfigured.mockReturnValue(true)
+  isEmailInboundWebhookConfigured.mockReturnValue(true)
   verifyResendWebhookSignature.mockReturnValue(true)
   isConversationsEnabled.mockResolvedValue(true)
   ingestInboundEmail.mockResolvedValue({ status: 'ingested', conversationId: 'conversation_1' })
@@ -51,7 +54,7 @@ beforeEach(() => {
 
 describe('handleInboundEmailWebhook', () => {
   it('404s when the email channel is not configured (no verify, no ingest)', async () => {
-    isEmailInboundConfigured.mockReturnValue(false)
+    isEmailInboundWebhookConfigured.mockReturnValue(false)
 
     const res = await handleInboundEmailWebhook(req({ type: 'email.received' }))
 

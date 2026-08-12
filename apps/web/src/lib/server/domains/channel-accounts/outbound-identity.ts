@@ -22,9 +22,17 @@
  * 2. It is exactly the platform's own default sender. Exactly, not
  *    domain-matched: that address is fleet-wide, so matching its domain would
  *    let any workspace mint any local part on the platform's brand.
- * 3. It is an address on the platform's shared inbound domain whose label is
- *    THIS workspace's mail slug. That domain is where every workspace's reply
- *    addresses live, so the slug is what separates them.
+ * 3. It is an address on the platform's shared MINTING domain whose label is
+ *    THIS workspace's mail slug. That domain is where every workspace's new
+ *    reply addresses live, so the slug is what separates them.
+ *
+ *    The minting domain alone, even on a platform that still receives on a
+ *    domain it has retired. What this rule grants is the right to put an
+ *    address in a From, and a From is only worth granting where the provider
+ *    holds a verified identity to send it with — which is the minting domain
+ *    and not the ones kept open to catch replies. Granting more would turn a
+ *    refusal that falls back to the platform sender into a send the provider
+ *    rejects outright.
  * 4. There is only one workspace. A self-hosted install owns its whole provider
  *    account, its operator typed every address in it by hand, and there is no
  *    second workspace to be impersonated. Refusing an address there would break
@@ -59,10 +67,14 @@
 import { addressDomain, parseAddress } from '@quackback/email/ses'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { createLogger } from '@quackback/logger'
-import { domainToASCII } from 'node:url'
 import { db, eq, emailSendingDomains } from '@/lib/server/db'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
-import { workspaceSlugFromInboundAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
+import { toAsciiDomain } from '@/lib/server/utils/mail-domain'
+import {
+  inboundAcceptDomains,
+  inboundMintDomain,
+  workspaceSlugFromInboundAddress,
+} from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 
 const log = createLogger({ base: { service_name: 'quackback-web' } }).child({
@@ -70,7 +82,6 @@ const log = createLogger({ base: { service_name: 'quackback-web' } }).child({
 })
 
 const EMAIL_FROM_ENV = 'EMAIL_FROM'
-const INBOUND_DOMAIN_ENV = 'EMAIL_INBOUND_DOMAIN'
 
 type EnvLike = Record<string, string | undefined>
 
@@ -81,38 +92,48 @@ function bareAddress(value: string): string {
 }
 
 /**
- * A domain in the one form comparisons are made in: lower-case ASCII, A-labels.
+ * The one spelling every domain comparison in this module is made in.
  *
- * An internationalised domain has two spellings that name the same zone, and
- * they never match as strings. DNS, the mail provider's identity list and this
- * table all speak the A-label form, so a workspace whose stored domain and
- * whose configured address disagreed on which spelling to use would be refused
- * an address it had genuinely verified, and would silently fall back to the
- * platform sender for every reply. Normalising both sides through one function
- * is what makes the two spellings one answer.
- *
- * Returns the input lower-cased when the label cannot be converted, so a
- * malformed value fails the comparison rather than becoming an empty string
- * that could match another empty string.
+ * Re-exported rather than defined here: a workspace's stored domain, the
+ * platform's configured ones and the envelope a reply arrives on are compared
+ * against each other, so the normalisation cannot belong to whichever of those
+ * modules happened to define it. See `@/lib/server/utils/mail-domain`.
  */
-export function toAsciiDomain(domain: string): string {
-  const trimmed = domain.trim().replace(/\.$/, '').toLowerCase()
-  if (!trimmed) return ''
-  return domainToASCII(trimmed) || trimmed
-}
+export { toAsciiDomain }
 
 /**
  * The domains the platform itself sends and receives on.
  *
  * Read by the guard below, and by the provisioning path to refuse a workspace
  * that tries to claim one of them as its own sending domain.
+ *
+ * EVERY domain the front door receives on, not only the one addresses are
+ * currently minted on. A domain the platform has retired from minting is still
+ * a domain it answers for: every reply address issued before the change is on
+ * it, so a workspace allowed to claim it would be verifying the zone another
+ * workspace's mail arrives at, and would then be able to prove ownership of
+ * addresses it never held.
+ *
+ * WHO PAYS FOR THAT, because it is not the platform. `normalizeSendingDomain`
+ * refuses an overlap in BOTH directions, so listing `mail.oldbrand.example`
+ * here also refuses `oldbrand.example` and every zone above it to every
+ * customer, forever, with a message that does not explain itself. That is
+ * accepted rather than narrowed: the both-direction rule is what stops a
+ * customer who verifies a parent zone from being handed sending rights over the
+ * subdomain our own reply addresses live on, and a rule with a hole in it on
+ * this path is worth less than the customers it inconveniences. The cost is
+ * instead bounded by what may be LISTED — a zone this platform operates, retired
+ * from minting but still ours — which is stated where the list is read.
+ *
+ * So this refusal tightens as the list grows, and the tightening lands on
+ * customers. It is not the reassurance it reads as, and an entry is not free.
  */
 export function platformSendingDomains(env: EnvLike = process.env): Set<string> {
-  const domains = new Set<string>()
+  // The accept-set arrives already in the one spelling; only the sender address,
+  // which is parsed out of a display-name form here, still has to be folded.
+  const domains = inboundAcceptDomains(env)
   const from = addressDomain(env[EMAIL_FROM_ENV])
   if (from) domains.add(toAsciiDomain(from))
-  const inbound = env[INBOUND_DOMAIN_ENV]?.trim()
-  if (inbound) domains.add(toAsciiDomain(inbound))
   return domains
 }
 
@@ -138,7 +159,18 @@ export interface SendingIdentityContext {
   verifiedDomains: Iterable<string>
   /** The platform's own default sender, in whatever form it is configured. */
   platformFrom: string | null
-  /** The fleet's shared inbound mail domain. */
+  /**
+   * The shared inbound mail domain the fleet MINTS on, in whatever spelling it
+   * is configured.
+   *
+   * Singular, and deliberately not the wider set of domains the front door
+   * receives on. Receiving is a fact about mail that has already been addressed;
+   * sending is a claim that the provider will accept a From, and only the
+   * minting domain has a verified identity behind it. A workspace permitted to
+   * send from a retired domain would pass this guard and then have the send
+   * REJECTED by the provider, where refusing it here falls back to the platform
+   * sender and the mail goes out.
+   */
   inboundDomain: string | null
   /** This workspace's label on that shared domain. */
   mailSlug: string | null
@@ -167,6 +199,10 @@ export function isSendingIdentityPermitted(from: string, ctx: SendingIdentityCon
 
   if (ctx.platformFrom && address === bareAddress(ctx.platformFrom)) return true
 
+  // The slug is the whole of what separates two workspaces on the shared
+  // minting domain. Only that domain: widening this to every domain the fleet
+  // RECEIVES on would grant a send right on a zone with no verified provider
+  // identity behind it, turning a graceful fallback into a rejected send.
   const inbound = ctx.inboundDomain ? toAsciiDomain(ctx.inboundDomain) : ''
   if (inbound && domain === inbound && ctx.mailSlug) {
     const claimed = workspaceSlugFromInboundAddress(address)
@@ -190,7 +226,7 @@ async function sendingIdentityContext(env: EnvLike = process.env): Promise<Sendi
   return {
     verifiedDomains: verified.map((r) => r.domain),
     platformFrom: env[EMAIL_FROM_ENV] ?? null,
-    inboundDomain: env[INBOUND_DOMAIN_ENV] ?? null,
+    inboundDomain: inboundMintDomain(env),
     mailSlug: currentMailSlug(),
     pooled: isPooledTenancy(env),
   }

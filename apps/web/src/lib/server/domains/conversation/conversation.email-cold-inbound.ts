@@ -51,7 +51,11 @@ import {
   ensurePrincipalForUser,
 } from '@/lib/server/domains/principals/principal.factory'
 import { evaluateInboundAuth, type InboundAuthResult } from './email-auth'
-import { normalizeSenderAddress, type ParsedInboundEmail } from './conversation.email-inbound'
+import {
+  inboundDedupeKey,
+  normalizeSenderAddress,
+  type ParsedInboundEmail,
+} from './conversation.email-inbound'
 import type { ConversationAuthorInput } from './conversation.types'
 import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
 
@@ -237,7 +241,10 @@ export async function createEmailConversation(input: {
         content,
         contentJson: safeContentJson,
         attachments: attachments.length > 0 ? attachments : null,
-        metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
+        // The same derivation the cold-inbound path deduplicated on a moment
+        // ago, so the row a redelivery has to match is filed under the key that
+        // redelivery will look up.
+        metadata: { source: 'email', emailMessageId: inboundDedupeKey(parsed) ?? undefined },
       })
       .returning()
     return { conversation: created, message: inserted }

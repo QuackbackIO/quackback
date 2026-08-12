@@ -67,6 +67,7 @@ import {
   listAllSendingDomains,
 } from './channel-account.service'
 import { verifySendingDomainDns } from './domain-verification'
+import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
 
 const log = createLogger({ base: { service_name: 'quackback-web' } }).child({
@@ -160,9 +161,6 @@ export function domainsOverlap(candidate: string, domain: string): boolean {
   return isAtOrUnder(a, b) || isAtOrUnder(b, a)
 }
 
-/** A syntactically usable domain: labels, dots, at least one dot, no address. */
-const DOMAIN_RE = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/
-
 /**
  * Normalise and refuse a domain that must never become a sending identity.
  *
@@ -191,7 +189,10 @@ export function normalizeSendingDomain(
   // domain in its own script and a reply addressed in ASCII are the same domain
   // rather than two that never match.
   const domain = toAsciiDomain(typed)
-  if (!DOMAIN_RE.test(domain)) {
+  // The shared rule, not a copy of it: what a customer may claim and what the
+  // platform may be configured with are the same question, and two spellings of
+  // the answer are two answers waiting to drift.
+  if (!MAIL_DOMAIN_RE.test(domain)) {
     throw new SendingDomainRefusedError(`${input.trim()} is not a valid domain name.`)
   }
   for (const platform of platformSendingDomains(env)) {

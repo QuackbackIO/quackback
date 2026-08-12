@@ -16,12 +16,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHmac } from 'crypto'
 
-const isEmailInboundConfigured = vi.fn<() => boolean>()
+// The door's own gate, which is not the minting question: see
+// `isEmailInboundWebhookConfigured`. A mint domain this install cannot use
+// costs a Reply-To; closing this door would cost the message.
+const isEmailInboundWebhookConfigured = vi.fn<() => boolean>()
 const ingestInboundEmail = vi.fn()
 const isConversationsEnabled = vi.fn<() => Promise<boolean>>()
 
 vi.mock('../conversation.email-channel', () => ({
-  isEmailInboundConfigured: (...a: []) => isEmailInboundConfigured(...a),
+  isEmailInboundWebhookConfigured: (...a: []) => isEmailInboundWebhookConfigured(...a),
 }))
 vi.mock('../conversation.email-inbound.service', () => ({
   ingestInboundEmail: (...a: unknown[]) => ingestInboundEmail(...a),
@@ -68,7 +71,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   process.env.EMAIL_INBOUND_SIGNING_SECRET = SECRET
-  isEmailInboundConfigured.mockReturnValue(true)
+  isEmailInboundWebhookConfigured.mockReturnValue(true)
   isConversationsEnabled.mockResolvedValue(true)
   ingestInboundEmail.mockResolvedValue({ status: 'ingested', conversationId: 'conversation_1' })
 })

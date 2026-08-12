@@ -208,6 +208,38 @@ describe('domains that may never be claimed', () => {
     expect(normalizeSendingDomain('notplatform.test', env)).toBe('notplatform.test')
   })
 
+  it('refuses a domain the platform still receives on after retiring it from minting', () => {
+    // The accept-set only grows, and this refusal grows with it. A domain no
+    // longer minted on is still one the platform's own mail arrives at, so a
+    // workspace that could claim it would be verifying a zone that already
+    // carries every reply address minted before the change.
+    const afterTheChange = { ...env, EMAIL_INBOUND_EXTRA_DOMAINS: 'mail.oldbrand.test' }
+
+    expect(() => normalizeSendingDomain('mail.oldbrand.test', afterTheChange)).toThrow(
+      SendingDomainRefusedError
+    )
+    // Below it, for the same reason the minting domain is refused downward.
+    expect(() => normalizeSendingDomain('sub.mail.oldbrand.test', afterTheChange)).toThrow(
+      SendingDomainRefusedError
+    )
+    // AND THE ZONE ABOVE IT, which is what an entry really costs and who pays.
+    // A customer who owns `oldbrand.test` can never verify it while the platform
+    // lists a subdomain of it, the list only grows in practice, and the refusal
+    // does not explain itself to them. Pinned rather than left implicit: the
+    // both-direction rule is what stops a verified parent from carrying sending
+    // rights over the subdomain our own reply addresses live on, so the cost is
+    // accepted — but it is a cost, and it is why the extras may only ever name a
+    // zone this platform operates.
+    expect(() => normalizeSendingDomain('oldbrand.test', afterTheChange)).toThrow(
+      SendingDomainRefusedError
+    )
+    // Without the extras all three are domains like any other, which is what
+    // makes the refusals above the accept-set answering rather than something
+    // else.
+    expect(normalizeSendingDomain('mail.oldbrand.test', env)).toBe('mail.oldbrand.test')
+    expect(normalizeSendingDomain('oldbrand.test', env)).toBe('oldbrand.test')
+  })
+
   it('domainsOverlap answers both directions and nothing else', () => {
     expect(domainsOverlap('a.example', 'a.example')).toBe(true)
     expect(domainsOverlap('x.a.example', 'a.example')).toBe(true)

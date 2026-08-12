@@ -69,11 +69,74 @@
  */
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { ID_PREFIXES, type ConversationId, type TicketId } from '@quackback/ids'
+import { normalizeMailDomain } from '@/lib/server/utils/mail-domain'
 import { extractEmailAddress } from './conversation.email-inbound'
 
 type EnvLike = Record<string, string | undefined>
 
+/**
+ * The ONE domain every address minted here is built on.
+ *
+ * One domain, and the value has to be readable as one: see
+ * {@link inboundMintDomain} for what happens to a value that is not.
+ */
 const INBOUND_DOMAIN_ENV = 'EMAIL_INBOUND_DOMAIN'
+
+/**
+ * Further domains this install RECEIVES on and never mints on. Comma- or
+ * whitespace-separated; unset is the ordinary single-domain install.
+ *
+ * Two values rather than one list, because the two halves of a domain change
+ * have different lifetimes. MINTING moves in a single step: from the moment
+ * {@link INBOUND_DOMAIN_ENV} changes, every new reply address is on the new
+ * domain and no address on the old one is ever produced again. ACCEPTING cannot
+ * move at all. Every address ever minted is still sitting in somebody's mail
+ * client and still routes a reply, so a domain that stops being accepted leaves
+ * each of those arriving at a door that refuses it — mail nobody has, waiting on
+ * a replay queue for somebody to notice — and that population only grows,
+ * because a reply address is read months after it was sent.
+ *
+ * So the accept-set is the mint domain plus this list, and this list is only
+ * ever added to. A domain change is then a swap of two values with both domains
+ * inside the accept-set at every instant, rather than a window in which one of
+ * them refuses mail. A single list with the first entry minting would make the
+ * same change a REORDER, where a typo silently moves minting instead of
+ * widening the door.
+ *
+ * The mint domain is deliberately NOT split on commas. It names one domain, and
+ * an install that put a list there would mint addresses on a domain that does
+ * not exist. One value, one meaning, in every reader — and a value that names
+ * more than one is refused rather than half-understood; see
+ * {@link inboundMintDomain}.
+ *
+ * ## What listing a domain here costs, and who pays it
+ *
+ * Membership is not free, and none of the three costs falls on the operator who
+ * types it. Each is stated at the reader that imposes it; together they are the
+ * rule for what may be listed at all: a zone this platform OPERATES, retired
+ * from minting but still ours.
+ *
+ * 1. No customer may ever verify that zone, its subtree, or any zone ABOVE it as
+ *    their own sending domain. The list only grows in practice, so the set of
+ *    zones no customer may use grows with it — and the customer who is refused
+ *    never sees why. See `platformSendingDomains`.
+ * 2. Inbound mail whose `Message-ID` sits on it is dropped as our own mail
+ *    looping back, with no retention. See {@link ownEmailDomains}.
+ * 3. Nothing else. In particular it grants no workspace the right to SEND from
+ *    the domain: that is a claim about a verified provider identity, which only
+ *    the minting domain has, and the send guard asks for the minting domain
+ *    alone.
+ *
+ * ## It has to survive a deploy
+ *
+ * The value is set out of band, and infrastructure-as-code that does not declare
+ * this variable DELETES it on the next apply. That is not a cosmetic loss: the
+ * accept-set narrows back to the minting domain, and every reply address on the
+ * retired one starts being refused by a front door that no longer answers for
+ * it. Declare it wherever fleet variables are declared, even when it is empty.
+ */
+const INBOUND_EXTRA_DOMAINS_ENV = 'EMAIL_INBOUND_EXTRA_DOMAINS'
+
 const INBOUND_SECRET_ENV = 'EMAIL_INBOUND_SIGNING_SECRET'
 const EMAIL_FROM_ENV = 'EMAIL_FROM'
 
@@ -202,7 +265,132 @@ function signingKey(env: EnvLike): Buffer | null {
  * one workspace's addresses to another's.
  */
 export function isEmailInboundConfigured(env: EnvLike = process.env): boolean {
-  return Boolean(env[INBOUND_DOMAIN_ENV] && env[INBOUND_SECRET_ENV])
+  return Boolean(inboundMintDomain(env) && env[INBOUND_SECRET_ENV])
+}
+
+/**
+ * Is the provider webhook's front door there at all?
+ *
+ * Deliberately NOT the question above, and the difference is one variable being
+ * unusable rather than unset. That door 404s when it answers false, and a 404 to
+ * a provider is a notification retried for a while and then abandoned — so the
+ * message is lost on OUR side for a reason that has nothing to do with it.
+ *
+ * Ingesting is still the right answer there when the mint domain is unusable.
+ * Nothing about routing an arriving message depends on that value: the recipient
+ * is read from the message, and a reply with no plus-address still threads on
+ * `In-Reply-To`/`References` or opens a cold conversation. What is lost is the
+ * Reply-To on the way back out, which is exactly the degradation an install with
+ * inbound email unconfigured already has, and it is a smaller loss than the mail
+ * itself.
+ *
+ * So this asks what it always asked — a domain was configured, and the secret
+ * that verifies this caller is present — and the stricter question is left to
+ * the readers whose wrong answer is not a discarded message: minting, which
+ * declines, the admin surface, which says so, and the raw-MIME door, which
+ * DEFERS.
+ */
+export function isEmailInboundWebhookConfigured(env: EnvLike = process.env): boolean {
+  return Boolean(env[INBOUND_DOMAIN_ENV]?.trim() && env[INBOUND_SECRET_ENV])
+}
+
+/**
+ * The domain every address minted here is built on, or null when this install
+ * has none it can use.
+ *
+ * Null for absent, and null for a value that does not name one domain — which
+ * is the whole reason this is a function rather than a read. A value naming
+ * more than one, `a.example,b.example` being the typo this variable invites
+ * during the very cutover the extras exist for, used to be spent verbatim in
+ * both directions at once: an address minted `…@a.example,b.example`, which no
+ * mail server will ever deliver a reply to, and an accept-set holding that one
+ * string, which no envelope can ever match. Both halves silently wrong, and the
+ * admin surface still reporting the channel configured.
+ *
+ * Refusing it here is what makes the same typo loud instead: nothing is minted,
+ * {@link isEmailInboundConfigured} is false, the admin surface says so, and the
+ * raw-MIME front door answers a delivery with a DEFERRAL rather than a
+ * rejection — so the mail waits for the value to be corrected instead of
+ * bouncing. See {@link invalidInboundDomainValues} for the operator-facing half.
+ *
+ * Normalised through the one function every other reader normalises through, so
+ * a mistyped-but-usable spelling (padding, a trailing dot, an internationalised
+ * domain in its unicode form) is the same domain everywhere it is read rather
+ * than a repaired accept-set beside a malformed minted address.
+ */
+export function inboundMintDomain(env: EnvLike = process.env): string | null {
+  return normalizeMailDomain(env[INBOUND_DOMAIN_ENV])
+}
+
+/** Every entry of the extras list, as configured, in one place. */
+function extraDomainValues(env: EnvLike): string[] {
+  // Comma or whitespace. A domain can contain neither, so no separator here can
+  // be mistaken for part of a value.
+  return (env[INBOUND_EXTRA_DOMAINS_ENV] ?? '').split(/[,\s]+/).filter((value) => value !== '')
+}
+
+/**
+ * EVERY domain a delivery may name: the one addresses are minted on, plus the
+ * ones this install still receives on and no longer mints on.
+ *
+ * Minting reads {@link inboundMintDomain} alone and always will. This is the
+ * other half of the same fact, and the two are asymmetric on purpose: an address
+ * is minted once and read for as long as the mail it travelled in survives, so
+ * the set of domains that must be ANSWERED for is a superset of the one that is
+ * minted on, and it only ever grows.
+ *
+ * Normalised entry by entry through {@link normalizeMailDomain}, which is the
+ * same normalisation the minter, the outbound `Message-ID` host and the
+ * provisioning refusal spend. That sameness is the property: a set folded by its
+ * own local rule would answer for a spelling nothing else in the process used,
+ * which is how a door comes to refuse the only spelling a real mail server
+ * delivers. Unusable and empty entries are dropped, which is what makes a
+ * trailing comma, a blank value and an unset value the same configuration —
+ * and a dropped entry is reported, not swallowed, by
+ * {@link invalidInboundDomainValues}.
+ *
+ * Exact matches only. A subdomain of an accepted domain is NOT accepted: the
+ * workspace label is unique only inside the zone it was minted under, so a
+ * second zone that resolved to the same host would make one label two
+ * workspaces'.
+ */
+export function inboundAcceptDomains(env: EnvLike = process.env): Set<string> {
+  const domains = new Set<string>()
+  const mint = inboundMintDomain(env)
+  if (mint) domains.add(mint)
+  for (const extra of extraDomainValues(env)) {
+    const domain = normalizeMailDomain(extra)
+    if (domain) domains.add(domain)
+  }
+  return domains
+}
+
+/**
+ * The configured values that name no domain, so somebody can be told.
+ *
+ * Every other reader treats an unusable value as absent, which is the safe
+ * behaviour and a silent one: the install mints nothing and defers everything,
+ * for a reason nothing on the mail path is able to state. This is the reason,
+ * gathered purely so the process can say it out loud at boot — a typo in the
+ * variable that carries a mail cutover is worth a line an operator can find.
+ *
+ * Names the VARIABLE and the value, because both are configuration an operator
+ * typed. Neither is a secret and neither is a recipient.
+ */
+export function invalidInboundDomainValues(
+  env: EnvLike = process.env
+): Array<{ variable: string; value: string }> {
+  const bad: Array<{ variable: string; value: string }> = []
+  const mint = env[INBOUND_DOMAIN_ENV]
+  // Blank is unset, not a typo: there is nothing to tell an operator about a
+  // variable they have not filled in.
+  if (mint?.trim() && !normalizeMailDomain(mint)) {
+    bad.push({ variable: INBOUND_DOMAIN_ENV, value: mint })
+  }
+  for (const extra of extraDomainValues(env)) {
+    if (!normalizeMailDomain(extra)) bad.push({ variable: INBOUND_EXTRA_DOMAINS_ENV, value: extra })
+  }
+  return bad
 }
 
 /**
@@ -265,7 +453,10 @@ function inboundAddress(
   if (slug === null) return null
   const safeSlug = assertMailSlug(slug)
 
-  const domain = env[INBOUND_DOMAIN_ENV]
+  // The normalised mint domain, never the raw value: an address is minted once
+  // and read for months, so a spelling only this reader accepted would be a
+  // reply address the front door does not answer for.
+  const domain = inboundMintDomain(env)
   const sig = signInboundTag(safeSlug, id, env)
   if (!domain || !sig) return null
 
@@ -460,20 +651,45 @@ function domainOf(address: string | undefined): string | null {
   return email ? email.slice(email.lastIndexOf('@') + 1) : null
 }
 
-/** The host used for outbound Message-IDs: the sending identity's domain, else
- *  the inbound domain. Null when neither is configured (no threading). */
+/**
+ * The host used for outbound Message-IDs: the sending identity's domain, else
+ * the minting domain. Null when neither is configured (no threading).
+ *
+ * Both sides normalised, so the host stamped into an id we mint is spelled the
+ * way {@link ownEmailDomains} compares one coming back. An unusable value falls
+ * through to the next candidate rather than becoming the host, which is what
+ * keeps a mistyped `EMAIL_FROM` from emitting ids on a domain that does not
+ * exist.
+ */
 export function outboundMessageIdDomain(env: EnvLike = process.env): string | null {
-  return domainOf(env[EMAIL_FROM_ENV]) ?? env[INBOUND_DOMAIN_ENV] ?? null
+  return normalizeMailDomain(domainOf(env[EMAIL_FROM_ENV])) ?? inboundMintDomain(env)
 }
 
-/** Domains we send from — an inbound message whose Message-ID sits on one of
- *  these is our own mail looping back, so the ingest core drops it. */
+/**
+ * Domains we send from — an inbound message whose Message-ID sits on one of
+ * these is our own mail looping back, so the ingest core drops it.
+ *
+ * Every domain we RECEIVE on, not just the one we mint on. A notification sent
+ * before a domain change carries a Message-ID on the domain that was minting
+ * then, and it is no less ours for having been retired since; a set that had
+ * narrowed to the current mint domain would stop recognising exactly the older
+ * mail most likely to still be circulating.
+ *
+ * WHAT MEMBERSHIP COSTS, stated where the set is built. The one consumer feeds a
+ * check whose branch is a HARD drop with no retention, and it matches on the
+ * `Message-ID` domain alone — so every entry here is also a promise that no
+ * stranger's mail legitimately carries a `Message-ID` on that domain. That
+ * holds for a zone we operate and stops holding the moment one is listed that we
+ * do not, which is the rule the extras list is bound by (see
+ * {@link INBOUND_EXTRA_DOMAINS_ENV}): a domain we have released, or never held,
+ * has no business in it.
+ */
 export function ownEmailDomains(env: EnvLike = process.env): Set<string> {
-  const domains = new Set<string>()
-  const from = domainOf(env[EMAIL_FROM_ENV])
+  const domains = inboundAcceptDomains(env)
+  // Normalised like every member beside it: the comparison is against the
+  // `Message-ID` domain of mail as it actually arrives, which is A-label ASCII.
+  const from = normalizeMailDomain(domainOf(env[EMAIL_FROM_ENV]))
   if (from) domains.add(from)
-  const inbound = env[INBOUND_DOMAIN_ENV]?.toLowerCase()
-  if (inbound) domains.add(inbound)
   return domains
 }
 
