@@ -135,7 +135,13 @@ export default defineRailway(() => {
 
     // Mail, inbound. The domain is the apex, already onboarded at the edge for
     // routing, so a workspace address is `<mail_slug>@` on it.
-    EMAIL_INBOUND_DOMAIN: 'quackback.co.uk',
+    // The domain SES actually receives on. The receipt rule set accepts
+    // recipients at this domain only, and its MX is the SES inbound endpoint.
+    // The apex is NOT it: the apex MX points at a different provider, so an
+    // address minted there is delivered somewhere we do not read. Changing this
+    // is half a cutover; the old domain belongs in EMAIL_INBOUND_EXTRA_DOMAINS
+    // so addresses already handed out keep being accepted.
+    EMAIL_INBOUND_DOMAIN: 'mail.quackback.co.uk',
     // Domains the fleet still RECEIVES on after retiring them from minting, set
     // out of band because the value changes with a mail cutover rather than with
     // a deploy — which is exactly why it has to be declared here.
