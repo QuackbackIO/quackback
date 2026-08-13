@@ -119,10 +119,10 @@ Excluded, and why:
 
 **Pending invitations are not seats.** A seat appears when the invite is
 accepted and the principal row exists. Billing for an unaccepted invite would
-charge for someone who has never signed in. (Note a pre-existing enforcement
-gap this inherits: `enforceSeatLimit()` runs on invite _send_, not on
-acceptance, so N invites issued under a cap can all accept and exceed it.
-Metering is unaffected — it counts principals, not invitations.)
+charge for someone who has never signed in. `enforceSeatLimit()` runs on
+invite send _and_ on accept of a new seat, so N pending invites cannot all
+land past the cap. Someone already seated is already counted and is not
+checked again. Metering counts principals, not invitations.
 
 **Removing a teammate frees the seat immediately.** `removeTeamMember()`
 downgrades the principal to `role='user'` rather than deleting it, so the next
