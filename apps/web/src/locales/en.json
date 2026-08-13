@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "We sent a password reset link to {email}. The link expires in 24 hours.",
   "portal.auth.otp.title": "Check your email",
   "portal.auth.otp.codeAriaLabel": "Verification code",
-  "portal.auth.otp.description": "We sent a 6-digit code to {email}.",
+  "portal.auth.otp.description": "Check {email} for your 6-digit code.",
   "portal.auth.otp.verify": "Verify code",
   "portal.auth.otp.verifying": "Verifying…",
   "portal.auth.otp.linkAlsoWorks": "The sign-in link in your email also works.",

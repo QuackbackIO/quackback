@@ -41,6 +41,11 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   // Proves control of an address someone is claiming. The code confirms the
   // address; it grants nothing on its own, so it is not a capability.
   sendVerifyAddressEmail: 'contact',
+  // Goes to an address a visitor typed, which is the definition of the contact
+  // class. Safe there because it carries no link, no code and no account: it
+  // says only that the workspace will not open one. That absence is what makes
+  // the class honest, and `signup-not-allowed.test.tsx` is what pins it.
+  sendSignupNotAllowedEmail: 'contact',
 
   // Exported with no production caller. Classified rather than deleted so the
   // decision to remove them is a separate, deliberate change.

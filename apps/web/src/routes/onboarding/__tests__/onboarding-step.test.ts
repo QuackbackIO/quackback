@@ -62,6 +62,56 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/workspace')
   })
 
+  // A workspace a control plane created reads unclaimed until its owner
+  // arrives. Routing on `setupClaimedByOther` alone therefore walked a stranger
+  // into the workspace form — and, before the promoter refused, all the way to
+  // admin. Routing them to the terminal page is the same answer the form now
+  // gives, arrived at before they fill it in.
+  it('routes an arrival on a provisioned workspace to the terminal page', () => {
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u_visitor' },
+        state: {
+          setupClaimedByOther: false,
+          setupOpenToClaim: false,
+          setupState: null,
+          principalRecord: { id: 'p_visitor', role: 'user' },
+        },
+      })
+    ).toBe('/onboarding/no-access')
+  })
+
+  // The control: one fact different, and the same caller belongs in the wizard.
+  it('still sends the first user of an unprovisioned install to the claim step', () => {
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u_first' },
+        state: {
+          setupClaimedByOther: false,
+          setupOpenToClaim: true,
+          setupState: null,
+          principalRecord: { id: 'p_first', role: 'user' },
+        },
+      })
+    ).toBe('/onboarding/workspace')
+  })
+
+  // The recorded owner of a provisioned workspace already holds admin, so the
+  // same "not open to claim" fact must not shut them out of their own setup.
+  it('does not shut the recorded owner out of a provisioned workspace', () => {
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u_owner' },
+        state: {
+          setupClaimedByOther: false,
+          setupOpenToClaim: false,
+          setupState: null,
+          principalRecord: { id: 'p_owner', role: 'admin' },
+        },
+      })
+    ).toBe('/onboarding/workspace')
+  })
+
   // The workspace step is where a workspace is claimed, and the declarative
   // config file can stamp the wizard's steps before anyone has ever signed in.
   // Routing on the stamp alone sent the first user past the only place that

@@ -72,10 +72,16 @@ function StepCard({ children }: { children: React.ReactNode }) {
  * Which first screen this workspace has earned.
  *
  * SSO wins outright: where an operator baked in an identity provider, it is
- * the only legitimate path to admin. Otherwise the two facts that decide are
- * whether setup is already owned and whether the workspace accepts passwords,
- * both read from the workspace itself. An install that nobody has claimed and
- * that accepts passwords keeps the account-creation form unchanged.
+ * the only legitimate path to admin. Otherwise three facts decide, all read
+ * from the workspace itself: whether setup is already owned, whether arriving
+ * here is still a way to take it, and whether the workspace accepts passwords.
+ * An install that nobody has claimed and that accepts passwords keeps the
+ * account-creation form unchanged.
+ *
+ * The middle fact is why this screen cannot decide on `claimed` alone. A
+ * workspace a control plane created for a customer has an owner before anyone
+ * signs in, so it reads unclaimed while being nobody here's to claim; offering
+ * account creation there would offer a path the server refuses.
  */
 export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: AccountStepProps) {
   // Every sign-in this screen offers ends by broadcasting success, and the
@@ -91,8 +97,15 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   const passwordEnabled = authConfig.oauth?.password ?? true
 
   if (ssoEnabled) return <SsoStep />
-  if (claim.claimed) {
-    return <ClaimedStep claim={claim} authConfig={authConfig} workspaceName={workspaceName} />
+  if (claim.claimed || !claim.openToClaim) {
+    return (
+      <SignInOnlyStep
+        reason={claim.claimed ? 'claimed' : 'notOpen'}
+        claim={claim}
+        authConfig={authConfig}
+        workspaceName={workspaceName}
+      />
+    )
   }
   if (!passwordEnabled) {
     return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
@@ -101,21 +114,28 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
 }
 
 /**
- * Setup already belongs to someone. The owner signs in here and the wizard
- * forwards them past account creation to the workspace step; anyone else
- * learns why this form is not theirs to fill in.
+ * Setup is not this visitor's to start: either an admin already owns it, or the
+ * workspace was created for somebody whose account is not here yet. The owner
+ * signs in and the wizard forwards them past account creation to the workspace
+ * step; anyone else learns why this form is not theirs to fill in.
  *
  * Who the owner is stays unsaid. Naming them, even partially, publishes the
  * owner's initial and their whole corporate domain to every unauthenticated
  * visitor of a guessable hostname, at the moment that person is expecting
  * setup mail. Someone who is not the owner does not need the address; they
  * need to know the form is not theirs, which the copy says outright.
+ *
+ * The two reasons get different copy because they are different situations to
+ * be in, and telling a customer waiting on a workspace they just paid for that
+ * it "already has an owner" would send them to support for no reason.
  */
-function ClaimedStep({
+function SignInOnlyStep({
+  reason,
   claim,
   authConfig,
   workspaceName,
 }: {
+  reason: 'claimed' | 'notOpen'
   claim: WorkspaceClaim
   authConfig: AccountAuthConfig
   workspaceName?: string
@@ -124,16 +144,30 @@ function ClaimedStep({
     <StepCard>
       <div className="mb-6 text-center">
         <h1 className="text-2xl font-bold">
-          <FormattedMessage
-            id="onboarding.account.claimed.title"
-            defaultMessage="This workspace already has an owner"
-          />
+          {reason === 'claimed' ? (
+            <FormattedMessage
+              id="onboarding.account.claimed.title"
+              defaultMessage="This workspace already has an owner"
+            />
+          ) : (
+            <FormattedMessage
+              id="onboarding.account.notOpen.title"
+              defaultMessage="Sign in to set up this workspace"
+            />
+          )}
         </h1>
         <p className="mt-2 text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.account.claimed.signIn"
-            defaultMessage="Setup belongs to an existing admin. Sign in as that admin to pick up where setup left off."
-          />
+          {reason === 'claimed' ? (
+            <FormattedMessage
+              id="onboarding.account.claimed.signIn"
+              defaultMessage="Setup belongs to an existing admin. Sign in as that admin to pick up where setup left off."
+            />
+          ) : (
+            <FormattedMessage
+              id="onboarding.account.notOpen.signIn"
+              defaultMessage="This workspace was created for a specific account. Sign in with that account to set it up."
+            />
+          )}
         </p>
       </div>
 
@@ -193,9 +227,11 @@ function MethodsStep({
       </div>
       <PortalAuthFormInline
         // Nobody has an account on this workspace yet, so the tiles say "Sign
-        // up with", not "Sign in with". `openSignup` is forced on for the same
-        // reason: it governs who may open a PORTAL account, and refusing the
-        // very first arrival would leave a workspace nobody can ever set up.
+        // up with", not "Sign in with". `openSignup` is forced on because the
+        // server does the same thing here and for the same reason: it governs
+        // who may open a PORTAL account, and refusing the very first arrival on
+        // a workspace still open to be claimed would leave one nobody can ever
+        // set up. This screen is only reached when it IS still open.
         mode="signup"
         authConfig={{ ...authConfig, openSignup: true }}
         workspaceName={workspaceName}

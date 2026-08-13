@@ -25,7 +25,10 @@ import {
   gt,
   inArray,
 } from '@/lib/server/db'
-import { findHumanAdmin } from '@/lib/server/domains/principals/bootstrap-admin'
+import {
+  findHumanAdmin,
+  isOpenToBootstrapClaim,
+} from '@/lib/server/domains/principals/bootstrap-admin'
 import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
@@ -707,6 +710,10 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
     return {
       principalRecord: null,
       setupClaimedByOther: false,
+      // Null rather than a plausible default: nobody asked, because there is no
+      // caller to route. A boolean here would be a fact nobody checked, and the
+      // wrong one is the one that lets someone through.
+      setupOpenToClaim: null,
       hasSettings: false,
       setupState: null,
       isOnboardingComplete: false,
@@ -723,6 +730,12 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
   // workspace is the first user and may still claim it at the workspace step.
   const setupClaimedByOther = !isAdmin(principalRecord?.role) && !!(await findHumanAdmin(db))
 
+  // The second half of the same question. A workspace a control plane created
+  // reads unclaimed until its owner arrives, and arriving is not how its admin
+  // is decided — so a caller who is not already one has nothing to finish here.
+  // Reported, never acted on: the promoter decides again under its own lock.
+  const setupOpenToClaim = await isOpenToBootstrapClaim(db)
+
   // Get settings to check setup state
   const currentSettings = await getSettings()
   const setupState = getSetupState(currentSettings?.setupState ?? null)
@@ -733,6 +746,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       setup_state: setupState,
       is_complete: isOnboardingComplete,
       claimed_by_other: setupClaimedByOther,
+      open_to_claim: setupOpenToClaim,
     },
     'check onboarding state'
   )
@@ -745,6 +759,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
         }
       : null,
     setupClaimedByOther,
+    setupOpenToClaim,
     hasSettings: !!currentSettings,
     setupState,
     isOnboardingComplete,

@@ -75,6 +75,32 @@ describe('detectAuthBlockRedirect', () => {
   })
 })
 
+/**
+ * Codes Better-Auth itself emits, taken from the installed 1.6.16 source rather
+ * than from memory. Detection is code-based, so a code the map does not list
+ * renders NOTHING — the page shows a login form with no explanation, which is
+ * indistinguishable from the link having silently failed.
+ *
+ * `failed_to_create_user` is the realistic one: `plugins/magic-link/index.mjs`
+ * redirects with it whenever user creation is refused, which is what an invitee
+ * clicking a link after their invitation expired now gets.
+ */
+describe('detectAuthBlockRedirect — the codes Better-Auth actually emits', () => {
+  it.each([
+    ['failed_to_create_user', /couldn't create an account/i],
+    ['unable_to_create_user', /went wrong creating your account/i],
+    ['unable_to_create_session', /went wrong signing you in/i],
+  ])('renders a reason for %s', (code, expected) => {
+    const err = detectAuthBlockRedirect({
+      redirected: true,
+      url: `https://t.example/auth/login?error=${code}`,
+    })
+    expect(err).toBeInstanceOf(AuthBlockedError)
+    expect(err?.code).toBe(code)
+    expect(err?.message).toMatch(expected)
+  })
+})
+
 describe('AUTH_BLOCK_MESSAGES', () => {
   it('covers the migrated admin-only codes', () => {
     for (const code of [

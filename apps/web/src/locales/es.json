@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "Enviamos un enlace para restablecer la contraseña a {email}. El enlace caduca en 24 horas.",
   "portal.auth.otp.title": "Revisa tu correo electrónico",
   "portal.auth.otp.codeAriaLabel": "Código de verificación",
-  "portal.auth.otp.description": "Enviamos un código de 6 dígitos a {email}.",
+  "portal.auth.otp.description": "Revisa {email} para obtener tu código de 6 dígitos.",
   "portal.auth.otp.verify": "Verificar código",
   "portal.auth.otp.verifying": "Verificando…",
   "portal.auth.otp.linkAlsoWorks": "El enlace de inicio de sesión de tu correo también funciona.",

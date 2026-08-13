@@ -44,7 +44,17 @@ const mockPrincipalFindFirst = vi.fn(async () =>
 const mockUserFindFirst = vi.fn()
 const mockAccountFindFirst = vi.fn()
 const mockTxPrincipalFindFirst = vi.fn()
-const mockTxExecute = vi.fn(async () => undefined)
+/**
+ * The transaction's executor answers BY STATEMENT, as the real one does: the
+ * advisory lock returns nothing, the provenance read returns a settings row.
+ * `stamp: null` is an install nobody provisioned, which is the workspace shape
+ * every case in this file is about.
+ */
+const mockTxExecute = vi.fn(async (statement?: { strings?: TemplateStringsArray }) => {
+  const text = (statement?.strings ?? []).join('')
+  if (!text.includes('cloud_workspace_key')) return undefined
+  return [{ stamp_column: null, metadata: null }] as unknown as undefined
+})
 const mockTxUpdateSet = vi.fn((patch: { role?: 'admin' | 'member' | 'user' }) => {
   if (patch.role) state.role = patch.role
 })

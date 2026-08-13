@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "Nous avons envoyé un lien de réinitialisation du mot de passe à {email}. Le lien expire dans 24 heures.",
   "portal.auth.otp.title": "Consultez votre boîte de réception",
   "portal.auth.otp.codeAriaLabel": "Code de vérification",
-  "portal.auth.otp.description": "Nous avons envoyé un code à 6 chiffres à {email}.",
+  "portal.auth.otp.description": "Consultez {email} pour votre code à 6 chiffres.",
   "portal.auth.otp.verify": "Vérifier le code",
   "portal.auth.otp.verifying": "Vérification…",
   "portal.auth.otp.linkAlsoWorks": "Le lien de connexion dans votre e-mail fonctionne également.",

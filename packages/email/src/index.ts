@@ -25,7 +25,7 @@ import { isSesEmailConfigured, sendViaSes } from './ses'
 // Capability-bearing senders declare `to: SecureRecipient` so a contact address
 // cannot be passed to one. See ./recipient for why the classes are shaped this
 // way, and why the guarantee belongs here rather than at the call sites.
-import type { SecureRecipient } from './recipient'
+import type { ContactEmail, SecureRecipient } from './recipient'
 export type { AccountEmail, SealedEmail, ContactEmail, SecureRecipient } from './recipient'
 // Senders that may leave the platform's own address declare `from: SendingIdentity`
 // for the same reason: on a shared provider account the From is a claim about
@@ -33,6 +33,7 @@ export type { AccountEmail, SealedEmail, ContactEmail, SecureRecipient } from '.
 import type { SendingIdentity } from './sender'
 export type { SendingIdentity } from './sender'
 import { MagicLinkEmail } from './templates/magic-link'
+import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 import { InvitationEmail } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
@@ -506,6 +507,41 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
     react: MagicLinkEmail({ signInUrl, code, logoUrl }),
     emailType: 'MagicLinkEmail',
     preview: { signInUrl, code },
+  })
+}
+
+// ============================================================================
+// Sign-in refused (no account, and the workspace is not accepting new ones)
+// ============================================================================
+
+interface SendSignupNotAllowedParams {
+  /**
+   * `ContactEmail`, not a `SecureRecipient`. The address was typed by whoever
+   * filled in the form, so nobody has proven they own it — and this message is
+   * deliberately the one kind that may go to such an address, because it grants
+   * nothing. No link, no code, no account.
+   */
+  to: ContactEmail
+  workspaceName?: string
+  logoUrl?: string
+}
+
+/**
+ * Sent instead of a sign-in link when the workspace refuses to open an account
+ * for the address. The HTTP response is identical either way, so this is the
+ * only place the reason is stated, and it reaches only the address it is about.
+ */
+export async function sendSignupNotAllowedEmail(
+  params: SendSignupNotAllowedParams
+): Promise<EmailResult> {
+  const { to, workspaceName, logoUrl } = params
+
+  log.debug('sending sign-in refusal email')
+  return sendEmail({
+    to,
+    subject: 'About your Quackback sign-in request',
+    react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
+    emailType: 'SignupNotAllowedEmail',
   })
 }
 
@@ -1367,6 +1403,7 @@ export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
 export { WelcomeEmail } from './templates/welcome'
 export { MagicLinkEmail } from './templates/magic-link'
+export { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
 export { PostMentionEmail } from './templates/post-mention'

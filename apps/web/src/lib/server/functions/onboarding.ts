@@ -16,7 +16,11 @@ import {
   ensurePrincipalForUser,
   setPrincipalRole,
 } from '@/lib/server/domains/principals/principal.factory'
-import { bootstrapAdminLock, findHumanAdmin } from '@/lib/server/domains/principals/bootstrap-admin'
+import {
+  bootstrapAdminLock,
+  findHumanAdmin,
+  isOpenToBootstrapClaim,
+} from '@/lib/server/domains/principals/bootstrap-admin'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { isOnboardingComplete } from '@/lib/shared/db-types'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
@@ -29,11 +33,16 @@ import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
 
 const log = logger.child({ component: 'onboarding' })
 
+/** Refusal for a workspace whose owner is decided somewhere other than here. */
+export const NOT_OPEN_TO_CLAIM_MESSAGE =
+  'This workspace is not open to be set up here. Sign in with the account it was created for.'
+
 /**
  * The one place a workspace's first admin is created, and the one place the
- * workspace step's authorization is decided. Three answers, in order: an admin
- * caller passes, a caller who is not the existing owner is refused, and a
- * caller on a workspace nobody owns claims it.
+ * workspace step's authorization is decided. Four answers, in order: an admin
+ * caller passes, a caller who is not the existing owner is refused, a caller on
+ * a workspace that is not open to be claimed is refused, and a caller on an
+ * unclaimed install nobody provisioned claims it.
  *
  * Reached only from the workspace step, where the caller has explicitly asked
  * to set this workspace up. Nothing that merely reports state may promote:
@@ -55,6 +64,15 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
     const existingAdmin = await findHumanAdmin(tx)
     if (existingAdmin) {
       throw new Error('Workspace setup is already claimed by an admin')
+    }
+
+    // Nobody owns it — which on a provisioned workspace is a statement about
+    // the owner not having arrived yet, not an invitation to become them.
+    // Asked on `tx` so it is decided inside the same lock window as the two
+    // questions above rather than alongside them.
+    if (!(await isOpenToBootstrapClaim(tx))) {
+      log.warn({ user_id: userId }, 'bootstrap admin promotion refused: workspace is provisioned')
+      throw new Error(NOT_OPEN_TO_CLAIM_MESSAGE)
     }
 
     const { created, principal: p } = await ensurePrincipalForUser({ userId, role: 'admin' }, tx)
@@ -80,18 +98,30 @@ export interface WorkspaceClaim {
    * claim screen can only offer a way out once this is true.
    */
   setupComplete: boolean
+  /**
+   * Whether arriving here is still a way to become this workspace's admin.
+   *
+   * False on a workspace a control plane provisioned, whose owner is recorded
+   * where it was created. A screen that offered account creation on such a
+   * workspace would be offering a path the promoter refuses, which is the
+   * disagreement this whole answer exists to prevent.
+   */
+  openToClaim: boolean
 }
 
 /**
  * Reports whether this workspace's setup is already claimed, for the
  * unauthenticated first screen.
  *
- * The signal is the same one {@link ensureBootstrapAdmin} decides on: a
- * principal that is a human (`type: 'user'`) and an admin. A workspace that
- * arrives with an owner already seeded reads `claimed: true` and its first
- * screen offers sign-in; an install that starts empty reads `claimed: false`
- * and keeps the account-creation form it has always had. Nothing here
- * consults how the workspace was deployed.
+ * The signals are the same ones {@link ensureBootstrapAdmin} decides on: an
+ * owner is a principal that is a human (`type: 'user'`) and an admin, and a
+ * workspace is open to be claimed only when no control plane created it. A
+ * workspace that arrives with an owner already seeded reads `claimed: true` and
+ * its first screen offers sign-in; a provisioned one whose owner has not
+ * arrived reads `openToClaim: false` and offers sign-in too, because there is
+ * no account for a stranger to create here; an install that starts empty reads
+ * `claimed: false` with `openToClaim: true` and keeps the account-creation form
+ * it has always had.
  *
  * Deliberately unauthenticated, because the visitor it exists for has no
  * session yet. It answers one question about the workspace as a whole and
@@ -107,14 +137,15 @@ export interface WorkspaceClaim {
  */
 export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<WorkspaceClaim> => {
-    // Existence only, on the same predicate the promoter guards with, so the
-    // screen and the promoter can never disagree about who owns setup.
-    const owner = await findHumanAdmin(db)
+    // Existence only, on the same predicates the promoter guards with, so the
+    // screen and the promoter can never disagree about who owns setup or about
+    // whether it is still there to be taken.
+    const [owner, openToClaim] = await Promise.all([findHumanAdmin(db), isOpenToBootstrapClaim(db)])
 
     const current = await getSettings()
     const setupComplete = isOnboardingComplete(getSetupState(current?.setupState ?? null))
 
-    return { claimed: !!owner, setupComplete }
+    return { claimed: !!owner, setupComplete, openToClaim }
   }
 )
 

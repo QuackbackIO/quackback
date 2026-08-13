@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "أرسلنا رابط إعادة تعيين كلمة المرور إلى {email}. تنتهي صلاحية الرابط خلال 24 ساعة.",
   "portal.auth.otp.title": "تحقّق من بريدك الإلكتروني",
   "portal.auth.otp.codeAriaLabel": "رمز التحقّق",
-  "portal.auth.otp.description": "أرسلنا رمزًا مكوّنًا من 6 أرقام إلى {email}.",
+  "portal.auth.otp.description": "تحقّق من {email} للحصول على الرمز المكوّن من 6 أرقام.",
   "portal.auth.otp.verify": "التحقّق من الرمز",
   "portal.auth.otp.verifying": "جارٍ التحقّق…",
   "portal.auth.otp.linkAlsoWorks": "يمكنك أيضًا استخدام رابط تسجيل الدخول الموجود في بريدك الإلكتروني.",

@@ -3,13 +3,15 @@
  * The first screen a workspace ever shows has to match how that workspace
  * actually lets people sign in, and it has to do something once someone does.
  *
- * Two fixtures, deliberately unalike. A workspace that arrives with an owner
- * already seeded accepts magic link and social sign-in and refuses passwords;
- * an install that starts empty accepts passwords and has no owner yet. A
- * fixture set where both look the same is what let a hardcoded password form
- * ship onto a workspace that rejects passwords, so the assertions below are
- * written to fail if the screen stops reading the config — including the ones
- * that have to walk the form to its second stage to find out.
+ * Three fixtures, deliberately unalike. A provisioned workspace that arrives
+ * with an owner already seeded accepts magic link and social sign-in and
+ * refuses passwords; the same workspace provisioned with NO owner recorded,
+ * which reads unclaimed while being nobody here's to claim; and an install that
+ * starts empty, accepts passwords and has no owner yet. A fixture set where
+ * they look the same is what let a hardcoded password form ship onto a
+ * workspace that rejects passwords, so the assertions below are written to fail
+ * if the screen stops reading the config — including the ones that have to walk
+ * the form to its second stage to find out.
  *
  * `PortalAuthFormInline` renders for real here (only its network leaves are
  * stubbed) because the question under test is whether the real config-driven
@@ -100,7 +102,9 @@ const PROVISIONED_OAUTH = {
 function provisioned(): AccountStepProps {
   return {
     ssoEnabled: false,
-    claim: { claimed: true, setupComplete: false },
+    // A control plane created this one, so arriving is never how its admin is
+    // decided — true whether or not its owner has signed in yet.
+    claim: { claimed: true, setupComplete: false, openToClaim: false },
     workspaceName: 'Acme',
     authConfig: {
       found: true,
@@ -113,6 +117,18 @@ function provisioned(): AccountStepProps {
 }
 
 /**
+ * The workspace the whole hole was about: provisioned for a customer whose
+ * address the provisioning path could not resolve, so no owner was recorded and
+ * nobody has ever signed in. It reads unclaimed, and its hostname is one of a
+ * guessable set — which is why "unclaimed" alone must not decide this screen.
+ */
+function provisionedOwnerless(): AccountStepProps {
+  const props = provisioned()
+  props.claim = { claimed: false, setupComplete: false, openToClaim: false }
+  return props
+}
+
+/**
  * A self-hosted install before anyone has signed up: no settings row yet, so
  * the workspace answers with the shipped defaults. Read from the real
  * constant rather than retyped, so a change to the product default shows up
@@ -121,7 +137,7 @@ function provisioned(): AccountStepProps {
 function selfHosted(): AccountStepProps {
   return {
     ssoEnabled: false,
-    claim: { claimed: false, setupComplete: false },
+    claim: { claimed: false, setupComplete: false, openToClaim: true },
     workspaceName: undefined,
     authConfig: {
       found: false,
@@ -228,18 +244,46 @@ describe('account step — someone who is not the owner', () => {
     cleanup()
 
     const done = provisioned()
-    done.claim = { claimed: true, setupComplete: true }
+    done.claim = { claimed: true, setupComplete: true, openToClaim: false }
     renderStep(done)
     expect(screen.getByRole('link', { name: /request access/i })).toBeInTheDocument()
   })
 
   it('still refuses passwords when setup is finished', () => {
     const props = provisioned()
-    props.claim = { claimed: true, setupComplete: true }
+    props.claim = { claimed: true, setupComplete: true, openToClaim: false }
     const { container } = renderStep(props)
 
     expect(container.querySelector('input[type="password"]')).toBeNull()
     expect(screen.getByText(/already has an owner/i)).toBeInTheDocument()
+  })
+})
+
+// The screen and the promoter have to agree. `ensureBootstrapAdmin` refuses to
+// promote an arrival on a provisioned workspace, so a screen that still invited
+// one to sign up would be advertising a path the server rejects — and, before
+// the refusal existed, it was advertising one the server honoured.
+describe('account step — a provisioned workspace nobody has claimed', () => {
+  it('offers no way to create an account', () => {
+    const { container } = renderStep(provisionedOwnerless())
+
+    expect(screen.queryByRole('button', { name: /^create account$/i })).toBeNull()
+    expect(container.querySelector('input[type="password"]')).toBeNull()
+    // The tell that separates this screen from the first-user one: that screen
+    // renders its social tiles in signup mode, this one in login mode.
+    expect(screen.queryByRole('button', { name: /sign up with google/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
+  })
+
+  it('says the workspace is not open rather than that it already has an owner', () => {
+    const { container } = renderStep(provisionedOwnerless())
+
+    expect(screen.getByText(/created for a specific account/i)).toBeInTheDocument()
+    // Nobody has signed in here, so claiming an owner exists would send the
+    // customer who is still waiting for their workspace to support.
+    expect(screen.queryByText(/already has an owner/i)).toBeNull()
+    expect(container.innerHTML).not.toContain(OWNER_EMAIL)
+    expect(container.innerHTML).not.toContain('acme.example')
   })
 })
 

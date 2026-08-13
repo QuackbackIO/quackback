@@ -24,6 +24,7 @@ import {
 } from '@/lib/server/workspaces/workspace-context'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
+import { guardBetterAuthUserCreation } from './signup-policy'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
 const log = logger.child({ component: 'auth-config' })
@@ -562,6 +563,17 @@ async function createAuth() {
     databaseHooks: {
       user: {
         create: {
+          /**
+           * `openSignup`'s backstop: the last point every Better-Auth account
+           * creation passes through, whatever endpoint asked for it.
+           *
+           * The per-endpoint gates in `hooks.ts` and `email-signin.ts` exist
+           * because they can refuse cheaply and name the reason. This exists
+           * because those gates are a list, and a list is only as good as
+           * whoever last added a sign-up path to it. Password, magic link,
+           * one-time code, social and OIDC all funnel here.
+           */
+          before: guardBetterAuthUserCreation,
           after: async (user) => {
             // Cast user.id to the branded TypeID type for database operations
             const userId = user.id as ReturnType<typeof generateId<'user'>>

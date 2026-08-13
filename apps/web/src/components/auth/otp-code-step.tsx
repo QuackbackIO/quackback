@@ -59,7 +59,7 @@ export function OtpCodeStep({
           <p className="text-sm text-muted-foreground">
             <FormattedMessage
               id="portal.auth.otp.description"
-              defaultMessage="We sent a 6-digit code to {email}."
+              defaultMessage="Check {email} for your 6-digit code."
               values={{
                 email: <span className="font-medium text-foreground break-all">{email}</span>,
               }}

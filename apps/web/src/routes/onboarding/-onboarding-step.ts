@@ -5,6 +5,10 @@ interface OnboardingStateInput {
   /** Somebody else already owns this workspace's setup, so the wizard is not
    *  this caller's to finish. */
   setupClaimedByOther?: boolean
+  /** Whether arriving here is still a way to become this workspace's admin.
+   *  False on a workspace a control plane created; null when nobody asked,
+   *  because there was no session to route. */
+  setupOpenToClaim?: boolean | null
   setupState: SetupState | null
   principalRecord: { id: string; role: string } | null
 }
@@ -50,16 +54,33 @@ export function mayForwardCompletedSetup(input: {
   return isAdmin(input.userRole)
 }
 
+/**
+ * Whether this caller has nothing to finish here, for the two reasons that mean
+ * the same thing to them: somebody else already owns setup, or this is a
+ * workspace a control plane created and its owner is recorded there rather than
+ * decided by who arrives.
+ *
+ * One predicate, exported, because two places need the answer — the router and
+ * the terminal page it routes to — and a terminal page that disagrees with its
+ * own router bounces the visitor between them forever. That loop is what this
+ * page was created to end.
+ */
+export function isSetupBlocked(state: OnboardingStateInput): boolean {
+  if (isAdmin(state.principalRecord?.role)) return false
+  if (state.setupClaimedByOther) return true
+  return state.setupOpenToClaim === false
+}
+
 export function pickOnboardingStep({ session, state }: PickStepInput): OnboardingStep {
   if (!session?.userId) return '/onboarding/account'
   if (!state) return '/onboarding/workspace'
 
-  // Signed in, but setup belongs to someone else. This has to be a page inside
-  // the wizard: routing out to a sign-in route sent the visitor through the
-  // root gate, which redirects back into onboarding while setup is unfinished,
-  // which routed them out again. And letting them walk on to the workspace form
-  // only moved the refusal to the end of it.
-  if (state.setupClaimedByOther) return ONBOARDING_NO_ACCESS
+  // Signed in, but setup is not this caller's to finish. This has to be a page
+  // inside the wizard: routing out to a sign-in route sent the visitor through
+  // the root gate, which redirects back into onboarding while setup is
+  // unfinished, which routed them out again. And letting them walk on to the
+  // workspace form only moved the refusal to the end of it.
+  if (isSetupBlocked(state)) return ONBOARDING_NO_ACCESS
 
   // Nobody owns setup and this caller does not hold admin yet. The workspace
   // step is where a workspace is claimed, so it comes before any step a

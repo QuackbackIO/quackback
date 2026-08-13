@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "Мы отправили ссылку для сброса пароля на {email}. Ссылка действительна 24 часа.",
   "portal.auth.otp.title": "Проверьте почту",
   "portal.auth.otp.codeAriaLabel": "Код подтверждения",
-  "portal.auth.otp.description": "Мы отправили 6-значный код на {email}.",
+  "portal.auth.otp.description": "Проверьте {email}: там ваш 6-значный код.",
   "portal.auth.otp.verify": "Подтвердить код",
   "portal.auth.otp.verifying": "Проверка…",
   "portal.auth.otp.linkAlsoWorks": "Ссылка для входа из письма тоже подойдёт.",

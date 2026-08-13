@@ -169,7 +169,24 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
     github: true,
     password: true,
   },
-  openSignup: false,
+  /**
+   * `true` because that is what a workspace that never answered the question
+   * has always DONE, not because open sign-ups are the friendlier choice.
+   *
+   * The setting bound nothing on any server path until `auth/signup-policy.ts`
+   * started enforcing it, so every workspace accepted new accounts regardless
+   * of what this reported. Two cohorts read their value from here rather than
+   * from a stored one: a config-file-provisioned workspace, whose `settings`
+   * row is inserted with no `authConfig` column at all, and any row written
+   * before this key existed. Defaulting them closed would not enforce a policy
+   * anyone set — it would invent one, apply it retroactively, and shut the
+   * public portal of every provisioned workspace the moment its owner arrived.
+   *
+   * A workspace that means "invitation only" says so: the onboarding wizard
+   * writes an explicit value, the admin UI writes one, and the declarative
+   * config file can write one. `false` is honoured everywhere it is stored.
+   */
+  openSignup: true,
 }
 
 // =============================================================================
@@ -295,6 +312,27 @@ export interface PortalNavConfig {
 export interface PortalConfig {
   /** Feature toggles */
   features: PortalFeatures
+  /**
+   * May a member of the public open an account on the PORTAL?
+   *
+   * The public portal's own answer to the question {@link AuthConfig.openSignup}
+   * answers for the team, and the two are routinely different: a workspace that
+   * takes feedback from anyone while keeping the team invitation-only says
+   * `true` here and `false` there. Provisioned workspaces are seeded with
+   * exactly that pair.
+   *
+   * **Optional, and deliberately absent from {@link DEFAULT_PORTAL_CONFIG}.**
+   * Absent means "this portal has no answer of its own", and the policy then
+   * falls back to the workspace-wide `authConfig.openSignup` — which is what
+   * the single admin toggle writes and therefore what a self-hosted install
+   * means by the setting. Giving this a default would make that absence
+   * unobservable and sever the fallback, so the portal would stop obeying the
+   * only toggle the UI offers.
+   *
+   * Read through `signupOpenFor` in `auth/signup-policy.ts`; nothing else
+   * should compare this field directly.
+   */
+  openSignup?: boolean
   /** Welcome card on the portal index. Optional — absent = disabled. */
   welcomeCard?: PortalWelcomeCard
   /** Workspace-wide approval policy; applies to every board. */

@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "我們已將重設密碼連結寄送至 {email}。此連結將在 24 小時後失效。",
   "portal.auth.otp.title": "查看你的電子郵件",
   "portal.auth.otp.codeAriaLabel": "驗證碼",
-  "portal.auth.otp.description": "我們已將 6 位數驗證碼寄送至 {email}。",
+  "portal.auth.otp.description": "請至 {email} 查看您的 6 位數驗證碼。",
   "portal.auth.otp.verify": "驗證代碼",
   "portal.auth.otp.verifying": "驗證中…",
   "portal.auth.otp.linkAlsoWorks": "你電子郵件中的登入連結同樣有效。",

@@ -13,13 +13,23 @@
  * decides again under the advisory lock for the case where ownership changed in
  * between. Both are exercised here, the second by staging that race.
  *
+ * A third guard joins them, and it needs both workspace shapes to mean
+ * anything: an install nobody provisioned, where the first human genuinely is
+ * the owner, and a workspace a control plane created, where being first through
+ * the door is a race anyone who can guess a hostname may enter. The two differ
+ * by one real column read with real SQL — `settings.cloud_workspace_key`, which
+ * migration 0258 documents as "NULL on self-hosted installs" — so the fixture
+ * can actually tell them apart. It is added inside the test transaction because
+ * the local development database predates that migration; the column, the
+ * value and the query are all the real ones, and all three roll back.
+ *
  * The sibling mock-based suite (onboarding-admin-promotion.fn.test.ts) keeps
  * the call-shape and managed-field coverage; this one is about the guards.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { principal, user, eq } from '@/lib/server/db'
+import { principal, user, settings, eq, sql } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -82,8 +92,26 @@ const fixture = await createDbTestFixture({
       .from(principal)
       .limit(0)
     await db.select({ id: user.id }).from(user).limit(0)
+    await db.select({ id: settings.id }).from(settings).limit(0)
   },
 })
+
+/**
+ * The control plane's claim on this database, planted for the length of one
+ * rolled-back transaction. Nothing in the app writes this: it comes from
+ * provisioning, which is what makes it a fact about the workspace rather than a
+ * flag somebody here can flip.
+ */
+async function seedProvisionedWorkspace(): Promise<void> {
+  await testDb.insert(settings).values({
+    id: createId('workspace'),
+    name: 'Acme',
+    slug: `acme-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date(),
+  })
+  await testDb.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS cloud_workspace_key text`)
+  await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = 'ws_acme'`)
+}
 
 async function seedUser(email: string): Promise<UserId> {
   const id = createId('user') as UserId
@@ -241,6 +269,90 @@ describe.skipIf(!fixture.available)('bootstrap promotion guard', () => {
     await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
       /already claimed by an admin/i
     )
+    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
+    expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
+  })
+
+  // The workspace this guard exists for: a control plane created it for a
+  // named customer, provisioning could not resolve that customer's address, so
+  // no owner was recorded. Nobody has ever signed in, the hostname sits in an
+  // enumerable set, and before this guard the first arrival became its admin.
+  it('refuses to hand a provisioned workspace to whoever arrives first', async () => {
+    await seedProvisionedWorkspace()
+    const arrivalId = await seedUser('whoever@evil.example')
+    hoisted.getSession.mockResolvedValue({ user: { id: arrivalId } })
+
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
+      /not open to be set up/i
+    )
+    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
+    expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
+  })
+
+  // Same refusal for the arrival who already holds a portal account here —
+  // signing up first and then walking to the workspace step is the same move
+  // with one more step in it.
+  it('refuses an arrival who already has a default-role principal there', async () => {
+    await seedProvisionedWorkspace()
+    const arrivalId = await seedUser('whoever@evil.example')
+    await seedPrincipal({ userId: arrivalId, role: 'user' })
+    hoisted.getSession.mockResolvedValue({ user: { id: arrivalId } })
+
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
+      /not open to be set up/i
+    )
+    expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
+  })
+
+  // The control that proves the two above are deciding on the stamp. Same
+  // settings row, same caller, stamp removed: the self-hosted install, which
+  // must keep promoting its first human exactly as it always has.
+  it('still promotes the first human once the stamp is gone', async () => {
+    await seedProvisionedWorkspace()
+    await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = NULL`)
+    hoisted.getSettings.mockResolvedValue({ id: 'workspace_1' })
+    const firstId = await seedUser('first@acme.example')
+    hoisted.getSession.mockResolvedValue({ user: { id: firstId } })
+
+    await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
+
+    expect(hoisted.ensurePrincipalForUser).toHaveBeenCalledWith(
+      { userId: firstId, role: 'admin' },
+      expect.any(Object)
+    )
+  })
+
+  // The stamp's older home. A workspace stamped before the dedicated column
+  // existed and never re-stamped carries only this, and reading one source
+  // would leave that whole cohort claimable.
+  it('refuses on a workspace stamped only in the metadata bag', async () => {
+    await testDb.insert(settings).values({
+      id: createId('workspace'),
+      name: 'Acme',
+      slug: `acme-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: new Date(),
+      metadata: JSON.stringify({ cloudTenant: { v: 1, workspaceKey: 'ws_acme', stampedAt: '' } }),
+    })
+    const arrivalId = await seedUser('whoever@evil.example')
+    hoisted.getSession.mockResolvedValue({ user: { id: arrivalId } })
+
+    await expect(saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })).rejects.toThrow(
+      /not open to be set up/i
+    )
+    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
+  })
+
+  // A provisioned workspace whose owner WAS recorded is unaffected: they are
+  // already an admin, so they never reach the claim branch at all.
+  it('lets the recorded owner of a provisioned workspace through', async () => {
+    await seedProvisionedWorkspace()
+    hoisted.getSettings.mockResolvedValue({ id: 'workspace_1' })
+    const ownerId = await seedUser('owner@acme.example')
+    await seedPrincipal({ userId: ownerId, role: 'admin' })
+    hoisted.getSession.mockResolvedValue({ user: { id: ownerId } })
+
+    await saveWorkspaceAndGoalFn({ data: WORKSPACE_INPUT })
+
     expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
     expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
   })

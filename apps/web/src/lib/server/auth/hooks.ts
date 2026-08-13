@@ -67,7 +67,7 @@ export type AuthProviderId =
  * the policy table operates on. Returns `null` for paths that aren't
  * sign-in flows (sign-out, session reads, JWT, MCP OAuth, etc.).
  *
- * Path templates verified against installed Better-Auth 1.6.5 source:
+ * Path templates verified against installed Better-Auth 1.6.16 source:
  *   - /sign-in/email                            -> credential
  *   - /sign-in/magic-link                       -> magic-link (send)
  *   - /magic-link/verify                        -> magic-link (verify)
@@ -150,6 +150,26 @@ const NO_EMAIL_BEFORE_PATHS = new Set<string>([
   '/callback/:id',
   '/sign-in/oauth2',
   '/oauth2/callback/:providerId',
+])
+
+/**
+ * Email-bearing paths that bring a NEW account into existence when no user
+ * holds the address yet — the ones `openSignup` is about.
+ *
+ * `/sign-in/email` is deliberately absent: a password sign-in against an
+ * address with no account simply fails, so gating it would turn a wrong
+ * password into an account-existence oracle.
+ *
+ * `/magic-link/verify` is absent for a different reason: it carries its email
+ * inside the consumed token rather than in the body, so there is nothing here
+ * to gate on. Its send side is listed, and the creation itself is covered by
+ * the `user.create.before` backstop in `auth/index.ts`.
+ */
+const ACCOUNT_CREATING_EMAIL_PATHS = new Set<string>([
+  '/sign-up/email',
+  '/sign-in/magic-link',
+  '/email-otp/send-verification-otp',
+  '/sign-in/email-otp',
 ])
 
 /**
@@ -319,6 +339,42 @@ export async function handleSignInPreCheck(ctx: {
     throw ctx.redirect('/?auth=signin&callbackUrl=/admin&error=verified_domain_requires_sso')
   }
 
+  // `openSignup`, enforced. Only for the paths that would CREATE an account and
+  // only when no user holds the address — the same exemption the policy itself
+  // opens with, checked here so the common case costs no extra query.
+  //
+  // Sits after hard-binding, which is the stronger statement about the same
+  // attempt and should be the one reported, and before the `!principalRow`
+  // return below — that early exit exists for exactly the brand-new sign-up
+  // this gate is about, so a gate placed after it would never run.
+  //
+  // This redirect IS distinguishable per address: an address that holds an
+  // account, or that a pending invitation names, gets the endpoint's normal
+  // answer instead. It is bounded rather than closed, because it sits behind
+  // the magic-link limiter above — 3 per (ip, address) per 15 minutes and 20
+  // per IP — which is spent before the question is asked, so probing costs the
+  // same budget as sending. `/api/auth/portal-signin` is the same question
+  // asked without a limiter in front of it, which is why that route answers
+  // identically either way and mails the refusal instead.
+  //
+  // The PORTAL door, because nothing here names an audience and the creation
+  // does. This gate sits before the `!principalRow` return by design, so there
+  // is no role to read; the four gated paths are each reachable from the portal
+  // dialog and the team login alike, and the one body field that would hint —
+  // `callbackURL` — is sent by none of this app's callers of them and is chosen
+  // by whoever is asking, so honouring it would let a caller pick which of the
+  // workspace's two answers to be judged by. What settles it is what the
+  // request would produce: `user.create.after` writes `role: 'user'` for every
+  // new account without consulting anything, so this creates a portal account
+  // or nothing. Team membership arrives by invitation or the bootstrap claim,
+  // and the policy exempts both.
+  if (!userRow && ACCOUNT_CREATING_EMAIL_PATHS.has(ctx.path ?? '')) {
+    const { isAccountCreationAllowed, SIGNUP_NOT_ALLOWED } = await import('./signup-policy')
+    if (!(await isAccountCreationAllowed(email, 'portal'))) {
+      throw ctx.redirect(`/?auth=signin&error=${SIGNUP_NOT_ALLOWED}`)
+    }
+  }
+
   if (!principalRow) return
 
   const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, workspace)
@@ -375,6 +431,13 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
  * first internet visitor to a declared public provider would seize admin
  * on a fresh / recovered workspace. The `lastSsoSignInAt` stamp is
  * provider-independent (it lives on `principal`) and runs unconditionally.
+ *
+ * On top of H8, promotion also requires `isOpenToBootstrapClaim`: on a
+ * workspace a control plane created, the owner is recorded where it was
+ * created and arriving is not how the admin is decided, whatever the IdP
+ * attests. The cost is that such a workspace cannot recover a deleted admin
+ * through SSO — it recovers through the control plane that owns it, which is
+ * the same place its owner came from.
  */
 export async function handleSsoCallbackAfter(
   ctx: {
@@ -405,7 +468,7 @@ export async function handleSsoCallbackAfter(
   const eligibleForBootstrap = shouldBootstrapPromote(email, callbackProvider)
 
   const { db } = await import('@/lib/server/db')
-  const { bootstrapAdminLock, findHumanAdmin } =
+  const { bootstrapAdminLock, findHumanAdmin, isOpenToBootstrapClaim } =
     await import('@/lib/server/domains/principals/bootstrap-admin')
   const { setPrincipalRole, updatePrincipalFields } =
     await import('@/lib/server/domains/principals/principal.factory')
@@ -426,8 +489,23 @@ export async function handleSsoCallbackAfter(
     // one, so this branch is recovery-scoped (deleted admin, skipped
     // onboarding, config-file provisioning before any admin existed).
     if (eligibleForBootstrap) {
-      const existingAdmin = await findHumanAdmin(tx)
-      if (!existingAdmin) {
+      // The same three facts the onboarding promoter and the unauthenticated
+      // claim screen decide on, asked on the same transaction inside the same
+      // lock. Two of them used to be asked here and the third was not, which
+      // is the disagreement the shared module exists to prevent, inverted: the
+      // screen told the browser `openToClaim: false` while this path promoted
+      // the first arrival anyway.
+      const [existingAdmin, openToClaim] = await Promise.all([
+        findHumanAdmin(tx),
+        isOpenToBootstrapClaim(tx),
+      ])
+      if (!existingAdmin && !openToClaim) {
+        log.warn(
+          { user_id: userId, provider_id: providerId },
+          'sso bootstrap admin promotion refused: workspace is provisioned'
+        )
+      }
+      if (!existingAdmin && openToClaim) {
         const { cacheKeysToBust } = await setPrincipalRole({ userId: userIdTyped }, 'admin', {
           executor: tx,
         })

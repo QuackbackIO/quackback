@@ -24,6 +24,9 @@ const hoisted = vi.hoisted(() => ({
   setPrincipalRole: vi.fn(),
   settingsInsert: vi.fn(),
   invalidateSettingsCache: vi.fn(),
+  /** What `settings.cloud_workspace_key` holds — null on an install, a key on a
+   *  workspace a control plane created. Read by the tx `execute` double below. */
+  stamp: { value: null as string | null },
 }))
 
 vi.mock('@/lib/server/auth/session', () => ({ getSession: hoisted.getSession }))
@@ -52,7 +55,7 @@ vi.mock('@quackback/ids', async (importOriginal) => ({
   generateId: vi.fn((type: string) => `${type}_test`),
 }))
 vi.mock('@/lib/server/logger', () => ({
-  logger: { child: () => ({ debug: vi.fn(), info: vi.fn(), error: vi.fn() }) },
+  logger: { child: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
 }))
 
 vi.mock('@/lib/server/setup-state', () => ({
@@ -123,6 +126,17 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.getSession.mockResolvedValue({ user: { id: 'user_caller' } })
   hoisted.postStatusesFindFirst.mockResolvedValue({ id: 'status_existing' })
+  hoisted.stamp.value = null
+  // The transaction's `execute` answers by statement, as the real one does: the
+  // advisory lock returns nothing, the provenance read returns the settings row
+  // the fixture's workspace shape implies. A double that answered both alike
+  // could not tell a lock from a read, and this file's central assertion is
+  // about the ordering between exactly those two.
+  hoisted.txExecute.mockImplementation(async (statement: { queryChunks?: unknown[] }) => {
+    const text = JSON.stringify(statement?.queryChunks ?? '')
+    if (!text.includes('cloud_workspace_key')) return undefined
+    return [{ stamp_column: hoisted.stamp.value, metadata: null }]
+  })
 })
 
 /** A workspace whose wizard steps are already stamped. */
@@ -232,7 +246,6 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       data: { workspaceName: 'Acme Inc', useCase: 'customer_support' },
     })
 
-    expect(hoisted.txExecute).toHaveBeenCalledOnce()
     const locked = hoisted.txExecute.mock.calls[0]![0] as { queryChunks?: unknown[] }
     expect(JSON.stringify(locked.queryChunks)).toContain('pg_advisory_xact_lock')
     expect(JSON.stringify(locked.queryChunks)).toBe(
@@ -245,6 +258,31 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     expect(hoisted.txExecute.mock.invocationCallOrder[0]).toBeLessThan(
       hoisted.txPrincipalFindFirst.mock.invocationCallOrder[0]!
     )
+    // The provenance read is a read like any other, and it decides whether this
+    // caller may be promoted — so it composes with the lock rather than racing
+    // it. Asserted on the transaction's OWN executor, which is what makes it a
+    // statement about the lock window rather than about a query somewhere.
+    const provenance = hoisted.txExecute.mock.calls.findIndex(([statement]) =>
+      JSON.stringify((statement as { queryChunks?: unknown[] })?.queryChunks).includes(
+        'cloud_workspace_key'
+      )
+    )
+    expect(provenance).toBeGreaterThan(0)
+  })
+
+  // The workspace this guard exists for. Every fact is identical to the
+  // promotion case above except the one the control plane wrote.
+  it('refuses to promote an arrival on a workspace a control plane created', async () => {
+    hoisted.stamp.value = 'ws_acme'
+    hoisted.getSettings.mockResolvedValue(undefined)
+    hoisted.principalFindFirst.mockResolvedValue(undefined)
+
+    await expect(
+      saveWorkspaceAndGoalFn({ data: { workspaceName: 'Acme Inc', useCase: 'customer_support' } })
+    ).rejects.toThrow(/not open to be set up/i)
+    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
+    expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
+    expect(hoisted.settingsInsert).not.toHaveBeenCalled()
   })
 
   it('keeps a managed slug fixed while allowing the workspace name to change', async () => {

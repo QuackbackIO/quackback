@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "Wir haben einen Link zum Zurücksetzen des Passworts an {email} gesendet. Der Link läuft in 24 Stunden ab.",
   "portal.auth.otp.title": "Überprüfen Sie Ihre E-Mails",
   "portal.auth.otp.codeAriaLabel": "Bestätigungscode",
-  "portal.auth.otp.description": "Wir haben einen 6-stelligen Code an {email} gesendet.",
+  "portal.auth.otp.description": "Prüfen Sie {email} auf Ihren 6-stelligen Code.",
   "portal.auth.otp.verify": "Code bestätigen",
   "portal.auth.otp.verifying": "Wird überprüft…",
   "portal.auth.otp.linkAlsoWorks": "Der Anmeldelink in Ihrer E-Mail funktioniert ebenfalls.",

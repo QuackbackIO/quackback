@@ -411,7 +411,7 @@
   "portal.auth.reset.description": "我们已向 {email} 发送了密码重置链接。该链接将在 24 小时后失效。",
   "portal.auth.otp.title": "请查收邮件",
   "portal.auth.otp.codeAriaLabel": "验证码",
-  "portal.auth.otp.description": "我们已向 {email} 发送了 6 位验证码。",
+  "portal.auth.otp.description": "请到 {email} 查收您的 6 位验证码。",
   "portal.auth.otp.verify": "验证",
   "portal.auth.otp.verifying": "验证中…",
   "portal.auth.otp.linkAlsoWorks": "邮件中的登录链接同样有效。",

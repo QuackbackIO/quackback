@@ -84,10 +84,16 @@ export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async
   await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const workspace = await getWorkspaceSettings()
+  // The shipped defaults, not a second set written out here. A form that showed
+  // `openSignup: false` while the server behaved as open is the disagreement
+  // that made this setting worth enforcing in the first place — see
+  // `DEFAULT_AUTH_CONFIG`. Only `password` differs, and deliberately: the admin
+  // form starts with team password sign-in unticked.
+  const { DEFAULT_AUTH_CONFIG } = await import('@/lib/server/domains/settings/settings.types')
   return (
     workspace?.authConfig ?? {
+      ...DEFAULT_AUTH_CONFIG,
       oauth: { google: true, github: true, password: false },
-      openSignup: false,
     }
   )
 })

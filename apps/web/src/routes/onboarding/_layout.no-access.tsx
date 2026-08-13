@@ -1,7 +1,7 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
-import { pickOnboardingStep } from './-onboarding-step'
+import { isSetupBlocked, pickOnboardingStep } from './-onboarding-step'
 import { SignOutButton } from './-sign-out-button'
 
 /**
@@ -19,33 +19,54 @@ export const Route = createFileRoute('/onboarding/_layout/no-access')({
   loader: async ({ context }) => {
     if (!context.session?.user) throw redirect({ to: '/onboarding/account' })
     const state = await checkOnboardingState()
-    // Not blocked after all (they own setup, or nobody does): send them to the
-    // step they belong on rather than stranding them on a refusal.
-    if (!state.setupClaimedByOther) {
+    // Not blocked after all (they own setup, or setup is still there to take):
+    // send them to the step they belong on rather than stranding them on a
+    // refusal. The router decides on the same predicate, so the two cannot
+    // point at each other.
+    if (!isSetupBlocked(state)) {
       throw redirect({
         to: pickOnboardingStep({ session: { userId: context.session.user.id }, state }),
       })
     }
-    return { setupComplete: state.isOnboardingComplete }
+    return {
+      setupComplete: state.isOnboardingComplete,
+      // Which refusal this is. An owner exists and it is not you, or nobody has
+      // arrived yet and it will not be you: telling a customer still waiting on
+      // the workspace they paid for that it "belongs to an existing admin"
+      // sends them to support for nothing.
+      claimedByOther: state.setupClaimedByOther,
+    }
   },
   component: NoAccessStep,
 })
 
 function NoAccessStep() {
-  const { setupComplete } = Route.useLoaderData()
+  const { setupComplete, claimedByOther } = Route.useLoaderData()
 
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="overflow-hidden rounded-2xl border bg-card">
         <div className="p-8 text-center">
           <h1 className="text-2xl font-bold">
-            <FormattedMessage
-              id="onboarding.noAccess.title"
-              defaultMessage="Setup belongs to an existing admin"
-            />
+            {claimedByOther ? (
+              <FormattedMessage
+                id="onboarding.noAccess.title"
+                defaultMessage="Setup belongs to an existing admin"
+              />
+            ) : (
+              <FormattedMessage
+                id="onboarding.noAccess.notOpenTitle"
+                defaultMessage="This workspace is not yours to set up"
+              />
+            )}
           </h1>
           <p className="mt-2 text-muted-foreground">
-            {setupComplete ? (
+            {!claimedByOther ? (
+              <FormattedMessage
+                id="onboarding.noAccess.notOpenBody"
+                defaultMessage="This workspace was created for a specific account. Sign in with that account to set it up."
+              />
+            ) : setupComplete ? (
               <FormattedMessage
                 id="onboarding.noAccess.readyBody"
                 defaultMessage="This workspace is already set up. Ask an admin to invite you, then sign in with the account they invite."

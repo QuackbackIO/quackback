@@ -37,6 +37,10 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   sendNewSignInEmail: 'platform',
   sendRecoveryCodeUsedEmail: 'platform',
   sendMagicLinkEmail: 'platform',
+  // The other half of the sign-in request, and it must speak as the same
+  // sender: it is the answer to a sign-in attempt, not part of any thread a
+  // customer is having with the workspace.
+  sendSignupNotAllowedEmail: 'platform',
   sendInvitationEmail: 'platform',
   sendPortalInviteEmail: 'platform',
   sendVerifyAddressEmail: 'platform',
