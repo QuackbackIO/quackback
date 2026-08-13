@@ -48,6 +48,7 @@ import {
 } from './settings.types'
 import { signupOpenFor } from '@/lib/shared/signup-open'
 import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
+import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { resolveChangelogSettings } from './settings.changelog'
 import { resolveStatusSettings } from './settings.status'
 import {
@@ -841,8 +842,16 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
   try {
     const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
     if (cached) {
-      log.debug('workspace settings cache hit')
-      return cached
+      const rawSetup = (cached.settings as { setupState?: string | null } | undefined)?.setupState
+      // A request during provision can cache settings before bootstrap stamps
+      // setup_state. That row lives an hour. Trusting it keeps a finished
+      // workspace on the OSS wizard. An incomplete cache is the only hit we
+      // refuse: once setup is complete it is mutated through this service,
+      // which already busts the key.
+      if (isOnboardingComplete(getSetupState(rawSetup ?? null))) {
+        log.debug('workspace settings cache hit')
+        return cached
+      }
     }
 
     const org = await db.query.settings.findFirst()
