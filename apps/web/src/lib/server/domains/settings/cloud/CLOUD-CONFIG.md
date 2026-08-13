@@ -135,6 +135,90 @@ the workspace's own plan grants, there is no upgrade that fixes it, so the
 refusal reports no required plan and the copy degrades to "contact us" rather
 than selling a plan the customer already has.
 
+## Trials
+
+A workspace that finishes setting up on a cloud-enabled deployment, and has no
+subscription, is lent a paid plan for a fortnight. The whole mechanism is one
+record and one rule.
+
+```jsonc
+"trial": { "plan": "pro", "startedAt": "…", "endsAt": "…" }
+```
+
+**The stored plan is never touched.** It stays `free` for the entire trial, and
+`resolveCloudConfig()` prefers the trial's plan while the trial is in date.
+Three things follow, and each is a bug that then does not have to be written:
+
+- **A trial ends with no job and no lag.** Nothing runs at `endsAt`; the row
+  already describes the workspace after the trial, and the next read simply
+  stops preferring it. The workspace-settings cache does not delay it either,
+  because the cache holds the stored row and the comparison happens after the
+  read.
+- **A trial cannot be restarted.** The record outlives the trial it describes,
+  so a second attempt finds it and hands out nothing. The window is also
+  derived from the workspace's stamped setup-completion time rather than from
+  the clock at the moment of the call, so a retry recomputes the identical
+  block and the write seam collapses it to a no-op.
+- **Nothing else has to know.** Entitlements, refusal copy and the plan on
+  screen all read `config.plan`, which is correct on both sides of the end.
+
+Writing the trial into `plan` or into `billing.status` instead was tried on
+paper and is actively destructive: both are reasserted from the subscription
+(or from its absence) by the billing reconcile, so a trial recorded in either
+is erased within minutes, silently, by a routine with no opinion about trials
+at all.
+
+Three conditions decide whether a recorded trial is in force. It has not run
+out; the workspace has no subscription, because once there is one the
+subscription decides; and it ranks **above** the stored plan, so a trial can
+only ever add. That last one is what stops a workspace an operator pinned to
+Scale being dropped onto a Pro trial for a fortnight.
+
+**Ending a trial is a downgrade, not a lockout.** The plan becomes Free and the
+gates below apply on their own. Signing in, reading the workspace's own data
+and exporting it are not entitlements, are not gated, and do not change.
+
+### Which writer owns it
+
+Billing, and the config file wins if it ever claims the path — the same rule as
+everything else in this block. Two specifics:
+
+- `cloud.trial` is in `CLOUD_MANAGED_PATHS`, so `writeCloudConfig()` refuses a
+  non-config writer whenever the path (or a `cloud` ancestor) is claimed. That
+  refusal is recorded and swallowed: setup completing is a request a human is
+  waiting on, and no workspace should fail to finish being built over a
+  commercial courtesy.
+- The config file's own vocabulary deliberately has no `trial` key. The file
+  declares intent (`plan`, `entitlements`), and a trial is a window with two
+  timestamps that nobody hand-writes. An operator who wants no trials pins the
+  plan they do want.
+
+`mergeCloudConfig()` carries the trial through explicitly. It has to: that
+function builds its result field by field, so a field it does not name is
+dropped rather than preserved, and both the config file's 30-second reconcile
+and the billing sweep's empty-subscription write touch this column for reasons
+that have nothing to do with a trial.
+
+### A trial lends features, not quotas
+
+`settings.tier_limits` is untouched by all of this, so a workspace trialing Pro
+has Pro's **entitlements** and whatever **numeric limits** were last written
+for it. That is a real seam, and it is deliberate in both directions.
+
+Making it follow the trial would mean either writing the trial plan's numbers
+into `tier_limits` — which nothing would ever write back, so the workspace
+would keep the larger caps for good — or teaching `getTierLimits()` to consult
+the plan, which is precisely the dependency `enforcement-untouched.test.ts`
+exists to forbid. The chosen failure direction is the conservative one: a trial
+can never inflate a quota and then leave it inflated.
+
+### What a trialing workspace sees
+
+The admin banner already driven by `settings.tier_limits.notice`. A trial
+notice is **derived** from the config rather than written at trial start, so it
+appears and expires with the trial and there is nothing left behind to clear.
+An operator-set notice wins, because someone chose those words.
+
 ## Errors
 
 `EntitlementRequiredError extends TierLimitError`. That inheritance is
@@ -175,7 +259,8 @@ reconcile that declares only `plan` leaves the billing refs intact.
 **2. Leaf-level managed paths.** The config file records what it declares in
 `settings.managed_field_paths` — `cloud.plan`, `cloud.entitlements`,
 `cloud.billing`, `cloud.enabled`, `cloud.upgradeUrl` — deliberately **not** a
-whole-block `cloud` lock the way `tierLimits` is locked. A whole-block lock
+whole-block `cloud` lock the way `tierLimits` is locked. (`cloud.trial` is a
+recognised path but has no key in the file's schema; see Trials above.) A whole-block lock
 would stop the billing module recording a subscription reference the file never
 claimed.
 

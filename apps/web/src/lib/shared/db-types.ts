@@ -81,6 +81,7 @@ export type {
   // asserts the two agree.
   StoredCloudConfig,
   StoredCloudBilling,
+  StoredCloudTrial,
 } from '@quackback/db/schema'
 
 // Runtime exports used in client components.

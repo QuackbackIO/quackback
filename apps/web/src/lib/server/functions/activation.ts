@@ -197,7 +197,7 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
     const capacity = await boardCapacity()
     const now = new Date().toISOString()
 
-    const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
+    const { state, value } = await mutateSetupStateAtomic(async (current, row, tx) => {
       const outcome = current.useCase
       if (!outcome || !current.steps.workspace) throw new Error('Complete workspace setup first')
 
@@ -391,6 +391,26 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
       },
       'starting point completed'
     )
+
+    // A trial starts here, and nowhere else, because this is the first moment
+    // a workspace is a real one: someone claimed it, named it, said what it is
+    // for, and has something to open. Anything earlier would hand a trial to
+    // an abandoned signup and start the clock while nobody was using it.
+    //
+    // It runs *after* the setup-state transaction rather than inside it. That
+    // transaction holds the settings row, and the trial write takes the same
+    // row; nesting the two would be a workspace deadlocking on itself at the
+    // last step of its own setup.
+    //
+    // Anchored on `completedAt`, which is stamped once and preserved on every
+    // later call (`current.completedAt ?? now`). So a retry, a double-click or
+    // a second visit to this step recomputes the identical trial window and
+    // changes nothing, rather than quietly buying another fortnight.
+    const { startTrialIfEligible } = await import('@/lib/server/domains/settings/cloud/trial')
+    await startTrialIfEligible({
+      anchor: state.completedAt ? new Date(state.completedAt) : new Date(now),
+    })
+
     return value
   })
 

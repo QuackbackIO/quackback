@@ -78,9 +78,48 @@ describe('stored/resolved twins', () => {
         status: 'active',
         currentPeriodEnd: '2026-09-01T00:00:00.000Z',
       },
+      trial: null,
+      trialActive: false,
       source: 'billing',
       updatedAt: '2026-08-08T00:00:00.000Z',
       upgradeUrl: 'https://example.com/billing',
+    })
+  })
+
+  it('round-trips a trial, and resolves the plan it lends', () => {
+    // The writer's output must be storable and the reader must accept it back:
+    // a trial that survives the merge but not the read (or the reverse) is a
+    // workspace whose plan changes when nothing happened.
+    const stored = mergeCloudConfig(
+      null,
+      {
+        enabled: true,
+        plan: 'free',
+        trial: {
+          plan: 'pro',
+          startedAt: '2026-03-01T00:00:00.000Z',
+          endsAt: '2026-03-15T00:00:00.000Z',
+        },
+      },
+      { writer: 'billing', now: new Date('2026-03-01T00:00:00.000Z') }
+    )
+    expect(stored.trial).toEqual({
+      plan: 'pro',
+      startedAt: '2026-03-01T00:00:00.000Z',
+      endsAt: '2026-03-15T00:00:00.000Z',
+    })
+
+    const during = resolveCloudConfig(stored, new Date('2026-03-10T00:00:00.000Z'))
+    expect({ plan: during.plan, trialActive: during.trialActive }).toEqual({
+      plan: 'pro',
+      trialActive: true,
+    })
+
+    const after = resolveCloudConfig(stored, new Date('2026-03-20T00:00:00.000Z'))
+    expect({ plan: after.plan, trialActive: after.trialActive, trial: after.trial }).toEqual({
+      plan: 'free',
+      trialActive: false,
+      trial: stored.trial,
     })
   })
 

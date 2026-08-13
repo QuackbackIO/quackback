@@ -89,11 +89,31 @@ export interface StoredCloudBilling {
   currentPeriodEnd?: string | null
 }
 
+/**
+ * A trial the workspace was given before it bought anything.
+ *
+ * Written once and then left alone: the trial ends by the clock passing
+ * `endsAt`, not by anything rewriting this. Keeping the record after it has
+ * expired is what makes "this workspace had a trial and it ran out" an answer
+ * the row itself can give, and what stops a second start from handing out
+ * another one.
+ */
+export interface StoredCloudTrial {
+  plan?: string | null
+  startedAt?: string | null
+  endsAt?: string | null
+}
+
 export interface StoredCloudConfig {
   enabled: boolean
   plan?: string | null
   entitlements?: Record<string, boolean>
   billing?: StoredCloudBilling | null
+  /**
+   * See {@link StoredCloudTrial}. Absent on every workspace that was never
+   * given one, which is every self-hosted install.
+   */
+  trial?: StoredCloudTrial | null
   /** Which writer last set plan/entitlements — 'config' or 'billing'. */
   source?: string | null
   updatedAt?: string | null

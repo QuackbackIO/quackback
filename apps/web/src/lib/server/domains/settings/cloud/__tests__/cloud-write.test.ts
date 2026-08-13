@@ -203,6 +203,50 @@ describe('writeCloudConfig', () => {
     expect(hoisted.state.locked).toBe(false)
   })
 
+  it('rejects a trial on an unknown plan before touching the row', async () => {
+    // The resolver reads a trial it cannot rank as no trial at all, so storing
+    // one would be a workspace whose trial silently never happened.
+    await expect(
+      writeCloudConfig(
+        {
+          trial: {
+            plan: 'platinum' as never,
+            startedAt: '2026-03-01T00:00:00.000Z',
+            endsAt: '2026-03-15T00:00:00.000Z',
+          },
+        },
+        { writer: 'billing' }
+      )
+    ).rejects.toThrow(ValidationError)
+    expect(hoisted.state.locked).toBe(false)
+  })
+
+  it('writes a trial the config file has not claimed', async () => {
+    // Guards the specific silent failure of a patch key with no managed path:
+    // `cloudPatchPaths` would report nothing to write and the seam would
+    // return "unchanged" without ever opening a transaction.
+    hoisted.state.row = row({ cloud: { enabled: true, plan: 'free' } })
+    const trial = {
+      plan: 'pro' as const,
+      startedAt: '2026-03-01T00:00:00.000Z',
+      endsAt: '2026-03-15T00:00:00.000Z',
+    }
+    const result = await writeCloudConfig(
+      { trial },
+      { writer: 'billing', now: new Date('2026-03-01T00:00:00.000Z') }
+    )
+    expect(result.changed).toBe(true)
+    expect(written().cloud).toEqual({
+      enabled: true,
+      plan: 'free',
+      entitlements: {},
+      billing: {},
+      trial,
+      source: 'billing',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+    })
+  })
+
   it('rejects an unknown entitlement key', async () => {
     await expect(
       writeCloudConfig({ entitlements: { timeTravel: true } as never }, { writer: 'billing' })

@@ -7,7 +7,7 @@
  */
 
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
-import type { CloudBilling, CloudWriter, EntitlementKey, PlanId } from './cloud.types'
+import type { CloudBilling, CloudTrial, CloudWriter, EntitlementKey, PlanId } from './cloud.types'
 
 export interface CloudConfigPatch {
   enabled?: boolean
@@ -16,6 +16,11 @@ export interface CloudConfigPatch {
   entitlements?: Partial<Record<EntitlementKey, boolean>>
   /** Sparse. Merged field-by-field into the stored billing block. */
   billing?: Partial<CloudBilling>
+  /**
+   * Whole-value, not sparse: a trial is written once, complete, and then left
+   * alone. There is no partial update of one that makes sense.
+   */
+  trial?: CloudTrial | null
   upgradeUrl?: string | null
 }
 
@@ -28,6 +33,7 @@ export const CLOUD_MANAGED_PATHS = {
   plan: 'cloud.plan',
   entitlements: 'cloud.entitlements',
   billing: 'cloud.billing',
+  trial: 'cloud.trial',
   upgradeUrl: 'cloud.upgradeUrl',
 } as const satisfies Record<keyof CloudConfigPatch, string>
 
@@ -64,6 +70,16 @@ export function mergeCloudConfig(
     source: opts.writer,
     updatedAt: (opts.now ?? new Date()).toISOString(),
   }
+  // Carried explicitly, because this function builds its output field by field
+  // rather than spreading the base: anything not named here is DROPPED. That
+  // is the mechanism by which one writer silently erases another's work, and
+  // the trial is the field it would hurt most — the config file's 30-second
+  // reconcile and the billing sweep's empty-subscription write both touch this
+  // column for reasons that have nothing to do with a trial, and either would
+  // end one early with nothing recording that it ever existed.
+  const trial = patch.trial !== undefined ? patch.trial : (base?.trial ?? null)
+  if (trial) next.trial = trial
+
   const upgradeUrl =
     patch.upgradeUrl !== undefined
       ? patch.upgradeUrl

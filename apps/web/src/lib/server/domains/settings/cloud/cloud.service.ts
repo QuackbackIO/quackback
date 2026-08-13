@@ -15,13 +15,16 @@ import {
   BILLING_STATUSES,
   DISABLED_CLOUD_CONFIG,
   EMPTY_BILLING,
+  PLAN_CATALOGUE,
   isEntitlementKey,
   isPlanId,
   type BillingStatus,
   type CloudBilling,
   type CloudConfig,
+  type CloudTrial,
   type CloudWriter,
   type EntitlementKey,
+  type PlanId,
 } from './cloud.types'
 
 export type { CloudConfigPatch } from './cloud.merge'
@@ -44,27 +47,99 @@ const log = logger.child({ component: 'cloud-config' })
  * is today's behaviour.
  *
  * Unknown plan ids and unknown entitlement keys are dropped rather than
- * carried through, so a newer control plane writing a key this code version
- * has never heard of can never accidentally deny a feature.
+ * carried through, so a newer writer using a key this code version has never
+ * heard of can never accidentally deny a feature.
+ *
+ * ## Why this takes the time
+ *
+ * A trial lends a plan until an instant, so *which plan a workspace is on* is
+ * a question about now. Answering it here, on every read, is what lets a trial
+ * end with no job, no sweep and no lag: the stored row already describes the
+ * world after the trial, and this function stops preferring the trial the
+ * moment it is over. The cost is a comparison of two numbers on a value the
+ * caller had already loaded, and none of it is reached at all when cloud is
+ * off.
+ *
+ * `now` is a parameter rather than a call to the clock so both sides of that
+ * instant are reachable in a test. A test that reads the real clock cannot
+ * tell "the trial ended" from "there was never a trial".
  */
-export function resolveCloudConfig(stored: StoredCloudConfig | null | undefined): CloudConfig {
+export function resolveCloudConfig(
+  stored: StoredCloudConfig | null | undefined,
+  now: Date = new Date()
+): CloudConfig {
   if (!stored || typeof stored !== 'object') return DISABLED_CLOUD_CONFIG
   if (stored.enabled !== true) return DISABLED_CLOUD_CONFIG
 
-  const plan = typeof stored.plan === 'string' && isPlanId(stored.plan) ? stored.plan : null
-  if (stored.plan && !plan) {
+  const storedPlan = typeof stored.plan === 'string' && isPlanId(stored.plan) ? stored.plan : null
+  if (stored.plan && !storedPlan) {
     log.error({ plan: stored.plan }, 'cloud config names an unknown plan; treating as no plan')
   }
 
+  const billing = sanitizeBilling(stored.billing)
+  const trial = sanitizeTrial(stored.trial)
+  const trialActive = isTrialActive(trial, billing, storedPlan, now)
+
   return {
     enabled: true,
-    plan,
+    plan: trialActive && trial ? trial.plan : storedPlan,
     entitlements: sanitizeEntitlements(stored.entitlements),
-    billing: sanitizeBilling(stored.billing),
+    billing,
+    trial,
+    trialActive,
     source: stored.source === 'config' || stored.source === 'billing' ? stored.source : null,
     updatedAt: typeof stored.updatedAt === 'string' ? stored.updatedAt : null,
     upgradeUrl: readUpgradeUrl(stored),
   }
+}
+
+/**
+ * Is the recorded trial the thing deciding this workspace's plan right now?
+ *
+ * Three conditions, each closing a different way a trial could do harm:
+ *
+ * 1. **It has not run out.** The end instant is exclusive.
+ * 2. **The workspace has not bought anything.** A trial is what a workspace
+ *    holds *before* there is a billing relationship; once a subscription
+ *    exists, the subscription decides and a leftover trial record must not
+ *    quietly grant more than was paid for.
+ * 3. **It would add rather than subtract.** A trial that ranks below the
+ *    stored plan is ignored outright, so an operator who pinned a workspace to
+ *    Scale cannot have it dropped to a Pro trial for a fortnight by a record
+ *    written before the pin.
+ */
+function isTrialActive(
+  trial: CloudTrial | null,
+  billing: CloudBilling,
+  storedPlan: PlanId | null,
+  now: Date
+): boolean {
+  if (!trial) return false
+  if (billing.subscriptionRef) return false
+  if (now.getTime() >= Date.parse(trial.endsAt)) return false
+  const storedRank = storedPlan ? PLAN_CATALOGUE[storedPlan].rank : -1
+  return PLAN_CATALOGUE[trial.plan].rank > storedRank
+}
+
+/**
+ * A stored trial is only a trial if every part of it is intelligible.
+ *
+ * A half-written record — an unknown plan, a date nothing can parse — must
+ * resolve to *no trial* rather than to a trial that never ends or one on a
+ * plan this version cannot rank. Both of those would be a workspace holding
+ * features nobody granted it, indefinitely.
+ */
+function sanitizeTrial(raw: StoredCloudConfig['trial']): CloudTrial | null {
+  if (!raw || typeof raw !== 'object') return null
+  const plan = typeof raw.plan === 'string' && isPlanId(raw.plan) ? raw.plan : null
+  const startedAt = str(raw.startedAt)
+  const endsAt = str(raw.endsAt)
+  if (!plan || !startedAt || !endsAt) return null
+  if (Number.isNaN(Date.parse(startedAt)) || Number.isNaN(Date.parse(endsAt))) {
+    log.error({ startedAt, endsAt }, 'cloud config holds an unparseable trial window; ignoring it')
+    return null
+  }
+  return { plan, startedAt, endsAt }
 }
 
 function sanitizeEntitlements(
@@ -267,6 +342,11 @@ export async function getCloudRevision(): Promise<number> {
 function validatePatch(patch: CloudConfigPatch): void {
   if (patch.plan !== undefined && patch.plan !== null && !isPlanId(patch.plan)) {
     throw new ValidationError('CLOUD_UNKNOWN_PLAN', `Unknown plan "${patch.plan}"`)
+  }
+  if (patch.trial && !isPlanId(patch.trial.plan)) {
+    // A trial on a plan nothing can rank is read as no trial at all, so
+    // storing one would be a workspace whose trial silently never happened.
+    throw new ValidationError('CLOUD_UNKNOWN_PLAN', `Unknown trial plan "${patch.trial.plan}"`)
   }
   for (const key of Object.keys(patch.entitlements ?? {})) {
     if (!isEntitlementKey(key)) {

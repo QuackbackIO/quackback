@@ -73,6 +73,7 @@ export { OSS_TIER_LIMITS } from './tier-limits.types'
 export type {
   CloudConfig,
   CloudBilling,
+  CloudTrial,
   CloudWriter,
   BillingStatus,
   PlanId,

@@ -333,6 +333,40 @@ export const EMPTY_BILLING: CloudBilling = {
 }
 
 // ---------------------------------------------------------------------------
+// Trials
+// ---------------------------------------------------------------------------
+
+/**
+ * A paid plan lent to a workspace that has not bought anything yet.
+ *
+ * Deliberately its own block rather than a value of {@link CloudBilling}
+ * `status` or a write to {@link CloudConfig} `plan`, and both alternatives are
+ * actively destructive:
+ *
+ * - `billing.status` and `billing.currentPeriodEnd` mirror a *provider*
+ *   subscription, and the periodic reconcile blanks them for any workspace
+ *   with no subscription. A trial recorded there would be erased within
+ *   minutes of starting, by design, silently.
+ * - `plan` is likewise reasserted from the subscription (or its absence) on
+ *   every reconcile and every webhook, so a trial written there survives only
+ *   until the next tick.
+ *
+ * Held separately, the trial is inert data that no other writer has an opinion
+ * about, and the plan it lends is applied when the config is *read*. Two
+ * properties fall out of that. Expiry needs no job: the stored block already
+ * describes the post-trial world the whole time the trial is running. And the
+ * record outlives the trial, so a second start finds it and hands out nothing.
+ */
+export interface CloudTrial {
+  /** The plan the workspace holds until {@link endsAt}. */
+  plan: PlanId
+  /** ISO timestamp. */
+  startedAt: string
+  /** ISO timestamp. Exclusive: at this instant the trial is over. */
+  endsAt: string
+}
+
+// ---------------------------------------------------------------------------
 // The resolved config
 // ---------------------------------------------------------------------------
 
@@ -346,7 +380,15 @@ export interface CloudConfig {
    * and no refusal is ever raised.
    */
   enabled: boolean
-  /** Null when cloud is disabled, or when enabled without a plan. */
+  /**
+   * The plan in force *now*. Null when cloud is disabled, or when enabled
+   * without a plan.
+   *
+   * While a trial is running this is the trial's plan rather than the stored
+   * one, which is what makes a trial need no special handling anywhere else:
+   * entitlements, refusal copy and the plan shown on screen all read this
+   * field and are all correct on both sides of the trial's end.
+   */
   plan: PlanId | null
   /**
    * Explicit per-key overrides on top of the plan's defaults. Sparse: a key
@@ -354,6 +396,19 @@ export interface CloudConfig {
    */
   entitlements: Partial<Record<EntitlementKey, boolean>>
   billing: CloudBilling
+  /**
+   * The trial this workspace was given, if it was ever given one. Present
+   * after it has ended: it is the record that a trial happened, not a claim
+   * that one is running. Ask {@link trialActive} for that.
+   */
+  trial: CloudTrial | null
+  /**
+   * Whether {@link plan} came from {@link trial} rather than from the stored
+   * plan. Resolved once, here, because it depends on the current time: a
+   * caller deriving it again with its own clock is how a countdown and a gate
+   * come to disagree.
+   */
+  trialActive: boolean
   source: CloudWriter | null
   /** ISO timestamp of the last write, or null. */
   updatedAt: string | null
@@ -372,6 +427,8 @@ export const DISABLED_CLOUD_CONFIG: CloudConfig = Object.freeze({
   plan: null,
   entitlements: Object.freeze({}) as Partial<Record<EntitlementKey, boolean>>,
   billing: Object.freeze({ ...EMPTY_BILLING }),
+  trial: null,
+  trialActive: false,
   source: null,
   updatedAt: null,
   upgradeUrl: null,
