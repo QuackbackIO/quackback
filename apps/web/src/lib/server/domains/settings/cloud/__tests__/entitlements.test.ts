@@ -145,7 +145,18 @@ describe('the refusal reuses the existing 402 plumbing', () => {
       currentPlanName: 'Free',
       requiredPlan: 'growth',
       requiredPlanName: 'Growth',
+      upgradeUrl: '/admin/settings/billing',
     })
+  })
+
+  it('sends the refusal to the workspace billing page when no upgradeUrl is set', () => {
+    const err = buildRefusal(cloud({ plan: 'free' }), 'apiAccess')
+    expect(err.upgradeUrl).toBe('/admin/settings/billing')
+  })
+
+  it('does not invent an upgrade link when cloud is off', () => {
+    const err = buildRefusal(DISABLED_CLOUD_CONFIG, 'apiAccess')
+    expect(err.upgradeUrl).toBeUndefined()
   })
 })
 

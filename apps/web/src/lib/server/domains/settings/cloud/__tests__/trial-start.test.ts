@@ -316,11 +316,12 @@ describe('the countdown a workspace sees', () => {
     ).toBeNull()
   })
 
-  it('offers no action when the deployment has nowhere to send them', () => {
+  it('sends See plans to the workspace billing page when no upgradeUrl is set', () => {
     const noUrl = { ...row, upgradeUrl: undefined } as StoredCloudConfig
     const twoDaysIn = new Date(ANCHOR.getTime() + 2 * DAY_MS)
     const notice = trialNotice(resolveCloudConfig(noUrl, twoDaysIn))
-    expect(notice?.actionUrl).toBeUndefined()
+    expect(notice?.actionUrl).toBe('/admin/settings/billing')
+    expect(notice?.actionLabel).toBe('See plans')
     expect(notice?.label).toBe(`${PLAN_CATALOGUE[TRIAL_PLAN].name} trial`)
   })
 })

@@ -53,6 +53,20 @@ export const TRIAL_PLAN: PlanId = 'pro'
 /** How long a trial runs. */
 export const TRIAL_DAYS = 14
 
+/**
+ * Where a cloud workspace goes to see plans when nobody set `upgradeUrl`.
+ *
+ * The billing page is the workspace's own upgrade surface. An operator-set
+ * `upgradeUrl` still wins — that is the self-host / config-file escape.
+ */
+export const IN_APP_PLANS_PATH = '/admin/settings/billing'
+
+/** The trial banner and a 402 both send the customer here. */
+export function plansActionUrl(config: Pick<CloudConfig, 'enabled' | 'upgradeUrl'>): string | null {
+  if (!config.enabled) return null
+  return config.upgradeUrl || IN_APP_PLANS_PATH
+}
+
 /** Why a workspace was not given a trial. Null when it was. */
 export type TrialSkipReason =
   /** Cloud is off, which is every self-hosted install. */
@@ -141,10 +155,11 @@ export async function startTrialIfEligible(opts: { anchor: Date }): Promise<Tria
  */
 export function trialNotice(config: CloudConfig): PlanNotice | null {
   if (!config.enabled || !config.trialActive || !config.trial) return null
+  const actionUrl = plansActionUrl(config)
   return {
     label: `${PLAN_CATALOGUE[config.trial.plan].name} trial`,
     message: 'Your workspace moves to the Free plan when this ends. Nothing is deleted.',
     expiresAt: config.trial.endsAt,
-    ...(config.upgradeUrl ? { actionUrl: config.upgradeUrl, actionLabel: 'See plans' } : {}),
+    ...(actionUrl ? { actionUrl, actionLabel: 'See plans' } : {}),
   }
 }

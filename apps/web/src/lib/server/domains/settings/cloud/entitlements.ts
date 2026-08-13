@@ -17,6 +17,7 @@
 
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import { getCloudConfig } from './cloud.service'
+import { plansActionUrl } from './trial'
 import {
   ENTITLEMENTS,
   ENTITLEMENT_KEYS,
@@ -95,6 +96,7 @@ export function buildRefusal(config: CloudConfig, key: EntitlementKey): Entitlem
   // a nonsense upsell, so in that case the refusal reports no required plan
   // and the copy degrades to "contact us" instead.
   const required = cheapest && current && cheapest.rank <= current.rank ? null : cheapest
+  const upgradeUrl = plansActionUrl(config)
   return new EntitlementRequiredError({
     entitlement: key,
     friendly: definition.friendly,
@@ -104,6 +106,6 @@ export function buildRefusal(config: CloudConfig, key: EntitlementKey): Entitlem
     currentPlanName: current?.name ?? null,
     requiredPlan: required?.id ?? null,
     requiredPlanName: required?.name ?? null,
-    ...(config.upgradeUrl ? { upgradeUrl: config.upgradeUrl } : {}),
+    ...(upgradeUrl ? { upgradeUrl } : {}),
   })
 }
