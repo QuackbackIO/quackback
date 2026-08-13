@@ -31,7 +31,7 @@ const CONFIG: BillingConfig = {
       outcome: 'price_pro_outcome',
       outcomeMeter: 'meter_outcome',
     },
-    business: { seat: 'price_biz_seat' },
+    scale: { seat: 'price_scale_seat' },
   },
 }
 
@@ -151,17 +151,14 @@ describe('toSnapshot', () => {
   })
 
   it('carries a null period end rather than an epoch date', () => {
-    const snapshot = toSnapshot(
-      subscription({ current_period_end: null }),
-      CONFIG,
-      FETCHED_AT
-    )
+    const snapshot = toSnapshot(subscription({ current_period_end: null }), CONFIG, FETCHED_AT)
     expect(snapshot.currentPeriodEnd).toBeNull()
   })
 
   it('reads the cancellation flag', () => {
-    expect(toSnapshot(subscription({ cancel_at_period_end: true }), CONFIG, FETCHED_AT)
-      .cancelAtPeriodEnd).toBe(true)
+    expect(
+      toSnapshot(subscription({ cancel_at_period_end: true }), CONFIG, FETCHED_AT).cancelAtPeriodEnd
+    ).toBe(true)
   })
 })
 

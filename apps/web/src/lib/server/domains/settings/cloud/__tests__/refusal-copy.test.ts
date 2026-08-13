@@ -65,6 +65,7 @@ describe('the defects that shipped', () => {
     ['webhooks', 'Webhooks are '],
     ['workflows', 'Workflows are '],
     ['aiInsights', 'AI insights are '],
+    ['aiDrafts', 'AI drafts are '],
     ['sso', 'Single sign-on is '],
     ['apiAccess', 'API access is '],
     ['auditLog', 'The audit log is '],
@@ -74,10 +75,13 @@ describe('the defects that shipped', () => {
     expect(buildRefusal(cloud('free'), key).message.slice(0, opening.length)).toBe(opening)
   })
 
-  it('picks the article from the plan name', () => {
-    expect(buildRefusal(cloud('free'), 'sso').message).toContain('an Enterprise feature')
-    expect(buildRefusal(cloud('free'), 'customDomain').message).toContain('a Pro feature')
-    expect(buildRefusal(cloud('free'), 'auditLog').message).toContain('a Business feature')
+  it('takes the article from the plan it names', () => {
+    // Every plan name in today's catalogue takes "a", so this pins that the
+    // copy carries one at all and carries the right plan. The vowel case is
+    // covered by the consistency check below, which survives a rename.
+    expect(buildRefusal(cloud('free'), 'sso').message).toContain('a Scale feature')
+    expect(buildRefusal(cloud('free'), 'customDomain').message).toContain('a Growth feature')
+    expect(buildRefusal(cloud('free'), 'auditLog').message).toContain('a Scale feature')
   })
 
   it('never emits "a" before a vowel-initial plan name or vice versa', () => {
@@ -94,9 +98,9 @@ describe('the defects that shipped', () => {
 
   it('agrees verb in the no-upgrade-available branch too', () => {
     // The "contact us" branch has its own copy path and was equally broken.
-    const config = cloud('enterprise', { entitlements: { customDomain: false } })
+    const config = cloud('scale', { entitlements: { customDomain: false } })
     expect(buildRefusal(config, 'customDomain').message).toBe(
-      'Custom domains are not included in your plan. Your workspace is on Enterprise. Contact us to enable it.'
+      'Custom domains are not included in your plan. Your workspace is on Scale. Contact us to enable it.'
     )
   })
 })

@@ -60,7 +60,7 @@ const SECRET = 'whsec_replay'
 const CATALOGUE = {
   free: { seat: 'price_free' },
   pro: { seat: 'price_pro_seat', limits: { maxBoards: 25 } },
-  business: { seat: 'price_biz_seat', limits: { maxBoards: 100 } },
+  scale: { seat: 'price_scale_seat', limits: { maxBoards: 100 } },
 }
 
 type Client = BillingProviderClient
@@ -74,7 +74,7 @@ type Client = BillingProviderClient
  * refused as foreign, which is correct behaviour and the wrong thing for this
  * suite to be testing.
  */
-function stub(plan: 'pro' | 'business', onFetch?: () => void): Client {
+function stub(plan: 'pro' | 'scale', onFetch?: () => void): Client {
   return {
     getCustomer: vi.fn(async (id: string) => ({
       id,
@@ -93,7 +93,7 @@ function stub(plan: 'pro' | 'business', onFetch?: () => void): Client {
             {
               id: 'si_seat',
               quantity: 1,
-              price: { id: plan === 'pro' ? 'price_pro_seat' : 'price_biz_seat' },
+              price: { id: plan === 'pro' ? 'price_pro_seat' : 'price_scale_seat' },
             },
           ],
         },
@@ -203,17 +203,17 @@ describe.skipIf(!fixture.available)('webhook idempotency and replay', () => {
   })
 
   it('converges on the same state when two events arrive out of order', async () => {
-    // The provider says "you moved to Business" and then "you moved to Pro",
+    // The provider says "you moved to Scale" and then "you moved to Pro",
     // and the network delivers them backwards. Because the handler re-fetches
     // authoritative state instead of trusting the payload, both deliveries
     // apply whatever the subscription actually is now.
-    await deliver(event('evt_later', 'customer.subscription.updated'), stub('business'))
-    expect(await storedPlan()).toBe('business')
+    await deliver(event('evt_later', 'customer.subscription.updated'), stub('scale'))
+    expect(await storedPlan()).toBe('scale')
 
     // The earlier event arrives late. Its payload is irrelevant; the fetch
-    // still reports Business, so nothing regresses.
-    await deliver(event('evt_earlier', 'customer.subscription.updated'), stub('business'))
-    expect(await storedPlan()).toBe('business')
+    // still reports Scale, so nothing regresses.
+    await deliver(event('evt_earlier', 'customer.subscription.updated'), stub('scale'))
+    expect(await storedPlan()).toBe('scale')
   })
 
   it('refuses to apply a snapshot older than the one already applied', async () => {
@@ -230,7 +230,7 @@ describe.skipIf(!fixture.available)('webhook idempotency and replay', () => {
         customer: 'cus_replay',
         status: 'active',
         current_period_end: 1_774_915_200,
-        items: { data: [{ id: 'si', quantity: 1, price: { id: 'price_biz_seat' } }] },
+        items: { data: [{ id: 'si', quantity: 1, price: { id: 'price_scale_seat' } }] },
       },
       config,
       new Date('2026-05-02T00:00:00.000Z')
@@ -248,12 +248,12 @@ describe.skipIf(!fixture.available)('webhook idempotency and replay', () => {
     )
 
     await applySubscription(newer, config)
-    expect(await storedPlan()).toBe('business')
+    expect(await storedPlan()).toBe('scale')
 
     const result = await applySubscription(older, config)
     expect(result.stale).toBe(true)
     // Without the guard this would read 'pro'.
-    expect(await storedPlan()).toBe('business')
+    expect(await storedPlan()).toBe('scale')
   })
 
   it('releases the claim when the handler fails, so the retry can succeed', async () => {
@@ -282,7 +282,7 @@ describe.skipIf(!fixture.available)('webhook idempotency and replay', () => {
   })
 
   it('rejects a forged delivery even when the body is a valid event', async () => {
-    const client = stub('business')
+    const client = stub('scale')
     const raw = JSON.stringify(event('evt_forged', 'customer.subscription.updated'))
     const forged = signWebhookPayload(raw, 'whsec_attacker', Math.floor(Date.now() / 1000))
     const result = await handleBillingWebhook(raw, forged, { client })
@@ -347,7 +347,7 @@ describe.skipIf(!fixture.available)('webhook idempotency and replay', () => {
 
     const result = await deliver(
       event('evt_inflight', 'customer.subscription.updated'),
-      stub('business')
+      stub('scale')
     )
     expect(result).toEqual({
       status: 200,
@@ -367,10 +367,7 @@ describe.skipIf(!fixture.available)('webhook idempotency and replay', () => {
       processedAt: new Date(Date.now() - CLAIM_LEASE_MS * 100),
     })
 
-    const result = await deliver(
-      event('evt_done', 'customer.subscription.updated'),
-      stub('business')
-    )
+    const result = await deliver(event('evt_done', 'customer.subscription.updated'), stub('scale'))
     expect(result).toEqual({
       status: 200,
       body: { received: true, handled: false, duplicate: true },

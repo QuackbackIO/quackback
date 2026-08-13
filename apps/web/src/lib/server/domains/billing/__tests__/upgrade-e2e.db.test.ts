@@ -104,7 +104,7 @@ const WEBHOOK_SECRET = 'whsec_upgrade_e2e'
 const CATALOGUE = {
   free: { seat: 'price_free_seat', limits: { maxBoards: 2 } },
   // Present so a genuine plan CHANGE can be distinguished from the hold.
-  business: { seat: 'price_biz_seat', limits: { maxBoards: 100 } },
+  scale: { seat: 'price_scale_seat', limits: { maxBoards: 100 } },
   pro: {
     seat: 'price_pro_seat',
     liteSeat: 'price_pro_lite',
@@ -270,7 +270,7 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
     expect(await getTierLimits()).toMatchObject({ maxBoards: null })
 
-    // --- 2. Billing on, nothing purchased: Free, and the Pro feature is
+    // --- 2. Billing on, nothing purchased: Free, and the paid feature is
     // refused with a message that names the plan to buy.
     const config = getBillingConfig()!
     await applySubscription(null, config)
@@ -283,9 +283,9 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       error: 'entitlement_required',
       entitlement: 'customDomain',
       currentPlan: 'free',
-      requiredPlan: 'pro',
+      requiredPlan: 'growth',
       message:
-        'Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.',
+        'Custom domains are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.',
     })
     // The Free plan's numeric limits landed too, from the same catalogue.
     expect(await getTierLimits()).toMatchObject({ maxBoards: 2, aiTokensPerMonth: null })
@@ -307,9 +307,17 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     // --- 4. The same call that was refused now returns.
     await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
     expect(await hasEntitlement('workflows')).toBe(true)
-    // Still not everything: Pro does not grant SSO, so the gate is doing real
-    // work rather than having been switched off.
+    // Everything Pro includes, read back through the stored row rather than
+    // off a config object built in the test. This is the path the product
+    // actually takes: webhook -> plan written to settings -> catalogue
+    // consulted, so a catalogue that were present but unread would fail here.
+    expect(await hasEntitlement('mcpServer')).toBe(true)
+    expect(await hasEntitlement('aiDrafts')).toBe(true)
+    expect(await hasEntitlement('aiInsights')).toBe(true)
+    // Still not everything: Pro includes neither SSO nor the audit log, so
+    // the gate is doing real work rather than having been switched off.
     expect(await hasEntitlement('sso')).toBe(false)
+    expect(await hasEntitlement('auditLog')).toBe(false)
 
     // Plan, billing references and numeric limits all moved together.
     const row = await testDb.query.settings.findFirst()
@@ -995,7 +1003,7 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       plan: 'pro',
     })
 
-    // Upgrades to Business. One line is still on a retired price, so the
+    // Upgrades to Scale. One line is still on a retired price, so the
     // subscription is simultaneously resolvable AND drifted.
     const upgraded = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
     upgraded.getSubscription = vi.fn(async (id: string) => ({
@@ -1005,7 +1013,7 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       current_period_end: 1_774_915_200,
       items: {
         data: [
-          { id: 'si_seat', quantity: 2, price: { id: 'price_biz_seat' } },
+          { id: 'si_seat', quantity: 2, price: { id: 'price_scale_seat' } },
           { id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite_retired' } },
         ],
       },
@@ -1021,10 +1029,10 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     )
     invalidateTierLimitsCache()
 
-    // Business, not the stored Pro. The hold must never outrank a plan the
+    // Scale, not the stored Pro. The hold must never outrank a plan the
     // subscription actually resolves to.
     expect(await testDb.query.settings.findFirst().then((r) => r?.cloud)).toMatchObject({
-      plan: 'business',
+      plan: 'scale',
     })
     expect(await getTierLimits()).toMatchObject({ maxBoards: 100 })
   })

@@ -60,11 +60,7 @@ describe('classifySeat', () => {
     // the extras list or the write list turns this red.
     expect(
       classifySeat(
-        set([
-          PERMISSIONS.CONVERSATION_VIEW,
-          PERMISSIONS.TICKET_VIEW,
-          PERMISSIONS.ASSISTANT_MANAGE,
-        ])
+        set([PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.TICKET_VIEW, PERMISSIONS.ASSISTANT_MANAGE])
       )
     ).toEqual({ lite: false, copilotEligible: false })
   })
@@ -211,7 +207,8 @@ describe('billableQuantities', () => {
     for (const seats of shapes) {
       const quantities = billableQuantities(seats, pro)
       const lines = checkoutLineItems(config, 'pro', seats, { copilot: true })
-      const quantityOf = (price: string) => lines.find((line) => line.price === price)?.quantity ?? 0
+      const quantityOf = (price: string) =>
+        lines.find((line) => line.price === price)?.quantity ?? 0
       expect({
         seats,
         seat: quantityOf('price_seat'),
@@ -266,16 +263,10 @@ describe('checkoutLineItems', () => {
     // rejecting the update (and 500ing the webhook forever) or charging and
     // crediting a seat that never existed.
     expect(
-      checkoutLineItems(
-        config,
-        'pro',
-        seats({ full: 0, lite: 3, copilotEligible: 0, total: 3 }),
-        { copilot: true }
-      )
-    ).toEqual([
-      { price: 'price_lite', quantity: 3 },
-      { price: 'price_outcome' },
-    ])
+      checkoutLineItems(config, 'pro', seats({ full: 0, lite: 3, copilotEligible: 0, total: 3 }), {
+        copilot: true,
+      })
+    ).toEqual([{ price: 'price_lite', quantity: 3 }, { price: 'price_outcome' }])
   })
 
   it('still produces a licensed line for an all-lite workspace on a seat-only plan', () => {
@@ -290,13 +281,10 @@ describe('checkoutLineItems', () => {
   it('omits meters with a zero count', () => {
     expect(
       checkoutLineItems(config, 'pro', seats({ full: 3, lite: 0, copilotEligible: 0, total: 3 }))
-    ).toEqual([
-      { price: 'price_seat', quantity: 3 },
-      { price: 'price_outcome' },
-    ])
+    ).toEqual([{ price: 'price_seat', quantity: 3 }, { price: 'price_outcome' }])
   })
 
   it('returns nothing for a plan the deployment does not sell', () => {
-    expect(checkoutLineItems(config, 'enterprise', seats())).toEqual([])
+    expect(checkoutLineItems(config, 'scale', seats())).toEqual([])
   })
 })

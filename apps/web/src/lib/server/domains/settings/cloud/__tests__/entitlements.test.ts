@@ -49,9 +49,7 @@ describe('isEntitled', () => {
   })
 
   it('lets an explicit override close a feature the plan does include', () => {
-    expect(isEntitled(cloud({ plan: 'enterprise', entitlements: { sso: false } }), 'sso')).toBe(
-      false
-    )
+    expect(isEntitled(cloud({ plan: 'scale', entitlements: { sso: false } }), 'sso')).toBe(false)
   })
 
   it('denies everything when enabled with no plan (fail closed)', () => {
@@ -69,29 +67,30 @@ describe('isEntitled', () => {
 describe('the refusal names the plan', () => {
   it('names the cheapest plan that would grant the feature', () => {
     const err = buildRefusal(cloud({ plan: 'free' }), 'customDomain')
-    expect(err.requiredPlan).toBe('pro')
-    expect(err.requiredPlanName).toBe('Pro')
+    expect(err.requiredPlan).toBe('growth')
+    expect(err.requiredPlanName).toBe('Growth')
     expect(err.currentPlan).toBe('free')
     expect(err.currentPlanName).toBe('Free')
     expect(err.message).toBe(
-      'Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
+      'Custom domains are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
     )
   })
 
   it('names the smallest sufficient upgrade, not the largest plan', () => {
-    // `sso` is Enterprise-only; `auditLog` starts at Business. A refusal that
-    // always pointed at the top plan would over-sell and read as dishonest.
-    expect(buildRefusal(cloud({ plan: 'pro' }), 'auditLog').requiredPlanName).toBe('Business')
-    expect(buildRefusal(cloud({ plan: 'pro' }), 'sso').requiredPlanName).toBe('Enterprise')
+    // The MCP server is included from the cheapest paid plan; the audit log
+    // only from the dearest. A refusal that always pointed at the top plan
+    // would over-sell and read as dishonest.
+    expect(buildRefusal(cloud({ plan: 'free' }), 'mcpServer').requiredPlanName).toBe('Growth')
+    expect(buildRefusal(cloud({ plan: 'free' }), 'auditLog').requiredPlanName).toBe('Scale')
   })
 
   it('does not invent an upsell when the workspace already has the plan', () => {
-    // An explicit override denied a feature Enterprise grants. Telling the
-    // customer to upgrade to Enterprise would be nonsense.
-    const err = buildRefusal(cloud({ plan: 'enterprise', entitlements: { sso: false } }), 'sso')
+    // An explicit override denied a feature the top plan grants. Telling the
+    // customer to upgrade to it would be nonsense.
+    const err = buildRefusal(cloud({ plan: 'scale', entitlements: { sso: false } }), 'sso')
     expect(err.requiredPlan).toBeNull()
     expect(err.message).toBe(
-      'Single sign-on is not included in your plan. Your workspace is on Enterprise. Contact us to enable it.'
+      'Single sign-on is not included in your plan. Your workspace is on Scale. Contact us to enable it.'
     )
   })
 
@@ -141,11 +140,11 @@ describe('the refusal reuses the existing 402 plumbing', () => {
       limit: 'entitlements.mcpServer',
       entitlement: 'mcpServer',
       message:
-        'The MCP server is a Business feature. Your workspace is on Free. Upgrade to Business to enable it.',
+        'The MCP server is a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.',
       currentPlan: 'free',
       currentPlanName: 'Free',
-      requiredPlan: 'business',
-      requiredPlanName: 'Business',
+      requiredPlan: 'growth',
+      requiredPlanName: 'Growth',
     })
   })
 })
@@ -162,7 +161,7 @@ describe('requireEntitlement against a configured workspace', () => {
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('customDomain')).rejects.toThrow(
-      /Custom domains are a Pro feature/
+      /Custom domains are a Growth feature/
     )
   })
 
@@ -174,7 +173,40 @@ describe('requireEntitlement against a configured workspace', () => {
     await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
   })
 
+  it('resolves the level from the stored plan, not from a hand-built config', async () => {
+    // Reads the plan out of a stored settings blob and refuses on it, so the
+    // catalogue level is reached through the real resolution path rather than
+    // asserted on a hand-built config object.
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
+      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'growth' } },
+    })
+    const { requireEntitlement } = await import('../entitlements')
+    await expect(requireEntitlement('mcpServer')).resolves.toBeUndefined()
+    await expect(requireEntitlement('aiInsights')).rejects.toThrow(
+      /AI insights are a Pro feature. Your workspace is on Growth./
+    )
+  })
+
   it('reports the whole catalogue for a plan surface', async () => {
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
+      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'growth' } },
+    })
+    const { listEntitlements } = await import('../entitlements')
+    expect(await listEntitlements()).toEqual({
+      customDomain: true,
+      sso: false,
+      aiAssistant: true,
+      aiDrafts: true,
+      aiInsights: false,
+      workflows: false,
+      apiAccess: true,
+      mcpServer: true,
+      webhooks: true,
+      auditLog: false,
+    })
+  })
+
+  it('reports a different set one plan up, so the surface is not a constant', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
       settings: { id: 'ws_1', cloud: { enabled: true, plan: 'pro' } },
     })
@@ -183,10 +215,11 @@ describe('requireEntitlement against a configured workspace', () => {
       customDomain: true,
       sso: false,
       aiAssistant: true,
+      aiDrafts: true,
       aiInsights: true,
       workflows: true,
       apiAccess: true,
-      mcpServer: false,
+      mcpServer: true,
       webhooks: true,
       auditLog: false,
     })

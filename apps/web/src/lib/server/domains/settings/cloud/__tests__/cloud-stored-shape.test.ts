@@ -53,7 +53,7 @@ describe('stored/resolved twins', () => {
       null,
       {
         enabled: true,
-        plan: 'business',
+        plan: 'scale',
         entitlements: { sso: true, auditLog: false },
         billing: {
           provider: 'acme',
@@ -69,7 +69,7 @@ describe('stored/resolved twins', () => {
     const resolved = resolveCloudConfig(stored)
     expect(resolved).toEqual({
       enabled: true,
-      plan: 'business',
+      plan: 'scale',
       entitlements: { sso: true, auditLog: false },
       billing: {
         provider: 'acme',

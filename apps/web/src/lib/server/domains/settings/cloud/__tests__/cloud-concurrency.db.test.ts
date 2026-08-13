@@ -11,7 +11,7 @@
  *
  *     T0  reconciler reads  { plan: 'pro' }
  *     T1  billing writes    { plan: 'pro', billing.subscriptionRef: 'sub_1' }
- *     T2  reconciler writes { plan: 'business' }        <- subscriptionRef gone
+ *     T2  reconciler writes { plan: 'scale' }        <- subscriptionRef gone
  *
  * Nothing errors, nothing logs, and the workspace's subscription reference is
  * simply absent. That is the failure this file reproduces and then proves
@@ -177,7 +177,10 @@ async function readCloud(): Promise<{
     .select({ cloud: settings.cloud, revision: settings.cloudRevision })
     .from(settings)
     .limit(1)
-  return { cloud: (row?.cloud ?? null) as Record<string, unknown> | null, revision: row?.revision ?? 0 }
+  return {
+    cloud: (row?.cloud ?? null) as Record<string, unknown> | null,
+    revision: row?.revision ?? 0,
+  }
 }
 
 /** Run `fn` with the code under test bound to `connection`. */
@@ -191,9 +194,7 @@ describe.skipIf(!available)('settings.cloud under two concurrent writers', () =>
     // plan, the billing writer sets a subscription reference, and they run at
     // the same time on different connections.
     await Promise.all([
-      on(alpha!, () =>
-        writeCloudConfig({ enabled: true, plan: 'business' }, { writer: 'config' })
-      ),
+      on(alpha!, () => writeCloudConfig({ enabled: true, plan: 'scale' }, { writer: 'config' })),
       on(beta!, () =>
         writeCloudConfig(
           { billing: { provider: 'stripe', subscriptionRef: 'sub_1' } },
@@ -207,7 +208,7 @@ describe.skipIf(!available)('settings.cloud under two concurrent writers', () =>
     // what concurrency means — but neither may erase the other's field.
     expect(cloud).toMatchObject({
       enabled: true,
-      plan: 'business',
+      plan: 'scale',
       billing: expect.objectContaining({ provider: 'stripe', subscriptionRef: 'sub_1' }),
     })
     // Two effective writes, two revisions. A lost update would show as 1.
@@ -221,9 +222,7 @@ describe.skipIf(!available)('settings.cloud under two concurrent writers', () =>
     const writes = [
       on(alpha!, () => writeCloudConfig({ enabled: true }, { writer: 'config' })),
       on(beta!, () => writeCloudConfig({ plan: 'pro' }, { writer: 'billing' })),
-      on(alpha!, () =>
-        writeCloudConfig({ entitlements: { sso: true } }, { writer: 'config' })
-      ),
+      on(alpha!, () => writeCloudConfig({ entitlements: { sso: true } }, { writer: 'config' })),
       on(beta!, () =>
         writeCloudConfig({ billing: { customerRef: 'cus_1' } }, { writer: 'billing' })
       ),
@@ -278,7 +277,7 @@ describe.skipIf(!available)('settings.cloud under two concurrent writers', () =>
     await on(alpha!, () => writeCloudConfig({ enabled: true, plan: 'pro' }, { writer: 'config' }))
     const stale = (await readCloud()).revision
 
-    await on(beta!, () => writeCloudConfig({ plan: 'business' }, { writer: 'billing' }))
+    await on(beta!, () => writeCloudConfig({ plan: 'scale' }, { writer: 'billing' }))
 
     await expect(
       on(alpha!, () =>
@@ -287,14 +286,14 @@ describe.skipIf(!available)('settings.cloud under two concurrent writers', () =>
     ).rejects.toThrow(/changed in another session/i)
 
     // And the refusal left the winner's value alone.
-    expect((await readCloud()).cloud).toMatchObject({ plan: 'business' })
+    expect((await readCloud()).cloud).toMatchObject({ plan: 'scale' })
   })
 
   it('accepts a write carrying the current revision', async () => {
     await on(alpha!, () => writeCloudConfig({ enabled: true, plan: 'pro' }, { writer: 'config' }))
     const current = (await readCloud()).revision
     const result = await on(beta!, () =>
-      writeCloudConfig({ plan: 'business' }, { writer: 'billing', expectedRevision: current })
+      writeCloudConfig({ plan: 'scale' }, { writer: 'billing', expectedRevision: current })
     )
     expect(result).toEqual({ changed: true, revision: current + 1 })
   })

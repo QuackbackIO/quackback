@@ -46,7 +46,7 @@ import type { TierFeatureFlags } from '../tier-limits.types'
  * need a bespoke arrangement express it as explicit entitlement overrides on
  * top of a catalogue plan, not as a new plan id.
  */
-export const PLAN_IDS = ['free', 'pro', 'business', 'enterprise'] as const
+export const PLAN_IDS = ['free', 'growth', 'pro', 'scale'] as const
 
 export type PlanId = (typeof PLAN_IDS)[number]
 
@@ -61,9 +61,10 @@ export interface PlanDefinition {
   rank: number
   /**
    * Indefinite article for {@link name} in refusal copy ("a Pro feature",
-   * "an Enterprise feature"). Declared rather than derived: an initial-vowel
+   * "an Advanced feature"). Declared rather than derived: an initial-vowel
    * test is wrong for names like "Unlimited" ("an Unlimited plan") and
-   * "One" ("a One plan"), and there are only a handful of plans.
+   * "One" ("a One plan"), and there are only a handful of plans. Every plan
+   * in today's catalogue happens to take "a".
    */
   article: 'a' | 'an'
   /** Entitlements this plan grants by default. */
@@ -111,12 +112,28 @@ export const ENTITLEMENTS = {
     chokepoint:
       'lib/server/domains/assistant/assistant.orchestrator.ts, lib/server/domains/assistant/copilot-gate.ts',
   },
+  /**
+   * Post summaries and sentiment. Deliberately *not* the drafting half of the
+   * AI feature set: see {@link ENTITLEMENTS.aiDrafts}, which is included a
+   * tier earlier, so one key could not have covered both.
+   */
   aiInsights: {
     friendly: 'AI insights',
     plural: true,
     tierFeature: null,
     chokepoint:
-      'the enforceAiTokenBudget() family: summaries, sentiment, merge suggestions, auto-tagging',
+      'intended seam, not wired: lib/server/domains/summary/summary.service.ts (post summaries), lib/server/domains/sentiment/sentiment.service.ts',
+  },
+  /**
+   * Drafting help for teammates answering in the inbox, and the macro library
+   * those drafts insert from.
+   */
+  aiDrafts: {
+    friendly: 'AI drafts',
+    plural: true,
+    tierFeature: null,
+    chokepoint:
+      'intended seam, not wired: lib/server/domains/assistant/copilot-gate.ts (gateCopilotAguiRequest, the shared gate for the drafting routes), lib/server/domains/macros/macro.service.ts',
   },
   workflows: {
     friendly: 'Workflows',
@@ -198,44 +215,45 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
     rank: 0,
     grants: [],
   },
+  growth: {
+    id: 'growth',
+    article: 'a',
+    name: 'Growth',
+    rank: 1,
+    grants: ['customDomain', 'aiAssistant', 'aiDrafts', 'apiAccess', 'mcpServer', 'webhooks'],
+  },
   pro: {
     id: 'pro',
     article: 'a',
     name: 'Pro',
-    rank: 1,
-    grants: ['customDomain', 'aiAssistant', 'aiInsights', 'workflows', 'apiAccess', 'webhooks'],
-  },
-  business: {
-    id: 'business',
-    article: 'a',
-    name: 'Business',
     rank: 2,
     grants: [
       'customDomain',
       'aiAssistant',
+      'aiDrafts',
       'aiInsights',
-      'workflows',
       'apiAccess',
-      'webhooks',
       'mcpServer',
-      'auditLog',
+      'webhooks',
+      'workflows',
     ],
   },
-  enterprise: {
-    id: 'enterprise',
-    article: 'an',
-    name: 'Enterprise',
+  scale: {
+    id: 'scale',
+    article: 'a',
+    name: 'Scale',
     rank: 3,
     grants: [
       'customDomain',
-      'sso',
       'aiAssistant',
+      'aiDrafts',
       'aiInsights',
-      'workflows',
       'apiAccess',
-      'webhooks',
-      'mcpServer',
       'auditLog',
+      'mcpServer',
+      'sso',
+      'webhooks',
+      'workflows',
     ],
   },
 }

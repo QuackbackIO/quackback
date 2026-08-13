@@ -55,7 +55,7 @@ describe('config-file schema: spec.cloud', () => {
       envelope({
         cloud: {
           enabled: true,
-          plan: 'business',
+          plan: 'scale',
           entitlements: { sso: true, auditLog: false },
           billing: { provider: 'acme', customerRef: 'cus_1', status: 'active' },
           upgradeUrl: 'https://example.com/billing',
@@ -93,6 +93,13 @@ describe('config-file schema: spec.cloud', () => {
         envelope({ cloud: { enabled: true, plan: 'pro', billing: { status: 'refunding' } } })
       ).success
     ).toBe(false)
+  })
+
+  it.each(['business', 'enterprise'])('rejects the retired plan id %s', (plan) => {
+    // These named plans in an earlier catalogue. A config file still carrying
+    // one must fail loudly rather than be silently reinterpreted, which is
+    // what makes a stale file recoverable instead of quietly wrong.
+    expect(parseQuackbackConfig(envelope({ cloud: { enabled: true, plan } })).success).toBe(false)
   })
 
   it('rejects a non-https upgrade link', () => {
@@ -172,9 +179,9 @@ describe('reconcileFileIntoDb — cloud block', () => {
       },
       managedFieldPaths: [],
     }))
-    await reconcileFileIntoDb({ cloud: { enabled: true, plan: 'enterprise' } }, deps)
+    await reconcileFileIntoDb({ cloud: { enabled: true, plan: 'scale' } }, deps)
     const patch = lastCloudPatch(deps)
-    expect(patch).toEqual({ enabled: true, plan: 'enterprise' })
+    expect(patch).toEqual({ enabled: true, plan: 'scale' })
     // The absence is the assertion: a patch with no `billing` key cannot
     // overwrite a stored one, whatever the merge does with it.
     expect(patch).not.toHaveProperty('billing')

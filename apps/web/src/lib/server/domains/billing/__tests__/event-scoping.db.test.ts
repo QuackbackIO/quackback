@@ -75,7 +75,7 @@ const OTHER = { customer: 'cus_other_workspace', subscription: 'sub_other_worksp
 const CATALOGUE = {
   free: { seat: 'price_free' },
   pro: { seat: 'price_pro_seat', limits: { maxBoards: 25 } },
-  business: { seat: 'price_biz_seat', limits: { maxBoards: 100 } },
+  scale: { seat: 'price_scale_seat', limits: { maxBoards: 100 } },
 }
 
 interface Calls {
@@ -91,7 +91,7 @@ interface Calls {
  */
 function stub(
   calls: Calls,
-  plan: 'pro' | 'business',
+  plan: 'pro' | 'scale',
   customer: string,
   ref: string,
   stampedFor: string | null = null
@@ -117,7 +117,7 @@ function stub(
             {
               id: 'si_seat',
               quantity: 1,
-              price: { id: plan === 'pro' ? 'price_pro_seat' : 'price_biz_seat' },
+              price: { id: plan === 'pro' ? 'price_pro_seat' : 'price_scale_seat' },
             },
           ],
         },
@@ -217,7 +217,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_foreign', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription)
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription)
     )
 
     // Acknowledged — the delivery is legitimate, it is simply not ours, and a
@@ -254,7 +254,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
       // Payload lies: says cus_mine.
       subscriptionEvent('evt_spoofed', OTHER.subscription, MINE.customer),
       // Provider tells the truth: sub_other_workspace belongs to cus_other_workspace.
-      stub(calls, 'business', OTHER.customer, OTHER.subscription)
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription)
     )
     expect(result.body).toMatchObject({ handled: false, foreign: true })
     expect(calls.fetched).toEqual([OTHER.subscription])
@@ -268,11 +268,11 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_mine', MINE.subscription, MINE.customer),
-      stub(calls, 'business', MINE.customer, MINE.subscription)
+      stub(calls, 'scale', MINE.customer, MINE.subscription)
     )
     expect(result).toEqual({ status: 200, body: { received: true, handled: true } })
     expect(await storedCloud()).toMatchObject({
-      plan: 'business',
+      plan: 'scale',
       billing: { customerRef: MINE.customer, subscriptionRef: MINE.subscription },
     })
     expect(calls.pushes).toHaveLength(1)
@@ -290,7 +290,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
       created: Math.floor(Date.now() / 1000),
       data: { object: { id: OTHER.subscription, customer: OTHER.customer } },
     }
-    const result = await deliver(raw, stub(calls, 'business', OTHER.customer, OTHER.subscription))
+    const result = await deliver(raw, stub(calls, 'scale', OTHER.customer, OTHER.subscription))
     expect(result.body).toMatchObject({ handled: false, foreign: true })
     expect(await storedCloud()).toMatchObject({ plan: 'pro' })
     expect(await currentSubscriptionRef()).toMatchObject({ subscriptionRef: MINE.subscription })
@@ -344,7 +344,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_unstamped', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription, null)
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription, null)
     )
     expect(result.body).toMatchObject({ handled: false, foreign: true })
     expect(await storedCloud()).toBeNull()
@@ -358,7 +358,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_other_ws', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription, 'workspace_someone_else')
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription, 'workspace_someone_else')
     )
     expect(result.body).toMatchObject({ handled: false, foreign: true })
     expect(await storedCloud()).toBeNull()
@@ -372,7 +372,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
       subscriptionEvent('evt_intruder', OTHER.subscription, OTHER.customer),
       // Stamped for US, to make the point: with a customer on record the
       // stamp is irrelevant, because equality already answers the question.
-      stub(calls, 'business', OTHER.customer, OTHER.subscription, await workspaceStamp())
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription, await workspaceStamp())
     )
     expect(await storedCloud()).toMatchObject({
       billing: { customerRef: MINE.customer },
@@ -438,7 +438,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_after_cancel', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription, await workspaceStamp())
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription, await workspaceStamp())
     )
     expect(result.body).toMatchObject({ handled: false, foreign: true })
     expect(await storedCloud()).toMatchObject({
@@ -480,7 +480,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_after_sweep', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription, await workspaceStamp())
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription, await workspaceStamp())
     )
     expect(result.body).toMatchObject({ handled: false, foreign: true })
     expect(await storedCloud()).toMatchObject({ billing: { customerRef: MINE.customer } })
@@ -490,11 +490,11 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     await deliver(
       subscriptionEvent('evt_foreign_twice', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription)
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription)
     )
     const second = await deliver(
       subscriptionEvent('evt_foreign_twice', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription)
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription)
     )
     expect(second.body).toMatchObject({ duplicate: true })
     // Zero fetches: the payload pre-filter refused it before spending any
@@ -512,7 +512,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_cheap_reject', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription)
+      stub(calls, 'scale', OTHER.customer, OTHER.subscription)
     )
     expect(result.body).toMatchObject({ handled: false, foreign: true })
     expect(calls.fetched).toEqual([])

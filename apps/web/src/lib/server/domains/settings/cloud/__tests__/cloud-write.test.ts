@@ -164,7 +164,7 @@ describe('writeCloudConfig', () => {
     // the workspace is on. This is the whole point of leaf-level managed paths.
     hoisted.state.row = row({
       managedFieldPaths: ['cloud.enabled', 'cloud.plan'],
-      cloud: { enabled: true, plan: 'business' },
+      cloud: { enabled: true, plan: 'scale' },
       cloudRevision: 3,
     })
     await writeCloudConfig(
@@ -173,7 +173,7 @@ describe('writeCloudConfig', () => {
     )
     expect(written().cloud).toEqual({
       enabled: true,
-      plan: 'business',
+      plan: 'scale',
       entitlements: {},
       billing: { provider: 'acme', subscriptionRef: 'sub_1' },
       source: 'billing',
@@ -185,7 +185,7 @@ describe('writeCloudConfig', () => {
   it('never refuses the config writer its own claimed paths', async () => {
     hoisted.state.row = row({ managedFieldPaths: ['cloud.enabled', 'cloud.plan'] })
     await expect(
-      writeCloudConfig({ enabled: true, plan: 'enterprise' }, { writer: 'config' })
+      writeCloudConfig({ enabled: true, plan: 'scale' }, { writer: 'config' })
     ).resolves.toEqual({ changed: true, revision: 1 })
   })
 

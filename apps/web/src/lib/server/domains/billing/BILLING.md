@@ -471,7 +471,7 @@ through `deps.updateSettings`. Interleave them:
 ```
 T0  reconciler reads   { plan: 'pro' }
 T1  billing writes     { plan: 'pro', billing.subscriptionRef: 'sub_1' }
-T2  reconciler writes  { plan: 'business' }          <- subscriptionRef gone
+T2  reconciler writes  { plan: 'scale' }             <- subscriptionRef gone
 ```
 
 Nothing errors and nothing logs. The workspace's subscription reference is
@@ -722,8 +722,8 @@ Requiring a second, explicit variable makes a live key an intentional act. An
 unrecognised key prefix is treated as **live**, because assuming test mode for
 a key that is actually live is the expensive direction of that mistake.
 
-The catalogue may declare a subset of the modelled plans — selling only Pro
-and Business is normal. A price filed under a plan the product does not model
+The catalogue may declare a subset of the modelled plans — selling only Growth
+and Pro is normal. A price filed under a plan the product does not model
 turns billing **off** rather than being dropped, because dropping it would
 resolve subscriptions to no plan and silently downgrade paying workspaces.
 

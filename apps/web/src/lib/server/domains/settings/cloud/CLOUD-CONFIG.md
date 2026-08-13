@@ -67,17 +67,18 @@ bullet and gating it means scattering half-checks that drift apart. The
 catalogue below was derived by auditing the codebase, not by picking plausible
 names.
 
-| Key            | Chokepoint                                                                                                            | Why it is a plan boundary                                                                                                                                                                                               |
-| -------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `customDomain` | `help-center/help-center-domain.service.ts` → `setHelpCenterDomain`                                                   | Standard paid boundary. `tier_limits.features.customDomain` has existed since tier limits shipped and **was never enforced anywhere** — this closes a hole the schema already declared                                  |
-| `sso`          | `functions/sso.ts` → `upsertIdentityProviderFn`                                                                       | Classic enterprise boundary. Runtime _registration_ already reads `features.customOidcProvider`, but provider CRUD was ungated                                                                                          |
-| `aiAssistant`  | `assistant.orchestrator.ts`, `assistant/copilot-gate.ts`                                                              | The two entry points for the customer-facing agent and inbox Copilot. Distinct from `aiTokensPerMonth`: the budget answers "how much", this answers "at all"                                                            |
-| `aiInsights`   | The `enforceAiTokenBudget()` family — summaries, sentiment, merge suggestions, auto-tagging, attribute classification | One coherent family, all already funnelling through one helper                                                                                                                                                          |
-| `workflows`    | `workflows/workflow.service.ts` → `createWorkflow`                                                                    | The authoring chokepoint. Note: there is **no simple/advanced split** in the engine, so the entitlement is `workflows`, not `advancedWorkflows` — naming it "advanced" would imply a distinction the code does not have |
-| `apiAccess`    | `domains/api/auth.ts` → `withApiKeyAuth`                                                                              | The single seam every `/api/v1/*` route passes through                                                                                                                                                                  |
-| `mcpServer`    | `lib/server/mcp/handler.ts`                                                                                           | Gated today only at config-_write_ time, not at request time                                                                                                                                                            |
-| `webhooks`     | `domains/webhooks/webhook.service.ts`                                                                                 | Already tier-gated; the entitlement adds the plan name to the refusal                                                                                                                                                   |
-| `auditLog`     | `functions/audit-log.ts` → `listAuditEventsFn`                                                                        | Retention/visibility is a standard enterprise boundary                                                                                                                                                                  |
+| Key            | Chokepoint                                                                        | Why it is a plan boundary                                                                                                                                                                                               |
+| -------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `customDomain` | `help-center/help-center-domain.service.ts` → `setHelpCenterDomain`               | Standard paid boundary. `tier_limits.features.customDomain` has existed since tier limits shipped and **was never enforced anywhere** — this closes a hole the schema already declared                                  |
+| `sso`          | `functions/sso.ts` → `upsertIdentityProviderFn`                                   | Classic enterprise boundary. Runtime _registration_ already reads `features.customOidcProvider`, but provider CRUD was ungated                                                                                          |
+| `aiAssistant`  | `assistant.orchestrator.ts`, `assistant/copilot-gate.ts`                          | The two entry points for the customer-facing agent and inbox Copilot. Distinct from `aiTokensPerMonth`: the budget answers "how much", this answers "at all"                                                            |
+| `aiInsights`   | `summary/summary.service.ts` (post summaries), `sentiment/sentiment.service.ts`   | Reading what customers said in bulk. Split from `aiDrafts` because the two sit on different plans, and one key cannot hold two levels                                                                                   |
+| `aiDrafts`     | `assistant/copilot-gate.ts` → `gateCopilotAguiRequest`, `macros/macro.service.ts` | Drafting help for teammates answering in the inbox, and the macro library those drafts insert from                                                                                                                      |
+| `workflows`    | `workflows/workflow.service.ts` → `createWorkflow`                                | The authoring chokepoint. Note: there is **no simple/advanced split** in the engine, so the entitlement is `workflows`, not `advancedWorkflows` — naming it "advanced" would imply a distinction the code does not have |
+| `apiAccess`    | `domains/api/auth.ts` → `withApiKeyAuth`                                          | The single seam every `/api/v1/*` route passes through                                                                                                                                                                  |
+| `mcpServer`    | `lib/server/mcp/handler.ts`                                                       | Gated today only at config-_write_ time, not at request time                                                                                                                                                            |
+| `webhooks`     | `domains/webhooks/webhook.service.ts`                                             | Already tier-gated; the entitlement adds the plan name to the refusal                                                                                                                                                   |
+| `auditLog`     | `functions/audit-log.ts` → `listAuditEventsFn`                                    | Retention/visibility is a standard enterprise boundary                                                                                                                                                                  |
 
 Deliberately **excluded**:
 
@@ -111,7 +112,8 @@ never read entitlements.
 
 ## Plans
 
-`PLAN_IDS` is a closed set (`free`, `pro`, `business`, `enterprise`). Closed on
+`PLAN_IDS` is a closed set (`free`, `growth`, `pro`, `scale`), ranked 0 to 3 in
+that order. Closed on
 purpose: the whole value of modelling a plan is that the product can rank it,
 name it in a refusal, and derive what it grants. A free-form string can do none
 of those. A negotiated or grandfathered workspace is expressed as an explicit
@@ -127,7 +129,8 @@ Resolution order in `isEntitled()`:
    hand-edited-row case, and failing closed is right once the switch is on.
 
 The refusal names the **cheapest** plan that grants the feature, not the largest
-— `auditLog` says Business, not Enterprise. When an override denies something
+— `mcpServer` says Growth, even though Pro and Scale include it too. When an
+override denies something
 the workspace's own plan grants, there is no upgrade that fixes it, so the
 refusal reports no required plan and the copy degrades to "contact us" rather
 than selling a plan the customer already has.
@@ -203,7 +206,7 @@ kind: QuackbackConfig
 spec:
   cloud:
     enabled: true
-    plan: business
+    plan: pro
     entitlements:
       sso: true # negotiated, above the plan's defaults
     upgradeUrl: https://example.com/billing

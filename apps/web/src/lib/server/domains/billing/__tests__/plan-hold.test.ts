@@ -97,7 +97,7 @@ const CONFIG: BillingConfig = {
       outcomeMeter: 'meter_planhold',
       limits: { maxBoards: 25 },
     },
-    business: { seat: 'price_biz_seat', limits: { maxBoards: 100 } },
+    scale: { seat: 'price_scale_seat', limits: { maxBoards: 100 } },
   },
 }
 
@@ -233,13 +233,13 @@ describe('a subscription that genuinely ended', () => {
 
 describe('the hold never outranks what the subscription actually says', () => {
   it('applies an upgrade the customer has paid for, retired line and all', async () => {
-    // Moved to Business while one line is still on a retired price. Writing
+    // Moved to Scale while one line is still on a retired price. Writing
     // the stored plan here would ignore an upgrade already being charged for.
     const snapshot = toSnapshot(
       subscription({
         items: {
           data: [
-            { id: 'si_biz', quantity: 7, price: { id: 'price_biz_seat' } },
+            { id: 'si_biz', quantity: 7, price: { id: 'price_scale_seat' } },
             { id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite_retired' } },
           ],
         },
@@ -247,14 +247,14 @@ describe('the hold never outranks what the subscription actually says', () => {
       CONFIG,
       FETCHED_AT
     )
-    expect(snapshot.plan).toBe('business')
+    expect(snapshot.plan).toBe('scale')
     expect(snapshot.unaccountedItems).toHaveLength(1)
 
     const result = await applySubscription(snapshot, CONFIG)
 
-    expect(result.plan).toBe('business')
+    expect(result.plan).toBe('scale')
     expect(result.planHeld).toBe(false)
-    expect(written()).toEqual([{ plan: 'business', limits: { maxBoards: 100 } }])
+    expect(written()).toEqual([{ plan: 'scale', limits: { maxBoards: 100 } }])
   })
 
   it('falls to Free when only a METERED line is unaccounted', async () => {

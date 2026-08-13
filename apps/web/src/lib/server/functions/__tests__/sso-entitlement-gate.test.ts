@@ -157,7 +157,7 @@ describe('plan gate on a workspace without the SSO entitlement', () => {
       caught = err as EntitlementRequiredError
     }
     expect(caught!.message).toBe(
-      'Single sign-on is an Enterprise feature. Your workspace is on Free. Upgrade to Enterprise to enable it.'
+      'Single sign-on is a Scale feature. Your workspace is on Free. Upgrade to Scale to enable it.'
     )
     expect(caught!.statusCode).toBe(402)
   })
@@ -182,9 +182,9 @@ describe('plan gate on a workspace without the SSO entitlement', () => {
 })
 
 describe('plan gate on a workspace that holds the entitlement', () => {
-  it('allows creating a provider on Enterprise', async () => {
+  it('allows creating a provider on Scale', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'enterprise' } },
+      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'scale' } },
     })
     await expect(upsert({ data: { ...NEW_PROVIDER, enabled: true } })).resolves.toBeDefined()
   })

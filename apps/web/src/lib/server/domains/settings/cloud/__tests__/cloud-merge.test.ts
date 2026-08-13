@@ -65,10 +65,10 @@ describe('mergeCloudConfig', () => {
     )
     const after = mergeCloudConfig(
       withBilling,
-      { enabled: true, plan: 'enterprise' },
+      { enabled: true, plan: 'scale' },
       { writer: 'config', now: NOW }
     )
-    expect(after.plan).toBe('enterprise')
+    expect(after.plan).toBe('scale')
     expect(after.billing).toEqual({ provider: 'acme', subscriptionRef: 'sub_1' })
     expect(after.entitlements).toEqual({ sso: true })
   })
@@ -117,7 +117,7 @@ describe('cloudConfigEquivalent', () => {
       { enabled: true, plan: 'pro', entitlements: { sso: true }, billing: { provider: 'acme' } },
       { writer: 'config', now: NOW }
     )
-    expect(cloudConfigEquivalent(base, { ...base, plan: 'business' })).toBe(false)
+    expect(cloudConfigEquivalent(base, { ...base, plan: 'scale' })).toBe(false)
     // Nested keys must not be flattened away by the comparison — the reason
     // stableStringify recurses instead of using a JSON.stringify replacer.
     expect(cloudConfigEquivalent(base, { ...base, entitlements: { sso: false } })).toBe(false)

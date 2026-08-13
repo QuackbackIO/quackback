@@ -122,8 +122,8 @@ const planPricesSchema = z
 /**
  * Keys are validated against `PLAN_IDS` after parsing rather than by
  * `z.record(z.enum(PLAN_IDS), …)`, which is *exhaustive* — it would demand
- * every plan in the catalogue be priced, so a deployment selling only Pro and
- * Business could not configure at all. Selling a subset of the modelled plans
+ * every plan in the catalogue be priced, so a deployment selling only Growth
+ * and Pro could not configure at all. Selling a subset of the modelled plans
  * is the normal case, not an error.
  */
 const catalogueSchema = z.record(z.string(), planPricesSchema)

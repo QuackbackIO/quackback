@@ -24,7 +24,7 @@ const CATALOGUE = {
     outcomeMeter: 'quackback_resolved_outcome',
     limits: { maxBoards: 25, aiTokensPerMonth: 1_000_000 },
   },
-  business: { seat: 'price_biz_seat' },
+  scale: { seat: 'price_scale_seat' },
 }
 
 const KEYS = ['BILLING_API_KEY', 'BILLING_WEBHOOK_SECRET', 'BILLING_PRICES', 'BILLING_ALLOW_LIVE']
@@ -161,7 +161,7 @@ describe('price lookup', () => {
   it('resolves each price to its plan', () => {
     expect(planForPrice(catalogue, 'price_pro_seat')).toBe('pro')
     expect(planForPrice(catalogue, 'price_pro_outcome')).toBe('pro')
-    expect(planForPrice(catalogue, 'price_biz_seat')).toBe('business')
+    expect(planForPrice(catalogue, 'price_scale_seat')).toBe('scale')
     expect(planForPrice(catalogue, 'price_unknown')).toBeNull()
   })
 
@@ -171,6 +171,6 @@ describe('price lookup', () => {
     expect(meterForPrice(pro, 'price_pro_lite')).toBe('liteSeat')
     expect(meterForPrice(pro, 'price_pro_copilot')).toBe('copilotSeat')
     expect(meterForPrice(pro, 'price_pro_outcome')).toBe('resolvedOutcome')
-    expect(meterForPrice(pro, 'price_biz_seat')).toBeNull()
+    expect(meterForPrice(pro, 'price_scale_seat')).toBeNull()
   })
 })

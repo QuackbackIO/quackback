@@ -12,7 +12,13 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from 'sonner'
 
 /**
@@ -294,8 +300,8 @@ function CatalogueDriftNotice({ drift }: { drift: BillingOverview['catalogueDrif
       <div className="w-full rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5">
         <p className="text-[13px] font-medium">Billing catalogue could not be checked</p>
         <p className="mt-0.5 text-[13px] text-muted-foreground">
-          The billing provider could not be reached, so whether this subscription is priced
-          against the current plan catalogue is unknown. Try again shortly.
+          The billing provider could not be reached, so whether this subscription is priced against
+          the current plan catalogue is unknown. Try again shortly.
         </p>
       </div>
     )
@@ -345,10 +351,16 @@ const STATUS_LABELS: Record<string, string> = {
   paused: 'Paused',
 }
 
-const ENTITLEMENT_LABELS: Record<string, string> = {
+/**
+ * One label per entitlement key. Missing keys fall back to the raw key, which
+ * would render "aiDrafts" at a customer, so `entitlement-labels.test.ts` keeps
+ * this exhaustive against the catalogue.
+ */
+export const ENTITLEMENT_LABELS: Record<string, string> = {
   customDomain: 'Custom domains',
   sso: 'Single sign-on',
   aiAssistant: 'AI assistant',
+  aiDrafts: 'AI drafts',
   aiInsights: 'AI insights',
   workflows: 'Workflows',
   apiAccess: 'API access',

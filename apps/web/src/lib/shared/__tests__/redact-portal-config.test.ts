@@ -216,7 +216,7 @@ describe('redactSettingsForClient — the cloud column', () => {
     name: 'Acme',
     cloud: {
       enabled: true,
-      plan: 'business',
+      plan: 'scale',
       entitlements: { sso: true },
       billing: {
         provider: 'acme-billing',
