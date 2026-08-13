@@ -32,7 +32,7 @@ const hoisted = vi.hoisted(() => ({
   isOpenToBootstrapClaim: vi.fn(),
   sendMagicLinkEmail: vi.fn(async () => undefined),
   sendSignupNotAllowedEmail: vi.fn(async () => undefined),
-  sendVerificationOTP: vi.fn(async () => undefined),
+  createVerificationOTP: vi.fn(async () => '123456'),
   createVerificationValue: vi.fn(async () => ({ id: 'v_1' })),
   rateLimitCalls: [] as Array<{ ip: string; email: string }>,
 }))
@@ -59,10 +59,9 @@ vi.mock('@/lib/server/domains/principals/bootstrap-admin', () => ({
 
 vi.mock('@/lib/server/auth/index', () => ({
   getAuth: vi.fn(async () => ({
-    api: { sendVerificationOTP: hoisted.sendVerificationOTP },
+    api: { createVerificationOTP: hoisted.createVerificationOTP },
     $context: { internalAdapter: { createVerificationValue: hoisted.createVerificationValue } },
   })),
-  getOTP: vi.fn(() => '123456'),
 }))
 
 vi.mock('@quackback/email', () => ({
@@ -188,7 +187,7 @@ describe('POST /api/auth/portal-signin — one answer for every address', () => 
     expect(hoisted.sendMagicLinkEmail).not.toHaveBeenCalled()
     // And the mint never ran, so no redeemable row exists for the stranger.
     expect(hoisted.createVerificationValue).not.toHaveBeenCalled()
-    expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
   })
 
   it('never names the code the policy refused with', async () => {

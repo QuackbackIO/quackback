@@ -54,6 +54,10 @@ vi.mock('@/lib/server/cache', async (importOriginal) => ({
 const { isAccountCreationAllowed } = await import('../signup-policy')
 const { getWorkspaceSettings, updatePortalConfig } =
   await import('@/lib/server/domains/settings/settings.service')
+// The validator the admin write actually passes through. Imported rather than
+// restated: a test that hand-built the input would pass while the only supported
+// writer silently dropped the key, which is exactly what it did.
+const { updatePortalConfigSchema } = await import('@/lib/server/functions/settings')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -191,6 +195,64 @@ describe.skipIf(!fixture.available)('openSignup, per audience', () => {
     })
   })
 
+  /**
+   * The write half.
+   *
+   * A setting the portal reads and nothing writes is not a setting: on a
+   * workspace seeded with the portal open, an administrator who wants it closed
+   * has to be able to say so, and the only save that reaches this column is
+   * `updatePortalConfigFn`. Its validator is a `z.object`, which STRIPS keys it
+   * does not name — so an omission there is silent by construction, and the
+   * request looks accepted while nothing changes.
+   *
+   * Driven through the real validator and the real service, then read back
+   * through the real policy: a test that called the service with a hand-built
+   * object would prove nothing about what the endpoint accepts.
+   */
+  describe('an administrator closing the portal', () => {
+    beforeEach(async () => {
+      await seedWorkspace({
+        authConfig: PROVISIONED_AUTH_CONFIG,
+        portalConfig: PROVISIONED_PORTAL_CONFIG,
+      })
+      await seedOwner('owner@acme.example')
+    })
+
+    it('takes the answer and refuses the public afterwards', async () => {
+      await updatePortalConfig(updatePortalConfigSchema.parse({ openSignup: false }))
+
+      expect((await getWorkspaceSettings())?.portalConfig.openSignup).toBe(false)
+      expect(await isAccountCreationAllowed(STRANGER, 'portal')).toBe(false)
+    })
+
+    // The control: the same writer puts it back. Both halves are asserted, so
+    // this cannot be satisfied by a writer that changes nothing at all.
+    it('opens it again', async () => {
+      await updatePortalConfig(updatePortalConfigSchema.parse({ openSignup: false }))
+      expect(await isAccountCreationAllowed(STRANGER, 'portal')).toBe(false)
+
+      await updatePortalConfig(updatePortalConfigSchema.parse({ openSignup: true }))
+      expect(await isAccountCreationAllowed(STRANGER, 'portal')).toBe(true)
+    })
+  })
+
+  // Two doors, two saves. Closing the portal must not reach across to the
+  // team's answer, or the writer would be the same collapse the read half was
+  // fixed for. Seeded with the team OPEN so that "unchanged" is a value this
+  // save could plausibly have clobbered.
+  it('closes the portal without closing the team', async () => {
+    await seedWorkspace({
+      authConfig: { openSignup: true },
+      portalConfig: { openSignup: true },
+    })
+    await seedOwner('owner@acme.example')
+
+    await updatePortalConfig(updatePortalConfigSchema.parse({ openSignup: false }))
+
+    expect(await isAccountCreationAllowed(STRANGER, 'portal')).toBe(false)
+    expect(await isAccountCreationAllowed(STRANGER, 'team')).toBe(true)
+  })
+
   // The divergence driven the other way, so that "the portal door reads the
   // portal's answer" cannot be satisfied by a policy that merely lets either
   // `true` win. A workspace that closed its portal and left team sign-ups open
@@ -206,9 +268,9 @@ describe.skipIf(!fixture.available)('openSignup, per audience', () => {
     expect(await isAccountCreationAllowed(STRANGER, 'team')).toBe(true)
   })
 
-  // The self-hosted shape: one toggle, no portal-specific answer. The portal
-  // must keep obeying it, or an admin who closed sign-ups in the only UI that
-  // offers the choice would find the portal still open.
+  // A workspace nobody has answered the portal's question for: the wizard
+  // writes the workspace-wide key and no portal one. The portal must keep
+  // obeying that single answer until somebody gives it one of its own.
   it('falls back to the workspace answer when the portal has none', async () => {
     await seedWorkspace({ authConfig: { openSignup: false }, portalConfig: { access: {} } })
     await seedOwner('owner@acme.example')

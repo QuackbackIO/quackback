@@ -23,12 +23,15 @@
  *  - SELF-HOSTED — a `settings` row with no stamp. Its first human genuinely is
  *    the owner, and that path must not regress.
  *
- * The stamp column is added inside the test transaction. It ships in migration
- * 0258 and the local development database predates it; adding it here (and
- * rolling it back with everything else) keeps the test exercising the REAL
- * `to_jsonb(s) ->> 'cloud_workspace_key'` read rather than a substitute for it.
- * The second provisioned case needs no DDL at all: it stamps the metadata bag,
- * which is the stamp's original home and a column every database has.
+ * The stamp column is a schema-currency PROBE, never a DDL statement this file
+ * runs. It ships in migration 0258, so a database that has it is simply a
+ * migrated one; asking for it in the probe means the suite either exercises the
+ * REAL `to_jsonb(s) ->> 'cloud_workspace_key'` read or skips, and never
+ * substitutes something else for it. It must not be added from inside the
+ * fixture's transaction: `ALTER TABLE` takes ACCESS EXCLUSIVE on `settings` and
+ * holds it until rollback, which is the whole test, so two suites doing it at
+ * once deadlock each other. The second provisioned case needs no schema at all:
+ * it stamps the metadata bag, the stamp's original home.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
@@ -52,13 +55,10 @@ const fixture = await createDbTestFixture({
     await db.select({ id: settings.id }).from(settings).limit(0)
     await db.select({ id: invitation.id }).from(invitation).limit(0)
     await db.select({ id: principal.id }).from(principal).limit(0)
+    // Migration 0258's column. Probed, not created — see the header.
+    await db.execute(sql`select cloud_workspace_key from settings limit 0`)
   },
 })
-
-/** The stamp column, present for the duration of one rolled-back transaction. */
-async function ensureStampColumn(): Promise<void> {
-  await testDb.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS cloud_workspace_key text`)
-}
 
 async function seedSettings(opts: { stamp?: string; metadataStamp?: string } = {}): Promise<void> {
   await testDb.insert(settings).values({
@@ -71,7 +71,6 @@ async function seedSettings(opts: { stamp?: string; metadataStamp?: string } = {
       : null,
   })
   if (opts.stamp) {
-    await ensureStampColumn()
     await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = ${opts.stamp}`)
   }
 }
@@ -195,7 +194,6 @@ describe.skipIf(!fixture.available)('isAccountCreationAllowed', () => {
     // not on some other difference: same rows, stamp removed.
     it('lets the first arrival in once the stamp is gone', async () => {
       await seedSettings({ stamp: 'ws_acme' })
-      await ensureStampColumn()
       await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = NULL`)
 
       expect(await isAccountCreationAllowed('first@acme.example', 'portal')).toBe(true)

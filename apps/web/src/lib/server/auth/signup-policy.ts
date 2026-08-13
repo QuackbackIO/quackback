@@ -47,9 +47,11 @@
  * which door it is cannot be given one silently.
  *
  * The portal falls back to `authConfig.openSignup` when it has no answer of its
- * own, which is the self-hosted shape: one toggle in one settings page, no
- * portal-specific value ever written, and an admin who closes sign-ups there
- * means the portal too. See {@link signupOpenFor}.
+ * own. That is the ordinary shape for a workspace nobody has answered the
+ * question for: the onboarding wizard writes the workspace-wide key and no
+ * portal-specific one, so until an administrator uses the portal's own signup
+ * toggle there is a single answer and the portal obeys it. See
+ * {@link signupOpenFor}.
  *
  * That fallback has a sharp edge worth stating: a workspace whose team answer
  * was written FOR it and whose portal answer was not reads as closed, and it is
@@ -71,14 +73,18 @@
  * never touches the wizard: `config-file/deps.ts::createSettings` inserts a
  * `settings` row with no `authConfig` at all, so a control-plane-provisioned
  * workspace's portal would have closed to the public the moment its owner
- * arrived, without anybody choosing that. A workspace that means it says so,
- * and `false` is then honoured everywhere.
+ * arrived, without anybody choosing that.
+ *
+ * A workspace that means "invitation only" says so through the portal's own
+ * answer, which is the one an administrator has a control for, and `false` is
+ * honoured wherever either key stores it.
  *
  * ## Why an unowned install is exempt
  *
  * `openSignup` is an admin's statement, and before a workspace has an admin
- * nobody has made it — the stored value there is whatever a declarative config
- * file left behind. Refusing on it would refuse the install's own first user
+ * nobody has made it: nothing writes either key except the onboarding wizard,
+ * which has not run, and the portal signup toggle, which nobody has reached
+ * without an account. Refusing on it would refuse the install's own first user
  * and leave a workspace nobody can ever set up, the same defect that once made
  * a pre-stamped workspace refuse its first user, arriving from the other
  * direction.
@@ -100,9 +106,12 @@
  * by any of these paths IS a portal account; nothing they can be handed makes
  * one a team member. Team membership is conferred afterwards and elsewhere — by
  * accepting an invitation, by the bootstrap claim, or by an IdP the admin
- * configured to auto-provision — and the first two are already exemptions
- * below, so asking the portal's question here gives the team's answer nothing
- * to lose.
+ * configured to auto-provision — and all three are exemptions rather than
+ * answers to this question, so asking the portal's question here gives the
+ * team's answer nothing to lose. The first two are exemptions inside
+ * {@link isAccountCreationAllowed}; the third is
+ * {@link isSsoAutoProvisionGrant}, checked at the backstop because the IdP's
+ * callback is the only place it is knowable.
  *
  * - `hooks.ts` Layer B, for the email-bearing endpoints that can create an
  *   account, so a refusal costs nothing and carries a real error code. Nothing
@@ -122,8 +131,9 @@
  * - `auth/index.ts`'s `databaseHooks.user.create.before`, as the backstop that
  *   does not depend on anyone having enumerated the paths correctly. Every
  *   account Better-Auth creates — password, magic link, one-time code, social,
- *   OIDC — funnels through that hook, and every one of them lands as a portal
- *   account.
+ *   OIDC — funnels through that hook. All but one land as a portal account; the
+ *   exception is an identity provider's own callback, which the hook exempts
+ *   before it asks the portal anything.
  *
  * ## What a refusal is allowed to say
  *
@@ -146,6 +156,7 @@
  * about them.
  */
 import { logger } from '@/lib/server/logger'
+import { signupOpenFor, type SignupAudience } from '@/lib/shared/signup-open'
 
 const log = logger.child({ component: 'signup-policy' })
 
@@ -157,36 +168,12 @@ const log = logger.child({ component: 'signup-policy' })
 export const SIGNUP_NOT_ALLOWED = 'signup_not_allowed'
 
 /**
- * Which door the account would come through.
- *
- * `portal` — a member of the public opening an account on the public feedback
- * portal. `team` — somebody joining the workspace's team without an invitation.
- * A workspace answers the two separately and often oppositely; see the module
- * header for why this is an argument rather than a lookup.
+ * The audience and the resolution rule live in `@/lib/shared/signup-open`, not
+ * here: the sign-in form has to reach the same answer this gate does, and a
+ * second implementation of the fallback in the browser would drift silently.
+ * Re-exported so callers of the policy still see one module.
  */
-export type SignupAudience = 'portal' | 'team'
-
-/** The two configs this decision reads, structurally. */
-interface OpenSignupFlags {
-  authConfig?: { openSignup?: boolean }
-  portalConfig?: { openSignup?: boolean }
-}
-
-/**
- * Has this workspace said the door in question is open?
- *
- * The team's answer is `authConfig.openSignup` and nothing else. The portal's
- * is its own `portalConfig.openSignup` when it has one, and the workspace-wide
- * `authConfig.openSignup` when it does not — an absent portal value is not a
- * "no", it is the shape of a workspace whose admin only ever saw one toggle.
- *
- * `??` and not `||`: `false` is an answer, and the fallback exists for the
- * workspace that gave none.
- */
-function signupOpenFor(workspace: OpenSignupFlags, audience: SignupAudience): boolean {
-  if (audience === 'team') return workspace.authConfig?.openSignup === true
-  return (workspace.portalConfig?.openSignup ?? workspace.authConfig?.openSignup) === true
-}
+export type { SignupAudience } from '@/lib/shared/signup-open'
 
 /**
  * Would creating an account for `email` be allowed on this workspace right now,
@@ -311,21 +298,26 @@ export async function isAccountCreationAllowed(
  * workspace admin means by the word. Blocking them would take the widget down
  * on every workspace that closed sign-ups.
  *
- * ## Why the portal door, on every path
+ * ## The portal door, on every path but one
  *
  * This hook sits immediately before the `after` half that creates the
  * principal, and that half writes `role: 'user'` for every account without
  * consulting anything. So whatever endpoint asked — password, magic link,
- * one-time code, social, OIDC — what is about to exist is a portal account, and
- * the portal's answer is the one that governs it.
+ * one-time code, social — what is about to exist is a portal account, and the
+ * portal's answer is the one that governs it.
+ *
+ * The exception is an identity provider's own callback, where the account is
+ * not a stranger walking up to the portal but the provisioning an administrator
+ * configured. See {@link isSsoAutoProvisionGrant}.
  */
 export async function guardBetterAuthUserCreation(
   user: { email?: unknown },
-  ctx?: { path?: string } | null
+  ctx?: { path?: string; params?: Record<string, unknown> } | null
 ): Promise<false | undefined> {
   const email = typeof user.email === 'string' ? user.email : ''
   const { isSyntheticAnonEmail } = await import('@/lib/shared/anonymous-email')
   if (isSyntheticAnonEmail(email)) return undefined
+  if (await isSsoAutoProvisionGrant(email, ctx)) return undefined
   if (await isAccountCreationAllowed(email, 'portal')) return undefined
   log.warn(
     { email_domain: email.split('@')[1] ?? null },
@@ -352,3 +344,80 @@ export async function guardBetterAuthUserCreation(
  * the reason to throw is the missing null check, not the caller's shape.
  */
 const PATHS_THAT_DEREFERENCE_THE_ABORT = new Set<string>(['/sign-in/email-otp'])
+
+/**
+ * The generic-OAuth callback template. `ctx.path` at a database hook is the
+ * ROUTED endpoint's template, not a value anyone sent, so matching on it says
+ * "a provider's token exchange completed" rather than "somebody claimed it
+ * did". `ctx.params.providerId` is filled in by the router from the URL it
+ * matched, which is why this is the one place the policy may look at a request
+ * at all.
+ */
+const OIDC_CALLBACK_PATH = '/oauth2/callback/:providerId'
+
+/**
+ * Is this account creation the just-in-time provisioning an administrator
+ * configured, rather than a stranger opening a portal account?
+ *
+ * `openSignup` is a statement about self-service: whether somebody the
+ * workspace has never heard of may bring an account into existence by asking.
+ * An identity provider's callback is not that. The address arrived attested by
+ * an IdP an administrator chose, at a domain that IdP proved it owns, on a
+ * provider they left set to create users. That is the same class of authority
+ * as an invitation — somebody who holds the workspace already said yes to these
+ * people — and it is recorded as rows rather than inferred from the request.
+ *
+ * Without this, a workspace with a closed portal refused its own employees at
+ * its own IdP. The refusal is invisible from the inside: `user.create.before`
+ * aborts, the OAuth callback redirects with `unable_to_create_user`, and
+ * `handleAutoProvisionAfter` — which would have made them a member — runs in
+ * `hooks.after`, downstream of an account that no longer gets created.
+ *
+ * ## The two facts, and why exactly these two
+ *
+ * They are the pair `handleAutoProvisionAfter` decides its default-role
+ * promotion on, read off the same provider row: `autoCreateUsers`, and a
+ * VERIFIED domain of THAT provider matching the address. Reading a different
+ * pair would let the two disagree, and the disagreements are both bad — a gate
+ * looser than the promoter admits accounts nobody will provision, leaving
+ * plain portal users on a closed portal; a gate tighter than the promoter
+ * refuses the sign-in the promoter was configured for, which is this defect.
+ *
+ * Provider-scoped for the same reason the promoter is: a sign-in via provider X
+ * is only X's attestation, so X's domains are the only ones it can speak for.
+ *
+ * ## What this deliberately does not cover
+ *
+ * `handleAutoProvisionAfter`'s other trust path assigns a role from an IdP's
+ * claims and does not require a domain match. That one cannot be mirrored here:
+ * the claims are read from the account row, which does not exist yet when this
+ * runs. So an IdP that maps roles from claims for people outside its verified
+ * domains is still governed by the portal's answer, and on a closed portal
+ * those users need an invitation.
+ */
+async function isSsoAutoProvisionGrant(
+  email: string,
+  ctx?: { path?: string; params?: Record<string, unknown> } | null
+): Promise<boolean> {
+  // Path first, so the portal's own doors never pay for the registry read.
+  if (ctx?.path !== OIDC_CALLBACK_PATH) return false
+  const providerId = ctx.params?.providerId
+  if (typeof providerId !== 'string' || providerId === '') return false
+
+  const { listIdentityProviders } =
+    await import('@/lib/server/domains/settings/identity-providers.service')
+  const provider = (await listIdentityProviders()).find((p) => p.registrationId === providerId)
+  if (!provider?.autoCreateUsers) return false
+
+  // The real domain match, not a substring test: it normalises the address's
+  // domain and requires `verifiedAt`, so a row somebody typed but never proved
+  // grants nothing.
+  const { findProviderForDomainEmail } = await import('./provider-ids')
+  if (findProviderForDomainEmail(email, [provider]) === null) return false
+
+  log.info(
+    { provider_id: providerId, email_domain: email.split('@')[1] ?? null },
+    'account creation allowed: identity provider auto-creates users at this domain'
+  )
+  return true
+}

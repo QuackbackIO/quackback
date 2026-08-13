@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { PortalPrivacyDialog } from '@/components/admin/settings/portal-privacy-dialog'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { updatePortalAccessFn } from '@/lib/server/functions/portal-access'
+import { updatePortalConfigFn } from '@/lib/server/functions/settings'
 import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { InvitePeopleDialog } from '@/components/admin/users/invite-people-dialog'
 import { usePortalInvites } from '@/components/admin/users/use-portal-invites'
@@ -24,6 +25,13 @@ import type { PortalConfig } from '@/lib/shared/types/settings'
 
 interface PortalAuthTabProps {
   portalConfig: PortalConfig
+  /**
+   * `authConfig.openSignup` — the workspace-wide answer the portal falls back
+   * to when it has never been given one of its own. Passed in so the signup
+   * toggle can show what the portal is ACTUALLY doing rather than a guess; see
+   * `signupOpenFor` in `auth/signup-policy.ts` for the fallback itself.
+   */
+  teamOpenSignup: boolean
 }
 
 /**
@@ -65,7 +73,7 @@ const VISIBILITY_OPTIONS: VisibilityOption[] = [
   },
 ]
 
-export function PortalAuthTab({ portalConfig }: PortalAuthTabProps) {
+export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -112,6 +120,36 @@ export function PortalAuthTab({ portalConfig }: PortalAuthTabProps) {
   const [domainInputError, setDomainInputError] = useState<string | null>(null)
 
   const isAccessBusy = accessBusy || isPending
+
+  // --- Self-service signup ---
+  //
+  // Its own busy flag rather than the access lock: it writes a different
+  // column through a different endpoint, so serialising it against visibility
+  // saves would only make two independent controls block each other.
+  //
+  // An absent `portalConfig.openSignup` means this portal has never been given
+  // an answer of its own and follows the workspace-wide one, which is what the
+  // policy does. Showing that resolved value is the point: an admin has to see
+  // what the portal is doing before deciding to change it. The first save
+  // writes an explicit portal answer, and the fallback stops applying.
+  const [openSignup, setOpenSignup] = useState<boolean>(portalConfig.openSignup ?? teamOpenSignup)
+  const [signupBusy, setSignupBusy] = useState(false)
+
+  async function applyOpenSignup(next: boolean) {
+    const previous = openSignup
+    setOpenSignup(next)
+    setSignupBusy(true)
+    try {
+      await updatePortalConfigFn({ data: { openSignup: next } })
+      startTransition(() => {
+        router.invalidate()
+      })
+    } catch {
+      setOpenSignup(previous)
+    } finally {
+      setSignupBusy(false)
+    }
+  }
 
   /**
    * Single save path for visibility, domain, and widget sign-in changes.
@@ -286,6 +324,29 @@ export function PortalAuthTab({ portalConfig }: PortalAuthTabProps) {
             the cards below to authorize additional visitors.
           </p>
         )}
+      </SettingsCard>
+
+      {/* Who may open an account, as opposed to who may look. Kept a peer of
+          visibility and shown in both modes: a public portal that anyone can
+          read still has to decide whether anyone can join it. */}
+      <SettingsCard
+        title="Account signup"
+        description="Choose whether visitors can create their own account on the portal."
+        action={
+          <Switch
+            id="portal-open-signup-toggle"
+            checked={openSignup}
+            onCheckedChange={(checked) => void applyOpenSignup(checked)}
+            disabled={signupBusy || isPending}
+            aria-label="Allow visitors to create their own portal account"
+          />
+        }
+      >
+        <p className="text-xs text-muted-foreground">
+          {openSignup
+            ? 'Anyone can create an account to post, vote and comment.'
+            : 'Only people you invite, and people already holding an account, can sign in. Everyone else is told the portal is not accepting new accounts.'}
+        </p>
       </SettingsCard>
 
       {/* The authorization channels — each a peer card of Portal visibility,

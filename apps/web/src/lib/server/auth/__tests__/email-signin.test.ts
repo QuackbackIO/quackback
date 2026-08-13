@@ -8,9 +8,10 @@ const hoisted = vi.hoisted(() => ({
     // than the request string, so the mock has to carry it.
     sealedAddress: opts.email,
   })),
-  mockSendVerificationOTP: vi.fn(async () => undefined),
+  // The path-less mint returns the code to its caller rather than routing it
+  // through the plugin's send callback, so the double returns one too.
+  mockCreateVerificationOTP: vi.fn(async () => '123456'),
   mockSendMagicLinkEmail: vi.fn(async () => undefined),
-  mockGetOTP: vi.fn(() => '123456'),
 }))
 
 vi.mock('../magic-link-mint', () => ({ mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl }))
@@ -27,9 +28,8 @@ vi.mock('../signup-policy', async (importOriginal) => ({
 
 vi.mock('../index', () => ({
   getAuth: vi.fn(async () => ({
-    api: { sendVerificationOTP: hoisted.mockSendVerificationOTP },
+    api: { createVerificationOTP: hoisted.mockCreateVerificationOTP },
   })),
-  getOTP: hoisted.mockGetOTP,
 }))
 
 vi.mock('@/lib/server/db', () => ({

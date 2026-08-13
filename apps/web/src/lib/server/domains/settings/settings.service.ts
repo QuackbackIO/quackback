@@ -46,6 +46,7 @@ import {
   DEFAULT_HELP_CENTER_CONFIG,
   resolveFeatureFlags,
 } from './settings.types'
+import { signupOpenFor } from '@/lib/shared/signup-open'
 import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
 import { resolveChangelogSettings } from './settings.changelog'
 import { resolveStatusSettings } from './settings.status'
@@ -811,7 +812,9 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 
     const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
+    const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     return {
+      openSignup: signupOpenFor({ authConfig, portalConfig }, 'portal'),
       features: {
         allowAnonymous: portalConfig.features.allowAnonymous,
         allowEditAfterEngagement: portalConfig.features.allowEditAfterEngagement,
@@ -905,6 +908,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
       publicPortalConfig: (() => {
         const welcome = publicWelcomeCard(portalConfig.welcomeCard)
         return {
+          openSignup: signupOpenFor({ authConfig, portalConfig }, 'portal'),
           features: portalConfig.features,
           ...(portalOidcProviders.length > 0 && { oidcProviders: portalOidcProviders }),
           ...(welcome && { welcomeCard: welcome }),

@@ -52,6 +52,10 @@ const fixture = await createDbTestFixture({
     await db.select({ id: settings.id }).from(settings).limit(0)
     await db.select({ id: principal.id }).from(principal).limit(0)
     await db.select({ id: invitation.id }).from(invitation).limit(0)
+    // Migration 0258's column, probed rather than created. `ALTER TABLE` from
+    // inside the fixture's transaction would hold ACCESS EXCLUSIVE on
+    // `settings` for the whole test, and two suites doing that at once deadlock.
+    await db.execute(sql`select cloud_workspace_key from settings limit 0`)
   },
 })
 
@@ -62,7 +66,6 @@ async function provisionWorkspace(): Promise<void> {
     slug: `acme-${Math.random().toString(36).slice(2, 8)}`,
     managedFieldPaths: ['name'],
   } as unknown as Parameters<ReturnType<typeof makeReconcileDeps>['createSettings']>[0])
-  await testDb.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS cloud_workspace_key text`)
   await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = 'ws_acme'`)
 }
 

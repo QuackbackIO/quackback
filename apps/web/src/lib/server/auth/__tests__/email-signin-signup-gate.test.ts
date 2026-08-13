@@ -28,10 +28,9 @@ const hoisted = vi.hoisted(() => ({
   createVerificationValue: vi.fn(async (_row: { identifier: string; value: string }) => ({
     id: 'v_1',
   })),
-  sendVerificationOTP: vi.fn(async () => undefined),
+  createVerificationOTP: vi.fn(async () => '123456'),
   sendMagicLinkEmail: vi.fn(async () => undefined),
   sendSignupNotAllowedEmail: vi.fn(async () => undefined),
-  getOTP: vi.fn(() => '123456'),
   getWorkspaceSettings: vi.fn(),
   userFindFirst: vi.fn(),
   invitationFindFirst: vi.fn(),
@@ -41,10 +40,9 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock('../index', () => ({
   getAuth: vi.fn(async () => ({
-    api: { sendVerificationOTP: hoisted.sendVerificationOTP },
+    api: { createVerificationOTP: hoisted.createVerificationOTP },
     $context: { internalAdapter: { createVerificationValue: hoisted.createVerificationValue } },
   })),
-  getOTP: hoisted.getOTP,
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -103,7 +101,7 @@ describe('requestEmailSignin — openSignup, in front of the mint', () => {
     await requestEmailSignin({ email: STRANGER, callbackURL: '/' })
 
     expect(mintedFor()).toEqual([])
-    expect(hoisted.sendVerificationOTP).not.toHaveBeenCalled()
+    expect(hoisted.createVerificationOTP).not.toHaveBeenCalled()
     expect(hoisted.sendMagicLinkEmail).not.toHaveBeenCalled()
   })
 

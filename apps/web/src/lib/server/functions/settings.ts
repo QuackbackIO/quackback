@@ -323,12 +323,17 @@ const updateThemeSchema = z.object({
   brandingConfig: z.record(z.string(), z.unknown()),
 })
 
-const updatePortalConfigSchema = z.object({
+export const updatePortalConfigSchema = z.object({
   features: z
     .object({
       allowAnonymous: z.boolean().optional(),
     })
     .optional(),
+  // May a member of the public open an account on the portal? The portal's own
+  // answer, distinct from `authConfig.openSignup`, which answers for the team.
+  // A `z.object` strips what it does not name, so the key has to be here or the
+  // save is accepted and discarded — and the portal has no other writer.
+  openSignup: z.boolean().optional(),
   welcomeCard: z
     .object({
       enabled: z.boolean().optional(),

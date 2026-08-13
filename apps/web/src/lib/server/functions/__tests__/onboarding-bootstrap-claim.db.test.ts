@@ -93,6 +93,10 @@ const fixture = await createDbTestFixture({
       .limit(0)
     await db.select({ id: user.id }).from(user).limit(0)
     await db.select({ id: settings.id }).from(settings).limit(0)
+    // Migration 0258's column, probed rather than created. `ALTER TABLE` from
+    // inside the fixture's transaction would hold ACCESS EXCLUSIVE on
+    // `settings` for the whole test, and two suites doing that at once deadlock.
+    await db.execute(sql`select cloud_workspace_key from settings limit 0`)
   },
 })
 
@@ -109,7 +113,6 @@ async function seedProvisionedWorkspace(): Promise<void> {
     slug: `acme-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date(),
   })
-  await testDb.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS cloud_workspace_key text`)
   await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = 'ws_acme'`)
 }
 

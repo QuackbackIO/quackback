@@ -82,7 +82,7 @@ export function makeWorkspace(overrides: Partial<WorkspaceSettings> = {}): Works
     statusConfig: {} as WorkspaceSettings['statusConfig'],
     customCss: '',
     publicAuthConfig: { oauth: {}, openSignup: false },
-    publicPortalConfig: { features: PORTAL_FEATURES_DEFAULTS },
+    publicPortalConfig: { features: PORTAL_FEATURES_DEFAULTS, openSignup: true },
     publicWidgetConfig: {} as WorkspaceSettings['publicWidgetConfig'],
     featureFlags: {} as WorkspaceSettings['featureFlags'],
     brandingData: {} as WorkspaceSettings['brandingData'],

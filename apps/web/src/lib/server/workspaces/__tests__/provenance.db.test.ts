@@ -52,6 +52,10 @@ const { isProvisionedWorkspace } = await import('../provenance')
 const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: settings.id }).from(settings).limit(0)
+    // Migration 0258's column, probed rather than created. `ALTER TABLE` from
+    // inside the fixture's transaction would hold ACCESS EXCLUSIVE on
+    // `settings` for the whole test, and two suites doing that at once deadlock.
+    await db.execute(sql`select cloud_workspace_key from settings limit 0`)
   },
 })
 
@@ -66,7 +70,6 @@ async function seed(metadata: string | null): Promise<void> {
 }
 
 async function stampColumn(value: string | null): Promise<void> {
-  await testDb.execute(sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS cloud_workspace_key text`)
   await testDb.execute(sql`UPDATE settings SET cloud_workspace_key = ${value}`)
 }
 

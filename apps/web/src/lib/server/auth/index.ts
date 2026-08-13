@@ -79,9 +79,13 @@ export const storeMagicLinkToken = (email: string, token: string) =>
 /**
  * OTP purposes the plugin issues.
  *
- * Only sign-in codes are stashed: they are the one purpose whose code has to
- * survive the callback, because `requestEmailSignin` combines it with a magic
- * link in a single email. Everything else is sent from the callback itself.
+ * Only sign-in codes are stashed, and stashing them is how they are SWALLOWED.
+ * `/email-otp/send-verification-otp` is mounted publicly, so a sign-in code can
+ * be minted through it by anyone; it must not go out under the verify-address
+ * template, and throwing would turn a routed endpoint into a 500. So it lands
+ * here instead and expires with the stash's own sweep. `requestEmailSignin`
+ * does not drain it: it mints its own code through the path-less endpoint, for
+ * the rate-limit reason set out there, and composes the email itself.
  *
  * The key still carries the purpose. Two purposes can be live for one address
  * at the same moment, so an address-only key would let the second overwrite the
@@ -638,9 +642,10 @@ async function createAuth() {
 
       emailOTP({
         async sendVerificationOTP({ email, otp, type }) {
-          // Sign-in codes are stashed and drained by `requestEmailSignin`,
-          // which combines them with a magic link in one email. Every other
-          // purpose has no such caller, so it is sent from here.
+          // Sign-in codes are never sent from here: this app composes the code
+          // and a magic link into one email of its own. Reaching this branch
+          // means the routed endpoint was called directly, so the code is
+          // stashed to expire rather than mailed under the wrong template.
           if (type === 'sign-in') {
             storeOTP('sign-in', email, otp)
             return

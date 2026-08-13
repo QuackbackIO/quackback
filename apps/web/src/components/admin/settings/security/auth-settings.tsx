@@ -88,7 +88,7 @@ export function AuthSettings({
       </TabsList>
 
       <TabsContent value="portal-access">
-        <PortalAuthTab portalConfig={portalConfig} />
+        <PortalAuthTab portalConfig={portalConfig} teamOpenSignup={teamAuthConfig.openSignup} />
       </TabsContent>
 
       <TabsContent value="sign-in">
