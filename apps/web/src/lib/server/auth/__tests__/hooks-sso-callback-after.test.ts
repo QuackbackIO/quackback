@@ -57,6 +57,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 
 const { handleSsoCallbackAfter: realHandleSsoCallbackAfter, shouldBootstrapPromote } =
   await import('../hooks')
+const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/bootstrap-admin')
 
 // Task 13 (H8): handleSsoCallbackAfter now also takes the provider registry,
 // and bootstrap promotion fires only when the IdP-asserted email is at a
@@ -321,7 +322,11 @@ describe('handleSsoCallbackAfter — transaction + locking', () => {
     expect(mockTransaction).toHaveBeenCalledTimes(1)
   })
 
-  it('acquires a workspace-scoped advisory lock before the admin lookup', async () => {
+  // The onboarding workspace step can hand out the first admin too, and a lock
+  // is only a lock if both promoters take the SAME one: two keys serialise
+  // nothing against each other. This asserts the shared key itself rather than
+  // a string spelled out here, so the two cannot drift apart again.
+  it('acquires the shared bootstrap advisory lock before the admin lookup', async () => {
     mockTxFindFirst.mockResolvedValue(null)
     await handleSsoCallbackAfter(
       ctxFor({
@@ -333,6 +338,7 @@ describe('handleSsoCallbackAfter — transaction + locking', () => {
     expect(mockExecute).toHaveBeenCalledTimes(1)
     const arg = mockExecute.mock.calls[0][0] as { strings: TemplateStringsArray }
     expect(arg.strings.raw.join('')).toContain('pg_advisory_xact_lock')
-    expect(arg.strings.raw.join('')).toContain('quackback:sso_bootstrap')
+    const shared = bootstrapAdminLock() as unknown as { strings: TemplateStringsArray }
+    expect(arg.strings.raw.join('')).toBe(shared.strings.raw.join(''))
   })
 })

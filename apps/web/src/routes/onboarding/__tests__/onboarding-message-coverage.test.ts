@@ -14,7 +14,10 @@ import { ONBOARDING_MESSAGE_PREFIX_LIST } from '@/lib/shared/i18n'
 // it.
 const APP_SRC = fileURLToPath(new URL('../../../', import.meta.url))
 
-const ONBOARDING_SOURCE_ROOTS = ['routes/onboarding', 'components/onboarding']
+// `components/auth` is here because the account step renders the shared
+// sign-in form: its ids are seeded by the onboarding loader now, so they
+// belong under the same guard.
+const ONBOARDING_SOURCE_ROOTS = ['routes/onboarding', 'components/onboarding', 'components/auth']
 
 function walk(dir: string): string[] {
   const out: string[] = []

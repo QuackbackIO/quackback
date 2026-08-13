@@ -9,7 +9,6 @@ import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import { pickOnboardingStep } from './-onboarding-step'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
-import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 import { normalizeOnboardingOutcome, type OnboardingOutcome } from '@/lib/shared/db-types'
 
 const DRAFT_KEY = 'quackback:onboarding:workspace-goal'
@@ -19,18 +18,17 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
     const { session } = context
     if (!session?.user) throw redirect({ to: '/onboarding/account' })
     const state = await checkOnboardingState()
-    if (state.needsInvitation) throw redirect(buildSigninRedirect('/admin'))
-    const target = pickOnboardingStep({
-      session: { userId: session.user.id },
-      state: {
-        needsInvitation: state.needsInvitation,
-        setupState: state.setupState,
-        principalRecord: state.principalRecord,
-      },
-    })
+    // Setup is somebody else's. The wizard answers that itself: routing out to
+    // a sign-in route bounces off the root gate and comes straight back here.
+    if (state.setupClaimedByOther) throw redirect({ to: '/onboarding/no-access' })
+    const target = pickOnboardingStep({ session: { userId: session.user.id }, state })
     // Back navigation remains available until the starting point is resolved;
     // this lets admins correct either field without creating a duplicate artifact.
-    if (state.setupState?.steps.startingPoint) throw redirect({ to: target })
+    // A caller who still has to claim this workspace is routed HERE, so honour
+    // that before the stamp: redirecting to our own path would only loop.
+    if (target !== '/onboarding/workspace' && state.setupState?.steps.startingPoint) {
+      throw redirect({ to: target })
+    }
     return {
       existingWorkspaceName: context.settings?.name ?? '',
       existingSlug: context.settings?.slug ?? '',

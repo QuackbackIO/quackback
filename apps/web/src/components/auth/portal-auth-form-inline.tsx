@@ -481,7 +481,6 @@ export function PortalAuthFormInline({
           (result.data as { twoFactorRedirect?: boolean } | null | undefined)?.twoFactorRedirect
         ) {
           setView({ stage: 'two-factor-challenge' })
-          setLoadingAction(null)
           return
         }
       }
@@ -489,7 +488,6 @@ export function PortalAuthFormInline({
       // is not enrolled (enrolled users get twoFactorRedirect, no session).
       if (twoFactorRequired) {
         setView({ stage: 'two-factor-enroll' })
-        setLoadingAction(null)
         return
       }
       postAuthSuccess()
@@ -502,6 +500,11 @@ export function PortalAuthFormInline({
               defaultMessage: 'Authentication failed',
             })
       )
+    } finally {
+      // Success clears it too: the broadcast is a request to whatever hosts
+      // this form, and a host that stays mounted (the onboarding account step)
+      // would otherwise be left with a spinning button and every field
+      // disabled behind `loadingAction !== null`.
       setLoadingAction(null)
     }
   }

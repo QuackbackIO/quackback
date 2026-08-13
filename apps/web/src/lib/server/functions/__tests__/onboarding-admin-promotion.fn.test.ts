@@ -13,7 +13,12 @@ vi.mock('@tanstack/react-start', () => ({
 const hoisted = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSettings: vi.fn(),
+  txExecute: vi.fn(),
   principalFindFirst: vi.fn(),
+  /** Reads made INSIDE the bootstrap transaction, kept distinct from the
+   *  entry gate's reads so the lock-ordering assertion cannot be satisfied
+   *  by a query that ran before the transaction opened. */
+  txPrincipalFindFirst: vi.fn(),
   postStatusesFindFirst: vi.fn(),
   ensurePrincipalForUser: vi.fn(),
   setPrincipalRole: vi.fn(),
@@ -77,8 +82,8 @@ vi.mock('@/lib/server/setup-state', () => ({
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/server/db')>()
   const tx = {
-    execute: vi.fn(),
-    query: { principal: { findFirst: hoisted.principalFindFirst } },
+    execute: hoisted.txExecute,
+    query: { principal: { findFirst: hoisted.txPrincipalFindFirst } },
   }
   return {
     ...actual,
@@ -112,6 +117,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 })
 
 const { saveWorkspaceAndGoalFn } = await import('../onboarding')
+const { bootstrapAdminLock } = await import('@/lib/server/domains/principals/bootstrap-admin')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -119,19 +125,22 @@ beforeEach(() => {
   hoisted.postStatusesFindFirst.mockResolvedValue({ id: 'status_existing' })
 })
 
+/** A workspace whose wizard steps are already stamped. */
+const STAMPED_SETTINGS = {
+  id: 'workspace_1',
+  name: 'Acme',
+  slug: 'acme',
+  managedFieldPaths: [] as string[],
+  setupState: JSON.stringify({
+    version: 2,
+    steps: { core: true, workspace: true, startingPoint: null },
+    useCase: 'product_feedback',
+  }),
+}
+
 describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
   it('rejects a non-admin once workspace setup is owned', async () => {
-    hoisted.getSettings.mockResolvedValue({
-      id: 'workspace_1',
-      name: 'Acme',
-      slug: 'acme',
-      managedFieldPaths: [],
-      setupState: JSON.stringify({
-        version: 2,
-        steps: { core: true, workspace: true, startingPoint: null },
-        useCase: 'product_feedback',
-      }),
-    })
+    hoisted.getSettings.mockResolvedValue({ ...STAMPED_SETTINGS })
     hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'member' })
 
     await expect(
@@ -140,6 +149,32 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
       })
     ).rejects.toThrow(/only admin/i)
     expect(hoisted.settingsInsert).not.toHaveBeenCalled()
+    // Refused at the gate: the promoter is never even opened.
+    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
+    expect(hoisted.txExecute).not.toHaveBeenCalled()
+  })
+
+  // The declarative config file stamps the workspace step before anyone has
+  // ever signed in, so a stamp is not an owner. Gating on the stamp instead of
+  // on ownership left a pre-stamped workspace with nobody able to claim it: the
+  // first user was refused here, and the only thing that had been promoting
+  // them was a loader that must not write.
+  it('lets the first user claim a workspace whose setup arrived pre-stamped', async () => {
+    hoisted.getSettings.mockResolvedValue({ ...STAMPED_SETTINGS })
+    hoisted.principalFindFirst.mockResolvedValue(undefined)
+    hoisted.ensurePrincipalForUser.mockResolvedValue({
+      created: true,
+      principal: { id: 'principal_1', role: 'admin' },
+    })
+
+    await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme', useCase: 'product_feedback' },
+    })
+
+    expect(hoisted.ensurePrincipalForUser).toHaveBeenCalledWith(
+      { userId: 'user_caller', role: 'admin' },
+      expect.any(Object)
+    )
   })
 
   it('promotes the first user and creates one combined V2 workspace record', async () => {
@@ -174,6 +209,41 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
         slug: 'acme-inc',
         useCase: 'customer_support',
       })
+    )
+  })
+
+  // What keeps two simultaneous first users from both observing an empty
+  // admin set: the advisory lock is taken inside the same transaction, and
+  // before anything is read. Reading first and locking after would leave the
+  // window open, so the ordering is the invariant, not merely the presence.
+  //
+  // The KEY matters as much as the ordering: the SSO callback can also hand out
+  // the first admin, and two promoters holding two different keys exclude each
+  // other exactly as much as no lock at all. Both take the key this asserts.
+  it('takes the shared bootstrap advisory lock before reading the admin set', async () => {
+    hoisted.getSettings.mockResolvedValue(undefined)
+    hoisted.principalFindFirst.mockResolvedValue(undefined)
+    hoisted.ensurePrincipalForUser.mockResolvedValue({
+      created: true,
+      principal: { id: 'principal_1', role: 'admin' },
+    })
+
+    await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme Inc', useCase: 'customer_support' },
+    })
+
+    expect(hoisted.txExecute).toHaveBeenCalledOnce()
+    const locked = hoisted.txExecute.mock.calls[0]![0] as { queryChunks?: unknown[] }
+    expect(JSON.stringify(locked.queryChunks)).toContain('pg_advisory_xact_lock')
+    expect(JSON.stringify(locked.queryChunks)).toBe(
+      JSON.stringify(bootstrapAdminLock().queryChunks)
+    )
+    // Every read the transaction makes happens after the lock. Compared against
+    // the transaction's own reads, so an entry-gate read that ran before the
+    // transaction opened cannot make this pass.
+    expect(hoisted.txPrincipalFindFirst).toHaveBeenCalled()
+    expect(hoisted.txExecute.mock.invocationCallOrder[0]).toBeLessThan(
+      hoisted.txPrincipalFindFirst.mock.invocationCallOrder[0]!
     )
   })
 

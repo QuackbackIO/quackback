@@ -16,15 +16,7 @@ export const Route = createFileRoute('/onboarding/')({
     }
 
     const state = await checkOnboardingState()
-    const target = pickOnboardingStep({
-      session: { userId: session.user.id },
-      state: {
-        needsInvitation: state.needsInvitation,
-        setupState: state.setupState,
-        principalRecord: state.principalRecord,
-      },
-    })
-    throw redirect({ to: target })
+    throw redirect({ to: pickOnboardingStep({ session: { userId: session.user.id }, state }) })
   },
   component: () => null,
 })

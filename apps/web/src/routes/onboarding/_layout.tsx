@@ -3,6 +3,8 @@ import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ALL_ONBOARDING_STEPS } from './-onboarding-steps'
+import { mayForwardCompletedSetup } from './-onboarding-step'
+import { SignOutButton } from './-sign-out-button'
 
 /**
  * Shared layout for all onboarding steps.
@@ -15,6 +17,9 @@ export const Route = createFileRoute('/onboarding/_layout')({
     // an anonymous visitor to the handoff would bounce between that route and
     // the account step forever.
     if (!context.session?.user) return
+    if (!mayForwardCompletedSetup({ pathname: location.pathname, userRole: context.userRole })) {
+      return
+    }
     const setupState = getSetupState(context.settings?.settings?.setupState ?? null)
     if (isOnboardingComplete(setupState)) {
       if (!setupState?.activationHandoffSeenAt && location.pathname !== '/onboarding/complete') {
@@ -113,6 +118,12 @@ function OnboardingHeader() {
 }
 
 function OnboardingLayout() {
+  // Which step the wizard shows is decided by whoever the browser is signed in
+  // as, so every signed-in step carries the one control that changes that
+  // answer. Without it a visitor signed in as the wrong account has nothing to
+  // press anywhere in the flow.
+  const { session } = Route.useRouteContext()
+
   return (
     <div className="min-h-screen bg-background">
       <main className="relative flex min-h-screen flex-col px-4 sm:px-6">
@@ -127,6 +138,12 @@ function OnboardingLayout() {
             <Outlet />
           </div>
         </div>
+
+        {session?.user && (
+          <div className="shrink-0 pb-8 text-center">
+            <SignOutButton size="sm" />
+          </div>
+        )}
       </main>
     </div>
   )

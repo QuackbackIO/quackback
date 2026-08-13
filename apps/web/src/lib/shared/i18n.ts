@@ -172,13 +172,15 @@ export async function loadWidgetMessages(locale: SupportedLocale): Promise<Recor
 }
 
 /**
- * Key prefixes the onboarding wizard renders. Every id authored under
- * `routes/onboarding` and `components/onboarding` lives under `onboarding.`;
- * a unit test (onboarding-message-coverage.test.ts) re-derives them from source
- * and fails if one falls outside this list, so a new key can't silently render
- * its English fallback once the catalogs carry onboarding copy.
+ * Key prefixes the onboarding wizard renders. Ids authored under
+ * `routes/onboarding` and `components/onboarding` live under `onboarding.`;
+ * `portal.auth.` joins them because the account step renders the shared
+ * sign-in form rather than a second copy of it, and those strings are
+ * already translated. A unit test (onboarding-message-coverage.test.ts)
+ * re-derives the ids from source and fails if one falls outside this list,
+ * so a new key can't silently render its English fallback.
  */
-const ONBOARDING_MESSAGE_PREFIXES = ['onboarding.'] as const
+const ONBOARDING_MESSAGE_PREFIXES = ['onboarding.', 'portal.auth.'] as const
 
 /** The prefix allowlist as a plain string[], for tests and iteration. */
 export const ONBOARDING_MESSAGE_PREFIX_LIST: readonly string[] = ONBOARDING_MESSAGE_PREFIXES

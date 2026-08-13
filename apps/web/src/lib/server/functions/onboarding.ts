@@ -16,17 +16,9 @@ import {
   ensurePrincipalForUser,
   setPrincipalRole,
 } from '@/lib/server/domains/principals/principal.factory'
-import {
-  db,
-  settings,
-  principal,
-  user,
-  postStatuses,
-  eq,
-  and,
-  sql,
-  DEFAULT_STATUSES,
-} from '@/lib/server/db'
+import { bootstrapAdminLock, findHumanAdmin } from '@/lib/server/domains/principals/bootstrap-admin'
+import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
+import { isOnboardingComplete } from '@/lib/shared/db-types'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
@@ -37,13 +29,22 @@ import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
 
 const log = logger.child({ component: 'onboarding' })
 
-/** The combined workspace-and-goal step promotes the first user to admin,
- *  or verifies that an admin already owns setup. */
+/**
+ * The one place a workspace's first admin is created, and the one place the
+ * workspace step's authorization is decided. Three answers, in order: an admin
+ * caller passes, a caller who is not the existing owner is refused, and a
+ * caller on a workspace nobody owns claims it.
+ *
+ * Reached only from the workspace step, where the caller has explicitly asked
+ * to set this workspace up. Nothing that merely reports state may promote:
+ * a loader runs on every page load, so a promoting reporter hands admin to
+ * whoever loads the page first.
+ */
 async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
   await db.transaction(async (tx) => {
     // Serialize the one-time bootstrap decision so two first users cannot both
     // observe an empty admin set and promote themselves concurrently.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('onboarding-admin', 0))`)
+    await tx.execute(bootstrapAdminLock())
 
     const caller = await tx.query.principal.findFirst({
       where: eq(principal.userId, userId),
@@ -51,24 +52,71 @@ async function ensureBootstrapAdmin(userId: UserId): Promise<void> {
     if (caller && isAdmin(caller.role)) return
 
     // Bootstrap promotion is only valid until the first human admin exists.
-    const existingAdmin = await tx.query.principal.findFirst({
-      where: and(eq(principal.role, 'admin'), eq(principal.type, 'user')),
-    })
+    const existingAdmin = await findHumanAdmin(tx)
     if (existingAdmin) {
       throw new Error('Workspace setup is already claimed by an admin')
     }
 
     const { created, principal: p } = await ensurePrincipalForUser({ userId, role: 'admin' }, tx)
     if (!created && !isAdmin(p.role)) {
-      log.debug({ user_id: userId }, 'upgrading user to admin')
       await setPrincipalRole({ userId }, 'admin', { executor: tx, knownUserId: userId })
     }
+    // Both branches hand out the same authority, so both are worth the same
+    // line in the log: this is the only record that a workspace was claimed.
+    log.info({ user_id: userId, created }, 'bootstrap admin promotion')
   })
 }
 
 /**
  * Server functions for onboarding workflow.
  */
+
+/** Whether a human admin already owns this workspace's setup. */
+export interface WorkspaceClaim {
+  claimed: boolean
+  /**
+   * Whether the workspace's own pages are reachable yet. Until setup
+   * finishes, the root gate returns the portal root to the wizard, so the
+   * claim screen can only offer a way out once this is true.
+   */
+  setupComplete: boolean
+}
+
+/**
+ * Reports whether this workspace's setup is already claimed, for the
+ * unauthenticated first screen.
+ *
+ * The signal is the same one {@link ensureBootstrapAdmin} decides on: a
+ * principal that is a human (`type: 'user'`) and an admin. A workspace that
+ * arrives with an owner already seeded reads `claimed: true` and its first
+ * screen offers sign-in; an install that starts empty reads `claimed: false`
+ * and keeps the account-creation form it has always had. Nothing here
+ * consults how the workspace was deployed.
+ *
+ * Deliberately unauthenticated, because the visitor it exists for has no
+ * session yet. It answers one question about the workspace as a whole and
+ * never about any person, so it is not an account-presence oracle: the answer
+ * is identical for every visitor.
+ *
+ * It deliberately says nothing about WHO the owner is. Everything a loader
+ * returns is dehydrated into the SSR document, so an owner hint would be a
+ * single unauthenticated GET away for anyone who can guess the hostname, and
+ * the local part plus the whole corporate domain is a working target at the
+ * moment that person is expecting setup mail. The same rule already governs
+ * {@link checkOnboardingState} and the auth-method lookup.
+ */
+export const getWorkspaceClaimFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<WorkspaceClaim> => {
+    // Existence only, on the same predicate the promoter guards with, so the
+    // screen and the promoter can never disagree about who owns setup.
+    const owner = await findHumanAdmin(db)
+
+    const current = await getSettings()
+    const setupComplete = isOnboardingComplete(getSetupState(current?.setupState ?? null))
+
+    return { claimed: !!owner, setupComplete }
+  }
+)
 
 // ============================================
 // Schemas
@@ -128,9 +176,18 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       const slug = slugify(workspaceName)
       if (slug.length < 2) throw new Error('Invalid workspace name - cannot generate valid slug')
       const existingSettings = await getSettings()
-      const setupState = getSetupState(existingSettings?.setupState ?? null)
 
-      if (existingSettings && setupState?.steps.workspace) {
+      // Who owns setup decides this, not what the setup state says. An earlier
+      // revision gated on whether the workspace step was already stamped, and
+      // the declarative config file stamps that before anyone has ever signed
+      // in: a stamp is not an owner, so a pre-stamped workspace refused its own
+      // first user here, and the only thing promoting them was a loader that
+      // had no business writing at all.
+      //
+      // The unlocked read below only picks the branch. The claim branch decides
+      // again under the bootstrap lock, so two simultaneous first users still
+      // end with exactly one admin and a refusal for the loser.
+      if (await findHumanAdmin(db)) {
         const principalRecord = await db.query.principal.findFirst({
           where: eq(principal.userId, session.user.id as UserId),
         })

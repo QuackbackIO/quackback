@@ -16,7 +16,6 @@ import {
   getStartingPointContextFn,
 } from '@/lib/server/functions/activation'
 import { pickOnboardingStep } from './-onboarding-step'
-import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
 
 const OUTCOME_COPY: Record<
@@ -55,15 +54,9 @@ export const Route = createFileRoute('/onboarding/_layout/boards')({
     const { session } = context
     if (!session?.user) throw redirect({ to: '/onboarding/account' })
     const state = await checkOnboardingState()
-    if (state.needsInvitation) throw redirect(buildSigninRedirect('/admin'))
-    const target = pickOnboardingStep({
-      session: { userId: session.user.id },
-      state: {
-        needsInvitation: state.needsInvitation,
-        setupState: state.setupState,
-        principalRecord: state.principalRecord,
-      },
-    })
+    // One check for every reason this is not the caller's step, the terminal
+    // refusal for a caller who does not own setup included.
+    const target = pickOnboardingStep({ session: { userId: session.user.id }, state })
     if (target !== '/onboarding/boards') throw redirect({ to: target })
     const startingPoint = await getStartingPointContextFn()
     return {

@@ -404,7 +404,9 @@ export async function handleSsoCallbackAfter(
   const callbackProvider = providers.find((p) => p.registrationId === providerId)
   const eligibleForBootstrap = shouldBootstrapPromote(email, callbackProvider)
 
-  const { db, principal: principalTable, and, eq, sql } = await import('@/lib/server/db')
+  const { db } = await import('@/lib/server/db')
+  const { bootstrapAdminLock, findHumanAdmin } =
+    await import('@/lib/server/domains/principals/bootstrap-admin')
   const { setPrincipalRole, updatePrincipalFields } =
     await import('@/lib/server/domains/principals/principal.factory')
   // Cast through the typeid-branded type so Drizzle's eq() narrows.
@@ -414,22 +416,17 @@ export async function handleSsoCallbackAfter(
   // Captured inside the tx (only the role promotion busts), drained after commit.
   let bootstrapCacheKeys: readonly string[] = []
   await db.transaction(async (tx) => {
-    // Workspace-scoped advisory lock so concurrent first-SSO sign-ins
-    // serialise. Hash key is stable across pods. Released on commit.
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('quackback:sso_bootstrap'))`)
+    // The shared bootstrap lock, not a private one: this path and the
+    // onboarding workspace step both hand out the first admin, and two
+    // different lock keys exclude nothing. Released on commit.
+    await tx.execute(bootstrapAdminLock())
 
     // Bootstrap admin promotion: only fires when the H8 gate passed AND no
     // human admin exists. A healthy workspace post-/admin/setup always has
     // one, so this branch is recovery-scoped (deleted admin, skipped
-    // onboarding, config-file provisioning before any admin existed). Filter
-    // to type='user' so a service-principal admin (e.g. a config-file-
-    // provisioned API key) doesn't block the first real user from self-
-    // promoting.
+    // onboarding, config-file provisioning before any admin existed).
     if (eligibleForBootstrap) {
-      const existingAdmin = await tx.query.principal.findFirst({
-        where: and(eq(principalTable.role, 'admin'), eq(principalTable.type, 'user')),
-        columns: { id: true },
-      })
+      const existingAdmin = await findHumanAdmin(tx)
       if (!existingAdmin) {
         const { cacheKeysToBust } = await setPrincipalRole({ userId: userIdTyped }, 'admin', {
           executor: tx,

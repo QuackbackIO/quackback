@@ -387,7 +387,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
 
   // Behavior refinements sitting behind an already-present entry gate.
   'lib/server/functions/admin.ts::checkOnboardingState::isAdmin': NOT_A_GATE(
-    'race-safe first-user promotion — not an access check'
+    'reports whether setup is already owned by somebody else so the wizard can route — the fn writes nothing'
   ),
   'lib/server/functions/onboarding.ts::ensureBootstrapAdmin::isAdmin': NOT_A_GATE(
     'promotes an existing non-admin principal during bootstrap — not an access check'

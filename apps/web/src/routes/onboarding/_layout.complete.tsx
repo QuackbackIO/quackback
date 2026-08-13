@@ -16,7 +16,6 @@ import {
   getActivationBridgeContextFn,
 } from '@/lib/server/functions/activation'
 import { pickOnboardingStep } from './-onboarding-step'
-import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 import type { OnboardingOutcome, StartingPointState } from '@/lib/shared/db-types'
 
 export const Route = createFileRoute('/onboarding/_layout/complete')({
@@ -24,19 +23,11 @@ export const Route = createFileRoute('/onboarding/_layout/complete')({
     const { session } = context
     if (!session?.user) throw redirect({ to: '/onboarding/account' })
     const state = await checkOnboardingState()
-    if (state.needsInvitation) throw redirect(buildSigninRedirect('/admin'))
-    if (!state.setupState?.steps.startingPoint) {
-      const target = pickOnboardingStep({
-        session: { userId: session.user.id },
-        state: {
-          needsInvitation: state.needsInvitation,
-          setupState: state.setupState,
-          principalRecord: state.principalRecord,
-        },
-      })
-      throw redirect({ to: target })
-    }
-    if (state.setupState.activationHandoffSeenAt) throw redirect({ to: '/admin' })
+    // One check for every reason this is not the caller's step: an earlier step
+    // is still open, the handoff is already acknowledged, they have yet to claim
+    // the workspace at all, or setup belongs to somebody else.
+    const target = pickOnboardingStep({ session: { userId: session.user.id }, state })
+    if (target !== '/onboarding/complete') throw redirect({ to: target })
     return getActivationBridgeContextFn()
   },
   component: ActivationBridge,
