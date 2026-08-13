@@ -115,6 +115,13 @@ const PostSummarySchema = z.object({
  * Fetches the post title, content, and comments, then calls the LLM.
  */
 export async function generateAndSavePostSummary(postId: PostId): Promise<void> {
+  // Plan gate before the budget: whether summaries are included at all is a
+  // cheaper question than how much of the month's allowance is left, and a
+  // workspace without them should never pay the usage read. No-op on any
+  // install without a plan, which is every self-hosted one — see
+  // domains/settings/cloud/entitlements.ts.
+  const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  await requireEntitlement('aiInsights')
   await enforceAiTokenBudget()
 
   const model = getChatModel('summary')

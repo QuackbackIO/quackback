@@ -105,12 +105,19 @@ export const ENTITLEMENTS = {
     tierFeature: 'customOidcProvider',
     chokepoint: 'lib/server/functions/sso.ts (upsertIdentityProviderFn)',
   },
+  /**
+   * Not wired: the customer-facing half (the orchestrator) and the
+   * teammate-facing half (the Copilot gate) are two seams, and the second one
+   * already carries {@link ENTITLEMENTS.aiDrafts}. Wiring this key wants a
+   * decision about which surfaces each of the two AI keys owns, not another
+   * gate on the same line.
+   */
   aiAssistant: {
     friendly: 'The AI assistant',
     plural: false,
     tierFeature: null,
     chokepoint:
-      'lib/server/domains/assistant/assistant.orchestrator.ts, lib/server/domains/assistant/copilot-gate.ts',
+      'not wired: lib/server/domains/assistant/assistant.orchestrator.ts, lib/server/domains/assistant/copilot-gate.ts',
   },
   /**
    * Post summaries and sentiment. Deliberately *not* the drafting half of the
@@ -122,7 +129,7 @@ export const ENTITLEMENTS = {
     plural: true,
     tierFeature: null,
     chokepoint:
-      'intended seam, not wired: lib/server/domains/summary/summary.service.ts (post summaries), lib/server/domains/sentiment/sentiment.service.ts',
+      'lib/server/domains/summary/summary.service.ts (generateAndSavePostSummary), lib/server/domains/sentiment/sentiment.service.ts (analyzeSentiment)',
   },
   /**
    * Drafting help for teammates answering in the inbox, and the macro library
@@ -133,7 +140,7 @@ export const ENTITLEMENTS = {
     plural: true,
     tierFeature: null,
     chokepoint:
-      'intended seam, not wired: lib/server/domains/assistant/copilot-gate.ts (gateCopilotAguiRequest, the shared gate for the drafting routes), lib/server/domains/macros/macro.service.ts',
+      'lib/server/domains/assistant/copilot-gate.ts (gateCopilotAguiRequest, the shared gate for the drafting routes), lib/server/domains/macros/macro.service.ts (listMacros, createMacro)',
   },
   workflows: {
     friendly: 'Workflows',
@@ -141,23 +148,32 @@ export const ENTITLEMENTS = {
     tierFeature: null,
     chokepoint: 'lib/server/domains/workflows/workflow.service.ts (createWorkflow)',
   },
+  /**
+   * The one seam named here that is not yet wired, and deliberately so:
+   * `withApiKeyAuth` runs on every REST API request and reads no workspace
+   * settings today, so a gate there would add a settings read (a `kv_store`
+   * row) to a per-request path on every install, including the self-hosted
+   * ones the gate can never refuse. Wiring it wants either a process-lifetime
+   * cache for the resolved config (the shape `getTierLimits()` already uses) or
+   * a per-request memo, neither of which this key should introduce on its own.
+   */
   apiAccess: {
     friendly: 'API access',
     plural: false,
     tierFeature: null,
-    chokepoint: 'lib/server/domains/api/auth.ts (withApiKeyAuth)',
+    chokepoint: 'not wired: lib/server/domains/api/auth.ts (withApiKeyAuth)',
   },
   mcpServer: {
     friendly: 'The MCP server',
     plural: false,
     tierFeature: 'mcpServer',
-    chokepoint: 'lib/server/mcp/handler.ts',
+    chokepoint: 'lib/server/mcp/handler.ts (handleMcpRequest, after auth)',
   },
   webhooks: {
     friendly: 'Webhooks',
     plural: true,
     tierFeature: 'webhooks',
-    chokepoint: 'lib/server/domains/webhooks/webhook.service.ts',
+    chokepoint: 'lib/server/domains/webhooks/webhook.service.ts (createWebhook)',
   },
   auditLog: {
     friendly: 'The audit log',
@@ -182,8 +198,10 @@ export interface EntitlementDefinition {
   tierFeature: keyof TierFeatureFlags | null
   /**
    * Where the gate sits, or will sit. Documentation, not executable — kept
-   * honest by review. Only `customDomain` and `sso` are wired today; for the
-   * rest this names the intended seam, not live code.
+   * honest by review, and by a test per seam that drives the named entry point
+   * on a plan that does and does not grant the key. An entry that reads
+   * "not wired:" names a verified seam with no live gate, and says why in the
+   * comment above it.
    */
   chokepoint: string
 }
