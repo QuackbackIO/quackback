@@ -227,6 +227,21 @@ const EXEMPTIONS: { reason: string; pattern: RegExp }[] = [
     pattern:
       /^ALTER TABLE "settings" ALTER COLUMN "assistant_config" SET DEFAULT '\{"version":3,.*\}'::jsonb;?$/,
   },
+  {
+    // 0256 is a raw-SQL lease table used only through relay-leader.ts; it has
+    // no TS schema on purpose (same shape as sweep_lock).
+    reason: 'outbox_relay_leader is a raw-SQL lease table, not part of the ORM schema',
+    pattern: /^(?:DROP TABLE|ALTER TABLE) "outbox_relay_leader"/,
+  },
+  {
+    // drizzle-kit cannot round-trip the named composite PKs on the
+    // workspace-keyed KV tables (0257/0258): it wants to drop the live
+    // `*_pkey` and recreate it under a column-order-derived name.
+    reason:
+      'workspace-keyed composite PKs: drizzle-kit re-emits a rename/reorder pair; migrations own the live constraint names',
+    pattern:
+      /^ALTER TABLE "(?:rate_bucket|kv_store|kv_set_member|presence_stream)" (?:DROP CONSTRAINT "\w+_pkey"|ADD CONSTRAINT "\w+_pk" PRIMARY KEY)/,
+  },
 ]
 
 function scratchUrl(): string {

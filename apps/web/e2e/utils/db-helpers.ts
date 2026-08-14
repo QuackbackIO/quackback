@@ -75,7 +75,7 @@ export function setSupportSurfaces(enabled: boolean = true): void {
 }
 
 export interface SeededConversation {
-  /** TypeID string (conversation_...) used in /admin/inbox?c= and /support/ URLs. */
+  /** TypeID string (conversation_...) used in /admin/inbox?i= and /support/ URLs. */
   conversationId: string
   visitorPrincipalId: string
   subject: string

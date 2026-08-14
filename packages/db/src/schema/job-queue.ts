@@ -23,6 +23,7 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
@@ -78,6 +79,15 @@ export const jobQueue = pgTable(
     index('job_queue_terminal_idx')
       .on(table.finishedAt)
       .where(sql`${table.status} IN ('succeeded', 'failed')`),
+    check(
+      'job_queue_status_check',
+      sql`${table.status} IN ('pending', 'running', 'succeeded', 'failed')`
+    ),
+    check('job_queue_max_attempts_check', sql`${table.maxAttempts} >= 1`),
+    check(
+      'job_queue_lease_shape_check',
+      sql`(${table.status} = 'running') = (${table.leaseToken} IS NOT NULL AND ${table.lockedUntil} IS NOT NULL)`
+    ),
   ]
 )
 

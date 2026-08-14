@@ -503,6 +503,17 @@ export const settings = pgTable('settings', {
   /** Local write token, deliberately separate from cloudRevision/billing. */
   cloudIdentityRevision: integer('cloud_identity_revision').notNull().default(0),
   /**
+   * Control-plane workspace key claiming this database. NULL on self-hosted
+   * installs. Written by migrations 0258; read on pool checkout, never sent
+   * to a client.
+   */
+  cloudWorkspaceKey: text('cloud_workspace_key'),
+  /**
+   * Constant sealed under this workspace's SECRET_KEY. NULL on self-hosted
+   * installs. Written by the control plane; checked on pool checkout.
+   */
+  cloudSecretCanary: text('cloud_secret_canary'),
+  /**
    * JSON array of dot-paths whose values are managed by the
    * declarative config file (`/etc/quackback/config.yaml`). When a
    * path is in this list, the in-app UI mutator for that field

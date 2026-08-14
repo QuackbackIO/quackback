@@ -1,4 +1,65 @@
 {
   "_comment": "Reviewed exceptions for `bun audit` (see scripts/audit-check.ts). Each entry suppresses one advisory, keyed by its GHSA id, until `expires` (YYYY-MM-DD, UTC). CI fails on any high/critical production advisory that is not listed here with an unexpired entry, and on any listed entry that has expired while its advisory is still present. Keep this list as short as possible and prefer upgrading or overriding the dependency over adding an exception.",
-  "advisories": []
+  "advisories": [
+    {
+      "ghsa": "GHSA-gcfj-64vw-6mp9",
+      "reason": "axios is already overridden to 1.16.0; a patched release is not in the override set yet. Transitive only (no first-party HTTP via axios).",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-qq9h-g4jm-xgf3",
+      "reason": "better-auth 1.6.16 is pinned by the auth stack; bumping is a coordinated upgrade, not a drive-by in this PR.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-4c8g-83qw-93j6",
+      "reason": "fast-uri is already overridden to 3.1.2; remaining host-confusion GHSAs need a newer override after lockfile verification.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-7p8r-x3mc-p8w7",
+      "reason": "Same fast-uri override as GHSA-4c8g-83qw-93j6.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-v2hh-gcrm-f6hx",
+      "reason": "Same fast-uri override as GHSA-4c8g-83qw-93j6.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-mwp4-54f8-5fhr",
+      "reason": "ip-address is a transitive parser; not used on request-path host validation (we use the SSRF guard).",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-52cp-r559-cp3m",
+      "reason": "js-yaml is a transitive build/tooling parser, not a request-path YAML ingest.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-5p4m-2wfm-xmqj",
+      "reason": "Same js-yaml quadratic-parse class as GHSA-52cp-r559-cp3m.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-28wg-ghj8-5hjv",
+      "reason": "nanoid is transitive; we do not pass attacker-controlled sizes to its generators.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-2v37-7h3g-55p8",
+      "reason": "Same nanoid generator-loop class as GHSA-28wg-ghj8-5hjv.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-6g55-p6wh-862q",
+      "reason": "postcss is a build-time CSS transform; we do not process attacker-controlled sourceMappingURL at runtime.",
+      "expires": "2026-09-14"
+    },
+    {
+      "ghsa": "GHSA-r28c-9q8g-f849",
+      "reason": "Same postcss sourceMappingURL class as GHSA-6g55-p6wh-862q.",
+      "expires": "2026-09-14"
+    }
+  ]
 }

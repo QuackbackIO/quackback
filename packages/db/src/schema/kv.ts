@@ -26,6 +26,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core'
 import { primaryKey } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 
 /** Generic cache entries, SET-NX locks and single values. */
 export const kvStore = pgTable(
@@ -88,6 +89,9 @@ export const presenceStream = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspaceKey, t.principalId, t.streamId] }),
     index('presence_stream_heartbeat_idx').on(t.heartbeatAt),
+    index('presence_stream_agents_idx')
+      .on(t.workspaceKey, t.heartbeatAt)
+      .where(sql`${t.isAgent}`),
   ]
 )
 

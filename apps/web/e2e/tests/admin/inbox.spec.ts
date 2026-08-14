@@ -34,13 +34,13 @@ test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
     const row = page.getByText(seeded.messages[1]).first()
     await expect(row).toBeVisible({ timeout: 15000 })
 
-    // Open the thread: the URL carries ?c=<conversationId> and both visitor
-    // messages render as bubbles. The list is server-rendered before React
+    // Open the thread: the URL carries ?i=<conversationId> (legacy ?c= is
+    // accepted and rewritten). The list is server-rendered before React
     // hydrates (and networkidle is unusable with SSE), so a first click can
     // land on inert HTML - retry until the selection reaches the URL.
     await expect(async () => {
       await row.click()
-      await expect(page).toHaveURL(new RegExp(`c=${seeded.conversationId}`), { timeout: 2000 })
+      await expect(page).toHaveURL(new RegExp(`[ci]=${seeded.conversationId}`), { timeout: 2000 })
     }).toPass({ timeout: 15000 })
     await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 10000 })
     // The preview text now appears in both the list row and the thread.
@@ -153,7 +153,7 @@ test.describe('Admin Support Inbox bulk actions', { tag: '@smoke' }, () => {
     await toolbar.getByRole('button', { name: 'Close', exact: true }).click()
 
     // The summary toast confirms the bulk apply; the row leaves the open list.
-    await waitForToast(page, /Closed 1 conversation/)
+    await waitForToast(page, /Closed 1 item/)
     await expect(row).toBeHidden({ timeout: 10000 })
   })
 })
