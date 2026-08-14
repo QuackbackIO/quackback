@@ -167,7 +167,7 @@ Verified 2026-08-14. Re-check before acting.
 | 4 workspace projection + gateway | implemented; live verification pending |
 | 5 authoritative starter trial    | implemented; live verification pending |
 | 6 remove workspace billing       | implemented; boundary scan pending     |
-| 6b remove stale SaaS code        | inventoried; delete next               |
+| 6b remove stale SaaS code        | first slice in `e2219f5`; more remains |
 | 7 first-win + operational proof  | infrastructure only                    |
 
 Historical test-mode checkout walks proved the **old** workspace-owned
@@ -195,10 +195,10 @@ billing path. They do not close tracks 3–7.
 
 **This wakeup’s unit, in order:**
 
-1. Remove stale SaaS-incompatible code. Inventory:
-   `LOOP-PROGRESS.md` § Stale code to remove. Delete, do not dual-mode.
-   Keep self-host (cloud off): local name, local Help Center domain,
-   hidden Plan & billing, no cloud URL/domain chrome.
+1. Finish stale SaaS-incompatible deletion. First slice is CP `e2219f5`.
+   Continue from `LOOP-PROGRESS.md` § Stale code to remove. Delete, do
+   not dual-mode. Keep self-host (cloud off): local name, local Help
+   Center domain, hidden Plan & billing, no cloud URL/domain chrome.
 2. Finish separating `cp_instances.name` from the authoritative identity
    projection.
 3. Add database-backed tests for rename-transfer replay, expiry, wrong
