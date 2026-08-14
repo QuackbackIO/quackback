@@ -31,7 +31,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 ## Current revisions
 
 - Workspace: `ff19faf4c`
-- Control plane: `9071f83`
+- Control plane: `b4afe73`
 - Last known deployed workspace: `03ea102e` (2026-08-14)
 - Last known deployed control plane: `01d3e028` (2026-08-14)
 
@@ -125,13 +125,21 @@ the MCP context no longer carries a base domain for canonicalization. Control-
 plane typecheck and the complete suite passed after the cut: 207 files and 2,711
 tests passed, with 5 files and 21 tests intentionally skipped.
 
+Control-plane `b4afe73` removed the last checkout-created-workspace path. Stripe
+metadata can no longer insert or provision a workspace, the browser checkout-
+success route and webhook finalizer are gone, missing instance references fail
+closed, and the remaining checkout reducer only links commercial state to an
+existing workspace. The production build and client-bundle audit passed; the
+full control-plane suite passed 207 files and 2,696 tests, with the same 5 files
+and 21 tests intentionally skipped.
+
 Re-check both worktrees before every edit and commit because another agent shares
 the codebase.
 
 ## Next commits
 
-1. Remove the obsolete checkout-created-workspace path and finish separating
-   `cp_instances.name` from the authoritative identity projection.
+1. Finish separating `cp_instances.name` from the authoritative identity
+   projection.
 2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
 3. Deploy and prove the compatible control-plane/workspace identity pair in
