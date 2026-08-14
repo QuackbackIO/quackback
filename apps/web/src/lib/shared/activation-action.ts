@@ -73,6 +73,7 @@ export function selectActivationAction({
 
   if (surface === 'feedback_empty') {
     if (!status.hasPublicBoard) {
+      if (status.permissions?.boardManage === false) return null
       return {
         id: 'create-feedback-board',
         outcome,
@@ -82,6 +83,7 @@ export function selectActivationAction({
       }
     }
     if (!status.publicBoardLinkCopiedAt && !status.hasWidgetInstalled && !status.hasFirstWin) {
+      if (status.permissions?.boardManage === false) return null
       return copyBoardAction(outcome, status)
     }
     return null
@@ -90,6 +92,7 @@ export function selectActivationAction({
   if (surface === 'conversation_empty') {
     if (outcome !== 'customer_support' || status.hasFirstWin) return null
     if (!status.hasWidgetInstalled) {
+      if (status.permissions?.settingsManage === false) return null
       return {
         id: 'connect-messenger',
         outcome,

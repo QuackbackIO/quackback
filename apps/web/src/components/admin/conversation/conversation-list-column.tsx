@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from 'react'
-import { Link, useRouteContext } from '@tanstack/react-router'
+import { useRouteContext } from '@tanstack/react-router'
 import type { ConversationDTO, ConversationPriority } from '@/lib/shared/conversation/types'
 import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
@@ -33,9 +33,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
-import { useReadinessAction } from '@/lib/client/hooks/use-readiness-action'
+import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { FormattedMessage, useIntl } from 'react-intl'
 
 const TRIAGE_FACETS: readonly InboxTriageFacet[] = ['open', 'waiting', 'closed']
@@ -221,7 +221,7 @@ export function ConversationListColumn({
 }: ConversationListColumnProps) {
   const intl = useIntl()
   const { userRole } = useRouteContext({ from: '__root__' })
-  const readinessAction = useReadinessAction()
+  const activationAction = useActivationAction('conversation_empty')
   const [composeOpen, setComposeOpen] = useState(false)
   // Whether the list is a search, which decides both the implicit sort and
   // whether the term-scored sort is offered at all.
@@ -436,7 +436,7 @@ export function ConversationListColumn({
               priorityFilter !== 'all' ||
               (facet !== 'all' && facet !== 'open')
             const isAllClear =
-              isMainConversationQueue && facet === 'open' && !isFiltered && !readinessAction
+              isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
             const emptyMsg = isFiltered
               ? intl.formatMessage({
                   id: 'inbox.empty.filtered.title',
@@ -476,10 +476,8 @@ export function ConversationListColumn({
                     </p>
                     {/* Widget settings are admin-only; members get the message
                         without a button they can't use. */}
-                    {userRole === 'admin' && readinessAction && (
-                      <Button size="sm" variant="outline" className="h-11 sm:h-9" asChild>
-                        <Link to={readinessAction.href}>{readinessAction.label}</Link>
-                      </Button>
+                    {userRole === 'admin' && activationAction && (
+                      <ActivationActionButton action={activationAction} className="h-11 sm:h-9" />
                     )}
                   </>
                 )}
