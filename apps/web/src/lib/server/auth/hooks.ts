@@ -596,13 +596,20 @@ async function readSsoClaims(
   userId: `user_${string}`,
   providerId: string
 ): Promise<Record<string, unknown>> {
-  const { db, account, and, eq } = await import('@/lib/server/db')
+  const { db, account, and, eq, desc } = await import('@/lib/server/db')
+  const { takeResolvedClaims } = await import('./resolved-claims-stash')
   const row = await db.query.account.findFirst({
     where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
-    columns: { idToken: true },
+    columns: { idToken: true, accountId: true },
+    orderBy: desc(account.createdAt),
   })
-  if (!row?.idToken) return {}
 
+  if (row?.accountId) {
+    const fresh = takeResolvedClaims(providerId, row.accountId)
+    if (fresh) return fresh
+  }
+
+  if (!row?.idToken) return {}
   const parts = row.idToken.split('.')
   if (parts.length !== 3) return {}
   try {

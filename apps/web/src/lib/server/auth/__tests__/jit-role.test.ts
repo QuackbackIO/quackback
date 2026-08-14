@@ -318,6 +318,26 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     }
     expect(call.metadata.source).toBe('claim_mapping')
   })
+
+  it('provisions from stashed claims, not only the stored id token', async () => {
+    const { stashResolvedClaims } = await import('../resolved-claims-stash')
+    stashResolvedClaims('sso', 'acct-1', { roles: ['admin'] })
+    mockFindFirst.mockResolvedValue({ role: 'user' })
+    mockAccountFindFirst.mockResolvedValue({
+      idToken: `h.${Buffer.from(JSON.stringify({ roles: ['member'] })).toString('base64url')}.s`,
+      accountId: 'acct-1',
+    })
+    await callHandlerWith({
+      ssoOidc: {
+        autoProvisionRole: 'member',
+        attributeMapping: {
+          claimPath: 'roles',
+          rules: [{ whenContains: 'admin', role: 'admin' }],
+        },
+      },
+    })
+    expect(mockSet).toHaveBeenCalledWith({ role: 'admin' })
+  })
 })
 
 describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-independent', () => {
