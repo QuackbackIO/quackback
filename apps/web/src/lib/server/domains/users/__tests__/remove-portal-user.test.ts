@@ -30,6 +30,10 @@ vi.mock('@/lib/server/db', () => {
     },
     principal: { id: 'principal.id', role: 'principal.role' },
     session: { userId: 'session.userId' },
+    conversations: {
+      visitorEmail: 'conversations.visitorEmail',
+      visitorPrincipalId: 'conversations.visitorPrincipalId',
+    },
     user: {},
     posts: {},
     comments: {},
@@ -54,7 +58,7 @@ vi.mock('@/lib/server/redis', () => ({
 }))
 
 vi.mock('@/lib/server/logger', () => ({
-  logger: { child: () => ({ error: vi.fn(), debug: vi.fn(), info: vi.fn() }) },
+  logger: { child: () => ({ error: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn() }) },
 }))
 
 const { removePortalUser } = await import('../user.service')
@@ -87,7 +91,7 @@ describe('removePortalUser', () => {
 
     await removePortalUser(PRINCIPAL_ID)
 
-    expect(hoisted.updateSet).toHaveBeenCalledWith({
+    expect(hoisted.updateSet).toHaveBeenNthCalledWith(1, {
       userId: null,
       type: 'anonymous',
       displayName: 'Removed user',
@@ -95,9 +99,27 @@ describe('removePortalUser', () => {
       avatarKey: null,
       contactEmail: null,
     })
+    expect(hoisted.updateSet).toHaveBeenNthCalledWith(2, { visitorEmail: null })
     expect(hoisted.updateWhere).toHaveBeenCalledWith({ col: 'principal.id', val: PRINCIPAL_ID })
+    expect(hoisted.updateWhere).toHaveBeenCalledWith({
+      col: 'conversations.visitorPrincipalId',
+      val: PRINCIPAL_ID,
+    })
     expect(hoisted.deleteWhere).toHaveBeenCalledWith({ col: 'session.userId', val: 'user_1' })
     expect(hoisted.cacheDel).toHaveBeenCalledWith('principal:user:user_1')
+  })
+
+  it('does not fail the remove when cache invalidation throws', async () => {
+    hoisted.findFirst.mockResolvedValue({
+      id: PRINCIPAL_ID,
+      userId: 'user_1',
+      role: 'user',
+    })
+    hoisted.cacheDel.mockRejectedValue(new Error('redis down'))
+
+    await expect(removePortalUser(PRINCIPAL_ID)).resolves.toBeUndefined()
+    expect(hoisted.updateSet).toHaveBeenCalled()
+    expect(hoisted.deleteWhere).toHaveBeenCalled()
   })
 
   it('skips session delete when the principal has no userId', async () => {

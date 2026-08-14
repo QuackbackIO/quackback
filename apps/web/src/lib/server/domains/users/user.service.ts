@@ -24,6 +24,7 @@ import {
   principal,
   user,
   session,
+  conversations,
   posts,
   comments,
   votes,
@@ -403,14 +404,26 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
         })
         .where(eq(principal.id, principalId))
 
+      await tx
+        .update(conversations)
+        .set({ visitorEmail: null })
+        .where(eq(conversations.visitorPrincipalId, principalId))
+
       if (userId) {
         await tx.delete(session).where(eq(session.userId, userId))
       }
     })
 
     if (userId) {
-      const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
-      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(userId))
+      try {
+        const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+        await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(userId))
+      } catch (error) {
+        log.warn(
+          { err: error, user_id: userId },
+          'failed to invalidate principal cache after remove'
+        )
+      }
     }
   } catch (error) {
     if (error instanceof NotFoundError) throw error
