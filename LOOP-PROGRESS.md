@@ -30,8 +30,8 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `ad6c408f9` (deployed image remains `58eebd173`)
-- Control plane: `be35af1` (live deploy remains `14dee7a2` / `b4afe73`)
+- Workspace: `1add15b16` (deployed image remains `58eebd173`)
+- Control plane: `4a1e97b` (live deploy remains `14dee7a2` / `b4afe73`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
 
@@ -69,17 +69,17 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                   | Evidence                                                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                 | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | implementation complete through post-handoff details; live proof pending | CP `bd9148c` through `9071f83`; app `4a1827560` through `ff19faf4c`                                               |
-| 2 focused widget activation      | implemented, focused verification passed                                 | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                              | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262               | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                                                                            |
+| Track                            | Status                                                                                               | Evidence                                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                             | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | implementation complete through post-handoff details; local transfer tests added; live proof pending | CP `bd9148c` through `9071f83`; app `4a1827560` through `1add15b16`; CP `4a1e97b`                                 |
+| 2 focused widget activation      | implemented, focused verification passed                                                             | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | implemented; full/live verification pending                                                          | CP `c7ec591` through `9f77647`                                                                                    |
+| 4 workspace projection + gateway | implemented; full/live verification pending                                                          | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | implemented; full/live verification pending                                                          | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                                                       | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                           | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                                                           | `33c15ba53`; first-win journeys remain                                                                            |
 
 ## Completed activation work
 
@@ -101,8 +101,8 @@ this through the control-plane gateway before closing the revised billing tracks
 
 ## Current worktree ownership
 
-Both worktrees were clean after workspace commit `ad6c408f9` and control-plane
-commit `be35af1`. The workspace
+Both worktrees were clean after workspace commit `1add15b16` and control-plane
+commit `4a1e97b`. The workspace
 accepts only signed control-plane commercial projections and contains no
 platform billing provider integration. The control plane now owns catalogue,
 gateway, starter trial, webhook projection, and durable fan-out behavior. Its
@@ -165,6 +165,18 @@ probed those columns no longer skip. Focused verification: 27 passed
 (`onboarding-bootstrap-claim` 13, `onboarding-workspace-claim` 8,
 `onboarding-state-readonly` 6). Development Neon workspaces were already at 0262.
 
+`1add15b16` extracts origin-transfer consume to a server function and covers
+it against real `settings.cloud_identity`, `verification`, and `session`
+rows: a valid token on the new canonical host establishes the session and
+burns the row; replay and expiry fail closed; the leftover system host and
+another workspace host refuse without deleting the token so the rightful
+consume can still succeed. The HTTP handler is what attaches Set-Cookie.
+Focused verification: 24 passed (`origin-transfer.db` 7, host-binding 1,
+`s3-tenant-placement` 16 including the system-host publicUrl after a
+friendly rename). Control-plane `4a1e97b` asserts the registry rename
+moves `routing.baseUrl` and leaves `storage.publicUrl` on the immutable
+system host. Registry integration: 1 passed (31 skipped in that file).
+
 The old operator/admin/MCP workspace-creation surfaces are deleted. Control-plane
 commits `4e730be`, `e69d48f`, and `a39a8c5` removed the manual admin dialog,
 provision token route, CLI trigger, MCP creation tool, and its private capacity,
@@ -195,20 +207,22 @@ the codebase.
    longer routed (`6836a6a`). Welcome no longer mails `login_url`
    (`be35af1`); the column stays until no replica treats presence as
    admin-seeded. Dashboard billing/members/settings leftovers stay as
-   redirects until 2026-11-14. Local onboarding fixture is at 0262
-   (this unit); do not keep a pre-identity schema for SaaS tests.
-2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
-   asset-origin verification.
-3. Fresh-browser prove the deployed identity pair on **new** generated
+   redirects until 2026-11-14. Local onboarding fixture is at 0262.
+   Rename-transfer replay/expiry/wrong-host and stable asset origin are
+   covered locally (`1add15b16`, `4a1e97b`); remaining stale items wait
+   on replica SELECTs, 2026-11-14 redirects, or live callers
+   (`plan-fanout`, `BILLING_*`, walk3 webhook).
+2. Fresh-browser prove the deployed identity pair on **new** generated
    `ws-*.quackback.co.uk` hosts: zero-input create, OTT handoff, skippable
    details, rename transfer. Do not use existing `walk-*` rows; they have
    no identity or hostname-claim rows (13 instances, 0 identity, 0 claims).
    Do not backfill their old customer-facing names into the identity ledger.
-4. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-5. Add the shared workspace custom-domain manager on
+   Do not deploy yet: live pair is still app `58eebd173` / CP `14dee7a2`.
+3. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+4. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
    readiness before enabling it.
-6. Run the remaining control-plane billing gateway and first-win journeys.
+5. Run the remaining control-plane billing gateway and first-win journeys.
    Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
@@ -303,7 +317,6 @@ on self-host.
 
 ## Verification still required
 
-- Rename transfer replay, expiry, and wrong-workspace database tests.
 - Least-restrictive numeric limit overlay and exact-expiry tests.
 - Cross-workspace checkout/portal isolation.
 - Control-plane webhook replay and outbox retry.
@@ -311,8 +324,9 @@ on self-host.
 - Control-plane outage behavior for normal use and billing actions.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
 - Zero-input first-workspace creation and retry after interrupted provisioning.
-- Cloud URL collision, rename handoff, old-host redirect, and stable asset-origin
-  behavior.
+- Live rename handoff, old-host redirect, and session survival on a new
+  generated host. Local replay/expiry/wrong-host and pinned asset-origin
+  tests passed (`1add15b16`, `4a1e97b`).
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
   provider retry, and cross-workspace isolation. Not a Track 1 close
   requirement.
