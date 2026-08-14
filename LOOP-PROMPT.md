@@ -8,6 +8,12 @@ You are the **lead agent**. Implement yourself, serially, on the two `saas`
 branches. Spawn **critics only** — never parallel builders, never piece
 branches, never extra worktrees for independence.
 
+Each fire is **builder then critic**. Build one unit (or one live
+probe). Then spawn a fresh critic. A fire that only builds, or only
+reviews, is incomplete. If Docker/CI is still pending, report one line
+and stop — do not skip the critic on a completed unit to “save it for
+later.”
+
 The previous long run died of decomposition. Do not repeat that shape.
 
 ---
@@ -244,18 +250,22 @@ the named-create screenshot exists because we stopped deploying.
    weaken a test to pass a bar.
 3. Deploy only when the app/control-plane pair is compatible and those
    tests are green.
-4. A critic is a fresh agent given only: the track goal, the bar, the
-   commit range, and the live URLs. It does not see your reasoning or
-   self-assessment. A critic that does not exercise the live system has
-   not signed. Discard that verdict and re-run it.
-5. Fresh-mailbox OTPs for the Development CP are readable in
+4. **Then spawn a critic.** Fresh agent. Give it only: the track goal,
+   the bar, the commit range, and the live URLs. It does not see your
+   reasoning or self-assessment. It must exercise the live system (or
+   the exact artifact this unit produced). A critic that only reads
+   the diff has not signed. Discard that verdict and re-run it. Record
+   the critic’s verdict in `LOOP-PROGRESS.md` before you stop.
+5. Status back to the parent must include both: what the builder did,
+   and the critic’s pass/fail plus one-line reason.
+6. Fresh-mailbox OTPs for the Development CP are readable in
    `cp_verifications`. Do not use the operator’s mailbox as proof.
-6. New workspaces get generated `ws-*` hostnames and `qb_*` database
+7. New workspaces get generated `ws-*` hostnames and `qb_*` database
    names. Do not ask the customer for a `walk-` label. If you create a
    disposable Neon project yourself, prefix it `walk-` and state expected
    monthly cost first. If extra spend would exceed **$50/month** above
    the current Development baseline, stop and ask.
-7. Do not delete existing `walk-*` workspaces without a fresh registry
+8. Do not delete existing `walk-*` workspaces without a fresh registry
    check. `walk3-mss0m53h` must remain until the obsolete workspace-side
    fleet webhook is deliberately retired. Those rows are not identity
    proof.

@@ -81,8 +81,11 @@ At the start of each work period:
 2. Inspect status and recent commits in both worktrees.
 3. Preserve concurrent uncommitted work and identify the first incomplete track.
 4. Finish, test, and commit one coherent unit before starting another.
-5. Update `LOOP-PROGRESS.md` with the commit and verification evidence.
-6. Deploy only when the app/control-plane pair is compatible and focused tests
+5. Spawn a fresh critic on that unit (goal, bar, commit range, live
+   URLs only). Record the verdict. A fire is builder then critic.
+6. Update `LOOP-PROGRESS.md` with the commit, verification evidence, and
+   critic verdict.
+7. Deploy only when the app/control-plane pair is compatible and focused tests
    are green.
 
 ### Deployment mechanics verified on 2026-08-14
