@@ -33,16 +33,15 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `31330d85b` (limits overlay merge). Live image is `6d4d9f252` /
-  `ghcr.io/quackbackio/quackback@sha256:139a4a8c6873d14c1d4cc129d8f3e2d286ccaaea90e2ab0e86766944b8219570`
-  (includes Origin-fix `635cdb149`). Re-checked this fire: web `683a4b07`
-  SUCCESS, `source.image` and `meta.imageDigest` match, region only
-  `us-east4-eqdc4a`. No fleet deploy.
+- Workspace tip: `f0186af2b` (docs). Live image is `f0186af2b` /
+  `ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`
+  (includes limits overlay `b0c13a366` / `31330d85b` and Origin-fix
+  `635cdb149`). Web `47e0c7be` SUCCESS, region only `us-east4-eqdc4a`.
 - Control plane: `71e59d9` live as `f135274f` /
   `sha256:a005414fa8a2e49e128a47abc59f221198e76214c78a7516894ef9e967def597`
-  (redeploy after test Stripe key + price seed; still `sfo`). Local CP
-  tip is `c5a484d` (3-Free cap, not deployed).
-- Last known deployed workspace: `6d4d9f252` (2026-08-14)
+  (still `sfo`). Local CP tip is `2fb9488` (catalogue + CF client +
+  3-Free `c5a484d`; not deployed).
+- Last known deployed workspace: `f0186af2b` (2026-08-14)
 - Last known deployed control plane: `f135274f` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
@@ -713,7 +712,33 @@ HIGH: t1a/t1e `settings.tier_limits` null + projection present →
 Fixer `b0c13a366` (`loop/cloud-limit-overlay`) merged as `31330d85b`.
 `resolveEffectiveTierLimits`: no row + projection uses projection
 floor, not OSS. Focused tests 19/19. Critic (re-run on `saas`): 19/19
-PASS. Not deployed (Docker not started this fire).
+PASS. **Live** as `sha256:cb186135…` (web `47e0c7be`).
+
+## Limits overlay live (2026-08-14)
+
+Fleet this fire: `635cdb149` already live; did not redeploy that
+commit alone. Docker `31843458993` built `saas` `f0186af2b` as
+`ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`.
+`source.image` + `serviceInstanceDeployV2` SUCCESS, matching digest,
+`us-east4-eqdc4a` only:
+
+| role     | deployment | digest     |
+| -------- | ---------- | ---------- |
+| web      | `47e0c7be` | `cb186135` |
+| worker   | `4576ca28` | `cb186135` |
+| hourly   | `bac96be0` | `cb186135` |
+| daily    | `4b77de9d` | `cb186135` |
+| migrator | `ced6922a` | `cb186135` |
+
+Ready 200 on gauntlet, south, north. Live web bundle defines
+`resolveEffectiveTierLimits` / `cloudProjectionFloor`. Stripe-live not
+repeated. CP-create not redeployed. Custom domains not started.
+
+### Critic (2026-08-14, limits image `cb186135`)
+
+PASS — five roles SUCCESS on `sha256:cb186135…` in `us-east4-eqdc4a`;
+three health URLs 200; replica exports `resolveEffectiveTierLimits`.
+`loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
 
 ## Next commits
 
@@ -740,9 +765,9 @@ PASS. Not deployed (Docker not started this fire).
     Not deployed. Live 4th-Free 402 still needs a CP deploy (Fleet lane;
     no new Neon unless that live proof requires it).
 13. ~~Hosted-product sweep.~~ 2026-08-14 FAIL one HIGH (unlimited
-    `getTierLimits` on cloud). Fixer `b0c13a366` merged `31330d85b`,
-    tests 19/19. Not in the live image. Re-sweep after deploy.
-14. Deploy `31330d85b` (Fleet) so cloud projection limits apply on t1a/t1e.
+    `getTierLimits` on cloud). Fixer live as `cb186135`. Re-sweep
+    remaining Verify rows next fire (not Fleet).
+14. ~~Deploy `31330d85b` (Fleet).~~ live `f0186af2b` / `sha256:cb186135…`.
 15. **Track 8 — hosted account operations** (see
     `LOOP-SAAS-FIRST-CUSTOMER.md`). Order:
     8a soft-delete/restore + 3-Free re-check (with or right after
@@ -857,7 +882,8 @@ on self-host.
 
 Standing program: `LOOP-VERIFY.md` (Verify lane + HIGH SIGNAL Fixers).
 Sweep 2026-08-14: `loop-evidence/verify-2026-08-14/sweep.md` **FAIL**
-one HIGH (cloud unlimited overlay). Fixer merged, not deployed.
+one HIGH (cloud unlimited overlay). Fixer is live `cb186135`; re-sweep
+limits row next fire.
 
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
   Live: Free cap refuses with a named plan; paid overlay lifts it;
@@ -897,15 +923,16 @@ one HIGH (cloud unlimited overlay). Fixer merged, not deployed.
 
 Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Unused web `BILLING_*` vars removed
-(`--skip-deploys`; deploy still `683a4b07`). Remaining: deploy limits
-overlay `31330d85b`; deploy CP `c5a484d` + live 4th-Free 402. Walk3
-workspace webhook stays disabled. Cloudflare for SaaS provider is
-started (`0302c1d00`); this fire did not wire the Domains card.
+(`--skip-deploys`; web now `47e0c7be`). Remaining: deploy CP `c5a484d` (and later `2fb9488`) + live 4th-Free
+402; re-sweep Verify limits on t1a/t1e. Walk3 workspace webhook stays
+disabled. Cloudflare for SaaS provider is started (`0302c1d00`); this
+fire did not wire the Domains card. Live app `f0186af2b` /
+`sha256:cb186135…`.
 
 The identity/billing pair is otherwise deployed. Further deploys are
-incremental. Live app `6d4d9f252` / `sha256:139a4a8c…`. Live CP
-`f135274f` / `sha256:a005414f…`. Local CP `c5a484d` waits for a Fleet
-deploy.
+incremental. Live app `f0186af2b` / `sha256:cb186135…`. Live CP
+`f135274f` / `sha256:a005414f…`. Local CP `2fb9488` (includes
+`c5a484d`) waits for a Fleet deploy.
 
 Operational defects carried from the prior lead:
 
