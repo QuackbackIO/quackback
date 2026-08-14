@@ -121,6 +121,7 @@ remains.
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
 | 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
+| 8 hosted account operations      | specified; not started                                                                                     | restore must re-check 3-Free; switcher, transfer, leave, seats, usage, export/wipe                                |
 
 ## Completed activation work
 
@@ -697,9 +698,16 @@ item+plan frees a slot; count is `ownerEmail`. Not live (CP still
     for HIGH SIGNAL. Custom-domain _live_ add/verify waits on the
     operator asking for Cloudflare for SaaS; the workspace Domains
     surface + gateway is in the contract now.
-14. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+14. **Track 8 — hosted account operations** (see
+    `LOOP-SAAS-FIRST-CUSTOMER.md`). Order:
+    8a soft-delete/restore + 3-Free re-check (with or right after
+    `c5a484d` deploy); 8b in-product switcher; 8c transfer/leave;
+    8d seats + SSO downgrade live row; 8e visible usage; 8f export /
+    wipe / delete CP account. No new Neon unless a finding cannot
+    be proved on current hosts.
+15. Add the control-plane Cloudflare for SaaS custom-hostname integration.
     Do not start this until the operator asks.
-15. First-win journeys. Checkout attaches to an existing workspace only.
+16. First-win journeys. Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
 
@@ -821,6 +829,8 @@ No sweep recorded yet.
   (surface + CP gateway; live provider skipped), Emails without platform
   keys. A cloud workspace must not use the Help Center local domain
   writer as the cloud manager.
+- Track 8: restore vs 3-Free, switcher, transfer/leave, seats, SSO
+  downgrade, visible usage, export/wipe/account delete.
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
   provider retry, and cross-workspace isolation. Live proof waits on
   Cloudflare for SaaS. The settings/gateway contract is in `LOOP-VERIFY.md`.

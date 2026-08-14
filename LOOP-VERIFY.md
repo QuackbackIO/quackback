@@ -61,7 +61,14 @@ for the first-run identity step) and must call the named CP path.
 | Settings → Plan & billing               | Downgrade, cancel, update card, invoices             | `POST /api/v1/internal/billing/session` `{ portal }`              | Absent                                                      |
 | Onboarding starter (created/configured) | Begin one Pro trial                                  | `POST /api/v1/internal/billing/activate-trial`                    | Absent                                                      |
 | Settings → Emails (cloud)               | Customer sending identity add / verify               | instance-scoped sending gateway; workspace holds no provider keys | Local sending-domain UI allowed                             |
-| CP dashboard                            | List, create (≤3 Free), Open, delete/purge           | `/api/instances`, `/open`                                         | n/a                                                         |
+| CP dashboard                            | List, create (≤3 Free), Open, soft-delete, restore   | `/api/instances`, `/open`, lifecycle                              | n/a                                                         |
+| Workspace admin chrome                  | Switch to another workspace the owner can open       | instance-scoped sibling list + existing `/open`                   | Absent                                                      |
+| Settings → Members (owner)              | Transfer ownership                                   | `POST /api/v1/internal/ownership`                                 | Local owner stays the first admin; no CP call               |
+| Settings → Members                      | Leave (non-owner)                                    | workspace roster + CP membership index                            | Local leave only                                            |
+| Settings → Members                      | Invite / remove / change role                        | workspace roster; seat cap from projected `tier_limits`           | Local roster; unlimited unless operator set a cap           |
+| Plan & billing + refusing surfaces      | Visible `N of M` usage and trial end date            | signed projection + local counts                                  | Operator plan notice only                                   |
+| Settings → General (danger)             | Export data, wipe workspace                          | export is workspace-local; wipe then CP soft-delete               | Local export/wipe; no CP account                            |
+| CP account                              | Delete the signed-in account                         | CP only, refused while any workspace is live                      | n/a                                                         |
 
 Missing a required cloud settings item, or a cloud item that does not go
 through the gateway, is HIGH SIGNAL.
@@ -152,7 +159,19 @@ and say so.
 | 21  | Self-host       | Cloud capability absent                                     | Trial, billing nav, cloud URL/domain controls |
 | 22  | Fleet           | Ready 200; digest matches; web `us-east4-eqdc4a`            | Digest drift, web on `sfo`, ready 5xx         |
 
-### E. Custom domains (live provider)
+### E. Account lifecycle, seats, usage
+
+| #   | Surface                 | Probe                                                                      | HIGH SIGNAL if                                                      |
+| --- | ----------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 23  | Soft-delete / restore   | Owner soft-deletes; slot frees; restore at 3 live Free 402s same reason    | Restore creates a fourth live Free; trash still listed as live      |
+| 24  | Switcher                | In-product list of the owner's other workspaces; Open works                | Missing on cloud; shows `ws-*` as the address; present on self-host |
+| 25  | Transfer / leave        | Owner transfers to a teammate; last owner cannot leave                     | Cap does not follow `ownerEmail`; owner can leave and orphan        |
+| 26  | Seats                   | Invite at Free `maxTeamSeats` 402s named; extra seats after downgrade stay | Unlimited invites on cloud Free; cannot remove extras               |
+| 27  | SSO downgrade           | Scale IdP enforced → downgrade → admin password still works                | Admins locked out; SSO still required on Free                       |
+| 28  | Visible usage           | Trial end date; `N of M` on finite limits; `N of 3` Free on CP list        | First signal is a bare 402; AI budget 0 is an opaque model error    |
+| 29  | Export / wipe / account | Owner export; wipe then soft-delete; CP account delete refused if live     | Wipe without confirm; account delete with live workspaces           |
+
+### F. Custom domains (live provider)
 
 Skipped until the operator asks to start Cloudflare for SaaS. When that
 integration is live, the same sweep adds: add → DNS instructions →
@@ -177,6 +196,9 @@ Workers-as-app, a general cloud gateway.
 - Billing that charges, opens, or projects the wrong workspace.
 - Plan change / downgrade / cancel / expiry that leaves the wrong limits.
 - Cloud Free with unlimited `tier_limits` (no row) once a projection is present.
+- Restore of a Free workspace that skips the three-Free cap.
+- Missing switcher / transfer / leave / usage on cloud, or a 402 with no
+  prior `N of M` / trial clock.
 - Session loss on Open, rename, or origin transfer.
 - Cloud chrome on a self-host, or generated `ws-*` presented as the address.
 - A refusal with no distinguishable reason (Bar B).

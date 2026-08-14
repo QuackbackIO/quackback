@@ -46,7 +46,10 @@ A new SaaS owner can:
    temporary control-plane outage, with Free as the baseline and named
    limit/entitlement refusals;
 10. own up to three live Free workspaces at a time, and unlimited paid
-    workspaces. The count is per signed-in owner, not per organisation.
+    workspaces. The count is per signed-in owner, not per organisation;
+11. transfer ownership, leave, switch workspaces from inside the
+    product, see usage before a limit 402, and export or wipe data /
+    delete the control-plane account when they have no live workspaces.
 
 Product-feedback owners are never required to install the widget. Customer
 support owners receive the focused Messenger installation flow. Help Center and
@@ -75,8 +78,14 @@ internal-feedback owners receive their own tailored continuation.
 - Return URLs come from the control-plane registry and an allowlist.
 - Trial end is a clock-based fallback to the projected Free state, not a
   suspension.
-- Invitations are optional except for the explicit internal-feedback outcome.
+- First-win invitations are optional except for the explicit
+  internal-feedback outcome. Invite / remove / change-role still exist
+  as hosted account operations and honour Free seat limits.
 - Branding and integrations are always optional polish.
+- A seat is a workspace teammate (admin/member with a login), not a
+  portal user. Paid cloud plans do not cap seats in this loop.
+- Soft-deleted workspaces are not live. Restore of a Free workspace
+  re-checks the three-Free cap.
 
 ## Wake-up protocol
 
@@ -96,7 +105,8 @@ At the start of each work period:
 7. Update `LOOP-PROGRESS.md` with the commit, verification evidence, and
    critic verdict.
 8. Deploy only when the app/control-plane pair is compatible and focused tests
-   are green.
+   are green. Track 8 (hosted account operations) is additional in-scope
+   work, after the 3-Free deploy, not a new architecture.
 
 ### Deployment mechanics verified on 2026-08-14
 
@@ -259,6 +269,90 @@ Bar: logs can derive step conversion, CTA click-through, time to starter, time t
 first win, defer rate, and trial-start failures without email, content, URLs, or
 tokens.
 
+### Track 8: Hosted account operations
+
+Hosting and account operations that sit next to the current bar. Not a
+bigger product roadmap. UI stays in the workspace (or the existing CP
+list for create/open/delete). API for ownership, sibling list, delete,
+restore, and account deletion stays on the control plane.
+
+**What already exists**
+
+- CP list + Create + Open. Soft-delete / restore / purge internals
+  (`instance-lifecycle-fn`, admin cancel-soft-delete). No customer
+  delete/restore on the dashboard.
+- Workspace Settings → Members: invite, remove, change role, custom
+  roles. First-win still only _requires_ an invite for the internal
+  outcome.
+- Trial countdown banner from the billing projection (`trialNotice`).
+- 3-Free cap on **create** (`c5a484d`). Restore does **not** re-check
+  the cap. Soft-deleted rows are not live; restoring one can make a
+  fourth live Free workspace.
+- SSO entitlement is Scale. Workspace auth already fail-opens admin
+  password sign-in when the IdP is not viable after a downgrade. No
+  live sweep row.
+
+**Seat (settled for this track)**
+
+A seat is a workspace teammate — an admin or member with a login — not
+a portal user, not an end customer. Free applies `maxTeamSeats` from
+`tier_limits`. Paid cloud plans do **not** cap seats in this loop
+(they are per-workspace, not per-seat billed). Do not invent Stripe
+seat quantities here.
+
+**Units, in order**
+
+1. **8a — Soft-delete, restore, purge, and the 3-Free cap.** Customer
+   can soft-delete a workspace from the CP dashboard (owner). Soft-
+   deleted is not live and does not count toward the three. Restore
+   re-runs `countLiveFreeOwnedBy`; a fourth live Free restore 402s
+   with `free_workspace_owner_cap`. Paid restore is unlimited. Purge
+   is irreversible and only from trash (operator/admin or explicit
+   customer confirm after a stated grace; today's code has `purgeAt`
+   null — pick one grace, write it down, do not leave restore
+   unbounded if we also promise purge). Tests must exercise the real
+   query, not only a stubbed count. Ship with or immediately after
+   the `c5a484d` deploy.
+
+2. **8b — In-product workspace switcher.** Admin chrome in the
+   workspace lists the signed-in owner's other workspaces (display
+   name + friendly URL, never `ws-*` as the address). Choosing one
+   Opens through the existing instance Open door. Self-host: absent.
+   Data from a CP list endpoint; instance credential; no workspace
+   id as authority.
+
+3. **8c — Transfer ownership and leave.** Owner transfers to an
+   existing teammate; CP writes `ownerEmail`; 3-Free cap follows the
+   new owner (receiver at 3 Free cannot accept a Free workspace).
+   Last owner cannot leave. Non-owner can leave. Membership roster
+   stays workspace-owned; the CP membership index updates.
+
+4. **8d — Seats, invites on downgrade, SSO live row.** Invite /
+   remove / change role already in Members — prove they work on
+   cloud. Invite 402s when Free `maxTeamSeats` is reached, named
+   plan. Extra seats after downgrade remain; cannot invite more;
+   can remove. Pending invites remain acceptable. Live: add IdP on
+   Scale → enforce → downgrade → admins still sign in (existing
+   fail-open), new SSO-only enforcement does not lock them out.
+
+5. **8e — Visible usage.** Before the 402: Plan & billing and the
+   plan notice show trial end date (already derived); Settings and
+   the refusing surface show `N of M` for every finite limit
+   (boards, posts, seats, sending domains, AI tokens). CP list
+   shows `N of 3` Free workspaces. AI budget 0 refuses with a named
+   upgrade, not a silent model error. Unlimited (null) is omitted,
+   not printed as a fake fraction.
+
+6. **8f — Export, wipe, delete the CP account.** Owner can export
+   workspace data from the workspace (tenant DB; no CP provider
+   keys). Wipe is owner-only, confirmed, then soft-delete (8a).
+   Delete the control-plane account only when the owner has zero
+   live workspaces; refuse otherwise with a named reason.
+
+Bar: each unit has focused tests and a live critic on existing
+`ws-*` hosts where possible. 8a must not create Neon. 8b–8f must
+not either unless a finding cannot be proved on current hosts.
+
 ## Deployment order
 
 The billing-ownership and identity **code** pair is already on the Development
@@ -296,7 +390,7 @@ direct-workspace billing path only.
 ## Definition of done
 
 - Both `saas` branches are clean and contain small, reviewed commits.
-- All eight tracks meet their focused bars.
+- All tracks (0–8) meet their focused bars.
 - Two fresh owners receive a workspace without pre-handoff questions and
   complete the handoff journey without repeated authentication.
 - Cloud name and platform URL mutations traverse the instance-scoped
@@ -311,6 +405,11 @@ direct-workspace billing path only.
   and entitlements refuse with a named plan; a paid overlay lifts them.
 - Cloud settings (name, URL, billing, and domains when enabled) are
   workspace UI and control-plane API. Self-host shows none of those.
+- Soft-delete / restore honour the three-Free cap. The workspace has
+  an in-product switcher, owner transfer, leave, visible usage, and
+  export / wipe / delete-account paths.
+- Invite / remove / change-role honour Free seat limits; SSO
+  downgrade still lets admins in.
 - The latest `LOOP-VERIFY.md` sweep has no open HIGH SIGNAL findings.
 - Cross-workspace isolation, replay, out-of-order projection, retry, outage, and
   exact-expiry probes pass.

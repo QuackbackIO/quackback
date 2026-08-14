@@ -116,7 +116,11 @@ A new SaaS owner can:
 9. keep using the product from the latest local billing projection during a
    temporary control-plane outage, with Free as the baseline and named
    limit/entitlement refusals that point at the cheapest plan that lifts them;
-10. own up to three live Free workspaces, and unlimited paid ones.
+10. own up to three live Free workspaces, and unlimited paid ones;
+11. transfer ownership, leave a workspace they do not own, switch
+    workspaces from inside the product, see usage before a limit
+    402, and export or wipe their data / delete the control-plane
+    account when they have no live workspaces.
 
 Product-feedback owners are never required to install the widget. Customer
 support owners get the focused Messenger installer. Help Center and
@@ -158,8 +162,10 @@ silently invert them.
     `/api/instances/:id/open`. The dashboard is not a pre-handoff step.
 12. Redis restore is parked. The control plane still needs Redis for rate
     limiting; do not spend a track “cleaning that up.”
-13. Invitations are optional except the explicit internal-feedback outcome.
-    Branding and integrations are always optional polish.
+13. First-win invitations are optional except the explicit
+    internal-feedback outcome. Branding and integrations are always
+    optional polish. Hosted account ops (Track 8) still require
+    invite / remove / change-role to exist and to honour seat limits.
 14. Stored asset refs are host-independent (`/api/storage/<key>`). Email,
     widget, OG, and other off-host leaves absolutize from the immutable
     system host at send/render time. Do not bake a friendly URL or
@@ -169,7 +175,15 @@ silently invert them.
     (`ownerEmail` / the actor), not by organisation. A workspace is
     Free unless it has an active paid subscription (trial is Free for
     this cap). Delete/purge or upgrading to paid frees a Free slot.
-    The fourth Free create fails closed with a distinguishable reason.
+    The fourth Free create **or restore** fails closed with a
+    distinguishable reason. Soft-deleted workspaces are not live.
+16. Hosted account operations (Track 8) are in scope: transfer
+    ownership, leave, in-product workspace switcher, visible usage,
+    export / wipe, delete the control-plane account, seats, and the
+    SSO downgrade path. Ownership is `ownerEmail` on the control
+    plane. A seat is a workspace teammate (admin/member with a
+    login), not a portal user. Paid cloud plans do not cap seats in
+    this loop. Usage is shown before a 402.
 
 When documents disagree, authority is: this prompt, then
 `LOOP-SAAS-FIRST-CUSTOMER.md`, then `LOOP-VERIFY.md` for the hosted
@@ -263,7 +277,8 @@ billing path. They do not close tracks 3–7.
    workspaces owned by this user; paid unlimited. Tests: 1–3 Free
    succeed; 4th Free 402; paid owner can create another; delete/upgrade
    frees a Free slot. Dashboard Create stays; first workspace still
-   auto-opens. Then a critic.
+   auto-opens. Then a critic. **8a** (restore re-checks the same cap)
+   ships with or immediately after this deploy.
 6. Fresh-browser prove the **deployed** pair with **two** mailboxes the
    operator does not own, on **new** generated hosts:
    - control-plane sign-in
@@ -440,6 +455,13 @@ All of the following, with evidence in `LOOP-PROGRESS.md`:
   are live-proved.
 - The ledger records commits, tests, deployments, and remaining
   operational blockers.
+- Soft-delete does not count toward the three Free slots; restore of a
+  Free workspace re-checks the cap.
+- The workspace has an in-product switcher, owner transfer, leave, and
+  visible `N of M` usage for finite limits (including `N of 3` Free
+  workspaces on the CP list).
+- Invite / remove / change-role honour Free seat limits; SSO
+  downgrade still lets admins in.
 - The latest hosted-product sweep (`LOOP-VERIFY.md`) has no open HIGH
   SIGNAL findings.
 
