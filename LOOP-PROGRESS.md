@@ -30,7 +30,8 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `689c99d13` live as
+- Workspace tip: `57ff32499` (starter-trial retry). Live image is still
+  `689c99d13` /
   `sha256:8d9da3be4870f2594b0a73937842688f6797936657a7671823ccd4ed375cafcb`
 - Control plane: `71e59d9` live as `e28c7b8e` /
   `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
@@ -107,9 +108,9 @@ remains.
 | 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
 | 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
 | 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                                                                | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                                                                | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                                                                | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 3 CP billing foundation          | implemented; checkout live blocked (invalid Stripe test key; paid plans have no price ids)                 | CP `c7ec591` through `9f77647`; see “Track 3/5 live billing (2026-08-14)”                                         |
+| 4 workspace projection + gateway | both `ws-*` workspaces hold signed billing projections; checkout/portal still pending prices               | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts through `/api/v1/internal/billing/activate-trial`; retry helper landed | CP `2fa8a08`, `710ab09`; app `57ff32499`; see “Track 3/5 live billing (2026-08-14)”                               |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
 | 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
@@ -411,6 +412,45 @@ serving digest `sha256:8d9da3be…` on web `30386b1e` was already listed
 by `list-deployments` this fire. Session survival was builder-walk
 evidence, not re-exercised.
 
+## Track 3/5 live billing (2026-08-14)
+
+First unfinished bar among tracks 3–5. Checkout cannot be live-proved:
+`STRIPE_SECRET_KEY` is present and `sk_test_*` but Stripe returns
+`Invalid API Key`. Paid `cp_plans` rows have no monthly/yearly price
+ids. `SEED_DATABASE` is unset on the CP. A full seed with
+`CLUSTER_ENV=gauntlet` would also create the public demo user unless
+`SEED_DEMO_USER=false`. Do not rotate the key from this loop.
+
+Trial activation does not need Stripe. t1a (`south63792f`,
+`inst_01m00kq6cdfzzb19gfjz8pt0s7`) already started a Pro trial at
+starter completion (`2026-08-14T19:24:04.355Z` → `2026-08-28T19:24:04.355Z`,
+projection v2 delivered, no provider fields). t1e (`northfa99f0`,
+`inst_01m00kprbrfzzb19f490wga8q2`) completed its starter at
+`2026-08-14T19:04:59.476Z` before the workspace could reach the CP, so
+it stayed on Free v1.
+
+Live through `POST https://cp.quackback.co.uk/api/v1/internal/billing/activate-trial`
+with the instance credential (no workspace id in the body):
+
+| Call                                  | Result                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| no bearer                             | 401 `unauthorized`                                                                          |
+| t1e + `instanceId`/`returnUrl` extras | 400 `Invalid input`                                                                         |
+| t1e configured-board evidence         | 201 `started`, trial `2026-08-14T19:44:24.774Z` → `2026-08-28T19:44:24.774Z`, projection v2 |
+| same t1e evidence again               | 200 `already_started`, same dates                                                           |
+| t1a original evidence                 | 200 `already_started`, original t1a dates unchanged                                         |
+
+t1e workspace `settings.cloud` accepted projection v2 (`pro`, same
+trial dates, `has_provider=false`). App `57ff32499` retries the same
+stamped evidence from admin plan-notice when Cloud is on and no local
+trial has landed. Focused tests 20 passed (starter-trial 5,
+setup-completion 8, plan-notice 7). That retry is not in the live
+image yet.
+
+### Critic (2026-08-14, starter trial)
+
+_(pending this fire)_
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
@@ -419,12 +459,16 @@ evidence, not re-exercised.
 4. ~~Deploy `6f255842f` + confirm CP `71e59d9`.~~ Digest and `us-east4-eqdc4a` verified. Live consume still bounced via `OttHandler`.
 5. ~~Deploy `f75518e47` (`sha256:c9fbd88b…`).~~ Chromium Open + details + outcome proved.
 6. ~~Live rename / old-friendly 308 / `/api/storage/…` src on the two `ws-*` hosts (`689c99d13`, `sha256:8d9da3be…`).~~
-7. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-8. Add the shared workspace custom-domain manager on
-   `cp_workspace_hostname_claims`, then live-prove hostname and certificate
-   readiness before enabling it.
-9. Run the remaining control-plane billing gateway and first-win journeys.
-   Checkout attaches to an existing workspace only.
+7. ~~Live starter trial through the instance-scoped CP gateway on both `ws-*` hosts.~~ App retry helper `57ff32499` not yet in the live image.
+8. Replace the invalid Stripe **test** key (do not mint a live key). Re-seed
+   paid-plan price ids, then live-prove checkout/portal through
+   `/api/v1/internal/billing/session`. `SEED_DATABASE` is unset;
+   `CLUSTER_ENV=gauntlet` would seed the public demo user unless
+   `SEED_DEMO_USER=false`.
+9. Deploy `57ff32499` so a later starter-miss retries from admin plan-notice.
+10. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+    Do not start this until the operator asks; custom domains stay later.
+11. First-win journeys. Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
 
@@ -518,11 +562,12 @@ on self-host.
 
 ## Verification still required
 
-- Least-restrictive numeric limit overlay and exact-expiry tests.
-- Cross-workspace checkout/portal isolation.
+- Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
+- Cross-workspace checkout/portal isolation. Blocked on a valid Stripe test key.
 - Control-plane webhook replay and outbox retry.
-- Created/configured-only trial activation and immutable anchor.
-- Control-plane outage behavior for normal use and billing actions.
+- ~~Created/configured-only trial activation and immutable anchor.~~ live on both `ws-*` hosts.
+- Control-plane outage behavior for normal use and billing actions. App retry
+  helper is committed (`57ff32499`) and not yet deployed.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
 - Zero-input first-workspace creation and retry after interrupted provisioning.
 - Live rename handoff, old-host redirect, and session survival on a new
@@ -534,8 +579,13 @@ on self-host.
 
 ## Blockers
 
-None. The identity/billing pair is already deployed. Further deploys are
-incremental after the current Track 1 unit.
+Stripe **test** key on the Development CP is rejected by Stripe
+(`Invalid API Key`). Checkout/portal through the instance-scoped
+gateway cannot be live-proved until the operator replaces it. Do not
+use a live key. Do not print the current value.
+
+The identity/billing pair is otherwise deployed. Further deploys are
+incremental. `57ff32499` is not in the live workspace image yet.
 
 Operational defects carried from the prior lead:
 
