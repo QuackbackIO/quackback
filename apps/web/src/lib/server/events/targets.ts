@@ -317,22 +317,29 @@ async function getIntegrationTargets(
     let accessToken: string | undefined
     if (m.secrets) {
       try {
-        if (m.integrationType === 'jira') {
-          accessToken = await getJiraAccessToken({
-            id: m.integrationId,
-            secrets: m.secrets,
-            config: m.integrationConfig,
-          })
-        } else {
-          const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
-          accessToken = secrets.accessToken
-        }
+        const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
+        accessToken = secrets.accessToken
       } catch (error) {
         log.error(
           { err: error, integration_type: m.integrationType },
           'failed to decrypt integration secrets'
         )
         continue
+      }
+
+      if (m.integrationType === 'jira') {
+        try {
+          accessToken = await getJiraAccessToken({
+            id: m.integrationId,
+            secrets: m.secrets,
+            config: m.integrationConfig,
+          })
+        } catch (error) {
+          log.warn(
+            { err: error, integration_type: m.integrationType },
+            'jira token refresh failed; using cached access token'
+          )
+        }
       }
     }
 

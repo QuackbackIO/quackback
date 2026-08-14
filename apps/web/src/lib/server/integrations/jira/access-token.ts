@@ -81,28 +81,36 @@ export async function getJiraAccessToken(integration: {
     const log = logger.child({ component: 'jira' })
     log.info({ integration_id: rowId }, 'access token expired, refreshing')
 
-    const { refreshJiraToken } = await import('./oauth')
-    const { getPlatformCredentials } =
-      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-    const { encryptSecrets } = await import('../encryption')
-    const credentials = await getPlatformCredentials('jira')
-    const refreshed = await refreshJiraToken(refreshToken, credentials ?? undefined)
+    try {
+      const { refreshJiraToken } = await import('./oauth')
+      const { getPlatformCredentials } =
+        await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+      const { encryptSecrets } = await import('../encryption')
+      const credentials = await getPlatformCredentials('jira')
+      const refreshed = await refreshJiraToken(refreshToken, credentials ?? undefined)
 
-    const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
-    await tx
-      .update(integrations)
-      .set({
-        secrets: encryptSecrets({
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken,
-        }),
-        config: { ...cfg, tokenExpiresAt: newExpiry },
-        updatedAt: new Date(),
-      })
-      .where(eq(integrations.id, rowId))
+      const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
+      await tx
+        .update(integrations)
+        .set({
+          secrets: encryptSecrets({
+            accessToken: refreshed.accessToken,
+            refreshToken: refreshed.refreshToken,
+          }),
+          config: { ...cfg, tokenExpiresAt: newExpiry },
+          updatedAt: new Date(),
+        })
+        .where(eq(integrations.id, rowId))
 
-    didRefresh = true
-    return refreshed.accessToken
+      didRefresh = true
+      return refreshed.accessToken
+    } catch (error) {
+      log.warn(
+        { err: error, integration_id: rowId },
+        'jira token refresh failed; using cached access token'
+      )
+      return secrets.accessToken
+    }
   })
 
   // After commit: Atlassian has already rotated the refresh token. A Redis

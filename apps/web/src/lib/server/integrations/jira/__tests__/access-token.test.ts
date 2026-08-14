@@ -59,7 +59,7 @@ vi.mock('@/lib/server/redis', () => ({
 }))
 
 vi.mock('@/lib/server/logger', () => ({
-  logger: { child: () => ({ info: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  logger: { child: () => ({ info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() }) },
 }))
 
 const { getJiraAccessToken } = await import('../access-token')
@@ -149,6 +149,26 @@ describe('getJiraAccessToken', () => {
     expect(hoisted.updateWhere).toHaveBeenCalledWith({ col: 'id', val: ID })
     expect(hoisted.eq).not.toHaveBeenCalledWith('integrationType', 'jira')
     expect(hoisted.cacheDel).toHaveBeenCalledWith('hooks:integration-mappings')
+  })
+
+  it('returns the cached token when refresh throws so the hook is still enqueued', async () => {
+    hoisted.lockedRows.mockResolvedValue([
+      {
+        secrets: JSON.stringify({ accessToken: 'stale-tok', refreshToken: 'stale-rt' }),
+        config: { cloudId: 'c', tokenExpiresAt: expired },
+      },
+    ])
+    hoisted.refreshJiraToken.mockRejectedValue(new Error('Atlassian 503'))
+
+    await expect(
+      getJiraAccessToken({
+        id: ID,
+        secrets: JSON.stringify({ accessToken: 'stale-tok', refreshToken: 'stale-rt' }),
+        config: { tokenExpiresAt: expired },
+      })
+    ).resolves.toBe('stale-tok')
+    expect(hoisted.updateWhere).not.toHaveBeenCalled()
+    expect(hoisted.cacheDel).not.toHaveBeenCalled()
   })
 
   it('still returns the rotated token if dropping the mappings cache fails', async () => {
