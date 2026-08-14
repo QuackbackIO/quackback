@@ -170,25 +170,23 @@ jobs:
           api_key=$(bun apps/web/scripts/create-ci-api-key.ts)
           echo "::add-mask::$api_key"
           echo "API_KEY=$api_key" >> "$GITHUB_ENV"
-      - name: Start application and require readiness
+      - name: Start application and run live API assertions
+        working-directory: apps/web
         run: |
-          # nohup + disown so the next step still has a server: `exit 0`
-          # from the wait loop otherwise SIGHUPs the background Vite process.
-          nohup bun run dev > /tmp/quackback-live-api.log 2>&1 &
-          disown
-          for attempt in $(seq 1 60); do
+          # Keep the server in this step. A later step's start-of-step
+          # cleanup can reap a background Vite even under nohup.
+          bun run dev > /tmp/quackback-live-api.log 2>&1 &
+          for attempt in $(seq 1 90); do
             if curl --fail --silent "$BASE_URL/api/health/ready" > /dev/null; then
               break
             fi
-            if [ "$attempt" -eq 60 ]; then
+            if [ "$attempt" -eq 90 ]; then
               cat /tmp/quackback-live-api.log
               exit 1
             fi
             sleep 1
           done
-      - name: Run live API assertions
-        run: bunx vitest run --config vitest.config.ts src/lib/server/domains/api/__tests__/api-integration.test.ts
-        working-directory: apps/web
+          bunx vitest run --config vitest.config.ts src/lib/server/domains/api/__tests__/api-integration.test.ts
 
   e2e-full:
     if: github.event_name == 'schedule'

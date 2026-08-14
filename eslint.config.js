@@ -132,6 +132,8 @@ export default tseslint.config(
       // this project's environment reports six phantom errors and would teach
       // the next person to silence them one by one.
       'deploy/edge/**',
+      // Scratch/loop artifacts are not app code and trip Node-globals lint.
+      'loop-evidence/**',
       '**/*.config.js',
       '**/*.config.mjs',
       '**/next-env.d.ts',

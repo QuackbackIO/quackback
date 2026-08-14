@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, cleanup, fireEvent, screen } from '@testing-library/react'
+import { render, cleanup, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
