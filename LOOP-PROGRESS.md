@@ -549,7 +549,21 @@ live until that commit is deployed.
 
 ### Critic (2026-08-14, test-mode checkout/portal)
 
-pending
+PASS — independent live POST to the instance-scoped gateway created
+test-mode checkout and portal sessions on the existing `ws-*` rows;
+return URLs match the registry; metadata does not create a workspace.
+
+HTTP/Stripe (`loop-evidence/t3-critic/facts.json`, `result.json`):
+`sk_test_`; no bearer and dummy bearer → 401 `unauthorized`; extras
+`returnUrl`/`instanceId` → 400 `Invalid input`; t1a and t1e checkout
+200 `checkout.stripe.com` `cs_test_` `livemode=false`
+`kind=workspace_subscription` with each workspace's own `instanceId`;
+success/cancel URLs are `https://south63792f…` / `https://northfa99f0…`
+`/admin/settings/billing?checkout=…`; t1a portal 200
+`billing.stripe.com`; instance count 16→16, same id set, `createdIds`
+empty. Hosted GET: checkout title “Stripe Checkout”, portal
+`billing.stripe.com`. Critic did not complete a payment. An explore
+critic without a shell only hit public GETs and is discarded.
 
 ## Next commits
 
