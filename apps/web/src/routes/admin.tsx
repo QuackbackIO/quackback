@@ -28,23 +28,13 @@ export const Route = createFileRoute('/admin')({
     // the sign-in prompt first.
     const ott = new URLSearchParams(location.searchStr.replace(/^\?/, '')).get('ott')
     if (ott) {
-      const { consumeOpenHandoff } = await import('@/lib/server/functions/origin-transfer')
-      const { getRequestHeaders, setResponseHeader } = await import('@tanstack/react-start/server')
+      const { consumeAdminOpenHandoffFn } =
+        await import('@/lib/server/functions/admin-open-handoff.functions')
       const { redirect } = await import('@tanstack/react-router')
-      const result = await consumeOpenHandoff({
-        ott,
-        returnTo: '/onboarding/workspace',
-        headers: getRequestHeaders(),
+      const result = await consumeAdminOpenHandoffFn({
+        data: { ott, returnTo: '/onboarding/workspace' },
       })
-      if (result.kind === 'redirect') {
-        for (const cookie of result.cookies) {
-          ;(setResponseHeader as (name: string, value: string | string[]) => void)(
-            'Set-Cookie',
-            cookie
-          )
-        }
-        throw redirect({ href: result.to })
-      }
+      if (result.kind === 'redirect') throw redirect({ href: result.to })
       throw redirect({ href: '/admin/login?error=handoff_failed' })
     }
 
