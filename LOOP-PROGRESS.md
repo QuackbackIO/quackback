@@ -593,7 +593,18 @@ Live after this fire (2026-08-14 T20:29Z):
 
 ### Critic (2026-08-14, workspace form 303 `635cdb149` / `139a4a8c`)
 
-Pending — spawned this fire.
+PASS — live owner `POST /api/billing/session` with https Origin 303s to
+test Checkout on existing t1a; foreign/missing Origin 403
+`invalid_origin`; five roles on `sha256:139a4a8c…` in
+`us-east4-eqdc4a` only; instances 16→16.
+
+Independent mint (not builder cookies). HTTP:
+`loop-evidence/t3-form-303/critic.md`, `critic-result.json`. Health
+200 on gauntlet, both friendly hosts, both `ws-*`. Owner +
+`Origin: https://south63792f…` → 303 `checkout.stripe.com`
+`/c/pay/cs_test_…`. Stripe retrieve `livemode=false`
+`kind=workspace_subscription`
+`instanceId=inst_01m00kq6cdfzzb19gfjz8pt0s7`. Critic did not pay.
 
 ## Next commits
 
