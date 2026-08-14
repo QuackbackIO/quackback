@@ -131,6 +131,11 @@ async function checkMigrations(): Promise<void> {
   migrationsKnownUpToDate = true
 }
 
+async function checkBilling(): Promise<void> {
+  const { assertBillingConfiguration } = await import('@/lib/server/domains/billing/billing.config')
+  assertBillingConfiguration()
+}
+
 /**
  * Readiness probe: 200 when every dependency check passes, 503 with a
  * per-check breakdown otherwise. Workers still booting don't fail the
@@ -160,9 +165,10 @@ async function checkMigrations(): Promise<void> {
  * `CHECK_TIMEOUT_MS` and reports `timeout`.
  */
 export async function handleReadinessProbe(): Promise<Response> {
-  const [dbCheck, migrationsCheck] = await Promise.all([
+  const [dbCheck, migrationsCheck, billingCheck] = await Promise.all([
     runCheck('db', checkDb),
     runCheck('migrations', checkMigrations),
+    runCheck('billing', checkBilling),
   ])
   // Background work is now one tier rather than a registry of BullMQ workers,
   // so readiness reports the tier.
@@ -197,7 +203,7 @@ export async function handleReadinessProbe(): Promise<Response> {
     refused: tier.workspaces.filter((t) => Boolean(t.refusedCode)).length,
   }
 
-  const ready = dbCheck.ok && migrationsCheck.ok && workersCheck.ok
+  const ready = dbCheck.ok && migrationsCheck.ok && billingCheck.ok && workersCheck.ok
   return Response.json(
     {
       status: ready ? 'ok' : 'unavailable',
@@ -205,6 +211,7 @@ export async function handleReadinessProbe(): Promise<Response> {
       checks: {
         db: dbCheck,
         migrations: migrationsCheck,
+        billing: billingCheck,
         workers: workersCheck,
       },
     },

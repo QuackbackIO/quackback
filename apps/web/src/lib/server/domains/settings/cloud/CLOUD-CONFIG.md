@@ -23,9 +23,10 @@ numbers**, so the product can say _"you have hit a limit"_ but never _"that is a
 Pro feature"_. There is no feature gating that can name a plan, no upgrade
 prompt with a target, and no way to explain a downgrade after the fact.
 
-This block adds the missing dimension. Nothing about numeric enforcement moves:
-`getTierLimits()` and the helpers in `tier-enforce.ts` are byte-for-byte
-unchanged, and `requireEntitlement()` sits _beside_ them rather than in front.
+This block adds the missing dimension. Numeric enforcement keeps the stored
+`tier_limits` row as its baseline; an active Pro trial overlays the configured
+Pro allowances dynamically. `requireEntitlement()` still sits _beside_ numeric
+enforcement rather than in front.
 
 ```ts
 await requireEntitlement('aiAssistant') // does the plan include it?
@@ -199,18 +200,16 @@ dropped rather than preserved, and both the config file's 30-second reconcile
 and the billing sweep's empty-subscription write touch this column for reasons
 that have nothing to do with a trial.
 
-### A trial lends features, not quotas
+### A Pro trial lends Pro features and Pro limits
 
-`settings.tier_limits` is untouched by all of this, so a workspace trialing Pro
-has Pro's **entitlements** and whatever **numeric limits** were last written
-for it. That is a real seam, and it is deliberate in both directions.
-
-Making it follow the trial would mean either writing the trial plan's numbers
-into `tier_limits` — which nothing would ever write back, so the workspace
-would keep the larger caps for good — or teaching `getTierLimits()` to consult
-the plan, which is precisely the dependency `enforcement-untouched.test.ts`
-exists to forbid. The chosen failure direction is the conservative one: a trial
-can never inflate a quota and then leave it inflated.
+`settings.tier_limits` remains the cached, persisted baseline. While the trial
+is active, `getTierLimits()` resolves Pro's numeric limits from the fleet billing
+catalogue and overlays them in the least-restrictive direction: unlimited or
+higher operator allowances are preserved, while lower Free caps are raised.
+The overlay is never persisted, so the exact expiry instant automatically falls
+back to the stored baseline. A cloud billing deployment without
+`BILLING_PRICES.pro.limits` fails readiness instead of advertising an incomplete
+Pro trial.
 
 ### What a trialing workspace sees
 

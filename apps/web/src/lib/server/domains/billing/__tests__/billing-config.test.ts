@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BILLING_PROVIDER,
+  assertBillingConfiguration,
   getBillingConfig,
   isBillingConfigured,
   meterForPrice,
@@ -64,6 +65,22 @@ describe('getBillingConfig', () => {
     expect(config!.livemode).toBe(false)
     expect(config!.provider).toBe(BILLING_PROVIDER)
     expect(config!.catalogue).toEqual(CATALOGUE)
+    expect(() => assertBillingConfiguration()).not.toThrow()
+  })
+
+  it('rejects a cloud catalogue without Pro trial limits', () => {
+    setEnv({
+      BILLING_API_KEY: 'sk_test_abc',
+      BILLING_WEBHOOK_SECRET: 'whsec_abc',
+      BILLING_PRICES: JSON.stringify({ pro: { seat: 'price_pro_seat' } }),
+    })
+
+    expect(() => assertBillingConfiguration()).toThrow('BILLING_PRICES.pro.limits')
+  })
+
+  it('keeps the readiness assertion inert when billing is not configured', () => {
+    setEnv({})
+    expect(() => assertBillingConfiguration()).not.toThrow()
   })
 
   it.each([

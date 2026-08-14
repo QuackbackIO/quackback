@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { OSS_TIER_LIMITS, type TierLimits } from '../tier-limits.types'
-import { mergeTierLimits } from '../tier-limits.service'
+import {
+  mergeTierLimits,
+  overlayTrialLimits,
+  resolveEffectiveTierLimits,
+} from '../tier-limits.service'
+import { resolveCloudConfig } from '../cloud/cloud.service'
 
 describe('OSS_TIER_LIMITS', () => {
   it('has all numeric limits set to null (unlimited)', () => {
@@ -86,5 +91,59 @@ describe('plan notice passthrough', () => {
   it('returns no notice when absent from stored limits', () => {
     expect(mergeTierLimits({ maxBoards: 1 }).notice).toBeUndefined()
     expect(mergeTierLimits(null).notice).toBeUndefined()
+  })
+})
+
+describe('Pro trial numeric limits', () => {
+  it('raises Free limits while preserving higher operator allowances', () => {
+    const baseline = mergeTierLimits({
+      maxBoards: 2,
+      maxPosts: 500,
+      features: { customDomain: false },
+      notice: { label: 'Operator notice' },
+    })
+
+    const effective = overlayTrialLimits(baseline, { maxBoards: 25, maxPosts: 100 })
+
+    expect(effective.maxBoards).toBe(25)
+    expect(effective.maxPosts).toBe(500)
+    expect(effective.features.customDomain).toBe(false)
+    expect(effective.notice).toEqual({ label: 'Operator notice' })
+  })
+
+  it('preserves unlimited baselines and grants unlimited Pro fields', () => {
+    const baseline = mergeTierLimits({ maxBoards: null, maxPosts: 10 })
+    const effective = overlayTrialLimits(baseline, { maxBoards: 25 })
+
+    expect(effective.maxBoards).toBeNull()
+    expect(effective.maxPosts).toBeNull()
+  })
+
+  it('falls back to the cached Free baseline at the exact expiry instant', () => {
+    const baseline = mergeTierLimits({ maxBoards: 2 })
+    const stored = {
+      enabled: true,
+      plan: 'free',
+      trial: {
+        plan: 'pro',
+        startedAt: '2026-08-01T00:00:00.000Z',
+        endsAt: '2026-08-15T00:00:00.000Z',
+      },
+    }
+    const beforeExpiry = resolveCloudConfig(stored, new Date('2026-08-14T23:59:59.999Z'))
+    const atExpiry = resolveCloudConfig(stored, new Date('2026-08-15T00:00:00.000Z'))
+
+    expect(resolveEffectiveTierLimits(baseline, beforeExpiry, { maxBoards: 25 }).maxBoards).toBe(25)
+    expect(resolveEffectiveTierLimits(baseline, atExpiry, { maxBoards: 25 })).toBe(baseline)
+  })
+
+  it('rejects an active Pro trial when its catalogue limits are missing', () => {
+    expect(() =>
+      resolveEffectiveTierLimits(
+        mergeTierLimits({ maxBoards: 2 }),
+        { enabled: true, trialActive: true },
+        undefined
+      )
+    ).toThrow('BILLING_PRICES.pro.limits')
   })
 })

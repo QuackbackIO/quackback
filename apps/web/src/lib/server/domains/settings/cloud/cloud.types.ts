@@ -7,8 +7,8 @@
  * `aiTokensPerMonth`, …) read by `getTierLimits()` and enforced by the helpers
  * in `tier-enforce.ts`. It has no notion of which plan produced those numbers,
  * so the product can say "you have hit a limit" but never "that is a Pro
- * feature". Nothing here changes any of it: numeric enforcement is untouched
- * and this module never writes, reads or reinterprets `tier_limits`.
+ * feature". This module never persists numeric limits; an active Pro trial is
+ * overlaid dynamically by `getTierLimits()` and disappears at expiry.
  *
  * This block answers *which plan, and what does it unlock* — the boolean layer
  * that makes feature gating and a named upgrade prompt possible.

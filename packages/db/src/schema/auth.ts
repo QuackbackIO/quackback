@@ -477,9 +477,9 @@ export const settings = pgTable('settings', {
    * means no cloud config, which resolves to `enabled: false`: no plan, no
    * entitlement gating, no upsell.
    *
-   * Deliberately NOT an input to numeric enforcement. `tierLimits` above
-   * remains the sole source for `getTierLimits()`; this column adds the
-   * boolean/plan layer beside it.
+   * `tierLimits` above remains the persisted numeric baseline. The active trial
+   * window in this block may temporarily overlay Pro allowances at read time;
+   * the overlay is never written back.
    */
   cloud: jsonb('cloud').$type<StoredCloudConfig>(),
   /**
