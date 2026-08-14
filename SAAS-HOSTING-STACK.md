@@ -23,6 +23,19 @@ The deployed platform remains:
 Self-hosted deployments do not depend on the control plane and do not show cloud
 commercial UI.
 
+### As-built fleet notes
+
+- The workspace app no longer reads Redis. The control plane still requires
+  `REDIS_URL` for rate limiting, so the Railway Redis service cannot be removed
+  until that setting becomes optional and its failure mode is explicit.
+- The fleet uses one object bucket. Five obsolete per-workspace `qb-*` probe
+  buckets and the completed `quackback-web-sleeper` experiment were deleted on
+  2026-08-14.
+- A real `role=web` service was verified to sleep successfully. Pooled compute
+  remains the default; the experiment carried no customer traffic.
+- The control-plane purge sweep currently logs `deprovision.failed`; this is an
+  operational defect carried into the new loop.
+
 ## Tenant boundary
 
 Workspace resolution is security-critical. A request must resolve one tenant

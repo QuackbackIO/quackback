@@ -64,6 +64,17 @@ At the start of each work period:
 6. Deploy only when the app/control-plane pair is compatible and focused tests
    are green.
 
+### Deployment mechanics verified on 2026-08-14
+
+- `docker.yml` builds `saas` only through `workflow_dispatch`.
+- After changing `source.image`, use `serviceInstanceDeployV2`.
+  `serviceInstanceRedeploy` reuses the prior deployment image.
+- Verify the deployed image digest rather than trusting the configured source.
+- Redeploys have drifted the web service back to `sfo`; reassert and verify the
+  `us-east4-eqdc4a` region pin.
+- The committed Railway file was not applied during the earlier loop. Inspect
+  the complete destroy list before any future apply.
+
 ## Tracks
 
 ### Track 0: Contextual activation
@@ -176,6 +187,11 @@ tokens.
 
 Do not deploy a workspace build that has removed direct billing until its paired
 control-plane gateway and projection producer are ready.
+
+The last known web deployment (`03ea102e`) runs the direct-workspace billing
+implementation and proves the old journey, not the revised ownership boundary.
+Worker, cron, and migrator roles remained on an older pinned digest at handoff;
+the next paired rollout must reconcile that deliberate image drift.
 
 ## Definition of done
 

@@ -22,6 +22,10 @@ only; it does not close the new architecture tracks.
 
 No deployment has yet been made for the revised billing ownership model.
 
+The prior web deployment `03ea102e` runs image digest `sha256:596d77e3…` in
+`us-east4-eqdc4a`. Worker, cron, and migrator services remain on the older
+`sha256:8ff95109…` pin. A future paired rollout must move all roles deliberately.
+
 ## Tracks
 
 | Track                            | Status                                   | Evidence                                                             |
@@ -43,6 +47,15 @@ No deployment has yet been made for the revised billing ownership model.
 - Focused widget/Messenger installer with atomic channel configuration.
 - Goal-only provisioned onboarding and tailored starter handoff.
 - Owner-bound, one-use OTT handoff with fail-closed workspace handling.
+
+## Historical live bar already passed
+
+Before the billing-ownership correction, two fresh-mailbox handoff walks and a
+test-mode hosted checkout passed on the Development fleet. The plan picker named
+prices, a paid Growth subscription replaced trial access, exact trial expiry
+fell to Free without breaking sign-in or existing data reads, forged webhook
+signatures failed closed, and self-host commercial-chrome tests passed. Repeat
+this through the control-plane gateway before closing the revised billing tracks.
 
 ## Current worktree ownership
 
@@ -78,12 +91,26 @@ commit because another agent shares the codebase.
 None. The revised boundary requires paired control-plane and workspace changes
 before the next deployment.
 
+Operational defects carried from the prior lead:
+
+- The control-plane purge sweep logs `deprovision.failed` and needs diagnosis.
+- `cp-t2crit.quackback.co.uk` has been stranded in `provisioning` since
+  2026-08-09; its former probe bucket was deleted after registry checks.
+- The control plane still requires Redis for rate limiting.
+
 ## Historical live evidence
 
 The prior direct-workspace test-mode checkout, expiry, and self-host probes passed.
 Those provider keys, catalogue variables, workspace webhook route, and provider
 references are now migration debt, not the target architecture.
 
-Disposable `walk-*` resources from the earlier loop remain listed in the old
-untracked ledger outside the implementation worktree. Do not delete them without
-fresh registry checks and explicit in-scope cleanup work.
+Disposable workspaces still running from the earlier loop:
+
+- `walk-msrx530c`, `walk1-msrxt17d`, `walk2-msryvgqj`, `walk3-mss0m53h`;
+- `walk-msscrita`, `walk-msscritb`, `walk-critic-m6qkz`;
+- `walk-critic-a1` and `walk-critic-b1`.
+
+Do not delete them without fresh registry checks and explicit in-scope cleanup
+work. `walk3-mss0m53h` is also the target of the obsolete workspace-side fleet
+webhook and must remain until that integration is removed or deliberately
+retired.
