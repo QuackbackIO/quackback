@@ -39,9 +39,11 @@ A new SaaS owner can:
 5. receive a useful starter artifact;
 6. follow one outcome-specific primary action;
 7. begin a 14-day Pro trial only after the starter is created or configured;
-8. upgrade or manage billing from the workspace through the control plane; and
+8. upgrade or manage billing from the workspace through the control plane;
 9. keep using the product from the latest local billing projection during a
-   temporary control-plane outage.
+   temporary control-plane outage; and
+10. own up to three live Free workspaces at a time, and unlimited paid
+    workspaces. The count is per signed-in owner, not per organisation.
 
 Product-feedback owners are never required to install the widget. Customer
 support owners receive the focused Messenger installation flow. Help Center and

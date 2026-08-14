@@ -132,6 +132,12 @@ silently invert them.
     widget, OG, and other off-host leaves absolutize from the immutable
     system host at send/render time. Do not bake a friendly URL or
     request Host into `contentJson`.
+15. A signed-in user may own at most **three live Free workspaces** at
+    a time, and **unlimited paid** workspaces. Count is by owner
+    (`ownerEmail` / the actor), not by organisation. A workspace is
+    Free unless it has an active paid subscription (trial is Free for
+    this cap). Delete/purge or upgrading to paid frees a Free slot.
+    The fourth Free create fails closed with a distinguishable reason.
 
 When documents disagree, authority is: this prompt, then
 `LOOP-SAAS-FIRST-CUSTOMER.md`, then `LOOP-PROGRESS.md` for live evidence,
@@ -219,7 +225,13 @@ billing path. They do not close tracks 3–7.
 4. Finish the in-flight CP setup-chunk isolation so the browser does
    not import `node:crypto`. Redeploy CP. Do not revert concurrent
    `.server.ts` work.
-5. Fresh-browser prove the **deployed** pair with **two** mailboxes the
+5. **Per-owner workspace cap.** Replace the leftover “one Free
+   workspace per unpaid org” check with: at most three live Free
+   workspaces owned by this user; paid unlimited. Tests: 1–3 Free
+   succeed; 4th Free 402; paid owner can create another; delete/upgrade
+   frees a Free slot. Dashboard Create stays; first workspace still
+   auto-opens. Then a critic.
+6. Fresh-browser prove the **deployed** pair with **two** mailboxes the
    operator does not own, on **new** generated hosts:
    - control-plane sign-in
    - first workspace created with no name/URL/region/plan form

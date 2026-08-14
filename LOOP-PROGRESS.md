@@ -30,13 +30,14 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `9c5756d4a` (ledger). Live image is `0c42bbe1f`
-  (includes starter-trial retry `57ff32499`) as
+- Workspace tip: `635cdb149` (https Origin form POST). Live image is still
+  `0c42bbe1f` /
   `ghcr.io/quackbackio/quackback@sha256:703eca7db7c22362e7ea5beed5d35a2574e8cb561d1dd078e5e8c7c311a51af2`
-- Control plane: `71e59d9` live as `e28c7b8e` /
-  `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
+- Control plane: `71e59d9` live as `f135274f` /
+  `sha256:a005414fa8a2e49e128a47abc59f221198e76214c78a7516894ef9e967def597`
+  (redeploy after test Stripe key + price seed; still `sfo`)
 - Last known deployed workspace: `0c42bbe1f` (2026-08-14)
-- Last known deployed control plane: `e28c7b8e` (2026-08-14)
+- Last known deployed control plane: `f135274f` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -108,8 +109,8 @@ remains.
 | 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
 | 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
 | 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; checkout live blocked (invalid Stripe test key; paid plans have no price ids)                 | CP `c7ec591` through `9f77647`; see “Track 3/5 live billing (2026-08-14)”                                         |
-| 4 workspace projection + gateway | both `ws-*` workspaces hold signed billing projections; checkout/portal still pending prices               | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 3 CP billing foundation          | live test-mode checkout + portal through instance-scoped gateway; workspace form Origin fix not deployed   | CP `f135274f` / `71e59d9`; app `635cdb149`; see “Track 3 live checkout (2026-08-14)”                              |
+| 4 workspace projection + gateway | both `ws-*` hold signed billing projections; CP 303 path live; workspace form 403 until `635cdb149`        | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`, `635cdb149`                                                            |
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
@@ -503,6 +504,53 @@ Live web `d525ae4f` replica `50b9fc32`:
 `plan-notice-HQY-UayT.mjs:29-30` imports and awaits it. Critic did
 not start a new trial (both workspaces already have one).
 
+## Track 3 live checkout (2026-08-14)
+
+Operator unblocked Stripe **test** on Development (`acct_1SeJT1Rbu1DLQxj3`,
+`sk_test_` / `pk_test_`). Paid `cp_plans` now have monthly+yearly
+`price_` ids (`qb_*_monthly` / `qb_*_yearly`). CP redeployed SUCCESS
+`f135274f` (`sha256:a005414f…`, code still `71e59d9`). Walk3 workspace
+webhook disabled. No new Neon. No live key.
+
+Live through `POST https://cp.quackback.co.uk/api/v1/internal/billing/session`
+with the instance credential (no workspace id or return URL in the body):
+
+| Call                                                               | Result                                            |
+| ------------------------------------------------------------------ | ------------------------------------------------- |
+| no bearer / dummy bearer                                           | 401 `unauthorized`                                |
+| extras `returnUrl` + `instanceId`                                  | 400 `Invalid input`                               |
+| `planId: free`                                                     | 400 `Invalid input`                               |
+| t1a `{ action: checkout, planId: growth, billingPeriod: monthly }` | 200 `checkout.stripe.com` `cs_test_`              |
+| t1e same body                                                      | 200; Stripe metadata `instanceId` is t1e, not t1a |
+| t1a `{ action: portal }` after customer create                     | 200 `billing.stripe.com`                          |
+
+t1a Stripe session (retrieved, test mode):
+
+- `kind=workspace_subscription`
+- `instanceId=inst_01m00kq6cdfzzb19gfjz8pt0s7` (existing)
+- `success_url=https://south63792f.quackback.co.uk/admin/settings/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`
+- `cancel_url=https://south63792f.quackback.co.uk/admin/settings/billing?checkout=cancelled`
+- instance count 16 → 16
+
+t1e return URLs are `https://northfa99f0.quackback.co.uk/admin/settings/billing?checkout=…`.
+
+Hosted pages (Chromium): `loop-evidence/t3-checkout/01-hosted-checkout.png`
+(Subscribe to Quackback Growth $32.00 / month, sandbox, owner email
+prefilled), `02-hosted-portal.png` (Stripe billing portal, no card yet).
+Pay-and-subscribe was filled with the test card but did not leave
+Checkout in the headless run; webhook finalize is not claimed.
+
+Workspace `POST https://south63792f.quackback.co.uk/api/billing/session`
+with browser `Origin: https://…` is 403 `invalid_origin` on the live
+image: `request.url` is `http://` behind TLS termination. App
+`635cdb149` compares Origin host to Host instead. Focused tests 4
+passed. Not in the live image. Do not treat the workspace form 303 as
+live until that commit is deployed.
+
+### Critic (2026-08-14, test-mode checkout/portal)
+
+pending
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
@@ -512,16 +560,22 @@ not start a new trial (both workspaces already have one).
 5. ~~Deploy `f75518e47` (`sha256:c9fbd88b…`).~~ Chromium Open + details + outcome proved.
 6. ~~Live rename / old-friendly 308 / `/api/storage/…` src on the two `ws-*` hosts (`689c99d13`, `sha256:8d9da3be…`).~~
 7. ~~Live starter trial through the instance-scoped CP gateway on both `ws-*` hosts.~~
-8. Replace the invalid Stripe **test** key (do not mint a live key). Re-seed
-   paid-plan price ids, then live-prove checkout/portal through
-   `/api/v1/internal/billing/session`. `SEED_DATABASE` is unset;
-   `CLUSTER_ENV=gauntlet` would seed the public demo user unless
-   `SEED_DEMO_USER=false`.
+8. ~~Live-prove test-mode checkout/portal through the instance-scoped CP
+   gateway on existing `ws-*` workspaces.~~ session + hosted pages +
+   registry return URLs + no new workspace. Webhook paid-finalize and
+   workspace-form 303 still open.
 9. ~~Deploy `57ff32499` so a later starter-miss retries from admin plan-notice.~~
    Live `0c42bbe1f` / `sha256:703eca7d…`.
-10. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+10. Deploy `635cdb149` so the workspace Upgrade form accepts https Origin,
+    then live-prove the 303 from `/api/billing/session`.
+11. Complete one test-mode payment and prove webhook finalize + projection
+    on the existing workspace (metadata must not create one).
+12. **Per-owner cap:** at most 3 live Free workspaces; unlimited paid.
+    Replace leftover one-Free-per-unpaid-org. Count by owner, not org.
+    Trial counts as Free. Delete/upgrade frees a Free slot.
+13. Add the control-plane Cloudflare for SaaS custom-hostname integration.
     Do not start this until the operator asks; custom domains stay later.
-11. First-win journeys. Checkout attaches to an existing workspace only.
+14. First-win journeys. Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
 
@@ -616,7 +670,8 @@ on self-host.
 ## Verification still required
 
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
-- Cross-workspace checkout/portal isolation. Blocked on a valid Stripe test key.
+- ~~Cross-workspace checkout session metadata.~~ t1e session names t1e;
+  extras `instanceId` cannot retarget. Paid webhook isolation still open.
 - Control-plane webhook replay and outbox retry.
 - ~~Created/configured-only trial activation and immutable anchor.~~ live on both `ws-*` hosts.
 - Control-plane outage behavior for normal use and billing actions. App retry
@@ -633,15 +688,15 @@ on self-host.
 
 ## Blockers
 
-Stripe **test** key on the Development CP is rejected by Stripe
-(`Invalid API Key`). Checkout/portal through the instance-scoped
-gateway cannot be live-proved until the operator replaces it. Do not
-use a live key. Do not print the current value.
+Stripe **test** key and paid-plan price ids are live. Checkout/portal
+session create through the CP gateway is proved. Remaining: deploy
+`635cdb149` for the workspace form 303; one test-mode payment +
+webhook finalize; Track 6 boundary scan and unused Railway
+`BILLING_*`. Walk3 workspace webhook was disabled by the operator.
 
 The identity/billing pair is otherwise deployed. Further deploys are
-incremental. `57ff32499` is live as `0c42bbe1f` /
-`sha256:703eca7d…`. Track 6 boundary scan and unused Railway
-`BILLING_*` / walk3 webhook retirement are the next unblocked unit.
+incremental. Live app `0c42bbe1f` / `sha256:703eca7d…`. Live CP
+`f135274f` / `sha256:a005414f…`.
 
 Operational defects carried from the prior lead:
 
