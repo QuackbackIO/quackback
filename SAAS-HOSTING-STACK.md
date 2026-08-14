@@ -159,7 +159,13 @@ appear in a workspace projection.
 
 ### Workspace billing UX
 
-Billing remains presented inside the workspace:
+The advertised catalogue (prices, highlights, add-ons) and the invoice
+list live on the control plane. The workspace GETs
+`/api/v1/internal/billing/catalogue` and `/invoices` and renders Plan &
+billing from that payload. It does not keep a parallel price list.
+Provider ids never appear in the workspace.
+
+Billing actions remain presented inside the workspace:
 
 1. An authenticated owner selects Upgrade, Change plan, or Manage billing.
 2. A workspace server endpoint calls the control plane with its instance

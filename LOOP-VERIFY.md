@@ -119,13 +119,13 @@ and say so.
 
 ### A. First-run hosting
 
-| #   | Surface          | Probe                                                            | HIGH SIGNAL if                                                 |
-| --- | ---------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| 1   | Create / Open    | CP sign-in → workspace with no pre-handoff form → OTT session    | Named-create form, 5xx, no auto-open, owner must sign in again |
-| 2   | Cloud identity   | Name + **required** friendly URL; no generated host by the field | Skip, optional URL, `ws-*` shown or prefilled                  |
-| 3   | Onboarding Ready | Each outcome has a primary enter action                          | No button; copy-only with no way into the product              |
-| 4   | Public board     | GET the starter board as a visitor                               | 5xx, wrong tenant, `/{slug}/feedback` as the cloud URL         |
-| 5   | Admin            | Owner reaches inbox / feedback                                   | Unexpected auth wall, 5xx                                      |
+| #   | Surface          | Probe                                                            | HIGH SIGNAL if                                                                           |
+| --- | ---------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1   | Create / Open    | CP sign-in → workspace with no pre-handoff form → OTT session    | Named-create form, 5xx, no auto-open, owner must sign in again                           |
+| 2   | Cloud identity   | Name + **required** friendly URL; no generated host by the field | Skip, optional URL, `ws-*` shown or prefilled. Local fix is uncommitted on `saas-merge`. |
+| 3   | Onboarding Ready | Each outcome has a primary enter action                          | No button; copy-only with no way into the product                                        |
+| 4   | Public board     | GET the starter board as a visitor                               | 5xx, wrong tenant, `/{slug}/feedback` as the cloud URL                                   |
+| 5   | Admin            | Owner reaches inbox / feedback                                   | Unexpected auth wall, 5xx                                                                |
 
 ### B. Settings IA and gateway
 
@@ -170,6 +170,15 @@ and say so.
 | 27  | SSO downgrade           | Scale IdP enforced → downgrade → admin password still works                | Admins locked out; SSO still required on Free                       |
 | 28  | Visible usage           | Trial end date; `N of M` on finite limits; `N of 3` Free on CP list        | First signal is a bare 402; AI budget 0 is an opaque model error    |
 | 29  | Export / wipe / account | Owner export; wipe then soft-delete; CP account delete refused if live     | Wipe without confirm; account delete with live workspaces           |
+
+### G. Billing page (catalogue)
+
+After CP `2fb9488` + app `6418785c8` are live:
+
+| #   | Surface    | Probe                                                             | HIGH SIGNAL if                                              |
+| --- | ---------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| 30  | Plan cards | Four cards from `GET …/catalogue`; annual default; current marked | Local price list; empty strip only; `ws-*` in copy          |
+| 31  | Invoices   | Table from `GET …/invoices`; View is an https hosted URL          | Provider ids in the workspace; 5xx; other tenant's invoices |
 
 ### F. Custom domains (live provider)
 

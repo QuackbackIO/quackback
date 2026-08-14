@@ -200,7 +200,12 @@ Bar:
 - instance credentials cannot act for another workspace;
 - return URLs cannot be supplied by callers;
 - webhook and starter-event replays are idempotent;
-- provider data never appears in projection payloads.
+- provider data never appears in projection payloads;
+- `GET /api/v1/internal/billing/catalogue` returns advertised stickers
+  (same as the public pricing page; annual = ten months) with no
+  provider ids;
+- `GET /api/v1/internal/billing/invoices` returns hosted invoice URLs
+  for this instance only.
 
 ### Track 4: Workspace projection and gateway
 
@@ -226,7 +231,10 @@ Bar:
 - `now >= expiresAt` falls back exactly to projected Free limits;
 - a control-plane outage preserves existing access and makes billing actions
   retryable;
-- self-host remains on its existing limits path.
+- self-host remains on its existing limits path;
+- Plan & billing renders catalogue cards + invoices from those GETs,
+  not a local price list. Paid workspaces change plan through portal
+  until checkout accepts an existing subscription.
 
 ### Track 5: Authoritative starter activation
 
@@ -298,14 +306,19 @@ restore, and account deletion stays on the control plane.
 - SSO entitlement is Scale. Workspace auth already fail-opens admin
   password sign-in when the IdP is not viable after a downgrade. No
   live sweep row.
+- Plan catalogue + invoices on CP (`2fb9488`); workspace cards
+  (`6418785c8`). Not deployed.
+- Cloudflare for SaaS client (`de0b038`); fallback origin active on
+  Railway. Domains card not wired.
 
 **Seat (settled for this track)**
 
 A seat is a workspace teammate — an admin or member with a login — not
 a portal user, not an end customer. Free applies `maxTeamSeats` from
-`tier_limits`. Paid cloud plans do **not** cap seats in this loop
-(they are per-workspace, not per-seat billed). Do not invent Stripe
-seat quantities here.
+`tier_limits`. Advertised stickers are **per seat** (CP catalogue /
+public pricing page). Stripe checkout is still one line item per
+workspace until seat billing is wired. Do not invent Stripe seat
+quantities in 8a–8c; 8d is where seat 402s land.
 
 **Units, in order**
 
@@ -372,14 +385,16 @@ Remaining identity/domain order:
 1. Close Track 1 without custom domains: `cp_instances.name` is not
    authoritative, rename-transfer tests, then two fresh-mailbox walks on
    **new** generated `ws-*.quackback.co.uk` hosts.
-2. Configure and readiness-check the Cloudflare for SaaS fallback origin and
-   custom-hostname provider in the control plane.
+2. ~~Configure Cloudflare for SaaS fallback origin.~~ Active on
+   `saas-origin.quackback.co.uk` → Railway. Client `de0b038`.
 3. Add the shared custom-domain manager on top of
-   `cp_workspace_hostname_claims`. Enable it only after live provider,
-   certificate, stale-update, cross-workspace, and cleanup-retry probes pass.
-4. Then run control-plane billing gateway and first-win journeys. Checkout
-   must attach to an **existing** workspace; Stripe metadata must not create
-   one.
+   `cp_workspace_hostname_claims` (identity gateway + Settings card).
+   Enable it only after live provider, certificate, stale-update,
+   cross-workspace, and cleanup-retry probes pass.
+4. Deploy catalogue/invoices (`2fb9488` + `6418785c8`) and prove the
+   Plan & billing cards on an existing workspace. Checkout still
+   attaches to an existing workspace; Stripe metadata must not create
+   one. Then first-win journeys.
 
 Existing `walk-*` / gauntlet instances have registry hostnames and
 `cp_instances.name`, but **zero** `cp_workspace_identity` and **zero**

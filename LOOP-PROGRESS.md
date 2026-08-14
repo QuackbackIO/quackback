@@ -116,12 +116,36 @@ remains.
 | 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
 | 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
 | 3 CP billing foundation          | live test-mode **payment** + webhook finalize on existing t1a; checkout/portal + form 303 already proved   | CP `f135274f` / `71e59d9`; app `635cdb149` / `139a4a8c`; see “Track 3 live payment (2026-08-14)”                  |
-| 4 workspace projection + gateway | paid Growth projection v4 delivered to t1a; no provider ids in workspace payload                           | outbox `delivered` `effectivePlan=growth`; `settings.cloud.projection` v4                                         |
+| 4 workspace projection + gateway | paid Growth projection v4 on t1a; catalogue+invoices **code** landed, not live                             | projection v4; CP `2fb9488`; app `6418785c8`                                                                      |
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
 | 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
-| 8 hosted account operations      | specified; not started                                                                                     | restore must re-check 3-Free; switcher, transfer, leave, seats, usage, export/wipe                                |
+| 8 hosted account operations      | specified; 8a–8f not started                                                                               | restore must re-check 3-Free; switcher, transfer, leave, seats, usage, export/wipe                                |
+
+## Pickup for critics and later fires
+
+Use this table. Do not rediscover work that already has a sha. Do not
+print the Cloudflare token. Preserve uncommitted onboarding files.
+
+| Unit                           | Where                | Sha                                                                                                 | Live?                    | Critic should prove                                                                                                                                                                                                                            |
+| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready CTA + required cloud URL | app, **uncommitted** | working tree on `saas-merge` (`_layout.complete.tsx`, `_layout.workspace.tsx`, `platform-label.ts`) | no                       | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
+| 3-Free create cap              | CP                   | `c5a484d`                                                                                           | no                       | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. Then **8a**: restore of a Free workspace at 3 live 402s the same reason.                                                                                                      |
+| Limits overlay                 | app                  | `31330d85b` / `b0c13a366`                                                                           | no                       | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep `LOOP-VERIFY.md` row 15 after deploy.                                                                                                            |
+| CF for SaaS origin + client    | zone + CP            | `de0b038`; fallback **active**                                                                      | token on CP, skip-deploy | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
+| Plan catalogue + invoices      | CP + app             | CP `2fb9488`, app `6418785c8`                                                                       | no                       | `GET /catalogue` stickers: Growth $32 / $300, Pro $62 / $588, Scale $115 / $1068, annual = 10 months. `GET /invoices` hosted https URLs only. UI: four cards, period toggle, invoice table. Paid change-plan still portal.                     |
+| Verify sweep                   | live                 | `loop-evidence/verify-2026-08-14/sweep.md`                                                          | FAIL 1 HIGH              | After limits+billing deploy, re-run the whole sweep. Fixer only for HIGH.                                                                                                                                                                      |
+| Track 8b–8f                    | neither              | specified in `LOOP-SAAS-FIRST-CUSTOMER.md`                                                          | no                       | Switcher, transfer/leave, seats+SSO downgrade, `N of M` usage, export/wipe/account delete. After 8a.                                                                                                                                           |
+
+**Fleet note:** one deploy thread. Prefer one CP deploy that includes
+`c5a484d` + `de0b038` + `2fb9488`, and one app deploy that includes
+`31330d85b` + `6418785c8` + the onboarding commit once it lands.
+Then one critic on the live pair (not a diff-only critic).
+
+**Do not invert:** Workers-as-app is out; fallback stays Railway.
+Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
+still 1 until 8d.
 
 ## Completed activation work
 
@@ -840,7 +864,9 @@ one HIGH (cloud unlimited overlay). Fixer merged, not deployed.
   downgrade leaves existing over-cap resources removable.
 - Plan change / downgrade / cancel / update-card through workspace
   Plan & billing (checkout + portal). Upgrade 303 and one paid
-  finalize are live on t1a; the rest of the catalogue path is not.
+  finalize are live on t1a. Catalogue cards + invoice list are
+  **code** (`2fb9488` / `6418785c8`), not live. After deploy: four
+  cards, annual default, invoices table, no local price list.
 - ~~Cross-workspace checkout session metadata.~~ t1e session names t1e;
   extras `instanceId` cannot retarget. Paid webhook on t1a named t1a;
   t1e was not paid. Isolation of a second paid workspace still open.
@@ -863,8 +889,9 @@ one HIGH (cloud unlimited overlay). Fixer merged, not deployed.
 - Track 8: restore vs 3-Free, switcher, transfer/leave, seats, SSO
   downgrade, visible usage, export/wipe/account delete.
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
-  provider retry, and cross-workspace isolation. Live proof waits on
-  Cloudflare for SaaS. The settings/gateway contract is in `LOOP-VERIFY.md`.
+  provider retry, and cross-workspace isolation. Provider client and
+  fallback origin are ready (`de0b038`). Workspace Domains card and
+  identity-gateway wiring are the next builder. Token is on CP only.
 
 ## Blockers
 

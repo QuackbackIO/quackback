@@ -110,9 +110,9 @@ A new SaaS owner can:
 6. follow one outcome-specific primary action;
 7. begin a 14-day Pro trial only after the starter is `created` or
    `configured`;
-8. upgrade, change plan, downgrade, cancel, and update a card from
-   the workspace Plan & billing settings (checkout or portal through
-   the control plane);
+8. see plan cards and invoices on Plan & billing (catalogue and
+   invoice list from the control plane), then upgrade, change plan,
+   downgrade, cancel, and update a card through checkout or portal;
 9. keep using the product from the latest local billing projection during a
    temporary control-plane outage, with Free as the baseline and named
    limit/entitlement refusals that point at the cheapest plan that lifts them;
@@ -182,8 +182,13 @@ silently invert them.
     export / wipe, delete the control-plane account, seats, and the
     SSO downgrade path. Ownership is `ownerEmail` on the control
     plane. A seat is a workspace teammate (admin/member with a
-    login), not a portal user. Paid cloud plans do not cap seats in
-    this loop. Usage is shown before a 402.
+    login), not a portal user. Advertised stickers are per-seat from
+    the CP catalogue; Stripe checkout is still one line item per
+    workspace until seat billing is wired. Usage is shown before a 402.
+17. The advertised plan catalogue (prices, highlights, add-ons,
+    invoices list) lives on the control plane. Workspaces GET
+    `/api/v1/internal/billing/catalogue` and `/invoices`. They do not
+    keep a parallel price list. Annual is ten months (two free).
 
 When documents disagree, authority is: this prompt, then
 `LOOP-SAAS-FIRST-CUSTOMER.md`, then `LOOP-VERIFY.md` for the hosted
@@ -260,43 +265,24 @@ billing path. They do not close tracks 3–7.
   is a superseded prompt: named create, app-owned billing, provision-time
   trial. Ignore it.
 
-**This wakeup’s unit, in order:**
+**This wakeup’s unit:** follow `LOOP-PROGRESS.md` “Next commits” and
+“Pickup for critics”. Do not restart Units A–C or the setup-chunk
+`node:crypto` fix — those are live. Current queue in short:
 
-1. ~~**Unit A — deploy the current CP.**~~ Live `7eca55b3` (`a040f78`).
-   Auto-create SSR screenshot `loop-evidence/unit-a-setup.png`.
-2. ~~**Unit B — auto-open when ready.**~~ Deployed with A; live
-   OpeningPane is blocked until the setup chunk hydrates.
-3. ~~**Unit C — host-independent stored assets.**~~ Live `98212c18c`
-   (`sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`).
-   Persist `/api/storage/<key>`; leaves absolutize from the system host.
-4. Finish the in-flight CP setup-chunk isolation so the browser does
-   not import `node:crypto`. Redeploy CP. Do not revert concurrent
-   `.server.ts` work.
-5. **Per-owner workspace cap.** Replace the leftover “one Free
-   workspace per unpaid org” check with: at most three live Free
-   workspaces owned by this user; paid unlimited. Tests: 1–3 Free
-   succeed; 4th Free 402; paid owner can create another; delete/upgrade
-   frees a Free slot. Dashboard Create stays; first workspace still
-   auto-opens. Then a critic. **8a** (restore re-checks the same cap)
-   ships with or immediately after this deploy.
-6. Fresh-browser prove the **deployed** pair with **two** mailboxes the
-   operator does not own, on **new** generated hosts:
-   - control-plane sign-in
-   - first workspace created with no name/URL/region/plan form
-   - auto-open establishes the session via one-use OTT (no dashboard)
-   - Workspace details with a required friendly URL (no generated host
-     by the field), then the outcome question
-   - rename of the friendly URL, old host redirects, session survives
-   - stored image src stays `/api/storage/…` across rename
-   - replay / expiry / wrong-workspace OTT fail closed
+1. Fleet-deploy undeployed CP (`c5a484d` 3-Free, `de0b038` CF client,
+   `2fb9488` catalogue/invoices) and undeployed app (`31330d85b`
+   limits overlay, `6418785c8` billing cards). Then a critic on the
+   live pair.
+2. Commit the uncommitted onboarding Ready/URL fix on `saas-merge`
+   (HIGH SIGNAL; files already written). Critic: Ready always has a
+   primary CTA; cloud URL is required; no `ws-*` by the field.
+3. 8a restore re-checks 3-Free. Then Track 8b–8f.
+4. Cloudflare: wire identity gateway + workspace Domains card on the
+   existing client. Fallback origin is already active on Railway.
+5. Re-run `LOOP-VERIFY.md` after those deploys.
 
-The operator unblocked Cloudflare for SaaS (token on the control plane,
-not in git). Fallback origin is the pooled Railway web service
-(`saas-origin.quackback.co.uk`), not a Worker. Customers CNAME to
-`customers.quackback.co.uk`. Live add/verify/certificate is in scope.
-Do not raise
-`MIN_SCHEMA_VERSION` unless the walk requires it and every enrolled
-workspace is already at the new floor.
+Do not raise `MIN_SCHEMA_VERSION` unless the walk requires it and every
+enrolled workspace is already at the new floor.
 
 After every CP or app unit that changes customer-visible create, open,
 identity, or storage URLs, deploy the affected side, verify
