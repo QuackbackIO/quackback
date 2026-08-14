@@ -1,68 +1,11 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { consumeOriginTransferFn } from '@/lib/server/functions/origin-transfer'
 
 const searchSchema = z.object({
   ott: z.string().optional(),
   returnTo: z.string().optional(),
 })
-
-type TransferResult =
-  | { kind: 'redirect'; to: string }
-  | { kind: 'error'; status: 'invalid' | 'error' }
-
-function responseCookies(response: Response): string[] {
-  const values = response.headers.getSetCookie?.() ?? []
-  if (values.length > 0) return values
-  for (const [name, value] of response.headers) {
-    if (name.toLowerCase() === 'set-cookie') values.push(value)
-  }
-  return values
-}
-
-export function isCanonicalIdentityHost(host: string | null, canonicalOrigin: string): boolean {
-  if (!host) return false
-  const requested = host.trim().toLowerCase().replace(/:\d+$/, '')
-  return requested === new URL(canonicalOrigin).hostname
-}
-
-const consumeOriginTransferFn = createServerFn({ method: 'POST' })
-  .validator(searchSchema)
-  .handler(async ({ data }): Promise<TransferResult> => {
-    const returnTo = isSafeCallbackUrl(data.returnTo) ? data.returnTo! : '/admin/settings/general'
-    if (!data.ott) return { kind: 'error', status: 'invalid' }
-
-    const { db, settings } = await import('@/lib/server/db')
-    const { parseIdentityProjection } =
-      await import('@/lib/server/domains/settings/cloud/identity-projection')
-    const [row] = await db.select({ identity: settings.cloudIdentity }).from(settings).limit(1)
-    const identity = parseIdentityProjection(row?.identity)
-    const headers = getRequestHeaders()
-    if (!identity || !isCanonicalIdentityHost(headers.get('host'), identity.canonicalOrigin)) {
-      return { kind: 'error', status: 'invalid' }
-    }
-
-    try {
-      const { auth } = await import('@/lib/server/auth')
-      const response = await auth.api.verifyOneTimeToken({
-        body: { token: data.ott },
-        headers,
-        asResponse: true,
-      })
-      if (!response.ok) return { kind: 'error', status: 'invalid' }
-      const cookies = responseCookies(response)
-      if (cookies.length === 0) return { kind: 'error', status: 'error' }
-      ;(setResponseHeader as (name: string, value: string | string[]) => void)(
-        'Set-Cookie',
-        cookies
-      )
-      return { kind: 'redirect', to: returnTo }
-    } catch {
-      return { kind: 'error', status: 'invalid' }
-    }
-  })
 
 export const Route = createFileRoute('/auth/origin-transfer')({
   validateSearch: searchSchema.parse,

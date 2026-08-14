@@ -114,6 +114,19 @@ describe('public URLs', () => {
     expect(url).not.toContain('env-cdn.example.net')
   })
 
+  it('keeps the pinned system-host asset origin after a friendly URL rename', () => {
+    // contentJson stores absolute image URLs. The registry publicUrl is the
+    // immutable system host; routing.baseUrl is the current friendly origin.
+    const url = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), {
+      storage: { publicUrl: 'https://ws-abc123.quackback.co.uk/api/storage' },
+      baseUrl: 'https://acme.quackback.co.uk',
+    })
+
+    expect(url).toBe(`https://ws-abc123.quackback.co.uk/api/storage/${PUBLIC_KEY}`)
+    expect(url).not.toContain('acme.quackback.co.uk')
+    expect(url).not.toContain('env-cdn.example.net')
+  })
+
   it('gives two workspaces different origins for the same key', () => {
     const alpha = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY))
     const bravo = withWorkspace('workspace-bravo', () => getPublicUrlOrNull(PUBLIC_KEY))
@@ -188,9 +201,13 @@ describe('placement', () => {
     // really about the accessor — it is that a public asset URL keeps rendering
     // for a workspace whose credentials this process cannot dereference, because
     // rendering one needs a bucket and no secret.
-    expect(withWorkspace('workspace-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(true)
+    expect(withWorkspace('workspace-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(
+      true
+    )
     expect(
-      withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), { secrets: NO_STORAGE })
+      withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), {
+        secrets: NO_STORAGE,
+      })
     ).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
   })
 
@@ -200,8 +217,12 @@ describe('placement', () => {
     // addressability question answers `true` while every upload throws. The two
     // callers that gate an upload already skip cleanly on `false`, so the wrong
     // question there turns a skip into an exception.
-    expect(withWorkspace('workspace-alpha', () => isS3Usable(), { secrets: NO_STORAGE })).toBe(false)
-    expect(withWorkspace('workspace-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(true)
+    expect(withWorkspace('workspace-alpha', () => isS3Usable(), { secrets: NO_STORAGE })).toBe(
+      false
+    )
+    expect(withWorkspace('workspace-alpha', () => isS3Configured(), { secrets: NO_STORAGE })).toBe(
+      true
+    )
   })
 
   it('is usable once the credentials resolved', () => {
@@ -262,11 +283,15 @@ describe('credentials', () => {
     // one attachment link, while an escaping throw takes down every page that
     // renders one.
     expect(
-      withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), { secrets: NO_STORAGE })
+      withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), {
+        secrets: NO_STORAGE,
+      })
     ).toBeNull()
     // …and the public URL still renders, because it needs no secret.
     expect(
-      withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), { secrets: NO_STORAGE })
+      withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), {
+        secrets: NO_STORAGE,
+      })
     ).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
   })
 

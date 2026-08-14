@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isCanonicalIdentityHost } from '../auth.origin-transfer'
+import { isCanonicalIdentityHost } from '@/lib/server/functions/origin-transfer'
 
 describe('origin transfer host binding', () => {
   it('accepts only the projected canonical hostname', () => {
