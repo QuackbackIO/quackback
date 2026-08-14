@@ -33,9 +33,19 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 - Workspace: `ff19faf4c`
 - Control plane: `b4afe73`
 - Last known deployed workspace: `03ea102e` (2026-08-14)
-- Last known deployed control plane: `01d3e028` (2026-08-14)
+- Last known deployed control plane: `14dee7a2` (2026-08-14)
 
-No deployment has yet been made for the revised billing ownership model.
+No complete paired deployment has yet been made for the revised billing
+ownership model.
+
+Control-plane deployment `14dee7a2-6a01-44ea-ba39-da7c2abd93bf` is a fresh
+Railway build of `b4afe73` and reached SUCCESS in `sfo`. The attempted paired
+workspace rollout did not advance the image: deployments `7cb1c890`,
+`53a53727`, `79d21f7e`, `3d8afed5`, and `2f810f9d` all reached SUCCESS but
+reused the prior `sha256:596d77e3…` web image or `sha256:8ff95109…` role image.
+They are explicitly not accepted as deployment proof for `8ae498796`.
+Railway service configuration remains image-based with the prior commands,
+cron schedules, and regions; no diagnostic build-command override remains.
 
 The prior web deployment `03ea102e` runs image digest `sha256:596d77e3…` in
 `us-east4-eqdc4a`. Worker, cron, and migrator services remain on the older
