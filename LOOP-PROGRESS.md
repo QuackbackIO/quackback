@@ -30,14 +30,12 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `4d1b582c8` (live image `98212c18c` /
+- Workspace: `f0f8cf02a` (live image still `98212c18c` /
   `sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`)
-- Control plane: `a040f78` (a concurrent CLI `railway up` moved live to
-  `07d5737e` /
-  `sha256:ffdd51a26023233f03c99ded29153317622beeee342b012de3fd75367e3dfe1c`;
-  previous `7eca55b3` is REMOVED)
+- Control plane: `ea1d44d` (live still `07d5737e` /
+  `sha256:ffdd51a26023233f03c99ded29153317622beeee342b012de3fd75367e3dfe1c`)
 - Last known deployed workspace: `98212c18c` (2026-08-14)
-- Last known deployed control plane: `07d5737e` (2026-08-14; not this fire)
+- Last known deployed control plane: `07d5737e` (2026-08-14; `6b42ef3`)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -64,17 +62,12 @@ worker / crons / migrator, skip-deploys). Live `/assets/setup._orgId-*.js`
 contains “Creating your workspace” and “Opening your workspace”; the
 named-create card copy is gone.
 
-Fresh-mailbox `/setup` (2026-08-14, `walk-unita-*@guerrillamail.com`,
-org `org_01m00j54jqe8ks0r6dd1cr6c9e`) SSR is auto-create: heading
-“Creating your workspace”, copy “nothing you need to choose yet”, no
-name/URL/region/plan fields. Screenshot:
-`loop-evidence/unit-a-setup.png`. Hydration then fails: the live setup
-chunk imports `node:crypto` (`Failed to fetch dynamically imported
-module: /assets/setup._orgId-D7jp-les.js`). Error shot:
-`loop-evidence/unit-a-setup-hydrate-error.png`. A concurrent CP change
-is isolating those server modules behind `.server.ts` doors; do not
-revert it. Do not treat the interactive walk as green until that chunk
-loads.
+Fresh-mailbox `/setup` hydrates. Live chunk
+`/assets/setup._orgId-DOHT4ynR.js` has no `node:crypto` and contains
+“Creating your workspace” / “Opening your workspace”. The old
+`D7jp-les` 404 is a stale browser cache; hard-refresh, do not refactor
+the CP again for it. Named-create copy is gone. Screenshot of a later
+zero-input create: `loop-evidence/t1a/03-setup.png`.
 
 Unit C (`a796b8885`) persists `/api/storage/<key>` (private: `?read=`)
 and absolutizes email, widget, OG, and vision from the immutable
@@ -109,17 +102,17 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                                               | Evidence                                                                                                          |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                                             | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | implementation complete through post-handoff details; local transfer tests added; live proof pending | CP `bd9148c` through `9071f83`; app `4a1827560` through `1add15b16`; CP `4a1e97b`                                 |
-| 2 focused widget activation      | implemented, focused verification passed                                                             | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                                                          | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                                                          | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                                                          | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                                                       | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                           | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                                                           | `33c15ba53`; first-win journeys remain                                                                            |
+| Track                            | Status                                                                                                     | Evidence                                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | live create + OpeningPane proved on new `ws-*` hosts; post-handoff OTT consume blocked on live `98212c18c` | see “Track 1 live walk (2026-08-14)”                                                                              |
+| 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | implemented; full/live verification pending                                                                | CP `c7ec591` through `9f77647`                                                                                    |
+| 4 workspace projection + gateway | implemented; full/live verification pending                                                                | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | implemented; full/live verification pending                                                                | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
 
 ## Completed activation work
 
@@ -240,25 +233,40 @@ and 21 tests intentionally skipped.
 Re-check both worktrees before every edit and commit because another agent shares
 the codebase.
 
+## Track 1 live walk (2026-08-14)
+
+Two fresh guerrilla mailboxes, **new** generated hosts (not `walk-*`):
+
+| Mailbox                             | Workspace                         | Host                                          |
+| ----------------------------------- | --------------------------------- | --------------------------------------------- |
+| `walk-t1e-a7ebad@guerrillamail.com` | `inst_01m00kprbrfzzb19f490wga8q2` | `ws-4a048e07941c5e7840e986c0.quackback.co.uk` |
+| `qb-t1a-7caf14b1@guerrillamail.com` | `inst_01m00kq6cdfzzb19gfjz8pt0s7` | `ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk` |
+
+Proved on live `07d5737e` / `98212c18c`:
+
+- Setup chunk `setup._orgId-DOHT4ynR.js` has **no** `node:crypto`. Named-create copy is gone. Old `D7jp-les` 404s need a hard refresh.
+- Sign-in OTP → `/dashboard` 307 → `/setup/$orgId` auto-creates. Heading “Creating your workspace”, copy “nothing you need to choose yet”. Shots: `loop-evidence/t1a/03-setup.png`, `loop-evidence/track1-a-setup.png`.
+- `cp_instances.name` leftover is `''`. Display name is `Untitled workspace` on `cp_workspace_identity`. DB name `qb_<24hex>`.
+- OpeningPane auto-POSTs `/api/instances/:id/open` and 302s to `https://ws-…/admin?ott=`. Shot: `loop-evidence/t1e/04-opening.png`.
+- First identity outbox attempt 401’d (`invalid_projection`); retry delivered. `settings.cloud_identity` is now present.
+- Live `/admin` on `98212c18c` does **not** consume `?ott=` in the loader. A healthy settings load `requireWorkspaceRole`s first and 307s to `/?auth=signin&callbackUrl=/admin`, dropping the token. Client `OttHandler` never runs. First-open error page (`loop-evidence/t1e/05-landed.png`) only kept `?ott=` because settings 500’d before the auth redirect.
+
+Fixes on `saas` not yet live:
+
+- CP `f1f23a1` Free catalogue row (first create insert failed until that row existed). `free` is now in live `cp_plans`.
+- CP `ea1d44d` vendor schema through `0262`.
+- App `9de604830` consume Open OTT in `/admin` before auth.
+- App `f0f8cf02a` move that consume into `consumeAdminOpenHandoffFn` so Docker import-protection does not see `@tanstack/react-start/server` from `admin.tsx`. Docker `31823672161` (`9de604830`) failed import-protection. Rebuild `31823947317` is `f0f8cf02a`.
+
+Do **not** start custom domains or the billing live bar. Reuse the two `ws-*` rows after the new image is on web (`us-east4-eqdc4a`). Do not mint more Neon projects for this walk.
+
 ## Next commits
 
-1. ~~**Unit A — deploy the current CP**~~ live `7eca55b3` (`a040f78`).
-   Auto-create SSR screenshot `loop-evidence/unit-a-setup.png`. Setup
-   chunk still fails to hydrate (`node:crypto`).
-2. ~~**Unit B — auto-open when ready**~~ CP `a040f78` deployed. Live
-   OpeningPane cannot run until the setup chunk loads.
-3. ~~**Unit C — host-independent stored assets**~~ app `a796b8885` +
-   `98212c18c`, live
-   `sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`.
-   Persist is `/api/storage/<key>`; email/widget/OG/vision absolutize
-   from the immutable system host. Focused tests 187 + 33 + 7.
-4. Finish the in-flight CP setup-chunk isolation (do not revert the
-   concurrent `.server.ts` work), redeploy CP, confirm the setup module
-   loads without `node:crypto`.
-5. Fresh-browser prove the deployed identity pair on **new** generated
-   `ws-*.quackback.co.uk` hosts: zero-input create, auto-open OTT,
-   skippable details, rename transfer, relative stored image src.
-   Do not use existing `walk-*` rows.
+1. ~~**Unit A — deploy the current CP**~~ live `07d5737e` (`6b42ef3`). Setup chunk hydrates.
+2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
+3. ~~**Unit C — host-independent stored assets**~~ live `98212c18c`.
+4. Deploy `f0f8cf02a` (or later) to web/worker/crons/migrator. Verify `meta.imageDigest` and `us-east4-eqdc4a`.
+5. Re-walk the two existing `ws-*` hosts: consume OTT → skippable details → outcome → rename / old-host redirect / `/api/storage/…` src → replay/expiry/wrong-workspace fail closed.
 6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
 7. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
