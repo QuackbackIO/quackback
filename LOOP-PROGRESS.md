@@ -33,7 +33,7 @@ No deployment has yet been made for the revised billing ownership model.
 | 4 workspace projection + gateway | in progress                              | uncommitted projection consumer replaces `2c3923ba9` catalogue reads |
 | 5 authoritative starter trial    | not started                              | workspace still calls local trial start and must change              |
 | 6 remove workspace billing       | not started                              | direct provider integration remains                                  |
-| 7 PLG + first-win proof          | in progress                              | typed privacy-safe event work uncommitted                            |
+| 7 PLG + first-win proof          | infrastructure implemented               | `33c15ba53`; first-win journeys remain                               |
 
 ## Completed activation work
 
@@ -46,14 +46,10 @@ No deployment has yet been made for the revised billing ownership model.
 
 ## Current worktree ownership
 
-The workspace worktree contains two intentionally uncommitted units:
-
-1. typed allowlisted PLG events and call-site instrumentation; and
-2. replacement of workspace catalogue-derived trial limits with a local billing
-   projection model.
-
-Before committing, separate those units by explicit path and ensure the
-workspace-local `trial_started` event is removed; that event becomes
+The workspace worktree contains the replacement of workspace catalogue-derived
+trial limits with a local billing projection model. Typed allowlisted PLG events
+and call-site instrumentation are committed; workspace-local `trial_started`
+emission was deliberately excluded because that event becomes
 control-plane-authoritative.
 
 The control-plane worktree was clean at takeover. Re-check before every edit and
@@ -61,13 +57,11 @@ commit because another agent shares the codebase.
 
 ## Next commits
 
-1. `docs(saas): make control-plane billing authoritative`
-2. `feat(analytics): add privacy-safe activation events`
-3. `feat(billing): consume versioned control-plane projections`
-4. Control-plane catalogue/readiness/projection primitives.
-5. Control-plane starter activation and signed fan-out.
-6. Workspace projection ingestion and billing gateway actions.
-7. Delete workspace provider integration and obsolete configuration.
+1. `feat(billing): consume versioned control-plane projections`
+2. Control-plane catalogue/readiness/projection primitives.
+3. Control-plane starter activation and signed fan-out.
+4. Workspace projection ingestion and billing gateway actions.
+5. Delete workspace provider integration and obsolete configuration.
 
 ## Verification still required
 
