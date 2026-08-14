@@ -30,7 +30,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `809891850` (this unit records local fixture 0262; sha after commit)
+- Workspace: `ad6c408f9` (deployed image remains `58eebd173`)
 - Control plane: `be35af1` (live deploy remains `14dee7a2` / `b4afe73`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
@@ -101,7 +101,7 @@ this through the control-plane gateway before closing the revised billing tracks
 
 ## Current worktree ownership
 
-Both worktrees were clean after workspace commit `809891850` and control-plane
+Both worktrees were clean after workspace commit `ad6c408f9` and control-plane
 commit `be35af1`. The workspace
 accepts only signed control-plane commercial projections and contains no
 platform billing provider integration. The control plane now owns catalogue,

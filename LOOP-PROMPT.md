@@ -134,7 +134,7 @@ Verified 2026-08-14. Re-check before acting.
 
 **Revisions**
 
-- App `saas` tip was `809891850` (ledger; this unit adds a docs commit).
+- App `saas` tip was `ad6c408f9` (ledger).
   Last **deployed** app image is `58eebd173` as
   `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`.
 - CP `saas` tip: `be35af1` (welcome no longer mails leftover `login_url`).
