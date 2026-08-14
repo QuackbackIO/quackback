@@ -24,7 +24,7 @@ export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
     if (limits.notice) return limits.notice
 
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
-    const { trialNotice } = await import('@/lib/server/domains/settings/cloud/trial')
+    const { trialNotice } = await import('@/lib/server/domains/settings/cloud/commercial-notice')
     return trialNotice(await getCloudConfig())
   }
 )

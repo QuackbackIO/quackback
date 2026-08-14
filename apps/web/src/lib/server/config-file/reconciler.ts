@@ -1,16 +1,10 @@
 import { computeManagedPaths } from './managed-paths'
 import type { QuackbackConfigSpec } from './schema'
 import {
-  cloudConfigEquivalent,
-  mergeCloudConfig,
-  type CloudConfigPatch,
-} from '@/lib/server/domains/settings/cloud/cloud.merge'
-import {
   DEFAULT_SETUP_STATE,
   getSetupState,
   normalizeOnboardingOutcome,
   type SetupState,
-  type StoredCloudConfig,
 } from '@/lib/shared/db-types'
 
 type ConfigWorkspace = NonNullable<QuackbackConfigSpec['workspace']>
@@ -21,12 +15,6 @@ export interface SettingsRow {
   slug: string
   setupState: string | null
   tierLimits: string | null
-  /**
-   * Current `settings.cloud` value. Optional so existing callers and test
-   * fixtures that predate the cloud block keep compiling; absent and null are
-   * treated identically (no cloud config).
-   */
-  cloud?: StoredCloudConfig | null
   managedFieldPaths: string[]
 }
 
@@ -49,7 +37,6 @@ export interface SettingsInsert {
   slug: string
   setupState?: string
   tierLimits?: string
-  cloud?: StoredCloudConfig
   managedFieldPaths: string[]
 }
 
@@ -63,28 +50,7 @@ export interface ReconcileDeps {
    *  when no settings row exists yet. */
   createSettings: (insert: SettingsInsert) => Promise<void>
   /**
-   * Apply the file's `cloud` block through `writeCloudConfig`, the single
-   * mutation seam for that column.
-   *
-   * Deliberately NOT part of `updateSettings`. `settings.cloud` has a second
-   * writer (the billing module), and a plain `SET cloud = <merged>` computed
-   * from a row read earlier in this function silently erases anything that
-   * writer committed in between. Routing through the seam puts the read, the
-   * merge and the write inside one row lock, and — as a second benefit —
-   * subjects the file's block to the same `validatePatch` the other writer
-   * gets, which a direct column write skipped.
-   *
-   * Returns whether the row actually changed, so the caller can decide about
-   * cache invalidation without a second read.
-   */
-  applyCloudConfig: (patch: CloudConfigPatch) => Promise<boolean>
-  /**
    * Apply the file's `tierLimits` block through `writeTierLimits`.
-   *
-   * Same reasoning as `applyCloudConfig`: the billing module became a second
-   * writer of this column, so a merge computed from a row read earlier in
-   * this function and written whole can erase it. Routing both writers
-   * through one locked seam is what makes the column safe.
    */
   applyTierLimits: (limits: Record<string, unknown> | null) => Promise<boolean>
   invalidateSettingsCache: () => Promise<void>
@@ -125,10 +91,6 @@ export async function reconcileFileIntoDb(
       slug: spec.workspace.slug,
       setupState,
       tierLimits: spec.tierLimits !== undefined ? JSON.stringify(spec.tierLimits) : undefined,
-      cloud:
-        spec.cloud !== undefined
-          ? mergeCloudConfig(null, toCloudPatch(spec.cloud), { writer: 'config' })
-          : undefined,
       managedFieldPaths: computeManagedPaths(spec),
     })
     await deps.invalidateSettingsCache()
@@ -162,25 +124,11 @@ export async function reconcileFileIntoDb(
     }
   }
 
-  // The cloud block travels its own path — see `ReconcileDeps.applyCloudConfig`.
-  // The equivalence test here is only a fast path that keeps a steady-state
-  // 30-second tick from opening a locking transaction; the seam repeats it
-  // under the row lock, which is where the decision that matters is made.
-  let cloudChanged = false
-  if (spec.cloud !== undefined) {
-    const patch = toCloudPatch(spec.cloud)
-    const wouldMerge = mergeCloudConfig(current.cloud ?? null, patch, { writer: 'config' })
-    if (!cloudConfigEquivalent(wouldMerge, current.cloud ?? null)) {
-      cloudChanged = await deps.applyCloudConfig(patch)
-    }
-  }
-
   const pathsChanged = !arrayEquals(newPaths, current.managedFieldPaths)
   const hasFieldUpdates = Object.keys(update).length > 1 // > 1 because managedFieldPaths is always set
 
   // Both seams invalidate their own caches when they write, so a reconcile
   // that touched only those columns is already fully applied.
-  void cloudChanged
   void tierLimitsChanged
 
   if (!pathsChanged && !hasFieldUpdates) return
@@ -188,20 +136,6 @@ export async function reconcileFileIntoDb(
   await deps.updateSettings(update)
   await deps.invalidateSettingsCache()
   await deps.invalidateTierLimitsCache()
-}
-
-/**
- * Config-file cloud block -> write patch. The two shapes are deliberately
- * near-identical; this exists so the file's `undefined` (not declared, leave
- * alone) survives into the merge rather than being flattened to a null.
- */
-function toCloudPatch(cloud: NonNullable<QuackbackConfigSpec['cloud']>): CloudConfigPatch {
-  const patch: CloudConfigPatch = { enabled: cloud.enabled }
-  if (cloud.plan !== undefined) patch.plan = cloud.plan
-  if (cloud.entitlements !== undefined) patch.entitlements = cloud.entitlements
-  if (cloud.billing !== undefined) patch.billing = cloud.billing
-  if (cloud.upgradeUrl !== undefined) patch.upgradeUrl = cloud.upgradeUrl
-  return patch
 }
 
 export function mergeSetupState(

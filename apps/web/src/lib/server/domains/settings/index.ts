@@ -72,9 +72,6 @@ export { OSS_TIER_LIMITS } from './tier-limits.types'
 // exported here; import them directly in server-only code.
 export type {
   CloudConfig,
-  CloudBilling,
-  CloudTrial,
-  CloudWriter,
   BillingStatus,
   PlanId,
   PlanDefinition,
@@ -87,7 +84,6 @@ export {
   PLAN_DEFINITIONS,
   ENTITLEMENTS,
   ENTITLEMENT_KEYS,
-  BILLING_STATUSES,
   DISABLED_CLOUD_CONFIG,
   minimumPlanFor,
   isPlanId,

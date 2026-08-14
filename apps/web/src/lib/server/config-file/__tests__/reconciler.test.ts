@@ -18,7 +18,6 @@ const baseDeps = (): ReconcileDeps => ({
     managedFieldPaths: [],
   })),
   updateSettings: vi.fn(async () => {}),
-  applyCloudConfig: vi.fn(async () => true),
   applyTierLimits: vi.fn(async () => true),
   createSettings: vi.fn(async () => {}),
   invalidateSettingsCache: vi.fn(async () => {}),

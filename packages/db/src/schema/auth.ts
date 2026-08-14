@@ -69,41 +69,8 @@ export interface StoredAssistantConfig {
   }
 }
 
-/**
- * Structural twin of `CloudConfig` (apps/web
- * `lib/server/domains/settings/cloud/cloud.types.ts`). packages/db can't import
- * apps/web, so this hand-written interface mirrors that type's shape with
- * widened primitives (`string` instead of the `PlanId` union, an index
- * signature instead of the closed entitlement-key set). A drift tripwire in
- * apps/web (`domains/settings/cloud/__tests__/cloud-stored-shape.test.ts`)
- * asserts the two stay structurally compatible — edit both sides together.
- *
- * A NULL column (the default for every existing and every self-hosted row)
- * means "no cloud config", which resolves to `enabled: false`.
- */
-export interface StoredCloudBilling {
-  provider?: string | null
-  customerRef?: string | null
-  subscriptionRef?: string | null
-  status?: string | null
-  currentPeriodEnd?: string | null
-}
-
-/**
- * A trial the workspace was given before it bought anything.
- *
- * Written once and then left alone: the trial ends by the clock passing
- * `endsAt`, not by anything rewriting this. Keeping the record after it has
- * expired is what makes "this workspace had a trial and it ran out" an answer
- * the row itself can give, and what stops a second start from handing out
- * another one.
- */
-export interface StoredCloudTrial {
-  plan?: string | null
-  startedAt?: string | null
-  endsAt?: string | null
-}
-
+/** Storage-only shape for the narrow control-plane projection. A NULL cloud
+ * column is the default for every self-hosted workspace. */
 export interface StoredProjectedLimits {
   maxBoards: number | null
   maxPosts: number | null
@@ -137,17 +104,6 @@ export interface StoredCloudConfig {
   enabled: boolean
   /** Signed, monotonic commercial state projected by the control plane. */
   projection?: StoredBillingProjection | null
-  plan?: string | null
-  entitlements?: Record<string, boolean>
-  billing?: StoredCloudBilling | null
-  /**
-   * See {@link StoredCloudTrial}. Absent on every workspace that was never
-   * given one, which is every self-hosted install.
-   */
-  trial?: StoredCloudTrial | null
-  /** Which writer last set plan/entitlements — 'config' or 'billing'. */
-  source?: string | null
-  updatedAt?: string | null
 }
 
 /**
@@ -501,30 +457,20 @@ export const settings = pgTable('settings', {
   tierLimits: text('tier_limits'),
   /**
    * Optional cloud configuration block (see {@link StoredCloudConfig}):
-   * which plan the workspace is on, which feature entitlements that plan
-   * unlocks, and opaque billing-provider references.
+   * A signed, versioned billing projection from the control plane. It contains
+   * only customer-safe UI and enforcement state, never provider references.
    *
    * NULL — the default, and the only value a self-hosted install ever has —
    * means no cloud config, which resolves to `enabled: false`: no plan, no
    * entitlement gating, no upsell.
    *
-   * `tierLimits` above remains the persisted numeric baseline. The active trial
-   * window in this block may temporarily overlay Pro allowances at read time;
-   * the overlay is never written back.
+   * `tierLimits` above remains the persisted numeric baseline. Projected limits
+   * are overlaid at read time and are never written into that baseline.
    */
   cloud: jsonb('cloud').$type<StoredCloudConfig>(),
   /**
-   * Optimistic-concurrency token incremented with every `cloud` write.
-   *
-   * `settings.cloud` has two independent writers — the declarative config
-   * file's reconciler and the billing module — and both are read-modify-write
-   * over a whole JSON block. Without a token, a reconcile that read at T0 and
-   * wrote at T2 would silently erase a billing write at T1, with nothing
-   * recording that it happened. `writeCloudConfig()` takes the row lock,
-   * re-reads inside it, and bumps this; a caller that carried a stale
-   * revision across a request boundary is refused rather than merged over.
-   *
-   * Same shape and same reason as `assistantConfigRevision` above.
+   * Local change token incremented whenever a newer projection is accepted.
+   * Projection monotonicity itself is enforced by `projection.version`.
    */
   cloudRevision: integer('cloud_revision').notNull().default(0),
   /**

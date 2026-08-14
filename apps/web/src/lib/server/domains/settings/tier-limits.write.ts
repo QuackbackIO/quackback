@@ -21,15 +21,13 @@
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { NotFoundError } from '@/lib/shared/errors'
-import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { invalidateSettingsCache } from './settings.helpers'
 import { invalidateTierLimitsCache } from './tier-limits.service'
 import type { TierLimits } from './tier-limits.types'
 
 const log = logger.child({ component: 'tier-limits-write' })
 
-/** Which writer is asking. Mirrors `CloudWriter`. */
-export type TierLimitsWriter = 'config' | 'billing'
+export type TierLimitsWriter = 'config'
 
 export interface TierLimitsWriteResult {
   changed: boolean
@@ -45,8 +43,7 @@ export interface TierLimitsWriteResult {
  * OSS defaults at *read* time), and a per-field merge would make a plan
  * downgrade unable to remove a limit the previous plan had raised.
  *
- * `null` clears the row back to the unlimited default, which is what a
- * cancelled subscription should leave behind on a self-hosted-shaped install.
+ * `null` clears the operator baseline back to the unlimited OSS default.
  */
 export async function writeTierLimits(
   next: Partial<TierLimits> | null,
@@ -59,24 +56,12 @@ export async function writeTierLimits(
       .select({
         id: settings.id,
         tierLimits: settings.tierLimits,
-        managedFieldPaths: settings.managedFieldPaths,
       })
       .from(settings)
       .limit(1)
       .for('update')
 
     if (!row) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
-
-    if (opts.writer !== 'config') {
-      const managed = (row.managedFieldPaths as string[] | null) ?? []
-      if (isPathManaged('tierLimits', managed)) {
-        // Deliberately not an exception. An operator pinning limits is a
-        // legitimate configuration, and a billing webhook is not a request a
-        // human is waiting on — refusing loudly would turn an operator's
-        // choice into a delivery failure and a retry storm.
-        return { changed: false, managedByConfigFile: true }
-      }
-    }
 
     if (row.tierLimits === serialized) {
       return { changed: false, managedByConfigFile: false }

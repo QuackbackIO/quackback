@@ -80,8 +80,6 @@ export type {
   // lib/server/domains/settings/cloud/__tests__/cloud-stored-shape.test.ts
   // asserts the two agree.
   StoredCloudConfig,
-  StoredCloudBilling,
-  StoredCloudTrial,
   StoredBillingProjection,
   StoredProjectedLimits,
 } from '@quackback/db/schema'

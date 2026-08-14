@@ -22,7 +22,6 @@ export function makeReconcileDeps(): ReconcileDeps {
         slug: row.slug,
         setupState: row.setupState,
         tierLimits: row.tierLimits,
-        cloud: row.cloud ?? null,
         managedFieldPaths: (row.managedFieldPaths as string[] | null) ?? [],
       } satisfies SettingsRow
     },
@@ -73,25 +72,13 @@ export function makeReconcileDeps(): ReconcileDeps {
           createdAt: new Date(),
           setupState: insert.setupState,
           tierLimits: insert.tierLimits,
-          cloud: insert.cloud,
           managedFieldPaths: insert.managedFieldPaths,
           authConfigVersion: 1,
         })
         .onConflictDoNothing({ target: settings.slug })
     },
-    applyCloudConfig: async (patch) => {
-      // Dynamic import: cloud.service imports managed-paths from this same
-      // config-file directory, so a static import here would close a cycle.
-      const { writeCloudConfig } = await import(
-        '@/lib/server/domains/settings/cloud/cloud.service'
-      )
-      const result = await writeCloudConfig(patch, { writer: 'config' })
-      return result.changed
-    },
     applyTierLimits: async (limits) => {
-      const { writeTierLimits } = await import(
-        '@/lib/server/domains/settings/tier-limits.write'
-      )
+      const { writeTierLimits } = await import('@/lib/server/domains/settings/tier-limits.write')
       const result = await writeTierLimits(limits as never, { writer: 'config' })
       return result.changed
     },

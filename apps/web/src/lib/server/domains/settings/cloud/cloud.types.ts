@@ -1,35 +1,5 @@
-/**
- * Cloud configuration: plans, entitlements and billing references.
- *
- * ## What this is, and what it is not
- *
- * `settings.tier_limits` answers *how much* — a bag of numbers (`maxBoards`,
- * `aiTokensPerMonth`, …) read by `getTierLimits()` and enforced by the helpers
- * in `tier-enforce.ts`. It has no notion of which plan produced those numbers,
- * so the product can say "you have hit a limit" but never "that is a Pro
- * feature". This module never persists numeric limits; an active Pro trial is
- * overlaid dynamically by `getTierLimits()` and disappears at expiry.
- *
- * This block answers *which plan, and what does it unlock* — the boolean layer
- * that makes feature gating and a named upgrade prompt possible.
- *
- * ## Disabled by default
- *
- * A `settings.cloud` value of NULL — the only value a self-hosted install ever
- * has, and the value every pre-existing row has after the additive migration —
- * resolves to {@link DISABLED_CLOUD_CONFIG}. With `enabled: false` every
- * entitlement reads as granted, `requireEntitlement()` never throws, there is
- * no plan and there is no upsell. That is byte-for-byte today's behaviour.
- *
- * ## Two writers
- *
- * Plan and entitlements are written either by the declarative config file
- * (`/etc/quackback/config.yaml`, reconciled by `lib/server/config-file/`) or,
- * later, by a billing module deriving them from a subscription. They never
- * fight because the config file records what it declares in
- * `settings.managed_field_paths`, and `writeCloudConfig()` refuses a
- * non-config writer any path that list covers. See CLOUD-CONFIG.md.
- */
+/** Customer-safe commercial state projected by the control plane. Absent means
+ * cloud features are disabled and self-hosted behavior remains unrestricted. */
 
 import type { TierFeatureFlags } from '../tier-limits.types'
 
@@ -299,79 +269,9 @@ export function minimumPlanFor(key: EntitlementKey): PlanDefinition | null {
   return null
 }
 
-// ---------------------------------------------------------------------------
-// Billing
-// ---------------------------------------------------------------------------
-
 export const BILLING_STATUSES = ['trialing', 'active', 'past_due', 'canceled', 'paused'] as const
 
 export type BillingStatus = (typeof BILLING_STATUSES)[number]
-
-/**
- * Opaque references into whichever billing provider the operator uses. Shape
- * only — no provider SDK is wired, and none of these fields is read by any
- * enforcement path. They exist so the billing module has somewhere to record
- * what it reconciled from, and so support can answer "which subscription is
- * this workspace on" without a second system.
- */
-export interface CloudBilling {
-  /** Opaque provider identifier, or null when billing is not wired. */
-  provider: string | null
-  customerRef: string | null
-  subscriptionRef: string | null
-  status: BillingStatus | null
-  /** ISO timestamp. */
-  currentPeriodEnd: string | null
-}
-
-export const EMPTY_BILLING: CloudBilling = {
-  provider: null,
-  customerRef: null,
-  subscriptionRef: null,
-  status: null,
-  currentPeriodEnd: null,
-}
-
-// ---------------------------------------------------------------------------
-// Trials
-// ---------------------------------------------------------------------------
-
-/**
- * A paid plan lent to a workspace that has not bought anything yet.
- *
- * Deliberately its own block rather than a value of {@link CloudBilling}
- * `status` or a write to {@link CloudConfig} `plan`, and both alternatives are
- * actively destructive:
- *
- * - `billing.status` and `billing.currentPeriodEnd` mirror a *provider*
- *   subscription, and the periodic reconcile blanks them for any workspace
- *   with no subscription. A trial recorded there would be erased within
- *   minutes of starting, by design, silently.
- * - `plan` is likewise reasserted from the subscription (or its absence) on
- *   every reconcile and every webhook, so a trial written there survives only
- *   until the next tick.
- *
- * Held separately, the trial is inert data that no other writer has an opinion
- * about, and the plan it lends is applied when the config is *read*. Two
- * properties fall out of that. Expiry needs no job: the stored block already
- * describes the post-trial world the whole time the trial is running. And the
- * record outlives the trial, so a second start finds it and hands out nothing.
- */
-export interface CloudTrial {
-  /** The plan the workspace holds until {@link endsAt}. */
-  plan: PlanId
-  /** ISO timestamp. */
-  startedAt: string
-  /** ISO timestamp. Exclusive: at this instant the trial is over. */
-  endsAt: string
-}
-
-// ---------------------------------------------------------------------------
-// The resolved config
-// ---------------------------------------------------------------------------
-
-/** Which writer last set plan/entitlements. Recorded so a downgrade is explicable. */
-export type CloudWriter = 'config' | 'billing'
 
 export interface CloudConfig {
   /**
@@ -395,13 +295,9 @@ export interface CloudConfig {
    * absent here falls back to the plan's grant list.
    */
   entitlements: Partial<Record<EntitlementKey, boolean>>
-  billing: CloudBilling
-  /**
-   * The trial this workspace was given, if it was ever given one. Present
-   * after it has ended: it is the record that a trial happened, not a claim
-   * that one is running. Ask {@link trialActive} for that.
-   */
-  trial: CloudTrial | null
+  subscriptionStatus: BillingStatus | null
+  trialStartedAt: string | null
+  trialExpiresAt: string | null
   /**
    * Whether {@link plan} came from {@link trial} rather than from the stored
    * plan. Resolved once, here, because it depends on the current time: a
@@ -414,13 +310,6 @@ export interface CloudConfig {
   canManageBilling: boolean
   renewalAt: string | null
   cancellationAt: string | null
-  source: CloudWriter | null
-  /** ISO timestamp of the last write, or null. */
-  updatedAt: string | null
-  /**
-   * Optional link an upgrade prompt points at. Operator-set; absent on OSS.
-   */
-  upgradeUrl: string | null
 }
 
 /**
@@ -431,14 +320,12 @@ export const DISABLED_CLOUD_CONFIG: CloudConfig = Object.freeze({
   enabled: false,
   plan: null,
   entitlements: Object.freeze({}) as Partial<Record<EntitlementKey, boolean>>,
-  billing: Object.freeze({ ...EMPTY_BILLING }),
-  trial: null,
+  subscriptionStatus: null,
+  trialStartedAt: null,
+  trialExpiresAt: null,
   trialActive: false,
   canUpgrade: false,
   canManageBilling: false,
   renewalAt: null,
   cancellationAt: null,
-  source: null,
-  updatedAt: null,
-  upgradeUrl: null,
 }) as CloudConfig

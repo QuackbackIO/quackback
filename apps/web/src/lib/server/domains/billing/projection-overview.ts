@@ -19,8 +19,8 @@ export async function getBillingProjectionOverview(): Promise<BillingProjectionO
   return {
     plan: cloud.plan,
     planName: PLAN_CATALOGUE[cloud.plan].name,
-    status: cloud.billing.status,
-    trialExpiresAt: cloud.trial?.endsAt ?? null,
+    status: cloud.subscriptionStatus,
+    trialExpiresAt: cloud.trialExpiresAt,
     renewalAt: cloud.renewalAt,
     cancellationAt: cloud.cancellationAt,
     canUpgrade: cloud.canUpgrade,

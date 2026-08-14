@@ -17,7 +17,7 @@
 
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import { getCloudConfig } from './cloud.service'
-import { plansActionUrl } from './trial'
+import { plansActionUrl } from './commercial-notice'
 import {
   ENTITLEMENTS,
   ENTITLEMENT_KEYS,
@@ -34,20 +34,12 @@ import {
  *   1. Cloud disabled  -> granted. Always. This is the default-off guarantee,
  *      and it is checked before anything else so no stored value, malformed or
  *      otherwise, can gate an install that has not opted in.
- *   2. Explicit override in `entitlements[key]` -> that value. Lets a
- *      grandfathered or negotiated workspace differ from its plan without
- *      inventing a plan id.
- *   3. The plan's grant list.
- *   4. No plan -> not granted. Reachable only by a hand-edited row (the config
- *      schema requires a plan whenever `enabled` is true), and failing closed
- *      is the right direction for a commercial gate that has been switched on.
+ *   2. The projected entitlement value. The control plane is authoritative;
+ *      the local plan catalogue is display metadata and never grants access.
  */
 export function isEntitled(config: CloudConfig, key: EntitlementKey): boolean {
   if (!config.enabled) return true
-  const override = config.entitlements[key]
-  if (typeof override === 'boolean') return override
-  if (!config.plan) return false
-  return PLAN_CATALOGUE[config.plan].grants.includes(key)
+  return config.entitlements[key] === true
 }
 
 /** Non-throwing check, for rendering a surface as locked rather than refusing. */

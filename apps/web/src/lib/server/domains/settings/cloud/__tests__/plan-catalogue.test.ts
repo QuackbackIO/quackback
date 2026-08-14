@@ -34,7 +34,13 @@ import { isEntitled } from '../entitlements'
 
 /** A workspace with gating switched on, on `plan`. */
 function on(plan: PlanId): CloudConfig {
-  return { ...DISABLED_CLOUD_CONFIG, enabled: true, plan }
+  const grants = new Set(PLAN_CATALOGUE[plan].grants)
+  return {
+    ...DISABLED_CLOUD_CONFIG,
+    enabled: true,
+    plan,
+    entitlements: Object.fromEntries(ENTITLEMENT_KEYS.map((key) => [key, grants.has(key)])),
+  }
 }
 
 /**

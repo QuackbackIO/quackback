@@ -23,7 +23,46 @@ vi.mock('../../settings.service', () => ({
 }))
 
 function cloud(overrides: Partial<CloudConfig>): CloudConfig {
-  return { ...DISABLED_CLOUD_CONFIG, enabled: true, ...overrides }
+  const config = { ...DISABLED_CLOUD_CONFIG, enabled: true, canUpgrade: true, ...overrides }
+  if (overrides.entitlements === undefined && config.plan) {
+    const grants = new Set(PLAN_CATALOGUE[config.plan].grants)
+    config.entitlements = Object.fromEntries(ENTITLEMENT_KEYS.map((key) => [key, grants.has(key)]))
+  }
+  return config
+}
+
+const LIMITS = {
+  maxBoards: 25,
+  maxPosts: 1_000,
+  maxTeamSeats: 10,
+  maxStatusComponents: 25,
+  maxCustomRoles: 5,
+  maxSendingDomains: 3,
+  aiTokensPerMonth: 100_000,
+  apiRequestsPerMonth: 100_000,
+  apiRequestsPerMinute: 600,
+}
+
+function storedCloud(plan: 'free' | 'growth' | 'pro' | 'scale') {
+  const grants = new Set(PLAN_CATALOGUE[plan].grants)
+  return {
+    enabled: true,
+    projection: {
+      version: 1,
+      effectivePlan: plan,
+      trialStartedAt: null,
+      trialExpiresAt: null,
+      subscriptionStatus: null,
+      entitlements: Object.fromEntries(ENTITLEMENT_KEYS.map((key) => [key, grants.has(key)])),
+      freeLimits: LIMITS,
+      planLimits: LIMITS,
+      planLimitsExpireAt: null,
+      canUpgrade: true,
+      canManageBilling: false,
+      renewalAt: null,
+      cancellationAt: null,
+    },
+  }
 }
 
 describe('isEntitled', () => {
@@ -111,15 +150,6 @@ describe('the refusal names the plan', () => {
     expect(err.message).toContain(ENTITLEMENTS[key].friendly)
     expect(err.message).toContain(PLAN_CATALOGUE[cheapest!.id].name)
   })
-
-  it('carries an operator-configured upgrade link when one is set', () => {
-    const err = buildRefusal(
-      cloud({ plan: 'free', upgradeUrl: 'https://example.com/billing' }),
-      'apiAccess'
-    )
-    expect(err.upgradeUrl).toBe('https://example.com/billing')
-    expect(err.toResponseBody().upgradeUrl).toBe('https://example.com/billing')
-  })
 })
 
 describe('the refusal reuses the existing 402 plumbing', () => {
@@ -168,7 +198,7 @@ describe('requireEntitlement against a configured workspace', () => {
 
   it('refuses and names the plan', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'free' } },
+      settings: { id: 'ws_1', cloud: storedCloud('free') },
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('customDomain')).rejects.toThrow(
@@ -178,7 +208,7 @@ describe('requireEntitlement against a configured workspace', () => {
 
   it('allows what the plan grants', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'pro' } },
+      settings: { id: 'ws_1', cloud: storedCloud('pro') },
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
@@ -189,7 +219,7 @@ describe('requireEntitlement against a configured workspace', () => {
     // catalogue level is reached through the real resolution path rather than
     // asserted on a hand-built config object.
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'growth' } },
+      settings: { id: 'ws_1', cloud: storedCloud('growth') },
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('mcpServer')).resolves.toBeUndefined()
@@ -200,7 +230,7 @@ describe('requireEntitlement against a configured workspace', () => {
 
   it('reports the whole catalogue for a plan surface', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'growth' } },
+      settings: { id: 'ws_1', cloud: storedCloud('growth') },
     })
     const { listEntitlements } = await import('../entitlements')
     expect(await listEntitlements()).toEqual({
@@ -219,7 +249,7 @@ describe('requireEntitlement against a configured workspace', () => {
 
   it('reports a different set one plan up, so the surface is not a constant', async () => {
     hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-      settings: { id: 'ws_1', cloud: { enabled: true, plan: 'pro' } },
+      settings: { id: 'ws_1', cloud: storedCloud('pro') },
     })
     const { listEntitlements } = await import('../entitlements')
     expect(await listEntitlements()).toEqual({

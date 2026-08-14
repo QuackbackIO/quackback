@@ -108,10 +108,35 @@ describe('getPlanNotice — the trial countdown', () => {
   const DURING = new Date('2026-03-10T00:00:00.000Z')
   const AFTER = new Date('2026-03-20T00:00:00.000Z')
 
+  const limits = {
+    maxBoards: 25,
+    maxPosts: 1_000,
+    maxTeamSeats: 10,
+    maxStatusComponents: 25,
+    maxCustomRoles: 5,
+    maxSendingDomains: 3,
+    aiTokensPerMonth: 100_000,
+    apiRequestsPerMonth: 100_000,
+    apiRequestsPerMinute: 600,
+  }
+
   const trialing: StoredCloudConfig = {
     enabled: true,
-    plan: 'free',
-    trial: { plan: 'pro', startedAt: STARTED, endsAt: ENDS },
+    projection: {
+      version: 1,
+      effectivePlan: 'pro',
+      trialStartedAt: STARTED,
+      trialExpiresAt: ENDS,
+      subscriptionStatus: null,
+      entitlements: {},
+      freeLimits: limits,
+      planLimits: limits,
+      planLimitsExpireAt: ENDS,
+      canUpgrade: true,
+      canManageBilling: false,
+      renewalAt: null,
+      cancellationAt: null,
+    },
   }
 
   function asTeamMember(): void {

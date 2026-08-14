@@ -12,6 +12,7 @@ import {
   writeBillingProjection,
 } from '../billing-projection.write'
 import type { BillingProjection } from '../billing-projection'
+import { resolveCloudConfig } from '../cloud.service'
 
 const LIMITS = {
   maxBoards: 25,
@@ -105,5 +106,43 @@ describe('billing projection monotonicity', () => {
       if (previous === undefined) delete process.env.QUACKBACK_INSTANCE_ID
       else process.env.QUACKBACK_INSTANCE_ID = previous
     }
+  })
+})
+
+describe('projected commercial state', () => {
+  it('enables cloud UX only from a valid projection', () => {
+    const cloud = resolveCloudConfig(
+      { enabled: true, projection: PROJECTION },
+      new Date('2026-08-14T23:59:59.999Z')
+    )
+    expect(cloud).toMatchObject({
+      enabled: true,
+      plan: 'pro',
+      trialActive: true,
+      canUpgrade: true,
+      canManageBilling: false,
+    })
+    expect(resolveCloudConfig({ enabled: true })).toMatchObject({
+      enabled: false,
+      canUpgrade: false,
+      canManageBilling: false,
+    })
+  })
+
+  it('falls back to Free at the exact projected expiry instant', () => {
+    const before = resolveCloudConfig(
+      { enabled: true, projection: PROJECTION },
+      new Date('2026-08-14T23:59:59.999Z')
+    )
+    const atExpiry = resolveCloudConfig(
+      { enabled: true, projection: PROJECTION },
+      new Date('2026-08-15T00:00:00.000Z')
+    )
+    expect(before.plan).toBe('pro')
+    expect(before.entitlements.customDomain).toBe(true)
+    expect(atExpiry.plan).toBe('free')
+    expect(atExpiry.entitlements).toEqual({})
+    expect(atExpiry.trialActive).toBe(false)
+    expect(atExpiry.trialExpiresAt).toBe(PROJECTION.trialExpiresAt)
   })
 })

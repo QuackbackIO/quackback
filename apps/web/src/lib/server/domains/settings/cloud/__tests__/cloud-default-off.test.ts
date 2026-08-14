@@ -34,7 +34,7 @@ describe('resolveCloudConfig — every "not configured" input resolves to disabl
         enabled: false,
         plan: 'free',
         entitlements: Object.fromEntries(ENTITLEMENT_KEYS.map((k) => [k, false])),
-        billing: { provider: 'acme', customerRef: 'cus_1' },
+        futureCommercialState: { opaque: true },
       },
     ],
     ['a truthy-but-not-true enabled', { enabled: 1 }],
@@ -50,21 +50,15 @@ describe('resolveCloudConfig — every "not configured" input resolves to disabl
   it('the disabled default itself is frozen, so no caller can turn gating on by mutation', () => {
     expect(Object.isFrozen(DISABLED_CLOUD_CONFIG)).toBe(true)
     expect(Object.isFrozen(DISABLED_CLOUD_CONFIG.entitlements)).toBe(true)
-    expect(Object.isFrozen(DISABLED_CLOUD_CONFIG.billing)).toBe(true)
   })
 
-  it('describes an install with no plan and no billing', () => {
+  it('describes an install with no plan or commercial actions', () => {
     expect(DISABLED_CLOUD_CONFIG.enabled).toBe(false)
     expect(DISABLED_CLOUD_CONFIG.plan).toBeNull()
     expect(DISABLED_CLOUD_CONFIG.entitlements).toEqual({})
-    expect(DISABLED_CLOUD_CONFIG.upgradeUrl).toBeNull()
-    expect(DISABLED_CLOUD_CONFIG.billing).toEqual({
-      provider: null,
-      customerRef: null,
-      subscriptionRef: null,
-      status: null,
-      currentPeriodEnd: null,
-    })
+    expect(DISABLED_CLOUD_CONFIG.subscriptionStatus).toBeNull()
+    expect(DISABLED_CLOUD_CONFIG.canUpgrade).toBe(false)
+    expect(DISABLED_CLOUD_CONFIG.canManageBilling).toBe(false)
   })
 })
 

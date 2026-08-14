@@ -1,10 +1,5 @@
 import { z } from 'zod'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
-import {
-  BILLING_STATUSES,
-  ENTITLEMENT_KEYS,
-  PLAN_IDS,
-} from '@/lib/server/domains/settings/cloud/cloud.types'
 
 /**
  * Declarative Quackback config file schema.
@@ -98,48 +93,6 @@ const tierLimitsSchema = z
   })
   .strict()
 
-// Cloud configuration block. Mirrors CloudConfig from
-// apps/web/src/lib/server/domains/settings/cloud/cloud.types.ts and is the
-// operator/self-hoster channel for plan and entitlements — the same role the
-// config file already plays for tier limits. A future billing module is the
-// second writer; the two are kept apart by managed paths (see the leaf paths
-// in managed-paths.ts).
-//
-// Absent from the file = the column is left alone. Present with
-// `enabled: false` = explicitly inert. Neither writes a plan.
-const planIdSchema = z.enum(PLAN_IDS)
-
-const cloudEntitlementsSchema = z
-  .object(Object.fromEntries(ENTITLEMENT_KEYS.map((key) => [key, z.boolean().optional()])))
-  .strict()
-
-const cloudBillingSchema = z
-  .object({
-    provider: z.string().min(1).nullable().optional(),
-    customerRef: z.string().min(1).nullable().optional(),
-    subscriptionRef: z.string().min(1).nullable().optional(),
-    status: z.enum(BILLING_STATUSES).nullable().optional(),
-    currentPeriodEnd: z.string().min(1).nullable().optional(),
-  })
-  .strict()
-
-const cloudSchema = z
-  .object({
-    enabled: z.boolean(),
-    plan: planIdSchema.nullable().optional(),
-    entitlements: cloudEntitlementsSchema.optional(),
-    billing: cloudBillingSchema.optional(),
-    upgradeUrl: httpsUrl.nullable().optional(),
-  })
-  .strict()
-  // Enabling the cloud block without naming a plan would leave every
-  // entitlement denied-by-default with nothing to upsell to. Reject it at the
-  // file boundary so that state is unreachable through the supported writer.
-  .refine((value) => !value.enabled || (value.plan !== undefined && value.plan !== null), {
-    message: 'spec.cloud.plan is required when spec.cloud.enabled is true',
-    path: ['plan'],
-  })
-
 // Deprecated compatibility keys. `auth` and top-level `features` were managed
 // by older config files, but are now in-app only. Keep accepting them for one
 // release so old files do not make the whole watcher fail before supported
@@ -157,7 +110,6 @@ export const quackbackConfigSchema = z
       .object({
         workspace: workspaceSchema.optional(),
         tierLimits: tierLimitsSchema.optional(),
-        cloud: cloudSchema.optional(),
         features: deprecatedFeaturesSchema.optional(),
         auth: deprecatedAuthSchema.optional(),
       })
