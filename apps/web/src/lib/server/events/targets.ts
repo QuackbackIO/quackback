@@ -21,6 +21,7 @@ import {
 } from '@/lib/server/db'
 import { canViewPost, type Actor } from '@/lib/server/policy'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
+import { getJiraAccessToken } from '@/lib/server/integrations/jira/access-token'
 import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import {
   getSubscribersForEvent,
@@ -222,6 +223,7 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
 }
 
 type CachedIntegrationMapping = {
+  integrationId: string
   eventType: string
   integrationType: string
   secrets: string | null
@@ -239,6 +241,7 @@ async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[
 
   const mappings = await db
     .select({
+      integrationId: integrations.id,
       eventType: integrationEventMappings.eventType,
       integrationType: integrations.integrationType,
       secrets: integrations.secrets,
@@ -317,15 +320,47 @@ async function getIntegrationTargets(
         const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
         accessToken = secrets.accessToken
       } catch (error) {
-        log.error({ err: error, integration_type: m.integrationType }, 'failed to decrypt integration secrets')
+        log.error(
+          { err: error, integration_type: m.integrationType },
+          'failed to decrypt integration secrets'
+        )
         continue
       }
+
+      if (m.integrationType === 'jira') {
+        try {
+          accessToken = await getJiraAccessToken({
+            id: m.integrationId,
+            secrets: m.secrets,
+            config: m.integrationConfig,
+          })
+        } catch (error) {
+          log.warn(
+            { err: error, integration_type: m.integrationType },
+            'jira token refresh failed; using cached access token'
+          )
+        }
+      }
     }
+
+    // Inbound-only fields stay on the integration row; they must not ride
+    // along in hook jobs (webhookSecret especially).
+    const {
+      webhookSecret: _webhookSecret,
+      statusMappings: _statusMappings,
+      statusSyncEnabled: _statusSyncEnabled,
+      externalWebhookId: _externalWebhookId,
+      ...hookConfig
+    } = integrationConfig
 
     targets.push({
       type: m.integrationType,
       target: { channelId },
-      config: { accessToken, rootUrl: context.portalBaseUrl },
+      config: {
+        ...hookConfig,
+        accessToken,
+        rootUrl: context.portalBaseUrl,
+      },
     })
   }
 

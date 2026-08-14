@@ -33,8 +33,20 @@ vi.mock('@/lib/server/db', () => ({
     select: () => ({ from: () => ({ innerJoin: () => ({ where: () => [] }) }) }),
     query: { webhooks: { findMany: vi.fn().mockResolvedValue([]) } },
   },
-  integrations: { id: 'id', integrationType: 'integrationType', secrets: 'secrets', config: 'config', status: 'status' },
-  integrationEventMappings: { integrationId: 'integrationId', eventType: 'eventType', actionConfig: 'actionConfig', filters: 'filters', enabled: 'enabled' },
+  integrations: {
+    id: 'id',
+    integrationType: 'integrationType',
+    secrets: 'secrets',
+    config: 'config',
+    status: 'status',
+  },
+  integrationEventMappings: {
+    integrationId: 'integrationId',
+    eventType: 'eventType',
+    actionConfig: 'actionConfig',
+    filters: 'filters',
+    enabled: 'enabled',
+  },
   webhooks: { status: 'status', deletedAt: 'deletedAt', $inferSelect: {} },
   eq: vi.fn(),
   and: vi.fn(),
@@ -45,6 +57,12 @@ vi.mock('@/lib/server/db', () => ({
 
 vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
+}))
+vi.mock('@/lib/server/integrations/jira/access-token', () => ({
+  getJiraAccessToken: vi.fn(async (integration: { secrets: unknown }) => {
+    const parsed = JSON.parse(integration.secrets as string) as { accessToken?: string }
+    return parsed.accessToken
+  }),
 }))
 vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
   decryptWebhookSecret: vi.fn((s: string) => s),
@@ -79,7 +97,10 @@ const { listIntegrationTypes, getIntegrationHook } = await import('@/lib/server/
  * Enrichment hooks that store NO channelId at connect time are listed in
  * KNOWN_UNRESOLVED below, not here — do not fabricate a channelId for them.
  */
-const CONNECTED_FIXTURES: Record<string, { integrationConfig?: Record<string, unknown>; actionConfig?: Record<string, unknown> }> = {
+const CONNECTED_FIXTURES: Record<
+  string,
+  { integrationConfig?: Record<string, unknown>; actionConfig?: Record<string, unknown> }
+> = {
   slack: { actionConfig: { channelId: 'C1' } },
   discord: { actionConfig: { channelId: 'C1' } },
   teams: { integrationConfig: { channelId: 'C1' } },
