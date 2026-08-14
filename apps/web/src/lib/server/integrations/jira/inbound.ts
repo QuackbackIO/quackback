@@ -15,7 +15,14 @@ function verifyHs256Jwt(token: string, secret: string): boolean {
   const [header, payload, signature] = parts
   const expected = createHmac('sha256', secret).update(`${header}.${payload}`).digest()
   const actual = Buffer.from(signature, 'base64url')
-  return actual.length === expected.length && timingSafeEqual(actual, expected)
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return false
+
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { exp?: unknown }
+    return typeof claims.exp === 'number' && claims.exp * 1000 > Date.now()
+  } catch {
+    return false
+  }
 }
 
 export const jiraInboundHandler: InboundWebhookHandler = {
