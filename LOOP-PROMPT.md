@@ -140,14 +140,14 @@ Verified 2026-08-14. Re-check before acting.
 
 **Revisions**
 
-- App `saas` tip `a796b8885`. Last **deployed** app image is `58eebd173`
-  as
-  `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`.
-- CP `saas` tip `a040f78`. Live Railway deploy `7eca55b3`
-  (`sha256:2b0276a2a49a38526dcbfbf1ea09c926c1d9f45524356b4d7185ca720470f1c8`).
-  SSR `/setup` is auto-create; the setup chunk fails to hydrate because
-  it imports `node:crypto`. Control-database migrations `0063`–`0067`
-  were already applied. Local app fixture DBs are at `0262`.
+- App `saas` tip `4d1b582c8`. Live app image is `98212c18c` as
+  `ghcr.io/quackbackio/quackback@sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`.
+- CP `saas` tip `a040f78`. Live Railway deploy `07d5737e`
+  (`sha256:ffdd51a26023233f03c99ded29153317622beeee342b012de3fd75367e3dfe1c`)
+  from a concurrent CLI `railway up`. SSR `/setup` is auto-create; the
+  setup chunk fails to hydrate because it imports `node:crypto`.
+  Control-database migrations `0063`–`0067` were already applied. Local
+  app fixture DBs are at `0262`.
 
 **Fleet**
 
@@ -207,9 +207,9 @@ billing path. They do not close tracks 3–7.
    Auto-create SSR screenshot `loop-evidence/unit-a-setup.png`.
 2. ~~**Unit B — auto-open when ready.**~~ Deployed with A; live
    OpeningPane is blocked until the setup chunk hydrates.
-3. ~~**Unit C — host-independent stored assets.**~~ App `a796b8885`
-   (not deployed). Persist `/api/storage/<key>`; leaves absolutize
-   from the system host.
+3. ~~**Unit C — host-independent stored assets.**~~ Live `98212c18c`
+   (`sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`).
+   Persist `/api/storage/<key>`; leaves absolutize from the system host.
 4. Finish the in-flight CP setup-chunk isolation so the browser does
    not import `node:crypto`. Redeploy CP. Do not revert concurrent
    `.server.ts` work.

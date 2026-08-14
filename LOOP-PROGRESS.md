@@ -30,23 +30,34 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `a796b8885` (deployed image remains `58eebd173`)
-- Control plane: `a040f78` (live deploy `7eca55b3` /
-  `sha256:2b0276a2a49a38526dcbfbf1ea09c926c1d9f45524356b4d7185ca720470f1c8`)
-- Last known deployed workspace: `58eebd173` (2026-08-14)
-- Last known deployed control plane: `7eca55b3` / `a040f78` (2026-08-14)
+- Workspace: `4d1b582c8` (live image `98212c18c` /
+  `sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`)
+- Control plane: `a040f78` (a concurrent CLI `railway up` moved live to
+  `07d5737e` /
+  `sha256:ffdd51a26023233f03c99ded29153317622beeee342b012de3fd75367e3dfe1c`;
+  previous `7eca55b3` is REMOVED)
+- Last known deployed workspace: `98212c18c` (2026-08-14)
+- Last known deployed control plane: `07d5737e` (2026-08-14; not this fire)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
 required before the revised tracks can close.
 
-Workspace image `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`
-was published from Docker workflow `31809268242` at commit `58eebd173`.
-Verified `meta.imageDigest` matches on web `4394da8d`, worker `b5646929`,
-cron-hourly `45979b99`, cron-daily `6bb7b221`, and migrator `e3709ae4`.
-Web remains in `us-east4-eqdc4a`. Cron-daily was moved off `sfo` onto
-`us-east4-eqdc4a`. Control plane live is `7eca55b3` (`a040f78`, still
-`sfo`). First `railway up` of that commit 500'd because
+Workspace image `ghcr.io/quackbackio/quackback@sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`
+was published from Docker workflow `31820406329` at commit `98212c18c`
+(Unit C `a796b8885` plus the origin-transfer import-protection fix).
+Verified `meta.imageDigest` matches on web `dfa00417`, worker `bdd32ec8`,
+cron-hourly `e06f2212`, cron-daily `e744f960`, and migrator `ec4b5f0f`.
+Web remains in `us-east4-eqdc4a`. Live probe: `GET
+https://gauntlet.quackback.co.uk/api/health/ready` → 200
+`{"status":"ok","role":"web"}`; `GET /api/storage/logos/unit-c-probe.png`
+→ 404 (no object; route present). The previous `58eebd173` /
+`sha256:496d295f…` image is historical.
+
+Control plane live is `07d5737e` from a concurrent CLI `railway up` at
+16:42Z (digest `sha256:ffdd51a2…`, still `sfo`). This fire did not
+change CP source or redeploy it. `7eca55b3` (`a040f78`) is REMOVED.
+First `railway up` of `a040f78` 500'd because
 `BILLING_PROJECTION_PRIVATE_KEY` was unset. Generated the first Ed25519
 pair (private on CP; `QUACKBACK_CP_PROJECTION_PUBLIC_KEY` on web /
 worker / crons / migrator, skip-deploys). Live `/assets/setup._orgId-*.js`
@@ -64,6 +75,17 @@ module: /assets/setup._orgId-D7jp-les.js`). Error shot:
 is isolating those server modules behind `.server.ts` doors; do not
 revert it. Do not treat the interactive walk as green until that chunk
 loads.
+
+Unit C (`a796b8885`) persists `/api/storage/<key>` (private: `?read=`)
+and absolutizes email, widget, OG, and vision from the immutable
+system-host pin. Legacy absolute srcs stay accepted; the fleet is not
+rewritten; bucket prefix stays `w/<workspaceId>/`. The first Docker
+dispatch of that commit failed import-protection because
+`auth.origin-transfer` statically imported a module that reached the
+workspace database; `98212c18c` moves the server fn into the route.
+Focused verification: 187 (storage/email/OG/vision) + 33 (related) +
+7 (`origin-transfer.db`) passed. Deployed as
+`sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`.
 
 That control-plane deploy had not applied SQL `0063`–`0067`. The live control
 database still had `tenant_hostname_kind` as `subdomain`/`custom` and
@@ -225,8 +247,11 @@ the codebase.
    chunk still fails to hydrate (`node:crypto`).
 2. ~~**Unit B — auto-open when ready**~~ CP `a040f78` deployed. Live
    OpeningPane cannot run until the setup chunk loads.
-3. ~~**Unit C — host-independent stored assets**~~ app `a796b8885`.
-   Not deployed (image still `58eebd173`).
+3. ~~**Unit C — host-independent stored assets**~~ app `a796b8885` +
+   `98212c18c`, live
+   `sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`.
+   Persist is `/api/storage/<key>`; email/widget/OG/vision absolutize
+   from the immutable system host. Focused tests 187 + 33 + 7.
 4. Finish the in-flight CP setup-chunk isolation (do not revert the
    concurrent `.server.ts` work), redeploy CP, confirm the setup module
    loads without `node:crypto`.
