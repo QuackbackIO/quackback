@@ -8,6 +8,7 @@ const hoisted = vi.hoisted(() => ({
   deleteWhere: vi.fn(),
   eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
   and: vi.fn((...args: unknown[]) => args),
+  cacheDel: vi.fn(),
 }))
 
 vi.mock('@/lib/server/db', () => {
@@ -46,6 +47,11 @@ vi.mock('@/lib/server/db', () => {
     sql: vi.fn(),
   }
 })
+
+vi.mock('@/lib/server/redis', () => ({
+  cacheDel: (...args: unknown[]) => hoisted.cacheDel(...args),
+  CACHE_KEYS: { PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}` },
+}))
 
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ error: vi.fn(), debug: vi.fn(), info: vi.fn() }) },
@@ -91,6 +97,7 @@ describe('removePortalUser', () => {
     })
     expect(hoisted.updateWhere).toHaveBeenCalledWith({ col: 'principal.id', val: PRINCIPAL_ID })
     expect(hoisted.deleteWhere).toHaveBeenCalledWith({ col: 'session.userId', val: 'user_1' })
+    expect(hoisted.cacheDel).toHaveBeenCalledWith('principal:user:user_1')
   })
 
   it('skips session delete when the principal has no userId', async () => {
@@ -104,5 +111,6 @@ describe('removePortalUser', () => {
 
     expect(hoisted.updateSet).toHaveBeenCalled()
     expect(hoisted.deleteWhere).not.toHaveBeenCalled()
+    expect(hoisted.cacheDel).not.toHaveBeenCalled()
   })
 })

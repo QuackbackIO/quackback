@@ -407,6 +407,11 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
         await tx.delete(session).where(eq(session.userId, userId))
       }
     })
+
+    if (userId) {
+      const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(userId))
+    }
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     log.error({ err: error }, 'failed to remove portal user')
