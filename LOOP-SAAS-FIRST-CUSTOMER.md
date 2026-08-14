@@ -5,15 +5,15 @@ two `saas` branches.
 
 ## /loop
 
-On every wakeup, including the first, paste `LOOP-PROMPT.md` unchanged. Do not
-paraphrase it into a new mission. Short form if a scheduler cannot take the
-whole file:
+In a new Grok session, paste this and send it. `/loop` is the scheduler;
+`/saas-first-customer` loads `LOOP-PROMPT.md`.
 
 ```
-Continue LOOP-PROMPT.md. Read LOOP-SAAS-FIRST-CUSTOMER.md and LOOP-PROGRESS.md.
-Resume the first Track 1 unit whose bar is not met. Do not start new
-architecture. Stop if a stop-and-ask condition holds.
+/loop 30m /saas-first-customer
 ```
+
+It fires immediately, then every 30 minutes, until done or a stop-and-ask.
+Do not paraphrase `LOOP-PROMPT.md` into a new mission.
 
 ## Worktrees
 
