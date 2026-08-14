@@ -26,6 +26,7 @@ export type OnboardingStep =
   | '/onboarding/boards'
   | '/onboarding/complete'
   | '/onboarding/no-access'
+  | '/onboarding/usecase'
   | '/onboarding/workspace'
 
 /** The one page inside the wizard that exists to be a dead end. */
@@ -98,7 +99,10 @@ export function pickOnboardingStep({ session, state }: PickStepInput): Onboardin
   // was true, but that left useCase silently false-checkmarked when
   // an external pre-seed populated workspace without picking a use
   // case.
-  if (!state.setupState?.useCase || !state.setupState.steps.workspace) {
+  if (state.setupOpenToClaim === false) {
+    if (!state.setupState?.workspaceDetailsSeenAt) return '/onboarding/workspace'
+    if (!state.setupState.useCase) return '/onboarding/usecase'
+  } else if (!state.setupState?.useCase || !state.setupState.steps.workspace) {
     return '/onboarding/workspace'
   }
   if (!state.setupState.steps.startingPoint) return '/onboarding/boards'

@@ -112,6 +112,51 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/workspace')
   })
 
+  it('asks a provisioned owner for their outcome after workspace details', () => {
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u_owner' },
+        state: {
+          setupClaimedByOther: false,
+          setupOpenToClaim: false,
+          setupState: state({ workspaceDetailsSeenAt: '2026-08-14T10:00:00.000Z' }),
+          principalRecord: { id: 'p_owner', role: 'admin' },
+        },
+      })
+    ).toBe('/onboarding/usecase')
+  })
+
+  it('routes a provisioned owner with details and an outcome to the starter', () => {
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u_owner' },
+        state: {
+          setupClaimedByOther: false,
+          setupOpenToClaim: false,
+          setupState: state({
+            workspaceDetailsSeenAt: '2026-08-14T10:00:00.000Z',
+            useCase: 'product_feedback',
+          }),
+          principalRecord: { id: 'p_owner', role: 'admin' },
+        },
+      })
+    ).toBe('/onboarding/boards')
+  })
+
+  it('does not let a pre-seeded outcome skip cloud workspace details', () => {
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u_owner' },
+        state: {
+          setupClaimedByOther: false,
+          setupOpenToClaim: false,
+          setupState: state({ useCase: 'product_feedback' }),
+          principalRecord: { id: 'p_owner', role: 'admin' },
+        },
+      })
+    ).toBe('/onboarding/workspace')
+  })
+
   // The workspace step is where a workspace is claimed, and the declarative
   // config file can stamp the wizard's steps before anyone has ever signed in.
   // Routing on the stamp alone sent the first user past the only place that

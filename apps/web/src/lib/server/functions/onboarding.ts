@@ -30,6 +30,7 @@ import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
+import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
 const log = logger.child({ component: 'onboarding' })
 
@@ -326,6 +327,49 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       return result
     }
   )
+
+const saveCloudOnboardingGoalSchema = z.object({ useCase: z.enum(ONBOARDING_OUTCOMES) }).strict()
+
+/** Save only the outcome for a control-plane-provisioned workspace. */
+export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
+  .validator(saveCloudOnboardingGoalSchema)
+  .handler(async ({ data }) => {
+    const session = await getSession()
+    if (!session?.user) throw new Error('Authentication required')
+    const caller = await db.query.principal.findFirst({
+      where: eq(principal.userId, session.user.id as UserId),
+    })
+    if (!caller || !isAdmin(caller.role)) throw new Error('Only admin can change setup')
+
+    const { state } = await mutateSetupStateAtomic((current, row) => {
+      if (!parseIdentityProjection(row.cloudIdentity)) {
+        throw new Error('Cloud workspace identity is not enabled')
+      }
+      if (!current.workspaceDetailsSeenAt) {
+        throw new Error('Complete or skip workspace details first')
+      }
+      return {
+        state: {
+          ...current,
+          steps: { ...current.steps, workspace: true },
+          useCase: data.useCase,
+        },
+        value: undefined,
+      }
+    })
+
+    const existingStatuses = await db.query.postStatuses.findFirst()
+    if (!existingStatuses) {
+      await db.insert(postStatuses).values(
+        DEFAULT_STATUSES.map((status) => ({
+          id: generateId('post_status') as PostStatusId,
+          ...status,
+          createdAt: new Date(),
+        }))
+      )
+    }
+    return { useCase: state.useCase! }
+  })
 
 /**
  * Save user name during onboarding.

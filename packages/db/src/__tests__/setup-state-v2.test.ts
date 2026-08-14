@@ -92,6 +92,16 @@ describe('SetupState V2 normalization', () => {
     )
   })
 
+  it('preserves the cloud workspace-details handoff marker', () => {
+    const normalized = normalizeSetupStateV2({
+      version: 2,
+      steps: { core: true, workspace: false, startingPoint: null },
+      workspaceDetailsSeenAt: '2026-08-14T10:00:00.000Z',
+    })
+
+    expect(normalized?.workspaceDetailsSeenAt).toBe('2026-08-14T10:00:00.000Z')
+  })
+
   it('sanitizes malformed V2 fields without changing valid state', () => {
     const normalized = normalizeSetupStateV2({
       version: 2,

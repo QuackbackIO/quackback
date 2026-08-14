@@ -7,6 +7,7 @@ import { requireAuth } from './auth-helpers'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 import { verifyIdentityProjectionToken } from '@/lib/server/domains/settings/cloud/identity-projection.signature'
 import { writeIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection.write'
+import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
 
 const cloudIdentityInputSchema = z
   .object({
@@ -31,6 +32,20 @@ export const getCloudIdentityFn = createServerFn({ method: 'GET' }).handler(asyn
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   return currentCloudIdentity()
 })
+
+export const markCloudWorkspaceDetailsSeenFn = createServerFn({ method: 'POST' }).handler(
+  async () => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    if (!(await currentCloudIdentity())) throw new Error('Cloud workspace identity is not enabled')
+    const { state } = await mutateSetupStateAtomic((current) => ({
+      state: current.workspaceDetailsSeenAt
+        ? current
+        : { ...current, workspaceDetailsSeenAt: new Date().toISOString() },
+      value: undefined,
+    }))
+    return { workspaceDetailsSeenAt: state.workspaceDetailsSeenAt! }
+  }
+)
 
 export const updateCloudIdentityFn = createServerFn({ method: 'POST' })
   .validator(cloudIdentityInputSchema)

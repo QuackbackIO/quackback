@@ -348,6 +348,8 @@ export interface SetupState {
   completedAt?: string
   /** ICP outcome for setup and activation personalization. */
   useCase?: OnboardingOutcome
+  /** Cloud owner saved or skipped the optional post-handoff identity polish. */
+  workspaceDetailsSeenAt?: string
   completionSource?: SetupCompletionSource
   /** Set only after the one-time setup-to-activation bridge has been acknowledged. */
   activationHandoffSeenAt?: string
@@ -477,6 +479,9 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
       },
       ...(asIsoString(value.completedAt) ? { completedAt: value.completedAt as string } : {}),
       ...(useCase ? { useCase } : {}),
+      ...(asIsoString(value.workspaceDetailsSeenAt)
+        ? { workspaceDetailsSeenAt: value.workspaceDetailsSeenAt as string }
+        : {}),
       ...(completionSource ? { completionSource } : {}),
       ...(asIsoString(value.activationHandoffSeenAt)
         ? { activationHandoffSeenAt: value.activationHandoffSeenAt as string }

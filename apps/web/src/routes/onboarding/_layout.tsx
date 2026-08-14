@@ -37,7 +37,8 @@ function OnboardingHeader() {
   const currentPath = location.pathname
 
   const steps = ALL_ONBOARDING_STEPS
-  const currentStepIndex = steps.findIndex((s) => s.path === currentPath)
+  const stepPath = currentPath === '/onboarding/usecase' ? '/onboarding/workspace' : currentPath
+  const currentStepIndex = steps.findIndex((s) => s.path === stepPath)
   const showSteps = currentStepIndex !== -1
 
   return (
