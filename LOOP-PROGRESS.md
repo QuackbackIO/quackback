@@ -402,7 +402,14 @@ Live after this fire (2026-08-14 T19:25Z):
 
 ### Critic (2026-08-14, rename/storage `689c99d13`)
 
-pending — spawned on the live walk URLs + commit range only.
+PASS — old friendly `northe0d78f` 308s to `northfa99f0` (path preserved);
+both logos 200 at `/api/storage/…` (not a friendly object-store host);
+system `ws-*` hosts still serve. Critic hit health 200, both canonical
+homes, both system homes, both logo URLs. It did not re-walk Open/OTP
+or independently read Railway `meta.imageDigest` (GraphQL blocked);
+serving digest `sha256:8d9da3be…` on web `30386b1e` was already listed
+by `list-deployments` this fire. Session survival was builder-walk
+evidence, not re-exercised.
 
 ## Next commits
 
