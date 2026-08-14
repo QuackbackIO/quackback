@@ -88,7 +88,9 @@ describe('jiraInboundHandler.parseStatusChange', () => {
         webhookEvent: 'jira:issue_updated',
         issue: { key: 'PROJ-12' },
         changelog: { items: [{ field: 'assignee' }, { field: 'status', toString: 'Done' }] },
-      })
+      }),
+      {},
+      {}
     )
     expect(result).toEqual({
       externalId: 'PROJ-12',
@@ -103,7 +105,9 @@ describe('jiraInboundHandler.parseStatusChange', () => {
         webhookEvent: 'jira:issue_updated',
         issue: { key: 'PROJ-12' },
         changelog: { items: [{ field: 'summary', toString: 'new title' }] },
-      })
+      }),
+      {},
+      {}
     )
     expect(result).toBeNull()
   })
@@ -114,7 +118,9 @@ describe('jiraInboundHandler.parseStatusChange', () => {
         webhookEvent: 'jira:issue_created',
         issue: { key: 'PROJ-12' },
         changelog: { items: [{ field: 'status', toString: 'To Do' }] },
-      })
+      }),
+      {},
+      {}
     )
     expect(result).toBeNull()
   })
