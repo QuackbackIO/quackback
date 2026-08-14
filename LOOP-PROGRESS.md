@@ -30,26 +30,42 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `ff19faf4c`
+- Workspace: `58eebd173`
 - Control plane: `b4afe73`
-- Last known deployed workspace: `03ea102e` (2026-08-14)
+- Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
 
-No complete paired deployment has yet been made for the revised billing
-ownership model.
+The Development fleet now runs a paired image/code pair for identity and
+billing-ownership work. Fresh-browser onboarding/rename journeys are still
+required before the revised tracks can close.
 
-Control-plane deployment `14dee7a2-6a01-44ea-ba39-da7c2abd93bf` is a fresh
-Railway build of `b4afe73` and reached SUCCESS in `sfo`. The attempted paired
-workspace rollout did not advance the image: deployments `7cb1c890`,
-`53a53727`, `79d21f7e`, `3d8afed5`, and `2f810f9d` all reached SUCCESS but
-reused the prior `sha256:596d77e3…` web image or `sha256:8ff95109…` role image.
-They are explicitly not accepted as deployment proof for `8ae498796`.
-Railway service configuration remains image-based with the prior commands,
-cron schedules, and regions; no diagnostic build-command override remains.
+Workspace image `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`
+was published from Docker workflow `31809268242` at commit `58eebd173`.
+Verified `meta.imageDigest` matches on web `4394da8d`, worker `b5646929`,
+cron-hourly `45979b99`, cron-daily `6bb7b221`, and migrator `e3709ae4`.
+Web remains in `us-east4-eqdc4a`. Cron-daily was moved off `sfo` onto
+`us-east4-eqdc4a`. Control plane `14dee7a2` remains the live `sfo` build of
+`b4afe73`.
 
-The prior web deployment `03ea102e` runs image digest `sha256:596d77e3…` in
-`us-east4-eqdc4a`. Worker, cron, and migrator services remain on the older
-`sha256:8ff95109…` pin. A future paired rollout must move all roles deliberately.
+That control-plane deploy had not applied SQL `0063`–`0067`. The live control
+database still had `tenant_hostname_kind` as `subdomain`/`custom` and
+`cp_instances.subdomain`. Those five migrations were applied with
+`railway run … bun run db:migrate` against the control-plane service;
+the enum is now `system`/`platform`/`platform_redirect`/`custom` and
+`system_hostname` replaced `subdomain`.
+
+Workspace schema target `0262_cloud_identity_projection` was then set and
+reconciled. Seven walk workspaces applied cleanly. Gauntlet `t1`/`t2` refused
+until `--allow-mutating-replay` because a gapped ledger would replay
+`0260_sending_domain_reverify`; those two databases had no sending-domain
+rows, so the replay was a no-op. All nine enrolled workspaces now report
+`succeeded` at `1786723200000` with 238 ledger rows and
+`postconditions_ok`. Walk hosts still 307 to `/?sort=trending`.
+`MIN_SCHEMA_VERSION` remains `0258_workspace_key_columns`.
+
+The migrator cron (`47 2 * * *`) and `enrol && run` start command were
+restored after the one-shot runs. No diagnostic build-command override
+remains.
 
 ## Tracks
 
@@ -84,8 +100,8 @@ this through the control-plane gateway before closing the revised billing tracks
 
 ## Current worktree ownership
 
-Both worktrees were clean after workspace commit `ff19faf4c` and control-plane
-commit `9071f83`. The workspace
+Both worktrees were clean after workspace commit `58eebd173` and control-plane
+commit `b4afe73`. The workspace
 accepts only signed control-plane commercial projections and contains no
 platform billing provider integration. The control plane now owns catalogue,
 gateway, starter trial, webhook projection, and durable fan-out behavior. Its
@@ -152,8 +168,8 @@ the codebase.
    projection.
 2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
-3. Deploy and prove the compatible control-plane/workspace identity pair in
-   Development, including migration 0262 and fresh-browser onboarding/rename.
+3. Fresh-browser prove the deployed identity pair: zero-input create, OTT
+   handoff, skippable details, and rename transfer.
 4. Add the control-plane Cloudflare for SaaS custom-hostname integration.
 5. Add the shared workspace custom-domain manager, then live-prove hostname and
    certificate readiness before enabling it.
