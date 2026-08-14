@@ -2,6 +2,7 @@
  * Pure naming / description / JSON-Schema helpers for connector tools.
  * Kept off the MCP/DB import graph so unit tests stay light.
  */
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 /** Sanitize an MCP tool name for use inside a Quackback tool id. */
@@ -15,7 +16,9 @@ export function sanitizeToolSegment(name: string): string {
 
 /** Stable model-facing tool name for one MCP tool on one connector. */
 export function connectorToolName(row: { slug: string }, remoteName: string): string {
-  return `mcp_${row.slug}_${sanitizeToolSegment(remoteName)}`
+  const hash = createHash('sha256').update(remoteName).digest('hex').slice(0, 8)
+  const base = sanitizeToolSegment(remoteName).slice(0, 48) || 'tool'
+  return `mcp_${row.slug}_${base}_${hash}`
 }
 
 /** Deduplicate a model-facing name against names already claimed this turn. */

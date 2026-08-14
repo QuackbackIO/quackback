@@ -851,6 +851,35 @@ describe('resolveEffectiveToolMode', () => {
     ).toBe('disabled')
   })
 
+  it('simulates a write tool whose saved rule is ask under sandbox simulate', () => {
+    const spec = makeFakeWriteSpec()
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        ctx({
+          toolRules: { [spec.name]: 'ask' },
+          simulate: true,
+          writeToolPolicy: 'simulate',
+        })
+      )
+    ).toBe('simulate')
+  })
+
+  it('simulates Copilot default-ask writes in the Test agent sandbox', () => {
+    const spec = makeFakeWriteSpec()
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        ctx({
+          role: 'copilot_qa',
+          conversationId: null,
+          simulate: true,
+          writeToolPolicy: 'simulate',
+        })
+      )
+    ).toBe('simulate')
+  })
+
   it('proposes a write tool whose saved rule is ask, even on an execute turn', () => {
     const spec = makeFakeWriteSpec()
     expect(

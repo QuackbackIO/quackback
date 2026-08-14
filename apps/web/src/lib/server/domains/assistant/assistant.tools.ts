@@ -112,6 +112,8 @@ export function resolveEffectiveToolMode(
   const saved = ctx.toolRules?.[spec.name]
   if (saved === 'deny') return 'disabled'
 
+  if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
+
   const wantsAsk =
     saved === 'ask' ||
     (saved === undefined &&
@@ -123,7 +125,6 @@ export function resolveEffectiveToolMode(
     return 'propose'
   }
 
-  if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
   return 'autonomous'
 }
 

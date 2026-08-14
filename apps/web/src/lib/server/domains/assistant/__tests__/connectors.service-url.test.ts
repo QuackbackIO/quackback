@@ -47,6 +47,16 @@ describe('assertConnectorUrlSafe', () => {
     })
   })
 
+  it('rejects credentials in the URL', async () => {
+    process.env.NODE_ENV = 'production'
+    await expect(
+      assertConnectorUrlSafe('https://user:token@mcp.example.com/mcp')
+    ).rejects.toMatchObject({
+      code: 'CONNECTOR_URL_INVALID',
+    })
+    expect(checkUrlSafety).not.toHaveBeenCalled()
+  })
+
   it('allows https when the SSRF guard accepts the host', async () => {
     process.env.NODE_ENV = 'production'
     checkUrlSafety.mockResolvedValue({ safe: true, address: '1.1.1.1', family: 4 })

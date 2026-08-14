@@ -16,8 +16,11 @@ vi.mock('../connectors.service', () => ({
 import { assembleConnectorSpecs, buildConnectorToolSpec } from '../connectors.tools'
 
 describe('connectorToolName', () => {
-  it('prefixes the slug and sanitizes the remote name', () => {
-    expect(connectorToolName({ slug: 'tracker' }, 'Create Issue')).toBe('mcp_tracker_create_issue')
+  it('prefixes the slug, sanitizes the remote name, and hashes the original', () => {
+    const name = connectorToolName({ slug: 'tracker' }, 'Create Issue')
+    expect(name.startsWith('mcp_tracker_create_issue_')).toBe(true)
+    expect(name).toBe(connectorToolName({ slug: 'tracker' }, 'Create Issue'))
+    expect(name).not.toBe(connectorToolName({ slug: 'tracker' }, 'create_issue'))
   })
 })
 
@@ -157,7 +160,8 @@ describe('assembleConnectorSpecs', () => {
       ],
       'agent'
     )
-    expect(specs.map((spec) => spec.name)).toEqual(['mcp_tracker_create_issue'])
-    expect(toolRulesPatch).toEqual({ mcp_tracker_create_issue: 'allow' })
+    const createIssueName = connectorToolName({ slug: 'tracker' }, 'create_issue')
+    expect(specs.map((spec) => spec.name)).toEqual([createIssueName])
+    expect(toolRulesPatch).toEqual({ [createIssueName]: 'allow' })
   })
 })

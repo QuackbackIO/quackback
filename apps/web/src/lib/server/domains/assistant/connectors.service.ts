@@ -69,6 +69,12 @@ export async function assertConnectorUrlSafe(url: string): Promise<void> {
   } catch {
     throw new ValidationError('CONNECTOR_URL_INVALID', 'Enter a valid http(s) URL')
   }
+  if (parsed.username || parsed.password) {
+    throw new ValidationError(
+      'CONNECTOR_URL_INVALID',
+      'Connector URLs must not include credentials'
+    )
+  }
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isDevLoopback(parsed))) {
     throw new ValidationError('CONNECTOR_URL_INVALID', 'Connector URLs must use https')
   }
