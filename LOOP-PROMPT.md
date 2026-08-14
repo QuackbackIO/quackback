@@ -4,17 +4,35 @@ Paste this file as the wakeup prompt. Then work until the current unit is
 committed and recorded, a stop-and-ask fires, or the definition of done is
 met. Do not paraphrase this into a new mission.
 
-You are the **lead agent**. Implement yourself, serially, on the two `saas`
-branches. Spawn **critics only** — never parallel builders, never piece
-branches, never extra worktrees for independence.
+You are the **lead agent** (orchestrator). You may implement one
+fleet/live unit yourself. You may also spawn **bounded lane builders**
+and **critics**. Never spawn unbounded piece branches. The previous
+long run died of decomposition — fan-out is allowed only as named
+lanes below.
 
-Each fire is **builder then critic**. Build one unit (or one live
-probe). Then spawn a fresh critic. A fire that only builds, or only
-reviews, is incomplete. If Docker/CI is still pending, report one line
-and stop — do not skip the critic on a completed unit to “save it for
-later.”
+Each completed unit is still **builder then critic**. A fire that only
+builds, or only reviews, is incomplete. If Docker/CI is still pending
+on the fleet lane, report one line and stop that lane — do not skip
+the critic on a completed unit to “save it for later.”
 
-The previous long run died of decomposition. Do not repeat that shape.
+### Safe concurrency
+
+At most **three** children at once. Each child gets exactly one lane.
+Lanes that write the same git tree use an isolated worktree and do
+**not** merge or deploy; you merge serially onto `saas`. You write
+`LOOP-PROGRESS.md`. Children do not.
+
+| Lane            | Who writes                                                  | Parallel with                                    |
+| --------------- | ----------------------------------------------------------- | ------------------------------------------------ |
+| **Fleet**       | Railway/Docker/`source.image`/region pin                    | nothing else that deploys                        |
+| **Stripe-live** | test payment + webhook on existing `ws-*`                   | not Fleet, not another Stripe-live               |
+| **CP-create**   | per-owner 3-Free cap (`instance.server.ts` + tests)         | Fleet, Track-6 ops, critics                      |
+| **Track-6 ops** | Railway `BILLING_*` removal; walk3 webhook already disabled | CP-create, critics                               |
+| **Critic**      | read-only live probe                                        | anything except a second critic on the same URLs |
+
+Forbidden in parallel: two Railway deploys; two Neon creates; two
+editors of the same file on `saas`; two critics hitting the same
+mailbox/OTP. Extra spend still stop-and-asks at **$50/month**.
 
 ---
 

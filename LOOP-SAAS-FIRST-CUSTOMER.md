@@ -83,8 +83,10 @@ At the start of each work period:
 2. Inspect status and recent commits in both worktrees.
 3. Preserve concurrent uncommitted work and identify the first incomplete track.
 4. Finish, test, and commit one coherent unit before starting another.
-5. Spawn a fresh critic on that unit (goal, bar, commit range, live
-   URLs only). Record the verdict. A fire is builder then critic.
+   The orchestrator may run up to three named lanes at once (see
+   LOOP-PROMPT.md Safe concurrency). Fleet deploys stay single-threaded.
+5. Spawn a fresh critic on each completed unit (goal, bar, commit range, live
+   URLs only). Record the verdict. A unit is builder then critic.
 6. Update `LOOP-PROGRESS.md` with the commit, verification evidence, and
    critic verdict.
 7. Deploy only when the app/control-plane pair is compatible and focused tests
