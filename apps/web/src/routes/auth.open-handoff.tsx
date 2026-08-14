@@ -1,36 +1,18 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import type { OriginTransferResult } from '@/lib/server/functions/origin-transfer'
 
 const searchSchema = z.object({
   ott: z.string().optional(),
   returnTo: z.string().optional(),
 })
 
-const consumeOpenHandoffFn = createServerFn({ method: 'POST' })
-  .validator(searchSchema)
-  .handler(async ({ data }): Promise<OriginTransferResult> => {
-    const { consumeOpenHandoff } = await import('@/lib/server/functions/origin-transfer')
-    const result = await consumeOpenHandoff({
-      ...data,
-      headers: getRequestHeaders(),
-    })
-    if (result.kind === 'redirect') {
-      ;(setResponseHeader as (name: string, value: string | string[]) => void)(
-        'Set-Cookie',
-        result.cookies
-      )
-    }
-    return result
-  })
-
 export const Route = createFileRoute('/auth/open-handoff')({
   validateSearch: searchSchema.parse,
   loader: async ({ location }) => {
     const search = location.search as z.infer<typeof searchSchema>
-    const result = await consumeOpenHandoffFn({ data: search })
+    const { consumeOpenHandoffOnRequest } =
+      await import('@/lib/server/functions/handoff-cookies.server')
+    const result = await consumeOpenHandoffOnRequest(search)
     if (result.kind === 'redirect') throw redirect({ href: result.to })
     return result
   },

@@ -30,13 +30,13 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `6f255842f` (live image `f0f8cf02a` /
-  `sha256:bcbe3ee6b6c0e4556ca62a136d3909dcd11865aef5f3e23cb8df8bd92abc09cc`)
-- Control plane: `71e59d9` (live `a41789e9` /
-  `sha256:e61cef2096fd892b7…` from local `railway up` of `ea1d44d`;
-  `e28c7b8e` is building `71e59d9`)
-- Last known deployed workspace: `f0f8cf02a` (2026-08-14)
-- Last known deployed control plane: `a41789e9` (2026-08-14; vendor through 0262)
+- Workspace: local tip includes the incoming-request consume fix (see
+  “Track 1 live walk”). Live image is still `6f255842f` /
+  `sha256:1249693eb22277381fbe450cd49368216af1254661e9502870aaa64e7f8c819d`
+- Control plane: `71e59d9` live as `e28c7b8e` /
+  `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
+- Last known deployed workspace: `6f255842f` (2026-08-14)
+- Last known deployed control plane: `e28c7b8e` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -103,17 +103,17 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                                                     | Evidence                                                                                                          |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | live create + OpeningPane proved on new `ws-*` hosts; post-handoff OTT consume blocked on live `98212c18c` | see “Track 1 live walk (2026-08-14)”                                                                              |
-| 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                                                                | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                                                                | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                                                                | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
+| Track                            | Status                                                                                                 | Evidence                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                               | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | live create + Open mint `/auth/open-handoff` proved; browser consume still bounced on live `6f255842f` | see “Track 1 live walk (2026-08-14)”                                                                              |
+| 2 focused widget activation      | implemented, focused verification passed                                                               | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | implemented; full/live verification pending                                                            | CP `c7ec591` through `9f77647`                                                                                    |
+| 4 workspace projection + gateway | implemented; full/live verification pending                                                            | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | implemented; full/live verification pending                                                            | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                                                         | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                             | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                                                             | `33c15ba53`; first-win journeys remain                                                                            |
 
 ## Completed activation work
 
@@ -252,24 +252,57 @@ Proved on live `07d5737e` / `98212c18c`:
 - First identity outbox attempt 401’d (`invalid_projection`); retry delivered. `settings.cloud_identity` is now present.
 - Live `/admin` on `98212c18c` does **not** consume `?ott=` in the loader. A healthy settings load `requireWorkspaceRole`s first and 307s to `/?auth=signin&callbackUrl=/admin`, dropping the token. Client `OttHandler` never runs. First-open error page (`loop-evidence/t1e/05-landed.png`) only kept `?ott=` because settings 500’d before the auth redirect.
 
-Live after this fire:
+Live after this fire (2026-08-14 T17:42Z):
 
-- App image `sha256:bcbe3ee6…` (`f0f8cf02a`) is on web `f6986fef`, worker `f6007a2d`, hourly `266feb2a`, daily `6006f067`, migrator `550fe77c`. All `us-east4-eqdc4a`. Ready 200.
-- That image consumes `?ott=` via `consumeAdminOpenHandoffFn`. A live resume still 307'd to `/?error=handoff_failed` — the RPC from `/admin` beforeLoad does not see the workspace Host, so verify misses the minted row.
-- App `6f255842f` (not deployed) drops that consume from `/admin` and adds `/auth/open-handoff`. Docker `31824767863` is building it.
-- CP SQL `0068` applied (`free` + `growth` in `cp_plans`). Without it, create inserted `plan_id=free` and the FK failed.
-- CP `a41789e9` vendored workspace schema through `0262`. New Neon DBs from the previous vendor stopped at 0260; `inst_01m00kq6…` was fleet-migrated 236→238 after the fact.
-- CP `71e59d9` (deploy `e28c7b8e` in flight) mints `/auth/open-handoff?ott=&returnTo=/onboarding/workspace`.
+- Docker `31824767863` published `saas` as
+  `ghcr.io/quackbackio/quackback@sha256:1249693eb22277381fbe450cd49368216af1254661e9502870aaa64e7f8c819d`
+  from `6f255842f`.
+- `source.image` set on web/worker/cron-hourly/cron-daily/migrator. Latest
+  `serviceInstanceDeployV2` SUCCESS with matching `meta.imageDigest`:
+  web `2cf7c84e`, worker `de43e4a4`, hourly `a11f9047`, daily `77511e68`,
+  migrator `5ed6f587`. All `us-east4-eqdc4a`. Ready 200.
+- Live CP `e28c7b8e` (`71e59d9`) mints
+  `/auth/open-handoff?ott=&returnTo=/onboarding/workspace`. Confirmed from
+  `/app/src/lib/server/tenant-bootstrap-magic-link.ts` on the running
+  service. Digest `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`.
+  CP remains in `sfo` (unchanged).
+- Re-walk of the two existing `ws-*` owners (no new Neon projects):
 
-Do **not** start custom domains or the billing live bar. Reuse the two `ws-*` rows after `6f255842f` is on web (`us-east4-eqdc4a`) and `71e59d9` is the live CP. Do not mint more Neon projects for this walk.
+  | Mailbox                             | Instance                          | Host                                          |
+  | ----------------------------------- | --------------------------------- | --------------------------------------------- |
+  | `walk-t1e-a7ebad@guerrillamail.com` | `inst_01m00kprbrfzzb19f490wga8q2` | `ws-4a048e07941c5e7840e986c0.quackback.co.uk` |
+  | `qb-t1a-7caf14b1@guerrillamail.com` | `inst_01m00kq6cdfzzb19gfjz8pt0s7` | `ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk` |
+
+  Both still `Untitled workspace`, leftover `cp_instances.name=''`,
+  onboarding already stamped `product_feedback`. POST `/api/instances/:id/open`
+  302s to `https://ws-…/auth/open-handoff?ott=&returnTo=/onboarding/workspace`.
+  Expiry and wrong-workspace GETs return the dedicated invalid page, no
+  session cookie; the wrong-host token remains on the owner DB.
+  Browser consume of a fresh mint then landed on
+  `/?auth=signin&callbackUrl=/admin&error=handoff_failed` (shot
+  `loop-evidence/t1e-oh/03-after-handoff.png`). Root `OttHandler` still
+  treats `?ott=` on `/auth/open-handoff` as a widget portal token and
+  races the loader. The route also still used a `createServerFn` RPC,
+  the same Host-loss shape `76ef4924b` already removed from `/admin`.
+  Rename/storage did not complete (friendly URL never moved; logo key
+  stayed null). Details/outcome UI not re-shown because the handoff
+  never reached `/onboarding/workspace`.
+
+- Fix committed: consume Open and rename transfer on the incoming
+  request via `handoff-cookies.server.ts`; `OttHandler` ignores `/auth/*`.
+  Focused tests 14 passed. Image for that fix is not live yet.
+
+Do **not** start custom domains or the billing live bar. Reuse the two
+`ws-*` rows after the consume-path image is on web (`us-east4-eqdc4a`).
+Do not mint more Neon projects for this walk.
 
 ## Next commits
 
-1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `a41789e9` (vendor 0262).
+1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
 2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
-3. ~~**Unit C — host-independent stored assets**~~ live through `f0f8cf02a` (`sha256:bcbe3ee6…`).
-4. Deploy app `6f255842f` + confirm CP `71e59d9` (`e28c7b8e`). Verify `meta.imageDigest` and `us-east4-eqdc4a`.
-5. Re-walk the two existing `ws-*` hosts: consume OTT on `/auth/open-handoff` → skippable details → outcome → rename / old-host redirect / `/api/storage/…` src → replay/expiry/wrong-workspace fail closed.
+3. ~~**Unit C — host-independent stored assets**~~ live through `6f255842f` (`sha256:1249693e…`).
+4. ~~Deploy `6f255842f` + confirm CP `71e59d9`.~~ Digest and `us-east4-eqdc4a` verified. Live consume still bounced via `OttHandler`.
+5. Deploy the incoming-request consume fix. Re-walk the two existing `ws-*` hosts: `/auth/open-handoff` session → skippable details → outcome → rename / old-host redirect / `/api/storage/…` src → replay/expiry/wrong-workspace fail closed.
 6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
 7. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
