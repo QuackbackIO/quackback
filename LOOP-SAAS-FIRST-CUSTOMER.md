@@ -98,16 +98,23 @@ At the start of each work period:
 4. Finish, test, and commit one coherent unit before starting another.
    The orchestrator may run up to three named lanes at once (see
    LOOP-PROMPT.md Safe concurrency). Fleet deploys stay single-threaded.
-5. Spawn a fresh critic on each completed unit (goal, bar, commit range, live
-   URLs only). Record the verdict. A unit is builder then critic.
-6. After the unit (or when no unit is in flight), run the hosted-product
-   sweep in `LOOP-VERIFY.md`, including the plan-matrix critic in §H
-   if it is unsigned against the current live image pair. Spawn a
-   Fixer only for HIGH SIGNAL findings that are not stop-and-ask.
-7. Update `LOOP-PROGRESS.md` with the commit, verification evidence, and
-   critic verdict.
-8. Deploy only when the app/control-plane pair is compatible and focused tests
-   are green. Track 8 (hosted account operations) is additional in-scope
+5. **Deploy in the same fire** when the unit is customer-visible, the
+   pair is compatible, and focused tests are green. See LOOP-PROMPT
+   “Deploy + live-verify”. Isolated children still do not deploy; the
+   orchestrator merges, then takes Fleet. If pickup already has
+   undeployed customer-visible shas, Fleet is the current unit — do
+   not start the next builder on top of them.
+6. Spawn a fresh critic on the **live** URLs after the digest is
+   confirmed (goal, bar, commit range, live URLs only). Record the
+   verdict and digest. A unit is builder then deploy then live critic.
+   Vitest-only or diff-only is not a critic.
+7. After the unit (or when no unit is in flight), run the hosted-product
+   sweep in `LOOP-VERIFY.md` against the current live digest, including
+   the plan-matrix critic in §H if it is unsigned against that pair.
+   Spawn a Fixer only for HIGH SIGNAL findings that are not stop-and-ask.
+8. Update `LOOP-PROGRESS.md` with the commit, digest, verification
+   evidence, and critic verdict. `committed, not deployed` is a fail
+   unless a named skip is recorded. Track 8 is additional in-scope
    work, after the 3-Free deploy, not a new architecture.
 
 ### Deployment mechanics verified on 2026-08-14
@@ -425,9 +432,11 @@ Remaining identity/domain order:
    `cp_workspace_hostname_claims` (identity gateway + Settings card).
    Enable it only after live provider, certificate, stale-update,
    cross-workspace, and cleanup-retry probes pass.
-4. Deploy catalogue/invoices (`2fb9488` + `6418785c8`) and prove the
-   Plan & billing cards on an existing workspace. Checkout still
-   attaches to an existing workspace; Stripe metadata must not create
+4. **Same-fire Fleet** for undeployed customer-visible tips: CP
+   `4da4607` (8b); app `804853ae2` + `1a39cd7d7` + `6418785c8`
+   (switcher, Ready/URL, catalogue cards). Live-critic the digest.
+   Catalogue API `2fb9488` is already in live CP `0b85cd0`. Checkout
+   still attaches to an existing workspace; Stripe metadata must not create
    one. Then first-win journeys.
 
 Existing `walk-*` / gauntlet instances have registry hostnames and
@@ -471,6 +480,8 @@ direct-workspace billing path only.
 - Invite / remove / change-role honour Free seat limits; SSO
   downgrade still lets admins in.
 - The latest `LOOP-VERIFY.md` sweep has no open HIGH SIGNAL findings.
+- Every customer-visible commit is on the live pair with a live
+  critic, or has a named skip (LOOP-PROMPT “Deploy + live-verify”).
 - Cross-workspace isolation, replay, out-of-order projection, retry, outage, and
   exact-expiry probes pass.
 - Self-hosted setup shows no cloud commercial surface.

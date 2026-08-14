@@ -29,18 +29,23 @@ SIGNAL.
 
 ## When to run
 
-Every fire, after finishing or parking the current builder unit:
+Every fire, after finishing or parking the current builder unit — and
+**after** any same-fire deploy of customer-visible tips (LOOP-PROMPT
+“Deploy + live-verify”). Sweep the digest that is live **now**, not
+the previous image.
 
-1. Run the **Verify** sweep against the **live** Development pair.
-2. Run the **Plan-matrix** critic in §H if it has not been signed against
+1. If pickup has undeployed customer-visible shas and no named skip
+   applies, do not sweep first: Fleet deploys, then this sweep.
+2. Run the **Verify** sweep against the **live** Development pair.
+3. Run the **Plan-matrix** critic in §H if it has not been signed against
    the current live image pair. A sweep that only samples one Free cap
    has not signed §H.
-3. Classify every finding. Record the sweep and the matrix in
+4. Classify every finding. Record the sweep and the matrix in
    `LOOP-PROGRESS.md`.
-4. Spawn a **Fixer** only for **HIGH SIGNAL** findings that are not already
+5. Spawn a **Fixer** only for **HIGH SIGNAL** findings that are not already
    being fixed and are not on the stop-and-ask list.
-5. Each fixer is still builder then critic. Merge serially onto `saas`.
-   Deploy only when the finding is customer-visible on the live pair.
+6. Each fixer is still builder then live critic. Merge serially onto
+   `saas`. Deploy in the same fire when the finding is customer-visible.
 
 Do not create Neon, mailboxes, or workspaces for a sweep unless the finding
 cannot be proved on the existing `ws-*` / friendly hosts. Prefer those hosts.
@@ -403,6 +408,9 @@ feature disagreement is HIGH.
 - Session loss on Open, rename, or origin transfer.
 - Cloud chrome on a self-host, or generated `ws-*` presented as the address.
 - A refusal with no distinguishable reason (Bar B).
+- Customer-visible pickup row still `Live? no` with no named skip
+  (Bar F). Do not spawn a Fixer for this — the orchestrator takes
+  **Fleet** in the same fire, then a live critic.
 
 **LOW** — record and leave:
 
@@ -454,9 +462,10 @@ tests, and a commit on its worktree.
 Then the orchestrator:
 
 1. Merges serially onto the relevant `saas`.
-2. Spawns a critic on the merged unit (not the sweep).
-3. Deploys if the finding is customer-visible.
-4. Records sha, critic, and digest in `LOOP-PROGRESS.md`.
+2. Deploys in the same fire if the finding is customer-visible
+   (LOOP-PROMPT “Deploy + live-verify”). Confirm `meta.imageDigest`.
+3. Spawns a **live** critic on those URLs (not the sweep, not vitest).
+4. Records sha, digest, and critic in `LOOP-PROGRESS.md`.
 
 The same finding failing its critic **three** times is a stop-and-ask. Do
 not lower the bar. Do not spawn a second fixer on the same files while

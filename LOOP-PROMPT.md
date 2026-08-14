@@ -11,14 +11,20 @@ findings. Never spawn unbounded piece branches. The previous long run
 died of decomposition — fan-out is allowed only as named lanes below.
 
 Each completed unit is still **builder then critic**. A fire that only
-builds, or only reviews, is incomplete. If Docker/CI is still pending
-on the fleet lane, report one line and stop that lane — do not skip
-the critic on a completed unit to “save it for later.”
+builds, or only reviews, is incomplete. A customer-visible unit is
+**builder → focused tests → deploy → live critic**. Parking the deploy
+or the live probe for a later fire is incomplete unless a named skip
+in “Deploy + live-verify” applies. If Docker/CI is still pending on
+the Fleet lane, report one line and **stay on Fleet** (dispatch or
+wait) — do not skip the deploy or the critic to start the next
+builder.
 
 After the current builder unit (or immediately if none is in flight),
-run the hosted-product sweep in `LOOP-VERIFY.md`. Spawn a Fixer only
-for HIGH SIGNAL findings. A sweep is not a substitute for a per-unit
-critic.
+run the hosted-product sweep in `LOOP-VERIFY.md`. If the pickup table
+has undeployed customer-visible shas and tests are green, **Fleet is
+the current unit** — deploy those tips, then critic the live pair.
+Spawn a Fixer only for HIGH SIGNAL findings. A sweep is not a
+substitute for a per-unit critic. Local vitest is not a live critic.
 
 ### Safe concurrency
 
@@ -282,31 +288,73 @@ billing path. They do not close tracks 3–7.
 “Pickup for critics”. Do not restart Units A–C or the setup-chunk
 `node:crypto` fix — those are live. Current queue in short:
 
-1. Fleet-deploy undeployed CP (`c5a484d` 3-Free, `de0b038` CF client,
-   `2fb9488` catalogue/invoices) and undeployed app (`31330d85b`
-   limits overlay, `6418785c8` billing cards). Then a critic on the
-   live pair.
-2. Commit the uncommitted onboarding Ready/URL fix on `saas-merge`
-   (HIGH SIGNAL; files already written). Critic: Ready always has a
-   primary CTA; cloud URL is required; no `ws-*` by the field.
-3. 8a restore re-checks 3-Free. Then Track 8b–8f.
-4. Cloudflare: wire identity gateway + workspace Domains card on the
+1. **Fleet first.** Deploy undeployed customer-visible tips in one
+   pair: CP `4da4607` (8b siblings); app `804853ae2` (8b switcher) +
+   `1a39cd7d7` (Ready/URL) + `6418785c8` (catalogue cards). Then a
+   **live** critic on the new digest (not vitest-only). Catalogue
+   API `2fb9488` is already an ancestor of live CP `0b85cd0` — prove
+   the GETs after the app cards land.
+2. After that digest is live: Verify sweep + Plan-matrix §H.
+3. Then 8c transfer/leave. Do not start 8c while 8b is committed and
+   not live.
+4. Cloudflare: identity gateway + workspace Domains card on the
    existing client. Fallback origin is already active on Railway.
-5. Re-run `LOOP-VERIFY.md` after those deploys.
-6. **Plan-matrix critic** (`LOOP-VERIFY.md` §H): every wired limit
-   and entitlement on every active-plan state, UI **and** server-fn.
-   Sign it against the current live image pair. Do not treat sweep
-   C rows 15–16 as the matrix.
 
 Do not raise `MIN_SCHEMA_VERSION` unless the walk requires it and every
 enrolled workspace is already at the new floor.
 
-After every CP or app unit that changes customer-visible create, open,
-identity, or storage URLs, deploy the affected side, verify
-`meta.imageDigest` (and CP SQL / fleet-migrator if schema changed),
-reassert `us-east4-eqdc4a` on web, and record one live probe. Do not
-redeploy on ledger-only commits. “Do not deploy yet” is withdrawn —
-the named-create screenshot exists because we stopped deploying.
+---
+
+## Deploy + live-verify (same fire)
+
+“Do not deploy yet” is withdrawn. The named-create screenshot exists
+because we stopped deploying. A fire that commits customer-visible
+work and leaves `Live? no` in the pickup table is **incomplete**.
+
+**Customer-visible** means a stranger (or an existing `ws-*` owner)
+would see or call it: create, Open, onboarding, settings, billing,
+switcher, limits, catalogue cards, identity, storage URLs.
+
+**Same-fire sequence** when tests are green and the app/CP pair is
+compatible:
+
+1. Merge isolated worktrees serially onto `saas`.
+2. **Fleet** deploys the affected side (batch undeployed tips into
+   one CP image and one app image when pairing makes sense).
+3. Wait until Railway `SUCCESS`. Confirm `meta.imageDigest` matches
+   the new image. Reassert `us-east4-eqdc4a` on web. If CP SQL or
+   workspace schema changed, confirm migrations actually ran.
+4. Spawn a **live** critic on those URLs (Bar A). Record digest +
+   verdict in `LOOP-PROGRESS.md`.
+5. Run Verify (`LOOP-VERIFY.md`) against that digest if this fire
+   has not already.
+
+Children on isolated worktrees still **must not** merge or deploy.
+The orchestrator merges, then **must** take Fleet in the same fire.
+
+**Named skips** (write the skip in the ledger; otherwise deploy):
+
+- Ledger-only / docs-only commits (`docs(loop):` with no product change).
+- Isolated worktree **before** serial merge.
+- Focused tests not green.
+- Pair incompatible (app needs a CP tip that is not ready, or the
+  reverse) — deploy the ready side, or wait one fire with the
+  incompatibility written down.
+- Fleet already deploying this fire (one thread) — finish and
+  live-verify **that** deploy; queue the other side as the next unit.
+  Do not skip verification of what you shipped.
+- Operator skip-deploy (Cloudflare token on CP env, no code change).
+- Stop-and-ask (live Stripe key, extra spend, destroy-list apply).
+
+**Not a skip:** “leave deploy for the next fire”, “critic IDs did not
+join”, “we re-ran vitest”, “Docker is still pending so start 8c”.
+If a critic task is unjoinable, the orchestrator live-probes itself
+or spawns a joinable critic before stopping. Local green tests do
+not sign a customer-visible unit.
+
+Wakeup rule: if the pickup table has `Live? no` on a customer-visible
+sha and a named skip does not apply, **Fleet is the current unit**.
+Do not start the next builder on top of undeployed tips.
 
 ---
 
@@ -315,22 +363,28 @@ the named-create screenshot exists because we stopped deploying.
 1. One coherent change. Test it. Commit it. Record it.
 2. Focused tests for the unit you touched. Do not disable, skip, or
    weaken a test to pass a bar.
-3. Deploy only when the app/control-plane pair is compatible and those
-   tests are green.
-4. **Then spawn a critic.** Fresh agent. Give it only: the track goal,
-   the bar, the commit range, and the live URLs. It does not see your
-   reasoning or self-assessment. It must exercise the live system (or
-   the exact artifact this unit produced). A critic that only reads
-   the diff has not signed. Discard that verdict and re-run it. Record
-   the critic’s verdict in `LOOP-PROGRESS.md` before you stop.
-5. **Then run Verify** (`LOOP-VERIFY.md`) if this fire has not already.
-   If §H has not been signed against the current live image pair,
-   spawn the Plan-matrix critic. Spawn a Fixer only for HIGH SIGNAL
-   findings that are not stop-and-ask (Cloudflare for SaaS, live
-   Stripe key). The fixer does not merge or deploy; you do, then a
+3. **Deploy in the same fire** when the unit is customer-visible, the
+   pair is compatible, and those tests are green. See “Deploy +
+   live-verify”. Ledger-only commits do not deploy.
+4. **Then spawn a critic on the live URLs** (after the digest is
+   confirmed). Fresh agent. Give it only: the track goal, the bar,
+   the commit range, and the live URLs. It does not see your
+   reasoning or self-assessment. It must exercise the live system.
+   A critic that only reads the diff, or only re-runs vitest, has
+   not signed. Discard that verdict and re-run it. Record the
+   critic’s verdict and the live digest in `LOOP-PROGRESS.md`
+   before you stop.
+5. **Then run Verify** (`LOOP-VERIFY.md`) against that digest if this
+   fire has not already. If §H has not been signed against the
+   current live image pair, spawn the Plan-matrix critic. Spawn a
+   Fixer only for HIGH SIGNAL findings that are not stop-and-ask
+   (Cloudflare for SaaS, live Stripe key). The fixer does not merge
+   or deploy; you merge, deploy if customer-visible, then a live
    critic.
-6. Status back to the parent must include both: what the builder did,
-   and the critic’s pass/fail plus one-line reason.
+6. Status back to the parent must include: what the builder did,
+   whether it is live (`meta.imageDigest`), and the critic’s
+   pass/fail plus one-line reason. `committed, not deployed` is a
+   fail unless a named skip is recorded.
 7. Fresh-mailbox OTPs for the Development CP are readable in
    `cp_verifications`. Do not use the operator’s mailbox as proof.
 8. New workspaces get generated `ws-*` hostnames and `qb_*` database
@@ -399,6 +453,12 @@ UI _and_ in the server-fn / REST that would create it. Catalogue
 stickers match enforcement. See `LOOP-VERIFY.md` §H. A spot-check of
 one Free cap does not close this bar.
 
+**Bar F — live when customer-visible.** A committed unit that changes
+what a stranger sees or can call is not done until it is on the live
+Development pair (`meta.imageDigest` matches) and a critic has
+exercised those live URLs. Parking the deploy is incomplete unless a
+named skip in “Deploy + live-verify” applies.
+
 ---
 
 ## Stop and ask when
@@ -443,6 +503,8 @@ unit:
 - Editing this prompt to expand the mission.
 - Claiming a track closed from tests alone, or from the pre-correction
   checkout walks.
+- Parking a customer-visible deploy or live critic for “the next
+  fire” when no named skip applies.
 
 ---
 
@@ -480,5 +542,7 @@ All of the following, with evidence in `LOOP-PROGRESS.md`:
 - The latest plan-matrix critic (`LOOP-VERIFY.md` §H) is signed
   against the current live image pair: every wired limit and
   entitlement, UI and server, on each active-plan state.
+- Every customer-visible commit in the pickup table is live
+  (`meta.imageDigest`) with a live critic, or has a named skip.
 
 Then **stop**. Do not start a new phase.

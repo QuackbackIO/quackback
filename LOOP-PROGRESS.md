@@ -138,10 +138,12 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Track 8b–8f                    | CP+app saas | 8b CP `4da4607`, app `804853ae2`; 8c–8f not started | no                       | Switcher: list+Open siblings, never `ws-*` as address, self-host absent. Then transfer/leave, seats+SSO, `N of M`, export/wipe.                                                                                                                                                                              |
 | Plan-matrix critic             | live + spec | `LOOP-VERIFY.md` §H                                 | no                       | Every wired limit + entitlement × Free / Growth / Pro / Scale / trial / expired / canceled / self-host. **UI and server-fn** both refuse. Catalogue vs `definitions.ts` vs `PLAN_GRANTS` vs `PLAN_CATALOGUE` must agree. Fixtures: t1a Growth, t1e trial. No Neon. Do not treat sweep C 15–16 as this cycle. |
 
-**Fleet note:** one deploy thread. Prefer one CP deploy that includes
-`c5a484d` + `de0b038` + `2fb9488`, and one app deploy that includes
-`31330d85b` + `6418785c8` + the onboarding commit once it lands.
-Then one critic on the live pair (not a diff-only critic).
+**Fleet note:** one deploy thread. **This fire’s Fleet unit** (no
+named skip): one CP deploy of tip `4da4607` (8b; catalogue `2fb9488`
+is already an ancestor of live `0b85cd0`), and one app deploy of
+`804853ae2` + `1a39cd7d7` + `6418785c8` (switcher, Ready/URL,
+catalogue cards). Then one **live** critic on the new digest — not
+vitest, not a later fire. Do not start 8c until 8b is live.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -818,12 +820,14 @@ re-run.
 14. ~~Deploy `31330d85b` (Fleet).~~ live `f0186af2b` / `sha256:cb186135…`.
 15. **Track 8 — hosted account operations.** ~~8a~~ live `0b85cd0` /
     `e8953f9b` (30-day purge, restore 402 `free_workspace_owner_cap`).
-    8b committed CP `4da4607` / app `804853ae2` (not live). Then 8c transfer/leave;
+    **Next fire = deploy + live-verify 8b** (CP `4da4607` + app
+    `804853ae2`) in the same image as Ready `1a39cd7d7` and catalogue
+    cards `6418785c8`. Then a live critic. Then 8c transfer/leave;
     8d seats + SSO downgrade live row; 8e visible usage; 8f export /
-    wipe / delete CP account. No new Neon unless a finding cannot
-    be proved on current hosts.
-    15b. ~~Commit Ready CTA + required cloud URL.~~ `1a39cd7d7`. Not live.
-    Focused tests 17/17. Critic in flight.
+    wipe / delete CP account. Do not start 8c while 8b is not live.
+    No new Neon unless a finding cannot be proved on current hosts.
+    15b. ~~Commit Ready CTA + required cloud URL.~~ `1a39cd7d7`.
+    **Deploy with 8b** (same app image). Focused tests 17/17.
 16. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
     Fallback origin `saas-origin.quackback.co.uk` is **active** and
     CNAMEs (proxied) to the pooled Railway web host — not the old
@@ -834,7 +838,9 @@ re-run.
 17. Plan & billing page: catalogue + invoices from the control plane
     (`GET /api/v1/internal/billing/catalogue` and `/invoices`). Cards
     use public pricing stickers (annual = 10 months). Workspace holds
-    no price list. Not live until CP + app deploy.
+    no price list. **Deploy app `6418785c8` with 8b** (CP catalogue
+    API is already in live `0b85cd0`). Live-verify four cards +
+    invoices table on t1a / t1e.
 18. First-win journeys. Checkout attaches to an existing workspace only.
 19. **Plan-matrix critic** (`LOOP-VERIFY.md` §H). Run against the
     current live pair after the catalogue + Ready deploys (or sooner
@@ -983,9 +989,9 @@ HIGH (cloud unlimited overlay). Re-sweep
 
 Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Unused web `BILLING_*` vars removed
-(`--skip-deploys`; web now `47e0c7be`). Remaining: critic + deploy 8b (`4da4607` / `804853ae2`);
-deploy Ready `1a39cd7d7` + catalogue cards `6418785c8`; 8c–8f;
-Domains card (this fire did not start it); standing Verify rows.
+(`--skip-deploys`; web now `47e0c7be`). Remaining: **same-fire Fleet** — deploy CP `4da4607` + app
+`804853ae2` / `1a39cd7d7` / `6418785c8`, then live critic +
+Verify. Then 8c–8f; Domains card; standing Verify / §H rows.
 Walk3 webhook stays disabled. Live app `f0186af2b` /
 `sha256:cb186135…`. Live CP `e8953f9b` / `sha256:06e7f5d3…`.
 App tip `804853ae2` not in the live image. CP tip `4da4607` not live.
