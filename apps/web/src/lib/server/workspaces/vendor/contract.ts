@@ -64,7 +64,7 @@ export const WORKSPACE_REGISTRY_CONTRACT_VERSION = 1
 /** Serving state. Gated before a database connection is spent. */
 export type WorkspaceState = 'active' | 'suspended' | 'deleting'
 
-export type WorkspaceHostnameKind = 'subdomain' | 'custom'
+export type WorkspaceHostnameKind = 'system' | 'platform' | 'platform_redirect' | 'custom'
 
 /** One bucket per workspace (SAAS-HOSTING-STACK.md §9). */
 export type WorkspaceStorage = {
@@ -214,6 +214,7 @@ export type WorkspaceRecord = {
 export type WorkspaceResolution =
   | { kind: 'ok'; workspace: WorkspaceRecord }
   | { kind: 'unknown_host'; hostname: string }
+  | { kind: 'redirect'; workspaceKey: string; hostname: string; location: string }
   | { kind: 'suspended'; workspaceKey: string; hostname: string; reason: string }
   | { kind: 'deleting'; workspaceKey: string; hostname: string }
   /**

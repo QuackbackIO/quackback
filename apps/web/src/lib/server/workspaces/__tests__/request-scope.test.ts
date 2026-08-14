@@ -16,9 +16,13 @@ vi.mock('@/lib/server/workspaces/resolver', () => ({ acquireScopeForHost }))
 
 const silentLog = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
-async function serve(host: string | null): Promise<Response | string> {
+async function serve(
+  host: string | null,
+  options: { url?: string; method?: string } = {}
+): Promise<Response | string> {
   const { resolveWorkspaceAndContinue } = await import('../request-scope')
-  const request = new Request('http://example.com/anything', {
+  const request = new Request(options.url ?? 'http://example.com/anything', {
+    method: options.method,
     headers: host === null ? {} : { host },
   })
   return resolveWorkspaceAndContinue({
@@ -74,6 +78,40 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(res.status).toBe(404)
     expect(res.headers.get('cache-control')).toBe('no-store')
   })
+
+  it.each(['GET', 'HEAD'])(
+    'redirects obsolete hosts for %s while preserving path and query',
+    async (method) => {
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'redirect',
+        workspaceKey: 'inst_a',
+        hostname: 'old.quackback.co.uk',
+        location: 'https://new.quackback.co.uk',
+      })
+      const res = (await serve('old.quackback.co.uk', {
+        method,
+        url: 'http://old.quackback.co.uk/posts/one?sort=new',
+      })) as Response
+      expect(res.status).toBe(308)
+      expect(res.headers.get('location')).toBe('https://new.quackback.co.uk/posts/one?sort=new')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+    }
+  )
+
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'])(
+    'refuses unsafe %s on an obsolete host',
+    async (method) => {
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'redirect',
+        workspaceKey: 'inst_a',
+        hostname: 'old.quackback.co.uk',
+        location: 'https://new.quackback.co.uk',
+      })
+      const res = (await serve('old.quackback.co.uk', { method })) as Response
+      expect(res.status).toBe(409)
+      expect(res.headers.get('location')).toBeNull()
+    }
+  )
 
   it('403s a suspended workspace and names the reason', async () => {
     acquireScopeForHost.mockResolvedValue({
@@ -291,6 +329,7 @@ describe('resolveWorkspaceAndContinue', () => {
     // long after the record was fixed.
     for (const lookup of [
       { kind: 'unknown_host', hostname: 'x.example.com' },
+      { kind: 'redirect', workspaceKey: 'a', hostname: 'x', location: 'https://y.example.com' },
       { kind: 'deleting', workspaceKey: 'a', hostname: 'x' },
       { kind: 'invalid', workspaceKey: 'a', hostname: 'x', problems: [] },
       { kind: 'refused', workspaceKey: 'a', code: 'c', detail: 'd' },

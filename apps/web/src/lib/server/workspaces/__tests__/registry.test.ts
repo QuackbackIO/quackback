@@ -34,6 +34,8 @@ const ROW: {
   neon_project_id: string | null
   neon_branch_id: string | null
   hostnames: string[]
+  requested_kind?: string
+  redirect_to_hostname?: string | null
 } = {
   workspace_key: 'inst_gauntlet_neon_t1',
   contract_version: 1,
@@ -84,6 +86,32 @@ function assertCarriesNoDsn(value: unknown): void {
 }
 
 describe('interpretRow', () => {
+  it('returns only redirect metadata for an obsolete platform hostname', () => {
+    const result = interpretRow(
+      row({
+        requested_kind: 'platform_redirect',
+        redirect_to_hostname: 'new-name.quackback.co.uk',
+      }),
+      'old-name.quackback.co.uk'
+    )
+    expect(result).toEqual({
+      kind: 'redirect',
+      workspaceKey: 'inst_gauntlet_neon_t1',
+      hostname: 'old-name.quackback.co.uk',
+      location: 'https://new-name.quackback.co.uk',
+    })
+    assertCarriesNoDsn(result)
+  })
+
+  it('fails closed when a redirect-only hostname has no destination', () => {
+    const result = interpretRow(
+      row({ requested_kind: 'platform_redirect', redirect_to_hostname: null }),
+      'old-name.quackback.co.uk'
+    )
+    expect(result.kind).toBe('invalid')
+    assertCarriesNoDsn(result)
+  })
+
   it('accepts a record whose storage names no credential of its own', () => {
     // The pooled default: one fleet bucket, isolation in the key prefix, so
     // there is no per-workspace credential to name. This must parse as a healthy
@@ -254,6 +282,8 @@ describe('the projection', () => {
       if (column === 'hostnames') continue
       // Cast to text, so it is selected under an alias rather than bare.
       if (column === 'state') continue
+      // Added by the hostname-specific query, not the shared registry projection.
+      if (column === 'requested_kind' || column === 'redirect_to_hostname') continue
       expect(SELECT_COLUMNS).toContain(`r.${column}`)
     }
     expect(SELECT_COLUMNS).toContain('r.state::text AS state')
