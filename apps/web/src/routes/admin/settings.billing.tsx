@@ -12,9 +12,8 @@ import { billingQueries } from '@/lib/client/queries/billing'
  *
  * Gated on `billing.manage`, the permission the RBAC catalogue has carried
  * for this purpose since custom roles shipped — Owner holds it, Admin does
- * not. On a deployment with no billing provider the loader still runs but
- * the overview resolves to null, so the page renders an empty state rather
- * than an error; the nav does not link here at all in that case.
+ * not. A valid control-plane projection is also required; self-hosted
+ * workspaces therefore have no navigation item or commercial dependency.
  */
 export const Route = createFileRoute('/admin/settings/billing')({
   loader: async ({ context }) => {
@@ -36,13 +35,13 @@ function BillingPage() {
       <PageHeader
         icon={CreditCardIcon}
         title="Plan & billing"
-        description="Your plan, your seats, and what you are being charged for."
+        description="Your Quackback Cloud plan and billing access."
       />
       {billingEnabled ? (
         <BillingSettings />
       ) : (
         <p className="text-sm text-muted-foreground">
-          This deployment is not configured for billing.
+          Plan and billing is available only in a Quackback Cloud workspace.
         </p>
       )}
     </div>

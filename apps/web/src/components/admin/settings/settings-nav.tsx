@@ -61,7 +61,7 @@ export function isNavGroup(entry: NavEntry): entry is NavGroup {
  * does not reflow when a flag flips. AI & Automation lives outside settings
  * entirely, as its own main-nav area at /admin/automation (M5).
  *
- * @param billingEnabled Whether this deployment has a billing provider
+ * @param billingEnabled Whether this workspace has a valid billing projection
  *   configured. Not a feature flag — a flag answers "has the admin turned it
  *   on", and this answers "does this deployment sell anything". False on
  *   every self-hosted install, which is why the Billing row is absent there.

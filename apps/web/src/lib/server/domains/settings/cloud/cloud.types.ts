@@ -409,6 +409,11 @@ export interface CloudConfig {
    * come to disagree.
    */
   trialActive: boolean
+  /** Control-plane-authorized commercial actions for this workspace. */
+  canUpgrade: boolean
+  canManageBilling: boolean
+  renewalAt: string | null
+  cancellationAt: string | null
   source: CloudWriter | null
   /** ISO timestamp of the last write, or null. */
   updatedAt: string | null
@@ -429,6 +434,10 @@ export const DISABLED_CLOUD_CONFIG: CloudConfig = Object.freeze({
   billing: Object.freeze({ ...EMPTY_BILLING }),
   trial: null,
   trialActive: false,
+  canUpgrade: false,
+  canManageBilling: false,
+  renewalAt: null,
+  cancellationAt: null,
   source: null,
   updatedAt: null,
   upgradeUrl: null,

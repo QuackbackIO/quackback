@@ -58,11 +58,10 @@ export async function writeBillingProjection(
     const decision = decideBillingProjectionWrite(current, projection)
     if (decision === 'idempotent') return false
 
-    const cloud: StoredCloudConfig = {
-      ...(row.cloud ?? {}),
-      enabled: true,
-      projection,
-    }
+    // The projection is the entire commercial state a workspace may retain.
+    // Replacing the block also guarantees old local provider references cannot
+    // survive a control-plane update.
+    const cloud: StoredCloudConfig = { enabled: true, projection }
     await tx
       .update(settings)
       .set({ cloud, cloudRevision: row.cloudRevision + 1 })

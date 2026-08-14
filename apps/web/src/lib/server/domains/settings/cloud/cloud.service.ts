@@ -12,20 +12,13 @@ import {
   type CloudConfigPatch,
 } from './cloud.merge'
 import {
-  BILLING_STATUSES,
   DISABLED_CLOUD_CONFIG,
-  EMPTY_BILLING,
-  PLAN_CATALOGUE,
   isEntitlementKey,
   isPlanId,
-  type BillingStatus,
-  type CloudBilling,
   type CloudConfig,
-  type CloudTrial,
   type CloudWriter,
-  type EntitlementKey,
-  type PlanId,
 } from './cloud.types'
+import { parseBillingProjection } from './billing-projection'
 
 export type { CloudConfigPatch } from './cloud.merge'
 export { CLOUD_MANAGED_PATHS, cloudPatchPaths, mergeCloudConfig } from './cloud.merge'
@@ -71,112 +64,45 @@ export function resolveCloudConfig(
   if (!stored || typeof stored !== 'object') return DISABLED_CLOUD_CONFIG
   if (stored.enabled !== true) return DISABLED_CLOUD_CONFIG
 
-  const storedPlan = typeof stored.plan === 'string' && isPlanId(stored.plan) ? stored.plan : null
-  if (stored.plan && !storedPlan) {
-    log.error({ plan: stored.plan }, 'cloud config names an unknown plan; treating as no plan')
+  const projection = parseBillingProjection(stored.projection)
+  if (!projection) {
+    log.error('cloud config has no valid control-plane projection; keeping commercial mode off')
+    return DISABLED_CLOUD_CONFIG
   }
-
-  const billing = sanitizeBilling(stored.billing)
-  const trial = sanitizeTrial(stored.trial)
-  const trialActive = isTrialActive(trial, billing, storedPlan, now)
+  const expiresAt = projection.planLimitsExpireAt
+  const projectedAccessExpired = expiresAt !== null && now.getTime() >= Date.parse(expiresAt)
+  const plan = projectedAccessExpired ? 'free' : projection.effectivePlan
+  const trial =
+    projection.trialStartedAt && projection.trialExpiresAt
+      ? {
+          plan: 'pro' as const,
+          startedAt: projection.trialStartedAt,
+          endsAt: projection.trialExpiresAt,
+        }
+      : null
+  const trialActive = Boolean(trial && now.getTime() < Date.parse(trial.endsAt))
 
   return {
     enabled: true,
-    plan: trialActive && trial ? trial.plan : storedPlan,
-    entitlements: sanitizeEntitlements(stored.entitlements),
-    billing,
+    plan,
+    entitlements: projectedAccessExpired ? {} : projection.entitlements,
+    billing: {
+      provider: null,
+      customerRef: null,
+      subscriptionRef: null,
+      status: projection.subscriptionStatus,
+      currentPeriodEnd: projection.renewalAt,
+    },
     trial,
     trialActive,
-    source: stored.source === 'config' || stored.source === 'billing' ? stored.source : null,
-    updatedAt: typeof stored.updatedAt === 'string' ? stored.updatedAt : null,
-    upgradeUrl: readUpgradeUrl(stored),
+    canUpgrade: projection.canUpgrade,
+    canManageBilling: projection.canManageBilling,
+    renewalAt: projection.renewalAt,
+    cancellationAt: projection.cancellationAt,
+    source: null,
+    updatedAt: null,
+    upgradeUrl: '/admin/settings/billing',
   }
-}
-
-/**
- * Is the recorded trial the thing deciding this workspace's plan right now?
- *
- * Three conditions, each closing a different way a trial could do harm:
- *
- * 1. **It has not run out.** The end instant is exclusive.
- * 2. **The workspace has not bought anything.** A trial is what a workspace
- *    holds *before* there is a billing relationship; once a subscription
- *    exists, the subscription decides and a leftover trial record must not
- *    quietly grant more than was paid for.
- * 3. **It would add rather than subtract.** A trial that ranks below the
- *    stored plan is ignored outright, so an operator who pinned a workspace to
- *    Scale cannot have it dropped to a Pro trial for a fortnight by a record
- *    written before the pin.
- */
-function isTrialActive(
-  trial: CloudTrial | null,
-  billing: CloudBilling,
-  storedPlan: PlanId | null,
-  now: Date
-): boolean {
-  if (!trial) return false
-  if (billing.subscriptionRef) return false
-  if (now.getTime() >= Date.parse(trial.endsAt)) return false
-  const storedRank = storedPlan ? PLAN_CATALOGUE[storedPlan].rank : -1
-  return PLAN_CATALOGUE[trial.plan].rank > storedRank
-}
-
-/**
- * A stored trial is only a trial if every part of it is intelligible.
- *
- * A half-written record — an unknown plan, a date nothing can parse — must
- * resolve to *no trial* rather than to a trial that never ends or one on a
- * plan this version cannot rank. Both of those would be a workspace holding
- * features nobody granted it, indefinitely.
- */
-function sanitizeTrial(raw: StoredCloudConfig['trial']): CloudTrial | null {
-  if (!raw || typeof raw !== 'object') return null
-  const plan = typeof raw.plan === 'string' && isPlanId(raw.plan) ? raw.plan : null
-  const startedAt = str(raw.startedAt)
-  const endsAt = str(raw.endsAt)
-  if (!plan || !startedAt || !endsAt) return null
-  if (Number.isNaN(Date.parse(startedAt)) || Number.isNaN(Date.parse(endsAt))) {
-    log.error({ startedAt, endsAt }, 'cloud config holds an unparseable trial window; ignoring it')
-    return null
-  }
-  return { plan, startedAt, endsAt }
-}
-
-function sanitizeEntitlements(
-  raw: Record<string, boolean> | undefined
-): Partial<Record<EntitlementKey, boolean>> {
-  if (!raw || typeof raw !== 'object') return {}
-  const out: Partial<Record<EntitlementKey, boolean>> = {}
-  for (const [key, value] of Object.entries(raw)) {
-    if (typeof value !== 'boolean') continue
-    if (!isEntitlementKey(key)) continue
-    out[key] = value
-  }
-  return out
-}
-
-function sanitizeBilling(raw: StoredCloudConfig['billing']): CloudBilling {
-  if (!raw || typeof raw !== 'object') return { ...EMPTY_BILLING }
-  const status =
-    typeof raw.status === 'string' && (BILLING_STATUSES as readonly string[]).includes(raw.status)
-      ? (raw.status as BillingStatus)
-      : null
-  return {
-    provider: str(raw.provider),
-    customerRef: str(raw.customerRef),
-    subscriptionRef: str(raw.subscriptionRef),
-    status,
-    currentPeriodEnd: str(raw.currentPeriodEnd),
-  }
-}
-
-function readUpgradeUrl(stored: StoredCloudConfig): string | null {
-  const value = (stored as { upgradeUrl?: unknown }).upgradeUrl
-  return typeof value === 'string' && value.length > 0 ? value : null
-}
-
-function str(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 /**

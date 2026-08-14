@@ -1,25 +1,14 @@
 /**
- * A real starter is what starts a trial; merely finishing setup is not.
- *
- * The trial's own behaviour is proven in
- * `domains/settings/cloud/__tests__/`. What can only be seen here is the
- * wiring: that the wizard's last step reaches the trial at all, and that the
- * moment it hands over is the workspace's *stamped* completion time rather
- * than the clock at the moment of the call. Those are the same value on the
- * first run and different values on every run after it, which is exactly why a
- * test that only ran the handler once would prove nothing.
+ * A real starter reports trial activation evidence to the control plane;
+ * merely finishing setup does not. Retries reuse the stamped completion time.
  */
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import type { SetupState } from '@/lib/server/db'
 
 const hoisted = vi.hoisted(() => ({
   state: null as unknown as SetupState,
-  startTrial: vi.fn(async (_opts: { anchor: Date }) => ({
-    started: true,
-    reason: null,
-    trial: null,
-  })),
-  /** State as it stood at the moment the trial was asked for. */
+  reportTrial: vi.fn(async (_opts: unknown) => 'started' as const),
+  /** State as it stood at the moment activation was reported. */
   stateWhenTrialStarted: null as SetupState | null,
 }))
 
@@ -39,6 +28,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: vi.fn(async () => ({
     user: { id: 'usr_1' },
     principal: { id: 'prn_1', role: 'admin' },
+    settings: { id: 'ws_1' },
   })),
 }))
 
@@ -71,7 +61,7 @@ vi.mock('@/lib/server/setup-state', () => ({
     const result = await mutate(
       hoisted.state,
       { id: 'ws_1', name: 'Acme', slug: 'acme', managedFieldPaths: [], featureFlags: null },
-      {}
+      { update: () => ({ set: () => ({ where: async () => undefined }) }) }
     )
     hoisted.state = result.state
     return result
@@ -79,26 +69,24 @@ vi.mock('@/lib/server/setup-state', () => ({
   acknowledgeActivationHandoff: vi.fn(),
 }))
 
-vi.mock('@/lib/server/domains/settings/cloud/trial', () => ({
-  startTrialIfEligible: (opts: { anchor: Date }) => {
+vi.mock('@/lib/server/control-plane/client', () => ({
+  reportTrialActivation: (opts: unknown) => {
     hoisted.stateWhenTrialStarted = hoisted.state
-    return hoisted.startTrial(opts)
+    return hoisted.reportTrial(opts)
   },
 }))
+
+vi.mock('@/lib/server/plg-events', () => ({ emitPlgEvent: vi.fn(async () => undefined) }))
 
 import { completeStartingPointFn, shouldStartTrialForStarter } from '../activation'
 
 const FIRST_RUN = new Date('2026-03-01T12:00:00.000Z')
 const SECOND_RUN = new Date('2026-03-09T08:30:00.000Z')
 
-function anchors(): string[] {
-  return hoisted.startTrial.mock.calls.map((call) => call[0].anchor.toISOString())
-}
-
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(FIRST_RUN)
-  hoisted.startTrial.mockClear()
+  hoisted.reportTrial.mockClear()
   hoisted.stateWhenTrialStarted = null
   hoisted.state = {
     version: 2,
@@ -114,7 +102,7 @@ afterEach(() => {
 describe('completing the wizard', () => {
   it('does not start a trial for a deferred starter', async () => {
     await completeStartingPointFn({ data: { action: 'defer' } } as never)
-    expect(anchors()).toEqual([])
+    expect(hoisted.reportTrial).not.toHaveBeenCalled()
   })
 
   it('still records deferred setup completion without touching the trial', async () => {
@@ -129,8 +117,25 @@ describe('completing the wizard', () => {
     vi.setSystemTime(SECOND_RUN)
     await completeStartingPointFn({ data: { action: 'defer' } } as never)
 
-    expect(anchors()).toEqual([])
+    expect(hoisted.reportTrial).not.toHaveBeenCalled()
     expect(hoisted.state.completedAt).toBe(FIRST_RUN.toISOString())
+  })
+
+  it('reports configured starter evidence with an immutable idempotency key', async () => {
+    hoisted.state.useCase = 'customer_support'
+    await completeStartingPointFn({ data: { action: 'complete' } } as never)
+    vi.setSystemTime(SECOND_RUN)
+    await completeStartingPointFn({ data: { action: 'complete' } } as never)
+
+    expect(hoisted.reportTrial).toHaveBeenCalledTimes(2)
+    expect(hoisted.reportTrial.mock.calls[0]?.[0]).toEqual({
+      idempotencyKey: `starter:${FIRST_RUN.toISOString()}:messenger`,
+      resolution: 'configured',
+      artifactType: 'messenger',
+      occurredAt: FIRST_RUN.toISOString(),
+    })
+    expect(hoisted.reportTrial.mock.calls[1]?.[0]).toEqual(hoisted.reportTrial.mock.calls[0]?.[0])
+    expect(hoisted.stateWhenTrialStarted).toBe(hoisted.state)
   })
 
   it.each([

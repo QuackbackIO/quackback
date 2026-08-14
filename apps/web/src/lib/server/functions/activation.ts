@@ -463,25 +463,36 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
       { workspaceId: auth.settings.id, principalId: auth.principal.id }
     )
 
-    // A trial starts here, and nowhere else, because this is the first moment
-    // a workspace is a real one: someone claimed it, named it, said what it is
-    // for, and has something to open. Anything earlier would hand a trial to
-    // an abandoned signup and start the clock while nobody was using it.
-    //
-    // It runs *after* the setup-state transaction rather than inside it. That
-    // transaction holds the settings row, and the trial write takes the same
-    // row; nesting the two would be a workspace deadlocking on itself at the
-    // last step of its own setup.
-    //
-    // Anchored on `completedAt`, which is stamped once and preserved on every
-    // later call (`current.completedAt ?? now`). So a retry, a double-click or
-    // a second visit to this step recomputes the identical trial window and
-    // changes nothing, rather than quietly buying another fortnight.
-    if (shouldStartTrialForStarter(value.startingPoint.resolution)) {
-      const { startTrialIfEligible } = await import('@/lib/server/domains/settings/cloud/trial')
-      await startTrialIfEligible({
-        anchor: state.completedAt ? new Date(state.completedAt) : new Date(now),
-      })
+    // The control plane owns trial eligibility and timestamps. Reporting is
+    // best effort so a temporary control-plane outage never blocks the user
+    // from entering the workspace they just configured. The stamped starter
+    // time makes every retry carry the same idempotency key and evidence.
+    if (
+      shouldStartTrialForStarter(value.startingPoint.resolution) &&
+      value.startingPoint.resourceType !== 'none'
+    ) {
+      try {
+        const { reportTrialActivation } = await import('@/lib/server/control-plane/client')
+        const completedAt = state.completedAt ?? value.startingPoint.completedAt
+        const status = await reportTrialActivation({
+          idempotencyKey: `starter:${completedAt}:${value.startingPoint.resourceType}`,
+          resolution: value.startingPoint.resolution as 'created' | 'configured',
+          artifactType: value.startingPoint.resourceType,
+          occurredAt: completedAt,
+        })
+        if (status === 'started') {
+          await emitPlgEvent(
+            {
+              name: 'trial_started',
+              outcome: value.startingPoint.outcome,
+              artifactType: value.startingPoint.resourceType,
+            },
+            { workspaceId: auth.settings.id, principalId: auth.principal.id }
+          )
+        }
+      } catch (error) {
+        log.error({ err: error }, 'trial activation could not be reported; onboarding continues')
+      }
     }
 
     return value

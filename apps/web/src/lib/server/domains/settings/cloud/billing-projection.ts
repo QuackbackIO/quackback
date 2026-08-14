@@ -1,5 +1,11 @@
 import type { StoredBillingProjection } from '@/lib/shared/db-types'
-import { BILLING_STATUSES, ENTITLEMENT_KEYS, PLAN_IDS } from './cloud.types'
+import {
+  BILLING_STATUSES,
+  ENTITLEMENT_KEYS,
+  PLAN_IDS,
+  type BillingStatus,
+  type PlanId,
+} from './cloud.types'
 import type { TierLimits } from '../tier-limits.types'
 
 export const PROJECTED_LIMIT_KEYS = [
@@ -16,7 +22,12 @@ export const PROJECTED_LIMIT_KEYS = [
 
 export type ProjectedLimits = Pick<TierLimits, (typeof PROJECTED_LIMIT_KEYS)[number]>
 
-export interface BillingProjection extends Omit<StoredBillingProjection, 'entitlements'> {
+export interface BillingProjection extends Omit<
+  StoredBillingProjection,
+  'effectivePlan' | 'subscriptionStatus' | 'entitlements'
+> {
+  effectivePlan: PlanId
+  subscriptionStatus: BillingStatus | null
   entitlements: Partial<Record<(typeof ENTITLEMENT_KEYS)[number], boolean>>
   freeLimits: ProjectedLimits
   planLimits: ProjectedLimits

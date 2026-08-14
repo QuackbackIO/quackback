@@ -6,7 +6,8 @@ import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { WorkspaceSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
-import { isBillingConfigured } from '@/lib/server/domains/billing/billing.config'
+import type { StoredCloudConfig } from '@/lib/shared/db-types'
+import { resolveCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { logger } from '@/lib/server/logger'
 import { runWithoutLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
@@ -44,7 +45,7 @@ export interface BootstrapData {
    *  banner renders in its final expanded/collapsed state on first paint. */
   updateBannerDismissedVersion: string | null
   /**
-   * Whether this deployment has a billing provider configured.
+   * Whether this workspace has a valid control-plane billing projection.
    *
    * A single boolean, and deliberately nothing more: the admin settings nav
    * needs to know whether a Billing item exists, and nothing else on the
@@ -52,8 +53,8 @@ export interface BootstrapData {
    * subscription reference, no plan, no price — every one of those stays
    * server-side, and `settings.cloud` remains in `SERVER_ONLY_SETTINGS_KEYS`.
    *
-   * False on every install with no provider configured, which is what keeps
-   * the nav byte-identical to today for self-hosters.
+   * False on every self-hosted install. Provider configuration is never read
+   * by the workspace application.
    */
   billingEnabled: boolean
 }
@@ -242,6 +243,9 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     currentHost: headers.get('host'),
     fallback: config.baseUrl,
   })
+  const cloud = resolveCloudConfig(
+    (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
+  )
 
   return {
     baseUrl,
@@ -254,7 +258,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     registeredAuthProviders,
     acceptLanguageLocale,
     updateBannerDismissedVersion,
-    billingEnabled: isBillingConfigured(),
+    billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
   }
 })
 
