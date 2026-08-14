@@ -33,7 +33,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `32779fd0e` (docs). Live image is `6d4d9f252` /
+- Workspace tip: `31330d85b` (limits overlay merge). Live image is `6d4d9f252` /
   `ghcr.io/quackbackio/quackback@sha256:139a4a8c6873d14c1d4cc129d8f3e2d286ccaaea90e2ab0e86766944b8219570`
   (includes Origin-fix `635cdb149`). Re-checked this fire: web `683a4b07`
   SUCCESS, `source.image` and `meta.imageDigest` match, region only
@@ -668,6 +668,29 @@ PASS — focused tests 35/35; 4th Free is 402 with
 item+plan frees a slot; count is `ownerEmail`. Not live (CP still
 `71e59d9` / `f135274f`).
 
+## Verify + Track-6 + limits fixer (2026-08-14)
+
+Fleet: `635cdb149` still live (`683a4b07` / `sha256:139a4a8c…`,
+`us-east4-eqdc4a`). No 635cdb149 deploy. Stripe-live not repeated.
+CP-create still `c5a484d` on `saas`, not deployed. No second builder.
+
+Track-6: deleted web `BILLING_API_KEY`, `BILLING_PRICES`,
+`BILLING_WEBHOOK_SECRET` with `--skip-deploys`. Remaining BILLING keys
+on web: none. Latest web deploy unchanged `683a4b07`. Worker/crons/
+migrator already had none. CP `BILLING_PROJECTION_PRIVATE_KEY` kept.
+
+Verify sweep: FAIL one HIGH. `loop-evidence/verify-2026-08-14/sweep.md`.
+Instances 16→16. t1e upgrade 303 `cs_test_`; t1a portal 303; foreign
+Origin 403; old friendly 308.
+
+HIGH: t1a/t1e `settings.tier_limits` null + projection present →
+`getTierLimits` returned OSS unlimited.
+
+Fixer `b0c13a366` (`loop/cloud-limit-overlay`) merged as `31330d85b`.
+`resolveEffectiveTierLimits`: no row + projection uses projection
+floor, not OSS. Focused tests 19/19. Critic (re-run on `saas`): 19/19
+PASS. Not deployed (Docker not started this fire).
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
@@ -692,27 +715,25 @@ item+plan frees a slot; count is `ownerEmail`. Not live (CP still
 12. **Per-owner cap:** implemented on CP `c5a484d` (tests 35, critic PASS).
     Not deployed. Live 4th-Free 402 still needs a CP deploy (Fleet lane;
     no new Neon unless that live proof requires it).
-13. Hosted-product sweep (`LOOP-VERIFY.md`): first-run, settings IA +
-    CP gateway, Free / upgrade / change-plan / downgrade / cancel /
-    limits / entitlements, isolation, rename, self-host. Fixer only
-    for HIGH SIGNAL. Custom-domain _live_ add/verify waits on the
-    operator asking for Cloudflare for SaaS; the workspace Domains
-    surface + gateway is in the contract now.
-14. **Track 8 — hosted account operations** (see
+13. ~~Hosted-product sweep.~~ 2026-08-14 FAIL one HIGH (unlimited
+    `getTierLimits` on cloud). Fixer `b0c13a366` merged `31330d85b`,
+    tests 19/19. Not in the live image. Re-sweep after deploy.
+14. Deploy `31330d85b` (Fleet) so cloud projection limits apply on t1a/t1e.
+15. **Track 8 — hosted account operations** (see
     `LOOP-SAAS-FIRST-CUSTOMER.md`). Order:
     8a soft-delete/restore + 3-Free re-check (with or right after
     `c5a484d` deploy); 8b in-product switcher; 8c transfer/leave;
     8d seats + SSO downgrade live row; 8e visible usage; 8f export /
     wipe / delete CP account. No new Neon unless a finding cannot
     be proved on current hosts.
-15. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
+16. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
     Fallback origin `saas-origin.quackback.co.uk` is **active** and
     CNAMEs (proxied) to the pooled Railway web host — not the old
     originless `100::` Worker pattern. Customer CNAME target is
     `customers.quackback.co.uk`. CP client is in `lib/server/cloudflare/`.
     Next: identity gateway add/verify/make-primary/remove + workspace
     Domains card. Do not print the token.
-16. First-win journeys. Checkout attaches to an existing workspace only.
+17. First-win journeys. Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
 
@@ -807,7 +828,8 @@ on self-host.
 ## Verification still required
 
 Standing program: `LOOP-VERIFY.md` (Verify lane + HIGH SIGNAL Fixers).
-No sweep recorded yet.
+Sweep 2026-08-14: `loop-evidence/verify-2026-08-14/sweep.md` **FAIL**
+one HIGH (cloud unlimited overlay). Fixer merged, not deployed.
 
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
   Live: Free cap refuses with a named plan; paid overlay lifts it;
@@ -843,12 +865,11 @@ No sweep recorded yet.
 ## Blockers
 
 Stripe **test** payment + webhook finalize is live on t1a (Growth,
-projection v4, instances 16). Remaining: deploy CP `c5a484d` (Fleet)
-then live-prove the 4th Free 402; Track 6 boundary scan and unused
-Railway `BILLING_*`. Walk3 workspace webhook was disabled by the
-operator. Cloudflare for SaaS provider is started: fallback origin
-active on Railway, token on CP, client landed. Workspace Domains UI
-and identity-gateway wiring remain.
+projection v4, instances 16). Unused web `BILLING_*` vars removed
+(`--skip-deploys`; deploy still `683a4b07`). Remaining: deploy limits
+overlay `31330d85b`; deploy CP `c5a484d` + live 4th-Free 402. Walk3
+workspace webhook stays disabled. Cloudflare for SaaS provider is
+started (`0302c1d00`); this fire did not wire the Domains card.
 
 The identity/billing pair is otherwise deployed. Further deploys are
 incremental. Live app `6d4d9f252` / `sha256:139a4a8c…`. Live CP
