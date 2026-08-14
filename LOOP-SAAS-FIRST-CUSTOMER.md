@@ -211,6 +211,25 @@ Bar: source/config scans enforce the boundary, workspace typecheck and tests are
 green, and control-plane checkout/webhook/projection integration works in test
 mode.
 
+The live image already dropped the billing tables (`0261`). Remaining work is
+the scan plus Railway `BILLING_*` variables and the walk3 fleet webhook.
+
+### Track 6b: Remove stale SaaS-incompatible code
+
+Outcome: the Railway/Neon/Cloudflare SaaS paths contain only the current
+create, identity, and billing contracts. Old named-create, k8s custom-domain,
+org-level customer billing UI, and CP member-roster code is deleted, not
+gated. Self-host with cloud off is unchanged and shows none of those
+surfaces.
+
+Priority: do this before building Cloudflare custom domains or more billing
+UI, so nobody implements on `domain-multi-fn` or `org-billing-fn`.
+
+Bar: the inventory in `LOOP-PROGRESS.md` “Stale code to remove” is gone or
+explicitly parked with a reason; `rg` does not find live imports of
+`domain-multi-fn`, `org-billing-fn`, or `members-fn`; self-host tests still
+prove local name editing, no Plan & billing nav, and no cloud URL controls.
+
 ### Track 7: First-win and operational proof
 
 Outcome: typed PLG events remain privacy-safe structured logs, and the complete

@@ -193,13 +193,17 @@ billing path. They do not close tracks 3–7.
   is a superseded prompt: named create, app-owned billing, provision-time
   trial. Ignore it.
 
-**This wakeup’s unit, in order, all still on Track 1:**
+**This wakeup’s unit, in order:**
 
-1. Finish separating `cp_instances.name` from the authoritative identity
+1. Remove stale SaaS-incompatible code. Inventory:
+   `LOOP-PROGRESS.md` § Stale code to remove. Delete, do not dual-mode.
+   Keep self-host (cloud off): local name, local Help Center domain,
+   hidden Plan & billing, no cloud URL/domain chrome.
+2. Finish separating `cp_instances.name` from the authoritative identity
    projection.
-2. Add database-backed tests for rename-transfer replay, expiry, wrong
+3. Add database-backed tests for rename-transfer replay, expiry, wrong
    workspace, and stable asset origin.
-3. Fresh-browser prove the deployed pair with **two** mailboxes the
+4. Fresh-browser prove the deployed pair with **two** mailboxes the
    operator does not own, on **new** generated hosts:
    - control-plane sign-in
    - first workspace created with no name/URL/region/plan form

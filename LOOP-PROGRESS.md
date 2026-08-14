@@ -78,6 +78,7 @@ remains.
 | 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                           |
 | 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`               |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`               |
+| 6b remove stale SaaS code        | inventoried; deletion pending                                            | see “Stale code to remove”                                          |
 | 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                              |
 
 ## Completed activation work
@@ -165,23 +166,103 @@ the codebase.
 
 ## Next commits
 
-1. Finish separating `cp_instances.name` from the authoritative identity
+1. Remove stale SaaS-incompatible code. The Development fleet does not
+   need backwards compatibility with named create, k8s custom domains,
+   org-level customer billing UI, or workspace-owned billing. Self-host
+   with cloud off must keep working and must not show those surfaces.
+   Inventory is in “Stale code to remove” below.
+2. Finish separating `cp_instances.name` from the authoritative identity
    projection. New creates still write `Untitled workspace` into that
    column; display name lives on `cp_workspace_identity`. Do not use
    `cp_instances.custom_domain*` for the new path.
-2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
+3. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
-3. Fresh-browser prove the deployed identity pair on **new** generated
+4. Fresh-browser prove the deployed identity pair on **new** generated
    `ws-*.quackback.co.uk` hosts: zero-input create, OTT handoff, skippable
    details, rename transfer. Do not use existing `walk-*` rows; they have
    no identity or hostname-claim rows (13 instances, 0 identity, 0 claims).
    Do not backfill their old customer-facing names into the identity ledger.
-4. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-5. Add the shared workspace custom-domain manager on
+5. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+6. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
    readiness before enabling it.
-6. Run the remaining control-plane billing gateway and first-win journeys.
+7. Run the remaining control-plane billing gateway and first-win journeys.
    Checkout attaches to an existing workspace only.
+
+## Stale code to remove
+
+No Railway/Neon/Cloudflare SaaS compatibility with the previous create,
+billing, or custom-domain paths. Delete rather than gate. **Self-host
+(`settings.cloud` absent / `enabled: false`) stays:** local workspace
+name, local Help Center reverse-proxy domain, no Plan & billing nav, no
+cloud URL/domain controls, Stripe remains a customer integration.
+
+### Delete on the control plane
+
+- `src/lib/server/functions/domain-multi-fn.ts` and
+  `src/lib/server/domains/multi*` — k8s HTTPRoute custom domains, no
+  certificate step. Only referenced by its own tests. The new path is
+  Cloudflare for SaaS + `cp_workspace_hostname_claims`.
+- `src/lib/server/functions/org-billing-fn.ts` and
+  `src/lib/server/billing/org-subscription.ts` — customer org billing
+  that the dashboard already abandoned. Live checkout is
+  `workspace-gateway.ts`. Keep Stripe customer/subscription ids on the
+  org row only while that gateway still reads them.
+- `src/lib/server/functions/members-fn.ts` — CP member roster. Only its
+  tests import it. Team lives in the workspace.
+- Customer dashboard leftovers that only redirect:
+  `dashboard/$orgId/billing`, `.../members`, `.../settings*`. Remove once
+  no mail template still points at them, or keep as redirects with a
+  delete-by date.
+- `setup.$orgId.tsx` header still describes a Name form. The page
+  auto-creates. Delete the named-create copy and any unused wizard name
+  fields.
+- `cp_instances.name` as customer identity; `custom_domain`,
+  `custom_domain_verified`, `custom_domain_verified_at`; unread
+  `r2_bucket_name`, `r2_token_id`, `oidc_client_id`. Drop after no
+  replica SELECTs them.
+- `login_url` / magic-link owner door if Open+OTT is the only customer
+  handoff. Confirm bootstrap email before deleting.
+- `stripe_subscription_item_id`, `pending_plan_id`,
+  `cancel_at_period_end_at` on instances if workspace billing no longer
+  writes them.
+- Admin `plan-fanout` and any operator path that still provisions by
+  customer name/URL.
+
+### Delete on the workspace app / fleet
+
+- `apps/web/src/lib/server/domains/billing/provider/` if empty or still
+  holding provider clients. Platform billing is projection + CP gateway
+  only.
+- Railway web/worker/cron/migrator variables `BILLING_API_KEY`,
+  `BILLING_PRICES`, `BILLING_WEBHOOK_SECRET` (still present on the live
+  web service). They are not read by the deployed image.
+- Workspace webhook still targeted at `walk3-mss0m53h` in the Stripe
+  test catalogue. Retire that endpoint; do not reattach it to the app.
+- Local onboarding fixture still pre-0262 (13 skipped tests). Migrate
+  or replace the fixture; do not keep a pre-identity schema for SaaS
+  tests.
+
+### UI must stay hidden when cloud is off
+
+Already: Plan & billing only when `billingEnabled`; General uses local
+name when there is no identity projection; onboarding name form only
+when `!isCloudProvisioned`.
+
+Audit and fix if any of these render without a verified cloud
+projection: friendly Quackback URL, custom-domain card, commercial
+trial banner, upgrade/change-plan CTAs, control-plane identity errors
+on self-host.
+
+### Do not delete
+
+- Self-host onboarding workspace name (`_layout.workspace.tsx` when
+  `!isCloudProvisioned`).
+- `updateWorkspaceNameFn` for local `settings.name`.
+- Help Center reverse-proxy domain helpers (`help-center-domain.ts`).
+- Product Stripe integration (`apps/web/src/integrations/stripe/**`).
+- Contextual activation, focused widget installer, projection
+  consumption, instance-scoped billing/identity gateways.
 
 ## Verification still required
 
