@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   decryptSecrets: vi.fn(),
-  encryptSecrets: vi.fn((s: unknown) => JSON.stringify(s)),
+  encryptSecrets: vi.fn((...args: unknown[]) => JSON.stringify(args[0])),
   lockedRows: vi.fn(),
   forUpdate: vi.fn(),
   updateWhere: vi.fn(),
-  eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
+  eq: vi.fn((...args: unknown[]) => ({ col: args[0], val: args[1] })),
   refreshJiraToken: vi.fn(),
   getPlatformCredentials: vi.fn(),
   cacheDel: vi.fn(),
