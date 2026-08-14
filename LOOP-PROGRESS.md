@@ -30,12 +30,11 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `338cb9f99` (live image still `6f255842f` /
-  `sha256:1249693eb22277381fbe450cd49368216af1254661e9502870aaa64e7f8c819d`;
-  Docker `31826887859` failed checkout; `31827133552` is building `saas`)
+- Workspace: `f75518e47` live as
+  `sha256:c9fbd88ba6152c8ccd3e04eaf3418554e5991d2f03f55a0d4a9e8913ae3dee46`
 - Control plane: `71e59d9` live as `e28c7b8e` /
   `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
-- Last known deployed workspace: `6f255842f` (2026-08-14)
+- Last known deployed workspace: `f75518e47` (2026-08-14)
 - Last known deployed control plane: `e28c7b8e` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
@@ -103,17 +102,17 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                                                                                              | Evidence                                                                                                          |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                                                                                            | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | live create + Open mint `/auth/open-handoff` proved; consume image not live yet (`31826887859` checkout-failed; `31827133552` building `338cb9f99`) | see “Track 1 live walk (2026-08-14)”                                                                              |
-| 2 focused widget activation      | implemented, focused verification passed                                                                                                            | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                                                                                                         | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                                                                                                         | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                                                                                                         | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                                                                                                      | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                                                          | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                                                                                                          | `33c15ba53`; first-win journeys remain                                                                            |
+| Track                            | Status                                                                                     | Evidence                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                   | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | live Chromium Open session + details + outcome on `f75518e47`; rename/storage not finished | see “Track 1 live walk (2026-08-14)”                                                                              |
+| 2 focused widget activation      | implemented, focused verification passed                                                   | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | implemented; full/live verification pending                                                | CP `c7ec591` through `9f77647`                                                                                    |
+| 4 workspace projection + gateway | implemented; full/live verification pending                                                | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | implemented; full/live verification pending                                                | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
 
 ## Completed activation work
 
@@ -306,9 +305,64 @@ Live after this fire (2026-08-14 T17:42Z):
   Queued 2026-08-14T18:06:48Z. Do not treat `31826887859` as a digest
   source.
 
+Live after this fire (2026-08-14 T18:21Z):
+
+- Docker `31827133552` succeeded from `saas` `338cb9f99` as
+  `ghcr.io/quackbackio/quackback@sha256:cd101b2c1339204ce1de77c50083a54fc8a5639233cab8f422b6ed017305d74c`.
+- `source.image` + `serviceInstanceDeployV2` SUCCESS, matching
+  `meta.imageDigest`, all `us-east4-eqdc4a`:
+  web `0c746ce4`, worker `fd9450b6`, hourly `0515ce99`, daily `c48e6569`,
+  migrator `73e52375`. Ready 200 on gauntlet and both `ws-*` hosts.
+- Re-walk of the same two `ws-*` owners (`t1e-cd` / `t1a-cd`). No new
+  Neon. Onboarding `useCase` / `startingPoint` were cleared so details
+  and outcome could reappear. Fresh mint still 302s to
+  `/auth/open-handoff?ott=&returnTo=/onboarding/workspace`.
+  Expiry and wrong-workspace GETs still fail closed (invalid page, no
+  session cookie; wrong-host token remains).
+- `curl` of a fresh mint: HTTP 307 `Location: /onboarding/workspace`
+  plus `__Secure-better-auth.session_token`; token row deleted. A
+  follow-up `GET /onboarding/workspace` with that cookie is 200.
+- Chromium `page.goto` of the same mint stores the session cookie,
+  follows the 307, then `GET /onboarding/workspace` 307s **back** to
+  the original `/auth/open-handoff?ott=` (spent). The visible page is
+  the dedicated invalid card (`loop-evidence/t1e-cd/03-after-handoff.png`).
+  Details / outcome / rename did not run.
+- Fix `f75518e47`: a remount that already holds the session continues
+  to `returnTo`; the route finishes on a 200 bounce instead of
+  `throw redirect`. Replay without a session still fails closed.
+  Focused tests 14 passed (open-handoff 3, route shape 2, ott-handler
+  2, origin-transfer.db 7). Pushed `saas`. Docker `31829624405`
+  dispatched `--ref saas` empty `sha`.
+
+- Docker `31829624405` succeeded from `saas` `f75518e47` as
+  `ghcr.io/quackbackio/quackback@sha256:c9fbd88ba6152c8ccd3e04eaf3418554e5991d2f03f55a0d4a9e8913ae3dee46`.
+  `source.image` + `serviceInstanceDeployV2` SUCCESS, matching digest,
+  all `us-east4-eqdc4a`: web `51e51404`, worker `ef4f782f`, hourly
+  `4ffc6944`, daily `feedc9b4`, migrator `81629f7d`. Live chunk
+  `auth.open-handoff-CJSBo0Zc.js` contains `location.replace` and
+  “Opening your workspace”.
+- Chromium consume on `ws-4a048e…` now lands on
+  `/onboarding/workspace` with session cookie and “Make this workspace
+  yours” (`loop-evidence/t1e-cd/04-details.png`). Expiry / wrong-workspace
+  / replay without a session still fail closed.
+- Same-browser walk then showed the outcome question
+  (`05-outcome.png`) and the product-feedback starter (`06-after-details.png`).
+  `/admin/settings/general` is still gated until the starter step is
+  finished, so rename / old-host redirect / `/api/storage/…` did not
+  complete. A later OTP wait hit the login form (likely rate-limited).
+  Do not hammer CP sign-in.
+
+### Critic (2026-08-14, remount fix `f75518e47`)
+
+PASS — tip is `f75518e47`, consume stays on the request with no
+`throw redirect`, required tests 7/7, live missing/dummy OTTs fail
+closed with no session cookie. Live image at critic time was still
+`cd101b2c` (`338cb9f99`); that cannot close the browser walk. The
+`c9fbd88b` deploy above landed after that verdict.
+
 Do **not** start custom domains or the billing live bar. Reuse the two
-`ws-*` rows after the consume-path image is on web (`us-east4-eqdc4a`).
-Do not mint more Neon projects for this walk.
+`ws-*` rows. Finish starter → rename / storage on those hosts. Do not
+mint more Neon projects.
 
 ## Next commits
 
@@ -316,15 +370,12 @@ Do not mint more Neon projects for this walk.
 2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
 3. ~~**Unit C — host-independent stored assets**~~ live through `6f255842f` (`sha256:1249693e…`).
 4. ~~Deploy `6f255842f` + confirm CP `71e59d9`.~~ Digest and `us-east4-eqdc4a` verified. Live consume still bounced via `OttHandler`.
-5. If Docker `31827133552` (`338cb9f99`, includes `78d9f7652`) succeeded,
-   set `source.image` + `serviceInstanceDeployV2` for web `0b821c4a` /
-   worker `9cd4a749` / cron-hourly `bb8fc6ee` / cron-daily `4bd70297` /
-   migrator `6e836ccb`. Verify digest + `us-east4-eqdc4a`. Then re-walk
-   the two existing `ws-*` hosts: `/auth/open-handoff` session →
-   skippable details → outcome → rename / old-host redirect /
-   `/api/storage/…` src → replay/expiry/wrong-workspace fail closed.
-   Dispatch Docker with `--ref saas` and empty `sha` (short SHAs fail
-   checkout). If still building, do not sleep.
+5. ~~Deploy `f75518e47` (`sha256:c9fbd88b…`).~~ Digest and
+   `us-east4-eqdc4a` verified. Chromium Open session + details +
+   outcome proved on `ws-4a048e…`. Finish the starter step on both
+   existing `ws-*` hosts, then rename / old-host redirect /
+   `/api/storage/…` src. Replay/expiry/wrong-workspace already fail
+   closed. Do not mint more Neon. Do not hammer CP OTPs.
 6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
 7. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
