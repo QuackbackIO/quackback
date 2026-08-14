@@ -30,12 +30,12 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `57ff32499` (starter-trial retry). Live image is still
-  `689c99d13` /
-  `sha256:8d9da3be4870f2594b0a73937842688f6797936657a7671823ccd4ed375cafcb`
+- Workspace tip: `9c5756d4a` (ledger). Live image is `0c42bbe1f`
+  (includes starter-trial retry `57ff32499`) as
+  `ghcr.io/quackbackio/quackback@sha256:703eca7db7c22362e7ea5beed5d35a2574e8cb561d1dd078e5e8c7c311a51af2`
 - Control plane: `71e59d9` live as `e28c7b8e` /
   `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
-- Last known deployed workspace: `689c99d13` (2026-08-14)
+- Last known deployed workspace: `0c42bbe1f` (2026-08-14)
 - Last known deployed control plane: `e28c7b8e` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
@@ -110,7 +110,7 @@ remains.
 | 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
 | 3 CP billing foundation          | implemented; checkout live blocked (invalid Stripe test key; paid plans have no price ids)                 | CP `c7ec591` through `9f77647`; see “Track 3/5 live billing (2026-08-14)”                                         |
 | 4 workspace projection + gateway | both `ws-*` workspaces hold signed billing projections; checkout/portal still pending prices               | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts through `/api/v1/internal/billing/activate-trial`; retry helper landed | CP `2fa8a08`, `710ab09`; app `57ff32499`; see “Track 3/5 live billing (2026-08-14)”                               |
+| 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
 | 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
@@ -464,6 +464,45 @@ Docker `31834774523` dispatched `--ref saas` for `57ff32499` (includes
 the ledger commit). Not waited; retry is not required for this unit’s
 live proof.
 
+Live after this fire (2026-08-14 T19:55Z):
+
+- Docker `31834774523` succeeded from `saas` `0c42bbe1f` (includes
+  `57ff32499`) as
+  `ghcr.io/quackbackio/quackback@sha256:703eca7db7c22362e7ea5beed5d35a2574e8cb561d1dd078e5e8c7c311a51af2`.
+- `source.image` + `serviceInstanceDeployV2` SUCCESS, matching
+  `meta.imageDigest`, all `us-east4-eqdc4a`:
+  web `d525ae4f`, worker `83a05e54`, hourly `14f7061d`, daily
+  `49d5c98c`, migrator `bce46043`. Worker/crons first landed on `sfo`
+  and were re-pinned then re-deployed V2; digest unchanged.
+- Ready 200 on gauntlet, `northfa99f0`, `south63792f`; health 200 on
+  both immutable `ws-*` hosts.
+- Live web bundle contains `reportStarterTrialIfDue` in
+  `/app/.output/server/_ssr/starter-trial-BOpCsSuc.mjs` (skips when
+  `trialStartedAt` is already set). Both `ws-*` workspaces already
+  hold a trial, so the helper is a no-op on those hosts.
+
+### Critic (2026-08-14, retry-image deploy `0c42bbe1f`)
+
+PASS — all five SUCCESS deploys run
+`sha256:703eca7db7c22362e7ea5beed5d35a2574e8cb561d1dd078e5e8c7c311a51af2`
+in `us-east4-eqdc4a` (not sfo); five health URLs 200; live web
+filesystem defines and calls `reportStarterTrialIfDue`.
+
+| role     | deployment | digest     | region          |
+| -------- | ---------- | ---------- | --------------- |
+| web      | `d525ae4f` | `703eca7d` | us-east4-eqdc4a |
+| worker   | `83a05e54` | `703eca7d` | us-east4-eqdc4a |
+| hourly   | `14f7061d` | `703eca7d` | us-east4-eqdc4a |
+| daily    | `49d5c98c` | `703eca7d` | us-east4-eqdc4a |
+| migrator | `bce46043` | `703eca7d` | us-east4-eqdc4a |
+
+HTTP 200: gauntlet `/api/health/ready` (`role: web`),
+`northfa99f0` ready, `south63792f` ready, both `ws-*` `/api/health`.
+Live web `d525ae4f` replica `50b9fc32`:
+`starter-trial-BOpCsSuc.mjs:26` defines `reportStarterTrialIfDue`;
+`plan-notice-HQY-UayT.mjs:29-30` imports and awaits it. Critic did
+not start a new trial (both workspaces already have one).
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
@@ -472,13 +511,14 @@ live proof.
 4. ~~Deploy `6f255842f` + confirm CP `71e59d9`.~~ Digest and `us-east4-eqdc4a` verified. Live consume still bounced via `OttHandler`.
 5. ~~Deploy `f75518e47` (`sha256:c9fbd88b…`).~~ Chromium Open + details + outcome proved.
 6. ~~Live rename / old-friendly 308 / `/api/storage/…` src on the two `ws-*` hosts (`689c99d13`, `sha256:8d9da3be…`).~~
-7. ~~Live starter trial through the instance-scoped CP gateway on both `ws-*` hosts.~~ App retry helper `57ff32499` not yet in the live image.
+7. ~~Live starter trial through the instance-scoped CP gateway on both `ws-*` hosts.~~
 8. Replace the invalid Stripe **test** key (do not mint a live key). Re-seed
    paid-plan price ids, then live-prove checkout/portal through
    `/api/v1/internal/billing/session`. `SEED_DATABASE` is unset;
    `CLUSTER_ENV=gauntlet` would seed the public demo user unless
    `SEED_DEMO_USER=false`.
-9. Deploy `57ff32499` so a later starter-miss retries from admin plan-notice.
+9. ~~Deploy `57ff32499` so a later starter-miss retries from admin plan-notice.~~
+   Live `0c42bbe1f` / `sha256:703eca7d…`.
 10. Add the control-plane Cloudflare for SaaS custom-hostname integration.
     Do not start this until the operator asks; custom domains stay later.
 11. First-win journeys. Checkout attaches to an existing workspace only.
@@ -580,7 +620,8 @@ on self-host.
 - Control-plane webhook replay and outbox retry.
 - ~~Created/configured-only trial activation and immutable anchor.~~ live on both `ws-*` hosts.
 - Control-plane outage behavior for normal use and billing actions. App retry
-  helper is committed (`57ff32499`) and not yet deployed.
+  helper is live (`57ff32499` in image `703eca7d`); both current `ws-*`
+  workspaces already have a trial so the helper skips.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
 - Zero-input first-workspace creation and retry after interrupted provisioning.
 - Live rename handoff, old-host redirect, and session survival on a new
@@ -598,7 +639,9 @@ gateway cannot be live-proved until the operator replaces it. Do not
 use a live key. Do not print the current value.
 
 The identity/billing pair is otherwise deployed. Further deploys are
-incremental. `57ff32499` is not in the live workspace image yet.
+incremental. `57ff32499` is live as `0c42bbe1f` /
+`sha256:703eca7d…`. Track 6 boundary scan and unused Railway
+`BILLING_*` / walk3 webhook retirement are the next unblocked unit.
 
 Operational defects carried from the prior lead:
 
