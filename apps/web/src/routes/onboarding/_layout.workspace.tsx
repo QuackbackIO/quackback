@@ -5,6 +5,12 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { saveWorkspaceAndGoalFn } from '@/lib/server/functions/onboarding'
+import {
+  getCloudIdentityFn,
+  markCloudWorkspaceDetailsSeenFn,
+  platformLabelFromHostname,
+  updateCloudIdentityFn,
+} from '@/lib/server/functions/cloud-identity'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import { pickOnboardingStep } from './-onboarding-step'
@@ -29,14 +35,196 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
     if (target !== '/onboarding/workspace' && state.setupState?.steps.startingPoint) {
       throw redirect({ to: target })
     }
+    const isCloudProvisioned = state.setupOpenToClaim === false
     return {
+      isCloudProvisioned,
+      cloudIdentity: isCloudProvisioned ? await getCloudIdentityFn() : null,
       existingWorkspaceName: context.settings?.name ?? '',
       existingSlug: context.settings?.slug ?? '',
       existingUseCase: state.setupState?.useCase,
     }
   },
-  component: WorkspaceAndGoalStep,
+  component: WorkspaceStep,
 })
+
+function WorkspaceStep() {
+  const { isCloudProvisioned, cloudIdentity } = Route.useLoaderData()
+  if (!isCloudProvisioned) return <WorkspaceAndGoalStep />
+  if (!cloudIdentity) return <CloudIdentityUnavailable />
+  return <CloudWorkspaceDetailsStep identity={cloudIdentity} />
+}
+
+function CloudIdentityUnavailable() {
+  return (
+    <div className="mx-auto max-w-lg space-y-5 text-center">
+      <h1 className="text-2xl font-bold">Workspace details are temporarily unavailable</h1>
+      <p className="text-sm text-muted-foreground">
+        Your workspace is ready, but its verified cloud identity has not arrived yet.
+      </p>
+      <Button type="button" onClick={() => window.location.reload()}>
+        Retry
+      </Button>
+    </div>
+  )
+}
+
+export function CloudWorkspaceDetailsStep(props: {
+  identity: NonNullable<Awaited<ReturnType<typeof getCloudIdentityFn>>>
+}) {
+  const navigate = useNavigate()
+
+  async function continueToGoal(transfer?: {
+    token: string
+    canonicalOrigin: string
+  }): Promise<void> {
+    await markCloudWorkspaceDetailsSeenFn()
+    if (transfer) {
+      const target = new URL('/auth/origin-transfer', transfer.canonicalOrigin)
+      target.searchParams.set('ott', transfer.token)
+      target.searchParams.set('returnTo', '/onboarding/usecase')
+      window.location.assign(target)
+      return
+    }
+    await navigate({ to: '/onboarding/usecase' })
+  }
+
+  async function save(input: { displayName: string; platformLabel?: string }): Promise<void> {
+    const result = await updateCloudIdentityFn({ data: input })
+    await continueToGoal(
+      result.transferToken
+        ? { token: result.transferToken, canonicalOrigin: result.projection.canonicalOrigin }
+        : undefined
+    )
+  }
+
+  return (
+    <CloudWorkspaceDetailsForm identity={props.identity} onSave={save} onSkip={continueToGoal} />
+  )
+}
+
+export function CloudWorkspaceDetailsForm(props: {
+  identity: NonNullable<Awaited<ReturnType<typeof getCloudIdentityFn>>>
+  onSave: (input: { displayName: string; platformLabel?: string }) => Promise<void>
+  onSkip: () => Promise<void>
+}) {
+  const [displayName, setDisplayName] = useState(props.identity.displayName)
+  const [platformLabel, setPlatformLabel] = useState(
+    props.identity.platformHostname
+      ? platformLabelFromHostname(props.identity.platformHostname)
+      : ''
+  )
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
+  const domainSuffix = new URL(props.identity.canonicalOrigin).hostname
+    .split('.')
+    .slice(1)
+    .join('.')
+
+  async function run(action: () => Promise<void>, fallback: string): Promise<void> {
+    setIsSaving(true)
+    setError('')
+    try {
+      await action()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : fallback)
+      setIsSaving(false)
+    }
+  }
+
+  function submit(event: React.FormEvent): void {
+    event.preventDefault()
+    if (!displayName.trim()) return
+    const friendlyLabel = platformLabel.trim()
+    void run(
+      () =>
+        props.onSave({
+          displayName: displayName.trim(),
+          ...(friendlyLabel ? { platformLabel: friendlyLabel } : {}),
+        }),
+      'Could not save workspace details. Try again.'
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="mx-auto flex w-full max-w-xl flex-col gap-7 pb-24 sm:pb-0">
+      <header className="text-center">
+        <h1 className="text-2xl font-bold">Make this workspace yours</h1>
+        <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
+          These details are optional. You can change them later in Admin Settings.
+        </p>
+      </header>
+
+      <div className="space-y-2">
+        <label htmlFor="cloud-workspace-name" className="text-sm font-medium">
+          Workspace name
+        </label>
+        <Input
+          id="cloud-workspace-name"
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          maxLength={80}
+          disabled={isSaving}
+          autoComplete="organization"
+          autoFocus
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="cloud-platform-label" className="text-sm font-medium">
+          Friendly Quackback URL{' '}
+          <span className="font-normal text-muted-foreground">(optional)</span>
+        </label>
+        <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+          <Input
+            id="cloud-platform-label"
+            value={platformLabel}
+            onChange={(event) => setPlatformLabel(event.target.value)}
+            className="border-0 focus-visible:ring-0"
+            maxLength={63}
+            autoCapitalize="none"
+            autoCorrect="off"
+            disabled={isSaving}
+            placeholder="your-team"
+          />
+          <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{domainSuffix}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Current address: <span className="font-mono">{props.identity.canonicalOrigin}</span>
+        </p>
+      </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          {error}
+        </p>
+      )}
+
+      <div className="flex flex-col items-center gap-2">
+        <Button
+          type="submit"
+          disabled={isSaving || !displayName.trim()}
+          className="h-11 w-full max-w-sm"
+        >
+          {isSaving && (
+            <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+          )}
+          Continue
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={isSaving}
+          onClick={() => void run(props.onSkip, 'Could not continue. Try again.')}
+        >
+          Skip for now
+        </Button>
+      </div>
+    </form>
+  )
+}
 
 function WorkspaceAndGoalStep() {
   const intl = useIntl()
