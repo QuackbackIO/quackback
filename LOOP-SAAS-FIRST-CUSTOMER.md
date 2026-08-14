@@ -3,6 +3,18 @@
 This is the lead-agent runbook for completing one first-customer journey on the
 two `saas` branches.
 
+## /loop
+
+On every wakeup, including the first, paste `LOOP-PROMPT.md` unchanged. Do not
+paraphrase it into a new mission. Short form if a scheduler cannot take the
+whole file:
+
+```
+Continue LOOP-PROMPT.md. Read LOOP-SAAS-FIRST-CUSTOMER.md and LOOP-PROGRESS.md.
+Resume the first Track 1 unit whose bar is not met. Do not start new
+architecture. Stop if a stop-and-ask condition holds.
+```
+
 ## Worktrees
 
 | Boundary      | Path                                  | Branch |
@@ -111,26 +123,30 @@ owner's workspace session through a ten-minute, owner-bound, single-use OTT.
 There is no pre-handoff name, URL, region, or plan form.
 
 After handoff, Workspace details offers a skippable display-name and friendly
-Quackback URL step before the goal question. The same controls live in Admin
-Settings, with a separate Custom domains card. The workspace UI calls an
-instance-scoped control-plane identity gateway; the control plane atomically
-reserves hostnames, owns canonical registry state and Cloudflare provider state,
-and fans a signed monotonic identity projection back to the workspace.
+Quackback URL step before the goal question. The same name/URL controls live
+in Admin Settings. The workspace UI calls an instance-scoped control-plane
+identity gateway; the control plane atomically reserves hostnames, owns
+canonical registry state, and fans a signed monotonic identity projection back
+to the workspace.
 
 Platform URL changes retain immutable database, namespace, mail, storage, and
 system-host identities; every old friendly host remains permanently reserved as
 redirect-only and the browser crosses to the new canonical host through a
-single-use current-principal handoff. Customer domains do not route until
-ownership, DNS target, Cloudflare hostname status, and Cloudflare SSL status are
-all verified. The cloud Help Center reuses this manager; the self-host
-reverse-proxy path stays local and separate.
+single-use current-principal handoff.
+
+Customer custom domains are **not** part of this track’s close bar. They wait
+for a control-plane Cloudflare for SaaS integration. Do not add a competing
+Custom domains card, and do not revive `cp_instances.custom_domain*`. New
+identity uses `cp_workspace_hostname_claims`. The cloud Help Center must reuse
+that manager once it exists; the self-host reverse-proxy path stays local.
 
 Bar: tests cover zero-input create/retry, generated-identifier immutability,
-concurrent URL claims, reserved names, signed projection replay/staleness,
-control-plane outage, rename session transfer, redirect-only old hosts, stable
-absolute asset URLs, custom-domain add/verify/make-primary/remove, provider retry,
-and self-host absence. Fresh-browser tests also cover OTT success, replay,
-expiry, wrong workspace, and sign-in-only behavior for non-owners.
+concurrent friendly-URL claims, reserved names, signed projection
+replay/staleness, control-plane outage, rename session transfer, redirect-only
+old hosts, stable absolute asset URLs, and self-host absence. Fresh-browser
+tests cover OTT success, replay, expiry, wrong workspace, and sign-in-only
+behavior for non-owners. Custom-domain add/verify/make-primary/remove is a
+later bar.
 
 ### Track 2: Focused widget activation
 
@@ -207,33 +223,37 @@ tokens.
 
 ## Deployment order
 
-1. Control-plane billing gateway, ledger, catalogue validation, projection API.
-2. Workspace projection consumption and enforcement.
-3. Workspace billing-action gateway routes.
-4. Control-plane trial activation.
-5. Workspace provider-integration removal.
-6. Cross-system and live first-customer verification.
+The billing-ownership and identity **code** pair is already on the Development
+fleet (`58eebd173` + `b4afe73`, workspace schema `0262`, CP SQL `0063`–`0067`).
+Do not re-run the original “deploy billing then remove workspace billing”
+sequence; that work is in the image. Further deploys are incremental.
 
-Do not deploy a workspace build that has removed direct billing until its paired
-control-plane gateway and projection producer are ready.
+Remaining identity/domain order:
 
-Cloud identity/domain rollout is paired as well:
-
-1. Split immutable provisioning identity from mutable friendly identity in the
-   control plane, and add the instance-scoped identity gateway plus signed
-   projection/outbox path.
+1. Close Track 1 without custom domains: `cp_instances.name` is not
+   authoritative, rename-transfer tests, then two fresh-mailbox walks on
+   **new** generated `ws-*.quackback.co.uk` hosts.
 2. Configure and readiness-check the Cloudflare for SaaS fallback origin and
    custom-hostname provider in the control plane.
-3. Add workspace projection consumption, the skippable post-handoff details step,
-   Admin Settings controls, and rename handoff.
-4. Remove the pre-provision name/URL form and auto-create the first workspace.
-5. Enable custom domains only after live provider, certificate, stale-update,
-   cross-workspace, and cleanup-retry probes pass.
+3. Add the shared custom-domain manager on top of
+   `cp_workspace_hostname_claims`. Enable it only after live provider,
+   certificate, stale-update, cross-workspace, and cleanup-retry probes pass.
+4. Then run control-plane billing gateway and first-win journeys. Checkout
+   must attach to an **existing** workspace; Stripe metadata must not create
+   one.
 
-The last known web deployment (`03ea102e`) runs the direct-workspace billing
-implementation and proves the old journey, not the revised ownership boundary.
-Worker, cron, and migrator roles remained on an older pinned digest at handoff;
-the next paired rollout must reconcile that deliberate image drift.
+Existing `walk-*` / gauntlet instances have registry hostnames and
+`cp_instances.name`, but **zero** `cp_workspace_identity` and **zero**
+hostname-claim rows. They prove old routing, not the new identity path.
+Do not backfill their customer-facing names into the identity ledger.
+Do not use them for rename or details proof.
+
+The Development fleet now runs workspace image `58eebd173`
+(`sha256:496d295f…`) paired with control plane `b4afe73` (`14dee7a2`) after
+control-database migrations `0063`–`0067` and workspace schema `0262`. That
+pair proves code is live, not that Track 1’s stranger walk has passed. The
+older `03ea102e` / `sha256:596d77e3…` image is historical and proved the
+direct-workspace billing path only.
 
 ## Definition of done
 
@@ -241,9 +261,10 @@ the next paired rollout must reconcile that deliberate image drift.
 - All eight tracks meet their focused bars.
 - Two fresh owners receive a workspace without pre-handoff questions and
   complete the handoff journey without repeated authentication.
-- Cloud name, platform URL, and custom-domain mutations traverse the
-  instance-scoped control-plane gateway; self-host shows none of those cloud
-  controls.
+- Cloud name and platform URL mutations traverse the instance-scoped
+  control-plane gateway; self-host shows none of those cloud controls.
+  Custom-domain mutations use the same gateway only after the Cloudflare
+  provider is live.
 - Each outcome reaches its tailored starter and never sees an irrelevant widget
   prompt.
 - A real created/configured starter begins one immutable Pro trial.

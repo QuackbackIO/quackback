@@ -7,11 +7,11 @@ Control-plane branch: `saas`
 
 ## Governing correction
 
-The control plane is now the sole billing authority. Earlier workspace-owned
-provider work and the workspace `BILLING_PRICES.pro.limits` direction are
-superseded and will be removed after the gateway and signed projection path are
-in place. Existing direct-billing live evidence demonstrates provider behavior
-only; it does not close the new architecture tracks.
+The control plane is now the sole billing authority. Workspace provider
+integration and billing tables are already gone from the live image
+(`178f0bf9b`, `0261`). Remaining `BILLING_*` service variables are unused
+migration debt. Existing direct-billing live evidence demonstrates the old
+provider path only; it does not close the new architecture tracks.
 
 Workspace creation and cloud identity are also control-plane-owned. The first
 workspace must now be created immediately after control-plane sign-in with
@@ -30,7 +30,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `58eebd173`
+- Workspace: `a769a6dac` (deployed image remains `58eebd173`)
 - Control plane: `b4afe73`
 - Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
@@ -136,8 +136,9 @@ retains local name editing and makes no identity-gateway call. Cloud onboarding
 now has an optional details screen followed by the outcome screen, with one
 primary action on each. Focused onboarding UI/state verification passed: 54
 tests across the latest slices; the full workspace typecheck passed. The local
-real-Postgres onboarding fixture is stale before migration 0262 and therefore
-correctly skips 13 tests; the Development Neon migration is still required.
+real-Postgres onboarding fixture is still pre-0262 and therefore correctly
+skips 13 tests. Development Neon workspaces are now at 0262; unskip those
+tests only after the local fixture is migrated.
 
 The old operator/admin/MCP workspace-creation surfaces are deleted. Control-plane
 commits `4e730be`, `e69d48f`, and `a39a8c5` removed the manual admin dialog,
@@ -165,15 +166,22 @@ the codebase.
 ## Next commits
 
 1. Finish separating `cp_instances.name` from the authoritative identity
-   projection.
+   projection. New creates still write `Untitled workspace` into that
+   column; display name lives on `cp_workspace_identity`. Do not use
+   `cp_instances.custom_domain*` for the new path.
 2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
-3. Fresh-browser prove the deployed identity pair: zero-input create, OTT
-   handoff, skippable details, and rename transfer.
+3. Fresh-browser prove the deployed identity pair on **new** generated
+   `ws-*.quackback.co.uk` hosts: zero-input create, OTT handoff, skippable
+   details, rename transfer. Do not use existing `walk-*` rows; they have
+   no identity or hostname-claim rows (13 instances, 0 identity, 0 claims).
+   Do not backfill their old customer-facing names into the identity ledger.
 4. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-5. Add the shared workspace custom-domain manager, then live-prove hostname and
-   certificate readiness before enabling it.
+5. Add the shared workspace custom-domain manager on
+   `cp_workspace_hostname_claims`, then live-prove hostname and certificate
+   readiness before enabling it.
 6. Run the remaining control-plane billing gateway and first-win journeys.
+   Checkout attaches to an existing workspace only.
 
 ## Verification still required
 
@@ -188,12 +196,13 @@ the codebase.
 - Cloud URL collision, rename handoff, old-host redirect, and stable asset-origin
   behavior.
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
-  provider retry, and cross-workspace isolation.
+  provider retry, and cross-workspace isolation. Not a Track 1 close
+  requirement.
 
 ## Blockers
 
-None. The revised boundary requires paired control-plane and workspace changes
-before the next deployment.
+None. The identity/billing pair is already deployed. Further deploys are
+incremental after the current Track 1 unit.
 
 Operational defects carried from the prior lead:
 
