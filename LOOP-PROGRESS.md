@@ -28,16 +28,16 @@ The prior web deployment `03ea102e` runs image digest `sha256:596d77e3…` in
 
 ## Tracks
 
-| Track                            | Status                                   | Evidence                                                             |
-| -------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed | `d2b8accca`, `029727e26`                                             |
-| 1 owner handoff + starter        | implemented, focused verification passed | app `9f0ff90e8`, `31b07cf03`; CP `957beda`                           |
-| 2 focused widget activation      | implemented, focused verification passed | `13df888fa`                                                          |
-| 3 CP billing foundation          | not started under revised boundary       | CP catalogue/ledger/gateway/projection required                      |
-| 4 workspace projection + gateway | in progress                              | uncommitted projection consumer replaces `2c3923ba9` catalogue reads |
-| 5 authoritative starter trial    | not started                              | workspace still calls local trial start and must change              |
-| 6 remove workspace billing       | not started                              | direct provider integration remains                                  |
-| 7 PLG + first-win proof          | infrastructure implemented               | `33c15ba53`; first-win journeys remain                               |
+| Track                            | Status                                   | Evidence                                                |
+| -------------------------------- | ---------------------------------------- | ------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed | `d2b8accca`, `029727e26`                                |
+| 1 owner handoff + starter        | implemented, focused verification passed | app `9f0ff90e8`, `31b07cf03`; CP `957beda`              |
+| 2 focused widget activation      | implemented, focused verification passed | `13df888fa`                                             |
+| 3 CP billing foundation          | not started under revised boundary       | CP catalogue/ledger/gateway/projection required         |
+| 4 workspace projection + gateway | projection consumer implemented          | `7d18b3cea`, `9eb85a9e6`; gateway actions remain        |
+| 5 authoritative starter trial    | not started                              | workspace still calls local trial start and must change |
+| 6 remove workspace billing       | not started                              | direct provider integration remains                     |
+| 7 PLG + first-win proof          | infrastructure implemented               | `33c15ba53`; first-win journeys remain                  |
 
 ## Completed activation work
 
@@ -59,22 +59,19 @@ this through the control-plane gateway before closing the revised billing tracks
 
 ## Current worktree ownership
 
-The workspace worktree contains the replacement of workspace catalogue-derived
-trial limits with a local billing projection model. Typed allowlisted PLG events
-and call-site instrumentation are committed; workspace-local `trial_started`
-emission was deliberately excluded because that event becomes
-control-plane-authoritative.
+The workspace worktree is clean. Projected limits and signed monotonic ingestion
+are committed. Workspace-local `trial_started` emission was deliberately
+excluded because that event becomes control-plane-authoritative.
 
 The control-plane worktree was clean at takeover. Re-check before every edit and
 commit because another agent shares the codebase.
 
 ## Next commits
 
-1. `feat(billing): consume versioned control-plane projections`
-2. Control-plane catalogue/readiness/projection primitives.
-3. Control-plane starter activation and signed fan-out.
-4. Workspace projection ingestion and billing gateway actions.
-5. Delete workspace provider integration and obsolete configuration.
+1. Control-plane catalogue/readiness/projection primitives.
+2. Control-plane starter activation and signed fan-out.
+3. Workspace billing gateway actions.
+4. Delete workspace provider integration and obsolete configuration.
 
 ## Verification still required
 
