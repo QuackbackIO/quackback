@@ -22,20 +22,6 @@ export const Route = createFileRoute('/admin')({
       return {}
     }
 
-    // Control-plane Open mints `/admin?ott=`. The session is established by
-    // consuming that token. Doing it here — before requireWorkspaceRole —
-    // is required: a client-only consume never runs if this loader 302s to
-    // the sign-in prompt first.
-    const ott = new URLSearchParams(location.searchStr.replace(/^\?/, '')).get('ott')
-    if (ott) {
-      const { consumeAdminOpenHandoff } =
-        await import('@/lib/server/functions/admin-open-handoff.server')
-      const { redirect } = await import('@tanstack/react-router')
-      const result = await consumeAdminOpenHandoff(ott)
-      if (result.kind === 'redirect') throw redirect({ href: result.to })
-      throw redirect({ href: '/admin/login?error=handoff_failed' })
-    }
-
     // Only team members (admin, member roles) can access admin dashboard
     // Portal users (role='user') don't have access to this
     const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
