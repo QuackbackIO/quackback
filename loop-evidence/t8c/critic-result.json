@@ -1,0 +1,11 @@
+{
+  "verdict": "PASS",
+  "reason": "Live ownership/leave fail closed with named reasons; digest 52e78237; instances 17.",
+  "appImage": "sha256:52e78237d2b6c9069600d42975637e3e8c4589fbeeae3fe16f44622d71e8bb87",
+  "webDeployment": "93838859-76e7-4629-b87a-3e4f599d15ec",
+  "cpDeployment": "6f0b0fee-81fd-4718-93da-bd04d28201c6",
+  "region": "us-east4-eqdc4a",
+  "instances": { "before": 17, "after": 17 },
+  "didTransfer": false,
+  "didCreateNeon": false
+}

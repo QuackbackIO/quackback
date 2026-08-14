@@ -1,0 +1,117 @@
+{
+  "when": "2026-08-14T23:52:59.926Z",
+  "failClosed": {
+    "noBearerGet": {
+      "status": 401,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "html": false
+    },
+    "noBearerPost": {
+      "status": 401,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "html": false
+    },
+    "dummyGet": {
+      "status": 401,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "html": false
+    },
+    "dummyPost": {
+      "status": 401,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "html": false
+    },
+    "noBearerLeave": {
+      "status": 401,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "html": false
+    },
+    "dummyLeave": {
+      "status": 401,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "html": false
+    }
+  },
+  "transfer": {
+    "t1aExtras": {
+      "status": 400,
+      "error": "Invalid input",
+      "keys": ["error"],
+      "html": false
+    },
+    "t1aInstanceId": {
+      "status": 400,
+      "error": "Invalid input",
+      "keys": ["error"],
+      "html": false
+    },
+    "t1aStranger": {
+      "status": 403,
+      "error": "not_teammate",
+      "keys": ["error"],
+      "html": false
+    },
+    "t1eStranger": {
+      "status": 403,
+      "error": "not_teammate",
+      "keys": ["error"],
+      "html": false
+    },
+    "t1aAlreadyOwner": {
+      "status": 400,
+      "error": "already_owner",
+      "keys": ["error"],
+      "html": false
+    }
+  },
+  "leave": {
+    "t1aOwner": {
+      "status": 403,
+      "error": "owner_cannot_leave",
+      "keys": ["error"],
+      "html": false
+    },
+    "t1eOwner": {
+      "status": 403,
+      "error": "owner_cannot_leave",
+      "keys": ["error"],
+      "html": false
+    },
+    "t1aEmpty": {
+      "status": 400,
+      "error": "Invalid input",
+      "keys": ["error"],
+      "html": false
+    },
+    "t1aExtras": {
+      "status": 400,
+      "error": "Invalid input",
+      "keys": ["error"],
+      "html": false
+    }
+  },
+  "get": {
+    "t1a": {
+      "status": 200,
+      "error": null,
+      "keys": ["ownerEmail"],
+      "html": false
+    },
+    "t1e": {
+      "status": 200,
+      "error": null,
+      "keys": ["ownerEmail"],
+      "html": false
+    },
+    "t1aHasOwner": true,
+    "t1eHasOwner": true,
+    "t1aStatus": 200,
+    "t1eStatus": 200
+  }
+}
