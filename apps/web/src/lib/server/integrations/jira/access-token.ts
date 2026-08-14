@@ -3,6 +3,8 @@
  * events worker can call it without tripping TanStack Start import protection.
  */
 
+import type { IntegrationId } from '@quackback/ids'
+
 export interface JiraTokenConfig {
   cloudId?: string
   siteUrl?: string
@@ -42,18 +44,20 @@ export async function getJiraAccessToken(integration: {
   }
 
   // No row id (stale cache shape): do not refresh — we cannot persist safely.
-  if (!integration.id) {
+  const integrationId = integration.id
+  if (!integrationId) {
     return cachedSecrets.accessToken
   }
 
   const { db, integrations, eq } = await import('@/lib/server/db')
+  const rowId = integrationId as IntegrationId
 
   let didRefresh = false
   const token = await db.transaction(async (tx) => {
     const [row] = await tx
       .select({ secrets: integrations.secrets, config: integrations.config })
       .from(integrations)
-      .where(eq(integrations.id, integration.id))
+      .where(eq(integrations.id, rowId))
       .for('update')
 
     let secrets = cachedSecrets
@@ -68,16 +72,21 @@ export async function getJiraAccessToken(integration: {
       }
     }
 
+    const refreshToken = secrets.refreshToken
+    if (!refreshToken) {
+      return secrets.accessToken
+    }
+
     const { logger } = await import('@/lib/server/logger')
     const log = logger.child({ component: 'jira' })
-    log.info({ integration_id: integration.id }, 'access token expired, refreshing')
+    log.info({ integration_id: rowId }, 'access token expired, refreshing')
 
     const { refreshJiraToken } = await import('./oauth')
     const { getPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     const { encryptSecrets } = await import('../encryption')
     const credentials = await getPlatformCredentials('jira')
-    const refreshed = await refreshJiraToken(secrets.refreshToken, credentials ?? undefined)
+    const refreshed = await refreshJiraToken(refreshToken, credentials ?? undefined)
 
     const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
     await tx
@@ -90,7 +99,7 @@ export async function getJiraAccessToken(integration: {
         config: { ...cfg, tokenExpiresAt: newExpiry },
         updatedAt: new Date(),
       })
-      .where(eq(integrations.id, integration.id))
+      .where(eq(integrations.id, rowId))
 
     didRefresh = true
     return refreshed.accessToken
