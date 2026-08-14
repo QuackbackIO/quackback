@@ -30,8 +30,8 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `191e4ae53`
-- Control plane: `41b277d`
+- Workspace: `137151f21`
+- Control plane: `12c5bdd`
 - Last known deployed workspace: `03ea102e` (2026-08-14)
 - Last known deployed control plane: `01d3e028` (2026-08-14)
 
@@ -43,16 +43,16 @@ The prior web deployment `03ea102e` runs image digest `sha256:596d77e3…` in
 
 ## Tracks
 
-| Track                            | Status                                                  | Evidence                                                    |
-| -------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                | `d2b8accca`, `029727e26`                                    |
-| 1 zero-input create + identity   | zero-input creation implemented; projection/rename open | CP `bd9148c`, `41b277d`; app `942d3654d`; handoff `957beda` |
-| 2 focused widget activation      | implemented, focused verification passed                | `13df888fa`                                                 |
-| 3 CP billing foundation          | implemented; full/live verification pending             | CP `c7ec591` through `9f77647`                              |
-| 4 workspace projection + gateway | implemented; full/live verification pending             | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                   |
-| 5 authoritative starter trial    | implemented; full/live verification pending             | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`       |
-| 6 remove workspace billing       | implementation complete; boundary scan pending          | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`       |
-| 7 PLG + first-win proof          | infrastructure implemented                              | `33c15ba53`; first-win journeys remain                      |
+| Track                            | Status                                                                   | Evidence                                                            |
+| -------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                 | `d2b8accca`, `029727e26`                                            |
+| 1 zero-input create + identity   | implementation complete through post-handoff details; live proof pending | CP `bd9148c` through `12c5bdd`; app `4a1827560` through `137151f21` |
+| 2 focused widget activation      | implemented, focused verification passed                                 | `13df888fa`                                                         |
+| 3 CP billing foundation          | implemented; full/live verification pending                              | CP `c7ec591` through `9f77647`                                      |
+| 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                           |
+| 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`               |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`               |
+| 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                              |
 
 ## Completed activation work
 
@@ -74,7 +74,8 @@ this through the control-plane gateway before closing the revised billing tracks
 
 ## Current worktree ownership
 
-Both worktrees were clean after control-plane commit `41b277d`. The workspace
+Both worktrees were clean after workspace commit `137151f21` and control-plane
+commit `12c5bdd`. The workspace
 accepts only signed control-plane commercial projections and contains no
 platform billing provider integration. The control plane now owns catalogue,
 gateway, starter trial, webhook projection, and durable fan-out behavior. Its
@@ -91,22 +92,46 @@ refreshes, response-loss retries, queue-submission retries, and concurrent tabs.
 Focused creation/setup verification passed: 53 tests and control-plane
 typecheck.
 
+The control plane now has a distinct signed identity-projection ledger and
+outbox, explicit immutable-system/platform/redirect routing kinds, and an
+instance-credential-scoped identity gateway. Friendly renames reserve names
+permanently, update registry origin atomically, and turn an earlier friendly
+hostname into redirect-only routing. Initial projections correctly leave the
+friendly platform hostname null rather than presenting the immutable system
+alias as mutable customer identity. Focused identity verification passed: 38
+tests and control-plane typecheck.
+
+The workspace verifies and monotonically applies the separate identity stream,
+redirects safe requests away from obsolete hosts without opening a tenant
+database, transfers the current owner session across a rename, and exposes
+cloud identity only when a verified projection exists. Admin Settings and the
+post-handoff details step use the instance-scoped gateway; self-hosted setup
+retains local name editing and makes no identity-gateway call. Cloud onboarding
+now has an optional details screen followed by the outcome screen, with one
+primary action on each. Focused onboarding UI/state verification passed: 54
+tests across the latest slices; the full workspace typecheck passed. The local
+real-Postgres onboarding fixture is stale before migration 0262 and therefore
+correctly skips 13 tests; the Development Neon migration is still required.
+
 Re-check both worktrees before every edit and commit because another agent shares
 the codebase.
 
 ## Next commits
 
-1. Replace the remaining `cp_instances.subdomain` coupling with explicit system,
-   platform, and routing identity.
-2. Add the signed identity projection, gateway, redirect history, and transfer token.
-3. Add workspace projection consumption, post-handoff details, and cloud Settings UI.
+1. Replace the remaining `cp_instances.subdomain` and mutable-name coupling,
+   then delete obsolete manual creation/admin/MCP paths.
+2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
+   asset-origin verification.
+3. Deploy and prove the compatible control-plane/workspace identity pair in
+   Development, including migration 0262 and fresh-browser onboarding/rename.
 4. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-5. Remove remaining obsolete creation/admin aliases and org-level trial columns.
-6. Run full billing/identity verification and deploy the compatible pair.
+5. Add the shared workspace custom-domain manager, then live-prove hostname and
+   certificate readiness before enabling it.
+6. Run the remaining control-plane billing gateway and first-win journeys.
 
 ## Verification still required
 
-- Projection signature, monotonicity, replay, and stale update tests.
+- Rename transfer replay, expiry, and wrong-workspace database tests.
 - Least-restrictive numeric limit overlay and exact-expiry tests.
 - Cross-workspace checkout/portal isolation.
 - Control-plane webhook replay and outbox retry.
