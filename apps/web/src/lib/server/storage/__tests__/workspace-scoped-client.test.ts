@@ -128,7 +128,9 @@ describe('every command is namespaced', () => {
     await withWorkspace('workspace-alpha', () => getS3Object(PUBLIC_KEY))
     await withWorkspace('workspace-alpha', () => deleteObject(PUBLIC_KEY))
     await withWorkspace('workspace-alpha', () => generatePresignedGetUrl(PUBLIC_KEY, 60))
-    await withWorkspace('workspace-alpha', () => generatePresignedUploadUrl(PUBLIC_KEY, 'image/png'))
+    await withWorkspace('workspace-alpha', () =>
+      generatePresignedUploadUrl(PUBLIC_KEY, 'image/png')
+    )
 
     expect(sent.map((c) => c.Key)).toEqual([
       nameFor('workspace-alpha', PUBLIC_KEY),
@@ -141,8 +143,16 @@ describe('every command is namespaced', () => {
   })
 
   it('cannot collide two workspaces on one key in one bucket', async () => {
-    await withWorkspace('workspace-alpha', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
-    await withWorkspace('workspace-bravo', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
+    await withWorkspace(
+      'workspace-alpha',
+      () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'),
+      FLEET
+    )
+    await withWorkspace(
+      'workspace-bravo',
+      () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'),
+      FLEET
+    )
 
     expect(sent).toHaveLength(2)
     const [alpha, bravo] = sent as [(typeof sent)[number], (typeof sent)[number]]
@@ -165,7 +175,11 @@ describe('every command is namespaced', () => {
     // A workspace no other test in this file touches. The client cache is keyed by
     // connection parameters, so reusing a workspace would let this pass on a client
     // an earlier test constructed — evidence about that test, not this one.
-    await withWorkspace('workspace-charlie', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), FLEET)
+    await withWorkspace(
+      'workspace-charlie',
+      () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'),
+      FLEET
+    )
 
     expect(clientCredentials).toHaveLength(1)
     expect(clientCredentials[0]!.accessKeyId).toBe('AK-workspace-charlie')
@@ -180,7 +194,7 @@ describe('the stored key stays namespace-free', () => {
     )
 
     expect(result.key).toBe(PUBLIC_KEY)
-    expect(result.publicUrl).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
+    expect(result.publicUrl).toBe(`/api/storage/${PUBLIC_KEY}`)
     expect(result.publicUrl).not.toContain(`${WORKSPACE_NAMESPACE_ROOT}/`)
     // …while the object it will be PUT to IS namespaced.
     expect(presigned).toHaveLength(1)
@@ -222,7 +236,9 @@ describe('a key that would escape never reaches a command', () => {
   it('refuses an empty key on the delete path', async () => {
     // An empty key composes to the namespace itself, which under a fleet bucket
     // is a request shaped like "everything belonging to this workspace".
-    await neverReachesTheBucket('delete', () => withWorkspace('workspace-alpha', () => deleteObject('')))
+    await neverReachesTheBucket('delete', () =>
+      withWorkspace('workspace-alpha', () => deleteObject(''))
+    )
   })
 
   it('refuses percent-encoded traversal on the presign path', async () => {
@@ -276,7 +292,9 @@ describe('there is no exported way to name a workspace', () => {
     )
     await expect(getS3Object(PUBLIC_KEY)).rejects.toThrow(WorkspaceScopeMissingError)
     await expect(deleteObject(PUBLIC_KEY)).rejects.toThrow(WorkspaceScopeMissingError)
-    await expect(generatePresignedGetUrl(PUBLIC_KEY, 60)).rejects.toThrow(WorkspaceScopeMissingError)
+    await expect(generatePresignedGetUrl(PUBLIC_KEY, 60)).rejects.toThrow(
+      WorkspaceScopeMissingError
+    )
     await expect(generatePresignedUploadUrl(PUBLIC_KEY, 'image/png')).rejects.toThrow(
       WorkspaceScopeMissingError
     )
@@ -303,7 +321,11 @@ describe('there is no exported way to name a workspace', () => {
     // client would be rebuilt from its captured config either way, and a cache
     // keyed by the asking workspace would look correct because nothing was there to
     // hand back. This is the state where a wrong key returns a wrong client.
-    await withWorkspace('workspace-hotel', () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
+    await withWorkspace(
+      'workspace-hotel',
+      () => uploadObject(PUBLIC_KEY, BYTES, 'image/png'),
+      HOTEL
+    )
 
     await withWorkspace('workspace-hotel', () => client.put(PUBLIC_KEY, BYTES, 'image/png'), HOTEL)
 

@@ -73,7 +73,11 @@ import {
   getWorkspaceStorageCredential,
   requireWorkspaceScope,
 } from '@/lib/server/workspaces/workspace-context'
-import { currentWorkspaceNamespace, SINGLE_WORKSPACE_NAMESPACE } from '@/lib/server/workspaces/workspace-keyed'
+import {
+  currentWorkspaceNamespace,
+  SINGLE_WORKSPACE_NAMESPACE,
+} from '@/lib/server/workspaces/workspace-keyed'
+import { absolutizeOffHostAssetUrl } from './asset-url'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
 import { currentWorkspaceId } from './workspace-scope'
 
@@ -113,10 +117,9 @@ interface StoragePlacement {
   forcePathStyle: boolean
   publicUrl?: string
   /**
-   * Origin the `/api/storage` fallback URL is built from. Pinned to the
-   * workspace's canonical base URL, never derived from the request: contentJson
-   * stores ABSOLUTE image URLs, so an origin that followed whichever hostname
-   * the visitor happened to use would bake that hostname into stored content.
+   * Origin used for same-host upload proxy URLs (`PUT /api/storage`). Stored
+   * asset refs themselves are host-independent (`/api/storage/<key>`); email,
+   * widget, and OG absolutize from the immutable system host at the leaf.
    */
   originUrl: string
 }
@@ -209,7 +212,10 @@ function resolveStorageCredentials(): StorageCredentials {
   // A credential result at all means a scope is active, so the identity read is
   // total. Asserted rather than defaulted: a placeholder workspace id in this
   // message would be indistinguishable from a real one nobody recognises.
-  throw new StorageUnavailableError(requireWorkspaceScope().workspace.workspaceKey, resolved.problem)
+  throw new StorageUnavailableError(
+    requireWorkspaceScope().workspace.workspaceKey,
+    resolved.problem
+  )
 }
 
 /**
@@ -667,14 +673,10 @@ export function verifyStorageReadToken(secret: string, key: string, sig: string 
   }
 }
 
-function buildPublicUrl(placement: StoragePlacement, key: string): string {
-  if (placement.publicUrl && isPublicStorageKey(key)) {
-    return `${placement.publicUrl.replace(/\/$/, '')}/${key}`
-  }
-
-  // Private objects always pass through the application with an unforgeable
-  // read capability, even when a public CDN endpoint is configured.
-  const base = `${placement.originUrl.replace(/\/$/, '')}/api/storage/${key}`
+function buildPublicUrl(_placement: StoragePlacement, key: string): string {
+  // Persist a host-independent ref. Friendly platform URLs and the request
+  // Host must not land in contentJson; leaves absolutize from the system host.
+  const base = `/api/storage/${key}`
   if (isPublicStorageKey(key)) return base
   // Only the private branch needs a secret, so a public asset URL still renders
   // on a workspace whose credential reference has no resolver. The private branch
@@ -711,8 +713,9 @@ export async function generatePresignedUploadUrl(
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
   // `key` stays bare in everything that leaves here: the returned `key` is what
-  // the caller stores in the database, and `publicUrl` is built from it. Only
-  // the presigned URL names the object, and only the client composes that.
+  // the caller stores in the database, and `publicUrl` is the host-independent
+  // `/api/storage/<key>` ref built from it. Only the presigned URL names the
+  // object, and only the client composes that.
   const publicUrl = buildPublicUrl(getStoragePlacement(), key)
 
   if (config.s3Proxy) {
@@ -938,23 +941,17 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
 
 /**
  * Get an email-safe URL for a storage key.
- * Email clients often don't follow redirects, so when there's no S3_PUBLIC_URL
- * this returns a proxy URL (?email=1) that streams bytes directly.
- * Returns null if the key is null/undefined or S3 is not configured.
+ *
+ * Persist is host-independent; this leaf absolutizes from the immutable
+ * system host and tags `?email=1` so mail clients receive bytes instead of
+ * following the storage route's 302.
  */
 export function getEmailSafeUrl(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
   if (!isPublicStorageKey(key) && !isS3Usable()) return null
 
-  const placement = getStoragePlacement()
-  const storageUrl = buildPublicUrl(placement, key)
-  if (placement.publicUrl && isPublicStorageKey(key)) return storageUrl
-
-  // Force proxy mode so email clients get bytes directly (no 302 redirect)
-  const url = new URL(storageUrl)
-  url.searchParams.set('email', '1')
-  return url.toString()
+  return absolutizeOffHostAssetUrl(buildPublicUrl(getStoragePlacement(), key), { email: true })
 }
 
 /**

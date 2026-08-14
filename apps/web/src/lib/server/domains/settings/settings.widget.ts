@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
 import { db, and, boards, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { deleteObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type {
   WidgetConfig,
@@ -98,11 +99,14 @@ export async function observeExternalWidgetRequest(
 /**
  * Client-safe projection of the Home config: the stored S3 key is swapped for
  * its resolved public URL so clients never see (or depend on) raw keys.
+ * The widget iframe may run off this origin, so the hero is absolutized from
+ * the immutable system host.
  */
 export function publicHomeConfig(home: WidgetHomeConfig | undefined): WidgetHomeConfig | undefined {
   if (!home) return undefined
   const { heroImageKey, ...rest } = home
-  return { ...rest, heroImageUrl: getPublicUrlOrNull(heroImageKey) }
+  const stored = getPublicUrlOrNull(heroImageKey)
+  return { ...rest, heroImageUrl: stored ? absolutizeOffHostAssetUrl(stored) : stored }
 }
 
 /** Drop agent-only fields (routing) from a messenger config for public
@@ -124,7 +128,9 @@ export function publicMessengerConfig(
           enabled: messenger.assistant.enabled,
           respond: messenger.assistant.respond,
           name: identity.name,
-          avatarUrl: identity.avatarUrl,
+          avatarUrl: identity.avatarUrl
+            ? absolutizeOffHostAssetUrl(identity.avatarUrl)
+            : identity.avatarUrl,
         }
       : undefined,
   }

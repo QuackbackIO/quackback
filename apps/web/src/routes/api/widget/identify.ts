@@ -20,6 +20,7 @@ import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import { isTeamMember } from '@/lib/shared/roles'
 import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.widget'
 import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
 import { verifyHS256JWT } from '@/lib/server/widget/identity-token'
@@ -424,8 +425,9 @@ export const Route = createFileRoute('/api/widget/identify')({
         // An unsigned cookie here would poison Better Auth's signed-cookie
         // lookup in same-site deployments (#99).
         // Resolve avatar: custom upload (S3) takes priority over OAuth URL
+        const storedAvatar = userRecord.imageKey ? getPublicUrlOrNull(userRecord.imageKey) : null
         const avatarUrl =
-          (userRecord.imageKey ? getPublicUrlOrNull(userRecord.imageKey) : null) ??
+          (storedAvatar ? absolutizeOffHostAssetUrl(storedAvatar) : null) ??
           userRecord.image ??
           null
 

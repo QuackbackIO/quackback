@@ -5,7 +5,13 @@
  * All images are stored in S3.
  */
 
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+
+function offHostPublicUrl(key: string | null | undefined): string | null {
+  const stored = getPublicUrlOrNull(key)
+  return stored ? absolutizeOffHostAssetUrl(stored) : stored
+}
 
 export interface LogoData {
   url: string | null
@@ -35,7 +41,7 @@ export async function getSettingsLogoData(): Promise<LogoData | null> {
   const record = await getSettingsRecord()
   if (!record) return null
 
-  const url = getPublicUrlOrNull(record.logoKey)
+  const url = offHostPublicUrl(record.logoKey)
   if (!url) return null
 
   return { url }
@@ -48,7 +54,7 @@ export async function getSettingsPortalOgImageData(): Promise<LogoData | null> {
   const record = await getSettingsRecord()
   if (!record) return null
 
-  const url = getPublicUrlOrNull(record.portalOgImageKey)
+  const url = offHostPublicUrl(record.portalOgImageKey)
   if (!url) return null
 
   return { url }
@@ -94,7 +100,7 @@ export async function getSettingsBrandingData(): Promise<BrandingData | null> {
   if (!record) return null
   return {
     name: record.name,
-    logoUrl: getPublicUrlOrNull(record.logoKey),
+    logoUrl: offHostPublicUrl(record.logoKey),
     faviconUrl: getPublicUrlOrNull(record.faviconKey),
     headerLogoUrl: getPublicUrlOrNull(record.headerLogoKey),
     headerDisplayMode: record.headerDisplayMode,

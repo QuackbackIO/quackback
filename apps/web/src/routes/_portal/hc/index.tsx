@@ -13,6 +13,7 @@ import {
 import { resolveHcLandingLocale } from '@/lib/shared/help-center-url'
 import { HC_LOCALE_COOKIE } from '@/components/help-center/help-center-locale-switcher'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 
 const DEFAULT_TITLE = 'How can we help?'
 const DEFAULT_DESCRIPTION =
@@ -73,7 +74,10 @@ export const Route = createFileRoute('/_portal/hc/')({
       popularArticles,
       helpCenterConfig: helpCenterConfig ?? null,
       workspaceName: settings?.name ?? 'Help Center',
-      logoUrl: settings?.brandingData?.logoUrl || '/logo.png',
+      logoUrl: resolvePortalOgImageUrl(
+        { logoUrl: settings?.brandingData?.logoUrl },
+        context.baseUrl
+      ),
     }
   },
   head: ({ loaderData }) => {

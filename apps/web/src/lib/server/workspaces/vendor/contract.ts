@@ -74,15 +74,10 @@ export type WorkspaceStorage = {
   region: string
   forcePathStyle: boolean
   /**
-   * The origin public asset URLs are built from. Pinned at provisioning and
-   * never changed while content exists: contentJson stores absolute image URLs,
-   * so moving the origin rewrites historical post, changelog and article
-   * content.
-   *
-   * Explicit rather than derived. The app's `buildPublicUrl` falls back to
-   * `${config.baseUrl}/api/storage/<key>` when S3_PUBLIC_URL is unset, and
-   * under pooling `baseUrl` is per-request — which would make a workspace's asset
-   * origin follow whichever hostname the visitor happened to use.
+   * Pinned system-host storage origin (`https://<systemHost>/api/storage`).
+   * Persist stores host-independent `/api/storage/<key>` refs; email, widget,
+   * and OG absolutize from this pin at send/render. It is never derived from
+   * the friendly platform URL or the request Host, and a rename must not move it.
    */
   publicUrl: string
   /**

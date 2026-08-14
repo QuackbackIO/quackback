@@ -28,12 +28,23 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+function isStoredAssetRef(value: string): boolean {
+  if (!value.startsWith('/api/storage/')) return false
+  try {
+    const parsed = new URL(value, 'https://placeholder.invalid')
+    return parsed.pathname.startsWith('/api/storage/') && parsed.pathname !== '/api/storage/'
+  } catch {
+    return false
+  }
+}
+
 export const assistantAvatarUrlSchema = z
   .string()
   .trim()
-  .url()
   .max(ASSISTANT_AVATAR_URL_MAX_LENGTH)
-  .refine(isHttpUrl, { message: 'Avatar URL must use HTTP or HTTPS' })
+  .refine((value) => isHttpUrl(value) || isStoredAssetRef(value), {
+    message: 'Avatar URL must be a stored asset ref or HTTP(S) URL',
+  })
 
 export const assistantIdentitySchema = z.object({
   name: z.string().trim().min(1).max(ASSISTANT_NAME_MAX_LENGTH),

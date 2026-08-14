@@ -1,4 +1,5 @@
 import { config } from '@/lib/server/config'
+import { isStoredAssetPath, trustedStorageHosts } from './asset-url'
 
 /**
  * Only accept attachment/image URLs that came from our own upload pipeline.
@@ -8,6 +9,10 @@ import { config } from '@/lib/server/config'
  * href/src. Used by both the conversation attachment validator and the TipTap content
  * sanitizer (inline `chatImage` nodes), so a visitor can never point an inline
  * image at a third-party host that would fire against an agent's browser.
+ *
+ * New persist is host-independent (`/api/storage/<key>`). Legacy absolute
+ * srcs on this workspace's system or routing hosts stay accepted; the fleet
+ * is not rewritten.
  */
 export function isTrustedAttachmentUrl(url: string): boolean {
   if (typeof url !== 'string' || url.length === 0) return false
@@ -26,7 +31,8 @@ export function isTrustedAttachmentUrl(url: string): boolean {
         basePath === '' || u.pathname === basePath || u.pathname.startsWith(`${basePath}/`)
       if (u.hostname === base.hostname && pathOk) return true
     }
-    return u.hostname === appBase.hostname && u.pathname.startsWith('/api/storage/')
+    if (!isStoredAssetPath(u.pathname)) return false
+    return trustedStorageHosts().has(u.hostname.toLowerCase())
   } catch {
     return false
   }

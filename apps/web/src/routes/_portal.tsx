@@ -288,7 +288,7 @@ export const Route = createFileRoute('/_portal')({
     const workspaceName = loaderData?.workspaceName ?? 'Quackback'
     const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
     // Social share image: custom OG upload > workspace logo > bundled default.
-    const ogImageUrl = resolvePortalOgImageUrl(loaderData?.brandingData)
+    const ogImageUrl = resolvePortalOgImageUrl(loaderData?.brandingData, loaderData?.baseUrl)
 
     const meta: Array<Record<string, string>> = [
       { title: workspaceName },

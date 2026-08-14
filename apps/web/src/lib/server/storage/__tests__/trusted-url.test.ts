@@ -15,6 +15,7 @@ const mockConfig = {
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
 const { isTrustedAttachmentUrl } = await import('@/lib/server/storage/trusted-url')
+const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
 
 beforeEach(() => {
   mockConfig.baseUrl = 'https://app.example.com'
@@ -34,6 +35,23 @@ describe('isTrustedAttachmentUrl — app storage route', () => {
 
   it('rejects dot-segment escapes out of the storage prefix', () => {
     expect(isTrustedAttachmentUrl('https://app.example.com/api/storage/../x.png')).toBe(false)
+  })
+
+  it('accepts legacy absolute srcs on the workspace system host and friendly host', () => {
+    const ok = withWorkspace(
+      'workspace-alpha',
+      () => ({
+        system: isTrustedAttachmentUrl('https://ws-abc123.quackback.co.uk/api/storage/x.png'),
+        friendly: isTrustedAttachmentUrl('https://acme.quackback.co.uk/api/storage/x.png'),
+        relative: isTrustedAttachmentUrl('/api/storage/x.png'),
+        other: isTrustedAttachmentUrl('https://evil.example.com/api/storage/x.png'),
+      }),
+      {
+        storage: { publicUrl: 'https://ws-abc123.quackback.co.uk/api/storage' },
+        baseUrl: 'https://acme.quackback.co.uk',
+      }
+    )
+    expect(ok).toEqual({ system: true, friendly: true, relative: true, other: false })
   })
 })
 

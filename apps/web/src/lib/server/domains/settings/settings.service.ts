@@ -16,6 +16,7 @@ import {
   type AssistantCopilotCapabilities,
 } from '@/lib/shared/assistant/config'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
 import type {
@@ -64,6 +65,11 @@ import {
 } from './settings.helpers'
 
 const log = logger.child({ component: 'settings' })
+
+function offHostPublicUrl(key: string | null | undefined): string | null {
+  const stored = getPublicUrlOrNull(key)
+  return stored ? absolutizeOffHostAssetUrl(stored) : stored
+}
 
 async function getConfiguredAuthTypes(): Promise<Set<string>> {
   const { getConfiguredIntegrationTypes } =
@@ -889,10 +895,10 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
-      logoUrl: getPublicUrlOrNull(org.logoKey),
+      logoUrl: offHostPublicUrl(org.logoKey),
       faviconUrl: getPublicUrlOrNull(org.faviconKey),
       headerLogoUrl: getPublicUrlOrNull(org.headerLogoKey),
-      ogImageUrl: getPublicUrlOrNull(org.portalOgImageKey),
+      ogImageUrl: offHostPublicUrl(org.portalOgImageKey),
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,
     }
