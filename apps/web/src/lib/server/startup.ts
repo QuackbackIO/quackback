@@ -348,11 +348,6 @@ function startBackgroundProcessing(): void {
       setTimeout(() => void jobs.runSummarySweep(), 5_000)
       setInterval(() => void jobs.runSummarySweep(), 30 * 60 * 1000)
 
-      // Billing reconcile. 20s in, so a pod that restarts mid-rollout
-      // re-asserts plan state promptly rather than waiting out a full interval.
-      setTimeout(() => void jobs.runBillingReconcile(), 20_000)
-      setInterval(() => void jobs.runBillingReconcile(), 15 * 60 * 1000)
-
       // Duplicate-post detection. 15s delay staggers after summary's 5s.
       setTimeout(() => void jobs.runMergeSweep(), 15_000)
       setInterval(() => void jobs.runMergeSweep(), 30 * 60 * 1000)

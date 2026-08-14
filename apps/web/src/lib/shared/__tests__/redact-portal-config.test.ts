@@ -208,21 +208,12 @@ describe('redactSettingsForClient — server-only settings columns', () => {
 })
 
 describe('redactSettingsForClient — the cloud column', () => {
-  // `cloud.billing` holds provider customer and subscription references. Those
-  // are account identifiers, not product config, and no client reads them.
-  // Stripping them here means a future exit point that serializes the raw row
-  // cannot leak them by omission.
+  // The signed projection is server-only enforcement and commercial state.
   const CLOUD_ROW = {
     name: 'Acme',
     cloud: {
       enabled: true,
-      plan: 'scale',
-      entitlements: { sso: true },
-      billing: {
-        provider: 'acme-billing',
-        customerRef: 'customer-ref-should-not-ship',
-        subscriptionRef: 'subscription-ref-should-not-ship',
-      },
+      projection: { version: 7, effectivePlan: 'scale' },
     },
     portalConfig: null,
   }
@@ -240,13 +231,11 @@ describe('redactSettingsForClient — the cloud column', () => {
     expect(result.settings).not.toHaveProperty('cloud')
   })
 
-  it('never leaks a billing reference into the serialized payload', () => {
+  it('never leaks the billing projection into the serialized payload', () => {
     const payload = JSON.stringify(
       redactSettingsForClient({ name: 'Acme', portalConfig: null, settings: { ...CLOUD_ROW } })
     )
-    expect(payload).not.toContain('customer-ref-should-not-ship')
-    expect(payload).not.toContain('subscription-ref-should-not-ship')
-    expect(payload).not.toContain('acme-billing')
+    expect(payload).not.toContain('effectivePlan')
   })
 
   it('leaves a row with no cloud column untouched', () => {

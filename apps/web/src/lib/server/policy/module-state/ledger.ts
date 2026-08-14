@@ -415,25 +415,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the constructor and no request attaches per-caller headers.',
   },
   {
-    file: 'apps/web/src/lib/server/domains/billing/billing.config.ts',
-    name: 'resolved',
-    category: 'fleet-wide',
-    reason:
-      'A memo of the billing configuration, and the category turns entirely on what is IN it. ' +
-      'resolveBillingConfig() reads five process environment variables - BILLING_API_KEY, ' +
-      'BILLING_WEBHOOK_SECRET, BILLING_PRICES, BILLING_ALLOW_LIVE, BILLING_RETURN_URL - and nothing ' +
-      'else: no settings row, no workspace id, no database call, no argument. What it parses is the ' +
-      'control-plane half of the boundary (which plans may be sold, what they cost, what limits ' +
-      'they imply), which is identical for every workspace by construction, the same class as ' +
-      'config.openaiApiKey in section 8. So a cross-workspace hit returns the same object the ' +
-      'requesting workspace would have parsed from the same variables, including the null that means ' +
-      '"billing is off". The per-workspace half - which plan this workspace bought, its seat ' +
-      'counts, its provider customer id - is deliberately not here; it lives in the database and is ' +
-      'read per call. Pre-existing on saas rather than introduced by the queue move. The claim to ' +
-      're-check on any change to this file: the moment anything workspace-derived joins the memoised ' +
-      'object the category is wrong, and the answer is a WorkspaceKeyedCache.',
-  },
-  {
     file: 'apps/web/src/lib/server/functions/version.ts',
     name: 'lastFailureAt',
     category: 'fleet-wide',

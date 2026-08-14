@@ -17,7 +17,6 @@
  * | Timer in `startup.ts` | Fan-out interval | Against a 300 s suspend timeout |
  * | --- | --- | --- |
  * | changelog / status / maintenance reconcilers | 5 min | **no workspace ever suspends** |
- * | billing reconcile | 15 min | wakes every workspace four times an hour |
  * | summary + merge sweeps | 30 min | wakes every workspace twice an hour |
  * | kv sweep, telemetry claim | 1 h | wakes every workspace hourly |
  * | daily audit maintenance | 24 h | fine |
@@ -31,8 +30,8 @@
  *
  * ## The tradeoff, stated
  *
- * Moving the reconcilers from 5 minutes, and the billing reconcile from 15, to
- * hourly is a real reduction in timeliness for a pooled fleet. They are
+ * Moving the reconcilers from 5 minutes to hourly is a real reduction in
+ * timeliness for a pooled fleet. They are
  * backstops — the primary paths are a synchronous publish, a delayed job and a
  * provider webhook — so what lengthens is the recovery window after a dropped
  * delivery, not the normal case. Nothing changes for a single-workspace install:
@@ -43,7 +42,6 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'fleet-cron' })
 
 const ONE_HOUR = 60 * 60 * 1000
-const TEN_MIN = 10 * 60 * 1000
 
 /**
  * Space reclamation for the tables that replaced Redis (`kv_store`,
@@ -61,26 +59,6 @@ export async function runKvSweep(): Promise<void> {
   ])
   await withSweepLock('kv_sweep', ONE_HOUR, async () => {
     await sweepExpiredKv().catch((err) => log.error({ err }, 'kv sweep failed'))
-  })
-}
-
-/**
- * Billing reconcile: the recovery path for a provider delivery that never
- * arrived or whose handler died past its claim lease. A no-op on every install
- * with no billing provider configured.
- *
- * Under a cross-instance lock because it makes provider API calls and pushes
- * seat quantities: several replicas doing that per tick would burn rate limit
- * for one outcome. On a pooled fleet this runs hourly rather than the
- * single-workspace install's 15 minutes — see the tradeoff stated in the header.
- */
-export async function runBillingReconcile(): Promise<void> {
-  const [{ reconcileBilling }, { withSweepLock }] = await Promise.all([
-    import('@/lib/server/domains/billing/billing.service'),
-    import('@/lib/server/sweep-lock'),
-  ])
-  await withSweepLock('billing_reconcile', TEN_MIN, async () => {
-    await reconcileBilling().catch((err) => log.error({ err }, 'billing reconcile failed'))
   })
 }
 
@@ -213,7 +191,6 @@ export const FLEET_CRON_JOBS = {
   },
   hourly: async () => {
     await runKvSweep()
-    await runBillingReconcile()
     await runSummarySweep()
     await runMergeSweep()
     await runChangelogNotifyReconcile()

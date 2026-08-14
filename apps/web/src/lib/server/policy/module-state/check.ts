@@ -253,5 +253,5 @@ export function renderLedgerDoc(result: CheckResult): string {
     }
     lines.push('')
   }
-  return lines.join('\n')
+  return lines.join('\n').trimEnd()
 }
