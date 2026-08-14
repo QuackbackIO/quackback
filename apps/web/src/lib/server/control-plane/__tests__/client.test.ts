@@ -9,7 +9,11 @@ vi.mock('@/lib/server/workspaces/workspace-context', () => ({
   getWorkspaceSecretKey: () => 'workspace-a-secret-key-000000000000000000',
 }))
 
-import { deriveControlPlaneCredential, reportTrialActivation } from '../client'
+import {
+  deriveControlPlaneCredential,
+  reportTrialActivation,
+  requestWorkspaceIdentityMutation,
+} from '../client'
 
 beforeEach(() => {
   process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://control.example.com'
@@ -45,4 +49,17 @@ describe('workspace control-plane credential', () => {
       ).resolves.toBe(status)
     }
   )
+
+  it('sends only customer identity fields and no caller-supplied workspace authority', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ projectionToken: 'signed-projection' }), { status: 200 })
+    )
+    await expect(
+      requestWorkspaceIdentityMutation({ displayName: 'Acme', platformLabel: 'acme' })
+    ).resolves.toEqual({ projectionToken: 'signed-projection' })
+    const [, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({ displayName: 'Acme', platformLabel: 'acme' })
+    expect(String(init.body)).not.toContain('workspaceId')
+    expect(String(init.body)).not.toContain('instanceId')
+  })
 })

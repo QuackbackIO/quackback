@@ -5,10 +5,24 @@ import {
 } from '@/lib/server/workspaces/workspace-context'
 
 export class ControlPlaneUnavailableError extends Error {
-  constructor(message = 'Billing is temporarily unavailable. Please try again.') {
+  constructor(message = 'Quackback Cloud is temporarily unavailable. Please try again.') {
     super(message)
     this.name = 'ControlPlaneUnavailableError'
   }
+}
+
+export async function requestWorkspaceIdentityMutation(input: {
+  displayName?: string
+  platformLabel?: string
+}): Promise<{ projectionToken: string }> {
+  const result = await callWorkspaceControlPlane<{ projectionToken?: unknown }>(
+    '/api/v1/internal/identity',
+    input
+  )
+  if (typeof result.projectionToken !== 'string' || result.projectionToken.length === 0) {
+    throw new ControlPlaneUnavailableError()
+  }
+  return { projectionToken: result.projectionToken }
 }
 
 export function deriveControlPlaneCredential(workspaceSecretKey: string): string {

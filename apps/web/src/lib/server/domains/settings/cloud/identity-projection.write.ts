@@ -60,7 +60,11 @@ export async function writeIdentityProjection(
     if (decideIdentityProjectionWrite(current, projection) === 'idempotent') return false
     await tx
       .update(settings)
-      .set({ cloudIdentity: projection, cloudIdentityRevision: row.revision + 1 })
+      .set({
+        name: projection.displayName,
+        cloudIdentity: projection,
+        cloudIdentityRevision: row.revision + 1,
+      })
       .where(eq(settings.id, row.id))
     return true
   })
