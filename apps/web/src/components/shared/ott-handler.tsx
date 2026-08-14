@@ -28,7 +28,7 @@ export function OttHandler() {
       const cleanUrl = window.location.pathname + (cleanSearch ? `?${cleanSearch}` : '')
 
       if (error) {
-        window.history.replaceState({}, '', cleanUrl)
+        window.location.replace('/admin/login?error=handoff_failed')
         return
       }
 

@@ -54,6 +54,7 @@ export type AuthBlockCode =
   | 'failed_to_create_user'
   | 'unable_to_create_session'
   | 'oauth_provider_not_found'
+  | 'handoff_failed'
 
 export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   password_method_not_allowed:
@@ -102,4 +103,6 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   unable_to_create_session: 'Something went wrong signing you in. Please try again.',
   oauth_provider_not_found:
     "That sign-in provider isn't available right now. It may have been disabled by an administrator.",
+  handoff_failed:
+    'That workspace handoff expired or was already used. Sign in here, or reopen the workspace from Quackback.',
 }
