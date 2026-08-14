@@ -106,6 +106,23 @@ export interface StoredCloudConfig {
   projection?: StoredBillingProjection | null
 }
 
+export interface StoredCloudCustomDomain {
+  hostname: string
+  readiness: 'pending' | 'ready' | 'failed'
+  isPrimary: boolean
+  updatedAt: string
+}
+
+/** Customer-safe cloud identity; provider ids and validation secrets never cross. */
+export interface StoredCloudIdentityProjection {
+  version: number
+  displayName: string
+  canonicalOrigin: string
+  platformHostname: string
+  customDomains: StoredCloudCustomDomain[]
+  updatedAt: string
+}
+
 /**
  * User table - User identities for the application
  */
@@ -473,6 +490,10 @@ export const settings = pgTable('settings', {
    * Projection monotonicity itself is enforced by `projection.version`.
    */
   cloudRevision: integer('cloud_revision').notNull().default(0),
+  /** Signed cloud identity projection. NULL on self-hosted installs. */
+  cloudIdentity: jsonb('cloud_identity').$type<StoredCloudIdentityProjection>(),
+  /** Local write token, deliberately separate from cloudRevision/billing. */
+  cloudIdentityRevision: integer('cloud_identity_revision').notNull().default(0),
   /**
    * JSON array of dot-paths whose values are managed by the
    * declarative config file (`/etc/quackback/config.yaml`). When a

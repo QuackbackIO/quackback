@@ -1660,6 +1660,13 @@
       "tag": "0261_drop_workspace_billing",
       "breakpoints": true,
       "idx": 236
+    },
+    {
+      "version": "7",
+      "when": 1786723200000,
+      "tag": "0262_cloud_identity_projection",
+      "breakpoints": true,
+      "idx": 237
     }
   ]
 }
