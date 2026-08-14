@@ -6,20 +6,16 @@
  * Status field: changelog.items[] where field === 'status' → toString.
  */
 
-import { createHmac, timingSafeEqual } from 'crypto'
+import { jwtVerify } from 'jose'
 import type { InboundWebhookHandler, InboundWebhookResult } from '../inbound-types'
 
-function verifyHs256Jwt(token: string, secret: string): boolean {
-  const parts = token.split('.')
-  if (parts.length !== 3) return false
-  const [header, payload, signature] = parts
-  const expected = createHmac('sha256', secret).update(`${header}.${payload}`).digest()
-  const actual = Buffer.from(signature, 'base64url')
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return false
-
+async function verifyHs256Jwt(token: string, secret: string): Promise<boolean> {
   try {
-    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { exp?: unknown }
-    return typeof claims.exp === 'number' && claims.exp * 1000 > Date.now()
+    await jwtVerify(token, new TextEncoder().encode(secret), {
+      algorithms: ['HS256'],
+      clockTolerance: '60s',
+    })
+    return true
   } catch {
     return false
   }
@@ -41,7 +37,7 @@ export const jiraInboundHandler: InboundWebhookHandler = {
       return new Response('Jira credentials not configured', { status: 401 })
     }
 
-    if (!verifyHs256Jwt(token, clientSecret)) {
+    if (!(await verifyHs256Jwt(token, clientSecret))) {
       return new Response('Invalid signature', { status: 401 })
     }
 

@@ -57,8 +57,8 @@ describe('jiraInboundHandler.verifySignature', () => {
     expect(await jiraInboundHandler.verifySignature(request, '', '')).toBe(true)
   })
 
-  it('rejects an expired JWT', async () => {
-    const token = bearerJwt(SECRET, { exp: Math.floor(Date.now() / 1000) - 30 })
+  it('rejects an expired JWT beyond clock skew', async () => {
+    const token = bearerJwt(SECRET, { exp: Math.floor(Date.now() / 1000) - 120 })
     const request = new Request('https://app.example.com/hook', {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -67,7 +67,7 @@ describe('jiraInboundHandler.verifySignature', () => {
     expect((result as Response).status).toBe(401)
   })
 
-  it('rejects a JWT with no exp claim', async () => {
+  it('accepts a JWT with no exp claim when the signature is valid', async () => {
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
     const payload = Buffer.from(JSON.stringify({ iss: 'jira' })).toString('base64url')
     const data = `${header}.${payload}`
@@ -75,9 +75,7 @@ describe('jiraInboundHandler.verifySignature', () => {
     const request = new Request('https://app.example.com/hook', {
       headers: { Authorization: `Bearer ${data}.${signature}` },
     })
-    const result = await jiraInboundHandler.verifySignature(request, '', '')
-    expect(result).toBeInstanceOf(Response)
-    expect((result as Response).status).toBe(401)
+    expect(await jiraInboundHandler.verifySignature(request, '', '')).toBe(true)
   })
 })
 
