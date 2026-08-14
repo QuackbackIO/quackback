@@ -128,6 +128,14 @@ function stub(): BillingProviderClient {
       },
     ]),
     updateSubscriptionItems: vi.fn(),
+    // Returns the id it was handed, so the leak assertions below prove the
+    // overview carries the price's display data but never the id itself.
+    getPrice: vi.fn(async (id: string) => ({
+      id,
+      unit_amount: 6200,
+      currency: 'usd',
+      recurring: { interval: 'month' },
+    })),
     reportMeterEvent: vi.fn(),
     createCustomer: vi.fn(),
     getCustomer: vi.fn(),
@@ -276,5 +284,13 @@ describe.skipIf(!fixture.available)('billing references never reach the client',
     // Only the plans this deployment actually sells, and by name — never by
     // price id.
     expect(overview.purchasablePlans.map((p) => p.id)).toEqual(['free', 'pro'])
+    // …and what each costs, as display data. The provider returned the price
+    // id in its payload; the overview must carry amount/currency/interval
+    // only (the leak sweep above covers the id).
+    expect(overview.purchasablePlans.find((p) => p.id === 'pro')?.price).toEqual({
+      amount: 6200,
+      currency: 'usd',
+      interval: 'month',
+    })
   })
 })

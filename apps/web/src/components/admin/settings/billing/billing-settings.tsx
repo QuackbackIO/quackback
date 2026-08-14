@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { ArrowTopRightOnSquareIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
-import type { BillingOverview } from '@/lib/server/domains/billing/billing.service'
+import type {
+  BillingOverview,
+  BillingPlanPrice,
+} from '@/lib/server/domains/billing/billing.service'
 import {
   openBillingPortalFn,
   reconcileBillingFn,
@@ -134,6 +137,7 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
                 {overview.purchasablePlans.map((plan) => (
                   <SelectItem key={plan.id} value={plan.id}>
                     {plan.name}
+                    {plan.price ? ` — ${formatPlanPrice(plan.price)}` : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -392,4 +396,19 @@ function formatMoney(total: number, currency: string): string {
   } catch {
     return `${(total / 100).toFixed(2)} ${currency.toUpperCase()}`
   }
+}
+
+/**
+ * `$32.00/seat/mo` — the plan-picker price label, from the provider's own
+ * display data. Exported for tests. Assumes a 2-minor-unit currency, which is
+ * what the deployed catalogue sells.
+ */
+export function formatPlanPrice(price: BillingPlanPrice): string {
+  const interval =
+    price.interval === 'month'
+      ? 'mo'
+      : price.interval === 'year'
+        ? 'yr'
+        : (price.interval ?? 'unit')
+  return `${formatMoney(price.amount, price.currency)}/seat/${interval}`
 }

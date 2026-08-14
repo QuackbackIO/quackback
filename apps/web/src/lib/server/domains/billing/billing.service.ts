@@ -64,6 +64,14 @@ export type CatalogueDriftState =
       planUnresolvable: boolean
     }
 
+export interface BillingPlanPrice {
+  /** Minor units, as the provider reports them (3200 = $32). */
+  amount: number
+  currency: string
+  /** `month`, `year`, … as the provider names it. null for one-off prices. */
+  interval: string | null
+}
+
 export interface BillingOverview {
   /**
    * Which plans this deployment sells, cheapest first.
@@ -71,8 +79,21 @@ export interface BillingOverview {
    * `copilotAddOn` says only whether the plan OFFERS the add-on, never what
    * it costs — a boolean, so no price identifier reaches the client. It
    * drives whether the opt-in control renders at all.
+   *
+   * `price` is display data — amount, currency, interval — fetched from the
+   * provider so the page can name what a plan costs before checkout. It is
+   * never the price id: `no-client-leak.db.test.ts` asserts that. `null`
+   * means the provider could not say (outage, or a price shape with no unit
+   * amount), and the plan then renders without a price rather than with a
+   * guessed one.
    */
-  purchasablePlans: Array<{ id: PlanId; name: string; grants: string[]; copilotAddOn: boolean }>
+  purchasablePlans: Array<{
+    id: PlanId
+    name: string
+    grants: string[]
+    copilotAddOn: boolean
+    price: BillingPlanPrice | null
+  }>
   plan: PlanId | null
   planName: string | null
   status: string | null
@@ -140,8 +161,43 @@ export async function getBillingOverview(
   // `ok` by a fetch that actually succeeded and found nothing.
   let catalogueDrift: BillingOverview['catalogueDrift'] = null
 
+  const client = deps.client ?? makeProviderClient(config)
+
+  // What each sold plan costs, for the change-plan surface. Best-effort like
+  // the other provider reads below: a plan whose price cannot be fetched
+  // renders without one rather than breaking the page or inventing a number.
+  // Fetched whether or not a subscription exists — a trialing workspace is
+  // exactly who the prices are for.
+  const priceByPlan = new Map<PlanId, BillingPlanPrice | null>()
+  const priceFetches = (Object.entries(config.catalogue) as Array<[PlanId, { seat?: string }]>)
+    .filter(([id]) => id in PLAN_CATALOGUE)
+    .map(([id, prices]) => [id, prices.seat] as const)
+  const priceResults = await Promise.allSettled(
+    priceFetches.map(([, priceId]) =>
+      priceId ? Promise.resolve().then(() => client.getPrice(priceId)) : Promise.resolve(null)
+    )
+  )
+  priceResults.forEach((result, i) => {
+    const planId = priceFetches[i][0]
+    if (result.status === 'fulfilled') {
+      const price = result.value
+      priceByPlan.set(
+        planId,
+        price && price.unit_amount !== null
+          ? {
+              amount: price.unit_amount,
+              currency: price.currency,
+              interval: price.recurring?.interval ?? null,
+            }
+          : null
+      )
+    } else {
+      log.warn({ err: result.reason, plan: planId }, 'plan price unavailable')
+      priceByPlan.set(planId, null)
+    }
+  })
+
   if (stored) {
-    const client = deps.client ?? makeProviderClient(config)
     // Provider reads are best-effort: an outage must degrade the page to
     // "plan and seats, no invoice history" rather than break it. This is a
     // commercial surface, and the same failure direction §8.1 argues for.
@@ -212,6 +268,7 @@ export async function getBillingOverview(
         name: plan.name,
         grants: [...plan.grants],
         copilotAddOn: Boolean(config.catalogue[plan.id]?.copilotSeat),
+        price: priceByPlan.get(plan.id) ?? null,
       })),
     plan: cloud.plan,
     planName: cloud.plan ? PLAN_CATALOGUE[cloud.plan].name : null,

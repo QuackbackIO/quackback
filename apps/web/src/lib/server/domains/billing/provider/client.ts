@@ -26,7 +26,12 @@ export class BillingProviderError extends Error {
   readonly providerCode: string | null
   readonly requestId: string | null
 
-  constructor(status: number, message: string, providerCode: string | null, requestId: string | null) {
+  constructor(
+    status: number,
+    message: string,
+    providerCode: string | null,
+    requestId: string | null
+  ) {
     super(message)
     this.name = 'BillingProviderError'
     this.status = status
@@ -97,16 +102,30 @@ export interface ProviderSession {
   url: string | null
 }
 
+export interface ProviderPrice {
+  id: string
+  /** Minor units (cents for USD). null for tiered/volume prices. */
+  unit_amount: number | null
+  currency: string
+  recurring: { interval: string } | null
+}
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
 
 export interface BillingProviderClient {
-  createCustomer(input: { email?: string; name?: string; metadata?: Record<string, string> }): Promise<ProviderCustomer>
+  createCustomer(input: {
+    email?: string
+    name?: string
+    metadata?: Record<string, string>
+  }): Promise<ProviderCustomer>
   getCustomer(id: string): Promise<ProviderCustomer>
   createCheckoutSession(input: CheckoutInput): Promise<ProviderSession>
   createPortalSession(input: { customer: string; returnUrl: string }): Promise<ProviderSession>
   getSubscription(id: string): Promise<ProviderSubscription>
+  /** Read one price, for displaying what a plan costs. Never sent client-side as an id. */
+  getPrice(id: string): Promise<ProviderPrice>
   updateSubscriptionItems(
     id: string,
     items: Array<{ id?: string; price?: string; quantity?: number; deleted?: boolean }>,
@@ -186,7 +205,8 @@ export function makeProviderClient(config: BillingConfig): BillingProviderClient
         ],
       }),
 
-    getCustomer: (id) => call<ProviderCustomer>(`/customers/${encodeURIComponent(id)}`, { method: 'GET' }),
+    getCustomer: (id) =>
+      call<ProviderCustomer>(`/customers/${encodeURIComponent(id)}`, { method: 'GET' }),
 
     createCheckoutSession: (input) =>
       call<ProviderSession>('/checkout/sessions', {
@@ -224,6 +244,8 @@ export function makeProviderClient(config: BillingConfig): BillingProviderClient
     getSubscription: (id) =>
       call<ProviderSubscription>(`/subscriptions/${encodeURIComponent(id)}`, { method: 'GET' }),
 
+    getPrice: (id) => call<ProviderPrice>(`/prices/${encodeURIComponent(id)}`, { method: 'GET' }),
+
     updateSubscriptionItems: (id, items, idempotencyKey) =>
       call<ProviderSubscription>(`/subscriptions/${encodeURIComponent(id)}`, {
         method: 'POST',
@@ -232,7 +254,8 @@ export function makeProviderClient(config: BillingConfig): BillingProviderClient
           const pairs: FormPairs = []
           if (item.id) pairs.push([`items[${i}][id]`, item.id])
           if (item.price) pairs.push([`items[${i}][price]`, item.price])
-          if (item.quantity !== undefined) pairs.push([`items[${i}][quantity]`, String(item.quantity)])
+          if (item.quantity !== undefined)
+            pairs.push([`items[${i}][quantity]`, String(item.quantity)])
           if (item.deleted) pairs.push([`items[${i}][deleted]`, 'true'])
           return pairs
         }),
@@ -288,9 +311,7 @@ function optional(key: string, value: string | undefined): FormPairs {
 }
 
 function encodeForm(pairs: FormPairs): string {
-  return pairs
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&')
+  return pairs.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
 }
 
 function safeJson(text: string): unknown {
