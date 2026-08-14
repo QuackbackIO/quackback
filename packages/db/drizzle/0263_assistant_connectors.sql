@@ -1,5 +1,5 @@
 CREATE TABLE "assistant_connectors" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"transport" text DEFAULT 'http' NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE "assistant_connectors" (
 	"enabled" boolean DEFAULT true NOT NULL,
 	"last_synced_at" timestamp with time zone,
 	"last_sync_error" text,
-	"created_by_id" text,
+	"created_by_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
