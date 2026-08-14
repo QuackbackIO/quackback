@@ -18,10 +18,13 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
  *  looking at anything else. */
 export const getPlanNotice = createServerFn({ method: 'GET' }).handler(
   async (): Promise<PlanNotice | null> => {
-    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
     const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
     const limits = await getTierLimits()
     if (limits.notice) return limits.notice
+
+    const { reportStarterTrialIfDue } = await import('@/lib/server/control-plane/starter-trial')
+    await reportStarterTrialIfDue({ principalId: auth.principal.id })
 
     const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
     const { trialNotice } = await import('@/lib/server/domains/settings/cloud/commercial-notice')

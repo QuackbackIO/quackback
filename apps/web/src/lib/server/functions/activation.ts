@@ -467,25 +467,18 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
     // best effort so a temporary control-plane outage never blocks the user
     // from entering the workspace they just configured. The stamped starter
     // time makes every retry carry the same idempotency key and evidence.
-    if (
-      shouldStartTrialForStarter(value.startingPoint.resolution) &&
-      value.startingPoint.resourceType !== 'none'
-    ) {
+    const { starterTrialEvidence } = await import('@/lib/server/control-plane/starter-trial')
+    const evidence = starterTrialEvidence(state)
+    if (evidence) {
       try {
         const { reportTrialActivation } = await import('@/lib/server/control-plane/client')
-        const completedAt = state.completedAt ?? value.startingPoint.completedAt
-        const status = await reportTrialActivation({
-          idempotencyKey: `starter:${completedAt}:${value.startingPoint.resourceType}`,
-          resolution: value.startingPoint.resolution as 'created' | 'configured',
-          artifactType: value.startingPoint.resourceType,
-          occurredAt: completedAt,
-        })
+        const status = await reportTrialActivation(evidence)
         if (status === 'started') {
           await emitPlgEvent(
             {
               name: 'trial_started',
               outcome: value.startingPoint.outcome,
-              artifactType: value.startingPoint.resourceType,
+              artifactType: evidence.artifactType,
             },
             { workspaceId: auth.settings.id, principalId: auth.principal.id }
           )
