@@ -1,17 +1,39 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createServerOnlyFn } from '@tanstack/react-start'
+import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
+import type { OriginTransferResult } from '@/lib/server/functions/origin-transfer'
 
 const searchSchema = z.object({
   ott: z.string().optional(),
   returnTo: z.string().optional(),
 })
 
+/**
+ * Consume on this request. An RPC server fn would drop the workspace Host;
+ * a `*.server.ts` import is denied in the client-bundled route.
+ */
+const consumeOpenHandoffOnRequest = createServerOnlyFn(
+  async (search: z.infer<typeof searchSchema>): Promise<OriginTransferResult> => {
+    const { consumeOpenHandoff } = await import('@/lib/server/functions/origin-transfer')
+    const result = await consumeOpenHandoff({
+      ...search,
+      headers: getRequestHeaders(),
+    })
+    if (result.kind === 'redirect') {
+      ;(setResponseHeader as (name: string, value: string | string[]) => void)(
+        'Set-Cookie',
+        result.cookies
+      )
+    }
+    return result
+  }
+)
+
 export const Route = createFileRoute('/auth/open-handoff')({
   validateSearch: searchSchema.parse,
   loader: async ({ location }) => {
     const search = location.search as z.infer<typeof searchSchema>
-    const { consumeOpenHandoffOnRequest } =
-      await import('@/lib/server/functions/handoff-cookies.server')
     const result = await consumeOpenHandoffOnRequest(search)
     if (result.kind === 'redirect') throw redirect({ href: result.to })
     return result
