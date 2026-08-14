@@ -38,6 +38,19 @@ describe('registerJiraWebhook', () => {
     ).rejects.toThrow('Operator is not is unsupported')
   })
 
+  it('accepts a numeric project id from the settings composite', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ webhookRegistrationResult: [{ createdWebhookId: 7 }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await registerJiraWebhook('tok', 'cloud-1', 'https://app.example.com/hook', '10000')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).webhooks[0].jqlFilter).toBe(
+      'project = 10000'
+    )
+  })
+
   it('rejects a project ref that is not a safe JQL token', async () => {
     await expect(
       registerJiraWebhook('tok', 'cloud-1', 'https://app.example.com/hook', 'PROJ OR 1=1')

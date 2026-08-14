@@ -80,3 +80,42 @@ describe('jiraInboundHandler.verifySignature', () => {
     expect((result as Response).status).toBe(401)
   })
 })
+
+describe('jiraInboundHandler.parseStatusChange', () => {
+  it('extracts a status change from jira:issue_updated', async () => {
+    const result = await jiraInboundHandler.parseStatusChange(
+      JSON.stringify({
+        webhookEvent: 'jira:issue_updated',
+        issue: { key: 'PROJ-12' },
+        changelog: { items: [{ field: 'assignee' }, { field: 'status', toString: 'Done' }] },
+      })
+    )
+    expect(result).toEqual({
+      externalId: 'PROJ-12',
+      externalStatus: 'Done',
+      eventType: 'jira:issue_updated',
+    })
+  })
+
+  it('ignores updates that are not a status change', async () => {
+    const result = await jiraInboundHandler.parseStatusChange(
+      JSON.stringify({
+        webhookEvent: 'jira:issue_updated',
+        issue: { key: 'PROJ-12' },
+        changelog: { items: [{ field: 'summary', toString: 'new title' }] },
+      })
+    )
+    expect(result).toBeNull()
+  })
+
+  it('ignores non-update events', async () => {
+    const result = await jiraInboundHandler.parseStatusChange(
+      JSON.stringify({
+        webhookEvent: 'jira:issue_created',
+        issue: { key: 'PROJ-12' },
+        changelog: { items: [{ field: 'status', toString: 'To Do' }] },
+      })
+    )
+    expect(result).toBeNull()
+  })
+})
