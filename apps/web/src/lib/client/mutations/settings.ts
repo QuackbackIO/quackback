@@ -2,7 +2,7 @@
  * Settings mutations
  *
  * Mutation hooks for workspace settings (logo, header, etc.)
- * Uses presigned URLs for direct S3 uploads.
+ * Uses same-origin `/api/storage` PUTs so a friendly URL rename cannot break uploads.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'

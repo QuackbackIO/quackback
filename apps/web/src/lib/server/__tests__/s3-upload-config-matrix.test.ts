@@ -4,23 +4,9 @@ import { createHmac } from 'node:crypto'
 /**
  * Configuration matrix tests for generatePresignedUploadUrl.
  *
- * Covers every supported deployment variation:
- *
- *   A. S3_PROXY=false, no S3_PUBLIC_URL  — local MinIO / Railway / AWS private bucket
- *      uploadUrl: presigned S3 PUT URL
- *      publicUrl: /api/storage/{key}
- *
- *   B. S3_PROXY=false, S3_PUBLIC_URL set  — AWS public / Cloudflare R2 + CDN
- *      uploadUrl: presigned S3 PUT URL
- *      publicUrl: /api/storage/{key}  (CDN is not baked into persist)
- *
- *   C. S3_PROXY=true, no S3_PUBLIC_URL  — Docker self-hosted / ngrok
- *      uploadUrl: BASE_URL/api/storage/{key}?ct=…&exp=…&sig=…  (HMAC-signed proxy)
- *      publicUrl: /api/storage/{key}
- *
- *   D. S3_PROXY=true, S3_PUBLIC_URL set  — proxy uploads, relative persist
- *      uploadUrl: BASE_URL/api/storage/{key}?ct=…&exp=…&sig=…  (must NOT use CDN URL)
- *      publicUrl: /api/storage/{key}
+ * Browser uploads are always a same-origin `/api/storage/{key}` PUT. Persist
+ * is the same path with no query. Object-store hosts, CDNs, BASE_URL, and a
+ * friendly platform URL must not appear on either URL.
  */
 
 // ── Shared mock config (mutated per test) ────────────────────────────────────
@@ -80,8 +66,12 @@ const { generatePresignedUploadUrl } = await import('@/lib/server/storage/s3')
 const KEY = 'post-images/abc123/photo.png'
 const CT = 'image/png'
 
+function parseUpload(uploadUrl: string): URL {
+  return new URL(uploadUrl, 'https://workspace.test')
+}
+
 function verifySig(uploadUrl: string, key: string, ct: string, secret: string): boolean {
-  const url = new URL(uploadUrl)
+  const url = parseUpload(uploadUrl)
   const exp = Number(url.searchParams.get('exp'))
   const sig = url.searchParams.get('sig')
   if (!sig || !exp) return false
@@ -102,25 +92,13 @@ beforeEach(() => {
   mockConfig.baseUrl = 'https://app.example.com'
 })
 
-// ── Case A: S3_PROXY=false, no S3_PUBLIC_URL ────────────────────────────────
-
-describe('Case A — S3_PROXY=false, no S3_PUBLIC_URL (local MinIO / Railway / AWS private)', () => {
-  it('returns a presigned S3 PUT URL', async () => {
-    const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(uploadUrl).toContain('s3.amazonaws.com')
-    expect(uploadUrl).toContain('X-Amz-Signature')
-    expect(mockGetSignedUrl).toHaveBeenCalledOnce()
-  })
-
-  it('presigns the workspace-namespaced object while returning the bare key', async () => {
-    // The two halves of the design in one assertion. What the browser PUTs to is
-    // namespaced; what the caller stores, and what contentJson refs are
-    // built from, is not.
-    const { key } = await generatePresignedUploadUrl(KEY, CT)
-
-    expect(mockGetSignedUrl).toHaveBeenCalledOnce()
-    const presigned = mockGetSignedUrl.mock.calls[0]![1] as { input: { Key: string } }
-    expect(presigned.input.Key).toBe(`w/${LOCAL_WORKSPACE}/${KEY}`)
+describe('browser uploads stay on /api/storage', () => {
+  it('returns a same-origin PUT target, not a presigned object-store URL', async () => {
+    const { uploadUrl, key } = await generatePresignedUploadUrl(KEY, CT)
+    expect(uploadUrl.startsWith(`/api/storage/${KEY}?`)).toBe(true)
+    expect(uploadUrl).not.toContain('s3.amazonaws.com')
+    expect(uploadUrl).not.toContain('X-Amz-Signature')
+    expect(mockGetSignedUrl).not.toHaveBeenCalled()
     expect(key).toBe(KEY)
   })
 
@@ -129,85 +107,33 @@ describe('Case A — S3_PROXY=false, no S3_PUBLIC_URL (local MinIO / Railway / A
     expect(publicUrl).toBe(`/api/storage/${KEY}`)
   })
 
-  it('does not bake BASE_URL into the persisted publicUrl', async () => {
-    mockConfig.baseUrl = 'https://app.example.com/'
-    const { publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(publicUrl).toBe(`/api/storage/${KEY}`)
-  })
-
-  it('works with MinIO endpoint (S3_FORCE_PATH_STYLE=true)', async () => {
+  it('does not bake BASE_URL, a friendly host, or a CDN into either URL', async () => {
+    mockConfig.baseUrl = 'https://acme.quackback.co.uk/'
+    mockConfig.s3PublicUrl = 'https://cdn.example.com/'
     mockConfig.s3Endpoint = 'http://minio:9000'
-    mockConfig.s3ForcePathStyle = true
     const { uploadUrl, publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    // Upload still goes through SDK (presigned MinIO URL)
-    expect(mockGetSignedUrl).toHaveBeenCalledOnce()
-    // Public URL still routes through the app
+    expect(uploadUrl.startsWith(`/api/storage/${KEY}?`)).toBe(true)
     expect(publicUrl).toBe(`/api/storage/${KEY}`)
-    // uploadUrl is whatever the SDK mock returned (simulating a MinIO presigned URL)
-    expect(uploadUrl).toContain('X-Amz-Signature')
-  })
-})
-
-// ── Case B: S3_PROXY=false, S3_PUBLIC_URL set ────────────────────────────────
-
-describe('Case B — S3_PROXY=false, S3_PUBLIC_URL set (AWS public / Cloudflare R2 + CDN)', () => {
-  beforeEach(() => {
-    mockConfig.s3PublicUrl = 'https://cdn.example.com'
-  })
-
-  it('returns a presigned S3 PUT URL', async () => {
-    const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(uploadUrl).toContain('X-Amz-Signature')
-    expect(mockGetSignedUrl).toHaveBeenCalledOnce()
-  })
-
-  it('still persists /api/storage even when S3_PUBLIC_URL is set', async () => {
-    const { publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(publicUrl).toBe(`/api/storage/${KEY}`)
+    expect(uploadUrl).not.toContain('acme.quackback.co.uk')
+    expect(uploadUrl).not.toContain('cdn.example.com')
+    expect(uploadUrl).not.toContain('minio')
+    expect(publicUrl).not.toContain('acme.quackback.co.uk')
     expect(publicUrl).not.toContain('cdn.example.com')
   })
 
-  it('does not bake a trailing-slash CDN into persist', async () => {
-    mockConfig.s3PublicUrl = 'https://cdn.example.com/'
-    const { publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(publicUrl).toBe(`/api/storage/${KEY}`)
-  })
-
-  it('works with Cloudflare R2 endpoint without baking the CDN into persist', async () => {
-    mockConfig.s3Endpoint = 'https://account-id.r2.cloudflarestorage.com'
-    mockConfig.s3ForcePathStyle = true
-    mockConfig.s3PublicUrl = 'https://assets.myapp.com'
-    const { uploadUrl, publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(mockGetSignedUrl).toHaveBeenCalledOnce()
-    expect(publicUrl).toBe(`/api/storage/${KEY}`)
-    expect(uploadUrl).toContain('X-Amz-Signature')
-  })
-})
-
-// ── Case C: S3_PROXY=true, no S3_PUBLIC_URL ──────────────────────────────────
-
-describe('Case C — S3_PROXY=true, no S3_PUBLIC_URL (Docker self-hosted / ngrok)', () => {
-  beforeEach(() => {
-    mockConfig.s3Proxy = true
-  })
-
-  it('returns a proxy upload URL (not a presigned S3 URL)', async () => {
-    const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(uploadUrl).toContain('/api/storage/')
-    expect(uploadUrl).not.toContain('X-Amz-Signature')
-    expect(mockGetSignedUrl).not.toHaveBeenCalled()
-  })
-
-  it('upload URL is rooted at BASE_URL, not at the S3 endpoint', async () => {
-    mockConfig.s3Endpoint = 'http://minio:9000'
-    const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(uploadUrl.startsWith('https://app.example.com/api/storage/')).toBe(true)
-    expect(uploadUrl).not.toContain('minio')
+  it('stays relative after a friendly URL rename', async () => {
+    mockConfig.baseUrl = 'https://ws-abc123.quackback.co.uk'
+    const before = await generatePresignedUploadUrl(KEY, CT)
+    mockConfig.baseUrl = 'https://north7f3a2b.quackback.co.uk'
+    const after = await generatePresignedUploadUrl(KEY, CT)
+    expect(before.uploadUrl.split('?')[0]).toBe(`/api/storage/${KEY}`)
+    expect(after.uploadUrl.split('?')[0]).toBe(`/api/storage/${KEY}`)
+    expect(before.publicUrl).toBe(after.publicUrl)
   })
 
   it('upload URL contains ct, exp, and sig query params', async () => {
     const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
-    const url = new URL(uploadUrl)
+    const url = parseUpload(uploadUrl)
     expect(url.searchParams.get('ct')).toBe(CT)
     expect(Number(url.searchParams.get('exp'))).toBeGreaterThan(Date.now())
     expect(url.searchParams.get('sig')).toHaveLength(32)
@@ -218,28 +144,16 @@ describe('Case C — S3_PROXY=true, no S3_PUBLIC_URL (Docker self-hosted / ngrok
     expect(verifySig(uploadUrl, KEY, CT, 'secret-key')).toBe(true)
   })
 
-  it('returns a host-independent /api/storage publicUrl', async () => {
-    const { publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(publicUrl).toBe(`/api/storage/${KEY}`)
-  })
-
-  it('strips trailing slash from BASE_URL on the upload URL only', async () => {
-    mockConfig.baseUrl = 'https://app.example.com/'
-    const { uploadUrl, publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(uploadUrl.startsWith('https://app.example.com/api/storage/')).toBe(true)
-    expect(publicUrl).toBe(`/api/storage/${KEY}`)
-  })
-
   it('upload URL encodes content-type correctly', async () => {
     const { uploadUrl } = await generatePresignedUploadUrl(KEY, 'image/svg+xml')
-    expect(new URL(uploadUrl).searchParams.get('ct')).toBe('image/svg+xml')
+    expect(parseUpload(uploadUrl).searchParams.get('ct')).toBe('image/svg+xml')
   })
 
   it('token expiry defaults to 15 minutes', async () => {
     const before = Date.now() + 900 * 1000
     const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
     const after = Date.now() + 900 * 1000
-    const exp = Number(new URL(uploadUrl).searchParams.get('exp'))
+    const exp = Number(parseUpload(uploadUrl).searchParams.get('exp'))
     expect(exp).toBeGreaterThanOrEqual(before)
     expect(exp).toBeLessThanOrEqual(after)
   })
@@ -248,38 +162,13 @@ describe('Case C — S3_PROXY=true, no S3_PUBLIC_URL (Docker self-hosted / ngrok
     const before = Date.now() + 60 * 1000
     const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT, 60)
     const after = Date.now() + 60 * 1000
-    const exp = Number(new URL(uploadUrl).searchParams.get('exp'))
+    const exp = Number(parseUpload(uploadUrl).searchParams.get('exp'))
     expect(exp).toBeGreaterThanOrEqual(before)
     expect(exp).toBeLessThanOrEqual(after)
   })
-})
 
-// ── Case D: S3_PROXY=true, S3_PUBLIC_URL set ─────────────────────────────────
-
-describe('Case D — S3_PROXY=true, S3_PUBLIC_URL set (proxy uploads, CDN downloads)', () => {
-  beforeEach(() => {
-    mockConfig.s3Proxy = true
+  it('does not call getSignedUrl when S3_PUBLIC_URL is set', async () => {
     mockConfig.s3PublicUrl = 'https://cdn.example.com'
-  })
-
-  it('upload URL points at BASE_URL/api/storage, not at the CDN', async () => {
-    const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(uploadUrl.startsWith('https://app.example.com/api/storage/')).toBe(true)
-    expect(uploadUrl).not.toContain('cdn.example.com')
-  })
-
-  it('public URL persist stays host-independent when a CDN is configured', async () => {
-    const { publicUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(publicUrl).toBe(`/api/storage/${KEY}`)
-    expect(publicUrl).not.toContain('cdn.example.com')
-  })
-
-  it('upload URL HMAC is still valid (signed against correct key path)', async () => {
-    const { uploadUrl } = await generatePresignedUploadUrl(KEY, CT)
-    expect(verifySig(uploadUrl, KEY, CT, 'secret-key')).toBe(true)
-  })
-
-  it('does not call getSignedUrl', async () => {
     await generatePresignedUploadUrl(KEY, CT)
     expect(mockGetSignedUrl).not.toHaveBeenCalled()
   })
