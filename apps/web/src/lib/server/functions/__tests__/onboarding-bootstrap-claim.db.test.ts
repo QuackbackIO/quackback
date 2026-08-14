@@ -96,7 +96,9 @@ const fixture = await createDbTestFixture({
     // Migration 0258's column, probed rather than created. `ALTER TABLE` from
     // inside the fixture's transaction would hold ACCESS EXCLUSIVE on
     // `settings` for the whole test, and two suites doing that at once deadlock.
-    await db.execute(sql`select cloud_workspace_key from settings limit 0`)
+    await db.execute(
+      sql`select cloud_workspace_key, cloud_identity, cloud_identity_revision from settings limit 0`
+    )
   },
 })
 
