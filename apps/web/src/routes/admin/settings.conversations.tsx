@@ -1,7 +1,7 @@
 import { useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
-import { createFileRoute, useRouter, Navigate } from '@tanstack/react-router'
+import { createFileRoute, useRouter, Navigate, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ChatBubbleLeftRightIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -142,8 +142,11 @@ function ConversationsSettingsPage() {
 
       {!widgetEnabled && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-          The widget is currently disabled. Enable it under{' '}
-          <span className="font-medium">Widget</span> settings for Messenger to appear.
+          The widget is currently disabled.{' '}
+          <Link to="/admin/settings/widget/install" className="font-medium underline">
+            Connect Messenger
+          </Link>{' '}
+          to enable it and verify the site installation.
         </div>
       )}
 

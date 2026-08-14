@@ -879,6 +879,15 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
     return await updateWidgetConfig(data)
   })
 
+export const configureWidgetForActivationFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ mode: z.enum(['messenger', 'feedback']) }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { configureWidgetForActivation } =
+      await import('@/lib/server/domains/settings/settings.widget')
+    return configureWidgetForActivation(data.mode)
+  })
+
 export const saveWidgetHeroImageKeyFn = createServerFn({ method: 'POST' })
   .validator(z.object({ key: z.string().min(1).max(512) }))
   .handler(async ({ data }) => {

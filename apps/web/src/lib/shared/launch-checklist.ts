@@ -53,6 +53,7 @@ export type LaunchTaskHref =
   | '/admin/settings/members'
   | '/admin/settings/branding'
   | '/admin/settings/widget'
+  | '/admin/settings/widget/install'
   | '/admin/settings/conversations'
   | '/admin/settings/integrations'
   | '/admin/help-center'
@@ -212,7 +213,7 @@ export function buildLaunchTasks(
       ? undefined
       : 'Customer support is turned off for this workspace. Ask a workspace admin to enable it.',
     classification: 'prerequisite',
-    href: '/admin/settings/widget',
+    href: '/admin/settings/widget/install',
     actionLabel: 'Connect Messenger',
     completedLabel: 'View installation',
   }
