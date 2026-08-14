@@ -124,7 +124,17 @@ export function selectActivationAction({
         destination: '/admin/getting-started',
       }
     }
-    if (outcome === 'product_feedback') return copyBoardAction(outcome, status)
+    if (outcome === 'product_feedback') {
+      return (
+        copyBoardAction(outcome, status) ?? {
+          id: 'open-feedback-board',
+          outcome,
+          label: 'Open your board',
+          kind: 'link',
+          destination: '/admin/feedback',
+        }
+      )
+    }
     if (outcome === 'customer_support') {
       return {
         id: 'connect-messenger',
@@ -177,5 +187,40 @@ export function selectActivationAction({
     label: nextTask.actionLabel ?? nextTask.title,
     kind: 'link',
     destination: nextTask.href,
+  }
+}
+
+/**
+ * Ready-step CTAs. The handoff must always have a way into the workspace;
+ * a copyable board link is a share action, not the only exit.
+ */
+export function resolveOnboardingHandoffCtas(input: Omit<ActivationActionContext, 'surface'>): {
+  primary: ActivationAction
+  share: Extract<ActivationAction, { kind: 'copy' }> | null
+} {
+  const selected = selectActivationAction({ ...input, surface: 'onboarding_handoff' })
+  const outcome = input.startingPoint?.outcome ?? normalizeOutcome(input.status.useCase)
+  if (selected?.kind === 'copy') {
+    return {
+      primary: {
+        id: 'open-feedback-board',
+        outcome,
+        label: 'Open your board',
+        kind: 'link',
+        destination: '/admin/feedback',
+      },
+      share: selected,
+    }
+  }
+  if (selected) return { primary: selected, share: null }
+  return {
+    primary: {
+      id: 'open-workspace',
+      outcome,
+      label: 'Go to your workspace',
+      kind: 'link',
+      destination: '/admin',
+    },
+    share: null,
   }
 }

@@ -8,6 +8,9 @@ import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/ide
 import { verifyIdentityProjectionToken } from '@/lib/server/domains/settings/cloud/identity-projection.signature'
 import { writeIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection.write'
 import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
+import { friendlyPlatformLabel, platformLabelFromHostname } from '@/lib/shared/platform-label'
+
+export { platformLabelFromHostname }
 
 const cloudIdentityInputSchema = z
   .object({
@@ -24,10 +27,6 @@ async function currentCloudIdentity() {
   return parseIdentityProjection(row?.cloudIdentity)
 }
 
-export function platformLabelFromHostname(hostname: string): string {
-  return hostname.split('.')[0] ?? ''
-}
-
 export const getCloudIdentityFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   return currentCloudIdentity()
@@ -36,7 +35,11 @@ export const getCloudIdentityFn = createServerFn({ method: 'GET' }).handler(asyn
 export const markCloudWorkspaceDetailsSeenFn = createServerFn({ method: 'POST' }).handler(
   async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    if (!(await currentCloudIdentity())) throw new Error('Cloud workspace identity is not enabled')
+    const identity = await currentCloudIdentity()
+    if (!identity) throw new Error('Cloud workspace identity is not enabled')
+    if (!friendlyPlatformLabel(identity.platformHostname)) {
+      throw new Error('Choose a Quackback URL before continuing')
+    }
     const { state } = await mutateSetupStateAtomic((current) => ({
       state: current.workspaceDetailsSeenAt
         ? current

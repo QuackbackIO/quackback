@@ -8,9 +8,9 @@ import { saveWorkspaceAndGoalFn } from '@/lib/server/functions/onboarding'
 import {
   getCloudIdentityFn,
   markCloudWorkspaceDetailsSeenFn,
-  platformLabelFromHostname,
   updateCloudIdentityFn,
 } from '@/lib/server/functions/cloud-identity'
+import { friendlyPlatformLabel } from '@/lib/shared/platform-label'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import { pickOnboardingStep } from './-onboarding-step'
@@ -88,7 +88,7 @@ export function CloudWorkspaceDetailsStep(props: {
     await navigate({ to: '/onboarding/usecase' })
   }
 
-  async function save(input: { displayName: string; platformLabel?: string }): Promise<void> {
+  async function save(input: { displayName: string; platformLabel: string }): Promise<void> {
     const result = await updateCloudIdentityFn({ data: input })
     await continueToGoal(
       result.transferToken
@@ -97,21 +97,16 @@ export function CloudWorkspaceDetailsStep(props: {
     )
   }
 
-  return (
-    <CloudWorkspaceDetailsForm identity={props.identity} onSave={save} onSkip={continueToGoal} />
-  )
+  return <CloudWorkspaceDetailsForm identity={props.identity} onSave={save} />
 }
 
 export function CloudWorkspaceDetailsForm(props: {
   identity: NonNullable<Awaited<ReturnType<typeof getCloudIdentityFn>>>
-  onSave: (input: { displayName: string; platformLabel?: string }) => Promise<void>
-  onSkip: () => Promise<void>
+  onSave: (input: { displayName: string; platformLabel: string }) => Promise<void>
 }) {
   const [displayName, setDisplayName] = useState(props.identity.displayName)
   const [platformLabel, setPlatformLabel] = useState(
-    props.identity.platformHostname
-      ? platformLabelFromHostname(props.identity.platformHostname)
-      : ''
+    friendlyPlatformLabel(props.identity.platformHostname)
   )
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -133,14 +128,11 @@ export function CloudWorkspaceDetailsForm(props: {
 
   function submit(event: React.FormEvent): void {
     event.preventDefault()
-    if (!displayName.trim()) return
+    const name = displayName.trim()
     const friendlyLabel = platformLabel.trim()
+    if (!name || !friendlyLabel) return
     void run(
-      () =>
-        props.onSave({
-          displayName: displayName.trim(),
-          ...(friendlyLabel ? { platformLabel: friendlyLabel } : {}),
-        }),
+      () => props.onSave({ displayName: name, platformLabel: friendlyLabel }),
       'Could not save workspace details. Try again.'
     )
   }
@@ -150,7 +142,8 @@ export function CloudWorkspaceDetailsForm(props: {
       <header className="text-center">
         <h1 className="text-2xl font-bold">Make this workspace yours</h1>
         <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-          These details are optional. You can change them later in Admin Settings.
+          Choose a name and the address customers will use. You can change these later in Admin
+          Settings.
         </p>
       </header>
 
@@ -171,8 +164,7 @@ export function CloudWorkspaceDetailsForm(props: {
 
       <div className="space-y-2">
         <label htmlFor="cloud-platform-label" className="text-sm font-medium">
-          Friendly Quackback URL{' '}
-          <span className="font-normal text-muted-foreground">(optional)</span>
+          Friendly Quackback URL
         </label>
         <div className="flex items-center rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
           <Input
@@ -185,12 +177,10 @@ export function CloudWorkspaceDetailsForm(props: {
             autoCorrect="off"
             disabled={isSaving}
             placeholder="your-team"
+            required
           />
           <span className="shrink-0 pe-3 text-sm text-muted-foreground">.{domainSuffix}</span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Current address: <span className="font-mono">{props.identity.canonicalOrigin}</span>
-        </p>
       </div>
 
       {error && (
@@ -205,21 +195,13 @@ export function CloudWorkspaceDetailsForm(props: {
       <div className="flex flex-col items-center gap-2">
         <Button
           type="submit"
-          disabled={isSaving || !displayName.trim()}
+          disabled={isSaving || !displayName.trim() || !platformLabel.trim()}
           className="h-11 w-full max-w-sm"
         >
           {isSaving && (
             <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           )}
           Continue
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={isSaving}
-          onClick={() => void run(props.onSkip, 'Could not continue. Try again.')}
-        >
-          Skip for now
         </Button>
       </div>
     </form>
