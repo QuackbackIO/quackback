@@ -449,7 +449,20 @@ image yet.
 
 ### Critic (2026-08-14, starter trial)
 
-_(pending this fire)_
+PASS — both `ws-*` workspaces have one immutable Pro trial (configured
+board, projection v2 delivered, no provider ids); unauthenticated
+activate-trial fails closed.
+
+HTTP: no bearer and dummy bearer → 401 `unauthorized`. Both canonical
+and both system hosts `/api/health` 200; `/` 307 `/?sort=trending`.
+t1e trial `2026-08-14T19:44:24.774Z` → `2026-08-28T19:44:24.774Z`.
+t1a trial `2026-08-14T19:24:04.355Z` → `2026-08-28T19:24:04.355Z`.
+Critic did not replay with an instance bearer (tables already show one
+event and one anchor each) and did not re-read image digests.
+
+Docker `31834774523` dispatched `--ref saas` for `57ff32499` (includes
+the ledger commit). Not waited; retry is not required for this unit’s
+live proof.
 
 ## Next commits
 
