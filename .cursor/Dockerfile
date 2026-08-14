@@ -25,6 +25,8 @@ RUN apt-get update \
         fuse-overlayfs \
         uidmap \
         iptables \
+    && update-alternatives --set iptables /usr/sbin/iptables-legacy \
+    && update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker Engine + CLI + Compose plugin from Docker's official apt repo.

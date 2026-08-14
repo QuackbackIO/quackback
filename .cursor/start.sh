@@ -38,14 +38,7 @@ if grep -q '^SECRET_KEY=$' .env 2>/dev/null; then
 fi
 
 echo "[start] Starting datastores (postgres, minio, dragonfly, mailpit)..."
-docker compose up -d postgres minio minio-init dragonfly mailpit
-
-echo "[start] Waiting for PostgreSQL..."
-until docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
-echo "[start] Waiting for Dragonfly..."
-until docker compose exec -T dragonfly redis-cli ping >/dev/null 2>&1; do sleep 1; done
-echo "[start] Waiting for MinIO..."
-until curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; do sleep 1; done
+docker compose up -d --wait postgres minio minio-init dragonfly mailpit
 
 # Create the dev and test databases if they do not exist yet. The test DB is
 # used by the DB-integration parts of `bun run test`.
