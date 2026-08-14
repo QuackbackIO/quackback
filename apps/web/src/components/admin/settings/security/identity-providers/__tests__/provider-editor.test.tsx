@@ -68,6 +68,15 @@ vi.mock('../../sso/test-sign-in-button', () => ({
   ),
 }))
 
+vi.mock('@/lib/client/hooks/use-user-attributes-queries', () => ({
+  useUserAttributes: () => ({
+    data: [
+      { key: 'department', label: 'Department', type: 'string' },
+      { key: 'mrr', label: 'MRR', type: 'number' },
+    ],
+  }),
+}))
+
 // A vanity Okta domain — `inferIdpKind` cannot classify it (only *.okta.com
 // matches), so it falls back to 'other'.
 const VANITY_OKTA_URL = 'https://login.acme.com/.well-known/openid-configuration'
@@ -225,6 +234,45 @@ describe('<ProviderEditor> claim-mapping autocomplete', () => {
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
   })
 
+  it('persists allowMissingEmail, access-token source, and attribute map', async () => {
+    renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
+    fireEvent.click(screen.getByLabelText('Allow accounts without an email address'))
+    fireEvent.click(screen.getByLabelText('Access token JWT (opt-in)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
+    fireEvent.change(screen.getByLabelText('Claim path (attribute 1)'), {
+      target: { value: 'department' },
+    })
+    fireEvent.click(screen.getByLabelText('Overwrite existing attribute values'))
+    fireEvent.click(screen.getByLabelText('Sync attributes on every sign-in'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    const saved = upsertSpy.mock.calls.at(-1)![0].data.claimMapping as {
+      profile?: { allowMissingEmail?: boolean; sources?: string[] }
+      attributes?: {
+        map?: Array<{ claimPath: string; attributeKey: string }>
+        overrideExisting?: boolean
+        syncOnSignIn?: boolean
+      }
+    }
+    expect(saved.profile?.allowMissingEmail).toBe(true)
+    expect(saved.profile?.sources).toEqual(['idToken', 'userinfo', 'accessTokenJwt'])
+    expect(saved.attributes?.map).toEqual([{ claimPath: 'department', attributeKey: 'department' }])
+    expect(saved.attributes?.overrideExisting).toBe(true)
+    expect(saved.attributes?.syncOnSignIn).toBe(true)
+  })
+
+  it('persists a non-default prompt from Advanced', async () => {
+    renderEditor(makeProvider({ prompt: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByLabelText('Sign-in prompt'))
+    fireEvent.click(screen.getByTestId('prompt-choice-omit'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls.at(-1)![0].data.prompt).toBe('omit')
+  })
+})
+
+describe('<ProviderEditor> claim-mapping autocomplete leftovers', () => {
   it('shows no inline suggestions for a test of a different provider', () => {
     ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { roles: ['admin'] } }
     renderEditor(

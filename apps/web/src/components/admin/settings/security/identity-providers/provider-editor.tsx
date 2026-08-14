@@ -76,6 +76,21 @@ import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
 import { Autocomplete } from '@/components/ui/autocomplete'
+import {
+  DEFAULT_OIDC_PROMPT,
+  DEFAULT_TOKEN_AUTH_METHOD,
+  PROMPT_CHOICES,
+  TOKEN_AUTH_CHOICES,
+  normalizePromptInput,
+  normalizeTokenAuthInput,
+} from '@/lib/shared/oidc-request'
+import {
+  IDENTITY_SOURCES,
+  DEFAULT_IDENTITY_SOURCES,
+  identitySourcesFor,
+  type IdentitySource,
+} from '@/lib/shared/oidc-claim-mapping'
+import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 
 type Role = 'admin' | 'member' | 'user'
 type Mapping = NonNullable<NonNullable<IdentityProvider['claimMapping']>['role']>
@@ -197,6 +212,28 @@ export function ProviderEditor({
   // admin can untick to hide. Existing providers keep their stored choice.
   const [showButton, setShowButton] = useState(provider?.showButton ?? true)
   const [mapping, setMapping] = useState<Mapping | null>(provider?.claimMapping?.role ?? null)
+  const [prompt, setPrompt] = useState(provider?.prompt ?? DEFAULT_OIDC_PROMPT)
+  const [tokenAuth, setTokenAuth] = useState(
+    provider?.tokenEndpointAuthMethod ?? DEFAULT_TOKEN_AUTH_METHOD
+  )
+  const [allowMissingEmail, setAllowMissingEmail] = useState(
+    provider?.claimMapping?.profile?.allowMissingEmail === true
+  )
+  const [sources, setSources] = useState<IdentitySource[]>(() =>
+    identitySourcesFor(provider?.claimMapping)
+  )
+  const [idClaim, setIdClaim] = useState(provider?.claimMapping?.profile?.claims?.id ?? '')
+  const [emailClaim, setEmailClaim] = useState(provider?.claimMapping?.profile?.claims?.email ?? '')
+  const [nameClaim, setNameClaim] = useState(provider?.claimMapping?.profile?.claims?.name ?? '')
+  const [attributeRows, setAttributeRows] = useState<Array<{ claimPath: string; attributeKey: string }>>(
+    () => provider?.claimMapping?.attributes?.map ?? []
+  )
+  const [overrideExisting, setOverrideExisting] = useState(
+    provider?.claimMapping?.attributes?.overrideExisting === true
+  )
+  const [syncOnSignIn, setSyncOnSignIn] = useState(
+    provider?.claimMapping?.attributes?.syncOnSignIn === true
+  )
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -212,10 +249,40 @@ export function ProviderEditor({
       toast.error('Client ID is required.')
       return
     }
-    // A claim mapping with no rules and no sign-in sync does nothing, so persist
-    // null (the canonical "no mapping" state). A custom claim path alone is inert.
-    const mappingToSave =
-      mapping && (mapping.rules.length > 0 || mapping.syncOnEverySignIn === true) ? mapping : null
+    // A role mapping with no rules and no sign-in sync does nothing, so omit
+    // it. A custom claim path alone is inert. Auto-create off keeps the stored
+    // role section so hiding the editor doesn't wipe it.
+    const roleToSave = autoCreateUsers
+      ? mapping && (mapping.rules.length > 0 || mapping.syncOnEverySignIn === true)
+        ? mapping
+        : undefined
+      : (provider?.claimMapping?.role ?? undefined)
+    const sourcesAreDefault =
+      sources.length === DEFAULT_IDENTITY_SOURCES.length &&
+      DEFAULT_IDENTITY_SOURCES.every((s, i) => sources[i] === s)
+    const claimsToSave = {
+      ...(idClaim.trim() ? { id: idClaim.trim() } : {}),
+      ...(emailClaim.trim() ? { email: emailClaim.trim() } : {}),
+      ...(nameClaim.trim() ? { name: nameClaim.trim() } : {}),
+    }
+    const profileToSave = {
+      ...(!sourcesAreDefault && sources.length > 0 ? { sources } : {}),
+      ...(Object.keys(claimsToSave).length > 0 ? { claims: claimsToSave } : {}),
+      ...(allowMissingEmail ? { allowMissingEmail: true as const } : {}),
+    }
+    const attrMap = attributeRows
+      .map((r) => ({ claimPath: r.claimPath.trim(), attributeKey: r.attributeKey.trim() }))
+      .filter((r) => r.claimPath && r.attributeKey)
+    const attributesToSave = {
+      ...(attrMap.length > 0 ? { map: attrMap } : {}),
+      ...(overrideExisting ? { overrideExisting: true as const } : {}),
+      ...(syncOnSignIn ? { syncOnSignIn: true as const } : {}),
+    }
+    const claimMapping = {
+      ...(Object.keys(profileToSave).length > 0 ? { profile: profileToSave } : {}),
+      ...(roleToSave ? { role: roleToSave } : {}),
+      ...(Object.keys(attributesToSave).length > 0 ? { attributes: attributesToSave } : {}),
+    }
     setSaving(true)
     try {
       const saved = await upsert({
@@ -235,12 +302,14 @@ export function ProviderEditor({
           userInfoUrl: kind === 'other' ? manual.userInfoUrl.trim() || null : null,
           jwksUri: kind === 'other' ? manual.jwksUri.trim() || null : null,
           issuer: kind === 'other' ? manual.issuer.trim() || null : null,
+          prompt: normalizePromptInput(prompt),
+          tokenEndpointAuthMethod: normalizeTokenAuthInput(tokenAuth),
           enabled,
           autoCreateUsers,
           // Role only applies when auto-create is on; null it out otherwise
           // so a stale role doesn't linger on a provisioning-off provider.
           autoProvisionRole: autoCreateUsers ? autoProvisionRole : null,
-          claimMapping: mappingToSave ? { role: mappingToSave } : null,
+          claimMapping: Object.keys(claimMapping).length > 0 ? claimMapping : null,
           showButton,
         },
       })
@@ -390,6 +459,14 @@ export function ProviderEditor({
               />
             </div>
 
+            <AdvancedRequestSection
+              prompt={prompt}
+              tokenAuth={tokenAuth}
+              disabled={saving}
+              onPromptChange={setPrompt}
+              onTokenAuthChange={setTokenAuth}
+            />
+
             <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
 
             {/* Connection test — the capstone of the connection block. A
@@ -428,6 +505,30 @@ export function ProviderEditor({
                 </span>
               </label>
             </div>
+
+            <IdentitySourcesSection
+              allowMissingEmail={allowMissingEmail}
+              sources={sources}
+              idClaim={idClaim}
+              emailClaim={emailClaim}
+              nameClaim={nameClaim}
+              disabled={saving}
+              onAllowMissingEmail={setAllowMissingEmail}
+              onSourcesChange={setSources}
+              onIdClaim={setIdClaim}
+              onEmailClaim={setEmailClaim}
+              onNameClaim={setNameClaim}
+            />
+
+            <AttributeMapSection
+              rows={attributeRows}
+              overrideExisting={overrideExisting}
+              syncOnSignIn={syncOnSignIn}
+              disabled={saving}
+              onRowsChange={setAttributeRows}
+              onOverrideExisting={setOverrideExisting}
+              onSyncOnSignIn={setSyncOnSignIn}
+            />
 
             {/* Provisioning */}
             <div className="space-y-4 border-t border-border/40 pt-5">
@@ -1256,6 +1357,333 @@ function ClaimMappingEditor({
           </label>
         </div>
       )}
+    </div>
+  )
+}
+
+function AdvancedRequestSection({
+  prompt,
+  tokenAuth,
+  disabled,
+  onPromptChange,
+  onTokenAuthChange,
+}: {
+  prompt: string
+  tokenAuth: string
+  disabled: boolean
+  onPromptChange: (next: string) => void
+  onTokenAuthChange: (next: string) => void
+}) {
+  const [open, setOpen] = useState(
+    () =>
+      normalizePromptInput(prompt) !== null || normalizeTokenAuthInput(tokenAuth) !== null
+  )
+
+  return (
+    <div className="rounded-md border border-border/50 bg-muted/10">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
+        aria-expanded={open}
+      >
+        <span>Advanced</span>
+        <span>{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-border/40 px-3 py-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="idp-prompt" className="text-xs">
+              Sign-in prompt
+            </Label>
+            <Select value={prompt} onValueChange={onPromptChange} disabled={disabled}>
+              <SelectTrigger id="idp-prompt" size="sm" aria-label="Sign-in prompt">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROMPT_CHOICES.map((c) => (
+                  <SelectItem key={c.value} value={c.value} data-testid={`prompt-choice-${c.value}`}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              What your provider does when someone already has a session with it.{' '}
+              <strong>Don&apos;t send a prompt</strong> leaves it to behave normally;{' '}
+              <strong>Silent</strong> fails outright when nobody is signed in.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="idp-token-auth" className="text-xs">
+              Client authentication
+            </Label>
+            <Select value={tokenAuth} onValueChange={onTokenAuthChange} disabled={disabled}>
+              <SelectTrigger id="idp-token-auth" size="sm" aria-label="Client authentication">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TOKEN_AUTH_CHOICES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              How your client secret reaches the token endpoint. Some providers accept only one of
+              the two.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const SOURCE_LABELS: Record<IdentitySource, string> = {
+  idToken: 'ID token',
+  userinfo: 'Userinfo endpoint',
+  accessTokenJwt: 'Access token JWT (opt-in)',
+}
+
+function IdentitySourcesSection({
+  allowMissingEmail,
+  sources,
+  idClaim,
+  emailClaim,
+  nameClaim,
+  disabled,
+  onAllowMissingEmail,
+  onSourcesChange,
+  onIdClaim,
+  onEmailClaim,
+  onNameClaim,
+}: {
+  allowMissingEmail: boolean
+  sources: IdentitySource[]
+  idClaim: string
+  emailClaim: string
+  nameClaim: string
+  disabled: boolean
+  onAllowMissingEmail: (next: boolean) => void
+  onSourcesChange: (next: IdentitySource[]) => void
+  onIdClaim: (next: string) => void
+  onEmailClaim: (next: string) => void
+  onNameClaim: (next: string) => void
+}) {
+  const toggle = (source: IdentitySource) => {
+    const next = new Set(sources)
+    if (next.has(source)) next.delete(source)
+    else next.add(source)
+    onSourcesChange(IDENTITY_SOURCES.filter((s) => next.has(s)))
+  }
+
+  return (
+    <div className="space-y-4 border-t border-border/40 pt-5">
+      <div>
+        <Label className="font-medium">Identity</Label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Where to read the account id, email, and name — and optional claim paths when this
+          provider does not use the standard ones.
+        </p>
+      </div>
+      <label className="flex items-start gap-2 text-sm">
+        <Checkbox
+          checked={allowMissingEmail}
+          onCheckedChange={(v) => onAllowMissingEmail(v === true)}
+          disabled={disabled}
+          aria-label="Allow accounts without an email address"
+          className="mt-0.5"
+        />
+        <span>
+          Allow accounts without an email address
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            For providers that release no email. Quackback creates a placeholder so people can still
+            sign in. Placeholders are permanent: turning this off later does not convert accounts
+            that already have one.
+          </span>
+        </span>
+      </label>
+      <div className="space-y-2">
+        <Label className="text-xs">Identity sources</Label>
+        {IDENTITY_SOURCES.map((source) => (
+          <label key={source} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={sources.includes(source)}
+              onCheckedChange={() => toggle(source)}
+              disabled={disabled}
+              aria-label={SOURCE_LABELS[source]}
+            />
+            <span>{SOURCE_LABELS[source]}</span>
+          </label>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="idp-claim-id" className="text-xs">
+            Account id claim
+          </Label>
+          <Input
+            id="idp-claim-id"
+            value={idClaim}
+            onChange={(e) => onIdClaim(e.target.value)}
+            placeholder="sub"
+            disabled={disabled}
+            className="h-8 text-[13px]"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="idp-claim-email" className="text-xs">
+            Email claim
+          </Label>
+          <Input
+            id="idp-claim-email"
+            value={emailClaim}
+            onChange={(e) => onEmailClaim(e.target.value)}
+            placeholder="email"
+            disabled={disabled}
+            className="h-8 text-[13px]"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="idp-claim-name" className="text-xs">
+            Name claim
+          </Label>
+          <Input
+            id="idp-claim-name"
+            value={nameClaim}
+            onChange={(e) => onNameClaim(e.target.value)}
+            placeholder="name"
+            disabled={disabled}
+            className="h-8 text-[13px]"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AttributeMapSection({
+  rows,
+  overrideExisting,
+  syncOnSignIn,
+  disabled,
+  onRowsChange,
+  onOverrideExisting,
+  onSyncOnSignIn,
+}: {
+  rows: Array<{ claimPath: string; attributeKey: string }>
+  overrideExisting: boolean
+  syncOnSignIn: boolean
+  disabled: boolean
+  onRowsChange: (next: Array<{ claimPath: string; attributeKey: string }>) => void
+  onOverrideExisting: (next: boolean) => void
+  onSyncOnSignIn: (next: boolean) => void
+}) {
+  const { data: attributes } = useUserAttributes()
+  const defs = attributes ?? []
+
+  return (
+    <div className="space-y-4 border-t border-border/40 pt-5">
+      <div>
+        <Label className="font-medium">User attributes</Label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Copy a claim onto a defined user attribute at sign-in. Board access still uses those
+          attributes through dynamic segments.
+        </p>
+      </div>
+      {defs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Define user attributes in Settings before mapping claims onto them.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((row, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                value={row.claimPath}
+                onChange={(e) =>
+                  onRowsChange(
+                    rows.map((r, i) => (i === index ? { ...r, claimPath: e.target.value } : r))
+                  )
+                }
+                placeholder="claim path"
+                aria-label={`Claim path (attribute ${index + 1})`}
+                disabled={disabled}
+                className="h-8 flex-1 text-[13px]"
+              />
+              <span className="shrink-0 text-xs text-muted-foreground">→</span>
+              <Select
+                value={row.attributeKey}
+                onValueChange={(v) =>
+                  onRowsChange(rows.map((r, i) => (i === index ? { ...r, attributeKey: v } : r)))
+                }
+                disabled={disabled}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-44"
+                  aria-label={`User attribute (row ${index + 1})`}
+                >
+                  <SelectValue placeholder="Attribute" />
+                </SelectTrigger>
+                <SelectContent>
+                  {defs.map((d) => (
+                    <SelectItem key={d.key} value={d.key}>
+                      {d.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8"
+                aria-label="Remove attribute mapping"
+                onClick={() => onRowsChange(rows.filter((_, i) => i !== index))}
+                disabled={disabled}
+              >
+                <TrashIcon className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() =>
+              onRowsChange([...rows, { claimPath: '', attributeKey: defs[0]?.key ?? '' }])
+            }
+            disabled={disabled}
+          >
+            <PlusIcon className="size-3.5" />
+            Add mapping
+          </Button>
+        </div>
+      )}
+      <label className="flex items-start gap-2 text-xs">
+        <Checkbox
+          checked={overrideExisting}
+          onCheckedChange={(v) => onOverrideExisting(v === true)}
+          disabled={disabled}
+          aria-label="Overwrite existing attribute values"
+          className="mt-0.5"
+        />
+        <span>Overwrite existing attribute values</span>
+      </label>
+      <label className="flex items-start gap-2 text-xs">
+        <Checkbox
+          checked={syncOnSignIn}
+          onCheckedChange={(v) => onSyncOnSignIn(v === true)}
+          disabled={disabled}
+          aria-label="Sync attributes on every sign-in"
+          className="mt-0.5"
+        />
+        <span>Sync on every sign-in. Clears an attribute when the claim disappears.</span>
+      </label>
     </div>
   )
 }
