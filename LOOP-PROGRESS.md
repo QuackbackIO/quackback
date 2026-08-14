@@ -31,7 +31,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 ## Current revisions
 
 - Workspace: `809891850` (deployed image remains `58eebd173`)
-- Control plane: `7230a32` (live deploy remains `14dee7a2` / `b4afe73`)
+- Control plane: `546b26e` (live deploy remains `14dee7a2` / `b4afe73`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
 
@@ -78,7 +78,7 @@ remains.
 | 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                           |
 | 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`               |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`               |
-| 6b remove stale SaaS code        | second slice deleted; remainder pending                                  | CP `e2219f5`, `7230a32`                                             |
+| 6b remove stale SaaS code        | name separated from identity; remainder pending                          | CP `e2219f5`, `7230a32`, `546b26e`                                  |
 | 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                              |
 
 ## Completed activation work
@@ -102,7 +102,7 @@ this through the control-plane gateway before closing the revised billing tracks
 ## Current worktree ownership
 
 Both worktrees were clean after workspace commit `809891850` and control-plane
-commit `7230a32`. The workspace
+commit `546b26e`. The workspace
 accepts only signed control-plane commercial projections and contains no
 platform billing provider integration. The control plane now owns catalogue,
 gateway, starter trial, webhook projection, and durable fan-out behavior. Its
@@ -126,7 +126,11 @@ permanently, update registry origin atomically, and turn an earlier friendly
 hostname into redirect-only routing. Initial projections correctly leave the
 friendly platform hostname null rather than presenting the immutable system
 alias as mutable customer identity. Focused identity verification passed: 38
-tests and control-plane typecheck.
+tests and control-plane typecheck. `546b26e` then stopped writing that
+display name into leftover `cp_instances.name`: creates store `''` there,
+provisioning identity carries only immutable identifiers, and customer
+tiles / ready emails / admin lists read `cp_workspace_identity`. The
+column is not dropped. Typecheck passed; focused verification 168 tests.
 
 The workspace verifies and monotonically applies the separate identity stream,
 redirects safe requests away from obsolete hosts without opening a tenant
@@ -166,34 +170,26 @@ the codebase.
 
 ## Next commits
 
-1. Finish the stale-code pass. First slice: CP `e2219f5` deleted
-   `domain-multi-fn`, `members-fn`, `org-billing-fn`, `domains/multi.ts`,
-   and their tests (2,637 lines). Second slice: CP `7230a32` deleted
-   unused customer billing/settings APIs (`settings-fn`,
-   `instance-plan-fn`, `instance-billing-fn`, `downgrade-fn`,
-   `cancel-at-period-end-fn`, `org-cancel-fn`, `org-billing-audit-fn`,
-   `resume-cascade-suspended-fn` and their tests; 2,267 lines). Setup
-   no longer shows a leftover name heading. Dashboard
-   billing/members/settings leftovers stay as redirects until
-   2026-11-14. Typecheck passed; Vitest 195 files / 2,537 tests
-   passed, 21 skipped. `org-subscription`, billing operations, and
-   the domain verify sweeper stay. Remaining inventory is below.
-2. Finish separating `cp_instances.name` from the authoritative identity
-   projection. New creates still write `Untitled workspace` into that
-   column; display name lives on `cp_workspace_identity`. Do not use
-   `cp_instances.custom_domain*` for the new path.
-3. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
+1. Finish the remaining stale-code inventory below. Name is no longer
+   identity: CP `546b26e` writes leftover `cp_instances.name` as `''`,
+   keeps `Untitled workspace` only on `cp_workspace_identity`, and
+   reads tiles/emails/admin lists from that row. Provisioning identity
+   no longer carries a display name. Typecheck passed; focused tests
+   168 passed. Do not use `cp_instances.custom_domain*` for the new
+   path. Dashboard billing/members/settings leftovers stay as
+   redirects until 2026-11-14.
+2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
-4. Fresh-browser prove the deployed identity pair on **new** generated
+3. Fresh-browser prove the deployed identity pair on **new** generated
    `ws-*.quackback.co.uk` hosts: zero-input create, OTT handoff, skippable
    details, rename transfer. Do not use existing `walk-*` rows; they have
    no identity or hostname-claim rows (13 instances, 0 identity, 0 claims).
    Do not backfill their old customer-facing names into the identity ledger.
-5. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-6. Add the shared workspace custom-domain manager on
+4. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+5. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
    readiness before enabling it.
-7. Run the remaining control-plane billing gateway and first-win journeys.
+6. Run the remaining control-plane billing gateway and first-win journeys.
    Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
@@ -226,7 +222,11 @@ cloud URL/domain controls, Stripe remains a customer integration.
   after 2026-11-14.
 - ~~`setup.$orgId.tsx` named-create copy~~ removed in `7230a32`. The
   page auto-creates and headings say "Your workspace".
-- `cp_instances.name` as customer identity; `custom_domain`,
+- ~~`cp_instances.name` as customer identity~~ writes `''` in
+  `546b26e`. Display name is `cp_workspace_identity` only. Admin
+  list coalesces identity, leftover name (walk-\* rows), then
+  system hostname. Drop the leftover column after no replica
+  SELECTs it. Still leftover: `custom_domain`,
   `custom_domain_verified`, `custom_domain_verified_at`; unread
   `r2_bucket_name`, `r2_token_id`, `oidc_client_id`. Drop after no
   replica SELECTs them.
