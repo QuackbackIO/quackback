@@ -30,7 +30,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `7bb4ed429` (deployed image remains `58eebd173`)
+- Workspace: `a796b8885` (deployed image remains `58eebd173`)
 - Control plane: `a040f78` (live deploy `7eca55b3` /
   `sha256:2b0276a2a49a38526dcbfbf1ea09c926c1d9f45524356b4d7185ca720470f1c8`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
@@ -52,6 +52,18 @@ pair (private on CP; `QUACKBACK_CP_PROJECTION_PUBLIC_KEY` on web /
 worker / crons / migrator, skip-deploys). Live `/assets/setup._orgId-*.js`
 contains “Creating your workspace” and “Opening your workspace”; the
 named-create card copy is gone.
+
+Fresh-mailbox `/setup` (2026-08-14, `walk-unita-*@guerrillamail.com`,
+org `org_01m00j54jqe8ks0r6dd1cr6c9e`) SSR is auto-create: heading
+“Creating your workspace”, copy “nothing you need to choose yet”, no
+name/URL/region/plan fields. Screenshot:
+`loop-evidence/unit-a-setup.png`. Hydration then fails: the live setup
+chunk imports `node:crypto` (`Failed to fetch dynamically imported
+module: /assets/setup._orgId-D7jp-les.js`). Error shot:
+`loop-evidence/unit-a-setup-hydrate-error.png`. A concurrent CP change
+is isolating those server modules behind `.server.ts` doors; do not
+revert it. Do not treat the interactive walk as green until that chunk
+loads.
 
 That control-plane deploy had not applied SQL `0063`–`0067`. The live control
 database still had `tenant_hostname_kind` as `subdomain`/`custom` and
@@ -209,19 +221,24 @@ the codebase.
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live `7eca55b3` (`a040f78`).
-   Named-create copy gone from the setup chunk.
-2. ~~**Unit B — auto-open when ready**~~ CP `a040f78` deployed.
-3. **Unit C — host-independent stored assets.** Persist `/api/storage/<key>`;
-   absolutize at email/widget/OG from the system host.
-4. Fresh-browser prove the deployed identity pair on **new** generated
+   Auto-create SSR screenshot `loop-evidence/unit-a-setup.png`. Setup
+   chunk still fails to hydrate (`node:crypto`).
+2. ~~**Unit B — auto-open when ready**~~ CP `a040f78` deployed. Live
+   OpeningPane cannot run until the setup chunk loads.
+3. ~~**Unit C — host-independent stored assets**~~ app `a796b8885`.
+   Not deployed (image still `58eebd173`).
+4. Finish the in-flight CP setup-chunk isolation (do not revert the
+   concurrent `.server.ts` work), redeploy CP, confirm the setup module
+   loads without `node:crypto`.
+5. Fresh-browser prove the deployed identity pair on **new** generated
    `ws-*.quackback.co.uk` hosts: zero-input create, auto-open OTT,
    skippable details, rename transfer, relative stored image src.
    Do not use existing `walk-*` rows.
-5. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-6. Add the shared workspace custom-domain manager on
+6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+7. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
    readiness before enabling it.
-7. Run the remaining control-plane billing gateway and first-win journeys.
+8. Run the remaining control-plane billing gateway and first-win journeys.
    Checkout attaches to an existing workspace only.
 
 ## Stale code to remove

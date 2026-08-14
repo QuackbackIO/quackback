@@ -140,13 +140,14 @@ Verified 2026-08-14. Re-check before acting.
 
 **Revisions**
 
-- App `saas` tip `7bb4ed429`. Last **deployed** app image is `58eebd173`
+- App `saas` tip `a796b8885`. Last **deployed** app image is `58eebd173`
   as
   `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`.
 - CP `saas` tip `a040f78`. Live Railway deploy `7eca55b3`
   (`sha256:2b0276a2a49a38526dcbfbf1ea09c926c1d9f45524356b4d7185ca720470f1c8`).
-  Setup chunk is auto-create + auto-open. Control-database migrations
-  `0063`–`0067` were already applied. Local app fixture DBs are at `0262`.
+  SSR `/setup` is auto-create; the setup chunk fails to hydrate because
+  it imports `node:crypto`. Control-database migrations `0063`–`0067`
+  were already applied. Local app fixture DBs are at `0262`.
 
 **Fleet**
 
@@ -203,15 +204,15 @@ billing path. They do not close tracks 3–7.
 **This wakeup’s unit, in order:**
 
 1. ~~**Unit A — deploy the current CP.**~~ Live `7eca55b3` (`a040f78`).
-   Named-create copy is gone from the setup chunk.
-2. ~~**Unit B — auto-open when ready.**~~ Deployed with A.
-3. **Unit C — host-independent stored assets.** `buildPublicUrl` for
-   persist returns `/api/storage/<key>` (private: `?read=`). Email /
-   widget / OG absolutize from the system host at the leaf. Accept
-   legacy absolute srcs; do not rewrite the fleet. Bucket prefix stays
-   `w/<workspaceId>/`.
-4. Database-backed rename-transfer / expiry / wrong-workspace tests
-   if they are not already on `saas` (`1add15b16`, `4a1e97b`).
+   Auto-create SSR screenshot `loop-evidence/unit-a-setup.png`.
+2. ~~**Unit B — auto-open when ready.**~~ Deployed with A; live
+   OpeningPane is blocked until the setup chunk hydrates.
+3. ~~**Unit C — host-independent stored assets.**~~ App `a796b8885`
+   (not deployed). Persist `/api/storage/<key>`; leaves absolutize
+   from the system host.
+4. Finish the in-flight CP setup-chunk isolation so the browser does
+   not import `node:crypto`. Redeploy CP. Do not revert concurrent
+   `.server.ts` work.
 5. Fresh-browser prove the **deployed** pair with **two** mailboxes the
    operator does not own, on **new** generated hosts:
    - control-plane sign-in
