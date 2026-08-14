@@ -104,8 +104,39 @@ export interface StoredCloudTrial {
   endsAt?: string | null
 }
 
+export interface StoredProjectedLimits {
+  maxBoards: number | null
+  maxPosts: number | null
+  maxTeamSeats: number | null
+  maxStatusComponents: number | null
+  maxCustomRoles: number | null
+  maxSendingDomains: number | null
+  aiTokensPerMonth: number | null
+  apiRequestsPerMonth: number | null
+  apiRequestsPerMinute: number | null
+}
+
+/** Commercial state safe to project from the control plane into a workspace. */
+export interface StoredBillingProjection {
+  version: number
+  effectivePlan: string
+  trialStartedAt: string | null
+  trialExpiresAt: string | null
+  subscriptionStatus: string | null
+  entitlements: Record<string, boolean>
+  freeLimits: StoredProjectedLimits
+  planLimits: StoredProjectedLimits
+  planLimitsExpireAt: string | null
+  canUpgrade: boolean
+  canManageBilling: boolean
+  renewalAt: string | null
+  cancellationAt: string | null
+}
+
 export interface StoredCloudConfig {
   enabled: boolean
+  /** Signed, monotonic commercial state projected by the control plane. */
+  projection?: StoredBillingProjection | null
   plan?: string | null
   entitlements?: Record<string, boolean>
   billing?: StoredCloudBilling | null

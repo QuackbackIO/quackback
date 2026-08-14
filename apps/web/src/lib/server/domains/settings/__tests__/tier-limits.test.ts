@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { OSS_TIER_LIMITS, type TierLimits } from '../tier-limits.types'
+import { mergeTierLimits } from '../tier-limits.service'
 import {
-  mergeTierLimits,
-  overlayTrialLimits,
-  resolveEffectiveTierLimits,
-} from '../tier-limits.service'
-import { resolveCloudConfig } from '../cloud/cloud.service'
+  overlayProjectedLimits,
+  parseBillingProjection,
+  projectedLimitsAt,
+  type BillingProjection,
+  type ProjectedLimits,
+} from '../cloud/billing-projection'
 
 describe('OSS_TIER_LIMITS', () => {
   it('has all numeric limits set to null (unlimited)', () => {
@@ -94,7 +96,35 @@ describe('plan notice passthrough', () => {
   })
 })
 
-describe('Pro trial numeric limits', () => {
+const PROJECTED_LIMITS: ProjectedLimits = {
+  maxBoards: 25,
+  maxPosts: 1_000,
+  maxTeamSeats: 10,
+  maxStatusComponents: 25,
+  maxCustomRoles: 5,
+  maxSendingDomains: 3,
+  aiTokensPerMonth: 100_000,
+  apiRequestsPerMonth: 100_000,
+  apiRequestsPerMinute: 600,
+}
+
+const PROJECTION: BillingProjection = {
+  version: 1,
+  effectivePlan: 'pro',
+  trialStartedAt: '2026-08-01T00:00:00.000Z',
+  trialExpiresAt: '2026-08-15T00:00:00.000Z',
+  subscriptionStatus: null,
+  entitlements: { customDomain: true },
+  freeLimits: { ...PROJECTED_LIMITS, maxBoards: 2 },
+  planLimits: PROJECTED_LIMITS,
+  planLimitsExpireAt: '2026-08-15T00:00:00.000Z',
+  canUpgrade: true,
+  canManageBilling: false,
+  renewalAt: null,
+  cancellationAt: null,
+}
+
+describe('projected numeric limits', () => {
   it('raises Free limits while preserving higher operator allowances', () => {
     const baseline = mergeTierLimits({
       maxBoards: 2,
@@ -103,7 +133,11 @@ describe('Pro trial numeric limits', () => {
       notice: { label: 'Operator notice' },
     })
 
-    const effective = overlayTrialLimits(baseline, { maxBoards: 25, maxPosts: 100 })
+    const effective = overlayProjectedLimits(baseline, {
+      ...PROJECTED_LIMITS,
+      maxBoards: 25,
+      maxPosts: 100,
+    })
 
     expect(effective.maxBoards).toBe(25)
     expect(effective.maxPosts).toBe(500)
@@ -113,7 +147,11 @@ describe('Pro trial numeric limits', () => {
 
   it('preserves unlimited baselines and grants unlimited Pro fields', () => {
     const baseline = mergeTierLimits({ maxBoards: null, maxPosts: 10 })
-    const effective = overlayTrialLimits(baseline, { maxBoards: 25 })
+    const effective = overlayProjectedLimits(baseline, {
+      ...PROJECTED_LIMITS,
+      maxBoards: 25,
+      maxPosts: null,
+    })
 
     expect(effective.maxBoards).toBeNull()
     expect(effective.maxPosts).toBeNull()
@@ -121,29 +159,30 @@ describe('Pro trial numeric limits', () => {
 
   it('falls back to the cached Free baseline at the exact expiry instant', () => {
     const baseline = mergeTierLimits({ maxBoards: 2 })
-    const stored = {
-      enabled: true,
-      plan: 'free',
-      trial: {
-        plan: 'pro',
-        startedAt: '2026-08-01T00:00:00.000Z',
-        endsAt: '2026-08-15T00:00:00.000Z',
-      },
-    }
-    const beforeExpiry = resolveCloudConfig(stored, new Date('2026-08-14T23:59:59.999Z'))
-    const atExpiry = resolveCloudConfig(stored, new Date('2026-08-15T00:00:00.000Z'))
-
-    expect(resolveEffectiveTierLimits(baseline, beforeExpiry, { maxBoards: 25 }).maxBoards).toBe(25)
-    expect(resolveEffectiveTierLimits(baseline, atExpiry, { maxBoards: 25 })).toBe(baseline)
+    expect(
+      projectedLimitsAt(PROJECTION, baseline, new Date('2026-08-14T23:59:59.999Z')).maxBoards
+    ).toBe(25)
+    expect(
+      projectedLimitsAt(PROJECTION, baseline, new Date('2026-08-15T00:00:00.000Z')).maxBoards
+    ).toBe(2)
   })
 
-  it('rejects an active Pro trial when its catalogue limits are missing', () => {
-    expect(() =>
-      resolveEffectiveTierLimits(
-        mergeTierLimits({ maxBoards: 2 }),
-        { enabled: true, trialActive: true },
-        undefined
-      )
-    ).toThrow('BILLING_PRICES.pro.limits')
+  it('rejects unknown fields, provider references, and incomplete limits', () => {
+    expect(parseBillingProjection(PROJECTION)).toEqual(PROJECTION)
+    expect(parseBillingProjection({ ...PROJECTION, customerRef: 'cus_secret' })).toBeNull()
+    expect(
+      parseBillingProjection({
+        ...PROJECTION,
+        planLimits: { ...PROJECTION.planLimits, maxBoards: undefined },
+      })
+    ).toBeNull()
+  })
+
+  it('rejects unrecognised plans, entitlements, and non-canonical dates', () => {
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })).toBeNull()
+    expect(
+      parseBillingProjection({ ...PROJECTION, entitlements: { secretFeature: true } })
+    ).toBeNull()
+    expect(parseBillingProjection({ ...PROJECTION, trialExpiresAt: 'August 15' })).toBeNull()
   })
 })

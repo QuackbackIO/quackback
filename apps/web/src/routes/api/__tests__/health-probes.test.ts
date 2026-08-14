@@ -59,8 +59,7 @@ describe('GET /api/health/ready', () => {
     // The probe reports exactly the dependencies it checks. Pinned as a set so
     // a check that stops being evaluated cannot keep a stale key in the body,
     // and so a re-added dependency has to be asserted rather than appear.
-    expect(Object.keys(body.checks).sort()).toEqual(['billing', 'db', 'migrations', 'workers'])
-    expect(body.checks.billing).toEqual({ ok: true })
+    expect(Object.keys(body.checks).sort()).toEqual(['db', 'migrations', 'workers'])
     expect(body.checks.workers).toEqual({
       ok: true,
       expected: true,

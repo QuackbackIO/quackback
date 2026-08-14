@@ -177,22 +177,6 @@ export function isBillingConfigured(): boolean {
   return getBillingConfig() !== null
 }
 
-/**
- * Readiness contract for a deployment that has opted into cloud billing.
- * Self-hosted installs set none of these variables and remain a no-op.
- */
-export function assertBillingConfiguration(): void {
-  const optedIn = Boolean(
-    process.env.BILLING_API_KEY || process.env.BILLING_WEBHOOK_SECRET || process.env.BILLING_PRICES
-  )
-  if (!optedIn) return
-  const config = getBillingConfig()
-  if (!config) throw new Error('Cloud billing configuration is incomplete or invalid')
-  if (!config.catalogue.pro?.limits) {
-    throw new Error('Cloud billing requires BILLING_PRICES.pro.limits for Pro trials')
-  }
-}
-
 function resolveBillingConfig(): BillingConfig | null {
   const apiKey = process.env.BILLING_API_KEY || undefined
   const webhookSecret = process.env.BILLING_WEBHOOK_SECRET || undefined

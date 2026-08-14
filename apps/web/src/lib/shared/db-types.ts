@@ -82,6 +82,8 @@ export type {
   StoredCloudConfig,
   StoredCloudBilling,
   StoredCloudTrial,
+  StoredBillingProjection,
+  StoredProjectedLimits,
 } from '@quackback/db/schema'
 
 // Runtime exports used in client components.
