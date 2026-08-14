@@ -33,15 +33,14 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `aebf31496` (docs). Product live is `804853ae2` + Ready
-  `1a39cd7d7` + catalogue `6418785c8` as
-  `ghcr.io/quackbackio/quackback@sha256:02cb4329e18f5dc867b18c1c53b59ddf66e16e09e4a7435f962e3e6d062e2d89`
-  (Docker `31848148683`). Web `d7fbdd0c` SUCCESS, region only
-  `us-east4-eqdc4a` (first land on `sfo` was re-pinned).
-- Control plane tip `4da4607` live as `e0af5dc1` (8b sibling list/open;
-  still `sfo`).
-- Last known deployed workspace: `aebf31496` / `sha256:02cb4329…` (2026-08-14)
-- Last known deployed control plane: `e0af5dc1` (2026-08-14)
+- Workspace tip: `717560270` (Change to {plan} target price). Live
+  `ghcr.io/quackbackio/quackback@sha256:1bf7ba8cdc68d0b0c602d3c74d1f43fbf1ddd8c602e404f904c77caf38a54ff7`
+  (Docker `31849377285`, includes `635cdb149`). Web `52c6afaa` SUCCESS,
+  region only `us-east4-eqdc4a`.
+- Control plane tip `b7948ee` live as `0e8d89a4` (plan-switch portal
+  confirm; still `sfo`).
+- Last known deployed workspace: `717560270` / `sha256:1bf7ba8c…` (2026-08-14)
+- Last known deployed control plane: `0e8d89a4` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -133,7 +132,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Limits overlay                 | app         | `31330d85b` / `b0c13a366`                                                         | **yes** `cb186135`            | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                                                                                   |
 | CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                                                    | token on CP, skip-deploy      | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.                                                                    |
 | Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                                                     | **yes** API; UI in `02cb4329` | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                                                                                   |
-| Paid plan switch               | CP + app    | this unit                                                                         | no                            | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades (`decreasing_item_amount` / `shortening_interval`) wait until period end. Yearly prices map back to the plan.                                                     |
+| Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c`                           | **yes**                       | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                                                                                        |
 | Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep.md`                                        | FAIL 1 HIGH                   | After limits+billing deploy, re-run the whole sweep. Fixer only for HIGH.                                                                                                                                                                                                                                    |
 | Track 8b–8f                    | CP+app saas | 8b CP `4da4607` live `e0af5dc1`; app `804853ae2` in `02cb4329`; 8c–8f not started | **8b yes**                    | Switcher: list 401/200 empty; Open 401/400/403 `not_owner`; live chrome has Switch workspace. Then 8c transfer/leave.                                                                                                                                                                                        |
 | Plan-matrix critic             | live + spec | `LOOP-VERIFY.md` §H                                                               | no                            | Every wired limit + entitlement × Free / Growth / Pro / Scale / trial / expired / canceled / self-host. **UI and server-fn** both refuse. Catalogue vs `definitions.ts` vs `PLAN_GRANTS` vs `PLAN_CATALOGUE` must agree. Fixtures: t1a Growth, t1e trial. No Neon. Do not treat sweep C 15–16 as this cycle. |
@@ -761,6 +760,24 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-14, orchestrator)
 
+Fleet: `635cdb149` already live in the prior image and in this one.
+Pickup had undeployed **paid plan switch** (customer-visible):
+
+- CP `railway up` `b7948ee` → `0e8d89a4` SUCCESS.
+- Docker `31849377285` `--ref saas` `717560270` → `sha256:1bf7ba8c…`.
+  `source.image` + region pin + `serviceInstanceDeployV2`: web
+  `52c6afaa` `us-east4-eqdc4a`.
+- Live: t1a Change-to-Pro form **303** `billing.stripe.com`
+  `/p/session/test_`; foreign Origin 403. CP no-auth 401; t1a checkout
+  pro → portal (not Checkout); t1e growth → `cs_test_`. Instances
+  **17→17**. No payment completed this fire. Stripe-live first-pay
+  already on t1a. CP-create already live; no second builder. No Neon.
+  No live key. Custom domains not started.
+
+Previous fire (8b/Ready/catalogue `02cb4329`) is historical.
+
+## Previous fire (2026-08-14, 8b deploy)
+
 Fleet: `635cdb149` already in the prior image. Same-fire deploy of
 undeployed customer-visible tips:
 
@@ -985,11 +1002,11 @@ HIGH (cloud unlimited overlay). Re-sweep
 
 ## Blockers
 
-Stripe **test** payment + webhook finalize is live on t1a. Remaining:
-8c–8f; browser catalogue-card walk; Verify + plan-matrix §H; Domains
-card. Walk3 webhook stays disabled. Live app `d7fbdd0c` /
-`sha256:02cb4329…` `us-east4-eqdc4a`. Live CP `e0af5dc1` (`4da4607`).
-Instance rows 17 (new provisioning `inst_01m017h6…` left standing).
+Stripe **test** payment + webhook finalize is live on t1a. Paid Change
+to Pro is live as a confirm portal session. Remaining: 8c–8f; Verify +
+plan-matrix §H; Domains card. Walk3 webhook stays disabled. Live app
+`52c6afaa` / `sha256:1bf7ba8c…` `us-east4-eqdc4a`. Live CP `0e8d89a4`
+(`b7948ee`). Instance rows 17.
 
 Operational defects carried from the prior lead:
 
