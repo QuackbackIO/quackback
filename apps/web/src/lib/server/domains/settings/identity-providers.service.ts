@@ -20,6 +20,7 @@ import {
   identityProvider,
   ssoVerifiedDomain,
   type IdentityProviderAttributeMapping,
+  type IdentityProviderProfileMapping,
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
@@ -75,6 +76,8 @@ export interface IdentityProvider {
   autoCreateUsers: boolean
   autoProvisionRole: 'admin' | 'member' | 'user' | null
   attributeMapping: IdentityProviderAttributeMapping | null
+  /** Custom profile-claim resolution; null = Better-Auth default user info. */
+  profileMapping: IdentityProviderProfileMapping | null
   showButton: boolean
   /** ISO-8601 UTC; null until a redirect-affecting detail changes. */
   detailsChangedAt: string | null
@@ -111,6 +114,7 @@ export interface UpsertIdentityProviderInput {
   autoCreateUsers?: boolean
   autoProvisionRole?: 'admin' | 'member' | 'user' | null
   attributeMapping?: IdentityProviderAttributeMapping | null
+  profileMapping?: IdentityProviderProfileMapping | null
   showButton?: boolean
 }
 
@@ -175,6 +179,7 @@ function rowToIdentityProvider(
     autoCreateUsers: row.autoCreateUsers,
     autoProvisionRole: row.autoProvisionRole,
     attributeMapping: row.attributeMapping ?? null,
+    profileMapping: row.profileMapping ?? null,
     showButton: row.showButton,
     detailsChangedAt: row.detailsChangedAt ? row.detailsChangedAt.toISOString() : null,
     lastSuccessfulTestAt: row.lastSuccessfulTestAt ? row.lastSuccessfulTestAt.toISOString() : null,
@@ -368,6 +373,7 @@ export async function upsertIdentityProvider(
         if (input.autoCreateUsers !== undefined) patch.autoCreateUsers = input.autoCreateUsers
         if (input.autoProvisionRole !== undefined) patch.autoProvisionRole = input.autoProvisionRole
         if (input.attributeMapping !== undefined) patch.attributeMapping = input.attributeMapping
+        if (input.profileMapping !== undefined) patch.profileMapping = input.profileMapping
         if (input.showButton !== undefined) patch.showButton = input.showButton
 
         // Restamp the freshness baseline when a connection-affecting field
@@ -413,6 +419,7 @@ export async function upsertIdentityProvider(
             autoCreateUsers: input.autoCreateUsers ?? true,
             autoProvisionRole: input.autoProvisionRole ?? null,
             attributeMapping: input.attributeMapping ?? null,
+            profileMapping: input.profileMapping ?? null,
             showButton: input.showButton ?? false,
           })
           .returning()
