@@ -140,14 +140,13 @@ Verified 2026-08-14. Re-check before acting.
 
 **Revisions**
 
-- App `saas` tip `405c729e8`. Last **deployed** app image is `58eebd173`
+- App `saas` tip `7bb4ed429`. Last **deployed** app image is `58eebd173`
   as
   `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`.
-- CP `saas` tip `4a1e97b`. Live Railway build is still `14dee7a2` /
-  `b4afe73` — that is why `cp.quackback.co.uk` still shows the named-
-  create card. Control-database migrations `0063`–`0067` were applied
-  after that deploy. Local app fixture DBs (`quackback`,
-  `quackback_test`) are at `0262`.
+- CP `saas` tip `a040f78`. Live Railway deploy `7eca55b3`
+  (`sha256:2b0276a2a49a38526dcbfbf1ea09c926c1d9f45524356b4d7185ca720470f1c8`).
+  Setup chunk is auto-create + auto-open. Control-database migrations
+  `0063`–`0067` were already applied. Local app fixture DBs are at `0262`.
 
 **Fleet**
 
@@ -203,17 +202,9 @@ billing path. They do not close tracks 3–7.
 
 **This wakeup’s unit, in order:**
 
-1. **Unit A — deploy the current CP.** Live `cp.quackback.co.uk` still
-   serves the named-create card from `14dee7a2`. Deploy `saas` CP,
-   confirm digest ≠ `14dee7a2`, and record a live `/setup` screenshot
-   of auto-create. Parked 6b leftovers (replica SELECTs, 2026-11-14
-   redirects, `plan-fanout`, `BILLING_*`, walk3 webhook) wait; do not
-   let them delay this deploy.
-2. **Unit B — auto-open when ready.** First-workspace (and a subsequent
-   Create) auto-POSTs `/api/instances/:id/open` when
-   `bootstrapStatus === 'succeeded'`. The setup loader must not bounce
-   a pinned ready `?inst=` to `/dashboard`. Failed / timed-out stays
-   on CP. One POST per ready transition (mint limiter still applies).
+1. ~~**Unit A — deploy the current CP.**~~ Live `7eca55b3` (`a040f78`).
+   Named-create copy is gone from the setup chunk.
+2. ~~**Unit B — auto-open when ready.**~~ Deployed with A.
 3. **Unit C — host-independent stored assets.** `buildPublicUrl` for
    persist returns `/api/storage/<key>` (private: `?read=`). Email /
    widget / OG absolutize from the system host at the leaf. Accept

@@ -30,10 +30,11 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `1add15b16` (deployed image remains `58eebd173`)
-- Control plane: `4a1e97b` (live deploy remains `14dee7a2` / `b4afe73`)
+- Workspace: `7bb4ed429` (deployed image remains `58eebd173`)
+- Control plane: `a040f78` (live deploy `7eca55b3` /
+  `sha256:2b0276a2a49a38526dcbfbf1ea09c926c1d9f45524356b4d7185ca720470f1c8`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
-- Last known deployed control plane: `14dee7a2` (2026-08-14)
+- Last known deployed control plane: `7eca55b3` / `a040f78` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -44,8 +45,13 @@ was published from Docker workflow `31809268242` at commit `58eebd173`.
 Verified `meta.imageDigest` matches on web `4394da8d`, worker `b5646929`,
 cron-hourly `45979b99`, cron-daily `6bb7b221`, and migrator `e3709ae4`.
 Web remains in `us-east4-eqdc4a`. Cron-daily was moved off `sfo` onto
-`us-east4-eqdc4a`. Control plane `14dee7a2` remains the live `sfo` build of
-`b4afe73`.
+`us-east4-eqdc4a`. Control plane live is `7eca55b3` (`a040f78`, still
+`sfo`). First `railway up` of that commit 500'd because
+`BILLING_PROJECTION_PRIVATE_KEY` was unset. Generated the first Ed25519
+pair (private on CP; `QUACKBACK_CP_PROJECTION_PUBLIC_KEY` on web /
+worker / crons / migrator, skip-deploys). Live `/assets/setup._orgId-*.js`
+contains “Creating your workspace” and “Opening your workspace”; the
+named-create card copy is gone.
 
 That control-plane deploy had not applied SQL `0063`–`0067`. The live control
 database still had `tenant_hostname_kind` as `subdomain`/`custom` and
@@ -202,12 +208,9 @@ the codebase.
 
 ## Next commits
 
-1. **Unit A — deploy the current CP** so live `cp.quackback.co.uk` stops
-   serving the named-create card (`14dee7a2`). Confirm digest, record a
-   live `/setup` screenshot. Parked 6b leftovers wait.
-2. **Unit B — auto-open when ready.** Setup auto-POSTs
-   `/api/instances/:id/open`; do not bounce a ready `?inst=` to
-   `/dashboard`.
+1. ~~**Unit A — deploy the current CP**~~ live `7eca55b3` (`a040f78`).
+   Named-create copy gone from the setup chunk.
+2. ~~**Unit B — auto-open when ready**~~ CP `a040f78` deployed.
 3. **Unit C — host-independent stored assets.** Persist `/api/storage/<key>`;
    absolutize at email/widget/OG from the system host.
 4. Fresh-browser prove the deployed identity pair on **new** generated
