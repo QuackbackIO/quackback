@@ -30,12 +30,13 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `f0f8cf02a` (live image still `98212c18c` /
-  `sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`)
-- Control plane: `ea1d44d` (live still `07d5737e` /
-  `sha256:ffdd51a26023233f03c99ded29153317622beeee342b012de3fd75367e3dfe1c`)
-- Last known deployed workspace: `98212c18c` (2026-08-14)
-- Last known deployed control plane: `07d5737e` (2026-08-14; `6b42ef3`)
+- Workspace: `6f255842f` (live image `f0f8cf02a` /
+  `sha256:bcbe3ee6b6c0e4556ca62a136d3909dcd11865aef5f3e23cb8df8bd92abc09cc`)
+- Control plane: `71e59d9` (live `a41789e9` /
+  `sha256:e61cef2096fd892b7…` from local `railway up` of `ea1d44d`;
+  `e28c7b8e` is building `71e59d9`)
+- Last known deployed workspace: `f0f8cf02a` (2026-08-14)
+- Last known deployed control plane: `a41789e9` (2026-08-14; vendor through 0262)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -251,22 +252,24 @@ Proved on live `07d5737e` / `98212c18c`:
 - First identity outbox attempt 401’d (`invalid_projection`); retry delivered. `settings.cloud_identity` is now present.
 - Live `/admin` on `98212c18c` does **not** consume `?ott=` in the loader. A healthy settings load `requireWorkspaceRole`s first and 307s to `/?auth=signin&callbackUrl=/admin`, dropping the token. Client `OttHandler` never runs. First-open error page (`loop-evidence/t1e/05-landed.png`) only kept `?ott=` because settings 500’d before the auth redirect.
 
-Fixes on `saas` not yet live:
+Live after this fire:
 
-- CP `f1f23a1` Free catalogue row (first create insert failed until that row existed). `free` is now in live `cp_plans`.
-- CP `ea1d44d` vendor schema through `0262`.
-- App `9de604830` consume Open OTT in `/admin` before auth.
-- App `f0f8cf02a` move that consume into `consumeAdminOpenHandoffFn` so Docker import-protection does not see `@tanstack/react-start/server` from `admin.tsx`. Docker `31823672161` (`9de604830`) failed import-protection. Rebuild `31823947317` is `f0f8cf02a`.
+- App image `sha256:bcbe3ee6…` (`f0f8cf02a`) is on web `f6986fef`, worker `f6007a2d`, hourly `266feb2a`, daily `6006f067`, migrator `550fe77c`. All `us-east4-eqdc4a`. Ready 200.
+- That image consumes `?ott=` via `consumeAdminOpenHandoffFn`. A live resume still 307'd to `/?error=handoff_failed` — the RPC from `/admin` beforeLoad does not see the workspace Host, so verify misses the minted row.
+- App `6f255842f` (not deployed) drops that consume from `/admin` and adds `/auth/open-handoff`. Docker `31824767863` is building it.
+- CP SQL `0068` applied (`free` + `growth` in `cp_plans`). Without it, create inserted `plan_id=free` and the FK failed.
+- CP `a41789e9` vendored workspace schema through `0262`. New Neon DBs from the previous vendor stopped at 0260; `inst_01m00kq6…` was fleet-migrated 236→238 after the fact.
+- CP `71e59d9` (deploy `e28c7b8e` in flight) mints `/auth/open-handoff?ott=&returnTo=/onboarding/workspace`.
 
-Do **not** start custom domains or the billing live bar. Reuse the two `ws-*` rows after the new image is on web (`us-east4-eqdc4a`). Do not mint more Neon projects for this walk.
+Do **not** start custom domains or the billing live bar. Reuse the two `ws-*` rows after `6f255842f` is on web (`us-east4-eqdc4a`) and `71e59d9` is the live CP. Do not mint more Neon projects for this walk.
 
 ## Next commits
 
-1. ~~**Unit A — deploy the current CP**~~ live `07d5737e` (`6b42ef3`). Setup chunk hydrates.
+1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `a41789e9` (vendor 0262).
 2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
-3. ~~**Unit C — host-independent stored assets**~~ live `98212c18c`.
-4. Deploy `f0f8cf02a` (or later) to web/worker/crons/migrator. Verify `meta.imageDigest` and `us-east4-eqdc4a`.
-5. Re-walk the two existing `ws-*` hosts: consume OTT → skippable details → outcome → rename / old-host redirect / `/api/storage/…` src → replay/expiry/wrong-workspace fail closed.
+3. ~~**Unit C — host-independent stored assets**~~ live through `f0f8cf02a` (`sha256:bcbe3ee6…`).
+4. Deploy app `6f255842f` + confirm CP `71e59d9` (`e28c7b8e`). Verify `meta.imageDigest` and `us-east4-eqdc4a`.
+5. Re-walk the two existing `ws-*` hosts: consume OTT on `/auth/open-handoff` → skippable details → outcome → rename / old-host redirect / `/api/storage/…` src → replay/expiry/wrong-workspace fail closed.
 6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
 7. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
