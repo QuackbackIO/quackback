@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { OSS_TIER_LIMITS, type TierLimits } from '../tier-limits.types'
-import { mergeTierLimits } from '../tier-limits.service'
+import { mergeTierLimits, resolveEffectiveTierLimits } from '../tier-limits.service'
 import {
   overlayProjectedLimits,
   parseBillingProjection,
@@ -184,5 +184,41 @@ describe('projected numeric limits', () => {
       parseBillingProjection({ ...PROJECTION, entitlements: { secretFeature: true } })
     ).toBeNull()
     expect(parseBillingProjection({ ...PROJECTION, trialExpiresAt: 'August 15' })).toBeNull()
+  })
+})
+
+describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
+  const beforeExpiry = new Date('2026-08-14T12:00:00.000Z')
+  const atExpiry = new Date('2026-08-15T00:00:00.000Z')
+
+  it('self-host with no row stays unlimited', () => {
+    expect(resolveEffectiveTierLimits(null, null)).toEqual(OSS_TIER_LIMITS)
+  })
+
+  it('does not inherit OSS unlimited once a billing projection is present', () => {
+    const effective = resolveEffectiveTierLimits(null, PROJECTION, beforeExpiry)
+    expect(effective.maxBoards).toBe(25)
+    expect(effective.maxPosts).toBe(PROJECTED_LIMITS.maxPosts)
+    expect(effective.features.customDomain).toBe(true)
+    expect(effective.features.webhooks).toBe(false)
+    expect(effective.features.ipAllowlist).toBe(false)
+  })
+
+  it('falls back to projected Free numbers and closed features at exact expiry', () => {
+    const effective = resolveEffectiveTierLimits(null, PROJECTION, atExpiry)
+    expect(effective.maxBoards).toBe(2)
+    expect(effective.features.customDomain).toBe(false)
+    expect(effective.features.webhooks).toBe(false)
+  })
+
+  it('still raises a stored operator floor in the least-restrictive direction', () => {
+    const effective = resolveEffectiveTierLimits(
+      { maxBoards: 2, maxPosts: 500, features: { customDomain: false } },
+      PROJECTION,
+      beforeExpiry
+    )
+    expect(effective.maxBoards).toBe(25)
+    expect(effective.maxPosts).toBe(PROJECTED_LIMITS.maxPosts)
+    expect(effective.features.customDomain).toBe(false)
   })
 })
