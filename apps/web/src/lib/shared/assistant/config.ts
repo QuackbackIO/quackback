@@ -123,16 +123,34 @@ export const assistantCopilotCapabilitiesSchema = z.object({
   qa: z.boolean(),
 })
 
+/**
+ * Per-tool permission rule (Cursor-style / AG-UI approval model):
+ * - `allow` — run without asking (after RBAC)
+ * - `ask` — pause for a human decision (AG-UI approval on Copilot; persisted
+ *   pending-action proposal on customer Agent turns)
+ * - `deny` — omit the tool from the catalogue for this agent
+ *
+ * Saved under each agent so teammates can "Always allow / Always deny" from an
+ * approval prompt. Empty map ⇒ role defaults (Agent write=allow, Copilot write=ask).
+ */
+export const ASSISTANT_TOOL_RULES = ['allow', 'ask', 'deny'] as const
+export const assistantToolRuleSchema = z.enum(ASSISTANT_TOOL_RULES)
+export type AssistantToolRule = z.infer<typeof assistantToolRuleSchema>
+export const assistantToolRulesSchema = z.record(z.string().min(1), assistantToolRuleSchema)
+
 /** Agent (customer-facing) sub-config: owns voice (D11) and its knowledge map. */
 export const assistantAgentConfigSchema = z.object({
   voice: assistantVoiceSchema,
   knowledge: assistantAgentKnowledgeSchema,
+  /** Optional; missing/empty uses role defaults. */
+  toolRules: assistantToolRulesSchema.default({}),
 })
 
 /** Copilot (teammate-facing) sub-config: capabilities + a wider knowledge map, no voice (D11). */
 export const assistantCopilotConfigSchema = z.object({
   capabilities: assistantCopilotCapabilitiesSchema,
   knowledge: assistantCopilotKnowledgeSchema,
+  toolRules: assistantToolRulesSchema.default({}),
 })
 
 // The z.infer of this schema (`AssistantConfig`) has a hand-written structural
@@ -156,6 +174,7 @@ export type AssistantCopilotCapabilities = z.infer<typeof assistantCopilotCapabi
 export type AssistantAgentConfig = z.infer<typeof assistantAgentConfigSchema>
 export type AssistantCopilotConfig = z.infer<typeof assistantCopilotConfigSchema>
 export type AssistantConfig = z.infer<typeof assistantConfigSchema>
+export type AssistantToolRules = z.infer<typeof assistantToolRulesSchema>
 
 export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
   version: ASSISTANT_CONFIG_VERSION,
@@ -177,6 +196,7 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
         documents: true,
         status: false,
       },
+      toolRules: {},
     },
     copilot: {
       capabilities: {
@@ -192,8 +212,25 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
         documents: true,
         status: true,
       },
+      toolRules: {},
     },
   },
+}
+
+/**
+ * Resolve the effective permission rule for one tool on one agent.
+ * Read/control tools are always `allow` (protocol primitives / observers).
+ */
+export function resolveAssistantToolRule(
+  toolRules: AssistantToolRules | undefined,
+  toolName: string,
+  risk: 'read' | 'write' | 'control',
+  agent: AssistantAgentKind
+): AssistantToolRule {
+  if (risk === 'read' || risk === 'control') return 'allow'
+  const saved = toolRules?.[toolName]
+  if (saved === 'allow' || saved === 'ask' || saved === 'deny') return saved
+  return agent === 'copilot' ? 'ask' : 'allow'
 }
 
 export interface AssistantPresetDefinition<Value extends string> {
@@ -343,10 +380,12 @@ const assistantConfigInputSchema = z.object({
         additionalInstructions: z.string(),
       }),
       knowledge: assistantAgentKnowledgeSchema,
+      toolRules: assistantToolRulesSchema.optional(),
     }),
     copilot: z.object({
       capabilities: assistantCopilotCapabilitiesSchema,
       knowledge: assistantCopilotKnowledgeSchema,
+      toolRules: assistantToolRulesSchema.optional(),
     }),
   }),
 })
@@ -371,6 +410,11 @@ export function normalizeAssistantConfig(input: unknown): AssistantConfig {
             parsed.agents.agent.voice.additionalInstructions
           ),
         },
+        toolRules: parsed.agents.agent.toolRules ?? {},
+      },
+      copilot: {
+        ...parsed.agents.copilot,
+        toolRules: parsed.agents.copilot.toolRules ?? {},
       },
     },
   })

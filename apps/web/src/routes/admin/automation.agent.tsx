@@ -19,6 +19,7 @@ import { AssistantVoiceCard } from '@/components/admin/automation/assistant-basi
 import { AgentKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
 import { BuiltInActionsCard } from '@/components/admin/automation/builtin-actions-card'
+import { ConnectorsCard } from '@/components/admin/automation/connectors-card'
 import { CustomActionsCard } from '@/components/admin/automation/custom-actions-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -260,6 +261,7 @@ function AssistantAgentSettings() {
                 className="space-y-6 data-[state=inactive]:hidden"
               >
                 <BuiltInActionsCard agent="agent" />
+                <ConnectorsCard agent="agent" />
                 {flags?.assistantCustomActions && <CustomActionsCard agent="agent" />}
               </TabsContent>
 

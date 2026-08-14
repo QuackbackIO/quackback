@@ -6,6 +6,8 @@ import { ImportCsv } from './import-csv'
 import { ImportHistoryList } from './import-history-list'
 import { ExportWorkspaceAction } from './export-workspace-action'
 import { ExportHistoryList } from './export-history-list'
+import { MIGRATION_PACKS } from '@/lib/shared/migration-packs'
+import { Badge } from '@/components/ui/badge'
 
 export function ImportsHubPage() {
   return (
@@ -18,6 +20,34 @@ export function ImportsHubPage() {
         title="Imports & exports"
         description="Move feedback data in from a CSV or another tool, and out as a full workspace export."
       />
+
+      <SettingsCard
+        title="Migration packs"
+        description="Start from a guided pack for the kind of product you are leaving. Each pack points at the CSV shape Quackback accepts today."
+      >
+        <div className="divide-y divide-border/60">
+          {MIGRATION_PACKS.map((pack) => (
+            <div
+              key={pack.id}
+              className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-medium">{pack.title}</h3>
+                  <Badge size="sm" variant="secondary" shape="pill">
+                    CSV
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{pack.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Use the import below with the matching template. CLI users can also run{' '}
+          <code className="text-[11px]">bun run scripts/import</code> against an intermediate CSV.
+        </p>
+      </SettingsCard>
 
       <SettingsCard
         title="Imports"

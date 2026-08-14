@@ -272,7 +272,11 @@ function MatrixRow({
               />
             </span>
           </TooltipTrigger>
-          <TooltipContent>Available with web push</TooltipContent>
+          <TooltipContent>
+            {surface === 'admin'
+              ? 'Teammate push via mobile app devices and browser web push when VAPID is configured'
+              : 'Available with web push'}
+          </TooltipContent>
         </Tooltip>
       </div>
     </div>

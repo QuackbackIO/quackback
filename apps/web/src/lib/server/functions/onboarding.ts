@@ -30,7 +30,8 @@ import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
-import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
+import { featureFlagsForOnboardingOutcome } from '@/lib/shared/onboarding-product-flags'
+import { DEFAULT_FEATURE_FLAGS } from '@/lib/server/domains/settings/settings.types'
 
 const log = logger.child({ component: 'onboarding' })
 
@@ -256,6 +257,10 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(initialState),
+            featureFlags: JSON.stringify({
+              ...DEFAULT_FEATURE_FLAGS,
+              ...featureFlagsForOnboardingOutcome(data.useCase),
+            }),
           })
           .returning()
         await invalidateSettingsCache()
@@ -277,10 +282,16 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
           if (useCaseManaged && data.useCase !== current.useCase) {
             throw new Error('Workspace goal is managed by your workspace admin')
           }
+          const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
           const updatePayload: Record<string, unknown> = {
             portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig:
               row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
+            // Re-narrow products when the operator picks (or changes) a goal.
+            featureFlags: JSON.stringify({
+              ...DEFAULT_FEATURE_FLAGS,
+              ...featureFlagsForOnboardingOutcome(goal),
+            }),
           }
           if (!nameManaged) updatePayload.name = workspaceName
           if (!slugManaged) updatePayload.slug = slug
@@ -289,7 +300,6 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             .set(updatePayload)
             .where(eq(settings.id, row.id))
             .returning()
-          const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
           return {
             state: {
               ...current,
@@ -341,13 +351,22 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
     })
     if (!caller || !isAdmin(caller.role)) throw new Error('Only admin can change setup')
 
-    const { state } = await mutateSetupStateAtomic((current, row) => {
+    const { state } = await mutateSetupStateAtomic(async (current, row, tx) => {
       if (!parseIdentityProjection(row.cloudIdentity)) {
         throw new Error('Cloud workspace identity is not enabled')
       }
       if (!current.workspaceDetailsSeenAt) {
         throw new Error('Complete or skip workspace details first')
       }
+      await tx
+        .update(settings)
+        .set({
+          featureFlags: JSON.stringify({
+            ...DEFAULT_FEATURE_FLAGS,
+            ...featureFlagsForOnboardingOutcome(data.useCase),
+          }),
+        })
+        .where(eq(settings.id, row.id))
       return {
         state: {
           ...current,

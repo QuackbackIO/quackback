@@ -7,12 +7,12 @@
 <h1 align="center">Quackback</h1>
 
 <p align="center">
-  <strong>Open source feedback for teams that ship.</strong>
+  <strong>Open source support and product feedback for teams that ship.</strong>
 </p>
 
 <p align="center">
-  The open-source alternative to Canny, UserVoice, and Productboard.<br />
-  Collect feedback. Prioritize what matters. Close the loop.
+  The open-source alternative to closed feedback and support suites.<br />
+  Collect feedback. Answer customers. Prioritize what matters. Close the loop — on infrastructure you own.
 </p>
 
 <p align="center">
@@ -40,22 +40,23 @@
 
 ## Why Quackback?
 
-Most feedback tools are expensive, closed-source, and lock you in. Quackback gives you a modern feedback system you actually own.
+Most support-and-feedback suites are expensive, closed-source, and lock you in. Quackback is the suite you actually own: feedback, shared inbox, help center, changelog, status, and AI — self-hosted or cloud.
 
 - **Self-host for free.** Run on your own infrastructure. No per-seat pricing.
-- **Own your data.** Your feedback lives in your own database. No vendor lock-in.
-- **AI-powered.** Automatic duplicate detection, AI summaries, feedback extraction from external sources, and an [MCP server](https://quackback.io/docs/mcp) that lets AI agents search, triage, and act on feedback directly.
-- **25 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and [more](#integrations) out of the box.
+- **Own your data.** Feedback, conversations, and knowledge live in your database. No vendor lock-in.
+- **AI-powered Quinn.** Duplicate detection, theme summaries, an agent that answers from your knowledge, a teammate Copilot, permissioned tool calls with saveable per-tool rules, and an [MCP server](https://quackback.io/docs/mcp) so your own agents can triage and act.
+- **One suite, not five tabs.** Product feedback, support inbox, help center, roadmap, changelog, and status in one product — with [25 integrations](#integrations) out of the box.
 
 ## Features
 
-- **Feedback boards.** Let users vote, comment, and track status on feature requests. Vote on behalf of customers and see a full activity timeline on every post.
-- **AI-powered.** Automatically detect duplicates, summarize key themes, and ingest feedback from Slack, email, and other sources so nothing slips through the cracks.
-- **Embeddable widget.** Collect feedback right inside your app with a [drop-in widget](https://quackback.io/docs/widget/installation). Works on desktop and mobile, with native SDKs for [iOS](https://github.com/QuackbackIO/quackback-ios) and [Android](https://github.com/QuackbackIO/quackback-android).
-- **Admin inbox.** Triage incoming feedback in one place. Filter, group, dismiss, and restore deleted posts.
-- **Roadmap & changelog.** Show users what's planned, in progress, and shipped. Publish updates and schedule posts for later.
+- **Feedback boards.** Let users vote, comment, and track status on feature requests. Vote on behalf of customers, weight demand by plan/MRR, and see a full activity timeline on every post.
+- **Support inbox & tickets.** Messenger, email, shared inbox, SLA, macros, and tickets next to the feedback that drives your roadmap.
+- **Help Center & Ask AI.** Publish searchable docs; optionally answer from your articles with citations.
+- **Roadmap, changelog & status.** Show what's planned and shipped; publish updates; run a public status page with incidents and subscribers.
+- **Quinn AI.** Customer Agent + teammate Copilot. Connect MCP servers as **Connectors**; each tool is permissioned Ask for approval / Always allow / Deny. Capture feedback from support threads and close the loop when you ship.
+- **Embeddable widget.** Collect feedback and chat inside your app with a [drop-in widget](https://quackback.io/docs/widget/installation). Works on desktop and mobile, with native SDKs for [iOS](https://github.com/QuackbackIO/quackback-ios) and [Android](https://github.com/QuackbackIO/quackback-android).
 - **Integrations.** [25 integrations](#integrations) including Slack, Linear, Jira, GitHub, Intercom, Zendesk, and two-way issue tracker sync.
-- **API, webhooks & MCP.** Automate workflows with the REST API, outbound webhooks, and a 23-tool [MCP server](https://quackback.io/docs/mcp) for AI agents.
+- **API, webhooks & MCP.** Automate workflows with the REST API, outbound webhooks, and a 39-tool [MCP server](https://quackback.io/docs/mcp) for AI agents.
 - **Internationalization.** Portal and widget available in English, French, German, Spanish, and Arabic with full RTL support. Auto-detects browser language.
 - **Flexible auth.** Password, email OTP, Google, GitHub, and SSO with providers like Okta and Auth0.
 - **SEO-ready.** Auto-generated sitemap and social sharing previews on every portal page.

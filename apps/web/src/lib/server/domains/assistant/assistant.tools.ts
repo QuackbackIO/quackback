@@ -2,7 +2,7 @@
  * Quinn's tool-execution pipeline: assembles the tool catalogue
  * (assistant.toolspec.ts) into TanStack AI server tools bound to a runtime
  * context, with each write tool's execution branch resolved from the turn's
- * role policy.
+ * role policy and saved per-tool rules.
  *
  * Assembly runs once per turn — assistant.runtime.ts calls it before the
  * retry loop, since the feature flag and role-derived write policy are
@@ -16,9 +16,15 @@
  * instead.
  */
 import { createHash } from 'node:crypto'
+import { toolDefinition } from '@tanstack/ai'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import type { ConversationId, TicketId } from '@quackback/ids'
+import {
+  resolveAssistantToolRule,
+  roleToAgent,
+  type AssistantToolRule,
+} from '@/lib/shared/assistant/config'
 import type { AssistantToolContext, AssistantToolSpec } from './assistant.toolspec'
 import {
   ASSISTANT_TOOL_SPECS,
@@ -68,28 +74,33 @@ const FAILED_NOTE = 'This action could not be completed.'
 
 /**
  * A tool's resolved execution branch for this turn (see
- * `resolveEffectiveToolMode`), decoupled from any saved per-tool config.
+ * `resolveEffectiveToolMode`). `disabled` means the tool is omitted from the
+ * catalogue entirely (saved rule `deny`).
  */
-export type ToolExecutionMode = 'autonomous' | 'propose' | 'simulate'
+export type ToolExecutionMode = 'autonomous' | 'propose' | 'simulate' | 'disabled'
 
 /**
- * Resolve a spec's execution branch for this turn from its risk class and the
- * turn's write policy (`ctx.writeToolPolicy`, selected from the role policy).
- * There is no saved per-tool configuration: end-user-triggered write tools
- * execute autonomously, with no approval step.
+ * Resolve a saved (or default) tool rule for this turn's agent.
+ */
+export function resolveToolRuleForSpec(
+  spec: AssistantToolSpec,
+  ctx: AssistantToolContext
+): AssistantToolRule {
+  return resolveAssistantToolRule(ctx.toolRules, spec.name, spec.risk, roleToAgent(ctx.role))
+}
+
+/**
+ * Resolve a spec's execution branch for this turn from its risk class, the
+ * turn's write policy, and saved per-tool rules.
  *
- * - Control tools are agent-protocol primitives: always autonomous, on every
- *   deployment (the model must express handoff/inability as tool calls).
- * - Read tools only observe: always autonomous, never simulated or proposed.
- * - Write tools branch on `ctx.writeToolPolicy`:
- *   - 'propose' (the copilot Q&A surface): resolves to a pending-action
- *     proposal; the approval card IS the confirmation UX, so nothing fires
- *     without a human decision, regardless of `ctx.simulate`.
- *   - `ctx.simulate` true with policy unset/'simulate' (the admin sandbox):
- *     previews instead of running — there is no conversation to attach a
- *     claim, approval, or denial to.
- *   - otherwise ('execute', a real customer-support turn): autonomous, after
- *     the permission check `runWithPipeline` runs.
+ * - Control / read tools: always autonomous (never simulated or proposed).
+ * - Write + rule `deny`: disabled (omitted from the toolset).
+ * - Write + Copilot `propose` policy: propose (persisted queue) unless the
+ *   tool is explicitly saved as `allow`, or AG-UI approvals are on (then
+ *   TanStack `needsApproval` + autonomous execute after approve).
+ * - Write + explicit `ask`: same as propose path above.
+ * - Write + sandbox simulate: simulate (when policy isn't propose).
+ * - Write + `allow` / Agent default: autonomous after permission check.
  */
 export function resolveEffectiveToolMode(
   spec: AssistantToolSpec,
@@ -97,10 +108,33 @@ export function resolveEffectiveToolMode(
 ): ToolExecutionMode {
   if (spec.risk === 'control') return 'autonomous'
   if (spec.risk !== 'write') return 'autonomous'
-  // Write-risk from here.
-  if (ctx.writeToolPolicy === 'propose') return 'propose'
+
+  const saved = ctx.toolRules?.[spec.name]
+  if (saved === 'deny') return 'disabled'
+
+  const wantsAsk =
+    saved === 'ask' ||
+    (saved === undefined &&
+      (ctx.writeToolPolicy === 'propose' || resolveToolRuleForSpec(spec, ctx) === 'ask'))
+
+  if (wantsAsk && saved !== 'allow') {
+    // AG-UI surfaces use needsApproval + autonomous execute after approve.
+    if (ctx.aguiApprovals) return 'autonomous'
+    return 'propose'
+  }
+
   if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
   return 'autonomous'
+}
+
+/** Whether this write tool should be assembled with TanStack needsApproval. */
+export function toolNeedsAguiApproval(spec: AssistantToolSpec, ctx: AssistantToolContext): boolean {
+  if (!ctx.aguiApprovals) return false
+  if (spec.risk !== 'write') return false
+  const saved = ctx.toolRules?.[spec.name]
+  if (saved === 'deny' || saved === 'allow') return false
+  if (saved === 'ask') return true
+  return ctx.writeToolPolicy === 'propose' || resolveToolRuleForSpec(spec, ctx) === 'ask'
 }
 
 /**
@@ -377,13 +411,36 @@ function toLegacyServerTool(spec: AssistantToolSpec, ctx: AssistantToolContext) 
 }
 
 /**
+ * Bind a pipelined tool. When AG-UI approval is required, rebuild the
+ * TanStack definition with `needsApproval: true` so the chat engine pauses
+ * for an in-stream decision before `execute` runs.
+ */
+function toPipelinedServerTool(
+  spec: AssistantToolSpec,
+  mode: ToolExecutionMode,
+  ctx: AssistantToolContext
+) {
+  const execute = (args: unknown) => runWithPipeline(spec, mode, args, ctx)
+  if (!toolNeedsAguiApproval(spec, ctx)) {
+    return spec.definition.server<AssistantToolContext>(execute)
+  }
+  return toolDefinition({
+    name: spec.definition.name,
+    description: spec.definition.description,
+    inputSchema: spec.definition.inputSchema,
+    outputSchema: spec.definition.outputSchema,
+    needsApproval: true,
+  }).server<AssistantToolContext>(execute)
+}
+
+/**
  * Build this turn's tool set, paired with the specs that produced it
  * (`activeSpecs[i]` is the spec behind `tools[i]`). Assistant actions off
  * means every catalogue tool runs exactly as before the pipeline existed,
  * with no settings read beyond the flag. Actions on resolves each built-in
- * spec's execution mode from the turn's write policy (see
- * `resolveEffectiveToolMode`), drops disabled tools, and wraps the rest in
- * the execution pipeline.
+ * spec's execution mode from the turn's write policy and saved tool rules
+ * (see `resolveEffectiveToolMode`), drops disabled tools, and wraps the rest
+ * in the execution pipeline (with TanStack `needsApproval` when AG-UI ask).
  *
  * `specs` defaults to the live catalogue; tests inject a fixed list to
  * exercise write-risk behavior the current catalogue doesn't ship yet.
@@ -415,9 +472,8 @@ export async function assembleAssistantToolset(
   const customActive = customActionSpecs
     .filter(availableForTurn)
     .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
-  const customTools = customActive.map(({ spec, mode }) =>
-    spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
-  )
+    .filter(({ mode }) => mode !== 'disabled')
+  const customTools = customActive.map(({ spec, mode }) => toPipelinedServerTool(spec, mode, ctx))
   const customActiveSpecs = customActive.map((entry) => entry.spec)
 
   if (!actionsEnabled) {
@@ -435,15 +491,14 @@ export async function assembleAssistantToolset(
     }
   }
 
-  const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableForTurn)
+  const resolvedEntries = (specs ?? resolveToolSpecs())
+    .filter(availableForTurn)
+    .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
+    .filter(({ mode }) => mode !== 'disabled')
+  const resolvedSpecs = resolvedEntries.map((e) => e.spec)
   return {
     tools: [
-      ...resolvedSpecs.map((spec) => {
-        const mode = resolveEffectiveToolMode(spec, ctx)
-        return spec.definition.server<AssistantToolContext>((args) =>
-          runWithPipeline(spec, mode, args, ctx)
-        )
-      }),
+      ...resolvedEntries.map(({ spec, mode }) => toPipelinedServerTool(spec, mode, ctx)),
       ...customTools,
     ],
     activeSpecs: withDynamicPromptGuidance([...resolvedSpecs, ...customActiveSpecs], ctx),

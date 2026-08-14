@@ -39,6 +39,9 @@ export interface StoredAssistantVoice {
  * in apps/web (`lib/shared/assistant/__tests__/config.test.ts`) asserts the two
  * stay structurally identical — edit both sides together.
  */
+/** Per-tool allow / ask / deny — mirrors apps/web AssistantToolRule. */
+export type StoredAssistantToolRule = 'allow' | 'ask' | 'deny'
+
 export interface StoredAssistantConfig {
   version: number
   identity: { name: string; avatarUrl: string | null }
@@ -52,6 +55,7 @@ export interface StoredAssistantConfig {
         documents: boolean
         status: boolean
       }
+      toolRules: Record<string, StoredAssistantToolRule>
     }
     copilot: {
       capabilities: { qa: boolean }
@@ -65,6 +69,7 @@ export interface StoredAssistantConfig {
         documents: boolean
         status: boolean
       }
+      toolRules: Record<string, StoredAssistantToolRule>
     }
   }
 }
@@ -418,6 +423,7 @@ export const settings = pgTable('settings', {
             documents: true,
             status: false,
           },
+          toolRules: {},
         },
         copilot: {
           capabilities: { qa: true },
@@ -431,6 +437,7 @@ export const settings = pgTable('settings', {
             documents: true,
             status: true,
           },
+          toolRules: {},
         },
       },
     }),

@@ -24,17 +24,33 @@ import { toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import type { PostListItem, InboxPostListParams, InboxPostListResult } from './post.types'
 
 /**
- * Priority score: `votes · 3 + comments · 2 + recency bonus`, where the
- * recency bonus starts at 30 for a brand-new post and decays linearly to 0
- * at 30 days old. Votes outweigh comments (a vote is the broader demand
- * signal); the bounded bonus keeps fresh posts visible without letting age
- * alone permanently outrank a strongly-voted post. Computed in SQL so
- * sorting and keyset pagination share one formula.
+ * Priority score: `votes · 3 + comments · 2 + recency bonus + MRR weight`,
+ * where the recency bonus starts at 30 for a brand-new post and decays
+ * linearly to 0 at 30 days old, and MRR weight is
+ * `min(50, ln(1 + author_company_mrr_cents / 10000) * 10)` so higher-value
+ * accounts surface without letting ARR alone dominate. Votes outweigh
+ * comments; the bounded bonuses keep fresh and revenue-weighted posts
+ * visible. Computed in SQL so sorting and keyset pagination share one
+ * formula.
  */
 const priorityScoreSql = sql<number>`
   ${posts.voteCount} * 3
   + ${posts.commentCount} * 2
   + GREATEST(0, 30 - EXTRACT(EPOCH FROM (now() - ${posts.createdAt})) / 86400)
+  + LEAST(
+      50,
+      LN(
+        1 + COALESCE(
+          (
+            SELECT c.mrr_cents
+            FROM principal p
+            LEFT JOIN companies c ON c.id = p.company_id
+            WHERE p.id = ${posts.principalId}
+          ),
+          0
+        ) / 10000.0
+      ) * 10
+    )
 `
 
 /**

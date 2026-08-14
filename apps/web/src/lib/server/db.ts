@@ -437,6 +437,12 @@ export {
   assistantActionsRelations,
   type StoredAssistantActionHeader,
   type StoredAssistantActionVariable,
+  // Schema tables - Quinn Connectors (outbound MCP)
+  assistantConnectors,
+  type StoredConnectorTool,
+  type StoredConnectorAssignments,
+  type ConnectorToolRule,
+  type AssistantConnectorRow,
   // Schema tables - assistant snippets
   assistantSnippets,
   assistantSnippetsRelations,

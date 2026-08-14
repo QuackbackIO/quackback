@@ -12,6 +12,7 @@ import { CopilotDeploymentCard } from '@/components/admin/automation/copilot-dep
 import { CopilotKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
 import { BuiltInActionsCard } from '@/components/admin/automation/builtin-actions-card'
+import { ConnectorsCard } from '@/components/admin/automation/connectors-card'
 import { CustomActionsCard } from '@/components/admin/automation/custom-actions-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -227,6 +228,7 @@ function AssistantCopilotSettings() {
                 className="space-y-6 data-[state=inactive]:hidden"
               >
                 <BuiltInActionsCard agent="copilot" />
+                <ConnectorsCard agent="copilot" />
                 {flags?.assistantCustomActions && <CustomActionsCard agent="copilot" />}
               </TabsContent>
 

@@ -19,6 +19,7 @@ const config = {
         additionalInstructions: '',
       },
       knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+      toolRules: {},
     },
     copilot: {
       capabilities: { qa: true },
@@ -31,6 +32,7 @@ const config = {
         changelog: false,
         status: true,
       },
+      toolRules: {},
     },
   },
 }

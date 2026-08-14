@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { AssistantActionDTO } from '@/lib/shared/assistant/custom-actions'
 
+const mutations = { create: vi.fn(), update: vi.fn() }
+
 // The cards read their data through these query factories; stub them with
 // queryOptions whose queryFn resolves in-memory so no server fn is invoked.
 const toolsData = [
@@ -28,6 +30,8 @@ vi.mock('@/lib/client/queries/assistant', () => ({
   assistantKeys: {
     tools: () => ['assistant', 'tools'],
     customActions: () => ['assistant', 'customActions'],
+    settings: () => ['assistant', 'settings'],
+    connectors: () => ['assistant', 'connectors'],
   },
   assistantQueries: {
     tools: () => ({ queryKey: ['assistant', 'tools'], queryFn: async () => toolsData }),
@@ -35,10 +39,63 @@ vi.mock('@/lib/client/queries/assistant', () => ({
       queryKey: ['assistant', 'customActions'],
       queryFn: async () => actionsData,
     }),
+    settings: () => ({
+      queryKey: ['assistant', 'settings'],
+      queryFn: async () => ({
+        revision: 1,
+        config: {
+          version: 3,
+          identity: { name: 'Quinn', avatarUrl: null },
+          agents: {
+            agent: {
+              voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
+              knowledge: {
+                helpCenter: true,
+                posts: false,
+                changelog: false,
+                documents: true,
+                status: false,
+              },
+              toolRules: {},
+            },
+            copilot: {
+              capabilities: { qa: true },
+              knowledge: {
+                helpCenter: true,
+                posts: true,
+                pastConversations: true,
+                internalNotes: true,
+                tickets: false,
+                changelog: false,
+                documents: true,
+                status: true,
+              },
+              toolRules: {},
+            },
+          },
+        },
+        managedFieldPaths: [],
+      }),
+    }),
+    connectors: () => ({
+      queryKey: ['assistant', 'connectors'],
+      queryFn: async () => [],
+    }),
   },
 }))
 
-const mutations = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn() }))
+vi.mock('@/lib/server/functions/assistant-settings', () => ({
+  updateAssistantToolRuleFn: vi.fn(),
+}))
+
+vi.mock('@/lib/server/functions/assistant-connectors', () => ({
+  listConnectorsFn: vi.fn(async () => []),
+  createConnectorFn: vi.fn(),
+  updateConnectorFn: vi.fn(),
+  deleteConnectorFn: vi.fn(),
+  syncConnectorFn: vi.fn(),
+  updateConnectorToolRuleFn: vi.fn(),
+}))
 
 vi.mock('@/lib/client/mutations/assistant-custom-actions', () => ({
   useCreateCustomAction: () => ({ mutateAsync: mutations.create, isPending: false }),
@@ -85,20 +142,21 @@ afterEach(() => {
 })
 
 describe('BuiltInActionsCard', () => {
-  it('lists built-in tools with read/write risk badges (no mode toggles, D14)', async () => {
+  it('lists built-in tools with read/write risk badges and permission controls', async () => {
     renderCard(<BuiltInActionsCard agent="agent" />)
     expect(await screen.findByText('End conversation')).toBeInTheDocument()
     expect(screen.getByText('Search knowledge')).toBeInTheDocument()
     expect(screen.getByText('Write')).toBeInTheDocument()
     expect(screen.getByText('Read')).toBeInTheDocument()
-    // Agent copy — autonomous, not "on request".
-    expect(screen.getByText(/runs these autonomously/i)).toBeInTheDocument()
+    expect(screen.getByText(/same controls as Connectors/i)).toBeInTheDocument()
+    // Write tools expose Ask / Always allow / Deny; read tools stay always on.
+    expect(screen.getByText('Always on')).toBeInTheDocument()
   })
 
-  it('uses the copilot description on the copilot page', async () => {
+  it('uses the shared permissions description on the copilot page', async () => {
     renderCard(<BuiltInActionsCard agent="copilot" />)
     await screen.findByText('End conversation')
-    expect(screen.getByText(/calls these on request/i)).toBeInTheDocument()
+    expect(screen.getByText(/same controls as Connectors/i)).toBeInTheDocument()
   })
 })
 

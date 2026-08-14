@@ -78,6 +78,8 @@ export const ID_PREFIXES = {
   // write-tool proposal mints (AssistantPendingActionId) — an unfortunate but
   // load-bearing name collision, so the definition table gets its own prefix.
   assistant_custom_action: 'assistant_custom_action',
+  /** Outbound MCP connector (Quinn "Connectors") — a remote MCP server Quackback dials. */
+  assistant_connector: 'assistant_connector',
   assistant_tool_call: 'assistant_tool_call',
   assistant_snippet: 'assistant_snippet',
   assistant_document: 'assistant_document',

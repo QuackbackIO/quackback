@@ -168,6 +168,7 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
           documents: true,
           status: false,
         },
+        toolRules: {},
       },
       copilot: {
         capabilities: { qa: true },
@@ -181,6 +182,7 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
           documents: true,
           status: true,
         },
+        toolRules: {},
       },
     },
   },
@@ -373,6 +375,7 @@ describe('mockRuntimeConfig helper', () => {
               documents: false,
               status: true,
             },
+            toolRules: {},
           },
         },
       },

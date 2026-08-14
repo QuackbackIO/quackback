@@ -7,6 +7,7 @@ import {
   assistantAgentKnowledgeUpdateSchema,
   assistantCopilotKnowledgeUpdateSchema,
   assistantCopilotCapabilitiesUpdateSchema,
+  assistantToolRuleUpdateSchema,
 } from '@/lib/server/domains/settings/settings.assistant'
 import { logger } from '@/lib/server/logger'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -79,6 +80,19 @@ export const updateAssistantCopilotCapabilitiesFn = createServerFn({ method: 'PO
     return updateAssistantCopilotCapabilities(
       data.expectedRevision,
       data.capabilities,
+      configActor(ctx)
+    )
+  })
+
+export const updateAssistantToolRuleFn = createServerFn({ method: 'POST' })
+  .validator(assistantToolRuleUpdateSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const { updateAssistantToolRule } =
+      await import('@/lib/server/domains/settings/settings.assistant')
+    return updateAssistantToolRule(
+      data.expectedRevision,
+      { agent: data.agent, toolName: data.toolName, rule: data.rule },
       configActor(ctx)
     )
   })

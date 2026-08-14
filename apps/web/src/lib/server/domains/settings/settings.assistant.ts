@@ -10,13 +10,16 @@ import {
   assistantCopilotKnowledgeSchema,
   assistantIdentitySchema,
   assistantVoiceSchema,
+  assistantToolRuleSchema,
   DEFAULT_ASSISTANT_CONFIG,
   normalizeAssistantConfig,
   type AssistantAgentKnowledge,
+  type AssistantAgentKind,
   type AssistantConfig,
   type AssistantCopilotCapabilities,
   type AssistantCopilotKnowledge,
   type AssistantIdentity,
+  type AssistantToolRule,
   type AssistantVoice,
 } from '@/lib/shared/assistant/config'
 import { ConflictError, ForbiddenError, InternalError, NotFoundError } from '@/lib/shared/errors'
@@ -49,6 +52,14 @@ export const assistantCopilotKnowledgeUpdateSchema = z.object({
 export const assistantCopilotCapabilitiesUpdateSchema = z.object({
   expectedRevision: z.number().int().positive(),
   capabilities: assistantCopilotCapabilitiesSchema,
+})
+
+export const assistantToolRuleUpdateSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  agent: z.enum(['agent', 'copilot']),
+  toolName: z.string().min(1).max(120),
+  /** Pass null to clear a saved rule and fall back to the agent default. */
+  rule: assistantToolRuleSchema.nullable(),
 })
 
 export interface AssistantConfigState {
@@ -150,6 +161,9 @@ function auditEventForPaths(paths: string[]): AuditEventType {
   }
   if (paths.every((path) => path.endsWith('.knowledge') || path.includes('.knowledge.'))) {
     return 'assistant.knowledge.changed'
+  }
+  if (paths.every((path) => path.includes('.toolRules'))) {
+    return 'assistant.capabilities.changed'
   }
   if (paths.every((path) => path === 'agents.agent.voice.additionalInstructions')) {
     return 'assistant.instructions.changed'
@@ -356,6 +370,35 @@ export function updateAssistantCopilotCapabilities(
       ...current,
       agents: { ...current.agents, copilot: { ...current.agents.copilot, capabilities } },
     }),
+    actor
+  )
+}
+
+/**
+ * Save (or clear) one per-tool permission rule for Agent or Copilot. Used by
+ * the Actions settings card and by "Always allow / Always deny" on AG-UI
+ * approval prompts.
+ */
+export function updateAssistantToolRule(
+  expectedRevision: number,
+  input: { agent: AssistantAgentKind; toolName: string; rule: AssistantToolRule | null },
+  actor: AssistantConfigAuditActor
+): Promise<AssistantConfigState> {
+  return updateAssistantConfig(
+    expectedRevision,
+    (current) => {
+      const agentConfig = current.agents[input.agent]
+      const nextRules = { ...(agentConfig.toolRules ?? {}) }
+      if (input.rule === null) delete nextRules[input.toolName]
+      else nextRules[input.toolName] = input.rule
+      return {
+        ...current,
+        agents: {
+          ...current.agents,
+          [input.agent]: { ...agentConfig, toolRules: nextRules },
+        },
+      }
+    },
     actor
   )
 }

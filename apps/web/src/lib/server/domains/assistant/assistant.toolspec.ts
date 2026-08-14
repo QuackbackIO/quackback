@@ -5,11 +5,13 @@
  * TanStack AI server tools; nothing here talks to the model runtime directly.
  *
  * A tool's execution branch is decided per turn by `resolveEffectiveToolMode`
- * (assistant.tools.ts) from the turn's role policy, not from any saved
- * per-tool configuration: a real customer-support turn executes write tools
- * autonomously, a Copilot Q&A turn proposes them as approval cards, and the
- * admin sandbox previews them. `permissions` is still enforced (via `can`)
- * before a write executes.
+ * (assistant.tools.ts) from the turn's role policy, saved per-tool rules
+ * (`toolRules`), and whether the surface speaks AG-UI approvals
+ * (`aguiApprovals`). Teammates can save allow/ask/deny rules from approval
+ * prompts; Copilot AG-UI turns use TanStack `needsApproval` when the rule is
+ * `ask`. Customer Agent turns with `ask` still use the persisted pending-action
+ * queue (no live teammate on the visitor stream). `permissions` is still
+ * enforced (via `can`) before a write executes.
  */
 import {
   toolDefinition,
@@ -261,21 +263,33 @@ export interface AssistantToolContext {
    * How a write-risk tool's outcome resolves this turn (never consulted for a
    * read-risk or control tool). Selected from the turn's role policy
    * (`ASSISTANT_ROLE_POLICIES`, assistant.system-prompt.ts), or forced to
-   * 'simulate' when `simulate` is true.
+   * 'simulate' when `simulate` is true — then overridden per tool by saved
+   * `toolRules` when present (see `resolveEffectiveToolMode`).
    * 'simulate' (the sandbox, and the default when unset while `simulate` is
    * true) always previews instead of running: there is no conversation to
    * attach a claim, approval, or denial to.
    * 'execute' (customer_support real turns) runs the write autonomously,
    * after its permission check — autonomous execution, no teammate approval
-   * in the loop.
+   * in the loop (unless a saved rule says `ask` / `deny`).
    * 'propose' (P2-C.4, the copilot Q&A surface) resolves every write to a
-   * pending-action proposal. From a Copilot chat the proposal card itself is
-   * the confirmation UX, so nothing fires without a human decision. Quinn must
-   * never act in the conversation from a teammate's Q&A about it, only ever
-   * suggest an action for a human to approve.
+   * pending-action proposal when AG-UI approvals are off. When
+   * `aguiApprovals` is true and the tool rule is `ask`, TanStack
+   * `needsApproval` pauses the run for an in-stream AG-UI decision instead.
    * See `resolveEffectiveToolMode` in assistant.tools.ts.
    */
   writeToolPolicy?: AssistantWriteToolPolicy
+  /**
+   * Saved per-tool allow/ask/deny rules for this agent. Empty/undefined uses
+   * role defaults (Agent write=allow, Copilot write=ask).
+   */
+  toolRules?: import('@/lib/shared/assistant/config').AssistantToolRules
+  /**
+   * When true (Copilot / Test agent AG-UI surfaces), `ask` write tools are
+   * assembled with TanStack `needsApproval: true` so the client can approve
+   * via AG-UI. When false (customer Agent), `ask` uses the persisted
+   * pending-action queue instead.
+   */
+  aguiApprovals?: boolean
   /** The involvement this turn belongs to, for audit rows and pending actions. Null before the first involvement opens. */
   involvementId: AssistantInvolvementId | null
   /** The customer message this turn answers, keying the write-tool idempotency key. Null in the sandbox. */
@@ -317,6 +331,8 @@ export function makeAssistantToolContext(init: {
   latestCustomerMessageId?: string | null
   simulate?: boolean
   writeToolPolicy?: AssistantWriteToolPolicy
+  toolRules?: import('@/lib/shared/assistant/config').AssistantToolRules
+  aguiApprovals?: boolean
   actor?: Actor
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
 }): AssistantToolContext {
@@ -340,6 +356,8 @@ export function makeAssistantToolContext(init: {
     ledger: makeAssistantToolLedger(),
     simulate: init.simulate ?? init.conversationId === null,
     writeToolPolicy: init.writeToolPolicy,
+    toolRules: init.toolRules,
+    aguiApprovals: init.aguiApprovals,
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
@@ -383,13 +401,13 @@ export const assistantGateEnvelopeSchema = z.union([
  * Compose a tool's outputSchema so it also admits the pipeline's gate
  * envelopes (pending-approval/denied/duplicate/failed/simulated).
  *
- * This deliberately does NOT use TanStack's `needsApproval` tool option.
- * Approval here is a PERSISTED queue — a pending-action row with a TTL, a
- * summary card a teammate reviews, and later execution as a bounded
- * teammate-actor (see `proposePendingAction` / `executeApprovedPendingAction`)
- * — not the in-stream client-side approval prompt `needsApproval` triggers. The
- * gate result is a normal tool output the model must be able to relay to the
- * customer, so it rides the outputSchema; do not migrate this to `needsApproval`.
+ * When the surface uses AG-UI approvals (`ctx.aguiApprovals`), write tools
+ * with rule `ask` are also assembled with TanStack `needsApproval: true` so
+ * the client pauses on an in-stream approval prompt. The persisted
+ * pending-action queue remains the path for customer Agent turns (no live
+ * teammate on the visitor stream) and for Copilot when AG-UI approval is
+ * unavailable. Gate envelopes still ride the outputSchema for the propose /
+ * deny paths.
  */
 export function withGateEnvelope<T extends z.ZodTypeAny>(schema: T) {
   return z.union([schema, assistantGateEnvelopeSchema])

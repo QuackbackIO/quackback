@@ -1086,8 +1086,8 @@ export interface FeatureFlags {
    *  translation, per-attribute opt-in). */
   inboxAi: boolean
   /** What the AI assistant may DO: built-in actions such as closing
-   *  conversations and creating tickets. Every action has per-action
-   *  controls and approvals. */
+   *  conversations and creating tickets. Each write tool is permissioned
+   *  (allow / ask / deny) with AG-UI approvals and saveable per-tool rules. */
   assistantTools: boolean
   /** Custom actions library (QUINN-TWO-AGENT-SPEC D6/Phase 5): admin-authored
    *  HTTP actions the assistant can call, defined once and assigned per agent.
@@ -1156,12 +1156,13 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: true,
   supportTickets: true,
   statusPage: true,
-  // AI / privacy-sensitive — opt-in
+  // AI — on for new workspaces (guided setup + per-tool approval rules).
+  // Privacy-sensitive visitor tracking stays opt-in.
   helpCenterAiAnswers: false,
   visitorAnalytics: false,
   visitorDeviceTracking: false,
-  inboxAi: false,
-  assistantTools: false,
+  inboxAi: true,
+  assistantTools: true,
   assistantCustomActions: false,
 }
 
@@ -1217,7 +1218,7 @@ export const FEATURE_FLAG_REGISTRY: Record<
   assistantTools: {
     label: 'Assistant actions',
     description:
-      'Let the AI assistant take actions such as closing conversations or creating tickets. Actions have per-action controls and approvals.',
+      'Let Quinn take actions such as closing conversations or creating tickets. Each write tool is permissioned (allow / ask / deny); Copilot asks for AG-UI approval unless you save an Always allow rule.',
   },
   assistantCustomActions: {
     label: 'Custom actions',

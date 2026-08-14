@@ -52,6 +52,7 @@ import type {
   AssistantToolSpec,
 } from './assistant.toolspec'
 import { listActionSpecsForAgent } from './custom-actions.service'
+import { listConnectorSpecsForAgent } from './connectors.tools'
 import { resolveAssistantKnowledgeSnapshot, type RetrievedItem } from './retrieval-sources'
 import { listEnabledGuidanceCandidates, type AssistantGuidanceRule } from './guidance.service'
 import { selectApplicableGuidance, splitGuidanceCandidates } from './guidance-selector'
@@ -933,6 +934,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
 
   // Shared construction point (simulate derives from the null conversation =
   // sandbox; actor defaults to Quinn's bounded set).
+  const agentKind = roleToAgent(role)
   const toolContext = makeAssistantToolContext({
     db: execDb,
     assistantPrincipalId: input.assistantPrincipalId,
@@ -948,6 +950,12 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     latestCustomerMessageId: input.latestCustomerMessageId,
     simulate: input.simulate,
     writeToolPolicy: input.simulate === true ? 'simulate' : rolePolicy.writeToolPolicy,
+    toolRules: runtimeConfig.config.agents[agentKind].toolRules,
+    // Copilot / Test agent speak AG-UI; customer Agent does not (visitor
+    // stream has no teammate to resolve TanStack needsApproval). Native
+    // needsApproval assembly is gated here once the wire round-trips tool
+    // call parts; until then Copilot still uses ask→propose + saveable rules.
+    aguiApprovals: false,
   })
   const promptChannel = surface === 'widget' || surface === 'email' ? surface : null
   const guidanceChannel = surface
@@ -1005,6 +1013,24 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     }
   }
 
+  // Connectors (outbound MCP): catalogue tools from each enabled connector
+  // assigned to this agent, and merge their per-tool allow/ask/deny rules into
+  // the turn's toolRules (model-facing names). Always on when assistant actions
+  // are enabled — connectors are first-class alongside built-ins.
+  let connectorSpecs: AssistantToolSpec[] = []
+  if (runtimeConfig.actionsEnabled) {
+    try {
+      const listed = await listConnectorSpecsForAgent(roleToAgent(role), execDb)
+      connectorSpecs = listed.specs
+      toolContext.toolRules = {
+        ...(toolContext.toolRules ?? {}),
+        ...listed.toolRulesPatch,
+      }
+    } catch (error) {
+      log.warn({ err: error }, 'connector load failed; omitting connector tools this turn')
+    }
+  }
+
   // Tool wiring (flag + role-derived write policy) is turn-scoped config, not
   // per-attempt state — assembled once so a retry can't re-read settings and
   // flip gating mid-turn, and shares the same tool set across every attempt.
@@ -1014,7 +1040,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     toolContext,
     undefined,
     runtimeConfig.actionsEnabled,
-    customActionSpecs
+    [...customActionSpecs, ...connectorSpecs]
   )
   let toolNames = new Set(tools.map((t) => t.name))
 

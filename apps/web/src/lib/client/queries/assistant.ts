@@ -7,6 +7,7 @@ import {
 import { getGuidanceRuleStatsFn } from '@/lib/server/functions/assistant-guidance-stats'
 import { getAssistantConfigChangelogFn } from '@/lib/server/functions/assistant-config-changelog'
 import { listCustomActionsFn } from '@/lib/server/functions/assistant-custom-actions'
+import { listConnectorsFn } from '@/lib/server/functions/assistant-connectors'
 
 const STALE_TIME = 30 * 1000
 // The tool catalogue is static, so it can sit stale far longer than settings
@@ -19,6 +20,7 @@ export const assistantKeys = {
   guidanceRuleStats: () => ['assistant', 'guidanceRuleStats'] as const,
   tools: () => ['assistant', 'tools'] as const,
   customActions: () => ['assistant', 'customActions'] as const,
+  connectors: () => ['assistant', 'connectors'] as const,
   configChangelog: () => ['assistant', 'configChangelog'] as const,
 }
 
@@ -58,6 +60,14 @@ export const assistantQueries = {
     queryOptions({
       queryKey: assistantKeys.customActions(),
       queryFn: listCustomActionsFn,
+      staleTime: STALE_TIME,
+    }),
+
+  /** Outbound MCP Connectors and their per-tool permission catalogues. */
+  connectors: () =>
+    queryOptions({
+      queryKey: assistantKeys.connectors(),
+      queryFn: listConnectorsFn,
       staleTime: STALE_TIME,
     }),
 
