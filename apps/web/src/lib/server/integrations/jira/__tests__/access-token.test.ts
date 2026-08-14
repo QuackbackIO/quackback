@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const hoisted = vi.hoisted(() => ({
   decryptSecrets: vi.fn(),
   encryptSecrets: vi.fn((s: unknown) => JSON.stringify(s)),
-  findFirst: vi.fn(),
+  lockedRows: vi.fn(),
+  forUpdate: vi.fn(),
   updateWhere: vi.fn(),
   eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
   refreshJiraToken: vi.fn(),
@@ -16,16 +17,33 @@ vi.mock('../../encryption', () => ({
   encryptSecrets: (...args: unknown[]) => hoisted.encryptSecrets(...args),
 }))
 
-vi.mock('@/lib/server/db', () => ({
-  db: {
-    query: { integrations: { findFirst: (...args: unknown[]) => hoisted.findFirst(...args) } },
+vi.mock('@/lib/server/db', () => {
+  const tx = {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          for: (mode: string) => {
+            hoisted.forUpdate(mode)
+            return hoisted.lockedRows()
+          },
+        }),
+      }),
+    }),
     update: () => ({
       set: () => ({ where: (...args: unknown[]) => hoisted.updateWhere(...args) }),
     }),
-  },
-  integrations: { id: 'id', integrationType: 'integrationType' },
-  eq: (...args: unknown[]) => hoisted.eq(...args),
-}))
+  }
+  return {
+    db: { transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) },
+    integrations: {
+      id: 'id',
+      integrationType: 'integrationType',
+      secrets: 'secrets',
+      config: 'config',
+    },
+    eq: (...args: unknown[]) => hoisted.eq(...args),
+  }
+})
 
 vi.mock('../oauth', () => ({
   refreshJiraToken: (...args: unknown[]) => hoisted.refreshJiraToken(...args),
@@ -72,7 +90,7 @@ describe('getJiraAccessToken', () => {
     })
 
     expect(token).toBe('tok')
-    expect(hoisted.findFirst).not.toHaveBeenCalled()
+    expect(hoisted.forUpdate).not.toHaveBeenCalled()
     expect(hoisted.refreshJiraToken).not.toHaveBeenCalled()
   })
 
@@ -87,11 +105,13 @@ describe('getJiraAccessToken', () => {
     expect(hoisted.updateWhere).not.toHaveBeenCalled()
   })
 
-  it('uses an already-rotated row instead of replaying the cached refresh token', async () => {
-    hoisted.findFirst.mockResolvedValue({
-      secrets: JSON.stringify({ accessToken: 'db-tok', refreshToken: 'db-rt' }),
-      config: { cloudId: 'c', tokenExpiresAt: fresh },
-    })
+  it('uses a locked already-rotated row instead of replaying the cached refresh token', async () => {
+    hoisted.lockedRows.mockResolvedValue([
+      {
+        secrets: JSON.stringify({ accessToken: 'db-tok', refreshToken: 'db-rt' }),
+        config: { cloudId: 'c', tokenExpiresAt: fresh },
+      },
+    ])
 
     const token = await getJiraAccessToken({
       id: ID,
@@ -100,15 +120,18 @@ describe('getJiraAccessToken', () => {
     })
 
     expect(token).toBe('db-tok')
+    expect(hoisted.forUpdate).toHaveBeenCalledWith('update')
     expect(hoisted.refreshJiraToken).not.toHaveBeenCalled()
     expect(hoisted.updateWhere).not.toHaveBeenCalled()
   })
 
-  it('refreshes by integration id and drops the mappings cache', async () => {
-    hoisted.findFirst.mockResolvedValue({
-      secrets: JSON.stringify({ accessToken: 'stale-tok', refreshToken: 'stale-rt' }),
-      config: { cloudId: 'c', tokenExpiresAt: expired },
-    })
+  it('refreshes under a row lock, by integration id, and drops the mappings cache', async () => {
+    hoisted.lockedRows.mockResolvedValue([
+      {
+        secrets: JSON.stringify({ accessToken: 'stale-tok', refreshToken: 'stale-rt' }),
+        config: { cloudId: 'c', tokenExpiresAt: expired },
+      },
+    ])
 
     const token = await getJiraAccessToken({
       id: ID,
@@ -117,6 +140,7 @@ describe('getJiraAccessToken', () => {
     })
 
     expect(token).toBe('new-tok')
+    expect(hoisted.forUpdate).toHaveBeenCalledWith('update')
     expect(hoisted.refreshJiraToken).toHaveBeenCalledWith('stale-rt', {
       clientId: 'id',
       clientSecret: 'sec',
