@@ -14,6 +14,7 @@ import {
   updatePortalUserFn,
 } from '@/lib/server/functions/admin'
 import { usersKeys } from '@/lib/client/hooks/use-users-queries'
+import { toast } from 'sonner'
 
 // ============================================================================
 // Mutation Hooks
@@ -86,7 +87,7 @@ export function useRemovePortalUser() {
 
       return { previousLists }
     },
-    onError: (_err, _principalId, context) => {
+    onError: (err, _principalId, context) => {
       if (context?.previousLists) {
         for (const [queryKey, data] of context.previousLists) {
           if (data) {
@@ -94,6 +95,7 @@ export function useRemovePortalUser() {
           }
         }
       }
+      toast.error(err instanceof Error ? err.message : 'Failed to remove portal user')
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: usersKeys.lists() })

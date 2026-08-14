@@ -368,12 +368,9 @@ export async function listPortalUsers(
 /**
  * Remove a portal user from the portal (soft removal).
  *
- * Deletes the `principal` record (role='user') only — the Better-Auth `user`
- * and `account` rows are intentionally retained so we still recognize the
- * person if they return (and their re-join shows distinct "joined" vs
- * "account created" dates). The FK is `principal.userId -> user` with
- * onDelete cascade, so deleting the principal does NOT remove the user; a
- * returning sign-in re-provisions a principal via the SSO hooks or lazily.
+ * Detaches the `principal` from its Better-Auth `user` instead of deleting
+ * the row: chat/posts/comments RESTRICT principal deletes. The user row is
+ * kept so a later sign-in provisions a fresh principal.
  */
 export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {
@@ -389,8 +386,21 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
       )
     }
 
-    // Delete principal record (user record will be deleted via CASCADE since user is org-scoped)
-    await db.delete(principal).where(eq(principal.id, principalId))
+    // Detach rather than DELETE: chat/posts/comments RESTRICT the principal
+    // row. Clearing userId drops them from the portal-user list (inner join
+    // on user) while keeping history. The user row stays so a later sign-in
+    // provisions a fresh principal.
+    await db
+      .update(principal)
+      .set({
+        userId: null,
+        type: 'anonymous',
+        displayName: 'Removed user',
+        avatarUrl: null,
+        avatarKey: null,
+        contactEmail: null,
+      })
+      .where(eq(principal.id, principalId))
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     log.error({ err: error }, 'failed to remove portal user')
