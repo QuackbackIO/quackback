@@ -20,11 +20,26 @@
  */
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
-import { authorizeRequestFor } from '@/lib/shared/oidc-request'
+import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
+import {
+  allowsMissingEmail,
+  identitySourcesFor,
+  profileClaimFor,
+} from '@/lib/shared/oidc-claim-mapping'
+import { resolveIdentity } from './resolve-identity'
+import { synthesizeName } from './placeholder-identity'
 
 // Re-exported so server callers keep this import path. The implementation lives
 // in `shared` because the admin editor needs it too.
 export { DEFAULT_OIDC_SCOPES, effectiveScopes } from '@/lib/shared/oidc-scopes'
+
+export type ResolvedProfile = {
+  id: string
+  email?: string
+  name?: string
+  image?: string
+  emailVerified: boolean
+} & Record<string, unknown>
 
 /** A single entry in the genericOAuth plugin's `config` array. */
 export interface GenericOAuthConfig {
@@ -38,6 +53,11 @@ export interface GenericOAuthConfig {
   tokenUrl?: string
   /** Manual-endpoint userinfo URL. */
   userInfoUrl?: string
+  /** Custom user-info resolution. Attached to EVERY provider. */
+  getUserInfo?: (tokens: {
+    idToken?: string
+    accessToken?: string
+  }) => Promise<ResolvedProfile | null>
   scopes?: string[]
   /** How the client secret reaches the token endpoint. */
   authentication?: 'basic' | 'post'
@@ -75,6 +95,23 @@ export interface BuildGenericOAuthConfigsArgs {
   creds: (registrationId: string) => Promise<ProviderCredentials>
   /** `tierLimits.features.customOidcProvider` — gates ALL OIDC registration. */
   tierAllowsOidc: boolean
+  /**
+   * Fetches a provider's discovery document, or null when it is unreachable.
+   * Injected so this module stays free of fetch imports.
+   */
+  discovery?: (
+    discoveryUrl: string
+  ) => Promise<{ userinfo_endpoint?: unknown; prompt_values_supported?: unknown } | null>
+  /** Fetches a userinfo document with the bearer token. */
+  fetchUserInfo?: (url: string, accessToken: string) => Promise<Record<string, unknown> | null>
+  onResolutionWarning?: (registrationId: string, warnings: readonly string[]) => void
+  onResolved?: (registrationId: string, accountId: string, claims: Record<string, unknown>) => void
+  /**
+   * Read-or-mint placeholder address. `getUserInfo` runs on every sign-in, so
+   * minting here unconditionally would hand a returning person a different
+   * address each time.
+   */
+  placeholderEmailFor?: (registrationId: string, accountId: string) => Promise<string>
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   /**
@@ -96,6 +133,11 @@ export async function buildGenericOAuthConfigs({
   providers,
   creds,
   tierAllowsOidc,
+  discovery,
+  fetchUserInfo,
+  onResolutionWarning,
+  onResolved,
+  placeholderEmailFor,
   mapProfileToUser,
   buildLoginHintParams,
 }: BuildGenericOAuthConfigsArgs): Promise<GenericOAuthConfig[]> {
@@ -117,10 +159,69 @@ export async function buildGenericOAuthConfigs({
     const discoveryUrl = provider.discoveryUrl || c.discoveryUrl || undefined
     const authorizationUrl = provider.authorizationUrl || undefined
     const tokenUrl = provider.tokenUrl || undefined
-    const userInfoUrl = provider.userInfoUrl || undefined
+    // A manual endpoint is an explicit choice and the row wins. Discovery is
+    // still fetched when the row has one, because the same document carries
+    // `prompt_values_supported`.
+    let userInfoUrl = provider.userInfoUrl || undefined
+    let promptValuesSupported: string[] | null = null
+    if (discoveryUrl && discovery) {
+      const doc = await discovery(discoveryUrl)
+      if (!userInfoUrl && typeof doc?.userinfo_endpoint === 'string') {
+        userInfoUrl = doc.userinfo_endpoint
+      }
+      if (Array.isArray(doc?.prompt_values_supported)) {
+        promptValuesSupported = doc.prompt_values_supported.filter(
+          (v): v is string => typeof v === 'string'
+        )
+      }
+    }
+
     const request = authorizeRequestFor(provider)
+    const prompt = supportsPrompt(request.prompt, promptValuesSupported)
+      ? request.prompt
+      : undefined
+
+    const resolvedUserInfoUrl = userInfoUrl
+    const getUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {
+      const result = await resolveIdentity({
+        tokens,
+        fetchUserInfo: async () =>
+          resolvedUserInfoUrl && tokens.accessToken && fetchUserInfo
+            ? await fetchUserInfo(resolvedUserInfoUrl, tokens.accessToken)
+            : null,
+        mapping: {
+          sources: identitySourcesFor(provider.claimMapping),
+          idClaim: profileClaimFor(provider.claimMapping, 'id'),
+          emailClaim: profileClaimFor(provider.claimMapping, 'email'),
+          nameClaim: profileClaimFor(provider.claimMapping, 'name'),
+        },
+      })
+      if (!result.ok) return null
+      const { id, email, name, emailVerified, claims, warnings } = result.identity
+      if (warnings?.length && onResolutionWarning) {
+        onResolutionWarning(provider.registrationId, warnings)
+      }
+      onResolved?.(provider.registrationId, id, claims)
+
+      const resolvedName = name ?? synthesizeName(claims, id)
+      let resolvedEmail = email
+      let minted = false
+      if (!resolvedEmail && allowsMissingEmail(provider.claimMapping) && placeholderEmailFor) {
+        resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
+        minted = true
+      }
+
+      return {
+        ...claims,
+        id,
+        emailVerified: minted ? false : emailVerified,
+        ...(resolvedEmail ? { email: resolvedEmail } : {}),
+        ...(resolvedName ? { name: resolvedName } : {}),
+      }
+    }
 
     configs.push({
+      getUserInfo,
       providerId: provider.registrationId,
       clientId,
       clientSecret: c.clientSecret,
@@ -133,7 +234,7 @@ export async function buildGenericOAuthConfigs({
       // reject without it; RFC 7636 §5 makes the params backwards-compatible
       // (IdPs without PKCE support simply ignore them).
       pkce: true,
-      ...(request.prompt ? { prompt: request.prompt } : {}),
+      ...(prompt ? { prompt } : {}),
       authentication: request.tokenAuth,
       // Better-Auth's JIT block. When false, the OAuth callback aborts in
       // handleOAuthUserInfo before any user/session is created. Existing

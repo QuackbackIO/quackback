@@ -133,3 +133,111 @@ describe('social provider registration regression (H3)', () => {
     expect(generic.map((p) => p.id)).toEqual(['custom-oidc'])
   })
 })
+
+describe('buildGenericOAuthConfigs identity cascade', () => {
+  const idToken = (payload: Record<string, unknown>) =>
+    `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+
+  it('attaches a resolver to every provider', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'oidc_abc',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+    })
+    expect(cfgs[0].getUserInfo).toBeTypeOf('function')
+  })
+
+  it('reads CharacterID-style claims from an access-token-only mapping', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'oidc_abc',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          claimMapping: {
+            profile: {
+              sources: ['accessTokenJwt'],
+              claims: { id: 'CharacterID', name: 'CharacterName' },
+            },
+          },
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      accessToken: idToken({ CharacterID: 42, CharacterName: 'Pilot' }),
+    })
+    expect(info?.id).toBe('42')
+    expect(info?.name).toBe('Pilot')
+  })
+
+  it('asks for the placeholder by account identity so a returning user keeps theirs', async () => {
+    const seen: Array<[string, string]> = []
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'oidc_abc',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          claimMapping: { profile: { allowMissingEmail: true } },
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      placeholderEmailFor: async (registrationId, accountId) => {
+        seen.push([registrationId, accountId])
+        return 'stored@anon.quackback.io'
+      },
+    })
+    const first = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 'subject-9' }),
+      accessToken: undefined,
+    })
+    const second = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 'subject-9' }),
+      accessToken: undefined,
+    })
+    expect(seen).toEqual([
+      ['oidc_abc', 'subject-9'],
+      ['oidc_abc', 'subject-9'],
+    ])
+    expect(first?.email).toBe('stored@anon.quackback.io')
+    expect(second?.email).toBe('stored@anon.quackback.io')
+    expect(first?.emailVerified).toBe(false)
+  })
+
+  it('does not mint when the provider has not opted in', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'oidc_abc',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      placeholderEmailFor: async () => 'should-not-be-used@anon.quackback.io',
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1' }),
+      accessToken: undefined,
+    })
+    expect(info?.email).toBeUndefined()
+  })
+})

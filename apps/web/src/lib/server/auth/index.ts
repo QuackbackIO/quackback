@@ -83,6 +83,7 @@ async function createAuth() {
     oauthConsent: oauthConsentTable,
     twoFactor: twoFactorTable,
     eq,
+    and,
   } = await import('@/lib/server/db')
   const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
   const { getPlatformCredentials } =
@@ -140,10 +141,53 @@ async function createAuth() {
   // buildGenericOAuthConfigs: a downgraded workspace stops registering
   // OIDC even though the rows remain. The login_hint params are carried
   // to every provider since any may be domain-routed.
+  const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+  const { stashResolvedClaims } = await import('./resolved-claims-stash')
+  const fetchJson = async (url: string, headers?: Record<string, string>) => {
+    try {
+      const res = await safeFetch(url, { ...(headers ? { headers } : {}), timeoutMs: 5000 })
+      if (!res.ok) return null
+      const body: unknown = await res.json()
+      return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
+    } catch {
+      return null
+    }
+  }
+
+  const resolvePlaceholderEmail = async (
+    registrationId: string,
+    accountId: string
+  ): Promise<string> => {
+    const existing = await db.query.account.findFirst({
+      where: and(eq(accountTable.providerId, registrationId), eq(accountTable.accountId, accountId)),
+      columns: { userId: true },
+    })
+    if (existing?.userId) {
+      const owner = await db.query.user.findFirst({
+        where: eq(userTable.id, existing.userId),
+        columns: { email: true },
+      })
+      if (owner?.email) return owner.email
+    }
+    const { mintPlaceholderEmail } = await import('./placeholder-identity')
+    const minted = mintPlaceholderEmail(registrationId)
+    log.info({ registrationId }, 'minted placeholder address for provider with no email claim')
+    return minted
+  }
+
   const oidcConfigs = await buildGenericOAuthConfigs({
     providers: await listIdentityProviders(),
     creds: getIdentityProviderCredentials,
     tierAllowsOidc: tierLimits.features.customOidcProvider,
+    discovery: (discoveryUrl) => fetchJson(discoveryUrl),
+    fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
+    onResolved: (registrationId, accountId, claims) => {
+      stashResolvedClaims(registrationId, accountId, claims)
+    },
+    onResolutionWarning: (registrationId, warnings) => {
+      log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
+    },
+    placeholderEmailFor: resolvePlaceholderEmail,
     mapProfileToUser: mapProfileLocale,
     buildLoginHintParams,
   })

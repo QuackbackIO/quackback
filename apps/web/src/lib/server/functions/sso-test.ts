@@ -27,7 +27,9 @@ import { requireAuth } from './auth-helpers'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
+import { allowsMissingEmail, identitySourcesFor, profileClaimFor } from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
+import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 
 const TTL_SECONDS = 600
 
@@ -53,6 +55,8 @@ type TestSession = {
   requestedScopes: string[]
   tokenAuth: 'basic' | 'post'
   requestedPrompt?: string
+  allowMissingEmail: boolean
+  identityMapping?: IdentityMapping
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -79,12 +83,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // the doc), or a complete manual-endpoint set (authorization + token + JWKS
     // + issuer) for installs with no discovery document. Production registers
     // manual-endpoint providers too, so they must be testable to be enforceable.
-    const hasManualEndpoints = !!(
-      provider.authorizationUrl &&
-      provider.tokenUrl &&
-      provider.jwksUri &&
-      provider.issuer
-    )
+    const hasManualEndpoints = !!(provider.authorizationUrl && provider.tokenUrl)
     if (!provider.discoveryUrl && !hasManualEndpoints) {
       return { error: 'sso-not-configured' }
     }
@@ -128,17 +127,12 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       } catch {
         return { error: 'discovery-unreachable' }
       }
-    } else if (
-      provider.authorizationUrl &&
-      provider.tokenUrl &&
-      provider.jwksUri &&
-      provider.issuer
-    ) {
+    } else if (provider.authorizationUrl && provider.tokenUrl) {
       endpoints = {
-        issuer: provider.issuer,
+        issuer: provider.issuer ?? '',
         authorizationEndpoint: provider.authorizationUrl,
         tokenEndpoint: provider.tokenUrl,
-        jwksUri: provider.jwksUri,
+        jwksUri: provider.jwksUri ?? '',
         userinfoEndpoint: provider.userInfoUrl ?? undefined,
       }
     } else {
@@ -181,6 +175,13 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       requestedScopes,
       tokenAuth: request.tokenAuth,
       requestedPrompt: request.prompt,
+      allowMissingEmail: allowsMissingEmail(provider.claimMapping),
+      identityMapping: {
+        sources: identitySourcesFor(provider.claimMapping),
+        idClaim: profileClaimFor(provider.claimMapping, 'id'),
+        emailClaim: profileClaimFor(provider.claimMapping, 'email'),
+        nameClaim: profileClaimFor(provider.claimMapping, 'name'),
+      },
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
