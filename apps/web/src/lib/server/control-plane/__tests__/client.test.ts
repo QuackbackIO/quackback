@@ -12,6 +12,8 @@ vi.mock('@/lib/server/workspaces/workspace-context', () => ({
 import {
   deriveControlPlaneCredential,
   fetchBillingCatalogue,
+  fetchOwnerWorkspaces,
+  openOwnerWorkspace,
   reportTrialActivation,
   requestWorkspaceIdentityMutation,
 } from '../client'
@@ -73,5 +75,34 @@ describe('workspace control-plane credential', () => {
     expect(String(url)).toContain('/api/v1/internal/billing/catalogue')
     expect(init.method).toBe('GET')
     expect(init.body).toBeUndefined()
+  })
+
+  it('lists owner workspaces over GET without a workspace id', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ workspaces: [] }), { status: 200 })
+    )
+    await fetchOwnerWorkspaces()
+    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(url)).toBe('https://control.example.com/api/v1/internal/workspaces')
+    expect(String(url)).not.toContain('workspaceId')
+    expect(String(url)).not.toContain('instanceId')
+    expect(init.method).toBe('GET')
+    expect(init.body).toBeUndefined()
+  })
+
+  it('opens a sibling with only instanceId in the body', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({ url: 'https://south63792f.quackback.co.uk/auth/open-handoff?ott=x' }),
+        { status: 200 }
+      )
+    )
+    await expect(openOwnerWorkspace('inst_south')).resolves.toMatch(/^https:\/\//)
+    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(url)).toContain('/api/v1/internal/workspaces/open')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ instanceId: 'inst_south' })
+    expect(String(init.body)).not.toContain('workspaceId')
+    expect(String(init.body)).not.toContain('returnUrl')
   })
 })

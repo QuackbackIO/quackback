@@ -166,3 +166,52 @@ export async function reportTrialActivation(input: {
   }
   return result.status
 }
+
+export type OwnerWorkspace = {
+  instanceId: string
+  displayName: string
+  url: string | null
+}
+
+export type OwnerSiblingWorkspace = OwnerWorkspace
+
+function isGeneratedSystemUrl(value: string): boolean {
+  return /(?:^|\.|\/\/)ws-[0-9a-f]{24}(?:\.|$|\/)/i.test(value)
+}
+
+function sanitizeOwnerWorkspace(raw: unknown): OwnerWorkspace | null {
+  if (!raw || typeof raw !== 'object') return null
+  const row = raw as { instanceId?: unknown; displayName?: unknown; url?: unknown }
+  if (typeof row.instanceId !== 'string' || row.instanceId.length === 0) return null
+  const displayName =
+    typeof row.displayName === 'string' && row.displayName.trim()
+      ? row.displayName.trim()
+      : 'Untitled workspace'
+  const url = typeof row.url === 'string' && row.url.startsWith('https://') ? row.url : null
+  return {
+    instanceId: row.instanceId,
+    displayName,
+    url: url && !isGeneratedSystemUrl(url) ? url : null,
+  }
+}
+
+export async function fetchOwnerWorkspaces(): Promise<OwnerWorkspace[]> {
+  const result = await getWorkspaceControlPlane<{ workspaces?: unknown }>(
+    '/api/v1/internal/workspaces'
+  )
+  if (!Array.isArray(result.workspaces)) return []
+  return result.workspaces
+    .map(sanitizeOwnerWorkspace)
+    .filter((row): row is OwnerWorkspace => row !== null)
+}
+
+export async function openOwnerWorkspace(instanceId: string): Promise<string> {
+  const result = await callWorkspaceControlPlane<{ url?: unknown }>(
+    '/api/v1/internal/workspaces/open',
+    { instanceId }
+  )
+  if (typeof result.url !== 'string' || !result.url.startsWith('https://')) {
+    throw new ControlPlaneUnavailableError()
+  }
+  return result.url
+}
