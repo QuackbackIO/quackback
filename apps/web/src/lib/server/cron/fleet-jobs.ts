@@ -41,6 +41,7 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'fleet-cron' })
 
+const TEN_MIN = 10 * 60 * 1000
 const ONE_HOUR = 60 * 60 * 1000
 
 /**
