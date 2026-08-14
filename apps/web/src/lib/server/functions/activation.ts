@@ -36,10 +36,11 @@ const log = logger.child({ component: 'activation' })
 
 const outcomeSchema = z.enum(ONBOARDING_OUTCOMES)
 const completeStartingPointSchema = z.object({ action: z.enum(['complete', 'defer']) })
+const markPublicBoardLinkCopiedSchema = z.object({ boardId: z.string().min(1) })
 
 const PRIMARY_TASK: Record<OnboardingOutcome, string> = {
   product_feedback: 'create-board',
-  customer_support: 'messenger',
+  customer_support: 'connect-messenger',
   help_center: 'help-article',
   internal: 'create-board',
 }
@@ -137,12 +138,20 @@ export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).ha
   if (!startingPoint) throw new Error('Choose a starting point first')
 
   let resourceLabel: string | null = null
+  let starterBoard: { id: string; slug: string; publicPath: string } | null = null
   if (startingPoint.resourceType === 'board' && startingPoint.resourceId) {
     const board = await db.query.boards.findFirst({
       where: and(eq(boards.id, startingPoint.resourceId as BoardId), isNull(boards.deletedAt)),
-      columns: { name: true },
+      columns: { id: true, name: true, slug: true, access: true },
     })
     resourceLabel = board?.name ?? null
+    if (board?.access.view === 'anonymous') {
+      starterBoard = {
+        id: board.id,
+        slug: board.slug,
+        publicPath: `/?board=${encodeURIComponent(board.slug)}`,
+      }
+    }
   } else if (startingPoint.resourceType === 'article' && startingPoint.resourceId) {
     const article = await db.query.helpCenterArticles.findFirst({
       where: and(
@@ -161,8 +170,43 @@ export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).ha
     workspaceSlug: row.slug,
     startingPoint,
     resourceLabel,
+    starterBoard,
   }
 })
+
+/** Record the first intentional distribution of a publicly viewable board. */
+export const markPublicBoardLinkCopiedFn = createServerFn({ method: 'POST' })
+  .validator(markPublicBoardLinkCopiedSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
+    const { state, value } = await mutateSetupStateAtomic(async (current, _row, tx) => {
+      const board = await tx.query.boards.findFirst({
+        where: and(eq(boards.id, data.boardId as BoardId), isNull(boards.deletedAt)),
+        columns: { id: true, access: true },
+      })
+      if (!board) throw new Error('Board not found')
+      if (board.access.view !== 'anonymous') {
+        throw new Error('Only a publicly viewable board link can be marked as shared')
+      }
+      const copiedAt =
+        current.activationMilestones?.publicBoardLinkCopiedAt ?? new Date().toISOString()
+      return {
+        state: {
+          ...current,
+          activationMilestones: {
+            ...current.activationMilestones,
+            publicBoardLinkCopiedAt: copiedAt,
+          },
+        },
+        value: { boardId: board.id, copiedAt },
+      }
+    })
+    log.info(
+      { board_id: value.boardId, copied_at: state.activationMilestones?.publicBoardLinkCopiedAt },
+      'public board link copied'
+    )
+    return value
+  })
 
 /** Change the activation goal without rewriting or deleting the setup artifact. */
 export const setActivationGoalFn = createServerFn({ method: 'POST' })
