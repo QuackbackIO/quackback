@@ -95,9 +95,11 @@ consumer continue to derive from that registry.
 Provisioning identity must be separated from the friendly URL. In particular,
 database names, roles, tenant namespaces, mail routing, object-storage prefixes,
 and the immutable system hostname never change when the customer renames the
-workspace. The system hostname is the initial canonical URL and remains a
-non-canonical routing alias and stable asset origin after a friendly URL is
-chosen because stored content contains absolute asset URLs. Every previous
+workspace. Stored asset refs are host-independent (`/api/storage/<key>`);
+email, widget, and other off-host leaves absolutize from the system host
+at send/render time. The system hostname is the initial canonical URL and
+remains a non-canonical routing alias after a friendly URL is chosen.
+Every previous
 friendly platform hostname remains permanently reserved to that workspace as a
 redirect-only alias; it never serves a second canonical origin and is never
 reassigned to another tenant.

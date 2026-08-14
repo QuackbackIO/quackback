@@ -115,11 +115,17 @@ silently invert them.
    `quackback-cp` `main` or the k8s fleet.
 10. One fleet object bucket, keys prefixed by workspace id.
 11. Customer UI on the control plane is a workspace list plus create.
-    Members, billing, trials, and domains live in the workspace.
+    Members, billing, trials, and domains live in the workspace. The
+    first-workspace ready state auto-opens via POST
+    `/api/instances/:id/open`. The dashboard is not a pre-handoff step.
 12. Redis restore is parked. The control plane still needs Redis for rate
     limiting; do not spend a track “cleaning that up.”
 13. Invitations are optional except the explicit internal-feedback outcome.
     Branding and integrations are always optional polish.
+14. Stored asset refs are host-independent (`/api/storage/<key>`). Email,
+    widget, OG, and other off-host leaves absolutize from the immutable
+    system host at send/render time. Do not bake a friendly URL or
+    request Host into `contentJson`.
 
 When documents disagree, authority is: this prompt, then
 `LOOP-SAAS-FIRST-CUSTOMER.md`, then `LOOP-PROGRESS.md` for live evidence,
@@ -134,14 +140,14 @@ Verified 2026-08-14. Re-check before acting.
 
 **Revisions**
 
-- App `saas` tip was `ad6c408f9` (ledger).
-  Last **deployed** app image is `58eebd173` as
+- App `saas` tip `405c729e8`. Last **deployed** app image is `58eebd173`
+  as
   `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`.
-- CP `saas` tip: `be35af1` (welcome no longer mails leftover `login_url`).
-  Live Railway build is still `14dee7a2` / `b4afe73` until the next
-  CP deploy. Control-database migrations `0063`–`0067` were applied
+- CP `saas` tip `4a1e97b`. Live Railway build is still `14dee7a2` /
+  `b4afe73` — that is why `cp.quackback.co.uk` still shows the named-
+  create card. Control-database migrations `0063`–`0067` were applied
   after that deploy. Local app fixture DBs (`quackback`,
-  `quackback_test`) are now at `0262`.
+  `quackback_test`) are at `0262`.
 
 **Fleet**
 
@@ -197,30 +203,45 @@ billing path. They do not close tracks 3–7.
 
 **This wakeup’s unit, in order:**
 
-1. Finish remaining stale SaaS-incompatible deletion. Slices: CP
-   `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`. Local
-   `quackback` + `quackback_test` are at `0262` (13 bootstrap-claim
-   tests unskipped). Continue from `LOOP-PROGRESS.md` § Stale code
-   to remove. Remaining items wait on replica SELECTs, 2026-11-14
-   redirects, or live callers (`plan-fanout`, `BILLING_*`, walk3
-   webhook). Delete, do not dual-mode. Keep self-host (cloud off):
-   local name, local Help Center domain, hidden Plan & billing, no
-   cloud URL/domain chrome.
-2. Add database-backed tests for rename-transfer replay, expiry, wrong
-   workspace, and stable asset origin.
-3. Fresh-browser prove the deployed pair with **two** mailboxes the
+1. **Unit A — deploy the current CP.** Live `cp.quackback.co.uk` still
+   serves the named-create card from `14dee7a2`. Deploy `saas` CP,
+   confirm digest ≠ `14dee7a2`, and record a live `/setup` screenshot
+   of auto-create. Parked 6b leftovers (replica SELECTs, 2026-11-14
+   redirects, `plan-fanout`, `BILLING_*`, walk3 webhook) wait; do not
+   let them delay this deploy.
+2. **Unit B — auto-open when ready.** First-workspace (and a subsequent
+   Create) auto-POSTs `/api/instances/:id/open` when
+   `bootstrapStatus === 'succeeded'`. The setup loader must not bounce
+   a pinned ready `?inst=` to `/dashboard`. Failed / timed-out stays
+   on CP. One POST per ready transition (mint limiter still applies).
+3. **Unit C — host-independent stored assets.** `buildPublicUrl` for
+   persist returns `/api/storage/<key>` (private: `?read=`). Email /
+   widget / OG absolutize from the system host at the leaf. Accept
+   legacy absolute srcs; do not rewrite the fleet. Bucket prefix stays
+   `w/<workspaceId>/`.
+4. Database-backed rename-transfer / expiry / wrong-workspace tests
+   if they are not already on `saas` (`1add15b16`, `4a1e97b`).
+5. Fresh-browser prove the **deployed** pair with **two** mailboxes the
    operator does not own, on **new** generated hosts:
    - control-plane sign-in
    - first workspace created with no name/URL/region/plan form
-   - Open establishes the session via one-use OTT
+   - auto-open establishes the session via one-use OTT (no dashboard)
    - skippable Workspace details, then the outcome question
    - rename of the friendly URL, old host redirects, session survives
+   - stored image src stays `/api/storage/…` across rename
    - replay / expiry / wrong-workspace OTT fail closed
 
 Do **not** start Cloudflare for SaaS, the custom-domain manager, or the
 billing live bar until that walk passes. Do not raise
 `MIN_SCHEMA_VERSION` unless the walk requires it and every enrolled
 workspace is already at the new floor.
+
+After every CP or app unit that changes customer-visible create, open,
+identity, or storage URLs, deploy the affected side, verify
+`meta.imageDigest` (and CP SQL / fleet-migrator if schema changed),
+reassert `us-east4-eqdc4a` on web, and record one live probe. Do not
+redeploy on ledger-only commits. “Do not deploy yet” is withdrawn —
+the named-create screenshot exists because we stopped deploying.
 
 ---
 

@@ -202,27 +202,23 @@ the codebase.
 
 ## Next commits
 
-1. Finish the remaining stale-code inventory below. Name is no longer
-   identity (`546b26e`). Leftover `cp_instances.custom_domain*` is no
-   longer routed (`6836a6a`). Welcome no longer mails `login_url`
-   (`be35af1`); the column stays until no replica treats presence as
-   admin-seeded. Dashboard billing/members/settings leftovers stay as
-   redirects until 2026-11-14. Local onboarding fixture is at 0262.
-   Rename-transfer replay/expiry/wrong-host and stable asset origin are
-   covered locally (`1add15b16`, `4a1e97b`); remaining stale items wait
-   on replica SELECTs, 2026-11-14 redirects, or live callers
-   (`plan-fanout`, `BILLING_*`, walk3 webhook).
-2. Fresh-browser prove the deployed identity pair on **new** generated
-   `ws-*.quackback.co.uk` hosts: zero-input create, OTT handoff, skippable
-   details, rename transfer. Do not use existing `walk-*` rows; they have
-   no identity or hostname-claim rows (13 instances, 0 identity, 0 claims).
-   Do not backfill their old customer-facing names into the identity ledger.
-   Do not deploy yet: live pair is still app `58eebd173` / CP `14dee7a2`.
-3. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-4. Add the shared workspace custom-domain manager on
+1. **Unit A — deploy the current CP** so live `cp.quackback.co.uk` stops
+   serving the named-create card (`14dee7a2`). Confirm digest, record a
+   live `/setup` screenshot. Parked 6b leftovers wait.
+2. **Unit B — auto-open when ready.** Setup auto-POSTs
+   `/api/instances/:id/open`; do not bounce a ready `?inst=` to
+   `/dashboard`.
+3. **Unit C — host-independent stored assets.** Persist `/api/storage/<key>`;
+   absolutize at email/widget/OG from the system host.
+4. Fresh-browser prove the deployed identity pair on **new** generated
+   `ws-*.quackback.co.uk` hosts: zero-input create, auto-open OTT,
+   skippable details, rename transfer, relative stored image src.
+   Do not use existing `walk-*` rows.
+5. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+6. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
    readiness before enabling it.
-5. Run the remaining control-plane billing gateway and first-win journeys.
+7. Run the remaining control-plane billing gateway and first-win journeys.
    Checkout attaches to an existing workspace only.
 
 ## Stale code to remove

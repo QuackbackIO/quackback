@@ -118,8 +118,9 @@ surface renders more than one primary action.
 ### Track 1: Zero-input creation, owner handoff, and cloud identity
 
 Outcome: the control plane creates the first workspace immediately after sign-in
-using generated immutable identity, then Open establishes the provisioned
-owner's workspace session through a ten-minute, owner-bound, single-use OTT.
+using generated immutable identity. When bootstrap succeeds, the setup
+page auto-opens the workspace through a ten-minute, owner-bound,
+single-use OTT. The control-plane dashboard is not a pre-handoff step.
 There is no pre-handoff name, URL, region, or plan form.
 
 After handoff, Workspace details offers a skippable display-name and friendly
@@ -143,7 +144,8 @@ that manager once it exists; the self-host reverse-proxy path stays local.
 Bar: tests cover zero-input create/retry, generated-identifier immutability,
 concurrent friendly-URL claims, reserved names, signed projection
 replay/staleness, control-plane outage, rename session transfer, redirect-only
-old hosts, stable absolute asset URLs, and self-host absence. Fresh-browser
+old hosts, host-independent stored asset refs (leaves absolutize from
+the system host), and self-host absence. Fresh-browser
 tests cover OTT success, replay, expiry, wrong workspace, and sign-in-only
 behavior for non-owners. Custom-domain add/verify/make-primary/remove is a
 later bar.
