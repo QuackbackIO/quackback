@@ -37,12 +37,11 @@ Custom Hostnames integration proves both hostname and SSL readiness.
   `ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`
   (includes limits overlay `b0c13a366` / `31330d85b` and Origin-fix
   `635cdb149`). Web `47e0c7be` SUCCESS, region only `us-east4-eqdc4a`.
-- Control plane: `71e59d9` live as `f135274f` /
-  `sha256:a005414fa8a2e49e128a47abc59f221198e76214c78a7516894ef9e967def597`
-  (still `sfo`). Local CP tip is `2fb9488` (catalogue + CF client +
-  3-Free `c5a484d`; not deployed).
+- Control plane: `2fb9488` live as `80c8301e` /
+  `sha256:3d10454a80267546478e184379b66fd71acccf9c2eda26de9ddd3dbcfc096c45`
+  (includes 3-Free `c5a484d`, catalogue, CF client; still `sfo`).
 - Last known deployed workspace: `f0186af2b` (2026-08-14)
-- Last known deployed control plane: `f135274f` (2026-08-14)
+- Last known deployed control plane: `80c8301e` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -688,8 +687,24 @@ unpaid (trial counts as Free). Fourth create is 402
 
 PASS — focused tests 35/35; 4th Free is 402 with
 `free_workspace_owner_cap` and does not insert; trial is Free; paid
-item+plan frees a slot; count is `ownerEmail`. Not live (CP still
-`71e59d9` / `f135274f`).
+item+plan frees a slot; count is `ownerEmail`.
+
+### Live deploy + 4th-Free (2026-08-14)
+
+Fleet: app `635cdb149` still in `cb186135` / web `47e0c7be`. No app
+redeploy. Stripe-live not repeated. No second CP-create builder.
+
+`railway up` CP `saas` `2fb9488` → `80c8301e` SUCCESS
+`sha256:3d10454a…`. Live `free-workspace-cap.ts` present. No owner
+had 3 Free (max 1); two temporary live-Free rows (no Neon) made t1e’s
+count 3; `_internal_createInstance` 402 `free_workspace_owner_cap`;
+no insert/provision; temps deleted; instances 16→16.
+
+### Critic (2026-08-14, live 3-Free cap)
+
+PASS — CP `80c8301e` digest `3d10454a`; live reason string present;
+instances 16; zero leftover cap-probe rows; t1a/t1e remain.
+`loop-evidence/t3-pay/cp-cap-live-critic.md`. Did not create Neon.
 
 ## Verify + Track-6 + limits fixer (2026-08-14)
 
@@ -761,9 +776,9 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 11. ~~Complete one test-mode payment and prove webhook finalize + projection
     on the existing workspace (metadata must not create one).~~ t1a Growth
     paid; webhook processed; projection v4 delivered; instances 16.
-12. **Per-owner cap:** implemented on CP `c5a484d` (tests 35, critic PASS).
-    Not deployed. Live 4th-Free 402 still needs a CP deploy (Fleet lane;
-    no new Neon unless that live proof requires it).
+12. ~~**Per-owner cap.**~~ live `80c8301e` / `2fb9488`. 4th Free 402
+    `free_workspace_owner_cap` on t1e owner (temps, no Neon);
+    instances 16.
 13. ~~Hosted-product sweep.~~ 2026-08-14 FAIL one HIGH (unlimited
     `getTierLimits` on cloud). Fixer live as `cb186135`. Re-sweep
     remaining Verify rows next fire (not Fleet).
@@ -923,16 +938,10 @@ limits row next fire.
 
 Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Unused web `BILLING_*` vars removed
-(`--skip-deploys`; web now `47e0c7be`). Remaining: deploy CP `c5a484d` (and later `2fb9488`) + live 4th-Free
-402; re-sweep Verify limits on t1a/t1e. Walk3 workspace webhook stays
-disabled. Cloudflare for SaaS provider is started (`0302c1d00`); this
-fire did not wire the Domains card. Live app `f0186af2b` /
-`sha256:cb186135…`.
-
-The identity/billing pair is otherwise deployed. Further deploys are
-incremental. Live app `f0186af2b` / `sha256:cb186135…`. Live CP
-`f135274f` / `sha256:a005414f…`. Local CP `2fb9488` (includes
-`c5a484d`) waits for a Fleet deploy.
+(`--skip-deploys`; web now `47e0c7be`). Remaining: re-sweep Verify limits on t1a/t1e; Track 8; Domains card
+(operator unblocked CF — this fire did not start it). Walk3 workspace
+webhook stays disabled. Live app `f0186af2b` / `sha256:cb186135…`.
+Live CP `80c8301e` / `sha256:3d10454a…`.
 
 Operational defects carried from the prior lead:
 
