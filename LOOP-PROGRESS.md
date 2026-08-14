@@ -30,9 +30,9 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `78d9f7652` (live image still `6f255842f` /
+- Workspace: `338cb9f99` (live image still `6f255842f` /
   `sha256:1249693eb22277381fbe450cd49368216af1254661e9502870aaa64e7f8c819d`;
-  Docker `31826887859` is building the import-protection-safe consume)
+  Docker `31826887859` failed checkout; `31827133552` is building `saas`)
 - Control plane: `71e59d9` live as `e28c7b8e` /
   `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
 - Last known deployed workspace: `6f255842f` (2026-08-14)
@@ -103,17 +103,17 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                                                                  | Evidence                                                                                                          |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                                                                | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | live create + Open mint `/auth/open-handoff` proved; consume image not live yet (`78d9f7652` building as `31826887859`) | see “Track 1 live walk (2026-08-14)”                                                                              |
-| 2 focused widget activation      | implemented, focused verification passed                                                                                | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                                                                             | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                                                                             | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                                                                             | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                                                                          | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                              | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                                                                              | `33c15ba53`; first-win journeys remain                                                                            |
+| Track                            | Status                                                                                                                                              | Evidence                                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                                                                            | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | live create + Open mint `/auth/open-handoff` proved; consume image not live yet (`31826887859` checkout-failed; `31827133552` building `338cb9f99`) | see “Track 1 live walk (2026-08-14)”                                                                              |
+| 2 focused widget activation      | implemented, focused verification passed                                                                                                            | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | implemented; full/live verification pending                                                                                                         | CP `c7ec591` through `9f77647`                                                                                    |
+| 4 workspace projection + gateway | implemented; full/live verification pending                                                                                                         | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | implemented; full/live verification pending                                                                                                         | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                                                                                                      | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                                                          | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                                                                                                          | `33c15ba53`; first-win journeys remain                                                                            |
 
 ## Completed activation work
 
@@ -298,7 +298,13 @@ Live after this fire (2026-08-14 T17:42Z):
   13 passed (open-handoff shape 2, ott-handler 2, open-handoff 2,
   origin-transfer.db 7). Local client Vite build passed import-protection;
   SSR failed only on a missing local widget bundle (Docker builds that
-  first). Docker `31826887859` is building `78d9f7652` as tag `saas`.
+  first). Docker `31826887859` (`78d9f7652`) **failed at checkout**, not
+  import-protection. Dispatch passed `sha=78d9f7652` (short); checkout
+  v6 fetched `refs/heads/78d9f7652*` and exited 1. Re-dispatched
+  `31827133552` with `--ref saas` and no `sha` input so checkout uses
+  `refs/heads/saas` (`338cb9f99`, includes `78d9f7652`) and tags `saas`.
+  Queued 2026-08-14T18:06:48Z. Do not treat `31826887859` as a digest
+  source.
 
 Do **not** start custom domains or the billing live bar. Reuse the two
 `ws-*` rows after the consume-path image is on web (`us-east4-eqdc4a`).
@@ -310,14 +316,15 @@ Do not mint more Neon projects for this walk.
 2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
 3. ~~**Unit C — host-independent stored assets**~~ live through `6f255842f` (`sha256:1249693e…`).
 4. ~~Deploy `6f255842f` + confirm CP `71e59d9`.~~ Digest and `us-east4-eqdc4a` verified. Live consume still bounced via `OttHandler`.
-5. If Docker `31826887859` (`78d9f7652`) succeeded, set `source.image` +
-   `serviceInstanceDeployV2` for web `0b821c4a` / worker `9cd4a749` /
-   cron-hourly `bb8fc6ee` / cron-daily `4bd70297` / migrator `6e836ccb`.
-   Verify digest + `us-east4-eqdc4a`. Then re-walk the two existing
-   `ws-*` hosts: `/auth/open-handoff` session → skippable details →
-   outcome → rename / old-host redirect / `/api/storage/…` src →
-   replay/expiry/wrong-workspace fail closed. If still building, do
-   not sleep.
+5. If Docker `31827133552` (`338cb9f99`, includes `78d9f7652`) succeeded,
+   set `source.image` + `serviceInstanceDeployV2` for web `0b821c4a` /
+   worker `9cd4a749` / cron-hourly `bb8fc6ee` / cron-daily `4bd70297` /
+   migrator `6e836ccb`. Verify digest + `us-east4-eqdc4a`. Then re-walk
+   the two existing `ws-*` hosts: `/auth/open-handoff` session →
+   skippable details → outcome → rename / old-host redirect /
+   `/api/storage/…` src → replay/expiry/wrong-workspace fail closed.
+   Dispatch Docker with `--ref saas` and empty `sha` (short SHAs fail
+   checkout). If still building, do not sleep.
 6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
 7. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
