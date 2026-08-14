@@ -205,6 +205,21 @@ export async function fetchOwnerWorkspaces(): Promise<OwnerWorkspace[]> {
     .filter((row): row is OwnerWorkspace => row !== null)
 }
 
+export async function fetchWorkspaceOwnerEmail(): Promise<string | null> {
+  const result = await getWorkspaceControlPlane<{ ownerEmail?: unknown }>(
+    '/api/v1/internal/ownership'
+  )
+  return typeof result.ownerEmail === 'string' ? result.ownerEmail : null
+}
+
+export async function transferWorkspaceOwnership(toEmail: string): Promise<void> {
+  await callWorkspaceControlPlane('/api/v1/internal/ownership', { toEmail })
+}
+
+export async function leaveCloudWorkspace(email: string): Promise<void> {
+  await callWorkspaceControlPlane('/api/v1/internal/membership/leave', { email })
+}
+
 export async function openOwnerWorkspace(instanceId: string): Promise<string> {
   const result = await callWorkspaceControlPlane<{ url?: unknown }>(
     '/api/v1/internal/workspaces/open',

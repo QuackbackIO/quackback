@@ -8,6 +8,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { EnvelopeIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
@@ -35,6 +36,7 @@ import {
   InviteLinkRow,
 } from '@/components/admin/settings/team/pending-invitations'
 import { MemberActions } from '@/components/admin/settings/team/member-actions'
+import { CloudOwnershipActions } from '@/components/admin/settings/team/cloud-ownership-actions'
 import { CUSTOM_ROLE_BADGE } from '@/components/admin/settings/team/role-ui'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { isAdmin } from '@/lib/shared/roles'
@@ -113,6 +115,7 @@ interface MembersTabProps {
 
 /** The teammate roster + pending invitations (the Members tab of Members & Teams). */
 export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
+  const { session } = useRouteContext({ from: '__root__' })
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
   const { members, avatarMap, formattedInvitations } = teamDataQuery.data
 
@@ -318,6 +321,13 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
   return (
     <div className="space-y-6">
       {error && <FormError message={error} />}
+
+      <CloudOwnershipActions
+        sessionEmail={session?.user?.email ?? null}
+        memberEmails={members
+          .map((member) => member.userEmail)
+          .filter((email): email is string => Boolean(email))}
+      />
 
       <SettingsCard
         title="Members"

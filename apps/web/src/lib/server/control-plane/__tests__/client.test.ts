@@ -13,7 +13,9 @@ import {
   deriveControlPlaneCredential,
   fetchBillingCatalogue,
   fetchOwnerWorkspaces,
+  leaveCloudWorkspace,
   openOwnerWorkspace,
+  transferWorkspaceOwnership,
   reportTrialActivation,
   requestWorkspaceIdentityMutation,
 } from '../client'
@@ -90,6 +92,28 @@ describe('workspace control-plane credential', () => {
     expect(init.body).toBeUndefined()
   })
 
+  it('transfers ownership with only toEmail in the body', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ ownerEmail: 'mate@example.com' }), { status: 200 })
+    )
+    await transferWorkspaceOwnership('mate@example.com')
+    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(url)).toContain('/api/v1/internal/ownership')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ toEmail: 'mate@example.com' })
+    expect(String(init.body)).not.toContain('workspaceId')
+    expect(String(init.body)).not.toContain('instanceId')
+  })
+
+  it('leaves with only the actor email in the body', async () => {
+    hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ left: true }), { status: 200 }))
+    await leaveCloudWorkspace('mate@example.com')
+    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(url)).toContain('/api/v1/internal/membership/leave')
+    expect(JSON.parse(String(init.body))).toEqual({ email: 'mate@example.com' })
+    expect(String(init.body)).not.toContain('workspaceId')
+  })
+
   it('opens a sibling with only instanceId in the body', async () => {
     hoisted.fetch.mockResolvedValue(
       new Response(
@@ -104,5 +128,22 @@ describe('workspace control-plane credential', () => {
     expect(JSON.parse(String(init.body))).toEqual({ instanceId: 'inst_south' })
     expect(String(init.body)).not.toContain('workspaceId')
     expect(String(init.body)).not.toContain('returnUrl')
+  })
+
+  it('transfers ownership with only toEmail', async () => {
+    hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ ownerEmail: 'mate@example.com' }), { status: 200 }))
+    await transferWorkspaceOwnership('mate@example.com')
+    const [, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(hoisted.fetch.mock.calls[0][0])).toContain('/api/v1/internal/ownership')
+    expect(JSON.parse(String(init.body))).toEqual({ toEmail: 'mate@example.com' })
+    expect(String(init.body)).not.toContain('workspaceId')
+  })
+
+  it('leaves with only email', async () => {
+    hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ left: true }), { status: 200 }))
+    await leaveCloudWorkspace('mate@example.com')
+    expect(JSON.parse(String((hoisted.fetch.mock.calls[0] as [URL, RequestInit])[1].body))).toEqual({
+      email: 'mate@example.com',
+    })
   })
 })
