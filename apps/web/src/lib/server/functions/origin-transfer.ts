@@ -17,6 +17,47 @@ function responseCookies(response: Response): string[] {
   return single ? [single] : []
 }
 
+async function verifyOttCookies(
+  ott: string,
+  returnTo: string,
+  headers?: Headers
+): Promise<OriginTransferResult> {
+  try {
+    const { auth } = await import('@/lib/server/auth')
+    const requestHeaders = new Headers(headers)
+    requestHeaders.set('content-type', 'application/json')
+    const response = await auth.handler(
+      new Request('http://auth.local/api/auth/one-time-token/verify', {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify({ token: ott }),
+      })
+    )
+    if (!response.ok) return { kind: 'error', status: 'invalid' }
+    const cookies = responseCookies(response)
+    if (cookies.length === 0) return { kind: 'error', status: 'error' }
+    return { kind: 'redirect', to: returnTo, cookies }
+  } catch {
+    return { kind: 'error', status: 'invalid' }
+  }
+}
+
+/**
+ * Consume the control-plane Open handoff. First arrival uses the immutable
+ * system host and may happen before the identity projection lands, so this
+ * path must not require a verified projection. Replay and expiry fail closed
+ * inside Better Auth's verify.
+ */
+export async function consumeOpenHandoff(input: {
+  ott?: string
+  returnTo?: string
+  headers?: Headers
+}): Promise<OriginTransferResult> {
+  const returnTo = isSafeCallbackUrl(input.returnTo) ? input.returnTo : '/onboarding/workspace'
+  if (!input.ott) return { kind: 'error', status: 'invalid' }
+  return verifyOttCookies(input.ott, returnTo, input.headers)
+}
+
 /**
  * Consume a one-use session handoff on the workspace's current canonical host.
  *
@@ -43,22 +84,5 @@ export async function consumeOriginTransfer(input: {
     return { kind: 'error', status: 'invalid' }
   }
 
-  try {
-    const { auth } = await import('@/lib/server/auth')
-    const headers = new Headers(input.headers)
-    headers.set('content-type', 'application/json')
-    const response = await auth.handler(
-      new Request('http://auth.local/api/auth/one-time-token/verify', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ token: input.ott }),
-      })
-    )
-    if (!response.ok) return { kind: 'error', status: 'invalid' }
-    const cookies = responseCookies(response)
-    if (cookies.length === 0) return { kind: 'error', status: 'error' }
-    return { kind: 'redirect', to: returnTo, cookies }
-  } catch {
-    return { kind: 'error', status: 'invalid' }
-  }
+  return verifyOttCookies(input.ott, returnTo, input.headers)
 }
