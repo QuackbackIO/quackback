@@ -98,7 +98,14 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
                 await import('@/lib/server/integrations/jira/webhook-registration')
               const cloudId = config.cloudId as string
               if (!cloudId) throw new Error('No Jira Cloud ID configured')
-              const result = await registerJiraWebhook(accessToken, cloudId, callbackUrl, secret)
+              const projectRef = String(config.channelId ?? '').split(':')[0]
+              if (!projectRef) throw new Error('No Jira project configured')
+              const result = await registerJiraWebhook(
+                accessToken,
+                cloudId,
+                callbackUrl,
+                projectRef
+              )
               externalWebhookId = result.webhookId
               break
             }

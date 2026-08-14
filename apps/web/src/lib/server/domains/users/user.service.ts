@@ -23,6 +23,8 @@ import {
   sql,
   principal,
   user,
+  session,
+  conversations,
   posts,
   comments,
   votes,
@@ -368,16 +370,14 @@ export async function listPortalUsers(
 /**
  * Remove a portal user from the portal (soft removal).
  *
- * Deletes the `principal` record (role='user') only — the Better-Auth `user`
- * and `account` rows are intentionally retained so we still recognize the
- * person if they return (and their re-join shows distinct "joined" vs
- * "account created" dates). The FK is `principal.userId -> user` with
- * onDelete cascade, so deleting the principal does NOT remove the user; a
- * returning sign-in re-provisions a principal via the SSO hooks or lazily.
+ * Detaches the `principal` from its Better-Auth `user` instead of deleting
+ * the row: chat/posts/comments RESTRICT principal deletes. Sessions are
+ * revoked in the same transaction so getOptionalAuth cannot immediately
+ * provision a replacement principal for a still-cookied user. The user
+ * row is kept so a later sign-in provisions a fresh principal.
  */
 export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {
-    // Verify principal exists and has role='user'
     const existingPrincipal = await db.query.principal.findFirst({
       where: and(eq(principal.id, principalId), eq(principal.role, 'user')),
     })
@@ -389,8 +389,42 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
       )
     }
 
-    // Delete principal record (user record will be deleted via CASCADE since user is org-scoped)
-    await db.delete(principal).where(eq(principal.id, principalId))
+    const userId = existingPrincipal.userId
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(principal)
+        .set({
+          userId: null,
+          type: 'anonymous',
+          displayName: 'Removed user',
+          avatarUrl: null,
+          avatarKey: null,
+          contactEmail: null,
+        })
+        .where(eq(principal.id, principalId))
+
+      await tx
+        .update(conversations)
+        .set({ visitorEmail: null })
+        .where(eq(conversations.visitorPrincipalId, principalId))
+
+      if (userId) {
+        await tx.delete(session).where(eq(session.userId, userId))
+      }
+    })
+
+    if (userId) {
+      try {
+        const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+        await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(userId))
+      } catch (error) {
+        log.warn(
+          { err: error, user_id: userId },
+          'failed to invalidate principal cache after remove'
+        )
+      }
+    }
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     log.error({ err: error }, 'failed to remove portal user')

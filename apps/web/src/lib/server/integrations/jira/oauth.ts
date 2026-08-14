@@ -135,6 +135,7 @@ export async function refreshJiraToken(
       client_secret: clientSecret,
       refresh_token: refreshToken,
     }),
+    signal: AbortSignal.timeout(10_000),
   })
 
   if (!response.ok) {

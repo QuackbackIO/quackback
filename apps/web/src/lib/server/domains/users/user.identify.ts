@@ -149,12 +149,24 @@ export async function identifyPortalUser(
     }
   }
 
-  const principalRecord = await db.query.principal.findFirst({
+  let principalRecord = await db.query.principal.findFirst({
     where: eq(principal.userId, userRecord.id),
     columns: { id: true },
   })
   if (!principalRecord) {
-    throw new NotFoundError('PRINCIPAL_NOT_FOUND', `No principal found for user ${userRecord.id}`)
+    const [inserted] = await db
+      .insert(principal)
+      .values({
+        id: generateId('principal'),
+        userId: userRecord.id,
+        role: 'user',
+        displayName: userRecord.name ?? defaultName,
+        avatarUrl: userRecord.image ?? null,
+        createdAt: new Date(),
+      })
+      .returning({ id: principal.id })
+    principalRecord = inserted
+    created = true
   }
 
   return {

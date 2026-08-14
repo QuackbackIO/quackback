@@ -347,6 +347,33 @@ describe('user.service', () => {
       expect(metadata._externalUserId).toBe('ext-789') // must be preserved
     })
 
+    it('mints a principal when the user exists after a detach', async () => {
+      const existingUser = {
+        id: 'user_existing' as UserId,
+        name: 'Existing User',
+        email: 'existing@example.com',
+        image: null,
+        emailVerified: false,
+        metadata: null,
+        createdAt: new Date('2024-01-01'),
+      }
+
+      mockFindFirst.mockResolvedValueOnce(existingUser).mockResolvedValueOnce(existingUser)
+      const { db } = await import('@/lib/server/db')
+      vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(undefined)
+
+      const { identifyPortalUser } = await import('../user.identify')
+      const result = await identifyPortalUser({ email: 'existing@example.com' })
+
+      expect(result.created).toBe(true)
+      expect(
+        insertValuesCalls.some((args) => {
+          const row = args[0] as Record<string, unknown>
+          return row.role === 'user' && row.userId === 'user_existing'
+        })
+      ).toBe(true)
+    })
+
     it('should remove _externalUserId when externalId is set to null', async () => {
       const existingUser = {
         id: 'user_existing' as UserId,
