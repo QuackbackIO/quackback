@@ -30,7 +30,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `809891850` (deployed image remains `58eebd173`)
+- Workspace: `809891850` (this unit records local fixture 0262; sha after commit)
 - Control plane: `be35af1` (live deploy remains `14dee7a2` / `b4afe73`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
@@ -69,17 +69,17 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                   | Evidence                                                            |
-| -------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                 | `d2b8accca`, `029727e26`                                            |
-| 1 zero-input create + identity   | implementation complete through post-handoff details; live proof pending | CP `bd9148c` through `9071f83`; app `4a1827560` through `ff19faf4c` |
-| 2 focused widget activation      | implemented, focused verification passed                                 | `13df888fa`                                                         |
-| 3 CP billing foundation          | implemented; full/live verification pending                              | CP `c7ec591` through `9f77647`                                      |
-| 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                           |
-| 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`               |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`               |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; remainder pending                   | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`            |
-| 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                              |
+| Track                            | Status                                                                   | Evidence                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                 | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | implementation complete through post-handoff details; live proof pending | CP `bd9148c` through `9071f83`; app `4a1827560` through `ff19faf4c`                                               |
+| 2 focused widget activation      | implemented, focused verification passed                                 | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | implemented; full/live verification pending                              | CP `c7ec591` through `9f77647`                                                                                    |
+| 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262               | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                                                                            |
 
 ## Completed activation work
 
@@ -157,9 +157,13 @@ retains local name editing and makes no identity-gateway call. Cloud onboarding
 now has an optional details screen followed by the outcome screen, with one
 primary action on each. Focused onboarding UI/state verification passed: 54
 tests across the latest slices; the full workspace typecheck passed. The local
-real-Postgres onboarding fixture is still pre-0262 and therefore correctly
-skips 13 tests. Development Neon workspaces are now at 0262; unskip those
-tests only after the local fixture is migrated.
+real-Postgres fixture (`quackback` fallback and `quackback_test`) was migrated
+to `0262_cloud_identity_projection` on 2026-08-14: `0261` dropped leftover
+workspace billing tables, `0262` added `settings.cloud_identity` and
+`cloud_identity_revision`. The 13 onboarding bootstrap-claim tests that
+probed those columns no longer skip. Focused verification: 27 passed
+(`onboarding-bootstrap-claim` 13, `onboarding-workspace-claim` 8,
+`onboarding-state-readonly` 6). Development Neon workspaces were already at 0262.
 
 The old operator/admin/MCP workspace-creation surfaces are deleted. Control-plane
 commits `4e730be`, `e69d48f`, and `a39a8c5` removed the manual admin dialog,
@@ -191,7 +195,8 @@ the codebase.
    longer routed (`6836a6a`). Welcome no longer mails `login_url`
    (`be35af1`); the column stays until no replica treats presence as
    admin-seeded. Dashboard billing/members/settings leftovers stay as
-   redirects until 2026-11-14.
+   redirects until 2026-11-14. Local onboarding fixture is at 0262
+   (this unit); do not keep a pre-identity schema for SaaS tests.
 2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
 3. Fresh-browser prove the deployed identity pair on **new** generated
@@ -270,9 +275,10 @@ cloud URL/domain controls, Stripe remains a customer integration.
   web service). They are not read by the deployed image.
 - Workspace webhook still targeted at `walk3-mss0m53h` in the Stripe
   test catalogue. Retire that endpoint; do not reattach it to the app.
-- Local onboarding fixture still pre-0262 (13 skipped tests). Migrate
-  or replace the fixture; do not keep a pre-identity schema for SaaS
-  tests.
+- ~~Local onboarding fixture still pre-0262 (13 skipped tests).~~
+  Local `quackback` and `quackback_test` migrated through `0262` on
+  2026-08-14. The 13 bootstrap-claim tests now run (27 onboarding DB
+  tests passed). Recreate those databases only via `bun run db:migrate`.
 
 ### UI must stay hidden when cloud is off
 
