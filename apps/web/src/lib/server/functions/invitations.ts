@@ -3,7 +3,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { InviteId, PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
-import { db, invitation, principal, user, and, eq } from '@/lib/server/db'
+import { db, invitation, principal, user, and, eq, or } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from '@/lib/server/auth/session'
 import { logger } from '@/lib/server/logger'
@@ -304,7 +304,10 @@ export const getInviteBrandingFn = createServerFn({ method: 'GET' })
       db.query.settings.findFirst(),
       db.query.invitation
         .findFirst({
-          where: and(eq(invitation.id, invitationId as InviteId), eq(invitation.kind, 'team')),
+          where: and(
+            eq(invitation.id, invitationId as InviteId),
+            or(eq(invitation.kind, 'team'), eq(invitation.kind, 'portal'))
+          ),
           with: { inviter: true },
         })
         .catch(() => null),
