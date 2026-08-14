@@ -137,7 +137,7 @@ Verified 2026-08-14. Re-check before acting.
 - App `saas` tip was `809891850` (ledger). Last **deployed** app image is
   `58eebd173` as
   `ghcr.io/quackbackio/quackback@sha256:496d295f1d87bf71e82e3f26913b9954a8ffde530f90242769ad9592aca44f30`.
-- CP `saas` tip: `6836a6a` (leftover `custom_domain*` no longer routed).
+- CP `saas` tip: `be35af1` (welcome no longer mails leftover `login_url`).
   Live Railway build is still `14dee7a2` / `b4afe73` until the next
   CP deploy. Control-database migrations `0063`–`0067` were applied
   after that deploy.
@@ -159,17 +159,17 @@ Verified 2026-08-14. Re-check before acting.
 
 **Track status**
 
-| Track                            | Bar                                                 |
-| -------------------------------- | --------------------------------------------------- |
-| 0 contextual activation          | met in tests                                        |
-| 1 zero-input create + identity   | implemented; live proof **not** met                 |
-| 2 focused widget activation      | met in tests                                        |
-| 3 CP billing foundation          | implemented; live verification pending              |
-| 4 workspace projection + gateway | implemented; live verification pending              |
-| 5 authoritative starter trial    | implemented; live verification pending              |
-| 6 remove workspace billing       | implemented; boundary scan pending                  |
-| 6b remove stale SaaS code        | `custom_domain*` ignored in `6836a6a`; more remains |
-| 7 first-win + operational proof  | infrastructure only                                 |
+| Track                            | Bar                                                           |
+| -------------------------------- | ------------------------------------------------------------- |
+| 0 contextual activation          | met in tests                                                  |
+| 1 zero-input create + identity   | implemented; live proof **not** met                           |
+| 2 focused widget activation      | met in tests                                                  |
+| 3 CP billing foundation          | implemented; live verification pending                        |
+| 4 workspace projection + gateway | implemented; live verification pending                        |
+| 5 authoritative starter trial    | implemented; live verification pending                        |
+| 6 remove workspace billing       | implemented; boundary scan pending                            |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url` (`be35af1`); more remains |
+| 7 first-win + operational proof  | infrastructure only                                           |
 
 Historical test-mode checkout walks proved the **old** workspace-owned
 billing path. They do not close tracks 3–7.
@@ -197,8 +197,8 @@ billing path. They do not close tracks 3–7.
 **This wakeup’s unit, in order:**
 
 1. Finish remaining stale SaaS-incompatible deletion. Slices: CP
-   `e2219f5`, `7230a32`, `546b26e`, `6836a6a`. Continue from
-   `LOOP-PROGRESS.md` § Stale code to remove. Delete, do not
+   `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`. Continue
+   from `LOOP-PROGRESS.md` § Stale code to remove. Delete, do not
    dual-mode. Keep self-host (cloud off): local name, local Help
    Center domain, hidden Plan & billing, no cloud URL/domain chrome.
 2. Add database-backed tests for rename-transfer replay, expiry, wrong
