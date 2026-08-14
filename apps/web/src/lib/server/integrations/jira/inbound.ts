@@ -1,33 +1,40 @@
 /**
  * Jira inbound webhook handler.
  *
- * Receives webhook events from Jira and extracts status changes.
- * Signature: HMAC-SHA256 in `X-Hub-Signature` header (optional, Jira Cloud).
- * Status field: `changelog.items[]` where `field === 'status'` → `toString`.
+ * OAuth 2.0 dynamic webhooks authenticate with a bearer JWT signed by the
+ * app client secret — not HMAC X-Hub-Signature (that is the admin-webhook API).
+ * Status field: changelog.items[] where field === 'status' → toString.
  */
 
-import { timingSafeEqual, createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import type { InboundWebhookHandler, InboundWebhookResult } from '../inbound-types'
 
+function verifyHs256Jwt(token: string, secret: string): boolean {
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  const [header, payload, signature] = parts
+  const expected = createHmac('sha256', secret).update(`${header}.${payload}`).digest()
+  const actual = Buffer.from(signature, 'base64url')
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
+}
+
 export const jiraInboundHandler: InboundWebhookHandler = {
-  async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
-    const rawSignature = request.headers.get('X-Hub-Signature')
-    if (!rawSignature) {
-      // Jira Cloud webhooks may not always have HMAC — but if we configured a secret, require it
-      return new Response('Missing signature', { status: 401 })
+  async verifySignature(request: Request): Promise<true | Response> {
+    const raw = request.headers.get('Authorization')
+    const token = raw?.startsWith('Bearer ') ? raw.slice('Bearer '.length).trim() : ''
+    if (!token) {
+      return new Response('Missing bearer token', { status: 401 })
     }
 
-    // Jira sends the signature as "sha256=<hex>" — strip the prefix for comparison
-    const signature = rawSignature.startsWith('sha256=')
-      ? rawSignature.slice('sha256='.length)
-      : rawSignature
+    const { getPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    const credentials = await getPlatformCredentials('jira')
+    const clientSecret = credentials?.clientSecret
+    if (!clientSecret) {
+      return new Response('Jira credentials not configured', { status: 401 })
+    }
 
-    const expected = createHmac('sha256', secret).update(body).digest('hex')
-    const valid =
-      signature.length === expected.length &&
-      timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-
-    if (!valid) {
+    if (!verifyHs256Jwt(token, clientSecret)) {
       return new Response('Invalid signature', { status: 401 })
     }
 
@@ -37,7 +44,6 @@ export const jiraInboundHandler: InboundWebhookHandler = {
   async parseStatusChange(body: string): Promise<InboundWebhookResult | null> {
     const payload = JSON.parse(body)
 
-    // Jira sends `jira:issue_updated` for issue changes
     if (
       !payload.webhookEvent?.includes('issue_updated') &&
       payload.webhookEvent !== 'jira:issue_updated'
@@ -45,7 +51,6 @@ export const jiraInboundHandler: InboundWebhookHandler = {
       return null
     }
 
-    // Look for a status change in the changelog
     const statusChange = payload.changelog?.items?.find(
       (item: { field: string }) => item.field === 'status'
     )

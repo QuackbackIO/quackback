@@ -1,23 +1,27 @@
 /**
- * Jira webhook registration.
+ * Jira dynamic webhook registration for inbound status sync.
  *
- * Uses Jira REST API to create/delete webhooks for issue status sync.
- * Note: Jira Cloud webhooks expire after 30 days by default.
+ * Uses POST /rest/api/3/webhook (Connect / OAuth 2.0). That API accepts only
+ * `=`, `!=`, `IN`, `NOT IN` in jqlFilter — not `IS` / `IS NOT`.
+ * Dynamic webhooks have no HMAC secret field.
  */
 
 interface JiraWebhookResult {
   webhookId: string
 }
 
-/**
- * Register a webhook with Jira to receive issue update events.
- */
+const PROJECT_REF = /^[A-Za-z0-9_]+$/
+
 export async function registerJiraWebhook(
   accessToken: string,
   cloudId: string,
   callbackUrl: string,
-  _secret: string
+  projectRef: string
 ): Promise<JiraWebhookResult> {
+  if (!PROJECT_REF.test(projectRef)) {
+    throw new Error('Invalid Jira project reference')
+  }
+
   const response = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/webhook`, {
     method: 'POST',
     headers: {
@@ -29,7 +33,7 @@ export async function registerJiraWebhook(
       url: callbackUrl,
       webhooks: [
         {
-          jqlFilter: 'project is not EMPTY',
+          jqlFilter: `project = ${projectRef}`,
           events: ['jira:issue_updated'],
         },
       ],
@@ -42,19 +46,17 @@ export async function registerJiraWebhook(
   }
 
   const result = (await response.json()) as {
-    webhookRegistrationResult?: Array<{ createdWebhookId?: number }>
+    webhookRegistrationResult?: Array<{ createdWebhookId?: number; errors?: string[] }>
   }
-  const webhookId = result.webhookRegistrationResult?.[0]?.createdWebhookId
-  if (!webhookId) {
-    throw new Error('No webhook ID returned from Jira')
+  const first = result.webhookRegistrationResult?.[0]
+  if (!first?.createdWebhookId) {
+    const detail = first?.errors?.join('; ')
+    throw new Error(detail || 'No webhook ID returned from Jira')
   }
 
-  return { webhookId: String(webhookId) }
+  return { webhookId: String(first.createdWebhookId) }
 }
 
-/**
- * Delete a webhook from Jira.
- */
 export async function deleteJiraWebhook(
   accessToken: string,
   cloudId: string,
