@@ -3,7 +3,7 @@
  *
  * Task 13: the JIT auto-provision hook reads provisioning config from the
  * MATCHED PROVIDER ROW (`autoCreateUsers` / `autoProvisionRole` /
- * `attributeMapping`) and scopes the verified-domain check to that
+ * `claimMapping.role`) and scopes the verified-domain check to that
  * provider's own domains. The target role defaults to 'member'; setting
  * 'user' disables promotion.
  *
@@ -118,7 +118,7 @@ const callHandlerWith = async (opts: CallOpts = {}) => {
         enabled: true,
         autoCreateUsers: ssoOidc.autoCreateUsers,
         autoProvisionRole: ssoOidc.autoProvisionRole ?? null,
-        attributeMapping: ssoOidc.attributeMapping ?? null,
+        claimMapping: ssoOidc.attributeMapping ? { role: ssoOidc.attributeMapping } : null,
         domains: [
           {
             id: 'domain_1',
@@ -222,7 +222,7 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     expect(mockSet).not.toHaveBeenCalled()
   })
 
-  it('re-applies on every sign-in when attributeMapping.syncOnEverySignIn=true (and can demote)', async () => {
+  it('re-applies on every sign-in when claimMapping.role.syncOnEverySignIn=true (and can demote)', async () => {
     mockFindFirst.mockResolvedValue({ role: 'admin' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     await callHandlerWith({
@@ -242,7 +242,7 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     mockFindFirst.mockResolvedValue({ role: 'admin' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     // With sync on, the resolved-from-claims role is authoritative on
-    // every sign-in. attributeMapping has no matching rules, so the resolver
+    // every sign-in. The role mapping has no matching rules, so the resolver
     // returns null and falls back to autoProvisionRole='user' — effectively
     // saying "this user has no team role". An existing admin gets demoted.
     await callHandlerWith({
@@ -299,7 +299,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     expect(mockEq).not.toHaveBeenCalledWith('account.providerId', 'sso')
   })
 
-  it('marks audit source=attribute_mapping when role came from claim resolution', async () => {
+  it('marks audit source=claim_mapping when role came from claim resolution', async () => {
     mockFindFirst.mockResolvedValue({ role: 'user' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     await callHandlerWith({
@@ -316,7 +316,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     const call = mockRecordAuditEvent.mock.calls[0][0] as {
       metadata: Record<string, unknown>
     }
-    expect(call.metadata.source).toBe('attribute_mapping')
+    expect(call.metadata.source).toBe('claim_mapping')
   })
 })
 
@@ -326,7 +326,7 @@ describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-indepe
     // user's email domain is not a verified domain on the provider. A
     // per-user role claim is its own trust anchor (the IdP attesting THIS
     // user's role), stronger than domain ownership, so the verified-domain
-    // gate must not block it. Mirrors WorkOS role assignment.
+    // gate must not block it.
     mockFindFirst.mockResolvedValue({ role: 'user' })
     mockIdTokenClaims({ roles: ['member'] })
     await callHandlerWith({

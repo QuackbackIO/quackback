@@ -25,7 +25,7 @@ beforeAll(() => {
 
 const { upsertSpy } = vi.hoisted(() => ({
   upsertSpy: vi.fn(
-    async (_args: { data: { kind: string | null; attributeMapping: unknown } }) => undefined
+    async (_args: { data: { kind: string | null; claimMapping: unknown } }) => undefined
   ),
 }))
 
@@ -87,10 +87,12 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     issuer: null,
     clientId: 'client-id',
     scopes: null,
+    prompt: null,
+    tokenEndpointAuthMethod: null,
     enabled: true,
     autoCreateUsers: true,
     autoProvisionRole: 'user',
-    attributeMapping: null,
+    claimMapping: null,
     showButton: false,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
@@ -118,7 +120,7 @@ beforeEach(() => {
 describe('<ProviderEditor> provisioning consolidation', () => {
   it('shows a single Default role and a collapsed group-mapping disclosure when no rules', () => {
     renderEditor(
-      makeProvider({ autoCreateUsers: true, autoProvisionRole: 'user', attributeMapping: null })
+      makeProvider({ autoCreateUsers: true, autoProvisionRole: 'user', claimMapping: null })
     )
     // One default-role control, bound to autoProvisionRole.
     expect(screen.getByLabelText('Default role')).toBeInTheDocument()
@@ -137,11 +139,11 @@ describe('<ProviderEditor> provisioning consolidation', () => {
     expect(screen.queryByRole('button', { name: /Map roles from claims/ })).not.toBeInTheDocument()
   })
 
-  it('persists attributeMapping=null when saved with no rules and sync off', async () => {
-    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+  it('persists claimMapping=null when saved with no rules and sync off', async () => {
+    renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    expect(upsertSpy.mock.calls.at(-1)![0].data.attributeMapping).toBeNull()
+    expect(upsertSpy.mock.calls.at(-1)![0].data.claimMapping).toBeNull()
   })
 })
 
@@ -208,7 +210,7 @@ describe('<ProviderEditor> claim-mapping autocomplete', () => {
       registrationId: 'oidc_x', // matches makeProvider().registrationId
       allClaims: { groups: ['11111111-2222'], roles: ['admin'] },
     }
-    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+    renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     // Inline hint names the observed claims (disclosure auto-opens on suggestions).
     expect(screen.getByText('From your test sign-in: groups, roles')).toBeInTheDocument()
     // The old batch-add block's caption is gone.
@@ -219,14 +221,17 @@ describe('<ProviderEditor> claim-mapping autocomplete', () => {
 
   it('auto-fills the claim path when the test returned exactly one array claim', () => {
     ssoTestRef.current = { registrationId: 'oidc_x', allClaims: { roles: ['admin'] } }
-    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+    renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
   })
 
   it('shows no inline suggestions for a test of a different provider', () => {
     ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { roles: ['admin'] } }
     renderEditor(
-      makeProvider({ autoCreateUsers: true, attributeMapping: { claimPath: 'groups', rules: [] } })
+      makeProvider({
+        autoCreateUsers: true,
+        claimMapping: { role: { claimPath: 'groups', rules: [] } },
+      })
     )
     // Disclosure auto-opens because a mapping object exists; no "from your test" hint.
     expect(screen.queryByText(/From your test sign-in:/)).not.toBeInTheDocument()

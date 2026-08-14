@@ -78,7 +78,7 @@ import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
 import { Autocomplete } from '@/components/ui/autocomplete'
 
 type Role = 'admin' | 'member' | 'user'
-type Mapping = NonNullable<IdentityProvider['attributeMapping']>
+type Mapping = NonNullable<NonNullable<IdentityProvider['claimMapping']>['role']>
 
 const ROLES: Role[] = ['admin', 'member', 'user']
 const IDENTITY_PROVIDERS_KEY = ['settings', 'identityProviders'] as const
@@ -196,7 +196,7 @@ export function ProviderEditor({
   // New providers default to showing a button (reachable out of the box); the
   // admin can untick to hide. Existing providers keep their stored choice.
   const [showButton, setShowButton] = useState(provider?.showButton ?? true)
-  const [mapping, setMapping] = useState<Mapping | null>(provider?.attributeMapping ?? null)
+  const [mapping, setMapping] = useState<Mapping | null>(provider?.claimMapping?.role ?? null)
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -240,7 +240,7 @@ export function ProviderEditor({
           // Role only applies when auto-create is on; null it out otherwise
           // so a stale role doesn't linger on a provisioning-off provider.
           autoProvisionRole: autoCreateUsers ? autoProvisionRole : null,
-          attributeMapping: mappingToSave,
+          claimMapping: mappingToSave ? { role: mappingToSave } : null,
           showButton,
         },
       })

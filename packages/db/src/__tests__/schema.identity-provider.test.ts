@@ -20,10 +20,12 @@ describe('identity_provider schema', () => {
       'userInfoUrl',
       'clientId',
       'scopes',
+      'prompt',
+      'tokenEndpointAuthMethod',
       'enabled',
       'autoCreateUsers',
       'autoProvisionRole',
-      'attributeMapping',
+      'claimMapping',
       'showButton',
       'detailsChangedAt',
       'lastSuccessfulTestAt',
@@ -52,7 +54,9 @@ describe('identity_provider schema', () => {
     // Null on rows predating the column; UI falls back to URL inference.
     expect(cols.kind.notNull).toBe(false)
     expect(cols.scopes.notNull).toBe(false)
-    expect(cols.attributeMapping.notNull).toBe(false)
+    expect(cols.prompt.notNull).toBe(false)
+    expect(cols.tokenEndpointAuthMethod.notNull).toBe(false)
+    expect(cols.claimMapping.notNull).toBe(false)
   })
 
   it('domains reference a provider via a nullable uuid TypeID FK', () => {

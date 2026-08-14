@@ -153,11 +153,35 @@ const identityProviderId = z.string().regex(/^idp_/) as z.ZodType<IdentityProvid
 
 const idpRole = z.enum(['admin', 'member', 'user'])
 
-/** Claim-to-role mapping mirror of `IdentityProviderAttributeMapping`. */
-const attributeMappingSchema = z.object({
+/** Claim-to-role mapping — the `role` section of `claim_mapping`. */
+const claimRoleSchema = z.object({
   claimPath: z.string(),
   rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
   syncOnEverySignIn: z.boolean().optional(),
+})
+
+const claimMappingSchema = z.object({
+  profile: z
+    .object({
+      sources: z.array(z.enum(['idToken', 'userinfo', 'accessTokenJwt'])).optional(),
+      claims: z
+        .object({
+          id: z.string().optional(),
+          email: z.string().optional(),
+          name: z.string().optional(),
+        })
+        .optional(),
+      allowMissingEmail: z.boolean().optional(),
+    })
+    .optional(),
+  role: claimRoleSchema.optional(),
+  attributes: z
+    .object({
+      map: z.array(z.object({ claimPath: z.string(), attributeKey: z.string() })).optional(),
+      overrideExisting: z.boolean().optional(),
+      syncOnSignIn: z.boolean().optional(),
+    })
+    .optional(),
 })
 
 /**
@@ -191,10 +215,12 @@ const upsertIdentityProviderInput = z.object({
   jwksUri: httpsUrl.nullable().optional(),
   issuer: httpsUrl.nullable().optional(),
   scopes: z.string().max(512).nullable().optional(),
+  prompt: z.string().max(64).nullable().optional(),
+  tokenEndpointAuthMethod: z.string().max(32).nullable().optional(),
   enabled: z.boolean().optional(),
   autoCreateUsers: z.boolean().optional(),
   autoProvisionRole: idpRole.nullable().optional(),
-  attributeMapping: attributeMappingSchema.nullable().optional(),
+  claimMapping: claimMappingSchema.nullable().optional(),
   showButton: z.boolean().optional(),
 })
 

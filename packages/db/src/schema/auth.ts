@@ -328,19 +328,41 @@ export const settings = pgTable('settings', {
 })
 
 /**
- * Role-mapping rules applied to an OIDC claim at sign-in.
- *
- * Mirrors `AuthConfig.ssoOidc.attributeMapping` (kept in the web app's
- * settings types). Declared here so the jsonb column is typed without
- * coupling the db package to the app layer.
+ * Role-mapping rules applied to an OIDC claim at sign-in. Now the `role`
+ * section of {@link IdentityProviderClaimMapping}; the shape is unchanged from
+ * the former `attribute_mapping` column so migrated rows behave identically.
  */
-export type IdentityProviderAttributeMapping = {
+export type ClaimRoleMapping = {
   /** Dotted path or namespaced claim on the ID token. */
   claimPath: string
   /** First-match-wins role assignment from the resolved claim. */
   rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
   /** When true, every sign-in re-resolves and may demote/promote. */
   syncOnEverySignIn?: boolean
+}
+
+/** Alias for the role-section shape (resolveSsoRole and similar readers). */
+export type IdentityProviderAttributeMapping = ClaimRoleMapping
+
+/**
+ * What this provider's claims mean, in one column with named sections.
+ *
+ * Replaces `attribute_mapping`, which only ever held the role rules above.
+ */
+export type IdentityProviderClaimMapping = {
+  profile?: {
+    sources?: Array<'idToken' | 'userinfo' | 'accessTokenJwt'>
+    claims?: { id?: string; email?: string; name?: string }
+    /** Mint a placeholder address when the provider supplies no email. */
+    allowMissingEmail?: boolean
+  }
+  role?: ClaimRoleMapping
+  attributes?: {
+    map?: Array<{ claimPath: string; attributeKey: string }>
+    overrideExisting?: boolean
+    /** When true, a disappeared claim clears the stored attribute. */
+    syncOnSignIn?: boolean
+  }
 }
 
 /**
@@ -385,11 +407,18 @@ export const identityProvider = pgTable(
     clientId: text('client_id').notNull(),
     /** Space- or comma-joined custom scopes; `openid email profile` when null. */
     scopes: text('scopes'),
+    /** Authorize-request `prompt`; the default when null. The sentinel 'omit'
+     *  means send no prompt parameter at all, which is NOT the OIDC value
+     *  'none'. See lib/shared/oidc-request.ts. */
+    prompt: text('prompt'),
+    /** How the client secret reaches the token endpoint ('post' | 'basic');
+     *  'post' when null. Some providers accept only one of the two. */
+    tokenEndpointAuthMethod: text('token_endpoint_auth_method'),
     enabled: boolean('enabled').notNull().default(false),
     /** JIT signup toggle — preserves the legacy auto-provision opt-out. */
     autoCreateUsers: boolean('auto_create_users').notNull().default(true),
     autoProvisionRole: text('auto_provision_role').$type<'admin' | 'member' | 'user'>(),
-    attributeMapping: jsonb('attribute_mapping').$type<IdentityProviderAttributeMapping>(),
+    claimMapping: jsonb('claim_mapping').$type<IdentityProviderClaimMapping>(),
     showButton: boolean('show_button').notNull().default(false),
     /** Bumped when redirect-affecting details change; freshness baseline. */
     detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),
