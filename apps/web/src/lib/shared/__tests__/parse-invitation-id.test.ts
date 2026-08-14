@@ -20,4 +20,10 @@ describe('parseInvitationId', () => {
     expect(parseInvitationId(undefined)).toBeNull()
     expect(parseInvitationId('not a url')).toBeNull()
   })
+
+  it('reads the id from a full magic-link callbackURL with query string', () => {
+    expect(
+      parseInvitationId('https://acme.test/portal-invite/invite_abc123?error=INVALID_TOKEN')
+    ).toBe('invite_abc123')
+  })
 })
