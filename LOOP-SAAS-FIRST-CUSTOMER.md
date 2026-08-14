@@ -34,14 +34,17 @@ A new SaaS owner can:
 1. receive a generated workspace immediately after control-plane sign-in,
    without supplying a name, URL, region, or plan;
 2. open it through a single-use handoff without authenticating again;
-3. optionally set or skip its name and friendly cloud URL inside the workspace;
+3. set a display name and a required friendly cloud URL inside the
+   workspace (the generated system host is never shown as the address);
 4. answer the outcome question;
 5. receive a useful starter artifact;
 6. follow one outcome-specific primary action;
 7. begin a 14-day Pro trial only after the starter is created or configured;
-8. upgrade or manage billing from the workspace through the control plane;
+8. upgrade, change plan, downgrade, cancel, and update a card from
+   workspace Plan & billing (control-plane checkout or portal);
 9. keep using the product from the latest local billing projection during a
-   temporary control-plane outage; and
+   temporary control-plane outage, with Free as the baseline and named
+   limit/entitlement refusals;
 10. own up to three live Free workspaces at a time, and unlimited paid
     workspaces. The count is per signed-in owner, not per organisation.
 
@@ -87,9 +90,12 @@ At the start of each work period:
    LOOP-PROMPT.md Safe concurrency). Fleet deploys stay single-threaded.
 5. Spawn a fresh critic on each completed unit (goal, bar, commit range, live
    URLs only). Record the verdict. A unit is builder then critic.
-6. Update `LOOP-PROGRESS.md` with the commit, verification evidence, and
+6. After the unit (or when no unit is in flight), run the hosted-product
+   sweep in `LOOP-VERIFY.md`. Spawn a Fixer only for HIGH SIGNAL findings
+   that are not stop-and-ask.
+7. Update `LOOP-PROGRESS.md` with the commit, verification evidence, and
    critic verdict.
-7. Deploy only when the app/control-plane pair is compatible and focused tests
+8. Deploy only when the app/control-plane pair is compatible and focused tests
    are green.
 
 ### Deployment mechanics verified on 2026-08-14
@@ -130,12 +136,14 @@ page auto-opens the workspace through a ten-minute, owner-bound,
 single-use OTT. The control-plane dashboard is not a pre-handoff step.
 There is no pre-handoff name, URL, region, or plan form.
 
-After handoff, Workspace details offers a skippable display-name and friendly
-Quackback URL step before the goal question. The same name/URL controls live
-in Admin Settings. The workspace UI calls an instance-scoped control-plane
-identity gateway; the control plane atomically reserves hostnames, owns
-canonical registry state, and fans a signed monotonic identity projection back
-to the workspace.
+After handoff, Workspace details requires a display name and a friendly
+Quackback URL before the goal question. The generated system host is not
+shown or prefilled. The same name/URL controls live in Admin Settings →
+General. Custom domains use a workspace Domains surface on the same
+identity gateway once the hostname provider is live. The workspace UI
+calls an instance-scoped control-plane identity gateway; the control
+plane atomically reserves hostnames, owns canonical registry state, and
+fans a signed monotonic identity projection back to the workspace.
 
 Platform URL changes retain immutable database, namespace, mail, storage, and
 system-host identities; every old friendly host remains permanently reserved as
@@ -189,7 +197,9 @@ Bar:
 Outcome: a workspace verifies signed projections, atomically accepts only a
 higher version, caches the latest projection, and uses it for UI and enforcement.
 Upgrade, Change plan, and Manage billing proxy to the control plane and return a
-303 to its hosted URL.
+303 to its hosted URL. Downgrade, cancel, and update-card use the same
+portal session. Free is the projected baseline; numeric limits and
+entitlements refuse with a named plan; a paid overlay lifts them.
 
 Bar:
 
@@ -296,7 +306,12 @@ direct-workspace billing path only.
 - Each outcome reaches its tailored starter and never sees an irrelevant widget
   prompt.
 - A real created/configured starter begins one immutable Pro trial.
-- Test-mode checkout and portal actions traverse the control-plane gateway.
+- Test-mode checkout, plan change, portal (downgrade / cancel / card),
+  and webhook finalize traverse the control-plane gateway. Free limits
+  and entitlements refuse with a named plan; a paid overlay lifts them.
+- Cloud settings (name, URL, billing, and domains when enabled) are
+  workspace UI and control-plane API. Self-host shows none of those.
+- The latest `LOOP-VERIFY.md` sweep has no open HIGH SIGNAL findings.
 - Cross-workspace isolation, replay, out-of-order projection, retry, outage, and
   exact-expiry probes pass.
 - Self-hosted setup shows no cloud commercial surface.

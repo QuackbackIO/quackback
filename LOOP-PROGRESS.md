@@ -15,10 +15,13 @@ provider path only; it does not close the new architecture tracks.
 
 Workspace creation and cloud identity are also control-plane-owned. The first
 workspace must now be created immediately after control-plane sign-in with
-generated immutable identifiers and no name, URL, region, or plan form. Name,
-friendly platform URL, and custom domains move into skippable post-handoff and
-Admin Settings UI; cloud mutations traverse the instance-scoped control-plane
-client and return as signed monotonic identity projections.
+generated immutable identifiers and no name, URL, region, or plan form. Name
+and a required friendly platform URL are set post-handoff (and again in
+Admin Settings → General). Custom domains use the same workspace-UI /
+control-plane-API pattern once the hostname provider is live. Cloud
+mutations traverse the instance-scoped control-plane client and return as
+signed monotonic identity projections. The generated system host is never
+presented as the customer address.
 
 Development infrastructure supports registry-only platform URL changes: the
 live Railway web service owns `*.quackback.co.uk`, Cloudflare is authoritative
@@ -688,9 +691,15 @@ item+plan frees a slot; count is `ownerEmail`. Not live (CP still
 12. **Per-owner cap:** implemented on CP `c5a484d` (tests 35, critic PASS).
     Not deployed. Live 4th-Free 402 still needs a CP deploy (Fleet lane;
     no new Neon unless that live proof requires it).
-13. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-    Do not start this until the operator asks; custom domains stay later.
-14. First-win journeys. Checkout attaches to an existing workspace only.
+13. Hosted-product sweep (`LOOP-VERIFY.md`): first-run, settings IA +
+    CP gateway, Free / upgrade / change-plan / downgrade / cancel /
+    limits / entitlements, isolation, rename, self-host. Fixer only
+    for HIGH SIGNAL. Custom-domain _live_ add/verify waits on the
+    operator asking for Cloudflare for SaaS; the workspace Domains
+    surface + gateway is in the contract now.
+14. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+    Do not start this until the operator asks.
+15. First-win journeys. Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
 
@@ -784,7 +793,15 @@ on self-host.
 
 ## Verification still required
 
+Standing program: `LOOP-VERIFY.md` (Verify lane + HIGH SIGNAL Fixers).
+No sweep recorded yet.
+
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
+  Live: Free cap refuses with a named plan; paid overlay lifts it;
+  downgrade leaves existing over-cap resources removable.
+- Plan change / downgrade / cancel / update-card through workspace
+  Plan & billing (checkout + portal). Upgrade 303 and one paid
+  finalize are live on t1a; the rest of the catalogue path is not.
 - ~~Cross-workspace checkout session metadata.~~ t1e session names t1e;
   extras `instanceId` cannot retarget. Paid webhook on t1a named t1a;
   t1e was not paid. Isolation of a second paid workspace still open.
@@ -794,13 +811,19 @@ on self-host.
   helper is live (`57ff32499` in image `703eca7d`); both current `ws-*`
   workspaces already have a trial so the helper skips.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
+  Ready must have a primary enter action (local onboarding fix still
+  uncommitted on `saas`).
 - Zero-input first-workspace creation and retry after interrupted provisioning.
 - Live rename handoff, old-host redirect, and session survival on a new
   generated host. Local replay/expiry/wrong-host and pinned asset-origin
   tests passed (`1add15b16`, `4a1e97b`).
+- Cloud settings contract: General (name/URL), Plan & billing, Domains
+  (surface + CP gateway; live provider skipped), Emails without platform
+  keys. A cloud workspace must not use the Help Center local domain
+  writer as the cloud manager.
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
-  provider retry, and cross-workspace isolation. Not a Track 1 close
-  requirement.
+  provider retry, and cross-workspace isolation. Live proof waits on
+  Cloudflare for SaaS. The settings/gateway contract is in `LOOP-VERIFY.md`.
 
 ## Blockers
 
@@ -808,7 +831,8 @@ Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Remaining: deploy CP `c5a484d` (Fleet)
 then live-prove the 4th Free 402; Track 6 boundary scan and unused
 Railway `BILLING_*`. Walk3 workspace webhook was disabled by the
-operator. Do not start custom domains.
+operator. Do not start the Cloudflare for SaaS provider until asked.
+The workspace Domains settings surface is specified in `LOOP-VERIFY.md`.
 
 The identity/billing pair is otherwise deployed. Further deploys are
 incremental. Live app `6d4d9f252` / `sha256:139a4a8c…`. Live CP

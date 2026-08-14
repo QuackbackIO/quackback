@@ -60,11 +60,13 @@ Provisioning may remain asynchronous, but the customer sees progress and then
 crosses the existing one-time-token handoff into the workspace.
 
 Display name, the friendly Quackback URL, and custom domains are post-handoff
-workspace settings. The first in-workspace journey shows a skippable Workspace
-details step before the outcome question, and the same controls remain available
-under Admin Settings. A generated `Untitled workspace` name and opaque platform
-hostname are always sufficient to continue, so identity polish cannot block
-activation.
+workspace settings. The first in-workspace journey requires a name and a
+friendly URL before the outcome question; the generated system host is never
+shown or prefilled as the customer address. The same name/URL controls remain
+under Admin Settings → General. Custom domains use a workspace Domains
+surface on the same control-plane identity gateway once the hostname
+provider is live. Self-host keeps local name editing and never renders
+cloud URL or domain controls.
 
 For a cloud workspace, the control plane owns this identity state just as it
 owns billing state. The workspace renders the UI, checks the local administrator

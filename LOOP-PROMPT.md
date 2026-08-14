@@ -5,15 +5,20 @@ committed and recorded, a stop-and-ask fires, or the definition of done is
 met. Do not paraphrase this into a new mission.
 
 You are the **lead agent** (orchestrator). You may implement one
-fleet/live unit yourself. You may also spawn **bounded lane builders**
-and **critics**. Never spawn unbounded piece branches. The previous
-long run died of decomposition — fan-out is allowed only as named
-lanes below.
+fleet/live unit yourself. You may also spawn **bounded lane builders**,
+**critics**, one **Verify** sweep, and **Fixers** for HIGH SIGNAL
+findings. Never spawn unbounded piece branches. The previous long run
+died of decomposition — fan-out is allowed only as named lanes below.
 
 Each completed unit is still **builder then critic**. A fire that only
 builds, or only reviews, is incomplete. If Docker/CI is still pending
 on the fleet lane, report one line and stop that lane — do not skip
 the critic on a completed unit to “save it for later.”
+
+After the current builder unit (or immediately if none is in flight),
+run the hosted-product sweep in `LOOP-VERIFY.md`. Spawn a Fixer only
+for HIGH SIGNAL findings. A sweep is not a substitute for a per-unit
+critic.
 
 ### Safe concurrency
 
@@ -26,8 +31,10 @@ Lanes that write the same git tree use an isolated worktree and do
 | --------------- | ----------------------------------------------------------- | ------------------------------------------------ |
 | **Fleet**       | Railway/Docker/`source.image`/region pin                    | nothing else that deploys                        |
 | **Stripe-live** | test payment + webhook on existing `ws-*`                   | not Fleet, not another Stripe-live               |
-| **CP-create**   | per-owner 3-Free cap (`instance.server.ts` + tests)         | Fleet, Track-6 ops, critics                      |
-| **Track-6 ops** | Railway `BILLING_*` removal; walk3 webhook already disabled | CP-create, critics                               |
+| **CP-create**   | per-owner 3-Free cap (`instance.server.ts` + tests)         | Fleet, Track-6 ops, critics, Verify              |
+| **Track-6 ops** | Railway `BILLING_*` removal; walk3 webhook already disabled | CP-create, critics, Verify                       |
+| **Verify**      | nothing (read-only hosted sweep, `LOOP-VERIFY.md`)          | CP-create, Track-6, critics on _other_ URLs      |
+| **Fixer**       | isolated worktree, one HIGH SIGNAL finding                  | critics; other fixers on _other_ files           |
 | **Critic**      | read-only live probe                                        | anything except a second critic on the same URLs |
 
 Forbidden in parallel: two Railway deploys; two Neon creates; two
@@ -40,24 +47,26 @@ mailbox/OTP. Extra spend still stop-and-asks at **$50/month**.
 
 1. Read `/home/james/quackback-wt/saas-merge/LOOP-SAAS-FIRST-CUSTOMER.md`.
 2. Read `/home/james/quackback-wt/saas-merge/LOOP-PROGRESS.md`.
-3. Read `/home/james/quackback-wt/saas-merge/SAAS-HOSTING-STACK.md` only as
+3. Read `/home/james/quackback-wt/saas-merge/LOOP-VERIFY.md` before a
+   Verify or Fixer lane, and when no builder unit is in flight.
+4. Read `/home/james/quackback-wt/saas-merge/SAAS-HOSTING-STACK.md` only as
    needed for a platform question.
-4. Inspect, do not assume:
+5. Inspect, do not assume:
 
    ```bash
    git -C /home/james/quackback-wt/saas-merge status -sb && git log -8 --oneline
    git -C /home/james/quackback-cp status -sb && git log -8 --oneline
    ```
 
-5. Preserve any concurrent uncommitted work. Stage explicit paths only.
-6. Identify the **first track whose bar is not met**. Work only on that
+6. Preserve any concurrent uncommitted work. Stage explicit paths only.
+7. Identify the **first track whose bar is not met**. Work only on that
    track, or on the first unfinished unit listed under “Now” below if the
-   ledger is more specific.
-7. If you are mid-unit, finish it (commit or revert) before starting another.
-8. Update `LOOP-PROGRESS.md` at the start if the ledger is stale, and again
+   ledger is more specific. If none, run the `LOOP-VERIFY.md` sweep.
+8. If you are mid-unit, finish it (commit or revert) before starting another.
+9. Update `LOOP-PROGRESS.md` at the start if the ledger is stale, and again
    after every committed unit with shas, tests, and deployment evidence.
-9. Stop looping when the definition of done is met. Write the handover and
-   wait. Do not invent a next phase.
+10. Stop looping when the definition of done is met. Write the handover and
+    wait. Do not invent a next phase.
 
 `/home/james/quackback` on `gauntlet/tenant-isolation-probe` is **not** an
 implementation tree. Do not commit loop work there.
@@ -94,15 +103,20 @@ A new SaaS owner can:
    with no name, URL, region, or plan form;
 2. open it through a ten-minute, owner-bound, single-use OTT without
    authenticating again;
-3. optionally set or skip display name and friendly Quackback URL;
+3. set a display name and a **required** friendly Quackback URL (the
+   generated `ws-*` host is never shown or prefilled as the address);
 4. answer the outcome question;
 5. receive a useful starter artifact;
 6. follow one outcome-specific primary action;
 7. begin a 14-day Pro trial only after the starter is `created` or
    `configured`;
-8. upgrade or manage billing from the workspace through the control plane;
+8. upgrade, change plan, downgrade, cancel, and update a card from
+   the workspace Plan & billing settings (checkout or portal through
+   the control plane);
 9. keep using the product from the latest local billing projection during a
-   temporary control-plane outage.
+   temporary control-plane outage, with Free as the baseline and named
+   limit/entitlement refusals that point at the cheapest plan that lifts them;
+10. own up to three live Free workspaces, and unlimited paid ones.
 
 Product-feedback owners are never required to install the widget. Customer
 support owners get the focused Messenger installer. Help Center and
@@ -158,9 +172,10 @@ silently invert them.
     The fourth Free create fails closed with a distinguishable reason.
 
 When documents disagree, authority is: this prompt, then
-`LOOP-SAAS-FIRST-CUSTOMER.md`, then `LOOP-PROGRESS.md` for live evidence,
-then `SAAS-HOSTING-STACK.md`, then `CLAUDE.md`. Gauntlet docs and old
-piece lists are history.
+`LOOP-SAAS-FIRST-CUSTOMER.md`, then `LOOP-VERIFY.md` for the hosted
+sweep, then `LOOP-PROGRESS.md` for live evidence, then
+`SAAS-HOSTING-STACK.md`, then `CLAUDE.md`. Gauntlet docs and old piece
+lists are history.
 
 ---
 
@@ -254,13 +269,15 @@ billing path. They do not close tracks 3–7.
    - control-plane sign-in
    - first workspace created with no name/URL/region/plan form
    - auto-open establishes the session via one-use OTT (no dashboard)
-   - skippable Workspace details, then the outcome question
+   - Workspace details with a required friendly URL (no generated host
+     by the field), then the outcome question
    - rename of the friendly URL, old host redirects, session survives
    - stored image src stays `/api/storage/…` across rename
    - replay / expiry / wrong-workspace OTT fail closed
 
-Do **not** start Cloudflare for SaaS, the custom-domain manager, or the
-billing live bar until that walk passes. Do not raise
+Do **not** start the Cloudflare for SaaS provider until the operator
+asks. The workspace Domains settings _surface_ and CP gateway belong
+in `LOOP-VERIFY.md` now; live add/verify/certificate stays skipped. Do not raise
 `MIN_SCHEMA_VERSION` unless the walk requires it and every enrolled
 workspace is already at the new floor.
 
@@ -286,16 +303,20 @@ the named-create screenshot exists because we stopped deploying.
    the exact artifact this unit produced). A critic that only reads
    the diff has not signed. Discard that verdict and re-run it. Record
    the critic’s verdict in `LOOP-PROGRESS.md` before you stop.
-5. Status back to the parent must include both: what the builder did,
+5. **Then run Verify** (`LOOP-VERIFY.md`) if this fire has not already.
+   Spawn a Fixer only for HIGH SIGNAL findings that are not
+   stop-and-ask (Cloudflare for SaaS, live Stripe key). The fixer does
+   not merge or deploy; you do, then a critic.
+6. Status back to the parent must include both: what the builder did,
    and the critic’s pass/fail plus one-line reason.
-6. Fresh-mailbox OTPs for the Development CP are readable in
+7. Fresh-mailbox OTPs for the Development CP are readable in
    `cp_verifications`. Do not use the operator’s mailbox as proof.
-7. New workspaces get generated `ws-*` hostnames and `qb_*` database
+8. New workspaces get generated `ws-*` hostnames and `qb_*` database
    names. Do not ask the customer for a `walk-` label. If you create a
    disposable Neon project yourself, prefix it `walk-` and state expected
    monthly cost first. If extra spend would exceed **$50/month** above
    the current Development baseline, stop and ask.
-8. Do not delete existing `walk-*` workspaces without a fresh registry
+9. Do not delete existing `walk-*` workspaces without a fresh registry
    check. `walk3-mss0m53h` must remain until the obsolete workspace-side
    fleet webhook is deliberately retired. Those rows are not identity
    proof.
@@ -346,6 +367,9 @@ reason. Silent no-ops are failures of the track that introduced them.
 
 **Bar C — self-host unchanged.** With cloud absent, no trial banner, no
 upgrade modal, no billing nav, no cloud URL/domain controls.
+
+**Bar D — hosted product sweep.** The latest `LOOP-VERIFY.md` sweep has
+no open HIGH SIGNAL rows. Per-unit green tests do not close this bar.
 
 ---
 
@@ -406,8 +430,9 @@ All of the following, with evidence in `LOOP-PROGRESS.md`:
 - Each outcome reaches its tailored starter and never sees an irrelevant
   widget prompt.
 - A real `created`/`configured` starter begins one immutable Pro trial.
-- Test-mode checkout and portal actions traverse the control-plane
-  gateway.
+- Test-mode checkout, plan change, portal (downgrade / cancel / card),
+  and webhook finalize traverse the control-plane gateway. Free limits
+  and entitlements refuse with a named plan; a paid overlay lifts them.
 - Cross-workspace isolation, replay, out-of-order projection, retry,
   outage, and exact-expiry probes pass.
 - Self-hosted setup shows no cloud commercial surface.
@@ -415,5 +440,7 @@ All of the following, with evidence in `LOOP-PROGRESS.md`:
   are live-proved.
 - The ledger records commits, tests, deployments, and remaining
   operational blockers.
+- The latest hosted-product sweep (`LOOP-VERIFY.md`) has no open HIGH
+  SIGNAL findings.
 
 Then **stop**. Do not start a new phase.
