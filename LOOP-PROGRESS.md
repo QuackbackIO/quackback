@@ -33,7 +33,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `f0186af2b` (docs). Live image is `f0186af2b` /
+- Workspace tip: `521b9e3e9` (docs). Live image is `f0186af2b` /
   `ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`
   (includes limits overlay `b0c13a366` / `31330d85b` and Origin-fix
   `635cdb149`). Web `47e0c7be` SUCCESS, region only `us-east4-eqdc4a`.
@@ -779,9 +779,9 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 12. ~~**Per-owner cap.**~~ live `80c8301e` / `2fb9488`. 4th Free 402
     `free_workspace_owner_cap` on t1e owner (temps, no Neon);
     instances 16.
-13. ~~Hosted-product sweep.~~ 2026-08-14 FAIL one HIGH (unlimited
-    `getTierLimits` on cloud). Fixer live as `cb186135`. Re-sweep
-    remaining Verify rows next fire (not Fleet).
+13. ~~Hosted-product sweep HIGH (unlimited limits).~~ fixer live;
+    re-sweep row 15 PASS (`limits-resweep.md`). Other Verify rows
+    remain standing (Track 8, Domains card, first-win).
 14. ~~Deploy `31330d85b` (Fleet).~~ live `f0186af2b` / `sha256:cb186135…`.
 15. **Track 8 — hosted account operations** (see
     `LOOP-SAAS-FIRST-CUSTOMER.md`). Order:
@@ -896,9 +896,10 @@ on self-host.
 ## Verification still required
 
 Standing program: `LOOP-VERIFY.md` (Verify lane + HIGH SIGNAL Fixers).
-Sweep 2026-08-14: `loop-evidence/verify-2026-08-14/sweep.md` **FAIL**
-one HIGH (cloud unlimited overlay). Fixer is live `cb186135`; re-sweep
-limits row next fire.
+Sweep 2026-08-14: `loop-evidence/verify-2026-08-14/sweep.md` FAIL one
+HIGH (cloud unlimited overlay). Re-sweep
+`loop-evidence/verify-2026-08-14/limits-resweep.md` **PASS** — t1a
+`maxBoards=3`, t1e `maxBoards=10`, no stored row, not unlimited.
 
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
   Live: Free cap refuses with a named plan; paid overlay lifts it;
@@ -938,10 +939,10 @@ limits row next fire.
 
 Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Unused web `BILLING_*` vars removed
-(`--skip-deploys`; web now `47e0c7be`). Remaining: re-sweep Verify limits on t1a/t1e; Track 8; Domains card
-(operator unblocked CF — this fire did not start it). Walk3 workspace
-webhook stays disabled. Live app `f0186af2b` / `sha256:cb186135…`.
-Live CP `80c8301e` / `sha256:3d10454a…`.
+(`--skip-deploys`; web now `47e0c7be`). Remaining: Track 8; Domains card (operator unblocked CF — this fire
+did not start it); standing Verify rows (first-win, self-host walk).
+Walk3 workspace webhook stays disabled. Live app `f0186af2b` /
+`sha256:cb186135…`. Live CP `80c8301e` / `sha256:3d10454a…`.
 
 Operational defects carried from the prior lead:
 
