@@ -32,10 +32,14 @@ SIGNAL.
 Every fire, after finishing or parking the current builder unit:
 
 1. Run the **Verify** sweep against the **live** Development pair.
-2. Classify every finding. Record the sweep in `LOOP-PROGRESS.md`.
-3. Spawn a **Fixer** only for **HIGH SIGNAL** findings that are not already
+2. Run the **Plan-matrix** critic in §H if it has not been signed against
+   the current live image pair. A sweep that only samples one Free cap
+   has not signed §H.
+3. Classify every finding. Record the sweep and the matrix in
+   `LOOP-PROGRESS.md`.
+4. Spawn a **Fixer** only for **HIGH SIGNAL** findings that are not already
    being fixed and are not on the stop-and-ask list.
-4. Each fixer is still builder then critic. Merge serially onto `saas`.
+5. Each fixer is still builder then critic. Merge serially onto `saas`.
    Deploy only when the finding is customer-visible on the live pair.
 
 Do not create Neon, mailboxes, or workspaces for a sweep unless the finding
@@ -44,7 +48,7 @@ Fresh mailboxes stay reserved for Open, the 3-Free cap, and isolation probes
 that require a new owner.
 
 A per-unit critic does **not** replace this sweep. A sweep does **not**
-replace a per-unit critic.
+replace a per-unit critic. §H does **not** replace sweep C or Track 8e.
 
 ## Workspace settings contract
 
@@ -110,6 +114,9 @@ Numeric limits (`maxBoards`, `maxPosts`, `maxTeamSeats`, `maxStatusComponents`,
 self-host config). Default (no row) is unlimited — that default is **only**
 correct when cloud is off.
 
+The full per-plan, UI + server critic is §H. Rows 15–16 below are the
+spot-check; they do not close the matrix.
+
 ## Sweep
 
 Read-only except where a row says otherwise. Use existing live hosts.
@@ -139,15 +146,15 @@ and say so.
 
 ### C. Plans, Free, limits
 
-| #   | Surface            | Probe                                                                 | HIGH SIGNAL if                                     |
-| --- | ------------------ | --------------------------------------------------------------------- | -------------------------------------------------- |
-| 11  | Free baseline      | Unpaid live workspace is Free                                         | Trial without starter; paid entitlements           |
-| 12  | Upgrade            | Owner 303s to test Checkout; metadata is this `instanceId`            | 403/500 on own origin; new workspace created       |
-| 13  | Portal             | Manage billing 303s to the hosted portal                              | Missing when `canManageBilling`; wrong return host |
-| 14  | Change / downgrade | Checkout or portal to another catalogue plan; projection follows      | Old plan entitlements stick; wrong tenant updated  |
-| 15  | Limits             | A Free cap refuses with a named upgrade; a paid overlay lifts it      | Unlimited on cloud Free; refuse after upgrade      |
-| 16  | Entitlements       | SSO / webhooks / custom domain / workflows 402 on Free with plan name | Feature works on Free; refuse copy has no plan     |
-| 17  | 3-Free cap         | Fourth live Free create                                               | Succeeds, or 402 is indistinguishable              |
+| #   | Surface            | Probe                                                                                     | HIGH SIGNAL if                                                               |
+| --- | ------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 11  | Free baseline      | Unpaid live workspace is Free                                                             | Trial without starter; paid entitlements                                     |
+| 12  | Upgrade            | Owner 303s to test Checkout; metadata is this `instanceId`                                | 403/500 on own origin; new workspace created                                 |
+| 13  | Portal             | Manage billing 303s to the hosted portal                                                  | Missing when `canManageBilling`; wrong return host                           |
+| 14  | Change / downgrade | Checkout or portal to another catalogue plan; projection follows                          | Old plan entitlements stick; wrong tenant updated                            |
+| 15  | Limits             | A Free cap refuses with a named upgrade; a paid overlay lifts it. Full matrix is §H.      | Unlimited on cloud Free; refuse after upgrade; UI-only or server-only gate   |
+| 16  | Entitlements       | SSO / webhooks / custom domain / workflows 402 on Free with plan name. Full matrix is §H. | Feature works on Free; refuse copy has no plan; UI unlocked when server 402s |
+| 17  | 3-Free cap         | Fourth live Free create                                                                   | Succeeds, or 402 is indistinguishable                                        |
 
 ### D. Isolation, rename, fail-closed, fleet
 
@@ -194,7 +201,184 @@ parked row. Those are LOW.
 
 Parked (not a sweep miss): Redis/BullMQ, invoice PDFs, dunning beyond
 “update your card”, unwired entitlement keys (`aiAssistant`, `apiAccess`),
-Workers-as-app, a general cloud gateway.
+unwired feature flags (`ipAllowlist`, `aiFeedbackExtraction`) and API
+rate counters, Workers-as-app, a general cloud gateway. §H still
+records those rows as skipped.
+
+## H. Plan-matrix critic (every tier, UI + server)
+
+Standing **Critic** cycle. Later fires pick this up. It is the review of
+every commercial limit and entitlement against the **active plan**, on
+both the workspace UI and the server function (or REST) that would
+create the resource.
+
+Sweep C rows 15–16 and Track 8e are samples. This section is the
+matrix. A fire that only proves `maxBoards` on one host has not signed.
+
+### Authority (do not pick a winner)
+
+| Layer                   | Source of truth                                            | Used for                                                                                                                                                          |
+| ----------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Numeric + feature flags | CP `src/lib/server/plans/definitions.ts`                   | `getTierLimits` / `enforceCountLimit` / `assertTierFeature` / `enforceAiTokenBudget`                                                                              |
+| Entitlement grants      | CP `PLAN_GRANTS` in `billing/projection.ts`                | signed `entitlements` map                                                                                                                                         |
+| Workspace plan names    | `PLAN_CATALOGUE.grants` in `cloud.types.ts`                | refusal copy (`minimumPlanFor`) — **must match** `PLAN_GRANTS`                                                                                                    |
+| Overlay                 | workspace `resolveEffectiveTierLimits`                     | no stored row + projection present is **not** OSS unlimited; features from projection entitlements; numeric least-restrictive; `now >= planLimitsExpireAt` → Free |
+| Advertised stickers     | CP `GET …/billing/catalogue` (same as `~/website` pricing) | Plan & billing cards. Must not contradict enforcement                                                                                                             |
+
+Trial overlays **Pro**. Cancel and `now >= expiresAt` fall back to
+**Free**. Self-host (no projection, cloud off) is OSS unlimited and
+never 402s.
+
+**Known drifts the critic must record** (HIGH if a customer would be
+refused after trusting the card, or allowed after the catalogue said
+no). Do not silently prefer marketing or code:
+
+- Website: unlimited boards and posts on every plan. CP: Free 2 / 50,
+  Growth 3 / 50, Pro 10 / unlimited.
+- Website: 1 Free workspace. Product: 3 live Free per owner.
+- Website: paid seats uncapped, billed per seat. CP: Growth 1, Pro 10,
+  Scale unlimited. Stripe checkout qty is still 1 until Track 8d.
+- Website status components 5 / 25 / unlimited / unlimited. CP: 3 / 10
+  / 25 / unlimited.
+- Website inbound addresses 1 / 1 / 2 / unlimited. CP sending domains:
+  0 / 1 / 3 / unlimited.
+- Website custom colours on Free. CP `customColors` false until Pro.
+- Website REST 100K / 1M / 2M. CP `apiRequestsPerMonth` 10K / 10K /
+  250K / 2M.
+- Website custom admin roles Scale-only. CP `maxCustomRoles` 0 / 0 / 5
+  / unlimited.
+- `PLAN_GRANTS` Growth includes `webhooks` and `mcpServer`.
+  `GROWTH_TIER_LIMITS.features` has both **false**. With no stored row
+  the overlay follows entitlements. A Growth workspace that can use
+  one helper and not the other is HIGH.
+
+### Dual gate
+
+Every **wired** limit and entitlement is checked twice. Missing either
+side is HIGH.
+
+1. **UI** (workspace). The create / enable control is locked or shows
+   an upgrade CTA **before** submit. Finite counts show `N of M`
+   (Track 8e). Copy names the cheapest plan that lifts the gate
+   (`minimumPlanFor` / “Upgrade to {Plan}”). Existing over-cap
+   resources stay listed and can be deleted or disabled.
+2. **Server** (workspace server-fn or REST; never a client-only
+   check). The mutating path returns **402**:
+   - numeric: `error: tier_limit_exceeded`, `limit`, and `current` /
+     `max` when known;
+   - entitlement: `error: entitlement_required`, `currentPlan`,
+     `requiredPlan`.
+     GET / list / delete of an existing over-cap resource must **not**
+   402.
+
+Self-host: neither gate fires. Cloud chrome on self-host is HIGH.
+
+### Plan states
+
+Prefer existing live hosts. Do not create Neon. Do not create a fourth
+Free workspace. Do not complete a payment (Stripe-live owns that).
+
+| State         | Live fixture                                                                        | Effective                     |
+| ------------- | ----------------------------------------------------------------------------------- | ----------------------------- |
+| Free unpaid   | any live unpaid workspace                                                           | `FREE_TIER_LIMITS`, no grants |
+| Trial         | t1e (Pro trial)                                                                     | Pro overlay                   |
+| Trial expired | clock / `planLimitsExpireAt`                                                        | Free                          |
+| Growth paid   | t1a projection v4                                                                   | Growth                        |
+| Pro paid      | existing paid host or Stripe-live leftover; no new Neon                             | Pro                           |
+| Scale paid    | skip live mutation until a Scale host exists; still run the catalogue / code critic | Scale                         |
+| Canceled      | portal `cancellationAt` reached                                                     | Free                          |
+| Self-host     | cloud capability absent                                                             | OSS unlimited                 |
+
+### Numeric matrix
+
+`∞` means `null` (unlimited). Server helpers live in
+`tier-enforce.ts` unless noted.
+
+| Key                    |    Free |    Growth |       Pro |       Scale | Server chokepoint                                          | UI surface                      |
+| ---------------------- | ------: | --------: | --------: | ----------: | ---------------------------------------------------------- | ------------------------------- |
+| `maxBoards`            |       2 |         3 |        10 |           ∞ | `board.service` create                                     | Boards create; launch checklist |
+| `maxPosts`             |      50 |        50 |         ∞ |           ∞ | `post.service` create                                      | Board / new post                |
+| `maxTeamSeats`         |       1 |         1 |        10 |           ∞ | `seat-limit.ts` on invite                                  | Members invite `used / limit`   |
+| `maxStatusComponents`  |       3 |        10 |        25 |           ∞ | `enforceStatusComponentLimit`                              | Status settings                 |
+| `maxCustomRoles`       |       0 |         0 |         5 |           ∞ | `role.service` create                                      | Roles                           |
+| `maxSendingDomains`    |       0 |         1 |         3 |           ∞ | `enforceSendingDomainLimit`                                | Settings → Emails (cloud)       |
+| `aiTokensPerMonth`     | 100_000 | 1_000_000 | 5_000_000 | 200_000_000 | `enforceAiTokenBudget`                                     | Plan notice / Copilot usage     |
+| `apiRequestsPerMonth`  |  10_000 |    10_000 |   250_000 |   2_000_000 | **not fully wired** — record the gap; do not invent a gate | —                               |
+| `apiRequestsPerMinute` |      60 |        60 |       300 |       1_200 | same                                                       | —                               |
+
+At cap: UI refuses first; server 402s if the UI is bypassed. Over cap
+after downgrade: extra rows remain; new creates 402; deletes succeed.
+
+### Feature + entitlement matrix
+
+`requireEntitlement` names a plan. `assertTierFeature` does not — the
+UI must still name one via `minimumPlanFor` / Plan & billing. Both
+layers must agree for keys that have both.
+
+| Key                          | Free | Growth                 | Pro | Scale | Layer            | Server chokepoint                                                    | UI                                    |
+| ---------------------------- | ---- | ---------------------- | --- | ----- | ---------------- | -------------------------------------------------------------------- | ------------------------------------- |
+| `customDomain`               | no   | yes                    | yes | yes   | both             | `help-center-domain.service` (and the CP domains gateway once wired) | Settings Domains / Help Center domain |
+| `sso` / `customOidcProvider` | no   | no                     | no  | yes   | both             | `sso.ts` upsert; `auth-provider-credentials`; settings OIDC          | Security → Authentication             |
+| `ipAllowlist`                | no   | no                     | no  | yes   | feature only     | **unwired** — record; do not invent                                  | —                                     |
+| `webhooks`                   | no   | grant yes / feature no | yes | yes   | both (**drift**) | `webhook.service` create                                             | Developer → Webhooks                  |
+| `mcpServer`                  | no   | grant yes / feature no | yes | yes   | both (**drift**) | `mcp/handler.ts`; settings MCP toggle                                | Developer → MCP                       |
+| `analyticsExports`           | no   | no                     | yes | yes   | feature          | export routes / `assertTierFeature`                                  | Analytics export                      |
+| `customColors`               | no   | no                     | yes | yes   | feature          | `settings.media`                                                     | Branding                              |
+| `customCss`                  | no   | no                     | yes | yes   | feature          | `settings.media`                                                     | Branding                              |
+| `integrations`               | no   | no                     | yes | yes   | feature          | `platform-credentials`                                               | Integrations                          |
+| `aiFeedbackExtraction`       | no   | no                     | no  | yes   | feature          | **unwired** — record; do not invent                                  | —                                     |
+| `aiDrafts`                   | no   | yes                    | yes | yes   | entitlement      | `copilot-gate.ts`; `macro.service`                                   | Inbox drafts / macros                 |
+| `aiInsights`                 | no   | no                     | yes | yes   | entitlement      | `summary.service`; `sentiment.service`                               | Insights                              |
+| `workflows`                  | no   | no                     | yes | yes   | entitlement      | `workflow.service` create                                            | Workflows                             |
+| `auditLog`                   | no   | no                     | no  | yes   | entitlement      | `audit-log.ts`                                                       | Audit log                             |
+| `aiAssistant`                | no   | yes                    | yes | yes   | **unwired**      | skip                                                                 | skip                                  |
+| `apiAccess`                  | no   | yes                    | yes | yes   | **unwired**      | skip                                                                 | skip                                  |
+
+Skipped keys are not a miss. A **wired** key with no UI lock, or a UI
+lock with no server 402, is HIGH.
+
+### Overlay / change-plan (still required)
+
+| Probe                                                             | HIGH SIGNAL if                                     |
+| ----------------------------------------------------------------- | -------------------------------------------------- |
+| After upgrade, a previously refused create succeeds               | Old Free cap still refuses                         |
+| After downgrade, a new create over the cap 402s with a named plan | Silent no-op or 500                                |
+| Existing extra board / domain / seat / IdP can still be cleared   | Cannot delete the extra                            |
+| Trial active = Pro numbers and Pro/Growth grants                  | Free caps during trial; Scale-only keys granted    |
+| Trial or cancel expiry = Free numbers and no paid grants          | Entitlements stay Pro; lockout or wipe             |
+| Projection present, no `tier_limits` row                          | OSS unlimited                                      |
+| Operator row + paid projection                                    | Least-restrictive overlay is ignored               |
+| Fourth live Free create or restore                                | Succeeds, or 402 is not `free_workspace_owner_cap` |
+
+### How a later fire runs it
+
+Named **Plan-matrix** critic (Critic lane). Give it only: this section,
+live CP and workspace URLs, current digests, and the fixtures in
+`LOOP-PROGRESS.md`. It does not see the builder’s self-assessment. It
+must exercise the live system (UI click or HTTP against the named
+chokepoint). A critic that only reads the diff has not signed.
+
+Output, and nothing else:
+
+- `PASS` / `FAIL`
+- one row per `(state × limit-or-entitlement × UI|server)`: result,
+  signal (HIGH / LOW / skipped)
+- each HIGH finding as one paragraph: what, URL/status, why it is HIGH
+- instance count before and after (must not rise)
+
+It does not edit, commit, deploy, create Neon, or complete a payment.
+
+Run:
+
+- once per fire after Verify if this cycle has not been signed against
+  the current live image pair;
+- again after any change to `definitions.ts`, `PLAN_GRANTS`,
+  `PLAN_CATALOGUE`, `resolveEffectiveTierLimits`, the CP catalogue, or
+  a refusing UI / server-fn.
+
+Missing `N of M` on a finite wired limit is HIGH (Track 8e / Fixer).
+Catalogue vs enforcement disagreement is HIGH. Dual-layer grant vs
+feature disagreement is HIGH.
 
 ## Signal
 
@@ -207,6 +391,12 @@ Workers-as-app, a general cloud gateway.
 - Billing that charges, opens, or projects the wrong workspace.
 - Plan change / downgrade / cancel / expiry that leaves the wrong limits.
 - Cloud Free with unlimited `tier_limits` (no row) once a projection is present.
+- A wired limit or entitlement that refuses only in the UI or only on
+  the server, or a 402 that does not name the plan / limit.
+- Advertised catalogue (or public pricing) that grants a feature the
+  active plan then 402s, or that hides a feature the plan then allows.
+- `PLAN_GRANTS` and `tier_limits.features` (or workspace
+  `PLAN_CATALOGUE.grants`) disagree for the same key on the same plan.
 - Restore of a Free workspace that skips the three-Free cap.
 - Missing switcher / transfer / leave / usage on cloud, or a 402 with no
   prior `N of M` / trial clock.
@@ -238,6 +428,9 @@ builder’s self-assessment.
 
 It must exercise the live system. A sweep that only reads the diff has
 not signed. Discard that verdict.
+
+When this fire also runs §H, attach the plan-matrix table (or spawn a
+separate Plan-matrix critic). Do not treat sweep C rows 15–16 as §H.
 
 Output, and nothing else:
 
@@ -271,10 +464,11 @@ the first is open.
 
 ## Concurrency
 
-| Lane       | Writes                         | Parallel with                                   |
-| ---------- | ------------------------------ | ----------------------------------------------- |
-| **Verify** | nothing                        | CP-create, Track-6 ops, critics on _other_ URLs |
-| **Fixer**  | isolated worktree, one finding | critics; other fixers on _other_ files          |
+| Lane            | Writes                         | Parallel with                                   |
+| --------------- | ------------------------------ | ----------------------------------------------- |
+| **Verify**      | nothing                        | CP-create, Track-6 ops, critics on _other_ URLs |
+| **Plan-matrix** | nothing (read-only §H critic)  | same as Critic; do not share hosts              |
+| **Fixer**       | isolated worktree, one finding | critics; other fixers on _other_ files          |
 
 Not in parallel with Fleet. Not two Verifies. Not a Fixer and another
 editor of the same files on `saas`. Stripe-live still owns payment +

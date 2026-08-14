@@ -181,6 +181,12 @@ Billing actions remain presented inside the workspace:
 Checkout and billing management fail with a retryable customer message while the
 control plane is unavailable. Normal product access and limit enforcement do not.
 
+Every wired numeric limit and entitlement is refused in the workspace UI
+and in the server function for the active plan. The review cycle is
+`LOOP-VERIFY.md` §H (Free / Growth / Pro / Scale / trial / expired /
+canceled / self-host). Advertised catalogue stickers must match CP
+`plans/definitions.ts` and `PLAN_GRANTS`.
+
 ### Billing projection
 
 The workspace receives only:

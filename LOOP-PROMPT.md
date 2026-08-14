@@ -27,15 +27,16 @@ Lanes that write the same git tree use an isolated worktree and do
 **not** merge or deploy; you merge serially onto `saas`. You write
 `LOOP-PROGRESS.md`. Children do not.
 
-| Lane            | Who writes                                                  | Parallel with                                    |
-| --------------- | ----------------------------------------------------------- | ------------------------------------------------ |
-| **Fleet**       | Railway/Docker/`source.image`/region pin                    | nothing else that deploys                        |
-| **Stripe-live** | test payment + webhook on existing `ws-*`                   | not Fleet, not another Stripe-live               |
-| **CP-create**   | per-owner 3-Free cap (`instance.server.ts` + tests)         | Fleet, Track-6 ops, critics, Verify              |
-| **Track-6 ops** | Railway `BILLING_*` removal; walk3 webhook already disabled | CP-create, critics, Verify                       |
-| **Verify**      | nothing (read-only hosted sweep, `LOOP-VERIFY.md`)          | CP-create, Track-6, critics on _other_ URLs      |
-| **Fixer**       | isolated worktree, one HIGH SIGNAL finding                  | critics; other fixers on _other_ files           |
-| **Critic**      | read-only live probe                                        | anything except a second critic on the same URLs |
+| Lane            | Who writes                                                  | Parallel with                                          |
+| --------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| **Fleet**       | Railway/Docker/`source.image`/region pin                    | nothing else that deploys                              |
+| **Stripe-live** | test payment + webhook on existing `ws-*`                   | not Fleet, not another Stripe-live                     |
+| **CP-create**   | per-owner 3-Free cap (`instance.server.ts` + tests)         | Fleet, Track-6 ops, critics, Verify                    |
+| **Track-6 ops** | Railway `BILLING_*` removal; walk3 webhook already disabled | CP-create, critics, Verify                             |
+| **Verify**      | nothing (read-only hosted sweep, `LOOP-VERIFY.md`)          | CP-create, Track-6, critics on _other_ URLs            |
+| **Fixer**       | isolated worktree, one HIGH SIGNAL finding                  | critics; other fixers on _other_ files                 |
+| **Critic**      | read-only live probe                                        | anything except a second critic on the same URLs       |
+| **Plan-matrix** | read-only §H critic (UI + server per plan)                  | same as Critic; do not share hosts with another critic |
 
 Forbidden in parallel: two Railway deploys; two Neon creates; two
 editors of the same file on `saas`; two critics hitting the same
@@ -49,6 +50,7 @@ mailbox/OTP. Extra spend still stop-and-asks at **$50/month**.
 2. Read `/home/james/quackback-wt/saas-merge/LOOP-PROGRESS.md`.
 3. Read `/home/james/quackback-wt/saas-merge/LOOP-VERIFY.md` before a
    Verify or Fixer lane, and when no builder unit is in flight.
+   §H (plan-matrix critic) is part of that cycle, not optional.
 4. Read `/home/james/quackback-wt/saas-merge/SAAS-HOSTING-STACK.md` only as
    needed for a platform question.
 5. Inspect, do not assume:
@@ -115,7 +117,9 @@ A new SaaS owner can:
    downgrade, cancel, and update a card through checkout or portal;
 9. keep using the product from the latest local billing projection during a
    temporary control-plane outage, with Free as the baseline and named
-   limit/entitlement refusals that point at the cheapest plan that lifts them;
+   limit/entitlement refusals that point at the cheapest plan that lifts them —
+   refused in the workspace UI **and** in the server function, for every
+   wired limit on the active plan;
 10. own up to three live Free workspaces, and unlimited paid ones;
 11. transfer ownership, leave a workspace they do not own, switch
     workspaces from inside the product, see usage before a limit
@@ -189,6 +193,15 @@ silently invert them.
     invoices list) lives on the control plane. Workspaces GET
     `/api/v1/internal/billing/catalogue` and `/invoices`. They do not
     keep a parallel price list. Annual is ten months (two free).
+18. Every wired numeric limit and entitlement is reviewed as a
+    **plan matrix** (Free / Growth / Pro / Scale / trial / expired /
+    canceled / self-host). Enforcement numbers come from CP
+    `plans/definitions.ts`; grants come from `PLAN_GRANTS` and must
+    match workspace `PLAN_CATALOGUE`. The workspace UI and the
+    server-fn both refuse. Advertised catalogue stickers must match
+    enforcement. Unwired keys (`aiAssistant`, `apiAccess`,
+    `ipAllowlist`, `aiFeedbackExtraction`, API rate counters) stay
+    parked. The cycle is `LOOP-VERIFY.md` §H.
 
 When documents disagree, authority is: this prompt, then
 `LOOP-SAAS-FIRST-CUSTOMER.md`, then `LOOP-VERIFY.md` for the hosted
@@ -280,6 +293,10 @@ billing path. They do not close tracks 3–7.
 4. Cloudflare: wire identity gateway + workspace Domains card on the
    existing client. Fallback origin is already active on Railway.
 5. Re-run `LOOP-VERIFY.md` after those deploys.
+6. **Plan-matrix critic** (`LOOP-VERIFY.md` §H): every wired limit
+   and entitlement on every active-plan state, UI **and** server-fn.
+   Sign it against the current live image pair. Do not treat sweep
+   C rows 15–16 as the matrix.
 
 Do not raise `MIN_SCHEMA_VERSION` unless the walk requires it and every
 enrolled workspace is already at the new floor.
@@ -307,9 +324,11 @@ the named-create screenshot exists because we stopped deploying.
    the diff has not signed. Discard that verdict and re-run it. Record
    the critic’s verdict in `LOOP-PROGRESS.md` before you stop.
 5. **Then run Verify** (`LOOP-VERIFY.md`) if this fire has not already.
-   Spawn a Fixer only for HIGH SIGNAL findings that are not
-   stop-and-ask (Cloudflare for SaaS, live Stripe key). The fixer does
-   not merge or deploy; you do, then a critic.
+   If §H has not been signed against the current live image pair,
+   spawn the Plan-matrix critic. Spawn a Fixer only for HIGH SIGNAL
+   findings that are not stop-and-ask (Cloudflare for SaaS, live
+   Stripe key). The fixer does not merge or deploy; you do, then a
+   critic.
 6. Status back to the parent must include both: what the builder did,
    and the critic’s pass/fail plus one-line reason.
 7. Fresh-mailbox OTPs for the Development CP are readable in
@@ -373,6 +392,12 @@ upgrade modal, no billing nav, no cloud URL/domain controls.
 
 **Bar D — hosted product sweep.** The latest `LOOP-VERIFY.md` sweep has
 no open HIGH SIGNAL rows. Per-unit green tests do not close this bar.
+
+**Bar E — plan matrix, UI + server.** Every wired numeric limit and
+entitlement is refused on the matching active plan in the workspace
+UI _and_ in the server-fn / REST that would create it. Catalogue
+stickers match enforcement. See `LOOP-VERIFY.md` §H. A spot-check of
+one Free cap does not close this bar.
 
 ---
 
@@ -452,5 +477,8 @@ All of the following, with evidence in `LOOP-PROGRESS.md`:
   downgrade still lets admins in.
 - The latest hosted-product sweep (`LOOP-VERIFY.md`) has no open HIGH
   SIGNAL findings.
+- The latest plan-matrix critic (`LOOP-VERIFY.md` §H) is signed
+  against the current live image pair: every wired limit and
+  entitlement, UI and server, on each active-plan state.
 
 Then **stop**. Do not start a new phase.

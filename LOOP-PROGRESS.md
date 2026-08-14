@@ -33,7 +33,8 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `d103770bf` (docs). Live image is `f0186af2b` /
+- Workspace tip: `1a39cd7d7` (Ready CTA + required friendly URL). Live
+  image is `f0186af2b` /
   `ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`
   (includes limits overlay `b0c13a366` / `31330d85b` and Origin-fix
   `635cdb149`). Web `47e0c7be` SUCCESS, region only `us-east4-eqdc4a`.
@@ -119,22 +120,23 @@ remains.
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
 | 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
-| 8 hosted account operations      | specified; 8a–8f not started                                                                               | restore must re-check 3-Free; switcher, transfer, leave, seats, usage, export/wipe                                |
+| 8 hosted account operations      | 8a live; 8b isolated builder in flight                                                                     | 8a `0b85cd0` / `e8953f9b`; 8b worktrees `loop-8b-switcher`                                                        |
 
 ## Pickup for critics and later fires
 
 Use this table. Do not rediscover work that already has a sha. Do not
 print the Cloudflare token. Preserve uncommitted onboarding files.
 
-| Unit                           | Where                | Sha                                                                                                 | Live?                    | Critic should prove                                                                                                                                                                                                                            |
-| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ready CTA + required cloud URL | app, **uncommitted** | working tree on `saas-merge` (`_layout.complete.tsx`, `_layout.workspace.tsx`, `platform-label.ts`) | no                       | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
-| 3-Free create cap              | CP                   | `c5a484d`                                                                                           | no                       | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. Then **8a**: restore of a Free workspace at 3 live 402s the same reason.                                                                                                      |
-| Limits overlay                 | app                  | `31330d85b` / `b0c13a366`                                                                           | no                       | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep `LOOP-VERIFY.md` row 15 after deploy.                                                                                                            |
-| CF for SaaS origin + client    | zone + CP            | `de0b038`; fallback **active**                                                                      | token on CP, skip-deploy | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
-| Plan catalogue + invoices      | CP + app             | CP `2fb9488`, app `6418785c8`                                                                       | no                       | `GET /catalogue` stickers: Growth $32 / $300, Pro $62 / $588, Scale $115 / $1068, annual = 10 months. `GET /invoices` hosted https URLs only. UI: four cards, period toggle, invoice table. Paid change-plan still portal.                     |
-| Verify sweep                   | live                 | `loop-evidence/verify-2026-08-14/sweep.md`                                                          | FAIL 1 HIGH              | After limits+billing deploy, re-run the whole sweep. Fixer only for HIGH.                                                                                                                                                                      |
-| Track 8b–8f                    | neither              | specified in `LOOP-SAAS-FIRST-CUSTOMER.md`                                                          | no                       | Switcher, transfer/leave, seats+SSO downgrade, `N of M` usage, export/wipe/account delete. After 8a.                                                                                                                                           |
+| Unit                           | Where           | Sha                                                                   | Live?                    | Critic should prove                                                                                                                                                                                                                                                                                          |
+| ------------------------------ | --------------- | --------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ready CTA + required cloud URL | app             | `1a39cd7d7`                                                           | no                       | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`.                                                               |
+| 3-Free create cap              | CP              | `c5a484d`                                                             | **yes** `80c8301e`       | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                                                                                     |
+| Limits overlay                 | app             | `31330d85b` / `b0c13a366`                                             | **yes** `cb186135`       | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                                                                                   |
+| CF for SaaS origin + client    | zone + CP       | `de0b038`; fallback **active**                                        | token on CP, skip-deploy | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.                                                                    |
+| Plan catalogue + invoices      | CP + app        | CP `2fb9488`, app `6418785c8`                                         | no                       | `GET /catalogue` stickers: Growth $32 / $300, Pro $62 / $588, Scale $115 / $1068, annual = 10 months. `GET /invoices` hosted https URLs only. UI: four cards, period toggle, invoice table. Paid change-plan still portal.                                                                                   |
+| Verify sweep                   | live            | `loop-evidence/verify-2026-08-14/sweep.md`                            | FAIL 1 HIGH              | After limits+billing deploy, re-run the whole sweep. Fixer only for HIGH.                                                                                                                                                                                                                                    |
+| Track 8b–8f                    | isolated 8b WTs | 8b builder on `loop-8b-switcher` (app+CP detached); 8c–8f not started | no                       | Switcher: list+Open siblings, never `ws-*` as address, self-host absent. Then transfer/leave, seats+SSO, `N of M`, export/wipe.                                                                                                                                                                              |
+| Plan-matrix critic             | live + spec     | `LOOP-VERIFY.md` §H                                                   | no                       | Every wired limit + entitlement × Free / Growth / Pro / Scale / trial / expired / canceled / self-host. **UI and server-fn** both refuse. Catalogue vs `definitions.ts` vs `PLAN_GRANTS` vs `PLAN_CATALOGUE` must agree. Fixtures: t1a Growth, t1e trial. No Neon. Do not treat sweep C 15–16 as this cycle. |
 
 **Fleet note:** one deploy thread. Prefer one CP deploy that includes
 `c5a484d` + `de0b038` + `2fb9488`, and one app deploy that includes
@@ -755,6 +757,22 @@ PASS — five roles SUCCESS on `sha256:cb186135…` in `us-east4-eqdc4a`;
 three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 `loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
 
+## This fire (2026-08-14, orchestrator)
+
+Fleet: `635cdb149` already live inside `sha256:cb186135…` / web
+`47e0c7be` / `us-east4-eqdc4a` only. No `source.image` change, no
+`serviceInstanceDeployV2`. Stripe-live not repeated (t1a Growth paid +
+webhook already critic PASS). CP-create: 3-Free + 8a already live
+(`c5a484d` / `0b85cd0` / `e8953f9b`); no second builder; nothing to
+merge. Custom domains not started. No Neon. No live Stripe key.
+
+App unit: `1a39cd7d7` Ready CTA + required friendly URL. Focused tests
+17/17 (`activation-action` 11, `platform-label` 3, `cloud-details-goal`
+3). Not deployed. Critic in flight.
+
+Track 8b: isolated detached worktrees `loop-8b-switcher` (app + CP).
+Builder must not merge or deploy.
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
@@ -785,10 +803,12 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 14. ~~Deploy `31330d85b` (Fleet).~~ live `f0186af2b` / `sha256:cb186135…`.
 15. **Track 8 — hosted account operations.** ~~8a~~ live `0b85cd0` /
     `e8953f9b` (30-day purge, restore 402 `free_workspace_owner_cap`).
-    Next: 8b in-product switcher; 8c transfer/leave;
+    8b isolated builder in flight (`/home/james/quackback-wt/loop-8b-switcher` + `/home/james/quackback-cp-wt/loop-8b-switcher`). Then 8c transfer/leave;
     8d seats + SSO downgrade live row; 8e visible usage; 8f export /
     wipe / delete CP account. No new Neon unless a finding cannot
     be proved on current hosts.
+    15b. ~~Commit Ready CTA + required cloud URL.~~ `1a39cd7d7`. Not live.
+    Focused tests 17/17. Critic in flight.
 16. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
     Fallback origin `saas-origin.quackback.co.uk` is **active** and
     CNAMEs (proxied) to the pooled Railway web host — not the old
@@ -801,6 +821,11 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
     use public pricing stickers (annual = 10 months). Workspace holds
     no price list. Not live until CP + app deploy.
 18. First-win journeys. Checkout attaches to an existing workspace only.
+19. **Plan-matrix critic** (`LOOP-VERIFY.md` §H). Run against the
+    current live pair after the catalogue + Ready deploys (or sooner
+    on existing t1a Growth / t1e trial). Every wired limit and
+    entitlement, UI **and** server-fn. Record advertised vs
+    enforcement drift as HIGH. Unwired keys stay skipped.
 
 ## Stale code to remove
 
@@ -900,6 +925,11 @@ HIGH (cloud unlimited overlay). Re-sweep
 `loop-evidence/verify-2026-08-14/limits-resweep.md` **PASS** — t1a
 `maxBoards=3`, t1e `maxBoards=10`, no stored row, not unlimited.
 
+- **Plan-matrix critic** (`LOOP-VERIFY.md` §H): every wired numeric
+  limit and entitlement on every active-plan state, UI lock **and**
+  server 402. Not signed yet. t1a = Growth paid, t1e = Pro trial.
+  Catalogue / website vs CP `definitions.ts` / `PLAN_GRANTS` drift
+  is in-scope HIGH. Do not treat the row-15 limits re-sweep as §H.
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
   Live: Free cap refuses with a named plan; paid overlay lifts it;
   downgrade leaves existing over-cap resources removable.
@@ -938,10 +968,12 @@ HIGH (cloud unlimited overlay). Re-sweep
 
 Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Unused web `BILLING_*` vars removed
-(`--skip-deploys`; web now `47e0c7be`). Remaining: Track 8b switcher; Domains card (this fire did not start
+(`--skip-deploys`; web now `47e0c7be`). Remaining: merge+critic 8b
+when the isolated builder finishes; deploy Ready `1a39cd7d7` +
+catalogue cards `6418785c8`; Domains card (this fire did not start
 it); standing Verify rows. Walk3 webhook stays disabled. Live app
 `f0186af2b` / `sha256:cb186135…`. Live CP `e8953f9b` /
-`sha256:06e7f5d3…`.
+`sha256:06e7f5d3…`. App tip `1a39cd7d7` not in the live image.
 
 Operational defects carried from the prior lead:
 

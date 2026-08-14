@@ -44,7 +44,8 @@ A new SaaS owner can:
    workspace Plan & billing (control-plane checkout or portal);
 9. keep using the product from the latest local billing projection during a
    temporary control-plane outage, with Free as the baseline and named
-   limit/entitlement refusals;
+   limit/entitlement refusals in the workspace UI **and** the server
+   function, for every wired limit on the active plan;
 10. own up to three live Free workspaces at a time, and unlimited paid
     workspaces. The count is per signed-in owner, not per organisation;
 11. transfer ownership, leave, switch workspaces from inside the
@@ -100,8 +101,9 @@ At the start of each work period:
 5. Spawn a fresh critic on each completed unit (goal, bar, commit range, live
    URLs only). Record the verdict. A unit is builder then critic.
 6. After the unit (or when no unit is in flight), run the hosted-product
-   sweep in `LOOP-VERIFY.md`. Spawn a Fixer only for HIGH SIGNAL findings
-   that are not stop-and-ask.
+   sweep in `LOOP-VERIFY.md`, including the plan-matrix critic in §H
+   if it is unsigned against the current live image pair. Spawn a
+   Fixer only for HIGH SIGNAL findings that are not stop-and-ask.
 7. Update `LOOP-PROGRESS.md` with the commit, verification evidence, and
    critic verdict.
 8. Deploy only when the app/control-plane pair is compatible and focused tests
@@ -234,7 +236,32 @@ Bar:
 - self-host remains on its existing limits path;
 - Plan & billing renders catalogue cards + invoices from those GETs,
   not a local price list. Paid workspaces change plan through portal
-  until checkout accepts an existing subscription.
+  until checkout accepts an existing subscription;
+- every wired numeric limit and entitlement is refused in the workspace
+  UI **and** the server-fn / REST for the active plan (Free, Growth,
+  Pro, Scale, trial-as-Pro, expired, canceled). Catalogue stickers
+  match enforcement. The critic cycle is `LOOP-VERIFY.md` §H.
+
+### Plan-matrix critic
+
+After any change to plan definitions, `PLAN_GRANTS`, the workspace
+`PLAN_CATALOGUE`, `resolveEffectiveTierLimits`, the CP catalogue, or a
+refusing surface — and once per live image pair otherwise — spawn the
+**Plan-matrix** critic in `LOOP-VERIFY.md` §H.
+
+It checks both sides of every wired gate:
+
+- **UI:** locked control or upgrade CTA before submit; `N of M` on
+  finite counts; cheapest plan named; over-cap extras still deletable.
+- **Server:** mutating server-fn / REST returns 402
+  (`tier_limit_exceeded` or `entitlement_required` with a named plan).
+  Reads and deletes of existing extras must not 402.
+
+Enforcement authority is CP `plans/definitions.ts` plus `PLAN_GRANTS`.
+Workspace `PLAN_CATALOGUE.grants` must match. Advertised catalogue /
+public pricing that disagrees is HIGH SIGNAL, not a pass. Unwired keys
+(`aiAssistant`, `apiAccess`, `ipAllowlist`, `aiFeedbackExtraction`,
+API rate counters) are skipped. Do not create Neon for this critic.
 
 ### Track 5: Authoritative starter activation
 
@@ -318,7 +345,10 @@ a portal user, not an end customer. Free applies `maxTeamSeats` from
 `tier_limits`. Advertised stickers are **per seat** (CP catalogue /
 public pricing page). Stripe checkout is still one line item per
 workspace until seat billing is wired. Do not invent Stripe seat
-quantities in 8a–8c; 8d is where seat 402s land.
+quantities in 8a–8c; 8d is where seat 402s land. Until 8d changes
+them, the plan-matrix critic treats CP `definitions.ts` numbers as
+enforcement truth (Growth 1, Pro 10, Scale unlimited) and records
+advertised “uncapped paid seats” as drift.
 
 **Units, in order**
 
@@ -350,10 +380,11 @@ quantities in 8a–8c; 8d is where seat 402s land.
 4. **8d — Seats, invites on downgrade, SSO live row.** Invite /
    remove / change role already in Members — prove they work on
    cloud. Invite 402s when Free `maxTeamSeats` is reached, named
-   plan. Extra seats after downgrade remain; cannot invite more;
-   can remove. Pending invites remain acceptable. Live: add IdP on
-   Scale → enforce → downgrade → admins still sign in (existing
-   fail-open), new SSO-only enforcement does not lock them out.
+   plan (UI lock + server-fn; see §H `maxTeamSeats`). Extra seats
+   after downgrade remain; cannot invite more; can remove. Pending
+   invites remain acceptable. Live: add IdP on Scale → enforce →
+   downgrade → admins still sign in (existing fail-open), new
+   SSO-only enforcement does not lock them out.
 
 5. **8e — Visible usage.** Before the 402: Plan & billing and the
    plan notice show trial end date (already derived); Settings and
@@ -361,7 +392,10 @@ quantities in 8a–8c; 8d is where seat 402s land.
    (boards, posts, seats, sending domains, AI tokens). CP list
    shows `N of 3` Free workspaces. AI budget 0 refuses with a named
    upgrade, not a silent model error. Unlimited (null) is omitted,
-   not printed as a fake fraction.
+   not printed as a fake fraction. This is the UI half of
+   `LOOP-VERIFY.md` §H; the server half is already the
+   `enforce*` / `requireEntitlement` chokepoints. Missing `N of M`
+   on a wired finite limit is HIGH.
 
 6. **8f — Export, wipe, delete the CP account.** Owner can export
    workspace data from the workspace (tenant DB; no CP provider
@@ -424,7 +458,11 @@ direct-workspace billing path only.
 - A real created/configured starter begins one immutable Pro trial.
 - Test-mode checkout, plan change, portal (downgrade / cancel / card),
   and webhook finalize traverse the control-plane gateway. Free limits
-  and entitlements refuse with a named plan; a paid overlay lifts them.
+  and entitlements refuse with a named plan on **both** the UI and the
+  server-fn; a paid overlay lifts them. The latest `LOOP-VERIFY.md` §H
+  plan-matrix critic is signed against the live image pair.
+- Plan & billing shows CP catalogue cards and invoices (no local
+  price list). Annual stickers are ten months.
 - Cloud settings (name, URL, billing, and domains when enabled) are
   workspace UI and control-plane API. Self-host shows none of those.
 - Soft-delete / restore honour the three-Free cap. The workspace has
