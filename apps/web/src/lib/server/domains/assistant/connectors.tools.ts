@@ -17,16 +17,21 @@ import {
 } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { AssistantAgentKind as AgentKind } from '@/lib/shared/assistant/config'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { AssistantToolSpec } from './assistant.toolspec'
 import { withGateEnvelope } from './assistant.toolspec'
 import { invokeConnectorTool } from './connectors.service'
 import {
+  connectorCallArgs,
+  connectorToolInputSchema,
   connectorToolName,
   formatConnectorToolDescription,
   uniqueConnectorToolName,
 } from './connectors.names'
 
 export {
+  connectorCallArgs,
+  connectorToolInputSchema,
   connectorToolName,
   formatConnectorToolDescription,
   sanitizeToolSegment,
@@ -40,14 +45,6 @@ const connectorToolOutputSchema = z.object({
 })
 
 type ConnectorToolOutput = z.infer<typeof connectorToolOutputSchema>
-
-/**
- * Build a JSON-schema-backed zod input that accepts any object. MCP tools ship
- * arbitrary JSON Schema; we validate lightly (object) and forward args as-is.
- */
-function looseObjectInputSchema(description: string) {
-  return z.record(z.string(), z.unknown()).describe(description).default({})
-}
 
 export function buildConnectorToolSpec(
   row: AssistantConnectorRow,
@@ -63,13 +60,7 @@ export function buildConnectorToolSpec(
   const definition = toolDefinition({
     name: modelName,
     description,
-    inputSchema: z.object({
-      arguments: looseObjectInputSchema(
-        remoteTool.inputSchemaJson
-          ? `Arguments matching this JSON Schema: ${remoteTool.inputSchemaJson}`
-          : 'Arguments for the remote MCP tool'
-      ),
-    }),
+    inputSchema: connectorToolInputSchema(remoteTool.inputSchemaJson),
     outputSchema: withGateEnvelope(connectorToolOutputSchema),
   })
 
@@ -79,16 +70,13 @@ export function buildConnectorToolSpec(
     description,
     promptGuidance: `Use when the ${row.name} connector's "${remoteTool.name}" tool is the right action. ${description}`,
     risk: 'write',
-    permissions: [],
+    // Same class as built-in conversation writes: Quinn already holds this
+    // autonomously; approving teammates must be able to reply, not only view.
+    permissions: [PERMISSIONS.CONVERSATION_REPLY],
     parents: ['conversation', 'ticket'],
     definition,
     execute: async (args: unknown): Promise<ConnectorToolOutput> => {
-      const source = (args && typeof args === 'object' ? args : {}) as {
-        arguments?: Record<string, unknown>
-      }
-      const remoteArgs =
-        source.arguments && typeof source.arguments === 'object' ? source.arguments : {}
-      const result = await invokeConnectorTool(row, remoteTool.name, remoteArgs)
+      const result = await invokeConnectorTool(row, remoteTool.name, connectorCallArgs(args))
       return { ok: result.ok, data: result.data, note: result.note }
     },
     summarize: () => `Run ${row.name} → ${remoteTool.name}`,
@@ -104,20 +92,15 @@ export function connectorToolRule(
 }
 
 /**
- * Specs + model-facing toolRules patch for one agent this turn.
- * Caller merges `toolRulesPatch` into the turn's toolRules before assembly.
+ * Specs + model-facing toolRules patch for already-loaded connector rows.
+ * Deny omits the tool. Unassigned / disabled rows contribute nothing.
  */
-export async function listConnectorSpecsForAgent(
-  agent: AgentKind,
-  execDb: Executor = defaultDb
-): Promise<{ specs: AssistantToolSpec[]; toolRulesPatch: Record<string, ConnectorToolRule> }> {
-  const rows = await execDb
-    .select()
-    .from(assistantConnectors)
-    .where(eq(assistantConnectors.enabled, true))
-
-  const assigned = rows.filter((row) =>
-    agent === 'agent' ? row.assignments.agent : row.assignments.copilot
+export function assembleConnectorSpecs(
+  rows: AssistantConnectorRow[],
+  agent: AgentKind
+): { specs: AssistantToolSpec[]; toolRulesPatch: Record<string, ConnectorToolRule> } {
+  const assigned = rows.filter(
+    (row) => row.enabled && (agent === 'agent' ? row.assignments.agent : row.assignments.copilot)
   )
 
   const specs: AssistantToolSpec[] = []
@@ -136,6 +119,21 @@ export async function listConnectorSpecsForAgent(
   }
 
   return { specs, toolRulesPatch }
+}
+
+/**
+ * Specs + model-facing toolRules patch for one agent this turn.
+ * Caller merges `toolRulesPatch` into the turn's toolRules before assembly.
+ */
+export async function listConnectorSpecsForAgent(
+  agent: AgentKind,
+  execDb: Executor = defaultDb
+): Promise<{ specs: AssistantToolSpec[]; toolRulesPatch: Record<string, ConnectorToolRule> }> {
+  const rows = await execDb
+    .select()
+    .from(assistantConnectors)
+    .where(eq(assistantConnectors.enabled, true))
+  return assembleConnectorSpecs(rows, agent)
 }
 
 /**

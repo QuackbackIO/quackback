@@ -44,6 +44,25 @@ import type { AssistantAgentKind, AssistantToolRule } from '@/lib/shared/assista
 import type { ConnectorPublicDTO } from '@/lib/server/domains/assistant/connectors.service'
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline'
 
+function connectorUrlLooksValid(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim())
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+function mutationErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback
+}
+
+function matchesToolQuery(tool: { name: string; description: string }, query: string): boolean {
+  if (query.length === 0) return true
+  const haystack = `${tool.name} ${tool.description}`.toLowerCase()
+  return haystack.includes(query)
+}
+
 const RULE_OPTIONS: Array<{ value: AssistantToolRule; labelId: string; defaultMessage: string }> = [
   {
     value: 'ask',
@@ -70,6 +89,7 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
   const [editTarget, setEditTarget] = useState<ConnectorPublicDTO | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ConnectorPublicDTO | null>(null)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [connectorQuery, setConnectorQuery] = useState('')
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: assistantKeys.connectors() })
@@ -102,7 +122,15 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
       )
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not add connector')
+      toast.error(
+        mutationErrorMessage(
+          error,
+          intl.formatMessage({
+            id: 'automation.connectors.createError',
+            defaultMessage: 'Could not add connector',
+          })
+        )
+      )
     },
   })
 
@@ -118,7 +146,15 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
       )
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not sync connector')
+      toast.error(
+        mutationErrorMessage(
+          error,
+          intl.formatMessage({
+            id: 'automation.connectors.syncError',
+            defaultMessage: 'Could not refresh connector tools',
+          })
+        )
+      )
     },
   })
 
@@ -135,7 +171,15 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
       )
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not delete connector')
+      toast.error(
+        mutationErrorMessage(
+          error,
+          intl.formatMessage({
+            id: 'automation.connectors.deleteError',
+            defaultMessage: 'Could not remove connector',
+          })
+        )
+      )
     },
   })
 
@@ -152,16 +196,32 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
       )
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not update connector')
+      toast.error(
+        mutationErrorMessage(
+          error,
+          intl.formatMessage({
+            id: 'automation.connectors.updateError',
+            defaultMessage: 'Could not update connector',
+          })
+        )
+      )
     },
   })
 
   const ruleMutation = useMutation({
-    mutationFn: (input: { id: string; toolName: string; rule: AssistantToolRule }) =>
+    mutationFn: (input: { id: string; toolName: string; rule: AssistantToolRule | null }) =>
       updateConnectorToolRuleFn({ data: input }),
     onSuccess: () => invalidate(),
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not update tool permission')
+      toast.error(
+        mutationErrorMessage(
+          error,
+          intl.formatMessage({
+            id: 'automation.connectors.ruleError',
+            defaultMessage: 'Could not update tool permission',
+          })
+        )
+      )
     },
   })
 
@@ -170,7 +230,15 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
       updateConnectorFn({ data: input }),
     onSuccess: () => invalidate(),
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Could not update assignment')
+      toast.error(
+        mutationErrorMessage(
+          error,
+          intl.formatMessage({
+            id: 'automation.connectors.assignmentError',
+            defaultMessage: 'Could not update assignment',
+          })
+        )
+      )
     },
   })
 
@@ -190,6 +258,16 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
   })
 
   const connectors = connectorsQuery.data ?? []
+  const connectorFilter = connectorQuery.trim().toLowerCase()
+  const visibleConnectors =
+    connectorFilter.length === 0
+      ? connectors
+      : connectors.filter((connector) => {
+          const haystack = `${connector.name} ${connector.url} ${connector.tools
+            .map((tool) => `${tool.name} ${tool.description}`)
+            .join(' ')}`.toLowerCase()
+          return haystack.includes(connectorFilter)
+        })
 
   return (
     <>
@@ -230,35 +308,65 @@ export function ConnectorsCard({ agent }: { agent: AssistantAgentKind }) {
             />
           </p>
         ) : (
-          <div className="divide-y divide-border/60">
-            {connectors.map((connector) => (
-              <ConnectorRow
-                key={connector.id}
-                connector={connector}
-                agent={agent}
-                expanded={expanded[connector.id] === true}
-                onToggle={() =>
-                  setExpanded((prev) => ({ ...prev, [connector.id]: !prev[connector.id] }))
-                }
-                onSync={() => syncMutation.mutate(connector.id)}
-                syncing={syncMutation.isPending && syncMutation.variables === connector.id}
-                onEdit={() => setEditTarget(connector)}
-                onDelete={() => setDeleteTarget(connector)}
-                onRuleChange={(toolName, rule) =>
-                  ruleMutation.mutate({ id: connector.id, toolName, rule })
-                }
-                onAssignmentChange={(checked) => {
-                  const assignments =
-                    agent === 'agent'
-                      ? { agent: checked, copilot: connector.assignments.copilot }
-                      : { agent: connector.assignments.agent, copilot: checked }
-                  assignmentMutation.mutate({ id: connector.id, assignments })
-                }}
-                onEnabledChange={(enabled) =>
-                  updateMutation.mutate({ data: { id: connector.id, enabled } })
-                }
+          <div className="space-y-3">
+            {connectors.length > 3 && (
+              <Input
+                value={connectorQuery}
+                onChange={(event) => setConnectorQuery(event.target.value)}
+                placeholder={intl.formatMessage({
+                  id: 'automation.connectors.filter',
+                  defaultMessage: 'Filter connectors',
+                })}
+                aria-label={intl.formatMessage({
+                  id: 'automation.connectors.filter',
+                  defaultMessage: 'Filter connectors',
+                })}
               />
-            ))}
+            )}
+            {visibleConnectors.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                <FormattedMessage
+                  id="automation.connectors.filterEmpty"
+                  defaultMessage="No connectors match that filter."
+                />
+              </p>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {visibleConnectors.map((connector) => (
+                  <ConnectorRow
+                    key={connector.id}
+                    connector={connector}
+                    agent={agent}
+                    expanded={expanded[connector.id] === true}
+                    onToggle={() =>
+                      setExpanded((prev) => ({ ...prev, [connector.id]: !prev[connector.id] }))
+                    }
+                    onSync={() => syncMutation.mutate(connector.id)}
+                    syncing={syncMutation.isPending && syncMutation.variables === connector.id}
+                    onEdit={() => setEditTarget(connector)}
+                    onDelete={() => setDeleteTarget(connector)}
+                    onRuleChange={(toolName, rule) =>
+                      ruleMutation.mutate({ id: connector.id, toolName, rule })
+                    }
+                    rulePendingKey={
+                      ruleMutation.isPending && ruleMutation.variables
+                        ? `${ruleMutation.variables.id}:${ruleMutation.variables.toolName}`
+                        : null
+                    }
+                    onAssignmentChange={(checked) => {
+                      const assignments =
+                        agent === 'agent'
+                          ? { agent: checked, copilot: connector.assignments.copilot }
+                          : { agent: connector.assignments.agent, copilot: checked }
+                      assignmentMutation.mutate({ id: connector.id, assignments })
+                    }}
+                    onEnabledChange={(enabled) =>
+                      updateMutation.mutate({ data: { id: connector.id, enabled } })
+                    }
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </SettingsCard>
@@ -320,6 +428,7 @@ function ConnectorRow({
   onEdit,
   onDelete,
   onRuleChange,
+  rulePendingKey,
   onAssignmentChange,
   onEnabledChange,
 }: {
@@ -331,11 +440,13 @@ function ConnectorRow({
   syncing: boolean
   onEdit: () => void
   onDelete: () => void
-  onRuleChange: (toolName: string, rule: AssistantToolRule) => void
+  onRuleChange: (toolName: string, rule: AssistantToolRule | null) => void
+  rulePendingKey: string | null
   onAssignmentChange: (checked: boolean) => void
   onEnabledChange: (enabled: boolean) => void
 }) {
   const intl = useIntl()
+  const [toolQuery, setToolQuery] = useState('')
   const assigned = agent === 'agent' ? connector.assignments.agent : connector.assignments.copilot
   const askCount = connector.tools.filter(
     (tool) => (connector.toolRules[tool.name] ?? 'ask') === 'ask'
@@ -371,7 +482,12 @@ function ConnectorRow({
             <ChevronRightIcon className="size-3.5" />
           )}
         </Button>
-        <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          className="min-w-0 flex-1 rounded-sm text-start"
+          onClick={onToggle}
+          aria-expanded={expanded}
+        >
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-medium">{connector.name}</h3>
             <Badge size="sm" variant="secondary" shape="pill">
@@ -413,7 +529,7 @@ function ConnectorRow({
           {connector.lastSyncError && (
             <p className="mt-1 text-xs text-destructive">{connector.lastSyncError}</p>
           )}
-        </div>
+        </button>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <div className="flex items-center gap-1.5">
             <Switch
@@ -464,42 +580,94 @@ function ConnectorRow({
               />
             </p>
           ) : (
-            connector.tools.map((tool) => {
-              const rule = (connector.toolRules[tool.name] ?? 'ask') as AssistantToolRule
-              return (
-                <div
-                  key={tool.name}
-                  className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{tool.name}</p>
-                    {tool.description ? (
-                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                        {tool.description}
-                      </p>
-                    ) : null}
-                  </div>
-                  <Select
-                    value={rule}
-                    onValueChange={(value) => onRuleChange(tool.name, value as AssistantToolRule)}
-                  >
-                    <SelectTrigger size="sm" className="w-[180px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RULE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {intl.formatMessage({
-                            id: option.labelId,
-                            defaultMessage: option.defaultMessage,
-                          })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <>
+              {connector.tools.length > 5 && (
+                <div className="px-3 pt-3">
+                  <Input
+                    value={toolQuery}
+                    onChange={(event) => setToolQuery(event.target.value)}
+                    placeholder={intl.formatMessage({
+                      id: 'automation.connectors.filterTools',
+                      defaultMessage: 'Filter tools',
+                    })}
+                    aria-label={intl.formatMessage({
+                      id: 'automation.connectors.filterTools',
+                      defaultMessage: 'Filter tools',
+                    })}
+                  />
                 </div>
-              )
-            })
+              )}
+              {connector.tools.filter((tool) =>
+                matchesToolQuery(tool, toolQuery.trim().toLowerCase())
+              ).length === 0 ? (
+                <p className="p-3 text-xs text-muted-foreground">
+                  <FormattedMessage
+                    id="automation.connectors.filterToolsEmpty"
+                    defaultMessage="No tools match that filter."
+                  />
+                </p>
+              ) : (
+                connector.tools
+                  .filter((tool) => matchesToolQuery(tool, toolQuery.trim().toLowerCase()))
+                  .map((tool) => {
+                    const saved = connector.toolRules[tool.name]
+                    const rule = (saved ?? 'ask') as AssistantToolRule
+                    const pending = rulePendingKey === `${connector.id}:${tool.name}`
+                    return (
+                      <div
+                        key={tool.name}
+                        className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{tool.name}</p>
+                          {tool.description ? (
+                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                              {tool.description}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {saved ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={pending}
+                              onClick={() => onRuleChange(tool.name, null)}
+                            >
+                              <FormattedMessage
+                                id="automation.connectors.resetRule"
+                                defaultMessage="Reset"
+                              />
+                            </Button>
+                          ) : null}
+                          <Select
+                            value={rule}
+                            disabled={pending}
+                            onValueChange={(value) =>
+                              onRuleChange(tool.name, value as AssistantToolRule)
+                            }
+                          >
+                            <SelectTrigger size="sm" className="w-[180px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {RULE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {intl.formatMessage({
+                                    id: option.labelId,
+                                    defaultMessage: option.defaultMessage,
+                                  })}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )
+                  })
+              )}
+            </>
           )}
         </div>
       )}
@@ -528,6 +696,8 @@ function CreateConnectorDialog({
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [authToken, setAuthToken] = useState('')
+  const [assignAgent, setAssignAgent] = useState(true)
+  const [assignCopilot, setAssignCopilot] = useState(true)
 
   return (
     <Dialog
@@ -537,6 +707,8 @@ function CreateConnectorDialog({
           setName('')
           setUrl('')
           setAuthToken('')
+          setAssignAgent(true)
+          setAssignCopilot(true)
         }
         onOpenChange(next)
       }}
@@ -565,18 +737,46 @@ function CreateConnectorDialog({
             defaultMessage: 'Project tracker',
           })}
         />
+        <div className="flex flex-wrap gap-4">
+          <div className="flex items-center gap-1.5">
+            <Switch
+              id="connector-create-agent"
+              checked={assignAgent}
+              onCheckedChange={setAssignAgent}
+            />
+            <Label htmlFor="connector-create-agent" className="text-xs">
+              <FormattedMessage
+                id="automation.connectors.assignAgent"
+                defaultMessage="Enable for Agent"
+              />
+            </Label>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Switch
+              id="connector-create-copilot"
+              checked={assignCopilot}
+              onCheckedChange={setAssignCopilot}
+            />
+            <Label htmlFor="connector-create-copilot" className="text-xs">
+              <FormattedMessage
+                id="automation.connectors.assignCopilot"
+                defaultMessage="Enable for Copilot"
+              />
+            </Label>
+          </div>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             <FormattedMessage id="common.cancel" defaultMessage="Cancel" />
           </Button>
           <Button
-            disabled={pending || name.trim().length < 1 || url.trim().length < 1}
+            disabled={pending || name.trim().length < 1 || !connectorUrlLooksValid(url)}
             onClick={() =>
               onSubmit({
                 name: name.trim(),
                 url: url.trim(),
                 authToken: authToken.trim() ? authToken.trim() : null,
-                assignments: { agent: true, copilot: true },
+                assignments: { agent: assignAgent, copilot: assignCopilot },
                 enabled: true,
               })
             }
@@ -609,6 +809,18 @@ function EditConnectorDialog({
   const [name, setName] = useState(connector.name)
   const [url, setUrl] = useState(connector.url)
   const [authToken, setAuthToken] = useState('')
+  const urlChanged = url.trim() !== connector.url
+  const tokenHint = urlChanged
+    ? intl.formatMessage({
+        id: 'automation.connectors.tokenClearedOnUrlChange',
+        defaultMessage: 'Changing the URL clears the saved token unless you enter a new one.',
+      })
+    : connector.hasAuthToken
+      ? intl.formatMessage({
+          id: 'automation.connectors.tokenReplace',
+          defaultMessage: 'Leave blank to keep the current token.',
+        })
+      : undefined
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -628,21 +840,14 @@ function EditConnectorDialog({
           onNameChange={setName}
           onUrlChange={setUrl}
           onAuthTokenChange={setAuthToken}
-          tokenHint={
-            connector.hasAuthToken
-              ? intl.formatMessage({
-                  id: 'automation.connectors.tokenReplace',
-                  defaultMessage: 'Leave blank to keep the current token.',
-                })
-              : undefined
-          }
+          tokenHint={tokenHint}
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             <FormattedMessage id="common.cancel" defaultMessage="Cancel" />
           </Button>
           <Button
-            disabled={pending || name.trim().length < 1 || url.trim().length < 1}
+            disabled={pending || name.trim().length < 1 || !connectorUrlLooksValid(url)}
             onClick={() =>
               onSubmit({
                 name: name.trim(),
@@ -697,10 +902,20 @@ function ConnectorFields({
         </Label>
         <Input
           id="connector-url"
+          type="url"
           value={url}
           onChange={(event) => onUrlChange(event.target.value)}
           placeholder="https://mcp.example.com/mcp"
+          aria-invalid={url.trim().length > 0 && !connectorUrlLooksValid(url)}
         />
+        {url.trim().length > 0 && !connectorUrlLooksValid(url) ? (
+          <p className="text-xs text-destructive">
+            <FormattedMessage
+              id="automation.connectors.urlInvalid"
+              defaultMessage="Enter an http(s) URL, for example https://mcp.example.com/mcp"
+            />
+          </p>
+        ) : null}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="connector-token">

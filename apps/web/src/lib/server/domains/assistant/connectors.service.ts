@@ -51,7 +51,8 @@ export const updateConnectorSchema = z.object({
 export const connectorToolRuleUpdateSchema = z.object({
   id: z.string().min(1),
   toolName: z.string().min(1).max(200),
-  rule: assistantToolRuleSchema,
+  /** `null` clears a saved rule so the connector default (`ask`) applies. */
+  rule: assistantToolRuleSchema.nullable(),
 })
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
@@ -218,13 +219,17 @@ export async function updateConnector(
     await assertSlugUnique(slug, id, execDb)
   }
 
+  const urlChanged = Boolean(parsed.url && parsed.url !== existing.url)
+  if (parsed.url) await assertConnectorUrlSafe(parsed.url)
+
+  // A URL change must not replay the previous host's token. Supply a new
+  // token in the same update to authenticate the new endpoint.
   let authTokenCiphertext = existing.authTokenCiphertext
   if (parsed.authToken !== undefined) {
     authTokenCiphertext = sealAuthToken(parsed.authToken)
+  } else if (urlChanged) {
+    authTokenCiphertext = null
   }
-
-  const urlChanged = Boolean(parsed.url && parsed.url !== existing.url)
-  if (parsed.url) await assertConnectorUrlSafe(parsed.url)
 
   const [row] = await execDb
     .update(assistantConnectors)
@@ -327,7 +332,9 @@ export async function updateConnectorToolRule(
       'That tool is not in this connector catalogue'
     )
   }
-  const nextRules = { ...(existing.toolRules ?? {}), [parsed.toolName]: parsed.rule }
+  const nextRules = { ...(existing.toolRules ?? {}) }
+  if (parsed.rule === null) delete nextRules[parsed.toolName]
+  else nextRules[parsed.toolName] = parsed.rule
   const [row] = await execDb
     .update(assistantConnectors)
     .set({ toolRules: nextRules, updatedAt: new Date() })

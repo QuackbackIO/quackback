@@ -1087,7 +1087,7 @@ export interface FeatureFlags {
   inboxAi: boolean
   /** What the AI assistant may DO: built-in actions such as closing
    *  conversations and creating tickets. Each write tool is permissioned
-   *  (allow / ask / deny) with AG-UI approvals and saveable per-tool rules. */
+   *  (allow / ask / deny) with queued teammate approval and saveable rules. */
   assistantTools: boolean
   /** Custom actions library (QUINN-TWO-AGENT-SPEC D6/Phase 5): admin-authored
    *  HTTP actions the assistant can call, defined once and assigned per agent.

@@ -124,10 +124,9 @@ export const assistantCopilotCapabilitiesSchema = z.object({
 })
 
 /**
- * Per-tool permission rule (in-stream or queued approval):
+ * Per-tool permission rule (queued approval):
  * - `allow` — run without asking (after RBAC)
- * - `ask` — pause for a human decision (AG-UI approval on Copilot; persisted
- *   pending-action proposal on customer Agent turns)
+ * - `ask` — pause for a human decision (persisted pending-action proposal)
  * - `deny` — omit the tool from the catalogue for this agent
  *
  * Saved under each agent so teammates can "Always allow / Always deny" from an

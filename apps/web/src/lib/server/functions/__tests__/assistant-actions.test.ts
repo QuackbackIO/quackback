@@ -432,8 +432,9 @@ describe('approveAssistantActionFn', () => {
       const connectorSpec = {
         ...CLOSE_SPEC,
         name: 'mcp_tracker_create_issue',
-        permissions: [] as string[],
+        permissions: [PERMISSIONS.CONVERSATION_REPLY],
       }
+      hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_REPLY]))
       const pending = pendingRow({ toolName: 'mcp_tracker_create_issue' })
       hoisted.getPendingActionById.mockResolvedValue(pending)
       hoisted.resolveToolSpecs.mockReturnValue([])
@@ -459,6 +460,25 @@ describe('approveAssistantActionFn', () => {
         expect.objectContaining({ simulate: false })
       )
       expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
+    })
+
+    it('rejects a connector proposal when the approver cannot reply', async () => {
+      hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_VIEW]))
+      hoisted.getPendingActionById.mockResolvedValue(
+        pendingRow({ toolName: 'mcp_tracker_create_issue' })
+      )
+      hoisted.resolveToolSpecs.mockReturnValue([])
+      hoisted.getConnectorSpecByToolName.mockResolvedValue({
+        ...CLOSE_SPEC,
+        name: 'mcp_tracker_create_issue',
+        permissions: [PERMISSIONS.CONVERSATION_REPLY],
+      })
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toThrow(
+        /conversation\.reply/
+      )
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
     })
 
     it('410s when the connector tool is gone since the proposal', async () => {
