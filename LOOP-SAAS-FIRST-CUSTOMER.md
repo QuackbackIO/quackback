@@ -242,8 +242,12 @@ Bar:
   retryable;
 - self-host remains on its existing limits path;
 - Plan & billing renders catalogue cards + invoices from those GETs,
-  not a local price list. Paid workspaces change plan through portal
-  until checkout accepts an existing subscription;
+  not a local price list. **Change to {plan}** POSTs checkout with
+  that `planId` and period. First purchase opens Checkout. An
+  existing subscription opens a Stripe confirm session for that
+  price (not a generic portal). Upgrades apply immediately
+  (pro-rata); downgrades wait until period end. Manage billing
+  still opens the portal for card / invoices / cancel;
 - every wired numeric limit and entitlement is refused in the workspace
   UI **and** the server-fn / REST for the active plan (Free, Growth,
   Pro, Scale, trial-as-Pro, expired, canceled). Catalogue stickers

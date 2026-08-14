@@ -83,7 +83,8 @@ export function BillingPlansView(props: {
           <div>
             <h2 className="text-base font-semibold">Plans</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Prices come from Quackback Cloud. Checkout opens with our billing provider.
+              Prices come from Quackback Cloud. Upgrades apply immediately (pro-rata). Downgrades
+              take effect at the end of the current billing period.
             </p>
           </div>
           <PeriodToggle
@@ -107,8 +108,12 @@ export function BillingPlansView(props: {
                 plan={plan}
                 period={period}
                 current={overview.plan === plan.id}
-                canCheckout={overview.canUpgrade && plan.id !== 'free' && overview.plan !== plan.id}
-                canManage={overview.canManageBilling && plan.id !== overview.plan}
+                canCheckout={
+                  (overview.canUpgrade || overview.canManageBilling) &&
+                  plan.id !== 'free' &&
+                  overview.plan !== plan.id
+                }
+                paidChange={overview.canManageBilling && !overview.canUpgrade}
                 index={index}
               />
             ))}
@@ -143,7 +148,7 @@ function PlanCard(props: {
   period: 'monthly' | 'annual'
   current: boolean
   canCheckout: boolean
-  canManage: boolean
+  paidChange: boolean
   index: number
 }) {
   const { plan, period } = props
@@ -209,11 +214,9 @@ function PlanCard(props: {
               className="w-full"
               variant={plan.recommended ? 'default' : 'outline'}
             >
-              {props.current ? 'Current plan' : `Choose ${plan.name}`}
+              {props.paidChange ? `Change to ${plan.name}` : `Choose ${plan.name}`}
             </Button>
           </form>
-        ) : props.canManage ? (
-          <PortalButton label={`Change to ${plan.name}`} variant="outline" wide />
         ) : (
           <Button size="sm" variant="outline" className="w-full" disabled>
             Choose {plan.name}

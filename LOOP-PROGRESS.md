@@ -132,7 +132,8 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | 3-Free create cap              | CP          | `c5a484d`                                                                         | **yes** `80c8301e`            | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                                                                                     |
 | Limits overlay                 | app         | `31330d85b` / `b0c13a366`                                                         | **yes** `cb186135`            | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                                                                                   |
 | CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                                                    | token on CP, skip-deploy      | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.                                                                    |
-| Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                                                     | **yes** API; UI in `02cb4329` | `GET /catalogue` 200 on live (plans + annualDiscountMonths). App billing chunk present. Browser four-card walk still for critic. Paid change-plan still portal.                                                                                                                                              |
+| Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                                                     | **yes** API; UI in `02cb4329` | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                                                                                   |
+| Paid plan switch               | CP + app    | this unit                                                                         | no                            | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades (`decreasing_item_amount` / `shortening_interval`) wait until period end. Yearly prices map back to the plan.                                                     |
 | Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep.md`                                        | FAIL 1 HIGH                   | After limits+billing deploy, re-run the whole sweep. Fixer only for HIGH.                                                                                                                                                                                                                                    |
 | Track 8b–8f                    | CP+app saas | 8b CP `4da4607` live `e0af5dc1`; app `804853ae2` in `02cb4329`; 8c–8f not started | **8b yes**                    | Switcher: list 401/200 empty; Open 401/400/403 `not_owner`; live chrome has Switch workspace. Then 8c transfer/leave.                                                                                                                                                                                        |
 | Plan-matrix critic             | live + spec | `LOOP-VERIFY.md` §H                                                               | no                            | Every wired limit + entitlement × Free / Growth / Pro / Scale / trial / expired / canceled / self-host. **UI and server-fn** both refuse. Catalogue vs `definitions.ts` vs `PLAN_GRANTS` vs `PLAN_CATALOGUE` must agree. Fixtures: t1a Growth, t1e trial. No Neon. Do not treat sweep C 15–16 as this cycle. |
@@ -832,11 +833,14 @@ Named critic spawned on the same URLs.
 17. Plan & billing page: catalogue + invoices from the control plane
     (`GET /api/v1/internal/billing/catalogue` and `/invoices`). Cards
     use public pricing stickers (annual = 10 months). Workspace holds
-    no price list. **Deploy app `6418785c8` with 8b** (CP catalogue
-    API is already in live `0b85cd0`). Live-verify four cards +
-    invoices table on t1a / t1e.
+    no price list. Cards live in `02cb4329`. **Change to {plan}**
+    must open a Stripe confirm session for that price (this unit).
+    Upgrades now (pro-rata); downgrades at period end.
 18. First-win journeys. Checkout attaches to an existing workspace only.
-19. **Plan-matrix critic** (`LOOP-VERIFY.md` §H). Run against the
+19. **Deploy paid plan switch** (this unit) on CP + app, then live-
+    critic Change to X on t1a (Growth paid). Portal config is created
+    on first session if seed has not run.
+20. **Plan-matrix critic** (`LOOP-VERIFY.md` §H). Run against the
     current live pair after the catalogue + Ready deploys (or sooner
     on existing t1a Growth / t1e trial). Every wired limit and
     entitlement, UI **and** server-fn. Record advertised vs

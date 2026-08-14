@@ -102,8 +102,8 @@ back to projected Free. No sweeper, no suspension, no second trial.
 | Trial start       | `created` / `configured` starter → one Pro trial                                          | `deferred` / `unavailable` starts a trial; second trial                 |
 | Trial expiry      | Clock fallback to Free; owner still signed in; data intact                                | Lockout, wipe, or entitlements stay Pro                                 |
 | Upgrade           | Free or trial → Growth / Pro / Scale via workspace Upgrade                                | 403/500 on own origin; wrong `instanceId`; metadata creates a workspace |
-| Change plan (up)  | Paid workspace Change plan → higher catalogue plan                                        | Session for another instance; plan picker posts a workspace id          |
-| Downgrade         | Portal (or Change plan to a lower paid plan) → projection matches                         | Limits stay high; entitlements of the old plan remain granted           |
+| Change plan (up)  | Paid **Change to {plan}** 303s to Stripe confirm for that price; applies now (pro-rata)   | Generic portal with no target price; checkout 409; wrong instance       |
+| Downgrade         | **Change to** a lower paid plan schedules at period end; projection follows then          | Instant entitlement drop; old plan stays after the period ends          |
 | Cancel            | Portal cancel → `cancellationAt` set; at that instant, Free                               | Immediate lockout or paid entitlements after the stamp                  |
 | Update card       | Portal from Manage billing                                                                | Workspace-owned billing route; missing nav when `canManageBilling`      |
 | Webhook finalize  | Test payment → projection version increases on **that** workspace                         | No fan-out, or a different workspace updates                            |
@@ -187,10 +187,11 @@ and say so.
 
 After CP `2fb9488` + app `6418785c8` are live:
 
-| #   | Surface    | Probe                                                             | HIGH SIGNAL if                                              |
-| --- | ---------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
-| 30  | Plan cards | Four cards from `GET …/catalogue`; annual default; current marked | Local price list; empty strip only; `ws-*` in copy          |
-| 31  | Invoices   | Table from `GET …/invoices`; View is an https hosted URL          | Provider ids in the workspace; 5xx; other tenant's invoices |
+| #   | Surface     | Probe                                                                                | HIGH SIGNAL if                                              |
+| --- | ----------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| 30  | Plan cards  | Four cards from `GET …/catalogue`; annual default; current marked                    | Local price list; empty strip only; `ws-*` in copy          |
+| 31  | Invoices    | Table from `GET …/invoices`; View is an https hosted URL                             | Provider ids in the workspace; 5xx; other tenant's invoices |
+| 32  | Change to X | Paid card POSTs `checkout` + `planId` + period; 303 to Stripe confirm for that price | Generic portal; 409 “use Manage billing”; no target price   |
 
 ### F. Custom domains (live provider)
 

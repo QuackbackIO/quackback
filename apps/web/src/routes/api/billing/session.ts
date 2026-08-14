@@ -30,7 +30,9 @@ export const Route = createFileRoute('/api/billing/session')({
             await import('@/lib/server/domains/settings/cloud/cloud.service')
           const cloud = await getCloudConfig()
           const actionAllowed =
-            parsed.data.action === 'portal' ? cloud.canManageBilling : cloud.canUpgrade
+            parsed.data.action === 'portal'
+              ? cloud.canManageBilling
+              : cloud.canUpgrade || cloud.canManageBilling
           if (!cloud.enabled || !actionAllowed) {
             return Response.json({ error: 'billing_action_unavailable' }, { status: 403 })
           }

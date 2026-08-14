@@ -105,7 +105,13 @@ describe('BillingPlansView', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(2)
     expect(screen.getByText('Current')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Current plan' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Change to Scale' })).toBeInTheDocument()
+    const change = screen.getByRole('button', { name: 'Change to Scale' })
+    expect(change).toBeInTheDocument()
+    const form = change.closest('form')
+    expect(form).toHaveAttribute('action', '/api/billing/session')
+    expect(form?.querySelector('input[name="action"]')).toHaveValue('checkout')
+    expect(form?.querySelector('input[name="planId"]')).toHaveValue('scale')
+    expect(form?.querySelector('input[name="billingPeriod"]')).toHaveValue('annual')
     expect(screen.getByText('INV-1001')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /View/ })).toHaveAttribute(
       'href',
@@ -123,6 +129,7 @@ describe('BillingPlansView', () => {
         invoicesError={null}
       />
     )
+    expect(screen.getByText(/Upgrades apply immediately/)).toBeInTheDocument()
     expect(screen.getByText('$49')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }))
     expect(screen.getByText('$62')).toBeInTheDocument()
