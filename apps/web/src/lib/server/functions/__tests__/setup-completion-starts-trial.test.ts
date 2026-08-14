@@ -1,5 +1,5 @@
 /**
- * Finishing setup is what starts a trial, and finishing it again is not.
+ * A real starter is what starts a trial; merely finishing setup is not.
  *
  * The trial's own behaviour is proven in
  * `domains/settings/cloud/__tests__/`. What can only be seen here is the
@@ -86,7 +86,7 @@ vi.mock('@/lib/server/domains/settings/cloud/trial', () => ({
   },
 }))
 
-import { completeStartingPointFn } from '../activation'
+import { completeStartingPointFn, shouldStartTrialForStarter } from '../activation'
 
 const FIRST_RUN = new Date('2026-03-01T12:00:00.000Z')
 const SECOND_RUN = new Date('2026-03-09T08:30:00.000Z')
@@ -112,30 +112,33 @@ afterEach(() => {
 })
 
 describe('completing the wizard', () => {
-  it('asks for a trial, anchored on when setup finished', async () => {
+  it('does not start a trial for a deferred starter', async () => {
     await completeStartingPointFn({ data: { action: 'defer' } } as never)
-    expect(anchors()).toEqual([FIRST_RUN.toISOString()])
+    expect(anchors()).toEqual([])
   })
 
-  it('asks only after setup is actually recorded as complete', async () => {
-    // Ordering, not decoration: the trial write takes the same settings row
-    // the setup-state transaction holds. Asking from inside that transaction
-    // would deadlock a workspace against itself on the last click of its own
-    // setup.
+  it('still records deferred setup completion without touching the trial', async () => {
     await completeStartingPointFn({ data: { action: 'defer' } } as never)
-    expect(hoisted.stateWhenTrialStarted?.completedAt).toBe(FIRST_RUN.toISOString())
-    expect(hoisted.stateWhenTrialStarted?.steps.startingPoint).not.toBeNull()
+    expect(hoisted.state.completedAt).toBe(FIRST_RUN.toISOString())
+    expect(hoisted.state.steps.startingPoint).not.toBeNull()
+    expect(hoisted.stateWhenTrialStarted).toBeNull()
   })
 
-  it('passes the same moment when the step is completed again days later', async () => {
-    // The anchor is what makes a repeat harmless: the same anchor recomputes
-    // the same window, so a second attempt cannot buy another fortnight even
-    // before the trial record itself is consulted.
+  it('does not start on a deferred retry days later', async () => {
     await completeStartingPointFn({ data: { action: 'defer' } } as never)
     vi.setSystemTime(SECOND_RUN)
     await completeStartingPointFn({ data: { action: 'defer' } } as never)
 
-    expect(anchors()).toEqual([FIRST_RUN.toISOString(), FIRST_RUN.toISOString()])
+    expect(anchors()).toEqual([])
     expect(hoisted.state.completedAt).toBe(FIRST_RUN.toISOString())
+  })
+
+  it.each([
+    ['created', true],
+    ['configured', true],
+    ['deferred', false],
+    ['unavailable', false],
+  ] as const)('starts only for a %s starter', (resolution, expected) => {
+    expect(shouldStartTrialForStarter(resolution)).toBe(expected)
   })
 })

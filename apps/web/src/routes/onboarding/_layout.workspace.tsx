@@ -140,55 +140,71 @@ function WorkspaceAndGoalStep() {
     >
       <header className="text-center">
         <h1 className="text-2xl font-bold">
-          <FormattedMessage
-            id="onboarding.workspace.title"
-            defaultMessage="Create your workspace"
-          />
-        </h1>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.workspace.description"
-            defaultMessage="Give your team a home in Quackback, then choose what you want to accomplish first."
-          />
-        </p>
-      </header>
-
-      <div className="space-y-3">
-        <label htmlFor="workspaceName" className="text-sm font-medium">
-          <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
-        </label>
-        <Input
-          id="workspaceName"
-          value={workspaceName}
-          onChange={(event) => setWorkspaceName(event.target.value)}
-          placeholder="Acme"
-          autoFocus
-          autoComplete="organization"
-          disabled={isLoading || nameManaged}
-          className="h-11"
-          aria-describedby="workspace-url-hint"
-        />
-        <p id="workspace-url-hint" className="text-xs text-muted-foreground">
           {nameManaged ? (
             <FormattedMessage
-              id="onboarding.workspace.nameManaged"
-              defaultMessage="Your workspace admin manages this name."
-            />
-          ) : slugManaged ? (
-            <FormattedMessage
-              id="onboarding.workspace.slugManaged"
-              defaultMessage="You can edit the name. Your workspace admin has set the portal URL to /{slug}."
-              values={{ slug: existingSlug }}
+              id="onboarding.workspace.goalOnlyTitle"
+              defaultMessage="Choose your first goal"
             />
           ) : (
             <FormattedMessage
-              id="onboarding.workspace.urlPreview"
-              defaultMessage="Portal URL: /{slug}"
-              values={{ slug: derivedSlug || 'workspace' }}
+              id="onboarding.workspace.title"
+              defaultMessage="Create your workspace"
+            />
+          )}
+        </h1>
+        <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+          {nameManaged ? (
+            <FormattedMessage
+              id="onboarding.workspace.goalOnlyDescription"
+              defaultMessage="Your workspace is ready. Tell us which result you want to reach first."
+            />
+          ) : (
+            <FormattedMessage
+              id="onboarding.workspace.description"
+              defaultMessage="Give your team a home in Quackback, then choose what you want to accomplish first."
             />
           )}
         </p>
-      </div>
+      </header>
+
+      {!nameManaged && (
+        <div className="space-y-3">
+          <label htmlFor="workspaceName" className="text-sm font-medium">
+            <FormattedMessage id="onboarding.workspace.name" defaultMessage="Workspace name" />
+          </label>
+          <Input
+            id="workspaceName"
+            value={workspaceName}
+            onChange={(event) => setWorkspaceName(event.target.value)}
+            placeholder="Acme"
+            autoFocus
+            autoComplete="organization"
+            disabled={isLoading || nameManaged}
+            className="h-11"
+            aria-describedby="workspace-url-hint"
+          />
+          <p id="workspace-url-hint" className="text-xs text-muted-foreground">
+            {nameManaged ? (
+              <FormattedMessage
+                id="onboarding.workspace.nameManaged"
+                defaultMessage="Your workspace admin manages this name."
+              />
+            ) : slugManaged ? (
+              <FormattedMessage
+                id="onboarding.workspace.slugManaged"
+                defaultMessage="You can edit the name. Your workspace admin has set the portal URL to /{slug}."
+                values={{ slug: existingSlug }}
+              />
+            ) : (
+              <FormattedMessage
+                id="onboarding.workspace.urlPreview"
+                defaultMessage="Portal URL: /{slug}"
+                values={{ slug: derivedSlug || 'workspace' }}
+              />
+            )}
+          </p>
+        </div>
+      )}
 
       {nameValid && (
         <fieldset className="space-y-4 animate-in fade-in duration-200 motion-reduce:animate-none">

@@ -230,6 +230,10 @@ export interface CompleteStartingPointResult {
   workspace: { name: string; slug: string }
 }
 
+export function shouldStartTrialForStarter(resolution: StartingPointState['resolution']): boolean {
+  return resolution === 'created' || resolution === 'configured'
+}
+
 /**
  * Create/configure one deterministic starting point and complete the setup
  * wizard in the same row-locked transaction. Retrying returns the same artifact.
@@ -450,10 +454,12 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
     // later call (`current.completedAt ?? now`). So a retry, a double-click or
     // a second visit to this step recomputes the identical trial window and
     // changes nothing, rather than quietly buying another fortnight.
-    const { startTrialIfEligible } = await import('@/lib/server/domains/settings/cloud/trial')
-    await startTrialIfEligible({
-      anchor: state.completedAt ? new Date(state.completedAt) : new Date(now),
-    })
+    if (shouldStartTrialForStarter(value.startingPoint.resolution)) {
+      const { startTrialIfEligible } = await import('@/lib/server/domains/settings/cloud/trial')
+      await startTrialIfEligible({
+        anchor: state.completedAt ? new Date(state.completedAt) : new Date(now),
+      })
+    }
 
     return value
   })

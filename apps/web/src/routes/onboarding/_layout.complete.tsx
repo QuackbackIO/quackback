@@ -10,13 +10,15 @@ import {
 } from '@heroicons/react/24/outline'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import {
   acknowledgeActivationHandoffFn,
   getActivationBridgeContextFn,
 } from '@/lib/server/functions/activation'
 import { pickOnboardingStep } from './-onboarding-step'
-import type { OnboardingOutcome, StartingPointState } from '@/lib/shared/db-types'
+import type { StartingPointState } from '@/lib/shared/db-types'
+import { selectActivationAction } from '@/lib/shared/activation-action'
 
 export const Route = createFileRoute('/onboarding/_layout/complete')({
   loader: async ({ context }) => {
@@ -36,18 +38,33 @@ export const Route = createFileRoute('/onboarding/_layout/complete')({
 function ActivationBridge() {
   const intl = useIntl()
   const navigate = useNavigate()
-  const { workspaceName, workspaceSlug, startingPoint, resourceLabel } = Route.useLoaderData()
+  const { workspaceName, workspaceSlug, startingPoint, resourceLabel, starterBoard } =
+    Route.useLoaderData()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const action = bridgeAction(startingPoint)
+  const action = selectActivationAction({
+    surface: 'onboarding_handoff',
+    startingPoint,
+    status: {
+      hasBoards: Boolean(starterBoard),
+      hasPublicBoard: Boolean(starterBoard),
+      publicBoardId: starterBoard?.id,
+      publicBoardSlug: starterBoard?.slug,
+      publicBoardPath: starterBoard?.publicPath,
+      memberCount: 1,
+      hasBranding: false,
+      hasWidgetEnabled: startingPoint.resourceType === 'messenger',
+      useCase: startingPoint.outcome,
+    },
+  })
 
   async function continueToAction() {
     setIsLoading(true)
     setError('')
     try {
       await acknowledgeActivationHandoffFn()
-      if (action.params) await navigate({ to: action.href, params: action.params })
-      else await navigate({ to: action.href })
+      if (!action || action.kind === 'copy') return
+      window.location.assign(action.destination)
     } catch (err) {
       setError(
         err instanceof Error
@@ -109,16 +126,27 @@ function ActivationBridge() {
         )}
       </div>
 
-      <Button onClick={continueToAction} disabled={isLoading} className="h-11 min-w-56">
-        {isLoading ? (
-          <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-        ) : (
-          <>
-            <FormattedMessage id={action.messageId} defaultMessage={action.label} />
-            <ArrowRightIcon className="h-4 w-4" />
-          </>
-        )}
-      </Button>
+      {action?.kind === 'copy' ? (
+        <ActivationActionButton
+          action={action}
+          className="h-11 min-w-56"
+          onCompleted={async () => {
+            await acknowledgeActivationHandoffFn()
+            await navigate({ to: '/admin/feedback' })
+          }}
+        />
+      ) : action ? (
+        <Button onClick={continueToAction} disabled={isLoading} className="h-11 min-w-56">
+          {isLoading ? (
+            <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <>
+              {action.label}
+              <ArrowRightIcon className="h-4 w-4" />
+            </>
+          )}
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -204,57 +232,4 @@ function BridgeArtifact({
       </div>
     </div>
   )
-}
-
-function bridgeAction(startingPoint: StartingPointState): {
-  href:
-    | '/admin/getting-started'
-    | '/admin/settings/widget'
-    | '/admin/help-center/articles/$articleId'
-    | '/admin/settings/members'
-  params?: { articleId: string }
-  label: string
-  messageId: string
-} {
-  if (startingPoint.resolution === 'deferred' || startingPoint.resolution === 'unavailable') {
-    return {
-      href: '/admin/getting-started',
-      label: 'View your launch plan',
-      messageId: 'onboarding.bridge.action.launchPlan',
-    }
-  }
-  switch (startingPoint.outcome as OnboardingOutcome) {
-    case 'customer_support':
-      return {
-        href: '/admin/settings/widget',
-        label: 'Install or delegate Messenger',
-        messageId: 'onboarding.bridge.action.messenger',
-      }
-    case 'help_center':
-      return startingPoint.resourceId
-        ? {
-            href: '/admin/help-center/articles/$articleId',
-            params: { articleId: startingPoint.resourceId },
-            label: 'Continue the article',
-            messageId: 'onboarding.bridge.action.article',
-          }
-        : {
-            href: '/admin/getting-started',
-            label: 'View your launch plan',
-            messageId: 'onboarding.bridge.action.launchPlan',
-          }
-    case 'internal':
-      return {
-        href: '/admin/settings/members',
-        label: 'Invite teammates',
-        messageId: 'onboarding.bridge.action.invite',
-      }
-    case 'product_feedback':
-    default:
-      return {
-        href: '/admin/settings/widget',
-        label: 'Share or install feedback',
-        messageId: 'onboarding.bridge.action.feedback',
-      }
-  }
 }

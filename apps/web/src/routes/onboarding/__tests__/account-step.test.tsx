@@ -288,13 +288,13 @@ describe('account step — a provisioned workspace nobody has claimed', () => {
 })
 
 describe('account step — a self-hosted first user', () => {
-  it('keeps the account-creation form when nobody has claimed setup and password is on', () => {
+  it('uses the shared email-first signup form when password is on', async () => {
     const { container } = renderStep(selfHosted())
 
-    expect(container.querySelector('input[type="password"]')).toBeInTheDocument()
-    expect(screen.getByLabelText(/your name/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/work email/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument()
+    expect(container.querySelector('input[type="password"]')).toBeNull()
+    await continuePastEmail()
+    await waitFor(() => expect(container.querySelector('input[type="password"]')).not.toBeNull())
     expect(screen.queryByText(/already has an owner/i)).toBeNull()
   })
 

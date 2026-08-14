@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useRouter } from '@tanstack/react-router'
-import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { PortalAuthFormInline } from '@/components/auth/portal-auth-form-inline'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -91,11 +89,6 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
   // and the wizard just sat there.
   useAdvanceOnAuthSuccess()
 
-  // Mirrors the default `PortalAuthFormInline` applies to the same key, so
-  // the screen and the form it renders can never disagree about whether a
-  // password box belongs here.
-  const passwordEnabled = authConfig.oauth?.password ?? true
-
   if (ssoEnabled) return <SsoStep />
   if (claim.claimed || !claim.openToClaim) {
     return (
@@ -107,10 +100,7 @@ export function AccountStep({ ssoEnabled, claim, authConfig, workspaceName }: Ac
       />
     )
   }
-  if (!passwordEnabled) {
-    return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
-  }
-  return <PasswordSignupStep />
+  return <MethodsStep authConfig={authConfig} workspaceName={workspaceName} />
 }
 
 /**
@@ -336,186 +326,5 @@ function SsoStep() {
         </div>
       </div>
     </div>
-  )
-}
-
-/** The original first-user form, reached when nobody has claimed setup and
- *  the workspace accepts passwords. Unchanged. */
-function PasswordSignupStep() {
-  const intl = useIntl()
-  const navigate = useNavigate()
-  const router = useRouter()
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    if (!name.trim() || name.trim().length < 2) {
-      setError(
-        intl.formatMessage({
-          id: 'onboarding.account.nameError',
-          defaultMessage: 'Enter your name.',
-        })
-      )
-      return
-    }
-    if (!email.trim()) {
-      setError(
-        intl.formatMessage({
-          id: 'onboarding.account.emailError',
-          defaultMessage: 'Enter your work email.',
-        })
-      )
-      return
-    }
-    if (!password || password.length < 8) {
-      setError(
-        intl.formatMessage({
-          id: 'onboarding.account.passwordError',
-          defaultMessage: 'Use at least 8 characters for your password.',
-        })
-      )
-      return
-    }
-
-    setError('')
-    setIsLoading(true)
-
-    try {
-      const result = await authClient.signUp.email({
-        name: name.trim(),
-        email,
-        password,
-      })
-
-      if (result.error) {
-        throw new Error(
-          result.error.message ||
-            intl.formatMessage({
-              id: 'onboarding.account.createError',
-              defaultMessage: 'We couldn’t create your account. Try again.',
-            })
-        )
-      }
-
-      // Better Auth sets the session cookie before resolving. Refresh the
-      // router context after the session read so navigation does not depend on
-      // a hard reload racing the cookie cache.
-      await authClient.getSession()
-      await router.invalidate()
-      await navigate({ to: '/onboarding/workspace' })
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : intl.formatMessage({
-              id: 'onboarding.account.createError',
-              defaultMessage: 'We couldn’t create your account. Try again.',
-            })
-      )
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return (
-    <StepCard>
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold">
-          <FormattedMessage id="onboarding.account.title" defaultMessage="Welcome to Quackback" />
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          <FormattedMessage
-            id="onboarding.account.description"
-            defaultMessage="Create your account to set up your workspace."
-          />
-        </p>
-      </div>
-
-      {error && (
-        <div
-          role="alert"
-          className="mb-4 rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive"
-        >
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <label htmlFor="name" className="text-sm font-medium">
-            <FormattedMessage id="onboarding.account.name" defaultMessage="Your name" />
-          </label>
-          <Input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            placeholder="Jane Doe"
-            autoComplete="name"
-            autoFocus
-            disabled={isLoading}
-            className="h-11"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium">
-            <FormattedMessage id="onboarding.account.email" defaultMessage="Work email" />
-          </label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder={intl.formatMessage({
-              id: 'onboarding.account.emailPlaceholder',
-              defaultMessage: 'you@company.com',
-            })}
-            autoComplete="email"
-            disabled={isLoading}
-            className="h-11"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium">
-            <FormattedMessage id="onboarding.account.password" defaultMessage="Password" />
-          </label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder={intl.formatMessage({
-              id: 'onboarding.account.passwordPlaceholder',
-              defaultMessage: 'At least 8 characters',
-            })}
-            autoComplete="new-password"
-            disabled={isLoading}
-            className="h-11"
-          />
-        </div>
-
-        <Button
-          type="submit"
-          disabled={isLoading || !email.trim() || !name.trim() || password.length < 8}
-          className="w-full h-11"
-        >
-          {isLoading ? (
-            <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <FormattedMessage id="onboarding.account.create" defaultMessage="Create account" />
-          )}
-        </Button>
-      </form>
-    </StepCard>
   )
 }
