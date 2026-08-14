@@ -30,13 +30,14 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `635cdb149` (https Origin form POST). Live image is still
-  `0c42bbe1f` /
-  `ghcr.io/quackbackio/quackback@sha256:703eca7db7c22362e7ea5beed5d35a2574e8cb561d1dd078e5e8c7c311a51af2`
+- Workspace tip: `203331611` (docs). Live image is `6d4d9f252` /
+  `ghcr.io/quackbackio/quackback@sha256:139a4a8c6873d14c1d4cc129d8f3e2d286ccaaea90e2ab0e86766944b8219570`
+  (includes Origin-fix `635cdb149`)
 - Control plane: `71e59d9` live as `f135274f` /
   `sha256:a005414fa8a2e49e128a47abc59f221198e76214c78a7516894ef9e967def597`
-  (redeploy after test Stripe key + price seed; still `sfo`)
-- Last known deployed workspace: `0c42bbe1f` (2026-08-14)
+  (redeploy after test Stripe key + price seed; still `sfo`). Local CP
+  tip is now `c5a484d` (3-Free cap, not deployed).
+- Last known deployed workspace: `6d4d9f252` (2026-08-14)
 - Last known deployed control plane: `f135274f` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
@@ -109,8 +110,8 @@ remains.
 | 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
 | 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
 | 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | live test-mode checkout + portal through instance-scoped gateway; workspace form Origin fix not deployed   | CP `f135274f` / `71e59d9`; app `635cdb149`; see “Track 3 live checkout (2026-08-14)”                              |
-| 4 workspace projection + gateway | both `ws-*` hold signed billing projections; CP 303 path live; workspace form 403 until `635cdb149`        | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`, `635cdb149`                                                            |
+| 3 CP billing foundation          | live test-mode checkout + portal through instance-scoped gateway; workspace Upgrade form 303 live          | CP `f135274f` / `71e59d9`; app `635cdb149` deployed `139a4a8c`; see “Track 3 live checkout (2026-08-14)”          |
+| 4 workspace projection + gateway | both `ws-*` hold signed billing projections; CP gateway + workspace form 303 live                          | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`, `635cdb149`                                                            |
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
@@ -541,11 +542,10 @@ Pay-and-subscribe was filled with the test card but did not leave
 Checkout in the headless run; webhook finalize is not claimed.
 
 Workspace `POST https://south63792f.quackback.co.uk/api/billing/session`
-with browser `Origin: https://…` is 403 `invalid_origin` on the live
-image: `request.url` is `http://` behind TLS termination. App
+with browser `Origin: https://…` was 403 `invalid_origin` on
+`703eca7d`: `request.url` is `http://` behind TLS termination. App
 `635cdb149` compares Origin host to Host instead. Focused tests 4
-passed. Not in the live image. Do not treat the workspace form 303 as
-live until that commit is deployed.
+passed. That commit is now live as `139a4a8c` (see below).
 
 ### Critic (2026-08-14, test-mode checkout/portal)
 
@@ -565,6 +565,36 @@ empty. Hosted GET: checkout title “Stripe Checkout”, portal
 `billing.stripe.com`. Critic did not complete a payment. An explore
 critic without a shell only hit public GETs and is discarded.
 
+Live after this fire (2026-08-14 T20:29Z):
+
+- Docker `31837417742` succeeded from `saas` `6d4d9f252` (includes
+  Origin-fix `635cdb149`) as
+  `ghcr.io/quackbackio/quackback@sha256:139a4a8c6873d14c1d4cc129d8f3e2d286ccaaea90e2ab0e86766944b8219570`.
+- `source.image` + `serviceInstanceDeployV2` SUCCESS, matching
+  `meta.imageDigest`, all `us-east4-eqdc4a`:
+  web `683a4b07`, worker `604419ed`, hourly `e7f7170e`, daily
+  `3c34090e`, migrator `6bd4b4d1`. Ready 200 on gauntlet, both
+  `ws-*` system hosts, and both friendly hosts.
+- Live web `683a4b07` replica defines `originMatchesRequestHost` in
+  `/app/.output/server/_ssr/router-CetLJkQa.mjs` and compares Origin
+  to `x-forwarded-host` / `Host`.
+- Workspace Upgrade form on t1a (`south63792f`,
+  `inst_01m00kq6cdfzzb19gfjz8pt0s7`):
+
+  | Call                                           | Result                                           |
+  | ---------------------------------------------- | ------------------------------------------------ |
+  | `Origin: https://south63792f…`, no session     | 500 `HTTPError` (origin accepted; auth required) |
+  | `Origin: https://attacker.test`, owner session | 403 `invalid_origin`                             |
+  | no Origin                                      | 403 `invalid_origin`                             |
+  | `Origin: https://south63792f…`, owner session  | **303** `checkout.stripe.com` `/c/pay/cs_test_…` |
+
+  Instance count 16 → 16. No new Neon. No live Stripe key.
+  Transcript: `loop-evidence/t3-form-303/facts.json`.
+
+### Critic (2026-08-14, workspace form 303 `635cdb149` / `139a4a8c`)
+
+Pending — spawned this fire.
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
@@ -576,12 +606,13 @@ critic without a shell only hit public GETs and is discarded.
 7. ~~Live starter trial through the instance-scoped CP gateway on both `ws-*` hosts.~~
 8. ~~Live-prove test-mode checkout/portal through the instance-scoped CP
    gateway on existing `ws-*` workspaces.~~ session + hosted pages +
-   registry return URLs + no new workspace. Webhook paid-finalize and
-   workspace-form 303 still open.
+   registry return URLs + no new workspace. Webhook paid-finalize
+   still open. Workspace-form 303 is live (`139a4a8c`).
 9. ~~Deploy `57ff32499` so a later starter-miss retries from admin plan-notice.~~
    Live `0c42bbe1f` / `sha256:703eca7d…`.
-10. Deploy `635cdb149` so the workspace Upgrade form accepts https Origin,
-    then live-prove the 303 from `/api/billing/session`.
+10. ~~Deploy `635cdb149` so the workspace Upgrade form accepts https Origin,
+    then live-prove the 303 from `/api/billing/session`.~~ live
+    `6d4d9f252` / `sha256:139a4a8c…`.
 11. Complete one test-mode payment and prove webhook finalize + projection
     on the existing workspace (metadata must not create one).
 12. **Per-owner cap:** at most 3 live Free workspaces; unlimited paid.
@@ -703,13 +734,15 @@ on self-host.
 ## Blockers
 
 Stripe **test** key and paid-plan price ids are live. Checkout/portal
-session create through the CP gateway is proved. Remaining: deploy
-`635cdb149` for the workspace form 303; one test-mode payment +
-webhook finalize; Track 6 boundary scan and unused Railway
-`BILLING_*`. Walk3 workspace webhook was disabled by the operator.
+session create through the CP gateway is proved. Workspace Upgrade
+form 303 through `/api/billing/session` is live (`139a4a8c`).
+Remaining: one test-mode payment + webhook finalize; per-owner 3-Free
+cap (local CP `c5a484d`, not deployed); Track 6 boundary scan and
+unused Railway `BILLING_*`. Walk3 workspace webhook was disabled by
+the operator.
 
 The identity/billing pair is otherwise deployed. Further deploys are
-incremental. Live app `0c42bbe1f` / `sha256:703eca7d…`. Live CP
+incremental. Live app `6d4d9f252` / `sha256:139a4a8c…`. Live CP
 `f135274f` / `sha256:a005414f…`.
 
 Operational defects carried from the prior lead:
