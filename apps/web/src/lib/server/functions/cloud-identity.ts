@@ -57,7 +57,8 @@ export const updateCloudIdentityFn = createServerFn({ method: 'POST' })
     const requestedLabel = data.platformLabel?.trim().toLowerCase()
     const mightChangeOrigin =
       requestedLabel !== undefined &&
-      requestedLabel !== platformLabelFromHostname(current.platformHostname)
+      requestedLabel !==
+        (current.platformHostname ? platformLabelFromHostname(current.platformHostname) : null)
 
     // Mint before the control plane changes routing: after a second friendly
     // rename, this request's host becomes redirect-only immediately.

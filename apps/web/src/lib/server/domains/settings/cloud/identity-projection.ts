@@ -37,7 +37,7 @@ export function parseIdentityProjection(value: unknown): IdentityProjection | nu
     projection.displayName.trim() !== projection.displayName ||
     projection.displayName.length < 1 ||
     projection.displayName.length > 80 ||
-    !isHostname(projection.platformHostname) ||
+    (projection.platformHostname !== null && !isHostname(projection.platformHostname)) ||
     !isIsoDate(projection.updatedAt) ||
     !Array.isArray(projection.customDomains)
   )

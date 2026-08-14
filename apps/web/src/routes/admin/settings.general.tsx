@@ -51,7 +51,9 @@ function GeneralSettingsPage() {
     initialCloudIdentity?.displayName ?? settings?.name ?? ''
   )
   const [platformLabel, setPlatformLabel] = useState(
-    initialCloudIdentity ? platformLabelFromHostname(initialCloudIdentity.platformHostname) : ''
+    initialCloudIdentity?.platformHostname
+      ? platformLabelFromHostname(initialCloudIdentity.platformHostname)
+      : ''
   )
   const [isSavingName, setIsSavingName] = useState(false)
   const [localFlags, setLocalFlags] = useState<FeatureFlags>(
@@ -87,14 +89,23 @@ function GeneralSettingsPage() {
   })
 
   const identityMutation = useMutation({
-    mutationFn: () =>
-      updateCloudIdentityFn({
-        data: { displayName: workspaceName.trim(), platformLabel: platformLabel.trim() },
-      }),
+    mutationFn: () => {
+      const requestedLabel = platformLabel.trim()
+      return updateCloudIdentityFn({
+        data: {
+          displayName: workspaceName.trim(),
+          ...(requestedLabel ? { platformLabel: requestedLabel } : {}),
+        },
+      })
+    },
     onSuccess: async (result) => {
       setCloudIdentity(result.projection)
       setWorkspaceName(result.projection.displayName)
-      setPlatformLabel(platformLabelFromHostname(result.projection.platformHostname))
+      setPlatformLabel(
+        result.projection.platformHostname
+          ? platformLabelFromHostname(result.projection.platformHostname)
+          : ''
+      )
       if (result.transferToken) {
         const target = new URL('/auth/origin-transfer', result.projection.canonicalOrigin)
         target.searchParams.set('ott', result.transferToken)
@@ -146,7 +157,10 @@ function GeneralSettingsPage() {
         <CloudWorkspaceDetails
           workspaceName={workspaceName}
           platformLabel={platformLabel}
-          domainSuffix={cloudIdentity.platformHostname.split('.').slice(1).join('.')}
+          domainSuffix={new URL(cloudIdentity.canonicalOrigin).hostname
+            .split('.')
+            .slice(1)
+            .join('.')}
           currentOrigin={cloudIdentity.canonicalOrigin}
           pending={identityMutation.isPending}
           error={identityMutation.error}
@@ -282,10 +296,7 @@ export function CloudWorkspaceDetails(props: {
             {props.error.message || 'Could not save workspace details. Try again.'}
           </p>
         )}
-        <Button
-          type="submit"
-          disabled={props.pending || !props.workspaceName.trim() || !props.platformLabel.trim()}
-        >
+        <Button type="submit" disabled={props.pending || !props.workspaceName.trim()}>
           {props.pending && <ArrowPathIcon className="h-4 w-4 animate-spin" />}
           Save workspace details
         </Button>

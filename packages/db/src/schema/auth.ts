@@ -118,7 +118,8 @@ export interface StoredCloudIdentityProjection {
   version: number
   displayName: string
   canonicalOrigin: string
-  platformHostname: string
+  /** Friendly Quackback hostname, null until the owner chooses one. */
+  platformHostname: string | null
   customDomains: StoredCloudCustomDomain[]
   updatedAt: string
 }

@@ -50,6 +50,10 @@ describe('identity projection validation', () => {
     expect(parseIdentityProjection(PROJECTION)).toEqual(PROJECTION)
     expect(isCloudIdentityEnabled(PROJECTION)).toBe(true)
     expect(isCloudIdentityEnabled(null)).toBe(false)
+    expect(parseIdentityProjection({ ...PROJECTION, platformHostname: null })).toEqual({
+      ...PROJECTION,
+      platformHostname: null,
+    })
     expect(
       parseIdentityProjection({ ...PROJECTION, cloudflareHostnameId: 'provider-secret' })
     ).toBeNull()
