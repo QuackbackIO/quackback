@@ -23,6 +23,7 @@ import {
   sql,
   principal,
   user,
+  session,
   posts,
   comments,
   votes,
@@ -369,12 +370,13 @@ export async function listPortalUsers(
  * Remove a portal user from the portal (soft removal).
  *
  * Detaches the `principal` from its Better-Auth `user` instead of deleting
- * the row: chat/posts/comments RESTRICT principal deletes. The user row is
- * kept so a later sign-in provisions a fresh principal.
+ * the row: chat/posts/comments RESTRICT principal deletes. Sessions are
+ * revoked in the same transaction so getOptionalAuth cannot immediately
+ * provision a replacement principal for a still-cookied user. The user
+ * row is kept so a later sign-in provisions a fresh principal.
  */
 export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {
-    // Verify principal exists and has role='user'
     const existingPrincipal = await db.query.principal.findFirst({
       where: and(eq(principal.id, principalId), eq(principal.role, 'user')),
     })
@@ -386,21 +388,25 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
       )
     }
 
-    // Detach rather than DELETE: chat/posts/comments RESTRICT the principal
-    // row. Clearing userId drops them from the portal-user list (inner join
-    // on user) while keeping history. The user row stays so a later sign-in
-    // provisions a fresh principal.
-    await db
-      .update(principal)
-      .set({
-        userId: null,
-        type: 'anonymous',
-        displayName: 'Removed user',
-        avatarUrl: null,
-        avatarKey: null,
-        contactEmail: null,
-      })
-      .where(eq(principal.id, principalId))
+    const userId = existingPrincipal.userId
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(principal)
+        .set({
+          userId: null,
+          type: 'anonymous',
+          displayName: 'Removed user',
+          avatarUrl: null,
+          avatarKey: null,
+          contactEmail: null,
+        })
+        .where(eq(principal.id, principalId))
+
+      if (userId) {
+        await tx.delete(session).where(eq(session.userId, userId))
+      }
+    })
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     log.error({ err: error }, 'failed to remove portal user')
