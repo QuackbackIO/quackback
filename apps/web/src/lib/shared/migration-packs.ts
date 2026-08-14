@@ -10,7 +10,7 @@ export const MIGRATION_PACKS = [
     title: 'Feedback portal',
     description: 'Import boards, posts, votes, and comments from a feedback portal CSV export.',
     entity: 'posts' as const,
-    docsPath: '/docs/import/feedback',
+    href: '#import-csv',
   },
   {
     id: 'support_suite',
@@ -18,14 +18,14 @@ export const MIGRATION_PACKS = [
     description:
       'Import help articles and prepare conversation history for a support-suite migration.',
     entity: 'help_articles' as const,
-    docsPath: '/docs/import/support',
+    href: '#import-csv',
   },
   {
     id: 'help_center',
     title: 'Help center',
     description: 'Import categories and articles from a help-center CSV export.',
     entity: 'help_articles' as const,
-    docsPath: '/docs/import/help-center',
+    href: '#import-csv',
   },
 ] as const
 

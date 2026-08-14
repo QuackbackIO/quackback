@@ -124,7 +124,7 @@ export const assistantCopilotCapabilitiesSchema = z.object({
 })
 
 /**
- * Per-tool permission rule (Cursor-style / AG-UI approval model):
+ * Per-tool permission rule (in-stream or queued approval):
  * - `allow` — run without asking (after RBAC)
  * - `ask` — pause for a human decision (AG-UI approval on Copilot; persisted
  *   pending-action proposal on customer Agent turns)

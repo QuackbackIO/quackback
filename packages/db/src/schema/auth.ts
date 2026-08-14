@@ -39,8 +39,8 @@ export interface StoredAssistantVoice {
  * in apps/web (`lib/shared/assistant/__tests__/config.test.ts`) asserts the two
  * stay structurally identical — edit both sides together.
  */
-/** Per-tool allow / ask / deny — mirrors apps/web AssistantToolRule. */
-export type StoredAssistantToolRule = 'allow' | 'ask' | 'deny'
+/** Per-tool allow / ask / deny — widened to string to match the DeepWiden twin. */
+export type StoredAssistantToolRule = string
 
 export interface StoredAssistantConfig {
   version: number

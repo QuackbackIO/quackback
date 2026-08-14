@@ -841,6 +841,43 @@ describe('resolveEffectiveToolMode', () => {
     }
   })
 
+  it('omits a write tool whose saved rule is deny', () => {
+    const spec = makeFakeWriteSpec()
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        ctx({ toolRules: { [spec.name]: 'deny' }, writeToolPolicy: 'execute' })
+      )
+    ).toBe('disabled')
+  })
+
+  it('proposes a write tool whose saved rule is ask, even on an execute turn', () => {
+    const spec = makeFakeWriteSpec()
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        ctx({
+          toolRules: { [spec.name]: 'ask' },
+          simulate: false,
+          writeToolPolicy: 'execute',
+        })
+      )
+    ).toBe('propose')
+  })
+
+  it('runs a write tool autonomously when the saved rule is allow on a propose turn', () => {
+    const spec = makeFakeWriteSpec()
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        ctx({
+          toolRules: { [spec.name]: 'allow' },
+          writeToolPolicy: 'propose',
+        })
+      )
+    ).toBe('autonomous')
+  })
+
   it('control tools are always autonomous, whatever the write policy', () => {
     const controls = Object.values(ASSISTANT_TOOL_SPECS).filter((spec) => spec.risk === 'control')
     expect(controls.length).toBeGreaterThan(0)

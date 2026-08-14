@@ -30,8 +30,11 @@ import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
-import { featureFlagsForOnboardingOutcome } from '@/lib/shared/onboarding-product-flags'
-import { DEFAULT_FEATURE_FLAGS } from '@/lib/server/domains/settings/settings.types'
+import {
+  featureFlagsForNewWorkspace,
+  mergeOnboardingProductFlags,
+} from '@/lib/shared/onboarding-product-flags'
+import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
 const log = logger.child({ component: 'onboarding' })
 
@@ -257,10 +260,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(initialState),
-            featureFlags: JSON.stringify({
-              ...DEFAULT_FEATURE_FLAGS,
-              ...featureFlagsForOnboardingOutcome(data.useCase),
-            }),
+            featureFlags: JSON.stringify(featureFlagsForNewWorkspace(data.useCase)),
           })
           .returning()
         await invalidateSettingsCache()
@@ -287,11 +287,8 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig:
               row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-            // Re-narrow products when the operator picks (or changes) a goal.
-            featureFlags: JSON.stringify({
-              ...DEFAULT_FEATURE_FLAGS,
-              ...featureFlagsForOnboardingOutcome(goal),
-            }),
+            // Re-narrow products only; keep Labs / AI flags the operator already set.
+            featureFlags: JSON.stringify(mergeOnboardingProductFlags(row.featureFlags, goal)),
           }
           if (!nameManaged) updatePayload.name = workspaceName
           if (!slugManaged) updatePayload.slug = slug
@@ -361,10 +358,7 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
       await tx
         .update(settings)
         .set({
-          featureFlags: JSON.stringify({
-            ...DEFAULT_FEATURE_FLAGS,
-            ...featureFlagsForOnboardingOutcome(data.useCase),
-          }),
+          featureFlags: JSON.stringify(mergeOnboardingProductFlags(row.featureFlags, data.useCase)),
         })
         .where(eq(settings.id, row.id))
       return {

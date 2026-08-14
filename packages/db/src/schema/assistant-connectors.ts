@@ -42,7 +42,7 @@ export const assistantConnectors = pgTable(
   'assistant_connectors',
   {
     id: typeIdWithDefault('assistant_connector')('id').primaryKey(),
-    /** Admin-facing display name (e.g. "Linear", "GitHub"). */
+    /** Admin-facing display name (e.g. "Project tracker"). */
     name: text('name').notNull(),
     /** URL-safe slug used in model-facing tool names: mcp_<slug>_<tool>. */
     slug: text('slug').notNull(),

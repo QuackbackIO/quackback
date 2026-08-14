@@ -148,7 +148,7 @@ describe('BuiltInActionsCard', () => {
     expect(screen.getByText('Search knowledge')).toBeInTheDocument()
     expect(screen.getByText('Write')).toBeInTheDocument()
     expect(screen.getByText('Read')).toBeInTheDocument()
-    expect(screen.getByText(/same controls as Connectors/i)).toBeInTheDocument()
+    expect(screen.getByText(/Ask queues a teammate approval/i)).toBeInTheDocument()
     // Write tools expose Ask / Always allow / Deny; read tools stay always on.
     expect(screen.getByText('Always on')).toBeInTheDocument()
   })
@@ -156,7 +156,7 @@ describe('BuiltInActionsCard', () => {
   it('uses the shared permissions description on the copilot page', async () => {
     renderCard(<BuiltInActionsCard agent="copilot" />)
     await screen.findByText('End conversation')
-    expect(screen.getByText(/same controls as Connectors/i)).toBeInTheDocument()
+    expect(screen.getByText(/Ask queues a teammate approval/i)).toBeInTheDocument()
   })
 })
 

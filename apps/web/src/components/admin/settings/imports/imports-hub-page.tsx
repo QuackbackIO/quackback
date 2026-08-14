@@ -39,6 +39,12 @@ export function ImportsHubPage() {
                   </Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{pack.description}</p>
+                <a
+                  href={pack.href}
+                  className="mt-1 inline-block text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Use the CSV import below
+                </a>
               </div>
             </div>
           ))}
@@ -49,20 +55,22 @@ export function ImportsHubPage() {
         </p>
       </SettingsCard>
 
-      <SettingsCard
-        title="Imports"
-        description="Upload a CSV of posts using the template — new boards, statuses, and tags are created as part of the import."
-      >
-        <ImportCsv />
-        <div className="mt-6 border-t border-border/50 pt-4 space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">Moving from another tool</p>
-          <p className="text-xs text-muted-foreground">
-            Export your data from the old tool, map it onto the template columns (only title and
-            content are required), and upload it above. Keep the source_id column filled to re-run
-            an import later without duplicating posts.
-          </p>
-        </div>
-      </SettingsCard>
+      <div id="import-csv">
+        <SettingsCard
+          title="Imports"
+          description="Upload a CSV of posts using the template — new boards, statuses, and tags are created as part of the import."
+        >
+          <ImportCsv />
+          <div className="mt-6 border-t border-border/50 pt-4 space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Moving from another tool</p>
+            <p className="text-xs text-muted-foreground">
+              Export your data from the old tool, map it onto the template columns (only title and
+              content are required), and upload it above. Keep the source_id column filled to re-run
+              an import later without duplicating posts.
+            </p>
+          </div>
+        </SettingsCard>
+      </div>
 
       <SettingsCard
         title="Export workspace data"

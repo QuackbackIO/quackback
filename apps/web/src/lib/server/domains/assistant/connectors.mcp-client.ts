@@ -11,33 +11,59 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'assistant-connectors-mcp' })
 
+/** Hard ceiling for connect + listTools / callTool. */
+export const CONNECTOR_REQUEST_TIMEOUT_MS = 15_000
+
 export interface ConnectorMcpEndpoint {
   url: string
   /** Plaintext bearer token, if any. */
   authToken?: string | null
 }
 
+class ConnectorTimeoutError extends Error {
+  constructor() {
+    super('Connector request timed out')
+    this.name = 'ConnectorTimeoutError'
+  }
+}
+
+async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const onAbort = () => reject(new ConnectorTimeoutError())
+      controller.signal.addEventListener('abort', onAbort, { once: true })
+      void run(controller.signal).then(resolve, reject)
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function withMcpClient<T>(
   endpoint: ConnectorMcpEndpoint,
   run: (client: Client) => Promise<T>
 ): Promise<T> {
-  const headers: Record<string, string> = {}
-  if (endpoint.authToken) headers.Authorization = `Bearer ${endpoint.authToken}`
+  return withTimeout(async (signal) => {
+    const headers: Record<string, string> = {}
+    if (endpoint.authToken) headers.Authorization = `Bearer ${endpoint.authToken}`
 
-  const transport = new StreamableHTTPClientTransport(new URL(endpoint.url), {
-    requestInit: { headers },
-  })
-  const client = new Client({ name: 'quackback', version: '1.0.0' }, { capabilities: {} })
-  try {
-    await client.connect(transport)
-    return await run(client)
-  } finally {
+    const transport = new StreamableHTTPClientTransport(new URL(endpoint.url), {
+      requestInit: { headers, signal },
+    })
+    const client = new Client({ name: 'quackback', version: '1.0.0' }, { capabilities: {} })
     try {
-      await client.close()
-    } catch (error) {
-      log.warn({ err: error }, 'failed to close MCP connector client')
+      await client.connect(transport)
+      return await run(client)
+    } finally {
+      try {
+        await client.close()
+      } catch (error) {
+        log.warn({ err: error }, 'failed to close MCP connector client')
+      }
     }
-  }
+  }, CONNECTOR_REQUEST_TIMEOUT_MS)
 }
 
 /** Fetch the remote tools/list catalogue. */

@@ -18,6 +18,7 @@ import { encrypt, decrypt } from '@/lib/server/encryption'
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { assistantToolRuleSchema } from '@/lib/shared/assistant/config'
 import { callRemoteConnectorTool, listRemoteConnectorTools } from './connectors.mcp-client'
+import { checkUrlSafety } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'assistant-connectors' })
@@ -52,6 +53,35 @@ export const connectorToolRuleUpdateSchema = z.object({
   toolName: z.string().min(1).max(200),
   rule: assistantToolRuleSchema,
 })
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
+
+function isDevLoopback(url: URL): boolean {
+  return process.env.NODE_ENV !== 'production' && LOOPBACK_HOSTS.has(url.hostname)
+}
+
+/** Reject private/link-local targets and require https outside local dev. */
+export async function assertConnectorUrlSafe(url: string): Promise<void> {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new ValidationError('CONNECTOR_URL_INVALID', 'Enter a valid http(s) URL')
+  }
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isDevLoopback(parsed))) {
+    throw new ValidationError('CONNECTOR_URL_INVALID', 'Connector URLs must use https')
+  }
+  if (isDevLoopback(parsed)) return
+  const safety = await checkUrlSafety(url)
+  if (safety.safe) return
+  if (safety.reason === 'ssrf-rejected') {
+    throw new ValidationError(
+      'CONNECTOR_URL_BLOCKED',
+      'That URL points at a private or local address and cannot be used as a connector'
+    )
+  }
+  throw new ValidationError('CONNECTOR_URL_UNRESOLVED', 'Could not resolve that connector URL')
+}
 
 function slugifyConnectorName(name: string): string {
   const slug = name
@@ -134,6 +164,7 @@ export async function createConnector(
   execDb: Executor = defaultDb
 ): Promise<ConnectorPublicDTO> {
   const parsed = createConnectorSchema.parse(input)
+  await assertConnectorUrlSafe(parsed.url)
   const slug = slugifyConnectorName(parsed.name)
   await assertSlugUnique(slug, null, execDb)
 
@@ -159,7 +190,12 @@ export async function createConnector(
     return await syncConnectorTools(row.id as AssistantConnectorId, execDb)
   } catch (error) {
     log.warn({ err: error, connector_id: row.id }, 'initial connector sync failed')
-    return toConnectorPublicDTO(row)
+    const [fresh] = await execDb
+      .select()
+      .from(assistantConnectors)
+      .where(eq(assistantConnectors.id, row.id))
+      .limit(1)
+    return toConnectorPublicDTO(fresh ?? row)
   }
 }
 
@@ -187,6 +223,9 @@ export async function updateConnector(
     authTokenCiphertext = sealAuthToken(parsed.authToken)
   }
 
+  const urlChanged = Boolean(parsed.url && parsed.url !== existing.url)
+  if (parsed.url) await assertConnectorUrlSafe(parsed.url)
+
   const [row] = await execDb
     .update(assistantConnectors)
     .set({
@@ -196,10 +235,25 @@ export async function updateConnector(
       authTokenCiphertext,
       assignments: parsed.assignments ?? existing.assignments,
       enabled: parsed.enabled ?? existing.enabled,
+      ...(urlChanged ? { tools: [], lastSyncedAt: null, lastSyncError: null } : {}),
       updatedAt: new Date(),
     })
     .where(eq(assistantConnectors.id, id))
     .returning()
+
+  if (urlChanged) {
+    try {
+      return await syncConnectorTools(id, execDb)
+    } catch (error) {
+      log.warn({ err: error, connector_id: id }, 'post-url-change connector sync failed')
+      const [fresh] = await execDb
+        .select()
+        .from(assistantConnectors)
+        .where(eq(assistantConnectors.id, id))
+        .limit(1)
+      return toConnectorPublicDTO(fresh ?? row!)
+    }
+  }
 
   return toConnectorPublicDTO(row!)
 }
@@ -223,16 +277,14 @@ export async function syncConnectorTools(
   if (!existing) throw new NotFoundError('CONNECTOR_NOT_FOUND', 'Connector not found')
 
   try {
+    await assertConnectorUrlSafe(existing.url)
     const tools = await listRemoteConnectorTools({
       url: existing.url,
       authToken: openAuthToken(existing.authTokenCiphertext),
     })
-    // Preserve rules for tools that still exist; drop orphan rules.
-    const nextRules: Record<string, ConnectorToolRule> = {}
-    for (const tool of tools) {
-      const prior = existing.toolRules?.[tool.name]
-      if (prior) nextRules[tool.name] = prior
-    }
+    // Keep saved rules even when a sync returns a partial/empty catalogue so
+    // a transient miss cannot drop an explicit deny.
+    const nextRules: Record<string, ConnectorToolRule> = { ...(existing.toolRules ?? {}) }
     const [row] = await execDb
       .update(assistantConnectors)
       .set({
@@ -297,5 +349,6 @@ export async function invokeConnectorTool(
   remoteToolName: string,
   args: Record<string, unknown>
 ) {
+  await assertConnectorUrlSafe(row.url)
   return callRemoteConnectorTool(connectorEndpoint(row), remoteToolName, args)
 }

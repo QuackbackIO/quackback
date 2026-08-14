@@ -117,7 +117,7 @@ export function resolveEffectiveToolMode(
     (saved === undefined &&
       (ctx.writeToolPolicy === 'propose' || resolveToolRuleForSpec(spec, ctx) === 'ask'))
 
-  if (wantsAsk && saved !== 'allow') {
+  if (wantsAsk) {
     // AG-UI surfaces use needsApproval + autonomous execute after approve.
     if (ctx.aguiApprovals) return 'autonomous'
     return 'propose'

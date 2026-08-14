@@ -39,6 +39,7 @@ const hoisted = vi.hoisted(() => ({
   markPendingActionFailed: vi.fn(),
   resolveToolSpecs: vi.fn(),
   getActionSpecByToolName: vi.fn(),
+  getConnectorSpecByToolName: vi.fn(),
   getAssistantRuntimeConfig: vi.fn(),
   executeApprovedPendingAction: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
@@ -115,6 +116,10 @@ vi.mock('@/lib/server/domains/assistant/assistant.tools', () => ({
 
 vi.mock('@/lib/server/domains/assistant/custom-actions.service', () => ({
   getActionSpecByToolName: hoisted.getActionSpecByToolName,
+}))
+
+vi.mock('@/lib/server/domains/assistant/connectors.tools', () => ({
+  getConnectorSpecByToolName: hoisted.getConnectorSpecByToolName,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
@@ -194,7 +199,11 @@ beforeEach(() => {
   // Custom-action resolver defaults: no dynamic spec, flag on. Built-in tests
   // (toolName without an `action_` prefix) never touch either.
   hoisted.getActionSpecByToolName.mockResolvedValue(null)
-  hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: true })
+  hoisted.getConnectorSpecByToolName.mockResolvedValue(null)
+  hoisted.getAssistantRuntimeConfig.mockResolvedValue({
+    customActionsEnabled: true,
+    actionsEnabled: true,
+  })
   hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   hoisted.assertConversationViewable.mockResolvedValue(undefined)
   hoisted.assertTicketVisible.mockResolvedValue(undefined)
@@ -415,6 +424,82 @@ describe('approveAssistantActionFn', () => {
       )
       expect(hoisted.markPendingActionFailed).not.toHaveBeenCalled()
       expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('connectors', () => {
+    it('executes a connector mcp_* proposal via the dynamic resolver', async () => {
+      const connectorSpec = {
+        ...CLOSE_SPEC,
+        name: 'mcp_tracker_create_issue',
+        permissions: [] as string[],
+      }
+      const pending = pendingRow({ toolName: 'mcp_tracker_create_issue' })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.resolveToolSpecs.mockReturnValue([])
+      hoisted.getConnectorSpecByToolName.mockResolvedValue(connectorSpec)
+      const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
+      hoisted.decidePendingAction.mockResolvedValue(decided)
+      hoisted.executeApprovedPendingAction.mockResolvedValue({
+        status: 'executed',
+        result: { ok: true },
+      })
+      const settled = { ...decided, status: 'executed', result: { ok: true } }
+      hoisted.markPendingActionExecuted.mockResolvedValue(settled)
+
+      const out = await approve({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.getConnectorSpecByToolName).toHaveBeenCalledWith(
+        'mcp_tracker_create_issue',
+        'agent'
+      )
+      expect(hoisted.executeApprovedPendingAction).toHaveBeenCalledWith(
+        connectorSpec,
+        decided,
+        expect.objectContaining({ simulate: false })
+      )
+      expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
+    })
+
+    it('410s when the connector tool is gone since the proposal', async () => {
+      hoisted.getPendingActionById.mockResolvedValue(
+        pendingRow({ toolName: 'mcp_tracker_deleted' })
+      )
+      hoisted.resolveToolSpecs.mockReturnValue([])
+      hoisted.getConnectorSpecByToolName.mockResolvedValue(null)
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        statusCode: 410,
+      })
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+
+    it('settles failed when assistant actions are off for an in-flight connector proposal', async () => {
+      const pending = pendingRow({ toolName: 'mcp_tracker_create_issue' })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.getAssistantRuntimeConfig.mockResolvedValue({
+        customActionsEnabled: true,
+        actionsEnabled: false,
+      })
+      const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
+      hoisted.decidePendingAction.mockResolvedValue(decided)
+      const settled = {
+        ...decided,
+        status: 'failed',
+        result: { error: 'Assistant actions are disabled.' },
+      }
+      hoisted.markPendingActionFailed.mockResolvedValue(settled)
+
+      const out = await approve({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.markPendingActionFailed).toHaveBeenCalledWith(
+        'assistant_action_1',
+        'Assistant actions are disabled.'
+      )
+      expect(hoisted.getConnectorSpecByToolName).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+      expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
     })
   })
 

@@ -36,6 +36,7 @@ import {
 } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { getActionSpecByToolName } from '@/lib/server/domains/assistant/custom-actions.service'
+import { getConnectorSpecByToolName } from '@/lib/server/domains/assistant/connectors.tools'
 import { getAssistantRuntimeConfig } from '@/lib/server/domains/settings/settings.assistant'
 import { roleToAgent } from '@/lib/shared/assistant/config'
 import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
@@ -168,9 +169,15 @@ async function decideAssistantAction(
   // (an `action_<slug>` toolName) can never execute after the switch is thrown.
   // Settle it as failed with a clear note instead of executing. Built-ins (no
   // `action_` prefix) are unaffected.
-  if (pending.toolName.startsWith('action_')) {
+  if (pending.toolName.startsWith('action_') || pending.toolName.startsWith('mcp_')) {
     const runtime = await getAssistantRuntimeConfig()
-    if (!runtime.customActionsEnabled) {
+    const disabledNote = pending.toolName.startsWith('action_')
+      ? 'Custom actions are disabled.'
+      : 'Assistant actions are disabled.'
+    const enabled = pending.toolName.startsWith('action_')
+      ? runtime.customActionsEnabled
+      : runtime.actionsEnabled
+    if (!enabled) {
       const decided = await decidePendingAction(pendingActionId, decision, approverPrincipalId)
       if (!decided) {
         throw new ConflictError(
@@ -178,22 +185,20 @@ async function decideAssistantAction(
           'This request was already decided or has expired'
         )
       }
-      return (
-        (await markPendingActionFailed(pendingActionId, 'Custom actions are disabled.')) ?? decided
-      )
+      return (await markPendingActionFailed(pendingActionId, disabledNote)) ?? decided
     }
   }
 
   // Built-in specs resolve from the static registry; a custom action
   // (Phase 5) persists an `action_<slug>` toolName that lives only in the DB,
-  // so fall back to the dynamic resolver keyed by the proposal's origin agent
-  // (the deterministic name set is recomputed there — see
-  // getActionSpecByToolName). A definition since disabled, unassigned,
-  // renamed, or removed resolves to null and reads as "no longer available",
-  // exactly like a gone built-in.
+  // and a connector tool persists `mcp_<slug>_<tool>`. Fall back to those
+  // dynamic resolvers keyed by the proposal's origin agent. A definition
+  // since disabled, unassigned, renamed, or removed resolves to null and
+  // reads as "no longer available", exactly like a gone built-in.
   const spec =
     (await getToolSpecByName(pending.toolName)) ??
-    (await getActionSpecByToolName(pending.toolName, roleToAgent(pending.originRole)))
+    (await getActionSpecByToolName(pending.toolName, roleToAgent(pending.originRole))) ??
+    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole)))
   if (!spec) throw new ToolSpecGoneError(pending.toolName)
   const parentKind = pending.conversationId ? 'conversation' : 'ticket'
   if (spec.risk !== 'write' || !spec.parents.includes(parentKind)) {

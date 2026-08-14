@@ -5,7 +5,11 @@
  */
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
-import { getProductFlagUpdate } from '@/lib/server/domains/settings/settings.types'
+import {
+  DEFAULT_FEATURE_FLAGS,
+  getProductFlagUpdate,
+  resolveFeatureFlags,
+} from '@/lib/server/domains/settings/settings.types'
 
 const ALL_PRODUCTS = ['feedback', 'support', 'helpCenter', 'changelog', 'status'] as const
 
@@ -33,4 +37,25 @@ export function featureFlagsForOnboardingOutcome(
     Object.assign(patch, getProductFlagUpdate(productId, enabled.has(productId)))
   }
   return patch
+}
+
+/** Fresh workspace: product narrowing plus Inbox AI / assistant tools on. */
+export function featureFlagsForNewWorkspace(outcome: OnboardingOutcome): FeatureFlags {
+  return {
+    ...DEFAULT_FEATURE_FLAGS,
+    inboxAi: true,
+    assistantTools: true,
+    ...featureFlagsForOnboardingOutcome(outcome),
+  }
+}
+
+/** Overlay product flags onto the stored row without resetting Labs / AI. */
+export function mergeOnboardingProductFlags(
+  storedJson: string | null | undefined,
+  outcome: OnboardingOutcome
+): FeatureFlags {
+  return {
+    ...resolveFeatureFlags(storedJson),
+    ...featureFlagsForOnboardingOutcome(outcome),
+  }
 }

@@ -188,6 +188,7 @@ export function NotificationMatrixForm({ surface }: { surface: 'admin' | 'portal
                 <MatrixRow
                   key={meta.type}
                   meta={meta}
+                  surface={surface}
                   matrix={preferences.matrix}
                   busy={busy}
                   onToggle={setCell}
@@ -225,11 +226,13 @@ function MatrixHeaderRow() {
 
 function MatrixRow({
   meta,
+  surface,
   matrix,
   busy,
   onToggle,
 }: {
   meta: NotificationTypeMeta
+  surface: 'admin' | 'portal'
   matrix: NotificationMatrix | undefined
   busy: boolean
   onToggle: (type: string, channel: NotificationChannel, checked: boolean) => void
@@ -274,7 +277,7 @@ function MatrixRow({
           </TooltipTrigger>
           <TooltipContent>
             {surface === 'admin'
-              ? 'Teammate push via mobile app devices and browser web push when VAPID is configured'
+              ? 'Delivered to the mobile app. Browser push is not available yet.'
               : 'Available with web push'}
           </TooltipContent>
         </Tooltip>

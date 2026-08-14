@@ -56,7 +56,7 @@ export function BuiltInActionsCard({ agent }: { agent: AssistantAgentKind }) {
   const description = intl.formatMessage({
     id: 'automation.actions.builtin.description.permissions',
     defaultMessage:
-      'Quinn’s built-in tools. Set Ask for approval, Always allow, or Deny on each write tool — same controls as Connectors.',
+      'Quinn’s built-in tools. Ask queues a teammate approval before the write runs. Always allow runs after the usual permission check. Deny hides the tool.',
   })
 
   const ruleMutation = useMutation({

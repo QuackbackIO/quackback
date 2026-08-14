@@ -1156,13 +1156,14 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: true,
   supportTickets: true,
   statusPage: true,
-  // AI — on for new workspaces (guided setup + per-tool approval rules).
-  // Privacy-sensitive visitor tracking stays opt-in.
+  // AI stays off in the shared default so existing workspaces missing a key
+  // do not gain write tools on upgrade. New workspaces opt in explicitly
+  // via featureFlagsForNewWorkspace().
   helpCenterAiAnswers: false,
   visitorAnalytics: false,
   visitorDeviceTracking: false,
-  inboxAi: true,
-  assistantTools: true,
+  inboxAi: false,
+  assistantTools: false,
   assistantCustomActions: false,
 }
 
@@ -1218,7 +1219,7 @@ export const FEATURE_FLAG_REGISTRY: Record<
   assistantTools: {
     label: 'Assistant actions',
     description:
-      'Let Quinn take actions such as closing conversations or creating tickets. Each write tool is permissioned (allow / ask / deny); Copilot asks for AG-UI approval unless you save an Always allow rule.',
+      'Let Quinn take actions such as closing conversations or creating tickets. Each write tool is permissioned (Ask for approval / Always allow / Deny). Ask queues a teammate approval before the write runs.',
   },
   assistantCustomActions: {
     label: 'Custom actions',
