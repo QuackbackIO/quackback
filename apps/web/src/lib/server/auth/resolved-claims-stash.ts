@@ -39,7 +39,11 @@ export function stashResolvedClaims(
   }, TTL_MS).unref?.()
 }
 
-/** Take the stashed claims, if this identity resolved in this request. */
+/**
+ * Read the stashed claims, if this identity resolved in this request.
+ * Left in place until TTL so role provisioning and attribute copy can
+ * both see the same payload.
+ */
 export function takeResolvedClaims(
   providerId: string,
   accountId: string
@@ -47,7 +51,9 @@ export function takeResolvedClaims(
   const k = key(providerId, accountId)
   const held = entries.get(k)
   if (!held) return null
-  entries.delete(k)
-  if (Date.now() - held.ts >= TTL_MS) return null
+  if (Date.now() - held.ts >= TTL_MS) {
+    entries.delete(k)
+    return null
+  }
   return held.claims
 }

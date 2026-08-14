@@ -1106,6 +1106,8 @@ export async function handleCountryCapture(ctx: {
  *     from the CALLBACK PROVIDER's autoProvisionRole / claimMapping
  *     config, scoped to that provider's own verified domains (brand-new
  *     sign-ins default to `role='user'`).
+ *  2b. `applyClaimAttributesAfter` — copy mapped claims onto defined user
+ *     attributes from the same resolved-claims stash.
  *  3. `handleCallbackPolicyCleanup` — revoke sessions that violate
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
@@ -1155,6 +1157,12 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
 
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
+    providers,
+    registeredOidcIds
+  )
+  const { applyClaimAttributesAfter } = await import('./apply-claim-attributes')
+  await applyClaimAttributesAfter(
+    ctx as Parameters<typeof applyClaimAttributesAfter>[0],
     providers,
     registeredOidcIds
   )
