@@ -43,6 +43,12 @@ export interface HandshakeInput {
   redirectUri: string
   /** PKCE verifier minted at authorize time (S256 challenge). */
   codeVerifier: string
+  /** The scopes this attempt actually requested. */
+  requestedScopes?: readonly string[]
+  /** How to authenticate at the token endpoint. Mirrors production. */
+  tokenAuth?: 'basic' | 'post'
+  /** The `prompt` this attempt sent, so a configuration error can name it. */
+  requestedPrompt?: string
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -97,7 +103,12 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       ok: false,
       stage: 'idp-authorize',
       errorCode: input.idpError,
-      hint: explainAuthorizeError(input.idpError, input.idpErrorDescription),
+      hint: explainAuthorizeError(
+        input.idpError,
+        input.idpErrorDescription,
+        input.requestedScopes,
+        input.requestedPrompt
+      ),
       steps,
     }
   }
@@ -195,19 +206,30 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   // pkce: true in our config, so the test flow sends code_verifier
   // too. Diverging here would test a slightly-different protocol and
   // produce false positives.
+  const useBasic = input.tokenAuth === 'basic'
   const tokenBody = new URLSearchParams({
     grant_type: 'authorization_code',
     code_verifier: input.codeVerifier,
     code: input.code,
     redirect_uri: input.redirectUri,
-    client_id: input.clientId,
-    client_secret: input.clientSecret,
+    ...(useBasic ? {} : { client_id: input.clientId, client_secret: input.clientSecret }),
   })
+  const basicHeader: Record<string, string> = useBasic
+    ? {
+        Authorization: `Basic ${Buffer.from(
+          `${encodeURIComponent(input.clientId)}:${encodeURIComponent(input.clientSecret)}`
+        ).toString('base64')}`,
+      }
+    : {}
   let tokenRes: Response
   try {
     tokenRes = await safeFetch(discovery.token_endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        ...basicHeader,
+      },
       body: tokenBody.toString(),
       timeoutMs: 10_000,
     })

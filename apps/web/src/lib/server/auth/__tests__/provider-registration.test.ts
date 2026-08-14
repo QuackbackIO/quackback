@@ -40,6 +40,44 @@ describe('buildGenericOAuthConfigs', () => {
     expect(cfgs[0].prompt).toBe('login')
   })
 
+  it('omits the prompt parameter when the row is configured to send none', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'sso',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          prompt: 'omit',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+    })
+    expect(cfgs[0]).not.toHaveProperty('prompt')
+  })
+
+  it('sends a non-default prompt and token-auth method from the row', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'sso',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          prompt: 'consent',
+          tokenEndpointAuthMethod: 'basic',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+    })
+    expect(cfgs[0].prompt).toBe('consent')
+    expect(cfgs[0].authentication).toBe('basic')
+  })
+
   it('skips disabled providers and providers without credentials', async () => {
     const cfgs = await buildGenericOAuthConfigs({
       providers: [

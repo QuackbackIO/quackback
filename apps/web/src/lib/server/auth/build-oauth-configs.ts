@@ -20,13 +20,11 @@
  */
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
+import { authorizeRequestFor } from '@/lib/shared/oidc-request'
 
-/**
- * Default OIDC scopes requested when a provider has no explicit `scopes`.
- * The SSO test flow mirrors this exact set so a passing test exercises the
- * same scope request production sign-in will make.
- */
-export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile'] as const
+// Re-exported so server callers keep this import path. The implementation lives
+// in `shared` because the admin editor needs it too.
+export { DEFAULT_OIDC_SCOPES, effectiveScopes } from '@/lib/shared/oidc-scopes'
 
 /** A single entry in the genericOAuth plugin's `config` array. */
 export interface GenericOAuthConfig {
@@ -38,7 +36,11 @@ export interface GenericOAuthConfig {
   pkce?: boolean
   authorizationUrl?: string
   tokenUrl?: string
+  /** Manual-endpoint userinfo URL. */
+  userInfoUrl?: string
   scopes?: string[]
+  /** How the client secret reaches the token endpoint. */
+  authentication?: 'basic' | 'post'
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   // Force the IdP account picker so admins notice when they're already
   // signed in as a different identity.
@@ -115,6 +117,8 @@ export async function buildGenericOAuthConfigs({
     const discoveryUrl = provider.discoveryUrl || c.discoveryUrl || undefined
     const authorizationUrl = provider.authorizationUrl || undefined
     const tokenUrl = provider.tokenUrl || undefined
+    const userInfoUrl = provider.userInfoUrl || undefined
+    const request = authorizeRequestFor(provider)
 
     configs.push({
       providerId: provider.registrationId,
@@ -123,18 +127,14 @@ export async function buildGenericOAuthConfigs({
       ...(discoveryUrl ? { discoveryUrl } : {}),
       ...(authorizationUrl ? { authorizationUrl } : {}),
       ...(tokenUrl ? { tokenUrl } : {}),
-      scopes: provider.scopes
-        ? provider.scopes.split(/\s+/).filter(Boolean)
-        : [...DEFAULT_OIDC_SCOPES],
+      ...(userInfoUrl ? { userInfoUrl } : {}),
+      scopes: request.scopes,
       // PKCE on every provider. OAuth 2.1 IdPs require code_challenge and
       // reject without it; RFC 7636 §5 makes the params backwards-compatible
       // (IdPs without PKCE support simply ignore them).
       pkce: true,
-      // Force re-authentication so an admin typing a specific email isn't
-      // silently signed in as whoever the IdP already has a session for.
-      // prompt=login is used rather than select_account, which is an
-      // OIDC-optional value many IdPs ignore or reject.
-      prompt: 'login',
+      ...(request.prompt ? { prompt: request.prompt } : {}),
+      authentication: request.tokenAuth,
       // Better-Auth's JIT block. When false, the OAuth callback aborts in
       // handleOAuthUserInfo before any user/session is created. Existing
       // users still link via accountLinking.trustedProviders.

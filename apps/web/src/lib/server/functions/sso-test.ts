@@ -26,7 +26,7 @@ import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
-import { DEFAULT_OIDC_SCOPES } from '@/lib/server/auth/build-oauth-configs'
+import { authorizeRequestFor } from '@/lib/shared/oidc-request'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 
 const TTL_SECONDS = 600
@@ -50,6 +50,9 @@ type TestSession = {
   adminUserId: string
   startedAt: number
   codeVerifier: string
+  requestedScopes: string[]
+  tokenAuth: 'basic' | 'post'
+  requestedPrompt?: string
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -157,6 +160,8 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // without a code_challenge; IdPs without PKCE support ignore it.
     const codeVerifier = randomBytes(32).toString('base64url')
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
+    const request = authorizeRequestFor(provider)
+    const requestedScopes = request.scopes
 
     const session: TestSession = {
       testId,
@@ -167,12 +172,15 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       tokenEndpoint: endpoints.tokenEndpoint,
       jwksUri: endpoints.jwksUri,
       authorizationEndpoint: endpoints.authorizationEndpoint,
-      userinfoEndpoint: endpoints.userinfoEndpoint,
+      userinfoEndpoint: provider.userInfoUrl ?? endpoints.userinfoEndpoint,
       issuer: endpoints.issuer,
       clientId: provider.clientId,
       clientSecret: creds.clientSecret,
       redirectUri,
       codeVerifier,
+      requestedScopes,
+      tokenAuth: request.tokenAuth,
+      requestedPrompt: request.prompt,
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
@@ -187,14 +195,12 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       response_type: 'code',
       client_id: provider.clientId,
       redirect_uri: redirectUri,
-      // Mirror production: buildGenericOAuthConfigs requests provider.scopes
-      // (falling back to the default set). A test that always sent a fixed
-      // scope set could pass while real sign-in requests a different one,
-      // letting a non-representative test unlock enforcement.
-      scope: provider.scopes ?? DEFAULT_OIDC_SCOPES.join(' '),
+      // Same builder as production registration, so a passing test exercises
+      // the request sign-in will actually make.
+      scope: requestedScopes.join(' '),
+      ...(request.prompt ? { prompt: request.prompt } : {}),
       state,
       nonce,
-      prompt: 'login',
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
     })
