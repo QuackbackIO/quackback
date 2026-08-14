@@ -30,8 +30,8 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `137151f21`
-- Control plane: `12c5bdd`
+- Workspace: `ff19faf4c`
+- Control plane: `9071f83`
 - Last known deployed workspace: `03ea102e` (2026-08-14)
 - Last known deployed control plane: `01d3e028` (2026-08-14)
 
@@ -46,7 +46,7 @@ The prior web deployment `03ea102e` runs image digest `sha256:596d77e3…` in
 | Track                            | Status                                                                   | Evidence                                                            |
 | -------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
 | 0 contextual activation          | implemented, focused verification passed                                 | `d2b8accca`, `029727e26`                                            |
-| 1 zero-input create + identity   | implementation complete through post-handoff details; live proof pending | CP `bd9148c` through `12c5bdd`; app `4a1827560` through `137151f21` |
+| 1 zero-input create + identity   | implementation complete through post-handoff details; live proof pending | CP `bd9148c` through `9071f83`; app `4a1827560` through `ff19faf4c` |
 | 2 focused widget activation      | implemented, focused verification passed                                 | `13df888fa`                                                         |
 | 3 CP billing foundation          | implemented; full/live verification pending                              | CP `c7ec591` through `9f77647`                                      |
 | 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                           |
@@ -74,8 +74,8 @@ this through the control-plane gateway before closing the revised billing tracks
 
 ## Current worktree ownership
 
-Both worktrees were clean after workspace commit `137151f21` and control-plane
-commit `12c5bdd`. The workspace
+Both worktrees were clean after workspace commit `ff19faf4c` and control-plane
+commit `9071f83`. The workspace
 accepts only signed control-plane commercial projections and contains no
 platform billing provider integration. The control plane now owns catalogue,
 gateway, starter trial, webhook projection, and durable fan-out behavior. Its
@@ -113,13 +113,25 @@ tests across the latest slices; the full workspace typecheck passed. The local
 real-Postgres onboarding fixture is stale before migration 0262 and therefore
 correctly skips 13 tests; the Development Neon migration is still required.
 
+The old operator/admin/MCP workspace-creation surfaces are deleted. Control-plane
+commits `4e730be`, `e69d48f`, and `a39a8c5` removed the manual admin dialog,
+provision token route, CLI trigger, MCP creation tool, and its private capacity,
+plan, hostname-claim, and insert machinery. `bb4f7e9` renamed the physical
+immutable column and retention key from `subdomain` to `system_hostname`.
+`9071f83` then removed the bare-label/full-hostname compatibility layer entirely:
+system hostnames have one fully-qualified representation, every provisioning,
+bootstrap, health, registry, open, and MCP path consumes that exact value, and
+the MCP context no longer carries a base domain for canonicalization. Control-
+plane typecheck and the complete suite passed after the cut: 207 files and 2,711
+tests passed, with 5 files and 21 tests intentionally skipped.
+
 Re-check both worktrees before every edit and commit because another agent shares
 the codebase.
 
 ## Next commits
 
-1. Replace the remaining `cp_instances.subdomain` and mutable-name coupling,
-   then delete obsolete manual creation/admin/MCP paths.
+1. Remove the obsolete checkout-created-workspace path and finish separating
+   `cp_instances.name` from the authoritative identity projection.
 2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
 3. Deploy and prove the compatible control-plane/workspace identity pair in
