@@ -68,6 +68,28 @@ describe('azureDevOpsHook', () => {
     expect(createWorkItem).toHaveBeenCalledWith('pat', 'acme', 'Proj', 'Task', expect.any(Object))
   })
 
+  it('maps HTTP 401 to reconnect only when organizationName is present', async () => {
+    vi.mocked(createWorkItem).mockRejectedValue(
+      Object.assign(new Error('Unauthorized'), { status: 401 })
+    )
+
+    const result = await azureDevOpsHook.run(
+      makePostCreatedEvent(),
+      { channelId: 'Proj:Task' },
+      {
+        accessToken: 'pat',
+        organizationName: 'acme',
+        rootUrl: 'https://app.example.com',
+      }
+    )
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Authentication failed. Please reconnect Azure DevOps.',
+      shouldRetry: false,
+    })
+  })
+
   it('skips non post.created events', async () => {
     const event = { type: 'comment.created' } as unknown as EventData
     expect(await azureDevOpsHook.run(event, { channelId: 'Proj:Task' }, {})).toEqual({

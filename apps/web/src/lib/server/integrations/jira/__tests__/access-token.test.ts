@@ -123,6 +123,7 @@ describe('getJiraAccessToken', () => {
     expect(hoisted.forUpdate).toHaveBeenCalledWith('update')
     expect(hoisted.refreshJiraToken).not.toHaveBeenCalled()
     expect(hoisted.updateWhere).not.toHaveBeenCalled()
+    expect(hoisted.cacheDel).not.toHaveBeenCalled()
   })
 
   it('refreshes under a row lock, by integration id, and drops the mappings cache', async () => {
@@ -148,5 +149,24 @@ describe('getJiraAccessToken', () => {
     expect(hoisted.updateWhere).toHaveBeenCalledWith({ col: 'id', val: ID })
     expect(hoisted.eq).not.toHaveBeenCalledWith('integrationType', 'jira')
     expect(hoisted.cacheDel).toHaveBeenCalledWith('hooks:integration-mappings')
+  })
+
+  it('still returns the rotated token if dropping the mappings cache fails', async () => {
+    hoisted.lockedRows.mockResolvedValue([
+      {
+        secrets: JSON.stringify({ accessToken: 'stale-tok', refreshToken: 'stale-rt' }),
+        config: { cloudId: 'c', tokenExpiresAt: expired },
+      },
+    ])
+    hoisted.cacheDel.mockRejectedValue(new Error('redis down'))
+
+    await expect(
+      getJiraAccessToken({
+        id: ID,
+        secrets: JSON.stringify({ accessToken: 'stale-tok', refreshToken: 'stale-rt' }),
+        config: { tokenExpiresAt: expired },
+      })
+    ).resolves.toBe('new-tok')
+    expect(hoisted.updateWhere).toHaveBeenCalled()
   })
 })

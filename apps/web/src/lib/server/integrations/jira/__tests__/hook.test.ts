@@ -108,6 +108,45 @@ describe('jiraHook', () => {
     expect(body.fields.issuetype).toEqual({ id: '999' })
   })
 
+  it('maps HTTP 401 to reconnect only when cloudId and token are present', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+        text: async () => 'Unauthorized',
+      })
+    )
+
+    const result = await jiraHook.run(
+      makePostCreatedEvent(),
+      { channelId: '10000:10001' },
+      { accessToken: 'tok', cloudId: 'cloud-1', rootUrl: 'https://app.example.com' }
+    )
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Authentication failed. Please reconnect Jira.',
+      shouldRetry: false,
+    })
+  })
+
+  it('refuses to call Jira when the access token is missing', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await jiraHook.run(
+      makePostCreatedEvent(),
+      { channelId: '10000:10001' },
+      { cloudId: 'cloud-1', rootUrl: 'https://app.example.com' }
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/access token/i)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('skips non post.created events', async () => {
     const event = { type: 'post.status_changed' } as unknown as EventData
     expect(await jiraHook.run(event, { channelId: '10000' }, { cloudId: 'c' })).toEqual({

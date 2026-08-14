@@ -48,7 +48,8 @@ export async function getJiraAccessToken(integration: {
 
   const { db, integrations, eq } = await import('@/lib/server/db')
 
-  return db.transaction(async (tx) => {
+  let didRefresh = false
+  const token = await db.transaction(async (tx) => {
     const [row] = await tx
       .select({ secrets: integrations.secrets, config: integrations.config })
       .from(integrations)
@@ -91,9 +92,16 @@ export async function getJiraAccessToken(integration: {
       })
       .where(eq(integrations.id, integration.id))
 
-    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
-    await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
-
+    didRefresh = true
     return refreshed.accessToken
   })
+
+  // After commit: Atlassian has already rotated the refresh token. A Redis
+  // failure must not roll back the persisted tokens.
+  if (didRefresh) {
+    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+    await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS).catch(() => undefined)
+  }
+
+  return token
 }
