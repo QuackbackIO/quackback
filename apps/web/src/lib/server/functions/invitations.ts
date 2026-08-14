@@ -3,7 +3,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { InviteId, PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
-import { db, invitation, principal, user, and, eq } from '@/lib/server/db'
+import { db, invitation, principal, user, and, eq, gt, sql } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from '@/lib/server/auth/session'
 import { logger } from '@/lib/server/logger'
@@ -126,154 +126,124 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { invitationId, name } = data
     log.debug({ invitation_id: invitationId }, 'accept invitation: entry')
-    // Track whether we successfully claimed the invitation so the catch
-    // block only rolls back when we actually changed its status.
-    let didClaim = false
+
+    const session = await getSession()
+    if (!session?.user) {
+      log.warn('accept invitation: no session')
+      throw new Error('Your session has expired. Please sign in again using the invitation link.')
+    }
+
+    const userId = session.user.id as UserId
+    const userEmail = session.user.email?.toLowerCase()
+    log.debug({ user_id: userId }, 'accept invitation: session resolved')
+
+    if (!userEmail) {
+      throw new Error(
+        'Your account is missing an email address. Please contact your administrator.'
+      )
+    }
+
+    let claimed: typeof invitation.$inferSelect
     try {
-      // Get current session
-      const session = await getSession()
-      if (!session?.user) {
-        log.warn('accept invitation: no session')
-        throw new Error('Your session has expired. Please sign in again using the invitation link.')
-      }
-
-      const userId = session.user.id as UserId
-      const userEmail = session.user.email?.toLowerCase()
-      log.debug({ user_id: userId }, 'accept invitation: session resolved')
-
-      if (!userEmail) {
-        throw new Error(
-          'Your account is missing an email address. Please contact your administrator.'
-        )
-      }
-
-      // Atomically claim the invitation with a conditional update to prevent
-      // double-accept race conditions (e.g., double-click, network retry).
-      // The `kind='team'` guard ensures portal invites cannot be consumed here.
-      const [claimed] = await db
-        .update(invitation)
-        .set({ status: 'accepted' })
-        .where(
-          and(
-            eq(invitation.id, invitationId as InviteId),
-            eq(invitation.status, 'pending'),
-            eq(invitation.kind, 'team')
-          )
-        )
-        .returning()
-
-      if (!claimed) {
-        // Either doesn't exist, already accepted, cancelled, or expired
-        const inv = await db.query.invitation.findFirst({
-          where: and(eq(invitation.id, invitationId as InviteId), eq(invitation.kind, 'team')),
-        })
-        log.warn(
-          { invitation_id: invitationId, exists: !!inv, status: inv?.status },
-          'accept invitation: claim failed'
-        )
-        if (!inv) throw new Error('This invitation could not be found. It may have been cancelled.')
-        throw new Error(
-          inv.status === 'accepted'
-            ? 'This invitation has already been accepted'
-            : 'This invitation has been cancelled. Please ask your administrator to send a new one.'
-        )
-      }
-
-      didClaim = true
-      log.debug({ invitation_id: invitationId, role: claimed.role }, 'accept invitation: claimed')
-
-      async function rollbackAndThrow(message: string): Promise<never> {
-        await db
+      claimed = await db.transaction(async (tx) => {
+        // Claim only a still-valid pending team invite for this email.
+        // Expiry and email live in the predicate so a failed validation
+        // never writes accepted, and nothing is reopened after side effects.
+        const [row] = await tx
           .update(invitation)
-          .set({ status: 'pending' })
-          .where(eq(invitation.id, invitationId as InviteId))
-        throw new Error(message)
-      }
+          .set({ status: 'accepted' })
+          .where(
+            and(
+              eq(invitation.id, invitationId as InviteId),
+              eq(invitation.status, 'pending'),
+              eq(invitation.kind, 'team'),
+              sql`lower(${invitation.email}) = ${userEmail}`,
+              gt(invitation.expiresAt, new Date())
+            )
+          )
+          .returning()
 
-      if (new Date(claimed.expiresAt) < new Date()) {
-        await rollbackAndThrow(
-          'This invitation has expired. Please ask your administrator to resend it.'
-        )
-      }
-
-      if (claimed.email.toLowerCase() !== userEmail) {
-        await rollbackAndThrow(
-          'This invitation was sent to a different email address. Please sign in with the correct email.'
-        )
-      }
-
-      const role = claimed.role || 'member'
-      const displayName = name?.trim() || undefined
-
-      const existingPrincipal = await db.query.principal.findFirst({
-        where: eq(principal.userId, userId),
-      })
-
-      if (existingPrincipal) {
-        // Update existing principal's role if the invitation grants a higher role
-        const roleHierarchy = ['user', 'member', 'admin']
-        const existingRoleIndex = roleHierarchy.indexOf(existingPrincipal.role)
-        const newRoleIndex = roleHierarchy.indexOf(role)
-
-        const updates: Record<string, unknown> = {}
-        if (newRoleIndex > existingRoleIndex) updates.role = role
-        if (displayName) updates.displayName = displayName
-
-        if (Object.keys(updates).length > 0) {
-          await db
-            .update(principal)
-            .set(updates)
-            .where(eq(principal.id, existingPrincipal.id as PrincipalId))
+        if (!row) {
+          const inv = await tx.query.invitation.findFirst({
+            where: and(eq(invitation.id, invitationId as InviteId), eq(invitation.kind, 'team')),
+          })
+          log.warn(
+            { invitation_id: invitationId, exists: !!inv, status: inv?.status },
+            'accept invitation: claim failed'
+          )
+          if (!inv) {
+            throw new Error('This invitation could not be found. It may have been cancelled.')
+          }
+          if (inv.status === 'accepted') {
+            throw new Error('This invitation has already been accepted')
+          }
+          if (new Date(inv.expiresAt) < new Date()) {
+            throw new Error(
+              'This invitation has expired. Please ask your administrator to resend it.'
+            )
+          }
+          if (inv.email.toLowerCase() !== userEmail) {
+            throw new Error(
+              'This invitation was sent to a different email address. Please sign in with the correct email.'
+            )
+          }
+          throw new Error(
+            'This invitation has been cancelled. Please ask your administrator to send a new one.'
+          )
         }
-      } else {
-        // Create new principal record
-        await db.insert(principal).values({
-          id: generateId('principal'),
-          userId,
-          role,
-          displayName,
-          createdAt: new Date(),
+
+        const role = row.role || 'member'
+        const displayName = name?.trim() || undefined
+
+        const existingPrincipal = await tx.query.principal.findFirst({
+          where: eq(principal.userId, userId),
         })
-      }
 
-      // Update user name if provided
-      if (displayName) {
-        await db.update(user).set({ name: displayName }).where(eq(user.id, userId))
-      }
+        if (existingPrincipal) {
+          const roleHierarchy = ['user', 'member', 'admin']
+          const existingRoleIndex = roleHierarchy.indexOf(existingPrincipal.role)
+          const newRoleIndex = roleHierarchy.indexOf(role)
 
-      // The invite is accepted — revoke every token in its set so no other
-      // emailed/copied link for this invite can still sign anyone in. (The link
-      // just used was already consumed by the magic-link verify; siblings from
-      // resends/copies would otherwise stay live until their 30-day expiry.)
-      // Best-effort: the membership is already committed, so a cleanup failure
-      // here must NOT hit the outer catch and roll the accept back to pending —
-      // log it and move on (the stray tokens still expire with the invite).
-      try {
-        const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
-        await revokeMagicLinkTokens(claimed.magicLinkTokens)
-      } catch (revokeError) {
-        log.error({ err: revokeError }, 'token revoke failed')
-      }
+          const updates: Record<string, unknown> = {}
+          if (newRoleIndex > existingRoleIndex) updates.role = role
+          if (displayName) updates.displayName = displayName
 
-      log.info({ invitation_id: invitationId }, 'accept invitation: accepted')
-      return { invitationId: invitationId as InviteId }
+          if (Object.keys(updates).length > 0) {
+            await tx
+              .update(principal)
+              .set(updates)
+              .where(eq(principal.id, existingPrincipal.id as PrincipalId))
+          }
+        } else {
+          await tx.insert(principal).values({
+            id: generateId('principal'),
+            userId,
+            role,
+            displayName,
+            createdAt: new Date(),
+          })
+        }
+
+        if (displayName) {
+          await tx.update(user).set({ name: displayName }).where(eq(user.id, userId))
+        }
+
+        return row
+      })
     } catch (error) {
       log.error({ err: error }, 'accept invitation failed')
-      // Only roll back if we actually claimed the invitation. If the error
-      // came from the !claimed branch (already accepted / invalid), rolling
-      // back would incorrectly reopen it to 'pending'.
-      if (didClaim) {
-        try {
-          await db
-            .update(invitation)
-            .set({ status: 'pending' })
-            .where(eq(invitation.id, invitationId as InviteId))
-        } catch (rollbackError) {
-          log.error({ err: rollbackError }, 'rollback failed')
-        }
-      }
       throw error
     }
+
+    try {
+      const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+      await revokeMagicLinkTokens(claimed.magicLinkTokens)
+    } catch (revokeError) {
+      log.error({ err: revokeError }, 'token revoke failed')
+    }
+
+    log.info({ invitation_id: invitationId }, 'accept invitation: accepted')
+    return { invitationId: invitationId as InviteId }
   })
 
 /**
