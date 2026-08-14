@@ -1,0 +1,181 @@
+{
+  "when": "2026-08-14T23:55:33.525Z",
+  "health": {
+    "gauntlet": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["checks", "role", "status"],
+      "planCount": null
+    },
+    "south": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["checks", "role", "status"],
+      "planCount": null
+    },
+    "north": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["checks", "role", "status"],
+      "planCount": null
+    },
+    "sysA": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["status"],
+      "planCount": null
+    },
+    "sysE": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["status"],
+      "planCount": null
+    },
+    "southHome": {
+      "status": 307,
+      "locationHost": "south63792f.quackback.co.uk",
+      "locationPath": "/",
+      "error": null,
+      "keys": [],
+      "planCount": null
+    },
+    "northHome": {
+      "status": 307,
+      "locationHost": "northfa99f0.quackback.co.uk",
+      "locationPath": "/",
+      "error": null,
+      "keys": [],
+      "planCount": null
+    }
+  },
+  "cp": {
+    "noAuthOwnership": {
+      "status": 401,
+      "locationHost": null,
+      "locationPath": null,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "planCount": null
+    },
+    "dummyOwnership": {
+      "status": 401,
+      "locationHost": null,
+      "locationPath": null,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "planCount": null
+    },
+    "catalogueNoAuth": {
+      "status": 401,
+      "locationHost": null,
+      "locationPath": null,
+      "error": "unauthorized",
+      "keys": ["error"],
+      "planCount": null
+    },
+    "catalogueA": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": [
+        "aiOutcomePriceCents",
+        "annualDiscountMonths",
+        "brandingRemoval",
+        "copilot",
+        "currency",
+        "liteSeatsIncluded",
+        "plans",
+        "recommendedPlanId",
+        "version"
+      ],
+      "planCount": 4
+    },
+    "invoicesA": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["invoices"],
+      "planCount": null
+    },
+    "workspacesA": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["workspaces"],
+      "planCount": null
+    }
+  },
+  "billing": {
+    "t1eCheckout": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["url"],
+      "planCount": null
+    },
+    "t1aPortal": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["url"],
+      "planCount": null
+    },
+    "t1aCheckoutPro": {
+      "status": 200,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["url"],
+      "planCount": null
+    },
+    "t1eFormOwnOrigin": {
+      "status": 500,
+      "locationHost": null,
+      "locationPath": null,
+      "error": null,
+      "keys": ["message", "status", "unhandled"],
+      "planCount": null
+    },
+    "t1eFormForeign": {
+      "status": 403,
+      "locationHost": null,
+      "locationPath": null,
+      "error": "invalid_origin",
+      "keys": ["error"],
+      "planCount": null
+    },
+    "t1eFormMissing": {
+      "status": 403,
+      "locationHost": null,
+      "locationPath": null,
+      "error": "invalid_origin",
+      "keys": ["error"],
+      "planCount": null
+    }
+  },
+  "rename": {
+    "oldFriendly": {
+      "status": 308,
+      "locationHost": "northfa99f0.quackback.co.uk",
+      "locationPath": "/admin/settings/general",
+      "error": null,
+      "keys": [],
+      "planCount": null
+    }
+  }
+}

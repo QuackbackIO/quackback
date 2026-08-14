@@ -133,14 +133,15 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                                  | token on CP, skip-deploy           | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.                                                                    |
 | Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                                   | **yes** API; UI in `02cb4329`      | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                                                                                   |
 | Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c`         | **yes**                            | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                                                                                        |
-| Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep.md`                      | FAIL 1 HIGH                        | After limits+billing deploy, re-run the whole sweep. Fixer only for HIGH.                                                                                                                                                                                                                                    |
+| Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep-52e78237.md`             | PASS (compact; 0 HIGH)             | Re-swept after 8c on `52e78237` / `6f0b0fee`. Historical `sweep.md` HIGH is fixed. §H still unsigned.                                                                                                                                                                                                        |
 | Track 8b–8f                    | CP+app saas | 8b live; **8c live** `209c8fb` / `ef9fe62b9`; 8d–8f not started | **8c yes** `52e78237` / `6f0b0fee` | Transfer/leave fail-closed live. Next: 8d seats + SSO.                                                                                                                                                                                                                                                       |
 | Plan-matrix critic             | live + spec | `LOOP-VERIFY.md` §H                                             | no                                 | Every wired limit + entitlement × Free / Growth / Pro / Scale / trial / expired / canceled / self-host. **UI and server-fn** both refuse. Catalogue vs `definitions.ts` vs `PLAN_GRANTS` vs `PLAN_CATALOGUE` must agree. Fixtures: t1a Growth, t1e trial. No Neon. Do not treat sweep C 15–16 as this cycle. |
 
 **Fleet note:** one deploy thread. Live pair is app `93838859` /
 `sha256:52e78237…` (`ef9fe62b9`, includes `635cdb149`) and CP
 `6f0b0fee` (`209c8fb`). No undeployed customer-visible product tip.
-This fire: 8c merged+deployed+critic; then Verify + §H.
+This fire: 8c merged+deployed+critic; compact Verify PASS (0 HIGH).
+§H still unsigned — next fire.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -774,8 +775,9 @@ merged serially onto `saas` as CP `209c8fb` and app `ef9fe62b9`.
   hourly `d528fef4`, daily `ee9f3cfc`, migrator `98d0ed1d`. All
   `us-east4-eqdc4a`. Digest matches. Ready 200 on five health URLs.
 - Live critic PASS: ownership/leave fail-closed; instances **17→17**.
-  `loop-evidence/t8c/`. No Neon. No live key. Custom domains not
-  started.
+  `loop-evidence/t8c/`. Compact Verify on this digest: 0 HIGH
+  (`sweep-52e78237.md`). §H not started (same-hosts critic; next
+  fire). No Neon. No live key. Custom domains not started.
 
 Previous fire (Fleet 303 re-prove + isolated 8c) is historical.
 
@@ -993,6 +995,8 @@ Sweep 2026-08-14: `loop-evidence/verify-2026-08-14/sweep.md` FAIL one
 HIGH (cloud unlimited overlay). Re-sweep
 `loop-evidence/verify-2026-08-14/limits-resweep.md` **PASS** — t1a
 `maxBoards=3`, t1e `maxBoards=10`, no stored row, not unlimited.
+Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
+`52e78237` / `6f0b0fee`.
 
 - **Plan-matrix critic** (`LOOP-VERIFY.md` §H): every wired numeric
   limit and entitlement on every active-plan state, UI lock **and**
