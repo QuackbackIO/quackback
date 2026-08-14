@@ -11,9 +11,8 @@
  * | `quackback-worker` | `worker` | workspace **direct** endpoints, one always-attached relay loop per workspace | no — and neither do the workspace computes it holds |
  * | `quackback-cron-*` | `worker`, one-shot | whatever the sweep touches, for the length of the run | n/a — it exits |
  * | `quackback-migrator` | `migrator`, one-shot | the **direct** endpoint of each workspace it claims | n/a — it exits |
- * | `quackback-web-sleeper` | `web` | same as `quackback` | **yes** (`deploy.sleepApplication`) |
  *
- * All six run the same image, pinned by digest. See APP_IMAGE.
+ * All five run the same image, pinned by digest. See APP_IMAGE.
  *
  * The web/worker split is not an optimisation. `LISTEN` is silently lost
  * through a transaction-mode pooler (§7.3, measured: a NOTIFY is never
@@ -29,11 +28,12 @@
  *
  * ## This file describes the whole environment, and `apply` is live
  *
- * It did not always. The control-plane service, the Redis database, both
+ * It did not always. The control-plane service, the Redis database, the
  * `qb-cp-*` buckets and four secrets were created through the API and never
  * declared, and absent means *deleted*: a plan proposed destroying all of them,
- * including the two per-workspace `SECRET_KEY`s. They are declared now, `plan`
- * reports no changes, and `apply` has been run.
+ * including the two per-workspace `SECRET_KEY`s. The buckets turned out to hold
+ * only provisioning probes and were removed in 2026-08; the rest are declared
+ * now, `plan` reports no changes, and `apply` has been run.
  *
  * What that costs is a standing obligation. Anything the control plane creates
  * through the API — a workspace bucket, a per-workspace secret — has to be added
@@ -99,25 +99,13 @@ export default defineRailway(() => {
   // it is stated rather than hidden.
   const uploads = bucket('quackback-gauntlet', { region: 'iad' })
 
-  // Per-workspace buckets, created by the control plane through the API.
-  //
-  // §9's line is "IaC for the skeleton, API for workspaces" — and Railway's IaC
-  // cannot express that. Anything absent from this file is a *deletion*: with
-  // these three omitted, `railway config plan` proposed
-  // "Delete bucket qb-neon-t1 / qb-neon-t2 / qb-neon-t4", which is every
-  // workspace's stored objects. So dynamic per-workspace resources must still be
-  // enumerated here, and a fleet that provisions workspaces by API needs this file
-  // regenerated (or `apply` never run) rather than hand-maintained. Recorded as
-  // a correction to §9 rather than worked around silently.
-  const workspaceBuckets = [
-    bucket('qb-neon-t1', { region: 'iad' }),
-    bucket('qb-neon-t2', { region: 'iad' }),
-    bucket('qb-neon-t4', { region: 'iad' }),
-    // The control plane's own test workspaces, created through the API like the
-    // rest. Same rule: absent here means deleted on the next apply.
-    bucket('qb-cp-t1', { region: 'iad' }),
-    bucket('qb-cp-t2crit', { region: 'iad' }),
-  ]
+  // There are no per-workspace buckets. The five the control plane once
+  // created through the API (qb-neon-t1/t2/t4, qb-cp-t1/t2crit) were deleted
+  // on 2026-08-14: every registry row names the fleet bucket, none named
+  // them, and their contents were provisioning probes (<=1.3 KB), not
+  // workspace data. The standing obligation still holds for anything the
+  // control plane creates through the API in future: it has to be added
+  // here, or the next `apply` removes it.
 
   /** Everything every app service needs, whatever its role. */
   const fleetEnv = {
@@ -384,25 +372,6 @@ export default defineRailway(() => {
     env: { ...fleetEnv, QUACKBACK_ROLE: 'worker', QUACKBACK_CRON_JOB: 'hourly' },
   })
 
-  // A `role=web` service with sleep enabled — the `single`-mode shape from §1.2,
-  // and the only way to answer §13's open question 6 ("does a role=web service
-  // actually sleep?") against a real deployment rather than by reasoning. Same
-  // image, same role, same tenancy as `quackback`; the only difference is the
-  // toggle, so what it measures is the role rather than a special build.
-  //
-  // It was also the first service moved to `APP_IMAGE`, deliberately: whether
-  // Railway can pull that image at all is a question no amount of local testing
-  // answers, and this is the one service in the fleet carrying no traffic. It
-  // answered yes, in seven seconds and with no registry credential, so the rest
-  // of the fleet followed.
-  const sleeper = service('quackback-web-sleeper', {
-    ...appBuild,
-    healthcheckPath: '/api/health/ready',
-    healthcheckTimeout: 300,
-    deploy: { ...appBuild.deploy, sleepApplication: true },
-    env: { ...fleetEnv, QUACKBACK_ROLE: 'web' },
-  })
-
   // The control plane. Built from the OTHER repository and deployed by uploading
   // its source, so this file cannot describe how to build it — `empty()` says
   // "this service exists and its source is managed elsewhere" rather than
@@ -496,17 +465,6 @@ export default defineRailway(() => {
   const cache = redis('Redis')
 
   return project('quackback-pooled-gauntlet', {
-    resources: [
-      web,
-      worker,
-      migrator,
-      cronDaily,
-      cronHourly,
-      sleeper,
-      controlPlane,
-      cache,
-      uploads,
-      ...workspaceBuckets,
-    ],
+    resources: [web, worker, migrator, cronDaily, cronHourly, controlPlane, cache, uploads],
   })
 })

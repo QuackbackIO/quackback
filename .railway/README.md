@@ -185,7 +185,7 @@ as a record of intent, not as something enforced.
 
 ## The fleet shape
 
-`.railway/railway.ts` describes six app services and the buckets. All six run
+`.railway/railway.ts` describes five app services and the bucket. All five run
 **one image, pinned by digest** (`APP_IMAGE`), published by the repository's
 Docker workflow and pulled anonymously from a public package, so no registry
 credential has to exist in a file that cannot express one. That is what makes
@@ -202,7 +202,11 @@ What separates the services is **which connections they hold**:
 | `quackback-worker`                 | `worker`                        | workspace **direct** (session-mode) endpoints, one always-attached relay loop per workspace | no                                  |
 | `quackback-cron-daily` / `-hourly` | `worker` + `QUACKBACK_CRON_JOB` | whatever the sweep touches, for the length of the run                                       | n/a — it exits                      |
 | `quackback-migrator`               | `migrator`, one-shot            | the **direct** endpoint of each workspace it claims                                         | n/a — it exits                      |
-| `quackback-web-sleeper`            | `web`                           | same as `quackback`                                                                         | **yes** (`deploy.sleepApplication`) |
+
+(There was a sixth, `quackback-web-sleeper` — a `role=web` service with sleep
+enabled, kept to answer §13's open question 6 against a real deployment. It
+answered it (yes, in seven seconds, no registry credential), carried no
+traffic, and was deleted on 2026-08-14.)
 
 `DATABASE_URL` is deliberately absent from every one of them: pooled mode
 refuses to boot with a fleet-wide DSN. The control-plane registry lives in its
@@ -226,6 +230,9 @@ The `replicas` warning below is not the only gap.
   `plan` proposed `Delete bucket qb-neon-t1 / qb-neon-t2 / qb-neon-t4` — every
   workspace's stored objects. So resources the control plane creates through the
   API must still be enumerated in this file, or `apply` must never be run.
+  (Those buckets were in the end deleted by hand on 2026-08-14: no registry row
+  named any of them and their contents were provisioning probes, not workspace
+  data. The rule stands for anything the control plane creates in future.)
 
 ### `preserve()` cannot bootstrap a new service
 
