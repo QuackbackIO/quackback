@@ -33,15 +33,15 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `521b9e3e9` (docs). Live image is `f0186af2b` /
+- Workspace tip: `d103770bf` (docs). Live image is `f0186af2b` /
   `ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`
   (includes limits overlay `b0c13a366` / `31330d85b` and Origin-fix
   `635cdb149`). Web `47e0c7be` SUCCESS, region only `us-east4-eqdc4a`.
-- Control plane: `2fb9488` live as `80c8301e` /
-  `sha256:3d10454a80267546478e184379b66fd71acccf9c2eda26de9ddd3dbcfc096c45`
-  (includes 3-Free `c5a484d`, catalogue, CF client; still `sfo`).
+- Control plane: `0b85cd0` live as `e8953f9b` /
+  `sha256:06e7f5d3378209be736a98f18eb69945c16d1f1807da06632c7d68db10387c85`
+  (Track 8a restore cap + 30-day purge; still `sfo`).
 - Last known deployed workspace: `f0186af2b` (2026-08-14)
-- Last known deployed control plane: `80c8301e` (2026-08-14)
+- Last known deployed control plane: `e8953f9b` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -783,10 +783,9 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
     re-sweep row 15 PASS (`limits-resweep.md`). Other Verify rows
     remain standing (Track 8, Domains card, first-win).
 14. ~~Deploy `31330d85b` (Fleet).~~ live `f0186af2b` / `sha256:cb186135…`.
-15. **Track 8 — hosted account operations** (see
-    `LOOP-SAAS-FIRST-CUSTOMER.md`). Order:
-    8a soft-delete/restore + 3-Free re-check (with or right after
-    `c5a484d` deploy); 8b in-product switcher; 8c transfer/leave;
+15. **Track 8 — hosted account operations.** ~~8a~~ live `0b85cd0` /
+    `e8953f9b` (30-day purge, restore 402 `free_workspace_owner_cap`).
+    Next: 8b in-product switcher; 8c transfer/leave;
     8d seats + SSO downgrade live row; 8e visible usage; 8f export /
     wipe / delete CP account. No new Neon unless a finding cannot
     be proved on current hosts.
@@ -939,10 +938,10 @@ HIGH (cloud unlimited overlay). Re-sweep
 
 Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Unused web `BILLING_*` vars removed
-(`--skip-deploys`; web now `47e0c7be`). Remaining: Track 8; Domains card (operator unblocked CF — this fire
-did not start it); standing Verify rows (first-win, self-host walk).
-Walk3 workspace webhook stays disabled. Live app `f0186af2b` /
-`sha256:cb186135…`. Live CP `80c8301e` / `sha256:3d10454a…`.
+(`--skip-deploys`; web now `47e0c7be`). Remaining: Track 8b switcher; Domains card (this fire did not start
+it); standing Verify rows. Walk3 webhook stays disabled. Live app
+`f0186af2b` / `sha256:cb186135…`. Live CP `e8953f9b` /
+`sha256:06e7f5d3…`.
 
 Operational defects carried from the prior lead:
 
