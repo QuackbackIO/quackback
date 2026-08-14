@@ -188,6 +188,20 @@ describe('acceptInvitationFn', () => {
     expect(hoisted.sets.some((s) => s.values.status === 'pending')).toBe(false)
   })
 
+  it('reports canceled before expiry when a canceled invite is also past due', async () => {
+    hoisted.invitationReturning.mockResolvedValue([])
+    hoisted.findInvitation.mockResolvedValue({
+      id: INVITE_ID,
+      email: 'alex@example.com',
+      kind: 'team',
+      status: 'canceled',
+      expiresAt: PAST,
+    })
+
+    await expect(accept({ data: { invitationId: INVITE_ID } })).rejects.toThrow('cancelled')
+    expect(hoisted.sets.some((s) => s.values.status === 'pending')).toBe(false)
+  })
+
   it('leaves the row untouched when the invite is expired', async () => {
     hoisted.invitationReturning.mockResolvedValue([])
     hoisted.findInvitation.mockResolvedValue({

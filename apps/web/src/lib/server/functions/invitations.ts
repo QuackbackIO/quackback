@@ -146,9 +146,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
     let claimed: typeof invitation.$inferSelect
     try {
       claimed = await db.transaction(async (tx) => {
-        // Claim only a still-valid pending team invite for this email.
-        // Expiry and email live in the predicate so a failed validation
-        // never writes accepted, and nothing is reopened after side effects.
+        // Email and expiry stay in the UPDATE so a rejected accept never writes accepted.
         const [row] = await tx
           .update(invitation)
           .set({ status: 'accepted' })
@@ -177,7 +175,12 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
           if (inv.status === 'accepted') {
             throw new Error('This invitation has already been accepted')
           }
-          if (new Date(inv.expiresAt) < new Date()) {
+          if (inv.status === 'canceled') {
+            throw new Error(
+              'This invitation has been cancelled. Please ask your administrator to send a new one.'
+            )
+          }
+          if (inv.status === 'expired' || new Date(inv.expiresAt) < new Date()) {
             throw new Error(
               'This invitation has expired. Please ask your administrator to resend it.'
             )
