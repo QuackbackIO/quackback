@@ -1,0 +1,58 @@
+{
+  "unit": "stripe-live-pay-webhook-finalize",
+  "at": "2026-08-14T20:55:52Z",
+  "stripeAccount": "acct_1SeJT1Rbu1DLQxj3",
+  "livemode": false,
+  "cpDeploy": "f135274f",
+  "appDeploy": "683a4b07",
+  "appDigest": "sha256:139a4a8c6873d14c1d4cc129d8f3e2d286ccaaea90e2ab0e86766944b8219570",
+  "workspace": {
+    "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+    "canonical": "https://south63792f.quackback.co.uk",
+    "system": "https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk"
+  },
+  "instanceCount": { "before": 16, "after": 16 },
+  "checkout": {
+    "status": 200,
+    "urlHost": "checkout.stripe.com",
+    "sessionPrefix": "cs_test_",
+    "kind": "workspace_subscription",
+    "planId": "growth",
+    "billingPeriod": "monthly"
+  },
+  "payment": {
+    "sessionStatus": "complete",
+    "paymentStatus": "paid",
+    "subscriptionPrefix": "sub_1U4S",
+    "subscriptionStatus": "active",
+    "leftCheckout": true,
+    "returnHost": "south63792f.quackback.co.uk"
+  },
+  "webhook": {
+    "cpEndpoint": "https://cp.quackback.co.uk/api/billing/webhook",
+    "checkoutSessionCompleted": "processed",
+    "customerSubscriptionCreated": "processed"
+  },
+  "finalize": {
+    "planId": "growth",
+    "hasItem": true,
+    "itemPrefix": "si_V4bLN",
+    "hasSub": true,
+    "orgSubscriptionStatus": "active",
+    "outboxVersion": 4,
+    "outboxStatus": "delivered",
+    "outboxEffectivePlan": "growth"
+  },
+  "workspaceProjection": {
+    "enabled": true,
+    "version": 4,
+    "effectivePlan": "growth",
+    "subscriptionStatus": "active",
+    "canManageBilling": true,
+    "canUpgrade": false,
+    "hasProviderId": false
+  },
+  "didNotCreateWorkspace": true,
+  "didNotMintNeon": true,
+  "didNotUseLiveKey": true
+}

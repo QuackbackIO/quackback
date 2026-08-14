@@ -30,13 +30,15 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `203331611` (docs). Live image is `6d4d9f252` /
+- Workspace tip: `32779fd0e` (docs). Live image is `6d4d9f252` /
   `ghcr.io/quackbackio/quackback@sha256:139a4a8c6873d14c1d4cc129d8f3e2d286ccaaea90e2ab0e86766944b8219570`
-  (includes Origin-fix `635cdb149`)
+  (includes Origin-fix `635cdb149`). Re-checked this fire: web `683a4b07`
+  SUCCESS, `source.image` and `meta.imageDigest` match, region only
+  `us-east4-eqdc4a`. No fleet deploy.
 - Control plane: `71e59d9` live as `f135274f` /
   `sha256:a005414fa8a2e49e128a47abc59f221198e76214c78a7516894ef9e967def597`
   (redeploy after test Stripe key + price seed; still `sfo`). Local CP
-  tip is now `c5a484d` (3-Free cap, not deployed).
+  tip is `c5a484d` (3-Free cap, not deployed).
 - Last known deployed workspace: `6d4d9f252` (2026-08-14)
 - Last known deployed control plane: `f135274f` (2026-08-14)
 
@@ -110,8 +112,8 @@ remains.
 | 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
 | 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
 | 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | live test-mode checkout + portal through instance-scoped gateway; workspace Upgrade form 303 live          | CP `f135274f` / `71e59d9`; app `635cdb149` deployed `139a4a8c`; see “Track 3 live checkout (2026-08-14)”          |
-| 4 workspace projection + gateway | both `ws-*` hold signed billing projections; CP gateway + workspace form 303 live                          | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`, `635cdb149`                                                            |
+| 3 CP billing foundation          | live test-mode **payment** + webhook finalize on existing t1a; checkout/portal + form 303 already proved   | CP `f135274f` / `71e59d9`; app `635cdb149` / `139a4a8c`; see “Track 3 live payment (2026-08-14)”                  |
+| 4 workspace projection + gateway | paid Growth projection v4 delivered to t1a; no provider ids in workspace payload                           | outbox `delivered` `effectivePlan=growth`; `settings.cloud.projection` v4                                         |
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
@@ -606,6 +608,62 @@ Independent mint (not builder cookies). HTTP:
 `kind=workspace_subscription`
 `instanceId=inst_01m00kq6cdfzzb19gfjz8pt0s7`. Critic did not pay.
 
+## Track 3 live payment (2026-08-14)
+
+Fleet lane this fire: `635cdb149` already live (`683a4b07` /
+`sha256:139a4a8c…`, `us-east4-eqdc4a` only). No deploy.
+
+One test-mode payment on existing t1a (`south63792f`,
+`inst_01m00kq6cdfzzb19gfjz8pt0s7`). No new Neon. No live key.
+
+- CP webhook `https://cp.quackback.co.uk/api/billing/webhook` enabled,
+  `checkout.session.completed` on. Walk3 workspace webhook still disabled.
+- Gateway `POST /api/v1/internal/billing/session` `{ action: checkout,
+planId: growth, billingPeriod: monthly }` → 200 `checkout.stripe.com`
+  `cs_test_`. Stripe retrieve: `livemode=false`,
+  `kind=workspace_subscription`, `instanceId=t1a`.
+- Hosted Checkout paid with test card 4242 + GB address. Browser left
+  Stripe for `south63792f.quackback.co.uk` (return hit public home
+  without an owner session). Shots: `loop-evidence/t3-pay/`.
+- Stripe session `complete` / `paid`, subscription `active` (`sub_1U4S…`).
+- `checkout.session.completed` and `customer.subscription.created`
+  processed on `cp_stripe_webhook_events`.
+- t1a `plan_id=growth`, item `si_V4bLN…`, org sub `active`.
+- Billing outbox v4 `delivered` `effectivePlan=growth`
+  `subscriptionStatus=active` `canManageBilling=true`.
+- Workspace `settings.cloud.projection` v4 same commercial fields; no
+  provider ids. Trial dates remain historical.
+- Instances **16 → 16**. t1a and t1e remain.
+
+### Critic (2026-08-14, test-mode payment + webhook)
+
+PASS — independent retrieve of the `cs_test_` session is complete+paid
+on existing t1a; `checkout.session.completed` processed; Growth
+projection delivered without provider ids; instances 16.
+
+HTTP: five health URLs 200. Stripe: `livemode=false` `mode=subscription`
+`status=complete` `payment_status=paid` `kind=workspace_subscription`
+`instanceId=inst_01m00kq6cdfzzb19gfjz8pt0s7` `planId=growth`
+`subscriptionStatus=active` success host `south63792f`. SQL:
+`plan_id=growth`, has item + sub, org `active`, outbox v4 delivered,
+workspace projection v4 `effectivePlan=growth` `hasProviderId=false`.
+`loop-evidence/t3-pay/critic.md`. Did not pay again.
+
+## Per-owner 3-Free cap (local, 2026-08-14)
+
+CP `c5a484d` already on `saas` (no isolated worktree builder). Not
+deployed. `countLiveFreeOwnedBy` is ownerEmail + live lifecycle +
+unpaid (trial counts as Free). Fourth create is 402
+`free_workspace_owner_cap`. Focused tests: 35 passed
+(`instance-fn` 21, `create-without-a-plan` 14).
+
+### Critic (2026-08-14, 3-Free cap `c5a484d`)
+
+PASS — focused tests 35/35; 4th Free is 402 with
+`free_workspace_owner_cap` and does not insert; trial is Free; paid
+item+plan frees a slot; count is `ownerEmail`. Not live (CP still
+`71e59d9` / `f135274f`).
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
@@ -624,11 +682,12 @@ Independent mint (not builder cookies). HTTP:
 10. ~~Deploy `635cdb149` so the workspace Upgrade form accepts https Origin,
     then live-prove the 303 from `/api/billing/session`.~~ live
     `6d4d9f252` / `sha256:139a4a8c…`.
-11. Complete one test-mode payment and prove webhook finalize + projection
-    on the existing workspace (metadata must not create one).
-12. **Per-owner cap:** at most 3 live Free workspaces; unlimited paid.
-    Replace leftover one-Free-per-unpaid-org. Count by owner, not org.
-    Trial counts as Free. Delete/upgrade frees a Free slot.
+11. ~~Complete one test-mode payment and prove webhook finalize + projection
+    on the existing workspace (metadata must not create one).~~ t1a Growth
+    paid; webhook processed; projection v4 delivered; instances 16.
+12. **Per-owner cap:** implemented on CP `c5a484d` (tests 35, critic PASS).
+    Not deployed. Live 4th-Free 402 still needs a CP deploy (Fleet lane;
+    no new Neon unless that live proof requires it).
 13. Add the control-plane Cloudflare for SaaS custom-hostname integration.
     Do not start this until the operator asks; custom domains stay later.
 14. First-win journeys. Checkout attaches to an existing workspace only.
@@ -727,7 +786,8 @@ on self-host.
 
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
 - ~~Cross-workspace checkout session metadata.~~ t1e session names t1e;
-  extras `instanceId` cannot retarget. Paid webhook isolation still open.
+  extras `instanceId` cannot retarget. Paid webhook on t1a named t1a;
+  t1e was not paid. Isolation of a second paid workspace still open.
 - Control-plane webhook replay and outbox retry.
 - ~~Created/configured-only trial activation and immutable anchor.~~ live on both `ws-*` hosts.
 - Control-plane outage behavior for normal use and billing actions. App retry
@@ -744,17 +804,16 @@ on self-host.
 
 ## Blockers
 
-Stripe **test** key and paid-plan price ids are live. Checkout/portal
-session create through the CP gateway is proved. Workspace Upgrade
-form 303 through `/api/billing/session` is live (`139a4a8c`).
-Remaining: one test-mode payment + webhook finalize; per-owner 3-Free
-cap (local CP `c5a484d`, not deployed); Track 6 boundary scan and
-unused Railway `BILLING_*`. Walk3 workspace webhook was disabled by
-the operator.
+Stripe **test** payment + webhook finalize is live on t1a (Growth,
+projection v4, instances 16). Remaining: deploy CP `c5a484d` (Fleet)
+then live-prove the 4th Free 402; Track 6 boundary scan and unused
+Railway `BILLING_*`. Walk3 workspace webhook was disabled by the
+operator. Do not start custom domains.
 
 The identity/billing pair is otherwise deployed. Further deploys are
 incremental. Live app `6d4d9f252` / `sha256:139a4a8c…`. Live CP
-`f135274f` / `sha256:a005414f…`.
+`f135274f` / `sha256:a005414f…`. Local CP `c5a484d` waits for a Fleet
+deploy.
 
 Operational defects carried from the prior lead:
 

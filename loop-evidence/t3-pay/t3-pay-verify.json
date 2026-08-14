@@ -1,0 +1,116 @@
+{
+  "at": "2026-08-14T20:55:47.238Z",
+  "unit": "stripe-live-pay-verify",
+  "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+  "errors": [],
+  "polls": [
+    {
+      "at": "2026-08-14T20:55:49.307Z",
+      "stripe": {
+        "status": "complete",
+        "paymentStatus": "paid",
+        "livemode": false,
+        "kind": "workspace_subscription",
+        "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+        "planId": "growth",
+        "hasSubscription": true,
+        "subscriptionPrefix": "sub_1U4S",
+        "subscriptionStatus": "active"
+      },
+      "workspace": {
+        "plan_id": "growth",
+        "has_item": true,
+        "item_prefix": "si_V4bLN",
+        "has_sub": true,
+        "sub_prefix": "sub_1U4S",
+        "subscription_status": "active",
+        "projection_version": "4"
+      },
+      "outbox": {
+        "projection_version": "4",
+        "status": "delivered",
+        "effective_plan": "growth",
+        "subscription_status": "active",
+        "can_manage_billing": "true"
+      },
+      "webhookEvents": [
+        {
+          "idPrefix": "evt_1U4S",
+          "type": "customer.subscription.created",
+          "processed": true
+        },
+        {
+          "idPrefix": "evt_1U4S",
+          "type": "checkout.session.completed",
+          "processed": true
+        }
+      ],
+      "instanceCount": 16
+    }
+  ],
+  "stripeKeyPrefix": "sk_test_",
+  "sessionPrefix": "cs_test_",
+  "final": {
+    "stripe": {
+      "status": "complete",
+      "paymentStatus": "paid",
+      "livemode": false,
+      "kind": "workspace_subscription",
+      "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+      "planId": "growth",
+      "hasSubscription": true,
+      "subscriptionPrefix": "sub_1U4S",
+      "subscriptionStatus": "active"
+    },
+    "workspace": {
+      "plan_id": "growth",
+      "has_item": true,
+      "item_prefix": "si_V4bLN",
+      "has_sub": true,
+      "sub_prefix": "sub_1U4S",
+      "subscription_status": "active",
+      "projection_version": "4"
+    },
+    "outbox": {
+      "projection_version": "4",
+      "status": "delivered",
+      "effective_plan": "growth",
+      "subscription_status": "active",
+      "can_manage_billing": "true"
+    },
+    "webhookEvents": [
+      {
+        "idPrefix": "evt_1U4S",
+        "type": "customer.subscription.created",
+        "processed": true
+      },
+      {
+        "idPrefix": "evt_1U4S",
+        "type": "checkout.session.completed",
+        "processed": true
+      }
+    ],
+    "instanceCount": 16
+  },
+  "paid": true,
+  "livemodeFalse": true,
+  "metadataExistingT1a": true,
+  "webhookCheckoutCompleted": true,
+  "instanceLinked": true,
+  "projectionAdvanced": false,
+  "outboxEffectivePlan": "growth",
+  "outboxStatus": "delivered",
+  "didNotCreateWorkspace": true,
+  "instanceCount": 16,
+  "sameT1aT1e": true,
+  "otherInstanceCount": 14,
+  "workspaceProjection": {
+    "present": true,
+    "keys": ["enabled", "projection"],
+    "planId": null,
+    "hasProvider": null,
+    "version": null,
+    "subscriptionStatus": null
+  },
+  "finishedAt": "2026-08-14T20:55:52.835Z"
+}

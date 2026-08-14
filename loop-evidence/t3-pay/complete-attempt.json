@@ -1,0 +1,73 @@
+{
+  "startedAt": "2026-08-14T20:55:15.753Z",
+  "steps": [
+    {
+      "at": "loaded",
+      "urlHost": "checkout.stripe.com"
+    },
+    {
+      "at": "shot:01-loaded.png",
+      "urlHost": "checkout.stripe.com"
+    },
+    {
+      "at": "card-number",
+      "via": "locator"
+    },
+    {
+      "at": "expiry",
+      "via": "locator"
+    },
+    {
+      "at": "cvc",
+      "via": "locator"
+    },
+    {
+      "at": "name",
+      "via": "locator"
+    },
+    {
+      "at": "country-gb"
+    },
+    {
+      "at": "manual-address"
+    },
+    {
+      "at": "line1",
+      "via": "locator"
+    },
+    {
+      "at": "city",
+      "via": "locator"
+    },
+    {
+      "at": "postal",
+      "via": "locator"
+    },
+    {
+      "at": "shot:02-filled.png",
+      "urlHost": "checkout.stripe.com"
+    },
+    {
+      "at": "pay-visible",
+      "disabled": false
+    },
+    {
+      "at": "clicked-pay",
+      "urlHost": "checkout.stripe.com"
+    },
+    {
+      "at": "shot:03-after-pay.png",
+      "urlHost": "south63792f.quackback.co.uk"
+    }
+  ],
+  "urlHost": "checkout.stripe.com",
+  "sessionPrefix": "cs_test_",
+  "leftCheckout": true,
+  "finalUrlHost": "south63792f.quackback.co.uk",
+  "finalPath": "/",
+  "finalQueryKeys": ["auth", "callbackUrl", "sort"],
+  "checkoutSuccess": false,
+  "hasSessionIdParam": false,
+  "sessionIdParamPrefix": null,
+  "finishedAt": "2026-08-14T20:55:40.935Z"
+}
