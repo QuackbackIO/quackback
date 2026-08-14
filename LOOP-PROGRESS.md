@@ -15,10 +15,13 @@ provider path only; it does not close the new architecture tracks.
 
 Workspace creation and cloud identity are also control-plane-owned. The first
 workspace must now be created immediately after control-plane sign-in with
-generated immutable identifiers and no name, URL, region, or plan form. Name,
-friendly platform URL, and custom domains move into skippable post-handoff and
-Admin Settings UI; cloud mutations traverse the instance-scoped control-plane
-client and return as signed monotonic identity projections.
+generated immutable identifiers and no name, URL, region, or plan form. Name
+and a required friendly platform URL are set post-handoff (and again in
+Admin Settings → General). Custom domains use the same workspace-UI /
+control-plane-API pattern once the hostname provider is live. Cloud
+mutations traverse the instance-scoped control-plane client and return as
+signed monotonic identity projections. The generated system host is never
+presented as the customer address.
 
 Development infrastructure supports registry-only platform URL changes: the
 live Railway web service owns `*.quackback.co.uk`, Cloudflare is authoritative
@@ -30,14 +33,16 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `4d1b582c8` (live image `98212c18c` /
-  `sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`)
-- Control plane: `a040f78` (a concurrent CLI `railway up` moved live to
-  `07d5737e` /
-  `sha256:ffdd51a26023233f03c99ded29153317622beeee342b012de3fd75367e3dfe1c`;
-  previous `7eca55b3` is REMOVED)
-- Last known deployed workspace: `98212c18c` (2026-08-14)
-- Last known deployed control plane: `07d5737e` (2026-08-14; not this fire)
+- Workspace tip: `804853ae2` (8b switcher). Ready CTA is `1a39cd7d7`. Live
+  image is `f0186af2b` /
+  `ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`
+  (includes limits overlay `b0c13a366` / `31330d85b` and Origin-fix
+  `635cdb149`). Web `47e0c7be` SUCCESS, region only `us-east4-eqdc4a`.
+- Control plane tip: `4da4607` (8b sibling list/open). Live remains `0b85cd0` as `e8953f9b` /
+  `sha256:06e7f5d3378209be736a98f18eb69945c16d1f1807da06632c7d68db10387c85`
+  (Track 8a restore cap + 30-day purge; still `sfo`).
+- Last known deployed workspace: `f0186af2b` (2026-08-14)
+- Last known deployed control plane: `e8953f9b` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -64,17 +69,12 @@ worker / crons / migrator, skip-deploys). Live `/assets/setup._orgId-*.js`
 contains “Creating your workspace” and “Opening your workspace”; the
 named-create card copy is gone.
 
-Fresh-mailbox `/setup` (2026-08-14, `walk-unita-*@guerrillamail.com`,
-org `org_01m00j54jqe8ks0r6dd1cr6c9e`) SSR is auto-create: heading
-“Creating your workspace”, copy “nothing you need to choose yet”, no
-name/URL/region/plan fields. Screenshot:
-`loop-evidence/unit-a-setup.png`. Hydration then fails: the live setup
-chunk imports `node:crypto` (`Failed to fetch dynamically imported
-module: /assets/setup._orgId-D7jp-les.js`). Error shot:
-`loop-evidence/unit-a-setup-hydrate-error.png`. A concurrent CP change
-is isolating those server modules behind `.server.ts` doors; do not
-revert it. Do not treat the interactive walk as green until that chunk
-loads.
+Fresh-mailbox `/setup` hydrates. Live chunk
+`/assets/setup._orgId-DOHT4ynR.js` has no `node:crypto` and contains
+“Creating your workspace” / “Opening your workspace”. The old
+`D7jp-les` 404 is a stale browser cache; hard-refresh, do not refactor
+the CP again for it. Named-create copy is gone. Screenshot of a later
+zero-input create: `loop-evidence/t1a/03-setup.png`.
 
 Unit C (`a796b8885`) persists `/api/storage/<key>` (private: `?read=`)
 and absolutizes email, widget, OG, and vision from the immutable
@@ -109,17 +109,45 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                                               | Evidence                                                                                                          |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                                             | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | implementation complete through post-handoff details; local transfer tests added; live proof pending | CP `bd9148c` through `9071f83`; app `4a1827560` through `1add15b16`; CP `4a1e97b`                                 |
-| 2 focused widget activation      | implemented, focused verification passed                                                             | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                                                          | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                                                          | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                                                          | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                                                       | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                           | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                                                           | `33c15ba53`; first-win journeys remain                                                                            |
+| Track                            | Status                                                                                                     | Evidence                                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
+| 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | live test-mode **payment** + webhook finalize on existing t1a; checkout/portal + form 303 already proved   | CP `f135274f` / `71e59d9`; app `635cdb149` / `139a4a8c`; see “Track 3 live payment (2026-08-14)”                  |
+| 4 workspace projection + gateway | paid Growth projection v4 on t1a; catalogue+invoices **code** landed, not live                             | projection v4; CP `2fb9488`; app `6418785c8`                                                                      |
+| 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
+| 8 hosted account operations      | 8a live; 8b committed, not deployed                                                                        | 8a `0b85cd0` / `e8953f9b`; 8b CP `4da4607` + app `804853ae2`                                                      |
+
+## Pickup for critics and later fires
+
+Use this table. Do not rediscover work that already has a sha. Do not
+print the Cloudflare token. Preserve uncommitted onboarding files.
+
+| Unit                           | Where       | Sha                                                 | Live?                    | Critic should prove                                                                                                                                                                                                                                                                                          |
+| ------------------------------ | ----------- | --------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ready CTA + required cloud URL | app         | `1a39cd7d7`                                         | no                       | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`.                                                               |
+| 3-Free create cap              | CP          | `c5a484d`                                           | **yes** `80c8301e`       | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                                                                                     |
+| Limits overlay                 | app         | `31330d85b` / `b0c13a366`                           | **yes** `cb186135`       | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                                                                                   |
+| CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                      | token on CP, skip-deploy | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.                                                                    |
+| Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                       | no                       | `GET /catalogue` stickers: Growth $32 / $300, Pro $62 / $588, Scale $115 / $1068, annual = 10 months. `GET /invoices` hosted https URLs only. UI: four cards, period toggle, invoice table. Paid change-plan still portal.                                                                                   |
+| Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep.md`          | FAIL 1 HIGH              | After limits+billing deploy, re-run the whole sweep. Fixer only for HIGH.                                                                                                                                                                                                                                    |
+| Track 8b–8f                    | CP+app saas | 8b CP `4da4607`, app `804853ae2`; 8c–8f not started | no                       | Switcher: list+Open siblings, never `ws-*` as address, self-host absent. Then transfer/leave, seats+SSO, `N of M`, export/wipe.                                                                                                                                                                              |
+| Plan-matrix critic             | live + spec | `LOOP-VERIFY.md` §H                                 | no                       | Every wired limit + entitlement × Free / Growth / Pro / Scale / trial / expired / canceled / self-host. **UI and server-fn** both refuse. Catalogue vs `definitions.ts` vs `PLAN_GRANTS` vs `PLAN_CATALOGUE` must agree. Fixtures: t1a Growth, t1e trial. No Neon. Do not treat sweep C 15–16 as this cycle. |
+
+**Fleet note:** one deploy thread. **This fire’s Fleet unit** (no
+named skip): one CP deploy of tip `4da4607` (8b; catalogue `2fb9488`
+is already an ancestor of live `0b85cd0`), and one app deploy of
+`804853ae2` + `1a39cd7d7` + `6418785c8` (switcher, Ready/URL,
+catalogue cards). Then one **live** critic on the new digest — not
+vitest, not a later fire. Do not start 8c until 8b is live.
+
+**Do not invert:** Workers-as-app is out; fallback stays Railway.
+Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
+still 1 until 8d.
 
 ## Completed activation work
 
@@ -240,31 +268,585 @@ and 21 tests intentionally skipped.
 Re-check both worktrees before every edit and commit because another agent shares
 the codebase.
 
+## Track 1 live walk (2026-08-14)
+
+Two fresh guerrilla mailboxes, **new** generated hosts (not `walk-*`):
+
+| Mailbox                             | Workspace                         | Host                                          |
+| ----------------------------------- | --------------------------------- | --------------------------------------------- |
+| `walk-t1e-a7ebad@guerrillamail.com` | `inst_01m00kprbrfzzb19f490wga8q2` | `ws-4a048e07941c5e7840e986c0.quackback.co.uk` |
+| `qb-t1a-7caf14b1@guerrillamail.com` | `inst_01m00kq6cdfzzb19gfjz8pt0s7` | `ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk` |
+
+Proved on live `07d5737e` / `98212c18c`:
+
+- Setup chunk `setup._orgId-DOHT4ynR.js` has **no** `node:crypto`. Named-create copy is gone. Old `D7jp-les` 404s need a hard refresh.
+- Sign-in OTP → `/dashboard` 307 → `/setup/$orgId` auto-creates. Heading “Creating your workspace”, copy “nothing you need to choose yet”. Shots: `loop-evidence/t1a/03-setup.png`, `loop-evidence/track1-a-setup.png`.
+- `cp_instances.name` leftover is `''`. Display name is `Untitled workspace` on `cp_workspace_identity`. DB name `qb_<24hex>`.
+- OpeningPane auto-POSTs `/api/instances/:id/open` and 302s to `https://ws-…/admin?ott=`. Shot: `loop-evidence/t1e/04-opening.png`.
+- First identity outbox attempt 401’d (`invalid_projection`); retry delivered. `settings.cloud_identity` is now present.
+- Live `/admin` on `98212c18c` does **not** consume `?ott=` in the loader. A healthy settings load `requireWorkspaceRole`s first and 307s to `/?auth=signin&callbackUrl=/admin`, dropping the token. Client `OttHandler` never runs. First-open error page (`loop-evidence/t1e/05-landed.png`) only kept `?ott=` because settings 500’d before the auth redirect.
+
+Live after this fire (2026-08-14 T17:42Z):
+
+- Docker `31824767863` published `saas` as
+  `ghcr.io/quackbackio/quackback@sha256:1249693eb22277381fbe450cd49368216af1254661e9502870aaa64e7f8c819d`
+  from `6f255842f`.
+- `source.image` set on web/worker/cron-hourly/cron-daily/migrator. Latest
+  `serviceInstanceDeployV2` SUCCESS with matching `meta.imageDigest`:
+  web `2cf7c84e`, worker `de43e4a4`, hourly `a11f9047`, daily `77511e68`,
+  migrator `5ed6f587`. All `us-east4-eqdc4a`. Ready 200.
+- Live CP `e28c7b8e` (`71e59d9`) mints
+  `/auth/open-handoff?ott=&returnTo=/onboarding/workspace`. Confirmed from
+  `/app/src/lib/server/tenant-bootstrap-magic-link.ts` on the running
+  service. Digest `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`.
+  CP remains in `sfo` (unchanged).
+- Re-walk of the two existing `ws-*` owners (no new Neon projects):
+
+  | Mailbox                             | Instance                          | Host                                          |
+  | ----------------------------------- | --------------------------------- | --------------------------------------------- |
+  | `walk-t1e-a7ebad@guerrillamail.com` | `inst_01m00kprbrfzzb19f490wga8q2` | `ws-4a048e07941c5e7840e986c0.quackback.co.uk` |
+  | `qb-t1a-7caf14b1@guerrillamail.com` | `inst_01m00kq6cdfzzb19gfjz8pt0s7` | `ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk` |
+
+  Both still `Untitled workspace`, leftover `cp_instances.name=''`,
+  onboarding already stamped `product_feedback`. POST `/api/instances/:id/open`
+  302s to `https://ws-…/auth/open-handoff?ott=&returnTo=/onboarding/workspace`.
+  Expiry and wrong-workspace GETs return the dedicated invalid page, no
+  session cookie; the wrong-host token remains on the owner DB.
+  Browser consume of a fresh mint then landed on
+  `/?auth=signin&callbackUrl=/admin&error=handoff_failed` (shot
+  `loop-evidence/t1e-oh/03-after-handoff.png`). Root `OttHandler` still
+  treats `?ott=` on `/auth/open-handoff` as a widget portal token and
+  races the loader. The route also still used a `createServerFn` RPC,
+  the same Host-loss shape `76ef4924b` already removed from `/admin`.
+  Rename/storage did not complete (friendly URL never moved; logo key
+  stayed null). Details/outcome UI not re-shown because the handoff
+  never reached `/onboarding/workspace`.
+
+- Fix `c7009ac91`: consume Open and rename transfer on the incoming
+  request via `handoff-cookies.server.ts`; `OttHandler` ignores `/auth/*`.
+  Focused tests 14 passed. Docker `31826475187` **failed** import-protection
+  (`auth.origin-transfer.tsx` imported `handoff-cookies.server`).
+- Fix `78d9f7652`: consume via `createServerOnlyFn` in the route so the
+  client bundle never imports `*.server.ts`. Incoming request / Host
+  preserved (no RPC). Deleted `handoff-cookies.server.ts`. Focused tests
+  13 passed (open-handoff shape 2, ott-handler 2, open-handoff 2,
+  origin-transfer.db 7). Local client Vite build passed import-protection;
+  SSR failed only on a missing local widget bundle (Docker builds that
+  first). Docker `31826887859` (`78d9f7652`) **failed at checkout**, not
+  import-protection. Dispatch passed `sha=78d9f7652` (short); checkout
+  v6 fetched `refs/heads/78d9f7652*` and exited 1. Re-dispatched
+  `31827133552` with `--ref saas` and no `sha` input so checkout uses
+  `refs/heads/saas` (`338cb9f99`, includes `78d9f7652`) and tags `saas`.
+  Queued 2026-08-14T18:06:48Z. Do not treat `31826887859` as a digest
+  source.
+
+Live after this fire (2026-08-14 T18:21Z):
+
+- Docker `31827133552` succeeded from `saas` `338cb9f99` as
+  `ghcr.io/quackbackio/quackback@sha256:cd101b2c1339204ce1de77c50083a54fc8a5639233cab8f422b6ed017305d74c`.
+- `source.image` + `serviceInstanceDeployV2` SUCCESS, matching
+  `meta.imageDigest`, all `us-east4-eqdc4a`:
+  web `0c746ce4`, worker `fd9450b6`, hourly `0515ce99`, daily `c48e6569`,
+  migrator `73e52375`. Ready 200 on gauntlet and both `ws-*` hosts.
+- Re-walk of the same two `ws-*` owners (`t1e-cd` / `t1a-cd`). No new
+  Neon. Onboarding `useCase` / `startingPoint` were cleared so details
+  and outcome could reappear. Fresh mint still 302s to
+  `/auth/open-handoff?ott=&returnTo=/onboarding/workspace`.
+  Expiry and wrong-workspace GETs still fail closed (invalid page, no
+  session cookie; wrong-host token remains).
+- `curl` of a fresh mint: HTTP 307 `Location: /onboarding/workspace`
+  plus `__Secure-better-auth.session_token`; token row deleted. A
+  follow-up `GET /onboarding/workspace` with that cookie is 200.
+- Chromium `page.goto` of the same mint stores the session cookie,
+  follows the 307, then `GET /onboarding/workspace` 307s **back** to
+  the original `/auth/open-handoff?ott=` (spent). The visible page is
+  the dedicated invalid card (`loop-evidence/t1e-cd/03-after-handoff.png`).
+  Details / outcome / rename did not run.
+- Fix `f75518e47`: a remount that already holds the session continues
+  to `returnTo`; the route finishes on a 200 bounce instead of
+  `throw redirect`. Replay without a session still fails closed.
+  Focused tests 14 passed (open-handoff 3, route shape 2, ott-handler
+  2, origin-transfer.db 7). Pushed `saas`. Docker `31829624405`
+  dispatched `--ref saas` empty `sha`.
+
+- Docker `31829624405` succeeded from `saas` `f75518e47` as
+  `ghcr.io/quackbackio/quackback@sha256:c9fbd88ba6152c8ccd3e04eaf3418554e5991d2f03f55a0d4a9e8913ae3dee46`.
+  `source.image` + `serviceInstanceDeployV2` SUCCESS, matching digest,
+  all `us-east4-eqdc4a`: web `51e51404`, worker `ef4f782f`, hourly
+  `4ffc6944`, daily `feedc9b4`, migrator `81629f7d`. Live chunk
+  `auth.open-handoff-CJSBo0Zc.js` contains `location.replace` and
+  “Opening your workspace”.
+- Chromium consume on `ws-4a048e…` now lands on
+  `/onboarding/workspace` with session cookie and “Make this workspace
+  yours” (`loop-evidence/t1e-cd/04-details.png`). Expiry / wrong-workspace
+  / replay without a session still fail closed.
+- Same-browser walk then showed the outcome question
+  (`05-outcome.png`) and the product-feedback starter (`06-after-details.png`).
+  `/admin/settings/general` is still gated until the starter step is
+  finished, so rename / old-host redirect / `/api/storage/…` did not
+  complete. A later OTP wait hit the login form (likely rate-limited).
+  Do not hammer CP sign-in.
+
+### Critic (2026-08-14, remount fix `f75518e47`)
+
+PASS — tip is `f75518e47`, consume stays on the request with no
+`throw redirect`, required tests 7/7, live missing/dummy OTTs fail
+closed with no session cookie. Live image at critic time was still
+`cd101b2c` (`338cb9f99`); that cannot close the browser walk. The
+`c9fbd88b` deploy above landed after that verdict.
+
+Do **not** start custom domains or the billing live bar. Reuse the two
+`ws-*` rows. Finish starter → rename / storage on those hosts. Do not
+mint more Neon projects.
+
+Live after this fire (2026-08-14 T19:25Z):
+
+- App `689c99d13` always issues same-origin `PUT /api/storage/<key>`
+  upload URLs (no object-store CORS). Focused tests 76 passed
+  (matrix 10, scoped-client 16, proxy-upload 9, tenant-placement 16,
+  uploads 9, unscoped 8, asset-url 8). Docker `31832193195` published
+  `ghcr.io/quackbackio/quackback@sha256:8d9da3be4870f2594b0a73937842688f6797936657a7671823ccd4ed375cafcb`.
+  `source.image` + `serviceInstanceDeployV2` SUCCESS, matching digest,
+  `us-east4-eqdc4a`: web `30386b1e`, worker `5d467cd6`, hourly
+  `6cbbe8b0`, daily `89afc3ef`, migrator `ee8160b9`. Ready 200.
+- Live fleet needed `S3_PROXY=true` on the prior image and
+  `QUACKBACK_CONTROL_PLANE_URL=https://cp.quackback.co.uk` on web
+  (worker skip-deploys). Identity rename 502'd as “temporarily
+  unavailable” until the CP origin was set. No new Neon. No CP OTPs;
+  Open minted via `mintOwnerHandoff`.
+- Same two `ws-*` owners:
+
+  | Mailbox                             | Instance                          | System host                                   | Canonical now                 |
+  | ----------------------------------- | --------------------------------- | --------------------------------------------- | ----------------------------- |
+  | `walk-t1e-a7ebad@guerrillamail.com` | `inst_01m00kprbrfzzb19f490wga8q2` | `ws-4a048e07941c5e7840e986c0.quackback.co.uk` | `northfa99f0.quackback.co.uk` |
+  | `qb-t1a-7caf14b1@guerrillamail.com` | `inst_01m00kq6cdfzzb19gfjz8pt0s7` | `ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk` | `south63792f.quackback.co.uk` |
+
+  t1a Chromium: skippable details (`04-details.png`) → outcome
+  (`05-outcome.png`) → existing-board starter (`06-starter.png`) →
+  complete → branding logo → General rename. Session survived on
+  `south63792f` (`11-renamed.png`). Stored logo
+  `/api/storage/logos/2026/08/277bef86-…-logo.png` unchanged across
+  rename.
+  t1e: starter already configured; second rename
+  `northe0d78f` → `northfa99f0`, session survived (`11-renamed.png`).
+  Stored logo `/api/storage/logos/2026/08/a5aa6244-…-logo.png`
+  unchanged. Previous friendly `GET https://northe0d78f.quackback.co.uk/`
+  → 308 `https://northfa99f0.quackback.co.uk/` (path preserved on
+  `/admin/settings/general`). System host stays active (immutable).
+  Shots: `loop-evidence/t1e-rn/`, `loop-evidence/t1a-rn/`.
+
+### Critic (2026-08-14, rename/storage `689c99d13`)
+
+PASS — old friendly `northe0d78f` 308s to `northfa99f0` (path preserved);
+both logos 200 at `/api/storage/…` (not a friendly object-store host);
+system `ws-*` hosts still serve. Critic hit health 200, both canonical
+homes, both system homes, both logo URLs. It did not re-walk Open/OTP
+or independently read Railway `meta.imageDigest` (GraphQL blocked);
+serving digest `sha256:8d9da3be…` on web `30386b1e` was already listed
+by `list-deployments` this fire. Session survival was builder-walk
+evidence, not re-exercised.
+
+## Track 3/5 live billing (2026-08-14)
+
+First unfinished bar among tracks 3–5. Checkout cannot be live-proved:
+`STRIPE_SECRET_KEY` is present and `sk_test_*` but Stripe returns
+`Invalid API Key`. Paid `cp_plans` rows have no monthly/yearly price
+ids. `SEED_DATABASE` is unset on the CP. A full seed with
+`CLUSTER_ENV=gauntlet` would also create the public demo user unless
+`SEED_DEMO_USER=false`. Do not rotate the key from this loop.
+
+Trial activation does not need Stripe. t1a (`south63792f`,
+`inst_01m00kq6cdfzzb19gfjz8pt0s7`) already started a Pro trial at
+starter completion (`2026-08-14T19:24:04.355Z` → `2026-08-28T19:24:04.355Z`,
+projection v2 delivered, no provider fields). t1e (`northfa99f0`,
+`inst_01m00kprbrfzzb19f490wga8q2`) completed its starter at
+`2026-08-14T19:04:59.476Z` before the workspace could reach the CP, so
+it stayed on Free v1.
+
+Live through `POST https://cp.quackback.co.uk/api/v1/internal/billing/activate-trial`
+with the instance credential (no workspace id in the body):
+
+| Call                                  | Result                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| no bearer                             | 401 `unauthorized`                                                                          |
+| t1e + `instanceId`/`returnUrl` extras | 400 `Invalid input`                                                                         |
+| t1e configured-board evidence         | 201 `started`, trial `2026-08-14T19:44:24.774Z` → `2026-08-28T19:44:24.774Z`, projection v2 |
+| same t1e evidence again               | 200 `already_started`, same dates                                                           |
+| t1a original evidence                 | 200 `already_started`, original t1a dates unchanged                                         |
+
+t1e workspace `settings.cloud` accepted projection v2 (`pro`, same
+trial dates, `has_provider=false`). App `57ff32499` retries the same
+stamped evidence from admin plan-notice when Cloud is on and no local
+trial has landed. Focused tests 20 passed (starter-trial 5,
+setup-completion 8, plan-notice 7). That retry is not in the live
+image yet.
+
+### Critic (2026-08-14, starter trial)
+
+PASS — both `ws-*` workspaces have one immutable Pro trial (configured
+board, projection v2 delivered, no provider ids); unauthenticated
+activate-trial fails closed.
+
+HTTP: no bearer and dummy bearer → 401 `unauthorized`. Both canonical
+and both system hosts `/api/health` 200; `/` 307 `/?sort=trending`.
+t1e trial `2026-08-14T19:44:24.774Z` → `2026-08-28T19:44:24.774Z`.
+t1a trial `2026-08-14T19:24:04.355Z` → `2026-08-28T19:24:04.355Z`.
+Critic did not replay with an instance bearer (tables already show one
+event and one anchor each) and did not re-read image digests.
+
+Docker `31834774523` dispatched `--ref saas` for `57ff32499` (includes
+the ledger commit). Not waited; retry is not required for this unit’s
+live proof.
+
+Live after this fire (2026-08-14 T19:55Z):
+
+- Docker `31834774523` succeeded from `saas` `0c42bbe1f` (includes
+  `57ff32499`) as
+  `ghcr.io/quackbackio/quackback@sha256:703eca7db7c22362e7ea5beed5d35a2574e8cb561d1dd078e5e8c7c311a51af2`.
+- `source.image` + `serviceInstanceDeployV2` SUCCESS, matching
+  `meta.imageDigest`, all `us-east4-eqdc4a`:
+  web `d525ae4f`, worker `83a05e54`, hourly `14f7061d`, daily
+  `49d5c98c`, migrator `bce46043`. Worker/crons first landed on `sfo`
+  and were re-pinned then re-deployed V2; digest unchanged.
+- Ready 200 on gauntlet, `northfa99f0`, `south63792f`; health 200 on
+  both immutable `ws-*` hosts.
+- Live web bundle contains `reportStarterTrialIfDue` in
+  `/app/.output/server/_ssr/starter-trial-BOpCsSuc.mjs` (skips when
+  `trialStartedAt` is already set). Both `ws-*` workspaces already
+  hold a trial, so the helper is a no-op on those hosts.
+
+### Critic (2026-08-14, retry-image deploy `0c42bbe1f`)
+
+PASS — all five SUCCESS deploys run
+`sha256:703eca7db7c22362e7ea5beed5d35a2574e8cb561d1dd078e5e8c7c311a51af2`
+in `us-east4-eqdc4a` (not sfo); five health URLs 200; live web
+filesystem defines and calls `reportStarterTrialIfDue`.
+
+| role     | deployment | digest     | region          |
+| -------- | ---------- | ---------- | --------------- |
+| web      | `d525ae4f` | `703eca7d` | us-east4-eqdc4a |
+| worker   | `83a05e54` | `703eca7d` | us-east4-eqdc4a |
+| hourly   | `14f7061d` | `703eca7d` | us-east4-eqdc4a |
+| daily    | `49d5c98c` | `703eca7d` | us-east4-eqdc4a |
+| migrator | `bce46043` | `703eca7d` | us-east4-eqdc4a |
+
+HTTP 200: gauntlet `/api/health/ready` (`role: web`),
+`northfa99f0` ready, `south63792f` ready, both `ws-*` `/api/health`.
+Live web `d525ae4f` replica `50b9fc32`:
+`starter-trial-BOpCsSuc.mjs:26` defines `reportStarterTrialIfDue`;
+`plan-notice-HQY-UayT.mjs:29-30` imports and awaits it. Critic did
+not start a new trial (both workspaces already have one).
+
+## Track 3 live checkout (2026-08-14)
+
+Operator unblocked Stripe **test** on Development (`acct_1SeJT1Rbu1DLQxj3`,
+`sk_test_` / `pk_test_`). Paid `cp_plans` now have monthly+yearly
+`price_` ids (`qb_*_monthly` / `qb_*_yearly`). CP redeployed SUCCESS
+`f135274f` (`sha256:a005414f…`, code still `71e59d9`). Walk3 workspace
+webhook disabled. No new Neon. No live key.
+
+Live through `POST https://cp.quackback.co.uk/api/v1/internal/billing/session`
+with the instance credential (no workspace id or return URL in the body):
+
+| Call                                                               | Result                                            |
+| ------------------------------------------------------------------ | ------------------------------------------------- |
+| no bearer / dummy bearer                                           | 401 `unauthorized`                                |
+| extras `returnUrl` + `instanceId`                                  | 400 `Invalid input`                               |
+| `planId: free`                                                     | 400 `Invalid input`                               |
+| t1a `{ action: checkout, planId: growth, billingPeriod: monthly }` | 200 `checkout.stripe.com` `cs_test_`              |
+| t1e same body                                                      | 200; Stripe metadata `instanceId` is t1e, not t1a |
+| t1a `{ action: portal }` after customer create                     | 200 `billing.stripe.com`                          |
+
+t1a Stripe session (retrieved, test mode):
+
+- `kind=workspace_subscription`
+- `instanceId=inst_01m00kq6cdfzzb19gfjz8pt0s7` (existing)
+- `success_url=https://south63792f.quackback.co.uk/admin/settings/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`
+- `cancel_url=https://south63792f.quackback.co.uk/admin/settings/billing?checkout=cancelled`
+- instance count 16 → 16
+
+t1e return URLs are `https://northfa99f0.quackback.co.uk/admin/settings/billing?checkout=…`.
+
+Hosted pages (Chromium): `loop-evidence/t3-checkout/01-hosted-checkout.png`
+(Subscribe to Quackback Growth $32.00 / month, sandbox, owner email
+prefilled), `02-hosted-portal.png` (Stripe billing portal, no card yet).
+Pay-and-subscribe was filled with the test card but did not leave
+Checkout in the headless run; webhook finalize is not claimed.
+
+Workspace `POST https://south63792f.quackback.co.uk/api/billing/session`
+with browser `Origin: https://…` was 403 `invalid_origin` on
+`703eca7d`: `request.url` is `http://` behind TLS termination. App
+`635cdb149` compares Origin host to Host instead. Focused tests 4
+passed. That commit is now live as `139a4a8c` (see below).
+
+### Critic (2026-08-14, test-mode checkout/portal)
+
+PASS — independent live POST to the instance-scoped gateway created
+test-mode checkout and portal sessions on the existing `ws-*` rows;
+return URLs match the registry; metadata does not create a workspace.
+
+HTTP/Stripe (`loop-evidence/t3-critic/facts.json`, `result.json`):
+`sk_test_`; no bearer and dummy bearer → 401 `unauthorized`; extras
+`returnUrl`/`instanceId` → 400 `Invalid input`; t1a and t1e checkout
+200 `checkout.stripe.com` `cs_test_` `livemode=false`
+`kind=workspace_subscription` with each workspace's own `instanceId`;
+success/cancel URLs are `https://south63792f…` / `https://northfa99f0…`
+`/admin/settings/billing?checkout=…`; t1a portal 200
+`billing.stripe.com`; instance count 16→16, same id set, `createdIds`
+empty. Hosted GET: checkout title “Stripe Checkout”, portal
+`billing.stripe.com`. Critic did not complete a payment. An explore
+critic without a shell only hit public GETs and is discarded.
+
+Live after this fire (2026-08-14 T20:29Z):
+
+- Docker `31837417742` succeeded from `saas` `6d4d9f252` (includes
+  Origin-fix `635cdb149`) as
+  `ghcr.io/quackbackio/quackback@sha256:139a4a8c6873d14c1d4cc129d8f3e2d286ccaaea90e2ab0e86766944b8219570`.
+- `source.image` + `serviceInstanceDeployV2` SUCCESS, matching
+  `meta.imageDigest`, all `us-east4-eqdc4a`:
+  web `683a4b07`, worker `604419ed`, hourly `e7f7170e`, daily
+  `3c34090e`, migrator `6bd4b4d1`. Ready 200 on gauntlet, both
+  `ws-*` system hosts, and both friendly hosts.
+- Live web `683a4b07` replica defines `originMatchesRequestHost` in
+  `/app/.output/server/_ssr/router-CetLJkQa.mjs` and compares Origin
+  to `x-forwarded-host` / `Host`.
+- Workspace Upgrade form on t1a (`south63792f`,
+  `inst_01m00kq6cdfzzb19gfjz8pt0s7`):
+
+  | Call                                           | Result                                           |
+  | ---------------------------------------------- | ------------------------------------------------ |
+  | `Origin: https://south63792f…`, no session     | 500 `HTTPError` (origin accepted; auth required) |
+  | `Origin: https://attacker.test`, owner session | 403 `invalid_origin`                             |
+  | no Origin                                      | 403 `invalid_origin`                             |
+  | `Origin: https://south63792f…`, owner session  | **303** `checkout.stripe.com` `/c/pay/cs_test_…` |
+
+  Instance count 16 → 16. No new Neon. No live Stripe key.
+  Transcript: `loop-evidence/t3-form-303/facts.json`.
+
+### Critic (2026-08-14, workspace form 303 `635cdb149` / `139a4a8c`)
+
+PASS — live owner `POST /api/billing/session` with https Origin 303s to
+test Checkout on existing t1a; foreign/missing Origin 403
+`invalid_origin`; five roles on `sha256:139a4a8c…` in
+`us-east4-eqdc4a` only; instances 16→16.
+
+Independent mint (not builder cookies). HTTP:
+`loop-evidence/t3-form-303/critic.md`, `critic-result.json`. Health
+200 on gauntlet, both friendly hosts, both `ws-*`. Owner +
+`Origin: https://south63792f…` → 303 `checkout.stripe.com`
+`/c/pay/cs_test_…`. Stripe retrieve `livemode=false`
+`kind=workspace_subscription`
+`instanceId=inst_01m00kq6cdfzzb19gfjz8pt0s7`. Critic did not pay.
+
+## Track 3 live payment (2026-08-14)
+
+Fleet lane this fire: `635cdb149` already live (`683a4b07` /
+`sha256:139a4a8c…`, `us-east4-eqdc4a` only). No deploy.
+
+One test-mode payment on existing t1a (`south63792f`,
+`inst_01m00kq6cdfzzb19gfjz8pt0s7`). No new Neon. No live key.
+
+- CP webhook `https://cp.quackback.co.uk/api/billing/webhook` enabled,
+  `checkout.session.completed` on. Walk3 workspace webhook still disabled.
+- Gateway `POST /api/v1/internal/billing/session` `{ action: checkout,
+planId: growth, billingPeriod: monthly }` → 200 `checkout.stripe.com`
+  `cs_test_`. Stripe retrieve: `livemode=false`,
+  `kind=workspace_subscription`, `instanceId=t1a`.
+- Hosted Checkout paid with test card 4242 + GB address. Browser left
+  Stripe for `south63792f.quackback.co.uk` (return hit public home
+  without an owner session). Shots: `loop-evidence/t3-pay/`.
+- Stripe session `complete` / `paid`, subscription `active` (`sub_1U4S…`).
+- `checkout.session.completed` and `customer.subscription.created`
+  processed on `cp_stripe_webhook_events`.
+- t1a `plan_id=growth`, item `si_V4bLN…`, org sub `active`.
+- Billing outbox v4 `delivered` `effectivePlan=growth`
+  `subscriptionStatus=active` `canManageBilling=true`.
+- Workspace `settings.cloud.projection` v4 same commercial fields; no
+  provider ids. Trial dates remain historical.
+- Instances **16 → 16**. t1a and t1e remain.
+
+### Critic (2026-08-14, test-mode payment + webhook)
+
+PASS — independent retrieve of the `cs_test_` session is complete+paid
+on existing t1a; `checkout.session.completed` processed; Growth
+projection delivered without provider ids; instances 16.
+
+HTTP: five health URLs 200. Stripe: `livemode=false` `mode=subscription`
+`status=complete` `payment_status=paid` `kind=workspace_subscription`
+`instanceId=inst_01m00kq6cdfzzb19gfjz8pt0s7` `planId=growth`
+`subscriptionStatus=active` success host `south63792f`. SQL:
+`plan_id=growth`, has item + sub, org `active`, outbox v4 delivered,
+workspace projection v4 `effectivePlan=growth` `hasProviderId=false`.
+`loop-evidence/t3-pay/critic.md`. Did not pay again.
+
+## Per-owner 3-Free cap (local, 2026-08-14)
+
+CP `c5a484d` already on `saas` (no isolated worktree builder). Not
+deployed. `countLiveFreeOwnedBy` is ownerEmail + live lifecycle +
+unpaid (trial counts as Free). Fourth create is 402
+`free_workspace_owner_cap`. Focused tests: 35 passed
+(`instance-fn` 21, `create-without-a-plan` 14).
+
+### Critic (2026-08-14, 3-Free cap `c5a484d`)
+
+PASS — focused tests 35/35; 4th Free is 402 with
+`free_workspace_owner_cap` and does not insert; trial is Free; paid
+item+plan frees a slot; count is `ownerEmail`.
+
+### Live deploy + 4th-Free (2026-08-14)
+
+Fleet: app `635cdb149` still in `cb186135` / web `47e0c7be`. No app
+redeploy. Stripe-live not repeated. No second CP-create builder.
+
+`railway up` CP `saas` `2fb9488` → `80c8301e` SUCCESS
+`sha256:3d10454a…`. Live `free-workspace-cap.ts` present. No owner
+had 3 Free (max 1); two temporary live-Free rows (no Neon) made t1e’s
+count 3; `_internal_createInstance` 402 `free_workspace_owner_cap`;
+no insert/provision; temps deleted; instances 16→16.
+
+### Critic (2026-08-14, live 3-Free cap)
+
+PASS — CP `80c8301e` digest `3d10454a`; live reason string present;
+instances 16; zero leftover cap-probe rows; t1a/t1e remain.
+`loop-evidence/t3-pay/cp-cap-live-critic.md`. Did not create Neon.
+
+## Verify + Track-6 + limits fixer (2026-08-14)
+
+Fleet: `635cdb149` still live (`683a4b07` / `sha256:139a4a8c…`,
+`us-east4-eqdc4a`). No 635cdb149 deploy. Stripe-live not repeated.
+CP-create still `c5a484d` on `saas`, not deployed. No second builder.
+
+Track-6: deleted web `BILLING_API_KEY`, `BILLING_PRICES`,
+`BILLING_WEBHOOK_SECRET` with `--skip-deploys`. Remaining BILLING keys
+on web: none. Latest web deploy unchanged `683a4b07`. Worker/crons/
+migrator already had none. CP `BILLING_PROJECTION_PRIVATE_KEY` kept.
+
+Verify sweep: FAIL one HIGH. `loop-evidence/verify-2026-08-14/sweep.md`.
+Instances 16→16. t1e upgrade 303 `cs_test_`; t1a portal 303; foreign
+Origin 403; old friendly 308.
+
+HIGH: t1a/t1e `settings.tier_limits` null + projection present →
+`getTierLimits` returned OSS unlimited.
+
+Fixer `b0c13a366` (`loop/cloud-limit-overlay`) merged as `31330d85b`.
+`resolveEffectiveTierLimits`: no row + projection uses projection
+floor, not OSS. Focused tests 19/19. Critic (re-run on `saas`): 19/19
+PASS. **Live** as `sha256:cb186135…` (web `47e0c7be`).
+
+## Limits overlay live (2026-08-14)
+
+Fleet this fire: `635cdb149` already live; did not redeploy that
+commit alone. Docker `31843458993` built `saas` `f0186af2b` as
+`ghcr.io/quackbackio/quackback@sha256:cb18613577d7acc9e6882acd1bf52c7a88576f5d4f1be50adf84269f1d66a166`.
+`source.image` + `serviceInstanceDeployV2` SUCCESS, matching digest,
+`us-east4-eqdc4a` only:
+
+| role     | deployment | digest     |
+| -------- | ---------- | ---------- |
+| web      | `47e0c7be` | `cb186135` |
+| worker   | `4576ca28` | `cb186135` |
+| hourly   | `bac96be0` | `cb186135` |
+| daily    | `4b77de9d` | `cb186135` |
+| migrator | `ced6922a` | `cb186135` |
+
+Ready 200 on gauntlet, south, north. Live web bundle defines
+`resolveEffectiveTierLimits` / `cloudProjectionFloor`. Stripe-live not
+repeated. CP-create not redeployed. Custom domains not started.
+
+### Critic (2026-08-14, limits image `cb186135`)
+
+PASS — five roles SUCCESS on `sha256:cb186135…` in `us-east4-eqdc4a`;
+three health URLs 200; replica exports `resolveEffectiveTierLimits`.
+`loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
+
+## This fire (2026-08-14, orchestrator)
+
+Fleet: `635cdb149` already live inside `sha256:cb186135…` / web
+`47e0c7be` / `us-east4-eqdc4a` only. No `source.image` change, no
+`serviceInstanceDeployV2`. Re-proved t1e Upgrade: owner POST
+`/api/billing/session` + `Origin: https://northfa99f0…` → **303**
+`checkout.stripe.com` `/c/pay/cs_test_…`; foreign/missing Origin → 403
+`invalid_origin`; five health URLs 200; instances **16→16**.
+`/tmp/t3-e-upgrade-303/facts.json`. Stripe-live not repeated (t1a
+Growth paid + webhook already critic PASS). CP-create: 3-Free + 8a
+already live (`c5a484d` / `0b85cd0` / `e8953f9b`); no second builder.
+Custom domains not started. No Neon. No live Stripe key.
+
+App unit: `1a39cd7d7` Ready CTA + required friendly URL. Focused tests
+17/17 (`activation-action` 11, `platform-label` 3, `cloud-details-goal`
+3). Not deployed.
+
+Track 8b: isolated worktrees then serial merge. CP `4da4607` (26
+owner-siblings tests). App `804853ae2` (client 8 + switcher 3 +
+sidebar 7 = 18). Not deployed. t1a/t1e are different owners so a live
+list on those hosts is empty until a same-owner sibling exists.
+
+### Critic notes (this fire)
+
+Spawned critic agents were unjoinable (same as earlier fires). Post-merge
+independent re-run on the saas tips: CP 26/26; app onboarding 17/17;
+app 8b 18/18. Live Fleet re-prove on t1e is 303 `cs_test_` / 403
+`invalid_origin` / instances 16. A later fire should attach a fresh
+named critic if a signed-off critic record is required beyond this
+re-run.
+
 ## Next commits
 
-1. ~~**Unit A — deploy the current CP**~~ live `7eca55b3` (`a040f78`).
-   Auto-create SSR screenshot `loop-evidence/unit-a-setup.png`. Setup
-   chunk still fails to hydrate (`node:crypto`).
-2. ~~**Unit B — auto-open when ready**~~ CP `a040f78` deployed. Live
-   OpeningPane cannot run until the setup chunk loads.
-3. ~~**Unit C — host-independent stored assets**~~ app `a796b8885` +
-   `98212c18c`, live
-   `sha256:b3ff89f240c184bec4beefc775bd06959bfb9e2d1c0ef393379ae90e0529fc5f`.
-   Persist is `/api/storage/<key>`; email/widget/OG/vision absolutize
-   from the immutable system host. Focused tests 187 + 33 + 7.
-4. Finish the in-flight CP setup-chunk isolation (do not revert the
-   concurrent `.server.ts` work), redeploy CP, confirm the setup module
-   loads without `node:crypto`.
-5. Fresh-browser prove the deployed identity pair on **new** generated
-   `ws-*.quackback.co.uk` hosts: zero-input create, auto-open OTT,
-   skippable details, rename transfer, relative stored image src.
-   Do not use existing `walk-*` rows.
-6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-7. Add the shared workspace custom-domain manager on
-   `cp_workspace_hostname_claims`, then live-prove hostname and certificate
-   readiness before enabling it.
-8. Run the remaining control-plane billing gateway and first-win journeys.
-   Checkout attaches to an existing workspace only.
+1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
+2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
+3. ~~**Unit C — host-independent stored assets**~~ live through `6f255842f` (`sha256:1249693e…`).
+4. ~~Deploy `6f255842f` + confirm CP `71e59d9`.~~ Digest and `us-east4-eqdc4a` verified. Live consume still bounced via `OttHandler`.
+5. ~~Deploy `f75518e47` (`sha256:c9fbd88b…`).~~ Chromium Open + details + outcome proved.
+6. ~~Live rename / old-friendly 308 / `/api/storage/…` src on the two `ws-*` hosts (`689c99d13`, `sha256:8d9da3be…`).~~
+7. ~~Live starter trial through the instance-scoped CP gateway on both `ws-*` hosts.~~
+8. ~~Live-prove test-mode checkout/portal through the instance-scoped CP
+   gateway on existing `ws-*` workspaces.~~ session + hosted pages +
+   registry return URLs + no new workspace. Webhook paid-finalize
+   still open. Workspace-form 303 is live (`139a4a8c`).
+9. ~~Deploy `57ff32499` so a later starter-miss retries from admin plan-notice.~~
+   Live `0c42bbe1f` / `sha256:703eca7d…`.
+10. ~~Deploy `635cdb149` so the workspace Upgrade form accepts https Origin,
+    then live-prove the 303 from `/api/billing/session`.~~ live
+    `6d4d9f252` / `sha256:139a4a8c…`.
+11. ~~Complete one test-mode payment and prove webhook finalize + projection
+    on the existing workspace (metadata must not create one).~~ t1a Growth
+    paid; webhook processed; projection v4 delivered; instances 16.
+12. ~~**Per-owner cap.**~~ live `80c8301e` / `2fb9488`. 4th Free 402
+    `free_workspace_owner_cap` on t1e owner (temps, no Neon);
+    instances 16.
+13. ~~Hosted-product sweep HIGH (unlimited limits).~~ fixer live;
+    re-sweep row 15 PASS (`limits-resweep.md`). Other Verify rows
+    remain standing (Track 8, Domains card, first-win).
+14. ~~Deploy `31330d85b` (Fleet).~~ live `f0186af2b` / `sha256:cb186135…`.
+15. **Track 8 — hosted account operations.** ~~8a~~ live `0b85cd0` /
+    `e8953f9b` (30-day purge, restore 402 `free_workspace_owner_cap`).
+    **Next fire = deploy + live-verify 8b** (CP `4da4607` + app
+    `804853ae2`) in the same image as Ready `1a39cd7d7` and catalogue
+    cards `6418785c8`. Then a live critic. Then 8c transfer/leave;
+    8d seats + SSO downgrade live row; 8e visible usage; 8f export /
+    wipe / delete CP account. Do not start 8c while 8b is not live.
+    No new Neon unless a finding cannot be proved on current hosts.
+    15b. ~~Commit Ready CTA + required cloud URL.~~ `1a39cd7d7`.
+    **Deploy with 8b** (same app image). Focused tests 17/17.
+16. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
+    Fallback origin `saas-origin.quackback.co.uk` is **active** and
+    CNAMEs (proxied) to the pooled Railway web host — not the old
+    originless `100::` Worker pattern. Customer CNAME target is
+    `customers.quackback.co.uk`. CP client is in `lib/server/cloudflare/`.
+    Next: identity gateway add/verify/make-primary/remove + workspace
+    Domains card. Do not print the token.
+17. Plan & billing page: catalogue + invoices from the control plane
+    (`GET /api/v1/internal/billing/catalogue` and `/invoices`). Cards
+    use public pricing stickers (annual = 10 months). Workspace holds
+    no price list. **Deploy app `6418785c8` with 8b** (CP catalogue
+    API is already in live `0b85cd0`). Live-verify four cards +
+    invoices table on t1a / t1e.
+18. First-win journeys. Checkout attaches to an existing workspace only.
+19. **Plan-matrix critic** (`LOOP-VERIFY.md` §H). Run against the
+    current live pair after the catalogue + Ready deploys (or sooner
+    on existing t1a Growth / t1e trial). Every wired limit and
+    entitlement, UI **and** server-fn. Record advertised vs
+    enforcement drift as HIGH. Unwired keys stay skipped.
 
 ## Stale code to remove
 
@@ -358,24 +940,61 @@ on self-host.
 
 ## Verification still required
 
-- Least-restrictive numeric limit overlay and exact-expiry tests.
-- Cross-workspace checkout/portal isolation.
+Standing program: `LOOP-VERIFY.md` (Verify lane + HIGH SIGNAL Fixers).
+Sweep 2026-08-14: `loop-evidence/verify-2026-08-14/sweep.md` FAIL one
+HIGH (cloud unlimited overlay). Re-sweep
+`loop-evidence/verify-2026-08-14/limits-resweep.md` **PASS** — t1a
+`maxBoards=3`, t1e `maxBoards=10`, no stored row, not unlimited.
+
+- **Plan-matrix critic** (`LOOP-VERIFY.md` §H): every wired numeric
+  limit and entitlement on every active-plan state, UI lock **and**
+  server 402. Not signed yet. t1a = Growth paid, t1e = Pro trial.
+  Catalogue / website vs CP `definitions.ts` / `PLAN_GRANTS` drift
+  is in-scope HIGH. Do not treat the row-15 limits re-sweep as §H.
+- Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
+  Live: Free cap refuses with a named plan; paid overlay lifts it;
+  downgrade leaves existing over-cap resources removable.
+- Plan change / downgrade / cancel / update-card through workspace
+  Plan & billing (checkout + portal). Upgrade 303 and one paid
+  finalize are live on t1a. Catalogue cards + invoice list are
+  **code** (`2fb9488` / `6418785c8`), not live. After deploy: four
+  cards, annual default, invoices table, no local price list.
+- ~~Cross-workspace checkout session metadata.~~ t1e session names t1e;
+  extras `instanceId` cannot retarget. Paid webhook on t1a named t1a;
+  t1e was not paid. Isolation of a second paid workspace still open.
 - Control-plane webhook replay and outbox retry.
-- Created/configured-only trial activation and immutable anchor.
-- Control-plane outage behavior for normal use and billing actions.
+- ~~Created/configured-only trial activation and immutable anchor.~~ live on both `ws-*` hosts.
+- Control-plane outage behavior for normal use and billing actions. App retry
+  helper is live (`57ff32499` in image `703eca7d`); both current `ws-*`
+  workspaces already have a trial so the helper skips.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
+  Ready must have a primary enter action (local onboarding fix still
+  uncommitted on `saas`).
 - Zero-input first-workspace creation and retry after interrupted provisioning.
 - Live rename handoff, old-host redirect, and session survival on a new
   generated host. Local replay/expiry/wrong-host and pinned asset-origin
   tests passed (`1add15b16`, `4a1e97b`).
+- Cloud settings contract: General (name/URL), Plan & billing, Domains
+  (surface + CP gateway; live provider skipped), Emails without platform
+  keys. A cloud workspace must not use the Help Center local domain
+  writer as the cloud manager.
+- Track 8: restore vs 3-Free, switcher, transfer/leave, seats, SSO
+  downgrade, visible usage, export/wipe/account delete.
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
-  provider retry, and cross-workspace isolation. Not a Track 1 close
-  requirement.
+  provider retry, and cross-workspace isolation. Provider client and
+  fallback origin are ready (`de0b038`). Workspace Domains card and
+  identity-gateway wiring are the next builder. Token is on CP only.
 
 ## Blockers
 
-None. The identity/billing pair is already deployed. Further deploys are
-incremental after the current Track 1 unit.
+Stripe **test** payment + webhook finalize is live on t1a (Growth,
+projection v4, instances 16). Unused web `BILLING_*` vars removed
+(`--skip-deploys`; web now `47e0c7be`). Remaining: **same-fire Fleet** — deploy CP `4da4607` + app
+`804853ae2` / `1a39cd7d7` / `6418785c8`, then live critic +
+Verify. Then 8c–8f; Domains card; standing Verify / §H rows.
+Walk3 webhook stays disabled. Live app `f0186af2b` /
+`sha256:cb186135…`. Live CP `e8953f9b` / `sha256:06e7f5d3…`.
+App tip `804853ae2` not in the live image. CP tip `4da4607` not live.
 
 Operational defects carried from the prior lead:
 

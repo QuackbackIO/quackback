@@ -133,15 +133,10 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
     MAX_FILE_SIZE,
   } = await import('@/lib/server/storage/s3')
   const { sniffImageMime } = await import('@/lib/server/content/magic-bytes')
-  const { config } = await import('@/lib/server/config')
 
-  // Two different refusals, deliberately not one. "This deployment does not do
-  // proxy uploads" is a permanent 403; "this workspace's storage credentials do
-  // not resolve" is a 503 an operator can fix. Collapsing them would report a
-  // configuration outage as a policy decision.
-  if (!config.s3Proxy) {
-    return Response.json({ error: 'Proxy uploads not enabled' }, { status: 403 })
-  }
+  // Browser uploads always come through this route. A 403 "proxy off" used
+  // to send the client to a presigned object-store URL, which CORS-fails on
+  // every generated workspace host. Credential outages stay 503.
   if (!isS3Usable()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
@@ -307,11 +302,11 @@ export const Route = createFileRoute('/api/storage/$')({
   server: {
     handlers: {
       /**
-       * PUT /api/storage/*  (S3_PROXY=true only)
+       * PUT /api/storage/*
        *
-       * Server streams the body to S3/MinIO so the browser never needs direct
-       * access to the storage endpoint. Requires a valid HMAC-signed token
-       * issued by generatePresignedUploadUrl.
+       * Server streams the body to the object store so the browser never
+       * needs direct access to the storage endpoint. Requires a valid
+       * HMAC-signed token issued by generatePresignedUploadUrl.
        */
       PUT: handleProxyUpload,
 

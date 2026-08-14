@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const actionSchema = z.discriminatedUnion('action', [
@@ -15,8 +16,7 @@ export const Route = createFileRoute('/api/billing/session')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const origin = request.headers.get('origin')
-        if (!origin || origin !== new URL(request.url).origin) {
+        if (!isSameOriginFormPost(request)) {
           return Response.json({ error: 'invalid_origin' }, { status: 403 })
         }
         const { requireAuth } = await import('@/lib/server/functions/auth-helpers')

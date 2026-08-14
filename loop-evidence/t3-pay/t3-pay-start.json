@@ -1,0 +1,104 @@
+{
+  "at": "2026-08-14T20:54:56.876Z",
+  "unit": "stripe-live-pay-start",
+  "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+  "errors": [],
+  "stripeKeyPrefix": "sk_test_",
+  "stripeAccount": {
+    "id": "acct_1SeJT1Rbu1DLQxj3",
+    "livemode": false,
+    "chargesEnabled": false
+  },
+  "webhookEndpoints": [
+    {
+      "idPrefix": "we_1U4RD",
+      "urlHost": "cp.quackback.co.uk",
+      "urlPath": "/api/billing/webhook",
+      "status": "enabled",
+      "livemode": false,
+      "enabledEventsCount": 7,
+      "hasCheckoutCompleted": true
+    },
+    {
+      "idPrefix": "we_1U46k",
+      "urlHost": "walk3-mss0m53h.quackback.co.uk",
+      "urlPath": "/api/billing/webhook",
+      "status": "disabled",
+      "livemode": false,
+      "enabledEventsCount": 8,
+      "hasCheckoutCompleted": true
+    },
+    {
+      "idPrefix": "we_1Tzxy",
+      "urlHost": "qb2-billing.mortamous.workers.dev",
+      "urlPath": "/webhooks/stripe",
+      "status": "enabled",
+      "livemode": false,
+      "enabledEventsCount": 6,
+      "hasCheckoutCompleted": true
+    },
+    {
+      "idPrefix": "we_1StlD",
+      "urlHost": "www.quackback.io",
+      "urlPath": "/api/stripe/webhook",
+      "status": "enabled",
+      "livemode": false,
+      "enabledEventsCount": 6,
+      "hasCheckoutCompleted": true
+    }
+  ],
+  "instanceCountBefore": 16,
+  "hasT1a": true,
+  "hasT1e": true,
+  "workspaceBefore": {
+    "id": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+    "planId": "free",
+    "status": "active",
+    "hasItem": false,
+    "itemPrefix": null,
+    "hasCustomer": true,
+    "customerPrefix": "cus_V4aU",
+    "hasSub": false,
+    "subscriptionStatus": null,
+    "registryState": "active",
+    "primaryHostname": "south63792f.quackback.co.uk",
+    "baseUrlHost": "south63792f.quackback.co.uk",
+    "trialStartedAt": "2026-08-14T19:24:04.355Z",
+    "trialExpiresAt": "2026-08-28T19:24:04.355Z",
+    "projectionVersion": "2",
+    "latestOutbox": {
+      "projection_version": "2",
+      "status": "delivered",
+      "effective_plan": "pro",
+      "subscription_status": null
+    }
+  },
+  "credentialHashMatch": true,
+  "checkout": {
+    "status": 200,
+    "error": null,
+    "urlHost": "checkout.stripe.com",
+    "urlPathPrefix": "/c/pay/cs_test_b1YPhIigA",
+    "sessionPrefix": "cs_test_"
+  },
+  "stripeSession": {
+    "idPrefix": "cs_test_",
+    "livemode": false,
+    "mode": "subscription",
+    "status": "open",
+    "paymentStatus": "unpaid",
+    "kind": "workspace_subscription",
+    "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+    "planId": "growth",
+    "billingPeriod": "monthly",
+    "successHost": "south63792f.quackback.co.uk",
+    "cancelHost": "south63792f.quackback.co.uk",
+    "customerPrefix": "cus_V4aU"
+  },
+  "customerAddressUpdated": {
+    "country": "GB",
+    "city": "London"
+  },
+  "instanceCountAfterCreate": 16,
+  "didNotCreateWorkspace": true
+}

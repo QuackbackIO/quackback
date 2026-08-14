@@ -353,7 +353,7 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
         throw new Error('Cloud workspace identity is not enabled')
       }
       if (!current.workspaceDetailsSeenAt) {
-        throw new Error('Complete or skip workspace details first')
+        throw new Error('Set your workspace name and URL first')
       }
       await tx
         .update(settings)

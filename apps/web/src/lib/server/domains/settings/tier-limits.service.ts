@@ -5,6 +5,7 @@ import {
   parseBillingProjection,
   projectedLimitsAt,
   type BillingProjection,
+  type ProjectedLimits,
 } from './cloud/billing-projection'
 
 type StoredTierLimits = Partial<Omit<TierLimits, 'features'>> & {
@@ -23,6 +24,67 @@ export function mergeTierLimits(stored: StoredTierLimits | null): TierLimits {
   }
 }
 
+const CLOSED_CLOUD_FEATURES: TierLimits['features'] = {
+  customDomain: false,
+  customOidcProvider: false,
+  ipAllowlist: false,
+  webhooks: false,
+  mcpServer: false,
+  analyticsExports: false,
+  customColors: false,
+  customCss: false,
+  integrations: false,
+}
+
+/** Numeric floor from a projection when the operator has not written a row. */
+export function cloudProjectionFloor(limits: ProjectedLimits): TierLimits {
+  return {
+    maxBoards: limits.maxBoards,
+    maxPosts: limits.maxPosts,
+    maxTeamSeats: limits.maxTeamSeats,
+    maxStatusComponents: limits.maxStatusComponents,
+    maxCustomRoles: limits.maxCustomRoles,
+    maxSendingDomains: limits.maxSendingDomains,
+    aiTokensPerMonth: limits.aiTokensPerMonth,
+    apiRequestsPerMonth: limits.apiRequestsPerMonth,
+    apiRequestsPerMinute: limits.apiRequestsPerMinute,
+    features: { ...CLOSED_CLOUD_FEATURES },
+  }
+}
+
+function featuresFromProjection(projection: BillingProjection, now: Date): TierLimits['features'] {
+  const expired =
+    projection.planLimitsExpireAt !== null &&
+    now.getTime() >= Date.parse(projection.planLimitsExpireAt)
+  const entitlements = expired ? {} : projection.entitlements
+  return {
+    ...CLOSED_CLOUD_FEATURES,
+    customDomain: entitlements.customDomain === true,
+    customOidcProvider: entitlements.sso === true,
+    webhooks: entitlements.webhooks === true,
+    mcpServer: entitlements.mcpServer === true,
+  }
+}
+
+/**
+ * Apply a signed billing projection on top of an optional operator row.
+ *
+ * No row + cloud off (no projection) stays OSS unlimited. No row + a
+ * projection must not inherit that unlimited default — otherwise every
+ * cloud Free/Growth workspace is uncapped.
+ */
+export function resolveEffectiveTierLimits(
+  stored: StoredTierLimits | null,
+  projection: BillingProjection | null,
+  now = new Date()
+): TierLimits {
+  if (!projection) return mergeTierLimits(stored)
+  const baseline = stored ? mergeTierLimits(stored) : cloudProjectionFloor(projection.freeLimits)
+  const numeric = projectedLimitsAt(projection, baseline, now)
+  if (stored) return numeric
+  return { ...numeric, features: featuresFromProjection(projection, now) }
+}
+
 /**
  * Per workspace, because this is the billing ceiling.
  *
@@ -33,7 +95,7 @@ export function mergeTierLimits(stored: StoredTierLimits | null): TierLimits {
  * be caught by asserting the separation directly.
  */
 interface CachedLimits {
-  baseline: TierLimits
+  stored: StoredTierLimits | null
   projection: BillingProjection | null
 }
 
@@ -43,6 +105,7 @@ const LIMITS_KEY = 'limits'
 /**
  * Resolve the active TierLimits for this workspace. Self-hosters with no
  * row in `settings.tier_limits` get OSS_TIER_LIMITS (unlimited everything).
+ * Cloud workspaces apply the signed projection instead of that default.
  * The cache is invalidated when the row is written.
  */
 export async function getTierLimits(now = new Date()): Promise<TierLimits> {
@@ -57,15 +120,13 @@ export async function getTierLimits(now = new Date()): Promise<TierLimits> {
     const stored: StoredTierLimits | null = raw ? (JSON.parse(raw) as StoredTierLimits) : null
     const rawProjection = rows[0]?.cloud?.projection
     cached = {
-      baseline: mergeTierLimits(stored),
+      stored,
       projection: parseBillingProjection(rawProjection),
     }
     cachedLimits.set(LIMITS_KEY, cached)
   }
 
-  return cached.projection
-    ? projectedLimitsAt(cached.projection, cached.baseline, now)
-    : cached.baseline
+  return resolveEffectiveTierLimits(cached.stored, cached.projection, now)
 }
 
 /** Invalidate the active workspace's cache. Call when settings.tier_limits is written. */

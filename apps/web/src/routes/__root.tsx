@@ -36,6 +36,7 @@ export interface RouterContext {
   registeredAuthProviders?: string[]
   acceptLanguageLocale?: SupportedLocale
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
+  billingEnabled?: boolean
 }
 
 // Paths that are allowed before onboarding is complete

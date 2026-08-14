@@ -1,0 +1,31 @@
+{
+  "at": "2026-08-14T21:18:20.374Z",
+  "unit": "hosted-product-verify-2026-08-14",
+  "errors": ["column i.lifecycle does not exist"],
+  "instanceCount": {
+    "before": 16
+  },
+  "instanceIds": {
+    "before": [
+      "inst_01kzxqsehnfagvsgd96p43245q",
+      "inst_01kzy9zwwnfk3tmwbqdmxjq1v9",
+      "inst_01kzyb24vde4f9r8zdb0evmc6c",
+      "inst_01kzycrtqmeh29tvszm2j0ebab",
+      "inst_01kzyfj29afvqteaeam23yy85f",
+      "inst_01kzyfyydmfvqteahv2z03mq9s",
+      "inst_01kzygdffffvqtean75nq11vwz",
+      "inst_01kzzn06yrfvqteb63vwc73caa",
+      "inst_01kzzs7c8pfvqtebc1hshz63xz",
+      "inst_01kzzvahavfvqtebfjp4fnrmd8",
+      "inst_01m00kprbrfzzb19f490wga8q2",
+      "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+      "inst_01m00mqr1zfzzb19nevwzer2hr",
+      "inst_cp_t2crit",
+      "inst_gauntlet_neon_t1",
+      "inst_gauntlet_neon_t2"
+    ],
+    "t1aBefore": true,
+    "t1eBefore": true
+  },
+  "stripeKeyPrefix": "sk_test_"
+}

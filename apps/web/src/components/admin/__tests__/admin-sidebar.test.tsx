@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, fireEvent, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -40,11 +40,12 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ mutate: vi.fn() }),
-  // Launch-checklist badge query; undefined data = checklist state unknown,
-  // which renders the nav item without a count.
-  useQuery: () => ({ data: undefined }),
-  // No cached onboarding data in tests, so the enabled-once-complete check
-  // (which reads the cache directly) always falls back to "keep it enabled".
+  useQuery: ({ queryKey }: { queryKey?: unknown[] }) => {
+    if (Array.isArray(queryKey) && queryKey.includes('owner-workspaces')) {
+      return { data: mockBillingEnabled.current ? mockSiblings.current : undefined }
+    }
+    return { data: undefined }
+  },
   useQueryClient: () => ({ getQueryData: () => undefined }),
   queryOptions: (opts: unknown) => opts,
 }))
@@ -55,6 +56,16 @@ vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 
 vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: vi.fn() }))
 
+const { mockSiblings, mockBillingEnabled } = vi.hoisted(() => ({
+  mockSiblings: { current: [] as Array<{ instanceId: string; displayName: string; url: string | null }> },
+  mockBillingEnabled: { current: false },
+}))
+
+vi.mock('@/lib/server/functions/owner-workspaces', () => ({
+  listOwnerWorkspacesFn: vi.fn(async () => mockSiblings.current),
+  openOwnerWorkspaceFn: vi.fn(),
+}))
+
 import { AdminSidebar } from '../admin-sidebar'
 
 function renderSidebar(userRole: 'admin' | 'member') {
@@ -63,6 +74,7 @@ function renderSidebar(userRole: 'admin' | 'member') {
     session: { user: { name: 'Test', email: 'test@example.com', image: null } },
     settings: { featureFlags: {} },
     userRole,
+    billingEnabled: mockBillingEnabled.current,
   })
   return render(
     <IntlProvider locale="en" messages={{}}>
@@ -72,6 +84,45 @@ function renderSidebar(userRole: 'admin' | 'member') {
     </IntlProvider>
   )
 }
+
+describe('AdminSidebar — workspace switcher', () => {
+  afterEach(() => {
+    mockSiblings.current = []
+    mockBillingEnabled.current = false
+    cleanup()
+  })
+
+  it('is absent when cloud is off', () => {
+    mockBillingEnabled.current = false
+    mockSiblings.current = [
+      { instanceId: 'inst_south', displayName: 'South', url: 'https://south63792f.quackback.co.uk' },
+    ]
+    renderSidebar('admin')
+    expect(screen.queryByRole('button', { name: 'Switch workspace' })).toBeNull()
+  })
+
+  it('is absent when the owner has no other workspaces', () => {
+    mockBillingEnabled.current = true
+    mockSiblings.current = []
+    renderSidebar('admin')
+    expect(screen.queryByRole('button', { name: 'Switch workspace' })).toBeNull()
+  })
+
+  it('lists sibling names and friendly URLs, never a generated host', () => {
+    mockBillingEnabled.current = true
+    mockSiblings.current = [
+      { instanceId: 'inst_south', displayName: 'South', url: 'https://south63792f.quackback.co.uk' },
+      {
+        instanceId: 'inst_raw',
+        displayName: 'Untitled workspace',
+        url: 'https://ws-4a048e07941c5e7840e986c0.quackback.co.uk',
+      },
+    ]
+    renderSidebar('admin')
+    expect(screen.getByRole('button', { name: 'Switch workspace' })).toBeTruthy()
+    expect(screen.queryByText(/ws-4a048e07941c5e7840e986c0/)).toBeNull()
+  })
+})
 
 describe('AdminSidebar — settings cog visibility', () => {
   afterEach(() => cleanup())

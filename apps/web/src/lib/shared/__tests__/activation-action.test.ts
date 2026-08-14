@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { selectActivationAction, type ActivationSurface } from '../activation-action'
+import {
+  resolveOnboardingHandoffCtas,
+  selectActivationAction,
+  type ActivationSurface,
+} from '../activation-action'
+import type { StartingPointState } from '../db-types'
 import type { LaunchStatus } from '../launch-checklist'
 
 const base: LaunchStatus = {
@@ -91,5 +96,60 @@ describe('selectActivationAction', () => {
         widgetOriginHost: 'example.com/path',
       })
     ).toBeNull()
+  })
+
+  const createdBoard: StartingPointState = {
+    outcome: 'product_feedback',
+    resourceType: 'board',
+    resourceId: 'board_1',
+    source: 'wizard',
+    resolution: 'created',
+    completedAt: '2026-08-14T12:00:00.000Z',
+  }
+
+  it('opens the board when the product-feedback handoff has no public path', () => {
+    expect(
+      selectActivationAction({
+        surface: 'onboarding_handoff',
+        startingPoint: createdBoard,
+        status: base,
+      })
+    ).toMatchObject({
+      id: 'open-feedback-board',
+      kind: 'link',
+      destination: '/admin/feedback',
+    })
+  })
+
+  it('keeps a way into the workspace when the board link is copyable', () => {
+    const ctas = resolveOnboardingHandoffCtas({
+      startingPoint: createdBoard,
+      status: {
+        ...base,
+        hasBoards: true,
+        hasPublicBoard: true,
+        publicBoardId: 'board_1',
+        publicBoardPath: '/?board=feedback',
+      },
+    })
+    expect(ctas.primary).toMatchObject({
+      id: 'open-feedback-board',
+      kind: 'link',
+      destination: '/admin/feedback',
+    })
+    expect(ctas.share).toMatchObject({
+      id: 'copy-board-link',
+      kind: 'copy',
+    })
+  })
+
+  it('always returns a primary Ready-step action', () => {
+    const ctas = resolveOnboardingHandoffCtas({
+      startingPoint: createdBoard,
+      status: base,
+    })
+    expect(ctas.primary.kind).toBe('link')
+    expect(ctas.primary.destination).toBe('/admin/feedback')
+    expect(ctas.share).toBeNull()
   })
 })

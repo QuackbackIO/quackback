@@ -276,7 +276,7 @@ function ArtifactPreview({
                       ? 'Draft article'
                       : outcome === 'internal'
                         ? 'Private to your team'
-                        : '/{workspaceSlug}/feedback'
+                        : 'Public board'
                 }
                 values={{ workspaceSlug: workspaceSlug || 'workspace' }}
               />

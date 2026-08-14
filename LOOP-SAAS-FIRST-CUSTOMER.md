@@ -34,14 +34,23 @@ A new SaaS owner can:
 1. receive a generated workspace immediately after control-plane sign-in,
    without supplying a name, URL, region, or plan;
 2. open it through a single-use handoff without authenticating again;
-3. optionally set or skip its name and friendly cloud URL inside the workspace;
+3. set a display name and a required friendly cloud URL inside the
+   workspace (the generated system host is never shown as the address);
 4. answer the outcome question;
 5. receive a useful starter artifact;
 6. follow one outcome-specific primary action;
 7. begin a 14-day Pro trial only after the starter is created or configured;
-8. upgrade or manage billing from the workspace through the control plane; and
+8. upgrade, change plan, downgrade, cancel, and update a card from
+   workspace Plan & billing (control-plane checkout or portal);
 9. keep using the product from the latest local billing projection during a
-   temporary control-plane outage.
+   temporary control-plane outage, with Free as the baseline and named
+   limit/entitlement refusals in the workspace UI **and** the server
+   function, for every wired limit on the active plan;
+10. own up to three live Free workspaces at a time, and unlimited paid
+    workspaces. The count is per signed-in owner, not per organisation;
+11. transfer ownership, leave, switch workspaces from inside the
+    product, see usage before a limit 402, and export or wipe data /
+    delete the control-plane account when they have no live workspaces.
 
 Product-feedback owners are never required to install the widget. Customer
 support owners receive the focused Messenger installation flow. Help Center and
@@ -70,8 +79,14 @@ internal-feedback owners receive their own tailored continuation.
 - Return URLs come from the control-plane registry and an allowlist.
 - Trial end is a clock-based fallback to the projected Free state, not a
   suspension.
-- Invitations are optional except for the explicit internal-feedback outcome.
+- First-win invitations are optional except for the explicit
+  internal-feedback outcome. Invite / remove / change-role still exist
+  as hosted account operations and honour Free seat limits.
 - Branding and integrations are always optional polish.
+- A seat is a workspace teammate (admin/member with a login), not a
+  portal user. Paid cloud plans do not cap seats in this loop.
+- Soft-deleted workspaces are not live. Restore of a Free workspace
+  re-checks the three-Free cap.
 
 ## Wake-up protocol
 
@@ -81,9 +96,26 @@ At the start of each work period:
 2. Inspect status and recent commits in both worktrees.
 3. Preserve concurrent uncommitted work and identify the first incomplete track.
 4. Finish, test, and commit one coherent unit before starting another.
-5. Update `LOOP-PROGRESS.md` with the commit and verification evidence.
-6. Deploy only when the app/control-plane pair is compatible and focused tests
-   are green.
+   The orchestrator may run up to three named lanes at once (see
+   LOOP-PROMPT.md Safe concurrency). Fleet deploys stay single-threaded.
+5. **Deploy in the same fire** when the unit is customer-visible, the
+   pair is compatible, and focused tests are green. See LOOP-PROMPT
+   “Deploy + live-verify”. Isolated children still do not deploy; the
+   orchestrator merges, then takes Fleet. If pickup already has
+   undeployed customer-visible shas, Fleet is the current unit — do
+   not start the next builder on top of them.
+6. Spawn a fresh critic on the **live** URLs after the digest is
+   confirmed (goal, bar, commit range, live URLs only). Record the
+   verdict and digest. A unit is builder then deploy then live critic.
+   Vitest-only or diff-only is not a critic.
+7. After the unit (or when no unit is in flight), run the hosted-product
+   sweep in `LOOP-VERIFY.md` against the current live digest, including
+   the plan-matrix critic in §H if it is unsigned against that pair.
+   Spawn a Fixer only for HIGH SIGNAL findings that are not stop-and-ask.
+8. Update `LOOP-PROGRESS.md` with the commit, digest, verification
+   evidence, and critic verdict. `committed, not deployed` is a fail
+   unless a named skip is recorded. Track 8 is additional in-scope
+   work, after the 3-Free deploy, not a new architecture.
 
 ### Deployment mechanics verified on 2026-08-14
 
@@ -123,12 +155,14 @@ page auto-opens the workspace through a ten-minute, owner-bound,
 single-use OTT. The control-plane dashboard is not a pre-handoff step.
 There is no pre-handoff name, URL, region, or plan form.
 
-After handoff, Workspace details offers a skippable display-name and friendly
-Quackback URL step before the goal question. The same name/URL controls live
-in Admin Settings. The workspace UI calls an instance-scoped control-plane
-identity gateway; the control plane atomically reserves hostnames, owns
-canonical registry state, and fans a signed monotonic identity projection back
-to the workspace.
+After handoff, Workspace details requires a display name and a friendly
+Quackback URL before the goal question. The generated system host is not
+shown or prefilled. The same name/URL controls live in Admin Settings →
+General. Custom domains use a workspace Domains surface on the same
+identity gateway once the hostname provider is live. The workspace UI
+calls an instance-scoped control-plane identity gateway; the control
+plane atomically reserves hostnames, owns canonical registry state, and
+fans a signed monotonic identity projection back to the workspace.
 
 Platform URL changes retain immutable database, namespace, mail, storage, and
 system-host identities; every old friendly host remains permanently reserved as
@@ -175,14 +209,28 @@ Bar:
 - instance credentials cannot act for another workspace;
 - return URLs cannot be supplied by callers;
 - webhook and starter-event replays are idempotent;
-- provider data never appears in projection payloads.
+- provider data never appears in projection payloads;
+- `GET /api/v1/internal/billing/catalogue` returns advertised stickers
+  (same as the public pricing page; annual = ten months) with no
+  provider ids;
+- `GET /api/v1/internal/billing/invoices` returns hosted invoice URLs
+  for this instance only.
 
 ### Track 4: Workspace projection and gateway
 
 Outcome: a workspace verifies signed projections, atomically accepts only a
 higher version, caches the latest projection, and uses it for UI and enforcement.
 Upgrade, Change plan, and Manage billing proxy to the control plane and return a
-303 to its hosted URL.
+303 to its hosted URL. Downgrade, cancel, and update-card use the same
+portal session. Free is the projected baseline; numeric limits and
+entitlements refuse with a named plan; a paid overlay lifts them.
+
+The Plan & billing page is a compact settings surface: current subscription
+strip, four plan cards from the **control-plane catalogue** (prices,
+highlights, add-ons — same stickers as the public pricing page), monthly /
+annual toggle, and an invoices table. The workspace does not keep a parallel
+price list. Invoices are listed through the instance-scoped CP API (hosted
+invoice URLs only; the workspace never stores provider ids).
 
 Bar:
 
@@ -192,7 +240,35 @@ Bar:
 - `now >= expiresAt` falls back exactly to projected Free limits;
 - a control-plane outage preserves existing access and makes billing actions
   retryable;
-- self-host remains on its existing limits path.
+- self-host remains on its existing limits path;
+- Plan & billing renders catalogue cards + invoices from those GETs,
+  not a local price list. Paid workspaces change plan through portal
+  until checkout accepts an existing subscription;
+- every wired numeric limit and entitlement is refused in the workspace
+  UI **and** the server-fn / REST for the active plan (Free, Growth,
+  Pro, Scale, trial-as-Pro, expired, canceled). Catalogue stickers
+  match enforcement. The critic cycle is `LOOP-VERIFY.md` §H.
+
+### Plan-matrix critic
+
+After any change to plan definitions, `PLAN_GRANTS`, the workspace
+`PLAN_CATALOGUE`, `resolveEffectiveTierLimits`, the CP catalogue, or a
+refusing surface — and once per live image pair otherwise — spawn the
+**Plan-matrix** critic in `LOOP-VERIFY.md` §H.
+
+It checks both sides of every wired gate:
+
+- **UI:** locked control or upgrade CTA before submit; `N of M` on
+  finite counts; cheapest plan named; over-cap extras still deletable.
+- **Server:** mutating server-fn / REST returns 402
+  (`tier_limit_exceeded` or `entitlement_required` with a named plan).
+  Reads and deletes of existing extras must not 402.
+
+Enforcement authority is CP `plans/definitions.ts` plus `PLAN_GRANTS`.
+Workspace `PLAN_CATALOGUE.grants` must match. Advertised catalogue /
+public pricing that disagrees is HIGH SIGNAL, not a pass. Unwired keys
+(`aiAssistant`, `apiAccess`, `ipAllowlist`, `aiFeedbackExtraction`,
+API rate counters) are skipped. Do not create Neon for this critic.
 
 ### Track 5: Authoritative starter activation
 
@@ -242,6 +318,102 @@ Bar: logs can derive step conversion, CTA click-through, time to starter, time t
 first win, defer rate, and trial-start failures without email, content, URLs, or
 tokens.
 
+### Track 8: Hosted account operations
+
+Hosting and account operations that sit next to the current bar. Not a
+bigger product roadmap. UI stays in the workspace (or the existing CP
+list for create/open/delete). API for ownership, sibling list, delete,
+restore, and account deletion stays on the control plane.
+
+**What already exists**
+
+- CP list + Create + Open. Soft-delete / restore / purge internals
+  (`instance-lifecycle-fn`, admin cancel-soft-delete). No customer
+  delete/restore on the dashboard.
+- Workspace Settings → Members: invite, remove, change role, custom
+  roles. First-win still only _requires_ an invite for the internal
+  outcome.
+- Trial countdown banner from the billing projection (`trialNotice`).
+- 3-Free cap on **create** (`c5a484d`). Restore does **not** re-check
+  the cap. Soft-deleted rows are not live; restoring one can make a
+  fourth live Free workspace.
+- SSO entitlement is Scale. Workspace auth already fail-opens admin
+  password sign-in when the IdP is not viable after a downgrade. No
+  live sweep row.
+- Plan catalogue + invoices on CP (`2fb9488`); workspace cards
+  (`6418785c8`). Not deployed.
+- Cloudflare for SaaS client (`de0b038`); fallback origin active on
+  Railway. Domains card not wired.
+
+**Seat (settled for this track)**
+
+A seat is a workspace teammate — an admin or member with a login — not
+a portal user, not an end customer. Free applies `maxTeamSeats` from
+`tier_limits`. Advertised stickers are **per seat** (CP catalogue /
+public pricing page). Stripe checkout is still one line item per
+workspace until seat billing is wired. Do not invent Stripe seat
+quantities in 8a–8c; 8d is where seat 402s land. Until 8d changes
+them, the plan-matrix critic treats CP `definitions.ts` numbers as
+enforcement truth (Growth 1, Pro 10, Scale unlimited) and records
+advertised “uncapped paid seats” as drift.
+
+**Units, in order**
+
+1. **8a — Soft-delete, restore, purge, and the 3-Free cap.** Customer
+   can soft-delete a workspace from the CP dashboard (owner). Soft-
+   deleted is not live and does not count toward the three. Restore
+   re-runs `countLiveFreeOwnedBy`; a fourth live Free restore 402s
+   with `free_workspace_owner_cap`. Paid restore is unlimited. Purge
+   is irreversible and only from trash (operator/admin or explicit
+   customer confirm after a stated grace; today's code has `purgeAt`
+   null — pick one grace, write it down, do not leave restore
+   unbounded if we also promise purge). Tests must exercise the real
+   query, not only a stubbed count. Ship with or immediately after
+   the `c5a484d` deploy.
+
+2. **8b — In-product workspace switcher.** Admin chrome in the
+   workspace lists the signed-in owner's other workspaces (display
+   name + friendly URL, never `ws-*` as the address). Choosing one
+   Opens through the existing instance Open door. Self-host: absent.
+   Data from a CP list endpoint; instance credential; no workspace
+   id as authority.
+
+3. **8c — Transfer ownership and leave.** Owner transfers to an
+   existing teammate; CP writes `ownerEmail`; 3-Free cap follows the
+   new owner (receiver at 3 Free cannot accept a Free workspace).
+   Last owner cannot leave. Non-owner can leave. Membership roster
+   stays workspace-owned; the CP membership index updates.
+
+4. **8d — Seats, invites on downgrade, SSO live row.** Invite /
+   remove / change role already in Members — prove they work on
+   cloud. Invite 402s when Free `maxTeamSeats` is reached, named
+   plan (UI lock + server-fn; see §H `maxTeamSeats`). Extra seats
+   after downgrade remain; cannot invite more; can remove. Pending
+   invites remain acceptable. Live: add IdP on Scale → enforce →
+   downgrade → admins still sign in (existing fail-open), new
+   SSO-only enforcement does not lock them out.
+
+5. **8e — Visible usage.** Before the 402: Plan & billing and the
+   plan notice show trial end date (already derived); Settings and
+   the refusing surface show `N of M` for every finite limit
+   (boards, posts, seats, sending domains, AI tokens). CP list
+   shows `N of 3` Free workspaces. AI budget 0 refuses with a named
+   upgrade, not a silent model error. Unlimited (null) is omitted,
+   not printed as a fake fraction. This is the UI half of
+   `LOOP-VERIFY.md` §H; the server half is already the
+   `enforce*` / `requireEntitlement` chokepoints. Missing `N of M`
+   on a wired finite limit is HIGH.
+
+6. **8f — Export, wipe, delete the CP account.** Owner can export
+   workspace data from the workspace (tenant DB; no CP provider
+   keys). Wipe is owner-only, confirmed, then soft-delete (8a).
+   Delete the control-plane account only when the owner has zero
+   live workspaces; refuse otherwise with a named reason.
+
+Bar: each unit has focused tests and a live critic on existing
+`ws-*` hosts where possible. 8a must not create Neon. 8b–8f must
+not either unless a finding cannot be proved on current hosts.
+
 ## Deployment order
 
 The billing-ownership and identity **code** pair is already on the Development
@@ -254,14 +426,18 @@ Remaining identity/domain order:
 1. Close Track 1 without custom domains: `cp_instances.name` is not
    authoritative, rename-transfer tests, then two fresh-mailbox walks on
    **new** generated `ws-*.quackback.co.uk` hosts.
-2. Configure and readiness-check the Cloudflare for SaaS fallback origin and
-   custom-hostname provider in the control plane.
+2. ~~Configure Cloudflare for SaaS fallback origin.~~ Active on
+   `saas-origin.quackback.co.uk` → Railway. Client `de0b038`.
 3. Add the shared custom-domain manager on top of
-   `cp_workspace_hostname_claims`. Enable it only after live provider,
-   certificate, stale-update, cross-workspace, and cleanup-retry probes pass.
-4. Then run control-plane billing gateway and first-win journeys. Checkout
-   must attach to an **existing** workspace; Stripe metadata must not create
-   one.
+   `cp_workspace_hostname_claims` (identity gateway + Settings card).
+   Enable it only after live provider, certificate, stale-update,
+   cross-workspace, and cleanup-retry probes pass.
+4. **Same-fire Fleet** for undeployed customer-visible tips: CP
+   `4da4607` (8b); app `804853ae2` + `1a39cd7d7` + `6418785c8`
+   (switcher, Ready/URL, catalogue cards). Live-critic the digest.
+   Catalogue API `2fb9488` is already in live CP `0b85cd0`. Checkout
+   still attaches to an existing workspace; Stripe metadata must not create
+   one. Then first-win journeys.
 
 Existing `walk-*` / gauntlet instances have registry hostnames and
 `cp_instances.name`, but **zero** `cp_workspace_identity` and **zero**
@@ -279,7 +455,7 @@ direct-workspace billing path only.
 ## Definition of done
 
 - Both `saas` branches are clean and contain small, reviewed commits.
-- All eight tracks meet their focused bars.
+- All tracks (0–8) meet their focused bars.
 - Two fresh owners receive a workspace without pre-handoff questions and
   complete the handoff journey without repeated authentication.
 - Cloud name and platform URL mutations traverse the instance-scoped
@@ -289,7 +465,23 @@ direct-workspace billing path only.
 - Each outcome reaches its tailored starter and never sees an irrelevant widget
   prompt.
 - A real created/configured starter begins one immutable Pro trial.
-- Test-mode checkout and portal actions traverse the control-plane gateway.
+- Test-mode checkout, plan change, portal (downgrade / cancel / card),
+  and webhook finalize traverse the control-plane gateway. Free limits
+  and entitlements refuse with a named plan on **both** the UI and the
+  server-fn; a paid overlay lifts them. The latest `LOOP-VERIFY.md` §H
+  plan-matrix critic is signed against the live image pair.
+- Plan & billing shows CP catalogue cards and invoices (no local
+  price list). Annual stickers are ten months.
+- Cloud settings (name, URL, billing, and domains when enabled) are
+  workspace UI and control-plane API. Self-host shows none of those.
+- Soft-delete / restore honour the three-Free cap. The workspace has
+  an in-product switcher, owner transfer, leave, visible usage, and
+  export / wipe / delete-account paths.
+- Invite / remove / change-role honour Free seat limits; SSO
+  downgrade still lets admins in.
+- The latest `LOOP-VERIFY.md` sweep has no open HIGH SIGNAL findings.
+- Every customer-visible commit is on the live pair with a live
+  critic, or has a named skip (LOOP-PROMPT “Deploy + live-verify”).
 - Cross-workspace isolation, replay, out-of-order projection, retry, outage, and
   exact-expiry probes pass.
 - Self-hosted setup shows no cloud commercial surface.

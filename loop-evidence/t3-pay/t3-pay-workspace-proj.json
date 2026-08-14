@@ -1,0 +1,32 @@
+{
+  "at": "2026-08-14T20:56:26.665Z",
+  "errors": [],
+  "instanceCount": 16,
+  "hasT1a": true,
+  "hasT1e": true,
+  "cloud": {
+    "enabled": true,
+    "projectionKeys": [
+      "version",
+      "renewalAt",
+      "canUpgrade",
+      "freeLimits",
+      "planLimits",
+      "entitlements",
+      "effectivePlan",
+      "cancellationAt",
+      "trialExpiresAt",
+      "trialStartedAt",
+      "canManageBilling",
+      "planLimitsExpireAt",
+      "subscriptionStatus"
+    ],
+    "version": 4,
+    "effectivePlan": "growth",
+    "subscriptionStatus": "active",
+    "canUpgrade": false,
+    "canManageBilling": true,
+    "hasProviderId": false,
+    "trialExpiresAt": "2026-08-28T19:24:04.355Z"
+  }
+}

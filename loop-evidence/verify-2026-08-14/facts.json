@@ -1,0 +1,217 @@
+{
+  "at": "2026-08-14T21:12:23.672Z",
+  "unit": "loop-verify-sweep",
+  "errors": ["relation \"board\" does not exist"],
+  "rows": [],
+  "health": {
+    "gauntlet": {
+      "url": "https://gauntlet.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 202,
+      "snippet": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}"
+    },
+    "t1aReady": {
+      "url": "https://south63792f.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 202,
+      "snippet": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}"
+    },
+    "t1eReady": {
+      "url": "https://northfa99f0.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 202,
+      "snippet": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}"
+    },
+    "t1aSys": {
+      "url": "https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk/api/health",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 15,
+      "snippet": "{\"status\":\"ok\"}"
+    },
+    "t1eSys": {
+      "url": "https://ws-4a048e07941c5e7840e986c0.quackback.co.uk/api/health",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 15,
+      "snippet": "{\"status\":\"ok\"}"
+    },
+    "oldFriendly": {
+      "url": "https://northe0d78f.quackback.co.uk/",
+      "status": 308,
+      "location": "https://northfa99f0.quackback.co.uk/",
+      "setCookieNames": [],
+      "bodyLen": 0,
+      "snippet": ""
+    },
+    "t1aHome": {
+      "url": "https://south63792f.quackback.co.uk/",
+      "status": 307,
+      "location": "/?sort=trending",
+      "setCookieNames": [],
+      "bodyLen": 0,
+      "snippet": ""
+    },
+    "t1eHome": {
+      "url": "https://northfa99f0.quackback.co.uk/",
+      "status": 307,
+      "location": "/?sort=trending",
+      "setCookieNames": [],
+      "bodyLen": 0,
+      "snippet": ""
+    }
+  },
+  "http": {
+    "t1aAdmin": {
+      "url": "https://south63792f.quackback.co.uk/admin",
+      "status": 307,
+      "location": "/admin/feedback",
+      "setCookieNames": [],
+      "bodyLen": 0,
+      "snippet": ""
+    },
+    "t1aGeneral": {
+      "url": "https://south63792f.quackback.co.uk/admin/settings/general",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 161435,
+      "snippet": "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\" style=\"color-scheme:light dark\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/><link rel=\"preload\" as=\"image"
+    },
+    "t1aBilling": {
+      "url": "https://south63792f.quackback.co.uk/admin/settings/billing",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 152437,
+      "snippet": "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\" style=\"color-scheme:light dark\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/><link rel=\"preload\" as=\"image"
+    },
+    "t1aHelpCenter": {
+      "url": "https://south63792f.quackback.co.uk/admin/settings/help-center",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 162010,
+      "snippet": "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\" style=\"color-scheme:light dark\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/><link rel=\"preload\" as=\"image"
+    },
+    "t1aEmails": {
+      "url": "https://south63792f.quackback.co.uk/admin/settings/emails",
+      "status": 404,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 147947,
+      "snippet": "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\" style=\"color-scheme:light dark\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/><link rel=\"preload\" as=\"image"
+    },
+    "t1aInbox": {
+      "url": "https://south63792f.quackback.co.uk/admin/inbox",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 149445,
+      "snippet": "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\" style=\"color-scheme:light dark\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/><link rel=\"preload\" as=\"image"
+    },
+    "t1eBilling": {
+      "url": "https://northfa99f0.quackback.co.uk/admin/settings/billing",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 156268,
+      "snippet": "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\" style=\"color-scheme:light dark\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/><link rel=\"preload\" as=\"image"
+    },
+    "t1eGeneral": {
+      "url": "https://northfa99f0.quackback.co.uk/admin/settings/general",
+      "status": 200,
+      "location": null,
+      "setCookieNames": [],
+      "bodyLen": 161625,
+      "snippet": "<!DOCTYPE html><html lang=\"en\" dir=\"ltr\" style=\"color-scheme:light dark\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/><link rel=\"preload\" as=\"image"
+    },
+    "upgradeT1e": {
+      "url": "https://northfa99f0.quackback.co.uk/api/billing/session",
+      "status": 303,
+      "locationHost": "checkout.stripe.com",
+      "locationPath": "/c/pay/cs_test_b1nu0r5BNYtuX",
+      "hasCsTest": true,
+      "hasCsLive": false,
+      "error": null,
+      "snippet": ""
+    },
+    "upgradeT1eForeign": {
+      "url": "https://northfa99f0.quackback.co.uk/api/billing/session",
+      "status": 403,
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false,
+      "error": "invalid_origin",
+      "snippet": "{\"error\":\"invalid_origin\"}"
+    },
+    "portalT1a": {
+      "url": "https://south63792f.quackback.co.uk/api/billing/session",
+      "status": 303,
+      "locationHost": "billing.stripe.com",
+      "locationPath": "/p/session/test_YWNjdF8xU2VK",
+      "hasCsTest": false,
+      "hasCsLive": false,
+      "error": null,
+      "snippet": ""
+    },
+    "portalT1aNoOrigin": {
+      "url": "https://south63792f.quackback.co.uk/api/billing/session",
+      "status": 403,
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false,
+      "error": "invalid_origin",
+      "snippet": "{\"error\":\"invalid_origin\"}"
+    }
+  },
+  "instanceCountBefore": 16,
+  "hasT1a": true,
+  "hasT1e": true,
+  "t1aCommercial": {
+    "plan_id": "growth",
+    "has_item": true,
+    "subscription_status": "active",
+    "projection_version": "4"
+  },
+  "t1eCommercial": {
+    "plan_id": "free",
+    "has_item": false,
+    "subscription_status": null,
+    "projection_version": "2",
+    "trial_started_at": "2026-08-14T19:44:24.774Z",
+    "trial_expires_at": "2026-08-28T19:44:24.774Z"
+  },
+  "auth": {
+    "t1a": {
+      "consumeStatus": 200,
+      "hasSession": true,
+      "ownerDomain": "guerrillamail.com"
+    },
+    "t1e": {
+      "consumeStatus": 200,
+      "hasSession": true,
+      "ownerDomain": "guerrillamail.com"
+    }
+  },
+  "t1aProjection": {
+    "enabled": true,
+    "effectivePlan": "growth",
+    "subscriptionStatus": "active",
+    "canManageBilling": true,
+    "canUpgrade": false,
+    "hasProviderId": false,
+    "tierLimitsPresent": false,
+    "maxBoards": null
+  }
+}

@@ -60,11 +60,13 @@ Provisioning may remain asynchronous, but the customer sees progress and then
 crosses the existing one-time-token handoff into the workspace.
 
 Display name, the friendly Quackback URL, and custom domains are post-handoff
-workspace settings. The first in-workspace journey shows a skippable Workspace
-details step before the outcome question, and the same controls remain available
-under Admin Settings. A generated `Untitled workspace` name and opaque platform
-hostname are always sufficient to continue, so identity polish cannot block
-activation.
+workspace settings. The first in-workspace journey requires a name and a
+friendly URL before the outcome question; the generated system host is never
+shown or prefilled as the customer address. The same name/URL controls remain
+under Admin Settings → General. Custom domains use a workspace Domains
+surface on the same control-plane identity gateway once the hostname
+provider is live. Self-host keeps local name editing and never renders
+cloud URL or domain controls.
 
 For a cloud workspace, the control plane owns this identity state just as it
 owns billing state. The workspace renders the UI, checks the local administrator
@@ -157,7 +159,13 @@ appear in a workspace projection.
 
 ### Workspace billing UX
 
-Billing remains presented inside the workspace:
+The advertised catalogue (prices, highlights, add-ons) and the invoice
+list live on the control plane. The workspace GETs
+`/api/v1/internal/billing/catalogue` and `/invoices` and renders Plan &
+billing from that payload. It does not keep a parallel price list.
+Provider ids never appear in the workspace.
+
+Billing actions remain presented inside the workspace:
 
 1. An authenticated owner selects Upgrade, Change plan, or Manage billing.
 2. A workspace server endpoint calls the control plane with its instance
@@ -172,6 +180,12 @@ Billing remains presented inside the workspace:
 
 Checkout and billing management fail with a retryable customer message while the
 control plane is unavailable. Normal product access and limit enforcement do not.
+
+Every wired numeric limit and entitlement is refused in the workspace UI
+and in the server function for the active plan. The review cycle is
+`LOOP-VERIFY.md` §H (Free / Growth / Pro / Scale / trial / expired /
+canceled / self-host). Advertised catalogue stickers must match CP
+`plans/definitions.ts` and `PLAN_GRANTS`.
 
 ### Billing projection
 

@@ -1,0 +1,96 @@
+{
+  "at": "2026-08-14T20:58:44.364Z",
+  "unit": "stripe-live-pay-webhook-critic",
+  "errors": [],
+  "health": {
+    "gauntletReady": {
+      "url": "https://gauntlet.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "body": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"r"
+    },
+    "t1aReady": {
+      "url": "https://south63792f.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "body": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"r"
+    },
+    "t1eReady": {
+      "url": "https://northfa99f0.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "body": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"r"
+    },
+    "t1aSystem": {
+      "url": "https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk/api/health",
+      "status": 200,
+      "body": "{\"status\":\"ok\"}"
+    },
+    "t1eSystem": {
+      "url": "https://ws-4a048e07941c5e7840e986c0.quackback.co.uk/api/health",
+      "status": 200,
+      "body": "{\"status\":\"ok\"}"
+    }
+  },
+  "stripeKeyPrefix": "sk_test_",
+  "sessionPrefix": "cs_test_",
+  "stripe": {
+    "idPrefix": "cs_test_",
+    "livemode": false,
+    "mode": "subscription",
+    "status": "complete",
+    "paymentStatus": "paid",
+    "kind": "workspace_subscription",
+    "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+    "planId": "growth",
+    "hasSubscription": true,
+    "subscriptionStatus": "active",
+    "successHost": "south63792f.quackback.co.uk"
+  },
+  "instances": {
+    "count": 16,
+    "hasT1a": true,
+    "hasT1e": true
+  },
+  "workspace": {
+    "plan_id": "growth",
+    "has_item": true,
+    "has_sub": true,
+    "subscription_status": "active",
+    "projection_version": "4"
+  },
+  "webhook": [
+    {
+      "event_type": "checkout.session.completed",
+      "processed": true
+    }
+  ],
+  "outbox": {
+    "projection_version": "4",
+    "status": "delivered",
+    "effective_plan": "growth",
+    "subscription_status": "active",
+    "has_customer_field": false,
+    "has_sub_field": false
+  },
+  "workspaceProjection": {
+    "enabled": true,
+    "version": 4,
+    "effectivePlan": "growth",
+    "subscriptionStatus": "active",
+    "canManageBilling": true,
+    "hasProviderId": false
+  },
+  "checks": {
+    "health200": true,
+    "testSession": true,
+    "paidComplete": true,
+    "metadataT1a": true,
+    "webhookProcessed": true,
+    "instanceGrowth": true,
+    "orgActive": true,
+    "outboxGrowth": true,
+    "workspaceGrowth": true,
+    "noProviderIds": true,
+    "instances16": true
+  },
+  "verdict": "PASS",
+  "reason": "Test-mode checkout paid on existing t1a; webhook processed; growth projection delivered; instances 16."
+}

@@ -1,0 +1,498 @@
+{
+  "at": "2026-08-14T21:14:05.382Z",
+  "probes": [
+    {
+      "url": "https://gauntlet.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 186,
+      "bodyPrefix": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}",
+      "json": {
+        "status": "ok",
+        "role": "web",
+        "checks": {
+          "db": {
+            "ok": true
+          },
+          "migrations": {
+            "ok": true
+          },
+          "workers": {
+            "ok": true,
+            "expected": false,
+            "running": false,
+            "loops": 0,
+            "inFlight": 0,
+            "schemaMissing": 0,
+            "attached": 0,
+            "refused": 0
+          }
+        }
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://gauntlet.quackback.co.uk/api/health",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 102,
+      "bodyPrefix": "{\"status\":\"ok\"}",
+      "json": {
+        "status": "ok"
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://cp.quackback.co.uk/api/health/ready",
+      "status": 404,
+      "location": null,
+      "contentType": "text/html; charset=utf-8",
+      "ms": 270,
+      "bodyPrefix": "<!DOCTYPE html><html lang=\"en\" class=\"h-full\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><link rel=\"stylesheet\" href=\"/assets/styles-BNplsmD_.css\" data-precedence=\"default\"/><title>Quackback Cloud</title><meta name=\"description\" content=\"Managed hosting for Quackback feedback boards.\"/><meta na",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://cp.quackback.co.uk/api/health",
+      "status": 404,
+      "location": null,
+      "contentType": "text/html; charset=utf-8",
+      "ms": 166,
+      "bodyPrefix": "<!DOCTYPE html><html lang=\"en\" class=\"h-full\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><link rel=\"stylesheet\" href=\"/assets/styles-BNplsmD_.css\" data-precedence=\"default\"/><title>Quackback Cloud</title><meta name=\"description\" content=\"Managed hosting for Quackback feedback boards.\"/><meta na",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 171,
+      "bodyPrefix": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}",
+      "json": {
+        "status": "ok",
+        "role": "web",
+        "checks": {
+          "db": {
+            "ok": true
+          },
+          "migrations": {
+            "ok": true
+          },
+          "workers": {
+            "ok": true,
+            "expected": false,
+            "running": false,
+            "loops": 0,
+            "inFlight": 0,
+            "schemaMissing": 0,
+            "attached": 0,
+            "refused": 0
+          }
+        }
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/api/health",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 105,
+      "bodyPrefix": "{\"status\":\"ok\"}",
+      "json": {
+        "status": "ok"
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://northfa99f0.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 161,
+      "bodyPrefix": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}",
+      "json": {
+        "status": "ok",
+        "role": "web",
+        "checks": {
+          "db": {
+            "ok": true
+          },
+          "migrations": {
+            "ok": true
+          },
+          "workers": {
+            "ok": true,
+            "expected": false,
+            "running": false,
+            "loops": 0,
+            "inFlight": 0,
+            "schemaMissing": 0,
+            "attached": 0,
+            "refused": 0
+          }
+        }
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://northfa99f0.quackback.co.uk/api/health",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 105,
+      "bodyPrefix": "{\"status\":\"ok\"}",
+      "json": {
+        "status": "ok"
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 175,
+      "bodyPrefix": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}",
+      "json": {
+        "status": "ok",
+        "role": "web",
+        "checks": {
+          "db": {
+            "ok": true
+          },
+          "migrations": {
+            "ok": true
+          },
+          "workers": {
+            "ok": true,
+            "expected": false,
+            "running": false,
+            "loops": 0,
+            "inFlight": 0,
+            "schemaMissing": 0,
+            "attached": 0,
+            "refused": 0
+          }
+        }
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk/api/health",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 108,
+      "bodyPrefix": "{\"status\":\"ok\"}",
+      "json": {
+        "status": "ok"
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://ws-4a048e07941c5e7840e986c0.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 159,
+      "bodyPrefix": "{\"status\":\"ok\",\"role\":\"web\",\"checks\":{\"db\":{\"ok\":true},\"migrations\":{\"ok\":true},\"workers\":{\"ok\":true,\"expected\":false,\"running\":false,\"loops\":0,\"inFlight\":0,\"schemaMissing\":0,\"attached\":0,\"refused\":0}}}",
+      "json": {
+        "status": "ok",
+        "role": "web",
+        "checks": {
+          "db": {
+            "ok": true
+          },
+          "migrations": {
+            "ok": true
+          },
+          "workers": {
+            "ok": true,
+            "expected": false,
+            "running": false,
+            "loops": 0,
+            "inFlight": 0,
+            "schemaMissing": 0,
+            "attached": 0,
+            "refused": 0
+          }
+        }
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://ws-4a048e07941c5e7840e986c0.quackback.co.uk/api/health",
+      "status": 200,
+      "location": null,
+      "contentType": "application/json;charset=utf-8",
+      "ms": 99,
+      "bodyPrefix": "{\"status\":\"ok\"}",
+      "json": {
+        "status": "ok"
+      },
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/",
+      "status": 307,
+      "location": "/?sort=trending",
+      "contentType": null,
+      "ms": 257,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://northfa99f0.quackback.co.uk/",
+      "status": 307,
+      "location": "/?sort=trending",
+      "contentType": null,
+      "ms": 248,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk/",
+      "status": 307,
+      "location": "/?sort=trending",
+      "contentType": null,
+      "ms": 118,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://ws-4a048e07941c5e7840e986c0.quackback.co.uk/",
+      "status": 307,
+      "location": "/?sort=trending",
+      "contentType": null,
+      "ms": 108,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://cp.quackback.co.uk/",
+      "status": 307,
+      "location": "/login",
+      "contentType": null,
+      "ms": 165,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://cp.quackback.co.uk/login",
+      "status": 200,
+      "location": null,
+      "contentType": "text/html; charset=utf-8",
+      "ms": 164,
+      "bodyPrefix": "<!DOCTYPE html><html lang=\"en\" class=\"h-full\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><link rel=\"preload\" as=\"image\" href=\"/logo.svg\"/><link rel=\"stylesheet\" href=\"/assets/styles-BNplsmD_.css\" data-precedence=\"default\"/><title>Quackback Cloud</title><meta name=\"description\" content=\"Managed ",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": true
+    },
+    {
+      "url": "https://cp.quackback.co.uk/dashboard",
+      "status": 307,
+      "location": "/login",
+      "contentType": null,
+      "ms": 164,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://cp.quackback.co.uk/signup",
+      "status": 200,
+      "location": null,
+      "contentType": "text/html; charset=utf-8",
+      "ms": 171,
+      "bodyPrefix": "<!DOCTYPE html><html lang=\"en\" class=\"h-full\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><link rel=\"preload\" as=\"image\" href=\"/logo.svg\"/><link rel=\"stylesheet\" href=\"/assets/styles-BNplsmD_.css\" data-precedence=\"default\"/><title>Quackback Cloud</title><meta name=\"description\" content=\"Managed ",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/admin",
+      "status": 307,
+      "location": "/?auth=signin&callbackUrl=%2Fadmin",
+      "contentType": null,
+      "ms": 165,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/admin/inbox",
+      "status": 307,
+      "location": "/?auth=signin&callbackUrl=%2Fadmin",
+      "contentType": null,
+      "ms": 124,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/admin/feedback",
+      "status": 307,
+      "location": "/admin/feedback?sort=newest",
+      "contentType": null,
+      "ms": 111,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/admin/settings/general",
+      "status": 307,
+      "location": "/?auth=signin&callbackUrl=%2Fadmin",
+      "contentType": null,
+      "ms": 133,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/admin/settings/billing",
+      "status": 307,
+      "location": "/?auth=signin&callbackUrl=%2Fadmin",
+      "contentType": null,
+      "ms": 140,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://south63792f.quackback.co.uk/admin/settings/help-center",
+      "status": 307,
+      "location": "/?auth=signin&callbackUrl=%2Fadmin",
+      "contentType": null,
+      "ms": 140,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    },
+    {
+      "url": "https://northfa99f0.quackback.co.uk/admin",
+      "status": 307,
+      "location": "/?auth=signin&callbackUrl=%2Fadmin",
+      "contentType": null,
+      "ms": 203,
+      "bodyPrefix": "",
+      "json": null,
+      "hasCreatingWorkspace": false,
+      "hasOpeningWorkspace": false,
+      "hasNamedCreate": false,
+      "hasWsPrefill": false,
+      "hasSignin": false
+    }
+  ]
+}

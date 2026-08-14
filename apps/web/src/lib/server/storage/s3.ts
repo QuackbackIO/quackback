@@ -117,9 +117,8 @@ interface StoragePlacement {
   forcePathStyle: boolean
   publicUrl?: string
   /**
-   * Origin used for same-host upload proxy URLs (`PUT /api/storage`). Stored
-   * asset refs themselves are host-independent (`/api/storage/<key>`); email,
-   * widget, and OG absolutize from the immutable system host at the leaf.
+   * Origin used when a leaf must absolutize a stored `/api/storage` ref
+   * (email, widget, OG). Browser PUTs and persisted refs stay relative.
    */
   originUrl: string
 }
@@ -700,8 +699,12 @@ export interface PresignedUploadUrl {
 }
 
 /**
- * Generate a presigned URL for uploading a file. When S3_PROXY is enabled,
- * returns a server-proxied URL instead of a direct presigned S3 URL.
+ * Mint a same-origin PUT target for a browser upload.
+ *
+ * The browser never talks to the object store. Workspace hosts have no CORS
+ * grant there, and a friendly URL rename must not change the stored ref or
+ * the upload path. Persist stays `/api/storage/<key>`; the PUT is the same
+ * path with a short-lived HMAC.
  *
  * @param key - Storage key (path within bucket), e.g., "changelog-images/abc123/image.jpg"
  * @param contentType - MIME type of the file, e.g., "image/jpeg"
@@ -712,19 +715,11 @@ export async function generatePresignedUploadUrl(
   contentType: string,
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
-  // `key` stays bare in everything that leaves here: the returned `key` is what
-  // the caller stores in the database, and `publicUrl` is the host-independent
-  // `/api/storage/<key>` ref built from it. Only the presigned URL names the
-  // object, and only the client composes that.
+  // Resolve the workspace first so a pooled call with no scope still refuses.
+  // The client is not used to presign: the browser PUTs to /api/storage.
+  await currentWorkspaceStorage()
   const publicUrl = buildPublicUrl(getStoragePlacement(), key)
-
-  if (config.s3Proxy) {
-    const uploadUrl = buildProxyUploadUrl(getStorageSigningSecret(), key, contentType, expiresIn)
-    return { uploadUrl, publicUrl, key }
-  }
-
-  const storage = await currentWorkspaceStorage()
-  const uploadUrl = await storage.presignPut(key, contentType, expiresIn)
+  const uploadUrl = buildProxyUploadUrl(getStorageSigningSecret(), key, contentType, expiresIn)
   return { uploadUrl, publicUrl, key }
 }
 
@@ -748,12 +743,9 @@ function buildProxyUploadUrl(
   contentType: string,
   expiresIn: number
 ): string {
-  const origin = getStoragePlacement().originUrl
-  if (!origin) throw new Error('BASE_URL must be set to use S3_PROXY upload')
   const exp = Date.now() + expiresIn * 1000
   const sig = proxyUploadSig(secret, key, contentType, exp)
-  const base = origin.replace(/\/$/, '')
-  return `${base}/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
+  return `/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
 }
 
 /**

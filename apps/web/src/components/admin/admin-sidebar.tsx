@@ -37,6 +37,11 @@ import type { LatestVersionResult } from '@/lib/server/functions/version'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { setAgentAvailabilityFn } from '@/lib/server/functions/conversation'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { listOwnerWorkspacesFn, openOwnerWorkspaceFn } from '@/lib/server/functions/owner-workspaces'
+import {
+  friendlySiblingAddress,
+  WorkspaceSwitcher,
+} from '@/components/admin/workspace-switcher'
 import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
 import { useIntl } from 'react-intl'
 import { usePermission } from '@/lib/client/hooks/use-permission'
@@ -153,7 +158,7 @@ function NavItem({
 export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
   const intl = useIntl()
   const router = useRouter()
-  const { session, settings, userRole } = useRouteContext({ from: '__root__' })
+  const { session, settings, userRole, billingEnabled } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // The settings area is admin-only (every tab gates on requireAuth(['admin'])).
   // Members would only ever land on the access-denied page, so hide the cog.
@@ -240,6 +245,20 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
     window.location.href = '/'
   }
 
+  const siblingsQuery = useQuery({
+    queryKey: ['admin', 'owner-workspaces'],
+    queryFn: () => listOwnerWorkspacesFn(),
+    enabled: Boolean(billingEnabled),
+  })
+  const siblings = siblingsQuery.data ?? []
+
+  const openSibling = useMutation({
+    mutationFn: (instanceId: string) => openOwnerWorkspaceFn({ data: { instanceId } }),
+    onSuccess: ({ url }) => {
+      window.location.assign(url)
+    },
+  })
+
   return (
     <>
       {/* Desktop Sidebar */}
@@ -298,6 +317,10 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   isActive={isNavActive(pathname, '/admin/settings')}
                 />
               )}
+
+              {billingEnabled && siblings.length > 0 ? (
+                <WorkspaceSwitcher siblings={siblings} onOpen={(id) => openSibling.mutate(id)} />
+              ) : null}
 
               {/* Notifications */}
               <NotificationBell className="size-9" />
@@ -499,6 +522,24 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   Settings
                 </Link>
               )}
+              {billingEnabled && siblings.length > 0
+                ? siblings.map((sibling) => (
+                    <button
+                      key={sibling.instanceId}
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false)
+                        openSibling.mutate(sibling.instanceId)
+                      }}
+                      className="flex flex-col items-start gap-0.5 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      <span>{sibling.displayName}</span>
+                      {friendlySiblingAddress(sibling.url) ? (
+                        <span className="text-[11px]">{friendlySiblingAddress(sibling.url)}</span>
+                      ) : null}
+                    </button>
+                  ))
+                : null}
               <Link
                 to="/"
                 onClick={() => setMobileMenuOpen(false)}

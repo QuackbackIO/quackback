@@ -18,7 +18,7 @@ import {
 } from '@/lib/server/functions/activation'
 import { pickOnboardingStep } from './-onboarding-step'
 import type { StartingPointState } from '@/lib/shared/db-types'
-import { selectActivationAction } from '@/lib/shared/activation-action'
+import { resolveOnboardingHandoffCtas } from '@/lib/shared/activation-action'
 
 export const Route = createFileRoute('/onboarding/_layout/complete')({
   loader: async ({ context }) => {
@@ -38,12 +38,10 @@ export const Route = createFileRoute('/onboarding/_layout/complete')({
 function ActivationBridge() {
   const intl = useIntl()
   const navigate = useNavigate()
-  const { workspaceName, workspaceSlug, startingPoint, resourceLabel, starterBoard } =
-    Route.useLoaderData()
+  const { workspaceName, startingPoint, resourceLabel, starterBoard } = Route.useLoaderData()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const action = selectActivationAction({
-    surface: 'onboarding_handoff',
+  const { primary, share } = resolveOnboardingHandoffCtas({
     startingPoint,
     status: {
       hasBoards: Boolean(starterBoard),
@@ -63,8 +61,7 @@ function ActivationBridge() {
     setError('')
     try {
       await acknowledgeActivationHandoffFn()
-      if (!action || action.kind === 'copy') return
-      window.location.assign(action.destination)
+      window.location.assign(primary.destination)
     } catch (err) {
       setError(
         err instanceof Error
@@ -114,8 +111,8 @@ function ActivationBridge() {
       <BridgeArtifact
         startingPoint={startingPoint}
         workspaceName={workspaceName}
-        workspaceSlug={workspaceSlug}
         resourceLabel={resourceLabel}
+        publicBoardPath={starterBoard?.publicPath ?? null}
       />
 
       <div aria-live="polite">
@@ -126,28 +123,30 @@ function ActivationBridge() {
         )}
       </div>
 
-      {action?.kind === 'copy' ? (
-        <ActivationActionButton
-          action={action}
-          surface="onboarding_handoff"
-          className="h-11 min-w-56"
-          onCompleted={async () => {
-            await acknowledgeActivationHandoffFn()
-            await navigate({ to: '/admin/feedback' })
-          }}
-        />
-      ) : action ? (
+      <div className="flex flex-col items-center gap-2">
         <Button onClick={continueToAction} disabled={isLoading} className="h-11 min-w-56">
           {isLoading ? (
             <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           ) : (
             <>
-              {action.label}
+              {primary.label}
               <ArrowRightIcon className="h-4 w-4" />
             </>
           )}
         </Button>
-      ) : null}
+        {share ? (
+          <ActivationActionButton
+            action={share}
+            surface="onboarding_handoff"
+            variant="ghost"
+            className="h-11 min-w-56"
+            onCompleted={async () => {
+              await acknowledgeActivationHandoffFn()
+              await navigate({ to: '/admin/feedback' })
+            }}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -155,13 +154,13 @@ function ActivationBridge() {
 function BridgeArtifact({
   startingPoint,
   workspaceName,
-  workspaceSlug,
   resourceLabel,
+  publicBoardPath,
 }: {
   startingPoint: StartingPointState
   workspaceName: string
-  workspaceSlug: string
   resourceLabel: string | null
+  publicBoardPath: string | null
 }) {
   const outcome = startingPoint.outcome
   const Icon =
@@ -196,7 +195,7 @@ function BridgeArtifact({
             ? 'Ready to continue'
             : outcome === 'internal'
               ? 'Private board'
-              : `/${workspaceSlug || 'workspace'}/feedback`
+              : (publicBoardPath ?? 'Public feedback board')
   return (
     <div className="mx-auto flex max-w-lg items-center gap-4 rounded-2xl border bg-card p-6 text-left">
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
