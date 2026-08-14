@@ -173,10 +173,12 @@ and say so.
 
 ### F. Custom domains (live provider)
 
-Skipped until the operator asks to start Cloudflare for SaaS. When that
-integration is live, the same sweep adds: add → DNS instructions →
-certificate ready → make primary → old host redirects → remove →
-cross-workspace claim refused → stale provider update retried.
+Provider is started (fallback origin active, CNAME target
+`customers.quackback.co.uk`). Sweep adds, once the workspace Domains
+card is wired: add → DNS instructions → certificate ready → make
+primary → old host redirects → remove → cross-workspace claim refused
+→ stale provider update retried. Until that card exists, row 9 is
+HIGH if a cloud workspace still uses the Help Center local writer.
 
 Do not fail the sweep for copy nits, spacing, unused translations, or a
 parked row. Those are LOW.

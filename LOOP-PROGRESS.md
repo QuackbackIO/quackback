@@ -705,8 +705,13 @@ item+plan frees a slot; count is `ownerEmail`. Not live (CP still
     8d seats + SSO downgrade live row; 8e visible usage; 8f export /
     wipe / delete CP account. No new Neon unless a finding cannot
     be proved on current hosts.
-15. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-    Do not start this until the operator asks.
+15. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
+    Fallback origin `saas-origin.quackback.co.uk` is **active** and
+    CNAMEs (proxied) to the pooled Railway web host — not the old
+    originless `100::` Worker pattern. Customer CNAME target is
+    `customers.quackback.co.uk`. CP client is in `lib/server/cloudflare/`.
+    Next: identity gateway add/verify/make-primary/remove + workspace
+    Domains card. Do not print the token.
 16. First-win journeys. Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
@@ -841,8 +846,9 @@ Stripe **test** payment + webhook finalize is live on t1a (Growth,
 projection v4, instances 16). Remaining: deploy CP `c5a484d` (Fleet)
 then live-prove the 4th Free 402; Track 6 boundary scan and unused
 Railway `BILLING_*`. Walk3 workspace webhook was disabled by the
-operator. Do not start the Cloudflare for SaaS provider until asked.
-The workspace Domains settings surface is specified in `LOOP-VERIFY.md`.
+operator. Cloudflare for SaaS provider is started: fallback origin
+active on Railway, token on CP, client landed. Workspace Domains UI
+and identity-gateway wiring remain.
 
 The identity/billing pair is otherwise deployed. Further deploys are
 incremental. Live app `6d4d9f252` / `sha256:139a4a8c…`. Live CP

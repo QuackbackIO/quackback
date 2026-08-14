@@ -290,9 +290,11 @@ billing path. They do not close tracks 3–7.
    - stored image src stays `/api/storage/…` across rename
    - replay / expiry / wrong-workspace OTT fail closed
 
-Do **not** start the Cloudflare for SaaS provider until the operator
-asks. The workspace Domains settings _surface_ and CP gateway belong
-in `LOOP-VERIFY.md` now; live add/verify/certificate stays skipped. Do not raise
+The operator unblocked Cloudflare for SaaS (token on the control plane,
+not in git). Fallback origin is the pooled Railway web service
+(`saas-origin.quackback.co.uk`), not a Worker. Customers CNAME to
+`customers.quackback.co.uk`. Live add/verify/certificate is in scope.
+Do not raise
 `MIN_SCHEMA_VERSION` unless the walk requires it and every enrolled
 workspace is already at the new floor.
 
