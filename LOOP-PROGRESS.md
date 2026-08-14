@@ -30,9 +30,9 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: local tip includes the incoming-request consume fix (see
-  “Track 1 live walk”). Live image is still `6f255842f` /
-  `sha256:1249693eb22277381fbe450cd49368216af1254661e9502870aaa64e7f8c819d`
+- Workspace: `c7009ac91` (live image still `6f255842f` /
+  `sha256:1249693eb22277381fbe450cd49368216af1254661e9502870aaa64e7f8c819d`;
+  Docker `31826475187` is building the consume-path fix)
 - Control plane: `71e59d9` live as `e28c7b8e` /
   `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
 - Last known deployed workspace: `6f255842f` (2026-08-14)
@@ -288,9 +288,9 @@ Live after this fire (2026-08-14 T17:42Z):
   stayed null). Details/outcome UI not re-shown because the handoff
   never reached `/onboarding/workspace`.
 
-- Fix committed: consume Open and rename transfer on the incoming
+- Fix `c7009ac91`: consume Open and rename transfer on the incoming
   request via `handoff-cookies.server.ts`; `OttHandler` ignores `/auth/*`.
-  Focused tests 14 passed. Image for that fix is not live yet.
+  Focused tests 14 passed. Docker `31826475187` is building it.
 
 Do **not** start custom domains or the billing live bar. Reuse the two
 `ws-*` rows after the consume-path image is on web (`us-east4-eqdc4a`).
