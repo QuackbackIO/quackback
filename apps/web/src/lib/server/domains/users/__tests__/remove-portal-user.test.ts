@@ -6,7 +6,7 @@ const hoisted = vi.hoisted(() => ({
   updateSet: vi.fn(),
   updateWhere: vi.fn(),
   deleteWhere: vi.fn(),
-  eq: vi.fn((col: unknown, val: unknown) => ({ col, val })),
+  eq: vi.fn((...args: unknown[]) => ({ col: args[0], val: args[1] })),
   and: vi.fn((...args: unknown[]) => args),
   cacheDel: vi.fn(),
 }))
