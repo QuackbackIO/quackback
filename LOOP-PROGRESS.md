@@ -13,6 +13,21 @@ superseded and will be removed after the gateway and signed projection path are
 in place. Existing direct-billing live evidence demonstrates provider behavior
 only; it does not close the new architecture tracks.
 
+Workspace creation and cloud identity are also control-plane-owned. The first
+workspace must now be created immediately after control-plane sign-in with
+generated immutable identifiers and no name, URL, region, or plan form. Name,
+friendly platform URL, and custom domains move into skippable post-handoff and
+Admin Settings UI; cloud mutations traverse the instance-scoped control-plane
+client and return as signed monotonic identity projections.
+
+Development infrastructure supports registry-only platform URL changes: the
+live Railway web service owns `*.quackback.co.uk`, Cloudflare is authoritative
+DNS, and the wildcard CNAME reaches that one pooled service with a matching
+wildcard certificate. Arbitrary customer domains are not covered by that
+certificate. The existing control-plane ownership verifier and registry writer
+therefore remain incomplete until a control-plane-owned Cloudflare for SaaS
+Custom Hostnames integration proves both hostname and SSL readiness.
+
 ## Current revisions
 
 - Workspace: `0201c6327`
@@ -28,16 +43,16 @@ The prior web deployment `03ea102e` runs image digest `sha256:596d77e3…` in
 
 ## Tracks
 
-| Track                            | Status                                   | Evidence                                                |
-| -------------------------------- | ---------------------------------------- | ------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed | `d2b8accca`, `029727e26`                                |
-| 1 owner handoff + starter        | implemented, focused verification passed | app `9f0ff90e8`, `31b07cf03`; CP `957beda`              |
-| 2 focused widget activation      | implemented, focused verification passed | `13df888fa`                                             |
-| 3 CP billing foundation          | not started under revised boundary       | CP catalogue/ledger/gateway/projection required         |
-| 4 workspace projection + gateway | projection consumer implemented          | `7d18b3cea`, `9eb85a9e6`; gateway actions remain        |
-| 5 authoritative starter trial    | not started                              | workspace still calls local trial start and must change |
-| 6 remove workspace billing       | not started                              | direct provider integration remains                     |
-| 7 PLG + first-win proof          | infrastructure implemented               | `33c15ba53`; first-win journeys remain                  |
+| Track                            | Status                                        | Evidence                                                |
+| -------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed      | `d2b8accca`, `029727e26`                                |
+| 1 zero-input create + identity   | handoff/starter done; new identity scope open | app `9f0ff90e8`, `31b07cf03`; CP `957beda`              |
+| 2 focused widget activation      | implemented, focused verification passed      | `13df888fa`                                             |
+| 3 CP billing foundation          | not started under revised boundary            | CP catalogue/ledger/gateway/projection required         |
+| 4 workspace projection + gateway | projection consumer implemented               | `7d18b3cea`, `9eb85a9e6`; gateway actions remain        |
+| 5 authoritative starter trial    | not started                                   | workspace still calls local trial start and must change |
+| 6 remove workspace billing       | not started                                   | direct provider integration remains                     |
+| 7 PLG + first-win proof          | infrastructure implemented                    | `33c15ba53`; first-win journeys remain                  |
 
 ## Completed activation work
 
@@ -70,8 +85,11 @@ commit because another agent shares the codebase.
 
 1. Control-plane catalogue/readiness/projection primitives.
 2. Control-plane starter activation and signed fan-out.
-3. Workspace billing gateway actions.
-4. Delete workspace provider integration and obsolete configuration.
+3. Control-plane zero-input identity model, gateway, and projection.
+4. Workspace post-handoff identity UI and cloud Settings gateway.
+5. Control-plane Cloudflare for SaaS custom-hostname integration.
+6. Workspace billing gateway actions.
+7. Delete workspace provider integration and obsolete configuration.
 
 ## Verification still required
 
@@ -82,6 +100,11 @@ commit because another agent shares the codebase.
 - Created/configured-only trial activation and immutable anchor.
 - Control-plane outage behavior for normal use and billing actions.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
+- Zero-input first-workspace creation and retry after interrupted provisioning.
+- Cloud URL collision, rename handoff, old-host redirect, and stable asset-origin
+  behavior.
+- Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
+  provider retry, and cross-workspace isolation.
 
 ## Blockers
 

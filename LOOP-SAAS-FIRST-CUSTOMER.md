@@ -19,14 +19,16 @@ co-author trailers.
 
 A new SaaS owner can:
 
-1. create one workspace from the control plane;
+1. receive a generated workspace immediately after control-plane sign-in,
+   without supplying a name, URL, region, or plan;
 2. open it through a single-use handoff without authenticating again;
-3. answer only the outcome question;
-4. receive a useful starter artifact;
-5. follow one outcome-specific primary action;
-6. begin a 14-day Pro trial only after the starter is created or configured;
-7. upgrade or manage billing from the workspace through the control plane; and
-8. keep using the product from the latest local billing projection during a
+3. optionally set or skip its name and friendly cloud URL inside the workspace;
+4. answer the outcome question;
+5. receive a useful starter artifact;
+6. follow one outcome-specific primary action;
+7. begin a 14-day Pro trial only after the starter is created or configured;
+8. upgrade or manage billing from the workspace through the control plane; and
+9. keep using the product from the latest local billing projection during a
    temporary control-plane outage.
 
 Product-feedback owners are never required to install the widget. Customer
@@ -45,7 +47,14 @@ internal-feedback owners receive their own tailored continuation.
 - No provider key, webhook secret, provider id, token, or price catalogue is
   stored in a workspace.
 - A workspace authenticates to the control plane with its instance credential;
-  billing APIs never accept a workspace id as authority.
+  billing and cloud-identity APIs never accept a workspace id as authority.
+- Cloud display name, friendly platform URL, and customer domains are
+  control-plane-owned and projected back to the workspace; the workspace owns
+  their in-product presentation.
+- Immutable provisioning identifiers are never derived from a mutable customer
+  name or friendly URL.
+- Self-hosted workspaces edit their name locally and never render or call cloud
+  URL/domain management.
 - Return URLs come from the control-plane registry and an allowlist.
 - Trial end is a clock-based fallback to the projected Free state, not a
   suspension.
@@ -94,14 +103,34 @@ selected outcome.
 Bar: contextual selector tests cover every state, and empty-state tests prove no
 surface renders more than one primary action.
 
-### Track 1: Owner handoff and tailored starter
+### Track 1: Zero-input creation, owner handoff, and cloud identity
 
-Outcome: control-plane Open establishes the provisioned owner’s workspace session
-through a ten-minute, owner-bound, single-use OTT. The workspace shows only the
-goal question and routes the final action to the tailored starter.
+Outcome: the control plane creates the first workspace immediately after sign-in
+using generated immutable identity, then Open establishes the provisioned
+owner's workspace session through a ten-minute, owner-bound, single-use OTT.
+There is no pre-handoff name, URL, region, or plan form.
 
-Bar: fresh-browser tests cover success, replay, expiry, wrong workspace, and
-sign-in-only behavior for non-owners.
+After handoff, Workspace details offers a skippable display-name and friendly
+Quackback URL step before the goal question. The same controls live in Admin
+Settings, with a separate Custom domains card. The workspace UI calls an
+instance-scoped control-plane identity gateway; the control plane atomically
+reserves hostnames, owns canonical registry state and Cloudflare provider state,
+and fans a signed monotonic identity projection back to the workspace.
+
+Platform URL changes retain immutable database, namespace, mail, storage, and
+system-host identities; every old friendly host remains permanently reserved as
+redirect-only and the browser crosses to the new canonical host through a
+single-use current-principal handoff. Customer domains do not route until
+ownership, DNS target, Cloudflare hostname status, and Cloudflare SSL status are
+all verified. The cloud Help Center reuses this manager; the self-host
+reverse-proxy path stays local and separate.
+
+Bar: tests cover zero-input create/retry, generated-identifier immutability,
+concurrent URL claims, reserved names, signed projection replay/staleness,
+control-plane outage, rename session transfer, redirect-only old hosts, stable
+absolute asset URLs, custom-domain add/verify/make-primary/remove, provider retry,
+and self-host absence. Fresh-browser tests also cover OTT success, replay,
+expiry, wrong workspace, and sign-in-only behavior for non-owners.
 
 ### Track 2: Focused widget activation
 
@@ -188,6 +217,19 @@ tokens.
 Do not deploy a workspace build that has removed direct billing until its paired
 control-plane gateway and projection producer are ready.
 
+Cloud identity/domain rollout is paired as well:
+
+1. Split immutable provisioning identity from mutable friendly identity in the
+   control plane, and add the instance-scoped identity gateway plus signed
+   projection/outbox path.
+2. Configure and readiness-check the Cloudflare for SaaS fallback origin and
+   custom-hostname provider in the control plane.
+3. Add workspace projection consumption, the skippable post-handoff details step,
+   Admin Settings controls, and rename handoff.
+4. Remove the pre-provision name/URL form and auto-create the first workspace.
+5. Enable custom domains only after live provider, certificate, stale-update,
+   cross-workspace, and cleanup-retry probes pass.
+
 The last known web deployment (`03ea102e`) runs the direct-workspace billing
 implementation and proves the old journey, not the revised ownership boundary.
 Worker, cron, and migrator roles remained on an older pinned digest at handoff;
@@ -197,7 +239,11 @@ the next paired rollout must reconcile that deliberate image drift.
 
 - Both `saas` branches are clean and contain small, reviewed commits.
 - All eight tracks meet their focused bars.
-- Two fresh owners complete the handoff journey without repeated auth or naming.
+- Two fresh owners receive a workspace without pre-handoff questions and
+  complete the handoff journey without repeated authentication.
+- Cloud name, platform URL, and custom-domain mutations traverse the
+  instance-scoped control-plane gateway; self-host shows none of those cloud
+  controls.
 - Each outcome reaches its tailored starter and never sees an irrelevant widget
   prompt.
 - A real created/configured starter begins one immutable Pro trial.

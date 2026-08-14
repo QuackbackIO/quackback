@@ -48,6 +48,96 @@ leases, and external clients must be keyed by workspace. Authorization cannot
 repair a wrong database selection because the selected database is internally
 self-consistent.
 
+## Workspace creation and cloud identity
+
+Cloud workspace creation is zero-input. After control-plane authentication, a
+customer with no workspace receives one immediately; creation never asks for a
+display name, URL, region, or plan. The control plane generates the immutable
+instance id, database/role names, tenant namespace, mail slug, and a
+non-customer-facing system hostname from opaque identifiers rather than from
+customer-facing text.
+Provisioning may remain asynchronous, but the customer sees progress and then
+crosses the existing one-time-token handoff into the workspace.
+
+Display name, the friendly Quackback URL, and custom domains are post-handoff
+workspace settings. The first in-workspace journey shows a skippable Workspace
+details step before the outcome question, and the same controls remain available
+under Admin Settings. A generated `Untitled workspace` name and opaque platform
+hostname are always sufficient to continue, so identity polish cannot block
+activation.
+
+For a cloud workspace, the control plane owns this identity state just as it
+owns billing state. The workspace renders the UI, checks the local administrator
+permission, and calls an instance-scoped control-plane endpoint through its
+derived credential. The control plane derives the workspace from the credential;
+no identity API accepts a caller-supplied workspace id as authority. Name, URL,
+and domain mutations fail with a retryable message during a control-plane outage
+while the last accepted identity continues to serve locally.
+
+The control plane returns identity through a workspace-safe, signed, monotonic
+projection. A successful mutation response carries the accepted signed
+projection so the workspace can verify and apply it synchronously; the
+control-plane outbox redelivers the same version until acknowledged. It contains
+only the projection version, display name, canonical origin, platform hostname,
+custom-domain names and safe verification states. Provider ids, validation
+secrets, credentials, and tokens stay in the control plane. Self-hosted
+workspaces keep local display-name editing and receive no cloud URL/domain
+controls or control-plane dependency.
+
+### Platform URL changes
+
+The customer edits only the first DNS label. The control plane validates the
+reserved-name and shape policy, atomically reserves the new hostname in the
+fleet-unique hostname table, and changes `primaryHostname` and `baseUrl` in the
+same registry transaction. Billing return URLs and every other canonical-origin
+consumer continue to derive from that registry.
+
+Provisioning identity must be separated from the friendly URL. In particular,
+database names, roles, tenant namespaces, mail routing, object-storage prefixes,
+and the immutable system hostname never change when the customer renames the
+workspace. The system hostname is the initial canonical URL and remains a
+non-canonical routing alias and stable asset origin after a friendly URL is
+chosen because stored content contains absolute asset URLs. Every previous
+friendly platform hostname remains permanently reserved to that workspace as a
+redirect-only alias; it never serves a second canonical origin and is never
+reassigned to another tenant.
+
+Because authentication cookies are host-scoped, a successful rename finishes
+with a single-use, current-principal browser handoff to the new canonical origin.
+The token is stripped on consumption. A replay, wrong workspace, or expired
+handoff fails closed.
+
+This is viable without per-workspace infrastructure mutations. In the
+Development deployment, Cloudflare is authoritative for `quackback.co.uk`, its
+wildcard DNS record targets the one Railway web service, and Railway terminates a
+`*.quackback.co.uk` certificate. Any first-level platform hostname therefore
+already reaches the pooled fleet; the control-plane registry decides whether it
+belongs to a workspace.
+
+### Customer custom domains
+
+Cloud custom domains appear as a separate card below Workspace details in Admin
+Settings > General, not as a competing onboarding requirement. Add, recheck,
+make-primary, and remove all go through the same instance-scoped control-plane
+client. Entitlement and numeric domain limits come from authoritative
+control-plane commercial state and are enforced again at the control-plane
+endpoint.
+
+The existing registry ownership challenge is necessary but is not sufficient:
+the Railway wildcard certificate covers only platform subdomains. The control
+plane must integrate Cloudflare for SaaS Custom Hostnames, own its credentials
+and provider references, and expose customer-safe DNS validation instructions.
+A domain becomes routable only when ownership is proven, Cloudflare reports both
+the hostname and its SSL certificate active, and the customer DNS points to the
+configured SaaS target. Only then may the control plane add it to the workspace
+hostname set or make it canonical.
+
+Removal first moves the canonical origin back to a verified hostname and updates
+the registry; provider cleanup follows idempotently through the control-plane
+outbox. The cloud Help Center must link to this shared domain manager rather than
+maintain a second cloud certificate path. Its existing local CNAME/reverse-proxy
+flow remains available only to self-hosters.
+
 ## Billing ownership
 
 The control plane is the sole source of truth for:
@@ -123,16 +213,17 @@ trial. Retrying activation cannot extend it.
 
 ## Activation and onboarding
 
-The control plane supplies workspace identity and owner identity. Opening a
-workspace uses a ten-minute, owner-bound, single-use OTT. The workspace consumes
-the token, strips it from the URL, establishes its local session, and fails closed
-to a clear sign-in/retry screen for invalid, expired, replayed, or wrong-workspace
-tokens.
+The control plane generates workspace identity and supplies owner identity.
+Opening a workspace uses a ten-minute, owner-bound, single-use OTT. The workspace
+consumes the token, strips it from the URL, establishes its local session, and
+fails closed to a clear sign-in/retry screen for invalid, expired, replayed, or
+wrong-workspace tokens.
 
-Provisioned owners answer only the outcome question. Product activation exposes
-one contextual primary action per surface. Widget installation is required only
-for customer-support Messenger activation and remains optional for product
-feedback.
+There is no pre-handoff onboarding form. Provisioned owners may skip or edit
+workspace details inside the workspace, then answer the outcome question.
+Product activation exposes one contextual primary action per surface. Widget
+installation is required only for customer-support Messenger activation and
+remains optional for product feedback.
 
 ## Availability and consistency
 
