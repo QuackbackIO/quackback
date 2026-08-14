@@ -21,6 +21,7 @@ import {
 } from '@/lib/server/db'
 import { canViewPost, type Actor } from '@/lib/server/policy'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
+import { getJiraAccessToken } from '@/lib/server/integrations/jira/access-token'
 import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import {
   getSubscribersForEvent,
@@ -314,18 +315,42 @@ async function getIntegrationTargets(
     let accessToken: string | undefined
     if (m.secrets) {
       try {
-        const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
-        accessToken = secrets.accessToken
+        if (m.integrationType === 'jira') {
+          accessToken = await getJiraAccessToken({
+            secrets: m.secrets,
+            config: m.integrationConfig,
+          })
+        } else {
+          const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
+          accessToken = secrets.accessToken
+        }
       } catch (error) {
-        log.error({ err: error, integration_type: m.integrationType }, 'failed to decrypt integration secrets')
+        log.error(
+          { err: error, integration_type: m.integrationType },
+          'failed to decrypt integration secrets'
+        )
         continue
       }
     }
 
+    // Inbound-only fields stay on the integration row; they must not ride
+    // along in hook jobs (webhookSecret especially).
+    const {
+      webhookSecret: _webhookSecret,
+      statusMappings: _statusMappings,
+      statusSyncEnabled: _statusSyncEnabled,
+      externalWebhookId: _externalWebhookId,
+      ...hookConfig
+    } = integrationConfig
+
     targets.push({
       type: m.integrationType,
       target: { channelId },
-      config: { accessToken, rootUrl: context.portalBaseUrl },
+      config: {
+        ...hookConfig,
+        accessToken,
+        rootUrl: context.portalBaseUrl,
+      },
     })
   }
 

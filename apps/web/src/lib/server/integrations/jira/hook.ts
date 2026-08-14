@@ -12,7 +12,19 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'jira' })
 
 export interface JiraTarget {
-  channelId: string // projectId is stored as channelId for consistency
+  channelId: string
+}
+
+/** Settings stores `projectId:issueTypeId`; a bare project id is still accepted. */
+export function parseJiraChannelId(channelId: string): {
+  projectId: string
+  issueTypeId?: string
+} {
+  const sep = channelId.indexOf(':')
+  if (sep === -1) return { projectId: channelId }
+  const projectId = channelId.slice(0, sep)
+  const issueTypeId = channelId.slice(sep + 1)
+  return { projectId, ...(issueTypeId ? { issueTypeId } : {}) }
 }
 
 export interface JiraConfig {
@@ -52,13 +64,31 @@ async function jiraApi(
 
 export const jiraHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { channelId: projectId } = target as JiraTarget
+    const { channelId } = target as JiraTarget
     const { accessToken, cloudId, siteUrl, issueTypeId, rootUrl } = config as JiraConfig
 
-    // Only create issues for new feedback
     if (event.type !== 'post.created') {
       return { success: true }
     }
+
+    if (!cloudId) {
+      return {
+        success: false,
+        error: 'Jira cloud ID is missing from integration config',
+        shouldRetry: false,
+      }
+    }
+    if (!accessToken) {
+      return {
+        success: false,
+        error: 'Jira access token is missing',
+        shouldRetry: false,
+      }
+    }
+
+    const parsed = parseJiraChannelId(channelId)
+    const projectId = parsed.projectId
+    const resolvedIssueTypeId = issueTypeId || parsed.issueTypeId
 
     log.debug({ event_type: event.type, project_id: projectId }, 'creating issue')
 
@@ -69,7 +99,7 @@ export const jiraHook: HookHandler = {
         project: { id: projectId },
         summary: title,
         description,
-        ...(issueTypeId ? { issuetype: { id: issueTypeId } } : {}),
+        ...(resolvedIssueTypeId ? { issuetype: { id: resolvedIssueTypeId } } : {}),
       },
     }
 

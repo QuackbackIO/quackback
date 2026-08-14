@@ -32,6 +32,21 @@ export const azureDevOpsHook: HookHandler = {
       return { success: true }
     }
 
+    if (!organizationName) {
+      return {
+        success: false,
+        error: 'Azure DevOps organization name is missing from integration config',
+        shouldRetry: false,
+      }
+    }
+    if (!accessToken) {
+      return {
+        success: false,
+        error: 'Azure DevOps access token is missing',
+        shouldRetry: false,
+      }
+    }
+
     const [project, workItemType] = channelId.split(':')
     if (!project || !workItemType) {
       return {
