@@ -30,11 +30,11 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `f75518e47` live as
-  `sha256:c9fbd88ba6152c8ccd3e04eaf3418554e5991d2f03f55a0d4a9e8913ae3dee46`
+- Workspace: `689c99d13` live as
+  `sha256:8d9da3be4870f2594b0a73937842688f6797936657a7671823ccd4ed375cafcb`
 - Control plane: `71e59d9` live as `e28c7b8e` /
   `sha256:29592e95de0e4e5299d591e2ef305b3cf0c13ccca509ccefb2a3978bf1832022`
-- Last known deployed workspace: `f75518e47` (2026-08-14)
+- Last known deployed workspace: `689c99d13` (2026-08-14)
 - Last known deployed control plane: `e28c7b8e` (2026-08-14)
 
 The Development fleet now runs a paired image/code pair for identity and
@@ -102,17 +102,17 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                                     | Evidence                                                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                                   | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | live Chromium Open session + details + outcome on `f75518e47`; rename/storage not finished | see “Track 1 live walk (2026-08-14)”                                                                              |
-| 2 focused widget activation      | implemented, focused verification passed                                                   | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | implemented; full/live verification pending                                                | CP `c7ec591` through `9f77647`                                                                                    |
-| 4 workspace projection + gateway | implemented; full/live verification pending                                                | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
-| 5 authoritative starter trial    | implemented; full/live verification pending                                                | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
+| Track                            | Status                                                                                                     | Evidence                                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
+| 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
+| 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
+| 3 CP billing foundation          | implemented; full/live verification pending                                                                | CP `c7ec591` through `9f77647`                                                                                    |
+| 4 workspace projection + gateway | implemented; full/live verification pending                                                                | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                                                                         |
+| 5 authoritative starter trial    | implemented; full/live verification pending                                                                | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
+| 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
 
 ## Completed activation work
 
@@ -364,23 +364,59 @@ Do **not** start custom domains or the billing live bar. Reuse the two
 `ws-*` rows. Finish starter → rename / storage on those hosts. Do not
 mint more Neon projects.
 
+Live after this fire (2026-08-14 T19:25Z):
+
+- App `689c99d13` always issues same-origin `PUT /api/storage/<key>`
+  upload URLs (no object-store CORS). Focused tests 76 passed
+  (matrix 10, scoped-client 16, proxy-upload 9, tenant-placement 16,
+  uploads 9, unscoped 8, asset-url 8). Docker `31832193195` published
+  `ghcr.io/quackbackio/quackback@sha256:8d9da3be4870f2594b0a73937842688f6797936657a7671823ccd4ed375cafcb`.
+  `source.image` + `serviceInstanceDeployV2` SUCCESS, matching digest,
+  `us-east4-eqdc4a`: web `30386b1e`, worker `5d467cd6`, hourly
+  `6cbbe8b0`, daily `89afc3ef`, migrator `ee8160b9`. Ready 200.
+- Live fleet needed `S3_PROXY=true` on the prior image and
+  `QUACKBACK_CONTROL_PLANE_URL=https://cp.quackback.co.uk` on web
+  (worker skip-deploys). Identity rename 502'd as “temporarily
+  unavailable” until the CP origin was set. No new Neon. No CP OTPs;
+  Open minted via `mintOwnerHandoff`.
+- Same two `ws-*` owners:
+
+  | Mailbox                             | Instance                          | System host                                   | Canonical now                 |
+  | ----------------------------------- | --------------------------------- | --------------------------------------------- | ----------------------------- |
+  | `walk-t1e-a7ebad@guerrillamail.com` | `inst_01m00kprbrfzzb19f490wga8q2` | `ws-4a048e07941c5e7840e986c0.quackback.co.uk` | `northfa99f0.quackback.co.uk` |
+  | `qb-t1a-7caf14b1@guerrillamail.com` | `inst_01m00kq6cdfzzb19gfjz8pt0s7` | `ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk` | `south63792f.quackback.co.uk` |
+
+  t1a Chromium: skippable details (`04-details.png`) → outcome
+  (`05-outcome.png`) → existing-board starter (`06-starter.png`) →
+  complete → branding logo → General rename. Session survived on
+  `south63792f` (`11-renamed.png`). Stored logo
+  `/api/storage/logos/2026/08/277bef86-…-logo.png` unchanged across
+  rename.
+  t1e: starter already configured; second rename
+  `northe0d78f` → `northfa99f0`, session survived (`11-renamed.png`).
+  Stored logo `/api/storage/logos/2026/08/a5aa6244-…-logo.png`
+  unchanged. Previous friendly `GET https://northe0d78f.quackback.co.uk/`
+  → 308 `https://northfa99f0.quackback.co.uk/` (path preserved on
+  `/admin/settings/general`). System host stays active (immutable).
+  Shots: `loop-evidence/t1e-rn/`, `loop-evidence/t1a-rn/`.
+
+### Critic (2026-08-14, rename/storage `689c99d13`)
+
+pending — spawned on the live walk URLs + commit range only.
+
 ## Next commits
 
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
 2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
 3. ~~**Unit C — host-independent stored assets**~~ live through `6f255842f` (`sha256:1249693e…`).
 4. ~~Deploy `6f255842f` + confirm CP `71e59d9`.~~ Digest and `us-east4-eqdc4a` verified. Live consume still bounced via `OttHandler`.
-5. ~~Deploy `f75518e47` (`sha256:c9fbd88b…`).~~ Digest and
-   `us-east4-eqdc4a` verified. Chromium Open session + details +
-   outcome proved on `ws-4a048e…`. Finish the starter step on both
-   existing `ws-*` hosts, then rename / old-host redirect /
-   `/api/storage/…` src. Replay/expiry/wrong-workspace already fail
-   closed. Do not mint more Neon. Do not hammer CP OTPs.
-6. Add the control-plane Cloudflare for SaaS custom-hostname integration.
-7. Add the shared workspace custom-domain manager on
+5. ~~Deploy `f75518e47` (`sha256:c9fbd88b…`).~~ Chromium Open + details + outcome proved.
+6. ~~Live rename / old-friendly 308 / `/api/storage/…` src on the two `ws-*` hosts (`689c99d13`, `sha256:8d9da3be…`).~~
+7. Add the control-plane Cloudflare for SaaS custom-hostname integration.
+8. Add the shared workspace custom-domain manager on
    `cp_workspace_hostname_claims`, then live-prove hostname and certificate
    readiness before enabling it.
-8. Run the remaining control-plane billing gateway and first-win journeys.
+9. Run the remaining control-plane billing gateway and first-win journeys.
    Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
