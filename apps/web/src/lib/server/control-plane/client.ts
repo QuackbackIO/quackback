@@ -84,12 +84,12 @@ export async function reportTrialActivation(input: {
   resolution: 'created' | 'configured'
   artifactType: 'board' | 'messenger' | 'article' | 'invitation'
   occurredAt: string
-}): Promise<'started' | 'active'> {
+}): Promise<'started' | 'already_started'> {
   const result = await callWorkspaceControlPlane<{ status?: unknown }>(
     '/api/v1/internal/billing/activate-trial',
     input
   )
-  if (result.status !== 'started' && result.status !== 'active') {
+  if (result.status !== 'started' && result.status !== 'already_started') {
     throw new ControlPlaneUnavailableError()
   }
   return result.status

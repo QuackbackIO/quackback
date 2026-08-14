@@ -1,5 +1,21 @@
-import { describe, expect, it } from 'vitest'
-import { deriveControlPlaneCredential } from '../client'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const hoisted = vi.hoisted(() => ({
+  fetch: vi.fn(),
+}))
+
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () => ({ id: 'workspace-1' }),
+  getWorkspaceSecretKey: () => 'workspace-a-secret-key-000000000000000000',
+}))
+
+import { deriveControlPlaneCredential, reportTrialActivation } from '../client'
+
+beforeEach(() => {
+  process.env.QUACKBACK_CONTROL_PLANE_URL = 'https://control.example.com'
+  hoisted.fetch.mockReset()
+  vi.stubGlobal('fetch', hoisted.fetch)
+})
 
 describe('workspace control-plane credential', () => {
   it('matches the stable per-workspace derivation contract', () => {
@@ -13,4 +29,20 @@ describe('workspace control-plane credential', () => {
   it('refuses weak source material', () => {
     expect(() => deriveControlPlaneCredential('short')).toThrow('too short')
   })
+
+  it.each(['started', 'already_started'] as const)(
+    'accepts the control plane trial status %s',
+    async (status) => {
+      hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ status }), { status: 200 }))
+
+      await expect(
+        reportTrialActivation({
+          idempotencyKey: 'starter:one',
+          resolution: 'created',
+          artifactType: 'board',
+          occurredAt: '2026-08-14T12:00:00.000Z',
+        })
+      ).resolves.toBe(status)
+    }
+  )
 })
