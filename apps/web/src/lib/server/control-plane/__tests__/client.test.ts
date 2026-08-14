@@ -11,6 +11,7 @@ vi.mock('@/lib/server/workspaces/workspace-context', () => ({
 
 import {
   deriveControlPlaneCredential,
+  fetchBillingCatalogue,
   reportTrialActivation,
   requestWorkspaceIdentityMutation,
 } from '../client'
@@ -61,5 +62,16 @@ describe('workspace control-plane credential', () => {
     expect(JSON.parse(String(init.body))).toEqual({ displayName: 'Acme', platformLabel: 'acme' })
     expect(String(init.body)).not.toContain('workspaceId')
     expect(String(init.body)).not.toContain('instanceId')
+  })
+
+  it('loads the billing catalogue over GET without a workspace id', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ version: 1, plans: [], currency: 'usd' }), { status: 200 })
+    )
+    await fetchBillingCatalogue()
+    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(url)).toContain('/api/v1/internal/billing/catalogue')
+    expect(init.method).toBe('GET')
+    expect(init.body).toBeUndefined()
   })
 })

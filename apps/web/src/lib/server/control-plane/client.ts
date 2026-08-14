@@ -51,18 +51,29 @@ function controlPlaneOrigin(): URL {
 }
 
 export async function callWorkspaceControlPlane<T>(path: string, body: unknown): Promise<T> {
+  return requestWorkspaceControlPlane<T>(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function getWorkspaceControlPlane<T>(path: string): Promise<T> {
+  return requestWorkspaceControlPlane<T>(path, { method: 'GET' })
+}
+
+async function requestWorkspaceControlPlane<T>(path: string, init: RequestInit): Promise<T> {
   const workspace = getCurrentWorkspace()
   const secretKey = getWorkspaceSecretKey()
   if (!workspace || !secretKey) throw new ControlPlaneUnavailableError()
   const response = await fetch(new URL(path, controlPlaneOrigin()), {
-    method: 'POST',
+    ...init,
     headers: {
       authorization: `Bearer ${deriveControlPlaneCredential(secretKey)}`,
-      'content-type': 'application/json',
+      ...(init.headers ?? {}),
     },
-    body: JSON.stringify(body),
     redirect: 'manual',
-    signal: AbortSignal.timeout(10_000),
+    signal: init.signal ?? AbortSignal.timeout(10_000),
   }).catch(() => {
     throw new ControlPlaneUnavailableError()
   })
@@ -72,6 +83,53 @@ export async function callWorkspaceControlPlane<T>(path: string, body: unknown):
     throw new ControlPlaneUnavailableError(message)
   }
   return payload as T
+}
+
+export async function fetchBillingCatalogue(): Promise<BillingCatalogue> {
+  return getWorkspaceControlPlane<BillingCatalogue>('/api/v1/internal/billing/catalogue')
+}
+
+export async function fetchBillingInvoices(): Promise<CustomerInvoice[]> {
+  const result = await getWorkspaceControlPlane<{ invoices?: CustomerInvoice[] }>(
+    '/api/v1/internal/billing/invoices'
+  )
+  return Array.isArray(result.invoices) ? result.invoices : []
+}
+
+export type BillingCatalogue = {
+  version: 1
+  currency: 'usd'
+  annualDiscountMonths: number
+  recommendedPlanId: 'growth' | 'pro' | 'scale'
+  aiOutcomePriceCents: number
+  copilot: {
+    freeConversationsPerSeat: number
+    addonMonthlyCents: number
+    addonAnnualCents: number
+  }
+  brandingRemoval: { monthlyCents: number; annualCents: number }
+  liteSeatsIncluded: Record<'free' | 'growth' | 'pro' | 'scale', number | null>
+  plans: Array<{
+    id: 'free' | 'growth' | 'pro' | 'scale'
+    name: string
+    rank: number
+    priceMonthlyCents: number
+    priceYearlyCents: number
+    billedPer: 'seat' | 'workspace'
+    bestFor: string
+    highlights: string[]
+    recommended: boolean
+  }>
+}
+
+export type CustomerInvoice = {
+  id: string
+  number: string | null
+  createdAt: string
+  amountCents: number
+  currency: string
+  status: string
+  hostedUrl: string | null
 }
 
 export async function createHostedBillingSession(

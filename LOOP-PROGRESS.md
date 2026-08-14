@@ -733,7 +733,11 @@ PASS. Not deployed (Docker not started this fire).
     `customers.quackback.co.uk`. CP client is in `lib/server/cloudflare/`.
     Next: identity gateway add/verify/make-primary/remove + workspace
     Domains card. Do not print the token.
-17. First-win journeys. Checkout attaches to an existing workspace only.
+17. Plan & billing page: catalogue + invoices from the control plane
+    (`GET /api/v1/internal/billing/catalogue` and `/invoices`). Cards
+    use public pricing stickers (annual = 10 months). Workspace holds
+    no price list. Not live until CP + app deploy.
+18. First-win journeys. Checkout attaches to an existing workspace only.
 
 ## Stale code to remove
 

@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 635 surfaces
+### Server functions (`requireAuth`) — 639 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -154,6 +154,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/domains/assistant/copilot-gate.ts`::gateCopilotAguiRequest | copilot.use |
 | `lib/server/functions/activation.ts`::getStartingPointContextFn | settings.manage |
 | `lib/server/functions/activation.ts`::getActivationBridgeContextFn | settings.manage |
+| `lib/server/functions/activation.ts`::markPublicBoardLinkCopiedFn | board.manage |
 | `lib/server/functions/activation.ts`::setActivationGoalFn | settings.manage |
 | `lib/server/functions/activation.ts`::completeStartingPointFn | settings.manage |
 | `lib/server/functions/activation.ts`::acknowledgeActivationHandoffFn | settings.manage |
@@ -250,9 +251,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderCredentialsMaskedFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderStatusFn | auth.manage |
 | `lib/server/functions/billing.ts`::fetchBillingOverviewFn | billing.manage |
-| `lib/server/functions/billing.ts`::startCheckoutFn | billing.manage |
-| `lib/server/functions/billing.ts`::openBillingPortalFn | billing.manage |
-| `lib/server/functions/billing.ts`::reconcileBillingFn | billing.manage |
+| `lib/server/functions/billing.ts`::fetchBillingCatalogueFn | billing.manage |
+| `lib/server/functions/billing.ts`::fetchBillingInvoicesFn | billing.manage |
 | `lib/server/functions/blocking.ts`::getPersonBlockStatusFn | people.view |
 | `lib/server/functions/blocking.ts`::blockPersonFn | people.manage |
 | `lib/server/functions/blocking.ts`::unblockPersonFn | people.manage |
@@ -286,6 +286,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/channel-accounts.ts`::verifySendingDomainFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::deleteSendingDomainFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::deleteChannelAccountFn | channel_account.manage |
+| `lib/server/functions/cloud-identity.ts`::getCloudIdentityFn | settings.manage |
+| `lib/server/functions/cloud-identity.ts`::markCloudWorkspaceDetailsSeenFn | settings.manage |
+| `lib/server/functions/cloud-identity.ts`::updateCloudIdentityFn | settings.manage |
 | `lib/server/functions/comments.ts`::createCommentFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::addReactionFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::removeReactionFn | END_USER (any authenticated) |
@@ -550,6 +553,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::fetchWidgetConfig | settings.manage |
 | `lib/server/functions/settings.ts`::fetchWidgetSecret | settings.manage |
 | `lib/server/functions/settings.ts`::updateWidgetConfigFn | settings.manage |
+| `lib/server/functions/settings.ts`::configureWidgetForActivationFn | settings.manage |
 | `lib/server/functions/settings.ts`::saveWidgetHeroImageKeyFn | settings.manage |
 | `lib/server/functions/settings.ts`::deleteWidgetHeroImageFn | settings.manage |
 | `lib/server/functions/settings.ts`::regenerateWidgetSecretFn | settings.manage |
@@ -740,11 +744,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
 
-### Public REST API (`withApiKeyAuth`) — 125 surfaces
+### Public REST API (`withApiKeyAuth`) — 126 surfaces
 
 | Surface | Enforces |
 | --- | --- |
 | `routes/api/admin/assistant/test.ts`::handleTestAgent | assistant.manage |
+| `routes/api/billing/session.ts`::POST | billing.manage |
 | `routes/api/export.companies.ts`::GET | company.view |
 | `routes/api/export.users.ts`::handleExportUsers | people.view |
 | `routes/api/v1/apps/boards.ts`::GET | PUBLIC (any valid key) |
@@ -939,7 +944,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-184 of 930 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+186 of 938 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -984,6 +989,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/invitations.ts`::setPasswordFn | server-fn |
 | `lib/server/functions/locale.ts`::getPortalLocaleFn | server-fn |
 | `lib/server/functions/onboarding.ts`::getWorkspaceClaimFn | server-fn |
+| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveUserNameFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | server-fn |
 | `lib/server/functions/portal-access.ts`::evaluateMyPortalAccessFn | server-fn |
@@ -1055,7 +1061,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/auth/$.ts`::POST | route |
 | `routes/api/auth/invitation.$invitationId.ts`::GET | route |
 | `routes/api/auth/portal-signin.ts`::POST | route |
-| `routes/api/billing/webhook.ts`::POST | route |
 | `routes/api/chat/email/inbound.ts`::POST | route |
 | `routes/api/chat/stream.ts`::GET | route |
 | `routes/api/devices.ts`::DELETE | route |
@@ -1074,6 +1079,8 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/import/runs.ts`::GET | route |
 | `routes/api/integrations/$type/identify.ts`::POST | route |
 | `routes/api/integrations/$type/webhook.ts`::POST | route |
+| `routes/api/internal/billing-projection.ts`::POST | route |
+| `routes/api/internal/identity-projection.ts`::POST | route |
 | `routes/api/mcp.ts`::DELETE | route |
 | `routes/api/mcp.ts`::GET | route |
 | `routes/api/mcp.ts`::POST | route |

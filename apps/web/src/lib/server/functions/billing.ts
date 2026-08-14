@@ -13,3 +13,15 @@ export const fetchBillingOverviewFn = createServerFn({ method: 'GET' }).handler(
     await import('@/lib/server/domains/billing/projection-overview')
   return await getBillingProjectionOverview()
 })
+
+export const fetchBillingCatalogueFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+  const { fetchBillingCatalogue } = await import('@/lib/server/control-plane/client')
+  return fetchBillingCatalogue()
+})
+
+export const fetchBillingInvoicesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+  const { fetchBillingInvoices } = await import('@/lib/server/control-plane/client')
+  return fetchBillingInvoices()
+})

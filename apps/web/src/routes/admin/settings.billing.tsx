@@ -18,7 +18,11 @@ import { billingQueries } from '@/lib/client/queries/billing'
 export const Route = createFileRoute('/admin/settings/billing')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.BILLING_MANAGE)
-    await context.queryClient.ensureQueryData(billingQueries.overview())
+    await Promise.all([
+      context.queryClient.ensureQueryData(billingQueries.overview()),
+      context.queryClient.ensureQueryData(billingQueries.catalogue()).catch(() => null),
+      context.queryClient.ensureQueryData(billingQueries.invoices()).catch(() => null),
+    ])
     return {}
   },
   component: BillingPage,

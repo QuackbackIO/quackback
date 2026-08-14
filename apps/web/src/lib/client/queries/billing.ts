@@ -1,13 +1,29 @@
 import { queryOptions } from '@tanstack/react-query'
-import { fetchBillingOverviewFn } from '@/lib/server/functions/billing'
+import {
+  fetchBillingCatalogueFn,
+  fetchBillingInvoicesFn,
+  fetchBillingOverviewFn,
+} from '@/lib/server/functions/billing'
 
-/** Billing state projected into this workspace by the control plane. */
+/** Billing state and catalogue from the control plane. */
 export const billingQueries = {
   all: ['billing'] as const,
   overview: () =>
     queryOptions({
       queryKey: ['billing', 'overview'] as const,
       queryFn: () => fetchBillingOverviewFn(),
+      staleTime: 30_000,
+    }),
+  catalogue: () =>
+    queryOptions({
+      queryKey: ['billing', 'catalogue'] as const,
+      queryFn: () => fetchBillingCatalogueFn(),
+      staleTime: 60_000,
+    }),
+  invoices: () =>
+    queryOptions({
+      queryKey: ['billing', 'invoices'] as const,
+      queryFn: () => fetchBillingInvoicesFn(),
       staleTime: 30_000,
     }),
 }

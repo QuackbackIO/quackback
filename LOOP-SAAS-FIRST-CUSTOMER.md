@@ -211,6 +211,13 @@ Upgrade, Change plan, and Manage billing proxy to the control plane and return a
 portal session. Free is the projected baseline; numeric limits and
 entitlements refuse with a named plan; a paid overlay lifts them.
 
+The Plan & billing page is a compact settings surface: current subscription
+strip, four plan cards from the **control-plane catalogue** (prices,
+highlights, add-ons — same stickers as the public pricing page), monthly /
+annual toggle, and an invoices table. The workspace does not keep a parallel
+price list. Invoices are listed through the instance-scoped CP API (hosted
+invoice URLs only; the workspace never stores provider ids).
+
 Bar:
 
 - invalid signatures and stale versions are rejected;
