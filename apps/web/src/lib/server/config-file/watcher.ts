@@ -7,8 +7,8 @@ const log = logger.child({ component: 'config-watcher' })
 
 export interface WatchOptions {
   /** Polling fallback interval. Defaults to 30s — `fs.watch` on
-   *  symlink-swap mounts (e.g. Kubernetes projected volumes) is
-   *  unreliable, so polling backs it up. */
+   *  symlink-swap mounts (atomic config-file updates replace a symlink
+   *  rather than writing in place) is unreliable, so polling backs it up. */
   pollIntervalMs?: number
 }
 
