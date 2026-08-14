@@ -1,11 +1,17 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { consumeOpenHandoff } from '../origin-transfer'
 
-const hoisted = vi.hoisted(() => ({ handler: vi.fn() }))
-vi.mock('@/lib/server/auth', () => ({ auth: { handler: hoisted.handler } }))
+const hoisted = vi.hoisted(() => ({ handler: vi.fn(), getSession: vi.fn() }))
+vi.mock('@/lib/server/auth', () => ({
+  auth: { handler: hoisted.handler, api: { getSession: hoisted.getSession } },
+}))
 
 describe('consumeOpenHandoff', () => {
-  beforeEach(() => hoisted.handler.mockReset())
+  beforeEach(() => {
+    hoisted.handler.mockReset()
+    hoisted.getSession.mockReset()
+    hoisted.getSession.mockResolvedValue(null)
+  })
 
   it('does not require an identity projection', async () => {
     hoisted.handler.mockResolvedValue({
@@ -22,6 +28,7 @@ describe('consumeOpenHandoff', () => {
       cookies: ['session=abc; Path=/; HttpOnly'],
     })
     expect(hoisted.handler).toHaveBeenCalledOnce()
+    expect(hoisted.getSession).not.toHaveBeenCalled()
   })
 
   it('refuses a missing or rejected token without a silent no-op', async () => {
@@ -31,5 +38,18 @@ describe('consumeOpenHandoff', () => {
       kind: 'error',
       status: 'invalid',
     })
+    expect(hoisted.getSession).not.toHaveBeenCalled()
+  })
+
+  it('continues when the spent token is remounted with the new session', async () => {
+    hoisted.handler.mockResolvedValue(new Response('no', { status: 400 }))
+    hoisted.getSession.mockResolvedValue({ user: { id: 'user_1' } })
+    const headers = new Headers({ cookie: 'session=abc' })
+    await expect(consumeOpenHandoff({ ott: 'spent', headers })).resolves.toEqual({
+      kind: 'redirect',
+      to: '/onboarding/workspace',
+      cookies: [],
+    })
+    expect(hoisted.getSession).toHaveBeenCalledWith({ headers })
   })
 })

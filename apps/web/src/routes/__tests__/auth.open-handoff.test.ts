@@ -8,9 +8,11 @@ const here = dirname(fileURLToPath(import.meta.url))
 function assertIncomingRequestConsume(src: string) {
   expect(src).not.toMatch(/\bcreateServerFn\b/)
   expect(src).not.toMatch(/handoff-cookies/)
+  expect(src).not.toMatch(/throw redirect/)
   expect(src).toMatch(/createServerOnlyFn/)
   expect(src).toMatch(/getRequestHeaders/)
   expect(src).toMatch(/setResponseHeader/)
+  expect(src).toMatch(/location\.replace/)
 }
 
 describe('open handoff consume path', () => {

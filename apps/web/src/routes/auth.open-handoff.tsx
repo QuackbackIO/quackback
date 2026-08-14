@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { createServerOnlyFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
@@ -34,12 +34,28 @@ export const Route = createFileRoute('/auth/open-handoff')({
   validateSearch: searchSchema.parse,
   loader: async ({ location }) => {
     const search = location.search as z.infer<typeof searchSchema>
-    const result = await consumeOpenHandoffOnRequest(search)
-    if (result.kind === 'redirect') throw redirect({ href: result.to })
-    return result
+    return consumeOpenHandoffOnRequest(search)
   },
-  component: OpenHandoffError,
+  component: OpenHandoffPage,
 })
+
+function OpenHandoffPage() {
+  const result = Route.useLoaderData()
+  if (result.kind === 'redirect') return <HandoffContinue to={result.to} />
+  return <OpenHandoffError />
+}
+
+function HandoffContinue({ to }: { to: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background px-4">
+      <meta httpEquiv="refresh" content={`0;url=${encodeURI(to)}`} />
+      <p className="text-sm text-muted-foreground">Opening your workspace…</p>
+      <script
+        dangerouslySetInnerHTML={{ __html: `window.location.replace(${JSON.stringify(to)})` }}
+      />
+    </main>
+  )
+}
 
 function OpenHandoffError() {
   return (

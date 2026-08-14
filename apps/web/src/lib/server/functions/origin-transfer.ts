@@ -25,6 +25,7 @@ async function verifyOttCookies(
   try {
     const { auth } = await import('@/lib/server/auth')
     const requestHeaders = new Headers(headers)
+    requestHeaders.delete('content-length')
     requestHeaders.set('content-type', 'application/json')
     const response = await auth.handler(
       new Request('http://auth.local/api/auth/one-time-token/verify', {
@@ -42,6 +43,33 @@ async function verifyOttCookies(
   }
 }
 
+/** Same-browser remount after a successful consume still has the session. */
+async function continueIfAlreadySignedIn(
+  returnTo: string,
+  headers?: Headers
+): Promise<OriginTransferResult> {
+  if (!headers) return { kind: 'error', status: 'invalid' }
+  try {
+    const { auth } = await import('@/lib/server/auth')
+    const session = await auth.api.getSession({ headers })
+    if (session?.user) return { kind: 'redirect', to: returnTo, cookies: [] }
+  } catch {
+    // The token already failed closed; absence of a session stays invalid.
+  }
+  return { kind: 'error', status: 'invalid' }
+}
+
+async function consumeOrContinueExistingSession(
+  ott: string,
+  returnTo: string,
+  headers?: Headers
+): Promise<OriginTransferResult> {
+  const verified = await verifyOttCookies(ott, returnTo, headers)
+  if (verified.kind === 'redirect') return verified
+  const existing = await continueIfAlreadySignedIn(returnTo, headers)
+  return existing.kind === 'redirect' ? existing : verified
+}
+
 /**
  * Consume the control-plane Open handoff. First arrival uses the immutable
  * system host and may happen before the identity projection lands, so this
@@ -55,7 +83,7 @@ export async function consumeOpenHandoff(input: {
 }): Promise<OriginTransferResult> {
   const returnTo = isSafeCallbackUrl(input.returnTo) ? input.returnTo : '/onboarding/workspace'
   if (!input.ott) return { kind: 'error', status: 'invalid' }
-  return verifyOttCookies(input.ott, returnTo, input.headers)
+  return consumeOrContinueExistingSession(input.ott, returnTo, input.headers)
 }
 
 /**
@@ -84,5 +112,5 @@ export async function consumeOriginTransfer(input: {
     return { kind: 'error', status: 'invalid' }
   }
 
-  return verifyOttCookies(input.ott, returnTo, input.headers)
+  return consumeOrContinueExistingSession(input.ott, returnTo, input.headers)
 }
