@@ -41,7 +41,11 @@ export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) 
         action={
           isAdmin &&
           activationAction && (
-            <ActivationActionButton action={activationAction} className="h-11 sm:h-9" />
+            <ActivationActionButton
+              action={activationAction}
+              surface="feedback_empty"
+              className="h-11 sm:h-9"
+            />
           )
         }
       />

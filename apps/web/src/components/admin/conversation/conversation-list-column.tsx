@@ -477,7 +477,11 @@ export function ConversationListColumn({
                     {/* Widget settings are admin-only; members get the message
                         without a button they can't use. */}
                     {userRole === 'admin' && activationAction && (
-                      <ActivationActionButton action={activationAction} className="h-11 sm:h-9" />
+                      <ActivationActionButton
+                        action={activationAction}
+                        surface="conversation_empty"
+                        className="h-11 sm:h-9"
+                      />
                     )}
                   </>
                 )}

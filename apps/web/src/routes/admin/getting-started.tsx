@@ -240,7 +240,11 @@ function GettingStartedPage() {
                 defaultMessage={nextTask.description}
               />
             </p>
-            <ActivationActionButton action={nextAction} className="mt-5 h-11" />
+            <ActivationActionButton
+              action={nextAction}
+              surface="launch_plan"
+              className="mt-5 h-11"
+            />
           </section>
         )}
 

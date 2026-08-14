@@ -31,6 +31,7 @@ import {
 import { parseJsonConfig } from '@/lib/server/domains/settings/settings.helpers'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
 import { logger } from '@/lib/server/logger'
+import { emitPlgEvent } from '@/lib/server/plg-events'
 
 const log = logger.child({ component: 'activation' })
 
@@ -178,7 +179,7 @@ export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).ha
 export const markPublicBoardLinkCopiedFn = createServerFn({ method: 'POST' })
   .validator(markPublicBoardLinkCopiedSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
     const { state, value } = await mutateSetupStateAtomic(async (current, _row, tx) => {
       const board = await tx.query.boards.findFirst({
         where: and(eq(boards.id, data.boardId as BoardId), isNull(boards.deletedAt)),
@@ -205,6 +206,10 @@ export const markPublicBoardLinkCopiedFn = createServerFn({ method: 'POST' })
       { board_id: value.boardId, copied_at: state.activationMilestones?.publicBoardLinkCopiedAt },
       'public board link copied'
     )
+    await emitPlgEvent(
+      { name: 'board_link_copied', artifactType: 'board' },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
+    )
     return value
   })
 
@@ -212,7 +217,7 @@ export const markPublicBoardLinkCopiedFn = createServerFn({ method: 'POST' })
 export const setActivationGoalFn = createServerFn({ method: 'POST' })
   .validator(z.object({ outcome: outcomeSchema }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { state } = await mutateSetupStateAtomic((current, row) => {
       if (isPathManaged('workspace.useCase', row.managedFieldPaths)) {
         throw new Error('Workspace goal is managed by your workspace admin')
@@ -222,6 +227,10 @@ export const setActivationGoalFn = createServerFn({ method: 'POST' })
         value: undefined,
       }
     })
+    await emitPlgEvent(
+      { name: 'onboarding_goal_saved', outcome: state.useCase! },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
+    )
     return { outcome: state.useCase! }
   })
 
@@ -438,6 +447,20 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
         resource_id: value.startingPoint.resourceId,
       },
       'starting point completed'
+    )
+    const starterEvent = {
+      created: 'starter_created',
+      configured: 'starter_configured',
+      deferred: 'starter_deferred',
+      unavailable: 'starter_unavailable',
+    } as const
+    await emitPlgEvent(
+      {
+        name: starterEvent[value.startingPoint.resolution],
+        outcome: value.startingPoint.outcome,
+        artifactType: value.startingPoint.resourceType,
+      },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
     )
 
     // A trial starts here, and nowhere else, because this is the first moment

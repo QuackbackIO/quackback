@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import { authClient } from '@/lib/client/auth-client'
+import { recordPlgEvent } from '@/lib/client/plg-events'
 
 /**
  * Handles one-time token (OTT) session transfer from the widget to the portal.
@@ -32,6 +33,7 @@ export function OttHandler() {
         return
       }
 
+      recordPlgEvent({ name: 'saas_handoff_consumed' })
       // Full reload to pick up the new session cookie in SSR
       window.location.replace(cleanUrl)
     })

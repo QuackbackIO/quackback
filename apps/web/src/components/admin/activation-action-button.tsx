@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowTopRightOnSquareIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { markPublicBoardLinkCopiedFn } from '@/lib/server/functions/activation'
-import type { ActivationAction } from '@/lib/shared/activation-action'
+import type { ActivationAction, ActivationSurface } from '@/lib/shared/activation-action'
+import { recordPlgEvent } from '@/lib/client/plg-events'
 
 export async function copyWithFallback(text: string): Promise<void> {
   try {
@@ -28,17 +29,36 @@ export async function copyWithFallback(text: string): Promise<void> {
 
 export function ActivationActionButton({
   action,
+  surface,
   variant = 'default',
   className,
   onCompleted,
 }: {
   action: ActivationAction
+  surface: ActivationSurface
   variant?: 'default' | 'outline'
   className?: string
   onCompleted?: () => void | Promise<void>
 }) {
   const queryClient = useQueryClient()
   const [copying, setCopying] = useState(false)
+
+  useEffect(() => {
+    recordPlgEvent({
+      name: 'activation_cta_viewed',
+      outcome: action.outcome,
+      surface,
+      actionId: action.id,
+    })
+  }, [action.id, action.outcome, surface])
+
+  const recordClick = () =>
+    recordPlgEvent({
+      name: 'activation_cta_clicked',
+      outcome: action.outcome,
+      surface,
+      actionId: action.id,
+    })
 
   if (action.kind === 'copy') {
     return (
@@ -48,6 +68,7 @@ export function ActivationActionButton({
         className={className}
         disabled={copying}
         onClick={async () => {
+          recordClick()
           setCopying(true)
           try {
             const url = new URL(action.payload.path, window.location.origin).toString()
@@ -76,7 +97,10 @@ export function ActivationActionButton({
       <a
         href={action.destination}
         {...(action.kind === 'external' ? { target: '_blank', rel: 'noreferrer' } : {})}
-        onClick={() => void onCompleted?.()}
+        onClick={() => {
+          recordClick()
+          void onCompleted?.()
+        }}
       >
         {action.label}
         {action.kind === 'external' && <ArrowTopRightOnSquareIcon className="h-4 w-4" />}

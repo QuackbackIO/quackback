@@ -129,6 +129,7 @@ function ActivationBridge() {
       {action?.kind === 'copy' ? (
         <ActivationActionButton
           action={action}
+          surface="onboarding_handoff"
           className="h-11 min-w-56"
           onCompleted={async () => {
             await acknowledgeActivationHandoffFn()
