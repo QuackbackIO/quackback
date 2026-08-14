@@ -1,6 +1,3 @@
-import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
-import { z } from 'zod'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 
 export type OriginTransferResult =
@@ -65,25 +62,3 @@ export async function consumeOriginTransfer(input: {
     return { kind: 'error', status: 'invalid' }
   }
 }
-
-const searchSchema = z.object({
-  ott: z.string().optional(),
-  returnTo: z.string().optional(),
-})
-
-export const consumeOriginTransferFn = createServerFn({ method: 'POST' })
-  .validator(searchSchema)
-  .handler(async ({ data }): Promise<OriginTransferResult> => {
-    const result = await consumeOriginTransfer({
-      ...data,
-      host: getRequestHeaders().get('host'),
-      headers: getRequestHeaders(),
-    })
-    if (result.kind === 'redirect') {
-      ;(setResponseHeader as (name: string, value: string | string[]) => void)(
-        'Set-Cookie',
-        result.cookies
-      )
-    }
-    return result
-  })

@@ -1,11 +1,31 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { consumeOriginTransferFn } from '@/lib/server/functions/origin-transfer'
+import type { OriginTransferResult } from '@/lib/server/functions/origin-transfer'
 
 const searchSchema = z.object({
   ott: z.string().optional(),
   returnTo: z.string().optional(),
 })
+
+const consumeOriginTransferFn = createServerFn({ method: 'POST' })
+  .validator(searchSchema)
+  .handler(async ({ data }): Promise<OriginTransferResult> => {
+    const { consumeOriginTransfer } = await import('@/lib/server/functions/origin-transfer')
+    const result = await consumeOriginTransfer({
+      ...data,
+      host: getRequestHeaders().get('host'),
+      headers: getRequestHeaders(),
+    })
+    if (result.kind === 'redirect') {
+      ;(setResponseHeader as (name: string, value: string | string[]) => void)(
+        'Set-Cookie',
+        result.cookies
+      )
+    }
+    return result
+  })
 
 export const Route = createFileRoute('/auth/origin-transfer')({
   validateSearch: searchSchema.parse,
