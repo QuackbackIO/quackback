@@ -30,8 +30,8 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace: `a769a6dac` (deployed image remains `58eebd173`)
-- Control plane: `b4afe73`
+- Workspace: `b1a34ab7b` (deployed image remains `58eebd173`)
+- Control plane: `e2219f5` (live deploy remains `14dee7a2` / `b4afe73`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
 
@@ -78,7 +78,7 @@ remains.
 | 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                           |
 | 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`               |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`               |
-| 6b remove stale SaaS code        | inventoried; deletion pending                                            | see “Stale code to remove”                                          |
+| 6b remove stale SaaS code        | first slice deleted; remainder pending                                   | CP `e2219f5`                                                        |
 | 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                              |
 
 ## Completed activation work
@@ -166,11 +166,12 @@ the codebase.
 
 ## Next commits
 
-1. Remove stale SaaS-incompatible code. The Development fleet does not
-   need backwards compatibility with named create, k8s custom domains,
-   org-level customer billing UI, or workspace-owned billing. Self-host
-   with cloud off must keep working and must not show those surfaces.
-   Inventory is in “Stale code to remove” below.
+1. Finish the stale-code pass. First slice: CP `e2219f5` deleted
+   `domain-multi-fn`, `members-fn`, `org-billing-fn`, `domains/multi.ts`,
+   and their tests (2,637 lines). Typecheck passed; Vitest 201 files /
+   2,607 tests passed, 21 skipped. `org-subscription` and the domain
+   verify sweeper stay because provision/webhooks/reconcile still use
+   them. Remaining inventory is below.
 2. Finish separating `cp_instances.name` from the authoritative identity
    projection. New creates still write `Untitled workspace` into that
    column; display name lives on `cp_workspace_identity`. Do not use
@@ -199,17 +200,13 @@ cloud URL/domain controls, Stripe remains a customer integration.
 
 ### Delete on the control plane
 
-- `src/lib/server/functions/domain-multi-fn.ts` and
-  `src/lib/server/domains/multi*` — k8s HTTPRoute custom domains, no
-  certificate step. Only referenced by its own tests. The new path is
-  Cloudflare for SaaS + `cp_workspace_hostname_claims`.
-- `src/lib/server/functions/org-billing-fn.ts` and
-  `src/lib/server/billing/org-subscription.ts` — customer org billing
-  that the dashboard already abandoned. Live checkout is
-  `workspace-gateway.ts`. Keep Stripe customer/subscription ids on the
-  org row only while that gateway still reads them.
-- `src/lib/server/functions/members-fn.ts` — CP member roster. Only its
-  tests import it. Team lives in the workspace.
+- ~~`domain-multi-fn.ts` / `domains/multi.ts`~~ deleted in `e2219f5`.
+  `domains/mutator.ts`, `verify.ts`, and the domain-verify sweeper
+  remain until reconcile stops reading `cp_instance_domains`.
+- ~~`org-billing-fn.ts`~~ deleted in `e2219f5`. Keep
+  `org-subscription.ts` — provision, plan changes, and webhooks still
+  call it. Live customer checkout is `workspace-gateway.ts`.
+- ~~`members-fn.ts`~~ deleted in `e2219f5`. Keep `accept-invite-fn`.
 - Customer dashboard leftovers that only redirect:
   `dashboard/$orgId/billing`, `.../members`, `.../settings*`. Remove once
   no mail template still points at them, or keep as redirects with a
