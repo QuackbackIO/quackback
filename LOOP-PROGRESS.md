@@ -31,7 +31,7 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 ## Current revisions
 
 - Workspace: `809891850` (deployed image remains `58eebd173`)
-- Control plane: `546b26e` (live deploy remains `14dee7a2` / `b4afe73`)
+- Control plane: `6836a6a` (live deploy remains `14dee7a2` / `b4afe73`)
 - Last known deployed workspace: `58eebd173` (2026-08-14)
 - Last known deployed control plane: `14dee7a2` (2026-08-14)
 
@@ -78,7 +78,7 @@ remains.
 | 4 workspace projection + gateway | implemented; full/live verification pending                              | app `7d18b3cea`, `9eb85a9e6`, `3004486a6`                           |
 | 5 authoritative starter trial    | implemented; full/live verification pending                              | CP `2fa8a08`, `710ab09`; app `3004486a6`, `4688afa92`               |
 | 6 remove workspace billing       | implementation complete; boundary scan pending                           | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`               |
-| 6b remove stale SaaS code        | name separated from identity; remainder pending                          | CP `e2219f5`, `7230a32`, `546b26e`                                  |
+| 6b remove stale SaaS code        | leftover `custom_domain*` no longer routed; remainder pending            | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`                       |
 | 7 PLG + first-win proof          | infrastructure implemented                                               | `33c15ba53`; first-win journeys remain                              |
 
 ## Completed activation work
@@ -102,7 +102,7 @@ this through the control-plane gateway before closing the revised billing tracks
 ## Current worktree ownership
 
 Both worktrees were clean after workspace commit `809891850` and control-plane
-commit `546b26e`. The workspace
+commit `6836a6a`. The workspace
 accepts only signed control-plane commercial projections and contains no
 platform billing provider integration. The control plane now owns catalogue,
 gateway, starter trial, webhook projection, and durable fan-out behavior. Its
@@ -131,6 +131,14 @@ display name into leftover `cp_instances.name`: creates store `''` there,
 provisioning identity carries only immutable identifiers, and customer
 tiles / ready emails / admin lists read `cp_workspace_identity`. The
 column is not dropped. Typecheck passed; focused verification 168 tests.
+
+`6836a6a` then stopped leftover `cp_instances.custom_domain*` from
+routing: provisioning no longer injects those columns into the tenant
+registry, `getInstanceOverview` no longer returns `customDomain`, and
+the unused `getActivePlans` / `getInstanceDomains` loaders plus the
+dead `selectUpgradeTarget` picker are deleted. Columns stay until no
+replica SELECTs them. Typecheck passed; focused tests 56 passed
+(provisioner, instance-claim-link, one-screen, domains, instance-fn).
 
 The workspace verifies and monotonically applies the separate identity stream,
 redirects safe requests away from obsolete hosts without opening a tenant
@@ -171,13 +179,13 @@ the codebase.
 ## Next commits
 
 1. Finish the remaining stale-code inventory below. Name is no longer
-   identity: CP `546b26e` writes leftover `cp_instances.name` as `''`,
-   keeps `Untitled workspace` only on `cp_workspace_identity`, and
-   reads tiles/emails/admin lists from that row. Provisioning identity
-   no longer carries a display name. Typecheck passed; focused tests
-   168 passed. Do not use `cp_instances.custom_domain*` for the new
-   path. Dashboard billing/members/settings leftovers stay as
-   redirects until 2026-11-14.
+   identity (`546b26e`). Leftover `cp_instances.custom_domain*` is no
+   longer routed (`6836a6a`): provisioner ignores those columns, the
+   unused customer plan/domain loaders are gone, and
+   `selectUpgradeTarget` is deleted. Columns stay until no replica
+   SELECTs them. Do not use them for the new hostname-claim path.
+   Dashboard billing/members/settings leftovers stay as redirects
+   until 2026-11-14.
 2. Add database-backed rename-transfer replay/expiry/wrong-workspace and stable
    asset-origin verification.
 3. Fresh-browser prove the deployed identity pair on **new** generated
@@ -226,12 +234,19 @@ cloud URL/domain controls, Stripe remains a customer integration.
   `546b26e`. Display name is `cp_workspace_identity` only. Admin
   list coalesces identity, leftover name (walk-\* rows), then
   system hostname. Drop the leftover column after no replica
-  SELECTs it. Still leftover: `custom_domain`,
-  `custom_domain_verified`, `custom_domain_verified_at`; unread
-  `r2_bucket_name`, `r2_token_id`, `oidc_client_id`. Drop after no
-  replica SELECTs them.
+  SELECTs it.
+- ~~`cp_instances.custom_domain*` as a routing source~~ ignored in
+  `6836a6a`. New identity uses `cp_workspace_hostname_claims`.
+  Columns stay until no replica SELECTs them. Still leftover and
+  unread by current code except implicit `SELECT *` / admin-MCP
+  display: `r2_bucket_name`, `r2_token_id`, `oidc_client_id`. Drop
+  after no replica SELECTs them.
 - `login_url` / magic-link owner door if Open+OTT is the only customer
-  handoff. Confirm bootstrap email before deleting.
+  handoff. Confirmed 2026-08-14: dashboard tiles and setup ReadyPane
+  already POST `/api/instances/:id/open`. The remaining customer
+  door is the owner `cloud_welcome` email, which still carries the
+  minted `claimUrl`. Do not delete `login_url` until that mail
+  points at Open (or the dashboard) instead.
 - `stripe_subscription_item_id`, `pending_plan_id`,
   `cancel_at_period_end_at` on instances if workspace billing no longer
   writes them.
