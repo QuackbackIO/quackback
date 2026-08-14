@@ -223,6 +223,7 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
 }
 
 type CachedIntegrationMapping = {
+  integrationId: string
   eventType: string
   integrationType: string
   secrets: string | null
@@ -240,6 +241,7 @@ async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[
 
   const mappings = await db
     .select({
+      integrationId: integrations.id,
       eventType: integrationEventMappings.eventType,
       integrationType: integrations.integrationType,
       secrets: integrations.secrets,
@@ -317,6 +319,7 @@ async function getIntegrationTargets(
       try {
         if (m.integrationType === 'jira') {
           accessToken = await getJiraAccessToken({
+            id: m.integrationId,
             secrets: m.secrets,
             config: m.integrationConfig,
           })
