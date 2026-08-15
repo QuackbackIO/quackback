@@ -47,10 +47,12 @@ the dashboard`) live as `9030705d` /
   (2026-08-15) web `7057e905` SUCCESS, region `us-east4-eqdc4a`.
   Docker `31898534925`.
 - Last known deployed control plane: `9030705d` / `c208c06` (2026-08-15)
-- App `saas` tip `e56d00b9a` is live. Next unit is **P4** numeric caps
-  - overlay/wrapDbError with live proof (analyticsExports /
-    integrations projection copy; branding `TierLimitError` not 500).
-    Same UpgradeOffer.
+- App `saas` tip `482f44938` (`fix(settings): copy Pro feature flags
+from the billing projection`) **committed, not live**. Docker
+  `31900508741` queued `--ref saas`. Live still `e56d00b9a` /
+  `7057e905` / `sha256:27c538ec…`. Next unit is **Fleet**: wait for
+  Docker SUCCESS, patch `source.image`, redeploy, live-critic
+  analyticsExports / integrations overlay + branding 402 (not 500).
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -146,6 +148,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CP list official + custom hosts     | CP           | `4ad81fc`                                                                         | **yes** `4a5ea8d7` / `sha256:43e28d87…`    | Dashboard tiles print identity `platform_hostname` and ready custom hosts. Generated `ws-*` omitted. t1a live: `south63792f.quackback.co.uk` present, no `ws-*`. No custom rows yet. Tests: one-screen 11, list-addresses 6, siblings 26.                                             |
 | Plan upgrade offer                  | app          | `5834951f7`                                                                       | **yes** `48468c28` / `sha256:b358f971…`    | Access & Security no longer 402s the page. Audit/SSO/Domains share one offer from `billingQueries.catalogue()`. Export 402 opens the same modal. t1a Pro: Portal access 200; audit tab names Scale; Sign-in shows the SSO offer.                                                      |
 | Webhooks/workflows/macros/MCP offer | app          | `e56d00b9a`                                                                       | **yes** `7057e905` / `sha256:27c538ec…`    | Free t7: webhook/MCP **Upgrade to Growth** `$25`/`$300`; workflows **Upgrade to Pro** `$49`/`$588`; macros in-route Growth screen. Mixed Developers 200. t1a Access & Security 200 (audit Scale offer). Live JS gates catalogue/checkout on `billingEnabled`. `p2-upgrade-critic.md`. |
+| Projection feature overlay          | app          | `482f44938`                                                                       | **no** Docker `31900508741` queued         | t1a Pro `GET /api/export` not 402; t7 Free still 402 `features.analyticsExports`. Integrations page Upgrade to Pro on Free, catalog on Pro. Branding custom-colour save **402** not 500 + UpgradeOffer.                                                                               |
 | Same-plan billing 409               | CP + app     | CP `f4e3844` / `7cecf06d`; app `be3e41b01` / `95610fd8`                           | **yes** in `895b942d` / `753d3b86`         | t1a same-plan Pro monthly **409** `already_on_plan` (not 503). Scale **303** `billing.stripe.com`. Origin 403. Evidence `this-fire/ws-already-on-plan.json`.                                                                                                                          |
 | Named billing session refusals      | app          | `cb3c65420` / `932a38f9`                                                          | **yes** `895b942d`                         | No-cookie **401** `unauthorized`. t1a cookie on t1e **401** (was 500). Tests 5/5. `this-fire/billing-authz.json`.                                                                                                                                                                     |
 | Plan catalogue + invoices           | CP + app     | CP `2fb9488`, app `6418785c8`                                                     | **yes** API; UI in `02cb4329`              | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                                                            |
@@ -187,6 +190,19 @@ This fire (P3 live critic, 2026-08-15 T18:01Z):
   with `role=alert` and the 3-Free copy; trash stayed deleted.
   Temps only, no Neon. Instances 20→20.
 - Did not start P4. Ledger-only commit (named skip-deploy).
+
+This fire (P4 builder, 2026-08-15 T19:13Z):
+
+- App `482f44938` `fix(settings): copy Pro feature flags from the
+billing projection`. Overlay copies `analyticsExports` /
+  `customColors` / `customCss` / `integrations` from
+  `effectivePlan`. `wrapDbError` rethrows `DomainException` (branding
+  402, not 500). Same `UpgradeOffer` on branding save and Integrations.
+- Focused tests 33 passed (`tier-limits`, `wrap-db-error`,
+  `branding-tier-gate`, `settings.integrations`,
+  `platform-credentials-tier-gate`).
+- Docker `31900508741` dispatched `--ref saas`. Not SUCCESS yet.
+  Fleet + live critic next fire. No Neon. No pay. Instances unchanged.
 
 This fire (Fleet + P2 critic, 2026-08-15 T17:49Z):
 
@@ -1509,8 +1525,9 @@ Named critic spawned on the same URLs.
    0b. ~~**P3 live critic**~~ CP `c208c06` / `9030705d` /
    `sha256:d84fd27c…`. Restore at 3-Free **303** dashboard notice.
    Critic **PASS** `p3-restore-critic.md`.
-   0c. **P4 app saas:** numeric caps + overlay/`wrapDbError` only with
-   live proof.
+   0c. **P4 app saas** committed `482f44938`. Tests 33. Docker
+   `31900508741` queued. **Fleet + live critic** is the rest of
+   this unit (analyticsExports/integrations overlay; branding 402).
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
 2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
 3. ~~**Unit C — host-independent stored assets**~~ live through `6f255842f` (`sha256:1249693e…`).
