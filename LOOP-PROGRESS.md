@@ -776,6 +776,22 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 Fleet: `635cdb149` already in live `95610fd8` / `sha256:40be439d…`,
 `us-east4-eqdc4a`. Gauntlet ready 200. No deploy.
 
+Stripe-live: t1a + t1e already paid. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Projection probes on existing t1e: replay **204**, stale **409**
+`stale_version`, garbage **401**. Paid Growth survives the still-set
+trial clock. Product 200 from cached projection. Focused tests 12/12
+(exact expiry + monotonicity). Critic **PASS**
+(`projection-probes-critic.md`). Instances **19→19**. Did not take
+CP down. No Neon. No live key. Custom domains not started.
+
+Previous fire (Free plan-matrix t7):
+
+Fleet: `635cdb149` already in live `95610fd8` / `sha256:40be439d…`,
+`us-east4-eqdc4a`. Gauntlet ready 200. No deploy.
+
 Stripe-live: t1a + t1e payments already finalized. **Not repeated.**
 
 CP-create: 3-Free already live. **No second builder.**
@@ -1377,7 +1393,9 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
   paid, t1e = Pro trial.
   Catalogue / website vs CP `definitions.ts` / `PLAN_GRANTS` drift
   is in-scope HIGH. Do not treat the row-15 limits re-sweep as §H.
-- Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
+- Least-restrictive numeric limit overlay and exact-expiry: unit
+  **12/12**; live t1e paid Growth is not dropped by a future
+  `trialExpiresAt`. Free fallback at the exact instant is unit-proved.
   Live: Free cap refuses with a named plan; paid overlay lifts it;
   downgrade leaves existing over-cap resources removable.
 - Plan change / downgrade / cancel / update-card through workspace
@@ -1388,7 +1406,9 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 - ~~Cross-workspace checkout session metadata.~~ t1e session names t1e;
   extras `instanceId` cannot retarget. Second paid isolation live on
   t1e (`this-fire/t1e-pay-verify.json`).
-- Control-plane webhook replay and outbox retry.
+- ~~Control-plane webhook replay and outbox retry.~~ webhook no/bad
+  sig 400 on live; billing projection replay **204** / stale **409**
+  (`projection-probes.json`). Outbox already delivered v5/v6.
 - ~~Created/configured-only trial activation and immutable anchor.~~ live on both `ws-*` hosts.
 - Control-plane outage behavior for normal use and billing actions. App retry
   helper is live (`57ff32499` in image `703eca7d`); both current `ws-*`

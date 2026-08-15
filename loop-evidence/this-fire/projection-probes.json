@@ -1,0 +1,45 @@
+{
+  "at": "2026-08-15T08:41:53.451Z",
+  "unit": "projection-replay-stale-expiry",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "didNotApplyNewerProjection": true,
+  "errors": [],
+  "stripeKeyPrefix": "sk_test_",
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "before": {
+    "version": 5,
+    "effectivePlan": "growth",
+    "subscriptionStatus": "active",
+    "trialExpiresAt": "2026-08-28T19:44:24.774Z",
+    "maxBoards": 3
+  },
+  "replay": {
+    "status": 204,
+    "error": null
+  },
+  "stale": {
+    "status": 409,
+    "error": "stale_version"
+  },
+  "garbage": {
+    "status": 401,
+    "error": "invalid_projection"
+  },
+  "after": {
+    "version": 5,
+    "effectivePlan": "growth",
+    "subscriptionStatus": "active",
+    "maxBoards": 3
+  },
+  "paidSurvivesTrialClock": true,
+  "versionUnchanged": true,
+  "productDuringCachedProjection": {
+    "ready": 200,
+    "publicBoard": 200
+  },
+  "ok": true
+}
