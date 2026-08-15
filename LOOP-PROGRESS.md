@@ -762,8 +762,17 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 ## This fire (2026-08-15, orchestrator)
 
 Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
-web `c5d64208`. No deploy. Stripe-live not repeated. CP-create not
-started. No Neon. No live key. Custom domains not started.
+web `c5d64208`. Health 200. t1a public still has `First customer idea`.
+No deploy. Stripe-live not repeated. CP-create not started. No Neon.
+No live key. Custom domains not started. Instances **17**.
+
+No allowed builder: support / HC / internal first-win walks need new
+workspaces (Neon, forbidden unless the 3-Free proof needs it). Domains
+card is parked. Verify / §H already signed on this pair. Local
+`quackback-db` is up but the app is not on :3000; did not start a
+dev server this fire.
+
+Previous fire (PLG emit skip) is historical.
 
 Track 7 PLG: `3b4556ae2` proves `emitPlgEvent` is a no-op when cloud
 is off and logs only the bounded vocabulary when cloud is on. Tests
