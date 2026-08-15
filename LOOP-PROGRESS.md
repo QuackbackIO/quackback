@@ -38,10 +38,10 @@ Custom Hostnames integration proves both hostname and SSL readiness.
   (Docker `31875492036`). Web `e20c0eef` SUCCESS (env restore after
   outage probe), region only `us-east4-eqdc4a`. Worker `adc52e84`,
   hourly `e232e3f8`, daily `7f893013`, migrator `141d5a5d` same digest.
-- Control plane tip `f4e3844` live as `7cecf06d`
-  (`sha256:753d3b86…`, sfo). SQL `0069` still applied.
+- Control plane tip `ef31b2a` live as `3a9bc4ee`
+  (`sha256:aed43943…`, sfo). SQL `0069` still applied.
 - Last known deployed workspace: `cb3c65420` / `sha256:895b942d…` (2026-08-15)
-- Last known deployed control plane: `7cecf06d` (2026-08-15)
+- Last known deployed control plane: `3a9bc4ee` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -144,6 +144,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Plan-matrix critic                 | live + spec  | `loop-evidence/plan-matrix-895b942d.md` + `plan-matrix-free-t7.md` | **PASS** on `895b942d` / `753d3b86` | t1a Pro + t1e Growth + t7 Free. Foreign billing POST 401. No Scale / cancel fixture.                                                                                                                                                           |
 | Projection replay / stale / expiry | live + tests | `this-fire/projection-probes.json`                                 | **yes** `40be439d`                  | Replay 204, stale 409, garbage 401. Paid Growth not dropped by trial clock. Unit exact-expiry 12/12.                                                                                                                                           |
 | CP outage (web origin)             | live         | `this-fire/cp-outage-critic.md`                                    | **yes** `e20c0eef` / `895b942d`     | Inbox 200; billing 503 retry copy; restore 303/409. Same digest. CP process not stopped.                                                                                                                                                       |
+| Unauth delete/restore              | CP           | `ef31b2a` / `3a9bc4ee`                                             | **yes** `aed43943`                  | No-cookie POST delete/restore **303** `/auth/login` (was 500). Tests 6/6. `lifecycle-auth-critic.md`.                                                                                                                                          |
 | Product-feedback first-win         | app          | `52c1ab397`                                                        | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”.                                                                                                                                                    |
 | Support + HC live first-win        | live         | existing `sup9ca3a708` / `hc9ca3a708`                              | **yes** hosts 200                   | Change goal + first-win reached. Support conversation + “You’re up and running”. HC article published + milestone 15 Aug 2026. Critic **PASS** `live-existing/critic.md`.                                                                      |
 | Widget install Outlet              | app          | `40e1e6bf1`                                                        | **yes** `532dbe27` / `27e0c23d`     | Install page is Connect Messenger + Enable Messenger (not parent Widget). Enable → Channel enabled + Add the SDK. Critic **PASS** `this-fire/install-critic.md`.                                                                               |
@@ -155,9 +156,9 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | PLG emit self-host skip            | app tests    | `3b4556ae2`                                                        | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
 **Fleet note:** one deploy thread. Live pair is app `e20c0eef` /
-`sha256:895b942d…` (`cb3c65420`) and CP `7cecf06d` (`f4e3844`).
-`635cdb149` is an ancestor. No undeployed customer-visible product
-tip. Verify / §H signed on `895b942d` / `753d3b86`.
+`sha256:895b942d…` (`cb3c65420`) and CP `3a9bc4ee` (`ef31b2a`).
+`635cdb149` is an ancestor. No undeployed customer-visible app tip.
+Verify / §H still signed on `895b942d` (app digest unchanged).
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -775,6 +776,25 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
+Fleet: `635cdb149` already in `e20c0eef` / `sha256:895b942d…`. **No
+635 deploy.** CP `railway up` `ef31b2a` → `3a9bc4ee` SUCCESS
+`sha256:aed43943…` (sfo). First `295b263` still 500'd because
+delete/restore called the createServerFn wrapper.
+
+Stripe-live: t1a Pro + t1e Growth still paid. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Live unit: **named unauth delete/restore** (Bar B). Tests 6/6.
+Unauth POST t1a/t1e delete+restore **303** `/auth/login` (was 500
+`HTTPError`). Rows not deleted. Critic **PASS**
+(`lifecycle-auth-critic.md`). Instances **19→19**.
+
+SSO downgrade still needs a Scale host + IdP. Custom domains not
+started. Verify / §H still on app `895b942d`.
+
+Previous fire (CP outage):
+
 Fleet: `635cdb149` already an ancestor of live `sha256:895b942d…`,
 `us-east4-eqdc4a` only. **No 635cdb149 deploy.** Web-only env flip
 for the outage unit (same image): `3f4a09b0` blackhole then
@@ -1365,7 +1385,10 @@ Named critic spawned on the same URLs.
     (`cp-outage-critic.md`). Inbox 200; billing 503 retry copy;
     recovered 303/409. CP process was not stopped.
 25. SSO downgrade still needs a Scale host (no live Scale fixture).
-    Do not start custom domains.
+    Fail-open is unit-tested (`hooks-before.test.ts`). Do not start
+    custom domains.
+26. ~~**Unauth delete/restore 500**~~ live CP `ef31b2a` / `3a9bc4ee`.
+    303 `/auth/login`. `lifecycle-auth-critic.md`.
 
 ## Stale code to remove
 
