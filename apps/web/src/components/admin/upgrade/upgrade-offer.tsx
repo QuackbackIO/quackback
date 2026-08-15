@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { CheckIcon } from '@heroicons/react/24/solid'
-import { useQuery } from '@tanstack/react-query'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { billingQueries } from '@/lib/client/queries/billing'
@@ -13,24 +13,56 @@ import type { BillingCatalogue } from '@/lib/server/control-plane/client'
 
 type BillingPeriod = 'monthly' | 'annual'
 
-/**
- * The one upgrade body. Card, in-route screen, and modal all render this.
- * Plan name, price, and highlights come from the same catalogue as Plan & billing.
- */
-export function UpgradeOffer(props: {
+type UpgradeOfferProps = {
   description: UpgradeDescription
   dismissLabel?: string
   onDismiss?: () => void
   className?: string
-}) {
+}
+
+/**
+ * The one upgrade body. Card, in-route screen, and modal all render this.
+ * Plan name, price, and highlights come from the same catalogue as Plan & billing.
+ * The catalogue is prefetched in the route loader so the first paint is complete.
+ */
+export function UpgradeOffer(props: UpgradeOfferProps) {
   const { billingEnabled } = useRouteContext({ from: '__root__' })
   const canCheckout = usePermission(PERMISSIONS.BILLING_MANAGE)
-  const catalogueQuery = useQuery({
-    ...billingQueries.catalogue(),
-    enabled: Boolean(billingEnabled),
-  })
-  const catalogue = (catalogueQuery.data ?? null) as BillingCatalogue | null
-  const plan = cataloguePlanFor(catalogue, props.description.requiredPlan)
+  if (!billingEnabled) {
+    return <OfferFrame {...props} catalogue={null} canCheckout={false} billingEnabled={false} />
+  }
+  return (
+    <Suspense
+      fallback={<OfferFrame {...props} catalogue={null} canCheckout={canCheckout} billingEnabled />}
+    >
+      <UpgradeOfferReady {...props} canCheckout={canCheckout} />
+    </Suspense>
+  )
+}
+
+function UpgradeOfferReady(
+  props: UpgradeOfferProps & {
+    canCheckout: boolean
+  }
+) {
+  const { data: catalogue } = useSuspenseQuery(billingQueries.catalogue())
+  return (
+    <OfferFrame
+      {...props}
+      catalogue={(catalogue ?? null) as BillingCatalogue | null}
+      billingEnabled
+    />
+  )
+}
+
+function OfferFrame(
+  props: UpgradeOfferProps & {
+    catalogue: BillingCatalogue | null
+    canCheckout: boolean
+    billingEnabled: boolean
+  }
+) {
+  const plan = cataloguePlanFor(props.catalogue, props.description.requiredPlan)
   const [period, setPeriod] = useState<BillingPeriod>('annual')
 
   return (
@@ -43,14 +75,14 @@ export function UpgradeOffer(props: {
         <CatalogueDetails
           plan={plan}
           period={period}
-          discountMonths={catalogue?.annualDiscountMonths ?? 2}
+          discountMonths={props.catalogue?.annualDiscountMonths ?? 2}
           onPeriodChange={setPeriod}
         />
       ) : null}
       <div className="mt-5 flex flex-col items-center gap-2">
-        {plan && canCheckout && billingEnabled ? (
+        {plan && props.canCheckout && props.billingEnabled ? (
           <CheckoutButton planId={plan.id} period={period} label={`Upgrade to ${plan.name}`} />
-        ) : billingEnabled ? (
+        ) : props.billingEnabled ? (
           <Button asChild size="sm">
             <a href="/admin/settings/billing">See plans</a>
           </Button>

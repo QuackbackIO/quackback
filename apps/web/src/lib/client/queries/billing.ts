@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, type QueryClient } from '@tanstack/react-query'
 import {
   fetchBillingCatalogueFn,
   fetchBillingInvoicesFn,
@@ -33,4 +33,21 @@ export const billingQueries = {
       queryFn: () => fetchPlanUsageFn(),
       staleTime: 30_000,
     }),
+}
+
+/**
+ * Warm the advertised-plan catalogue before an upgrade surface renders.
+ * Fail-open: a control-plane miss stores null so the offer still SSRs.
+ */
+export async function ensureBillingCatalogue(
+  queryClient: QueryClient,
+  billingEnabled: boolean | undefined
+) {
+  if (!billingEnabled) return null
+  try {
+    return await queryClient.ensureQueryData(billingQueries.catalogue())
+  } catch {
+    queryClient.setQueryData(billingQueries.catalogue().queryKey, null)
+    return null
+  }
 }

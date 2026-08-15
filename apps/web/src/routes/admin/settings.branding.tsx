@@ -111,6 +111,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
     // of letting managers land on a shell full of 403s.
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
 
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
@@ -118,6 +119,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
       context.queryClient.ensureQueryData(settingsQueries.favicon()),
       context.queryClient.ensureQueryData(settingsQueries.customCss()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
   },
   component: BrandingPage,

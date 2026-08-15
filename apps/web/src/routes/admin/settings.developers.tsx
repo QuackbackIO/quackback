@@ -32,6 +32,7 @@ export const Route = createFileRoute('/admin/settings/developers')({
     // All three tabs are preloaded so switching tabs never round-trips
     // for data — every payload is small and admin-only.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const [, entitlements] = await Promise.all([
       Promise.all([
         queryClient.ensureQueryData(adminQueries.apiKeys()),
@@ -39,6 +40,7 @@ export const Route = createFileRoute('/admin/settings/developers')({
         queryClient.ensureQueryData(settingsQueries.developerConfig()),
       ]),
       listEntitlementsFn(),
+      ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
 
     return { webhooksEntitled: entitlements.webhooks, mcpEntitled: entitlements.mcpServer }

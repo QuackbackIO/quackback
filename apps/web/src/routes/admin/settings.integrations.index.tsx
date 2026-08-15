@@ -12,10 +12,12 @@ export const Route = createFileRoute('/admin/settings/integrations/')({
   loader: async ({ context }) => {
     const { queryClient } = context
     const { hasTierFeatureFn } = await import('@/lib/server/functions/entitlement-status')
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const [integrationsEnabled] = await Promise.all([
       hasTierFeatureFn({ data: { feature: 'integrations' } }),
       queryClient.ensureQueryData(adminQueries.integrationCatalog()),
       queryClient.ensureQueryData(adminQueries.integrations()),
+      ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
     return { integrationsEnabled }
   },

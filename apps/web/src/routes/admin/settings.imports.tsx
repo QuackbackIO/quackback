@@ -9,8 +9,10 @@ import { ImportsHubPage } from '@/components/admin/settings/imports/imports-hub-
  * experimental surface.
  */
 export const Route = createFileRoute('/admin/settings/imports')({
-  loader: ({ context }) => {
+  loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    await ensureBillingCatalogue(context.queryClient, context.billingEnabled)
   },
   component: ImportsHubPage,
 })

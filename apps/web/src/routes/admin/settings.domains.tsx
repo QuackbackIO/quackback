@@ -26,9 +26,11 @@ export const Route = createFileRoute('/admin/settings/domains')({
     const { cloudEnabled } = context
     if (!cloudEnabled)
       return { allowed: false, entitled: false, domains: [] as CustomDomainInstruction[] }
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const [entitled, domains] = await Promise.all([
       hasCustomDomainEntitlementFn(),
       getCloudCustomDomainsFn().catch(() => [] as CustomDomainInstruction[]),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
     return { allowed: true, entitled, domains }
   },

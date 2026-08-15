@@ -14,9 +14,14 @@ export const Route = createFileRoute('/admin/settings/security/sso_/new')({
   beforeLoad: ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
   },
-  loader: async () => {
+  loader: async ({ context }) => {
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
-    return { ssoEntitled: await hasEntitlementFn({ data: { key: 'sso' } }) }
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const [ssoEntitled] = await Promise.all([
+      hasEntitlementFn({ data: { key: 'sso' } }),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
+    ])
+    return { ssoEntitled }
   },
   component: SsoCreateRoute,
 })

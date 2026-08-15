@@ -12,7 +12,12 @@ export const Route = createFileRoute('/admin/settings/macros')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CONVERSATION_MANAGE)
     const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
-    return { macrosEntitled: await hasEntitlementFn({ data: { key: 'aiDrafts' } }) }
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const [macrosEntitled] = await Promise.all([
+      hasEntitlementFn({ data: { key: 'aiDrafts' } }),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
+    ])
+    return { macrosEntitled }
   },
   component: MacrosSettingsRoute,
 })

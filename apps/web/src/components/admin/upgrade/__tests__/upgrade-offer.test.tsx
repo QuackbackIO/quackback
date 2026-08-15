@@ -49,13 +49,14 @@ function renderOffer() {
 }
 
 describe('UpgradeOffer', () => {
-  it('renders catalogue price and highlights, not a second price list', () => {
+  it('renders catalogue price and highlights on the first paint', () => {
     renderOffer()
     expect(screen.getByRole('heading', { name: 'Upgrade to Scale' })).toBeTruthy()
     expect(screen.getByText(/The audit log is a Scale feature/)).toBeTruthy()
     expect(screen.getByText('SSO and audit log')).toBeTruthy()
     expect(screen.getByText('Audit log')).toBeTruthy()
     expect(screen.getByText('SSO')).toBeTruthy()
+    expect(screen.getByText('$89')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Upgrade to Scale' })).toBeTruthy()
     const form = document.querySelector('form')
     expect(form?.getAttribute('action')).toBe('/api/billing/session')

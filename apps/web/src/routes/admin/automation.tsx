@@ -16,6 +16,10 @@ export const Route = createFileRoute('/admin/automation')({
     )
     if (!canOpen) throw new Error('Access denied: requires an AI & Automation permission')
   },
+  loader: async ({ context }) => {
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    await ensureBillingCatalogue(context.queryClient, context.billingEnabled)
+  },
   component: AutomationLayout,
 })
 

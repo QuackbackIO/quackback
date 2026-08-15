@@ -7,6 +7,10 @@ import { PageHeader } from '@/components/shared/page-header'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 export const Route = createFileRoute('/admin/settings')({
+  loader: async ({ context }) => {
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    await ensureBillingCatalogue(context.queryClient, context.billingEnabled)
+  },
   component: SettingsLayout,
 })
 

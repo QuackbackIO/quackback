@@ -38,6 +38,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     // entitlement: prefetching it here took down Portal access and Sign-in
     // on every other plan. The audit tab loads that query only when entitled.
     const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     const [, entitlements] = await Promise.all([
       Promise.all([
         queryClient.ensureQueryData(settingsQueries.authConfig()),
@@ -48,6 +49,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
         queryClient.ensureQueryData(adminQueries.recoveryCodes()),
       ]),
       listEntitlementsFn(),
+      ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
 
     return { ssoEntitled: entitlements.sso, auditEntitled: entitlements.auditLog }
