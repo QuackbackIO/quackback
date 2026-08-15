@@ -145,7 +145,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Second paid isolation              | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Was Growth; now **Scale** (`t1e-scale-critic.md`). t1a stays Pro.                                                                                                                                                                              |
 | t1e Scale + SSO surface            | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Scale paid; outbox v6; `/sso/new` create fields. No IdP added. `t1e-scale-critic.md`.                                                                                                                                                          |
 | t1e period-end Growth schedule     | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Gateway Growth confirm **200** `billing.stripe.com`. Stripe test schedule **active** [scale] then [growth]. CP still Scale. t1a Pro. Instances 19. `t1e-downgrade-critic.md`.                                                                  |
-| Verify sweep                       | live         | `loop-evidence/verify-2026-08-15/sweep-e20c0eef.md`                               | **PASS 0 HIGH** on `895b942d` / `b7ae7455` | Compact re-sign after t1e period-end schedule. Prior `aed43943` sign historical.                                                                                                                                                               |
+| Verify sweep                       | live         | `loop-evidence/verify-2026-08-15/sweep-e20c0eef.md`                               | **PASS 0 HIGH** on `895b942d` / `b7ae7455` | Compact re-sign 11:13Z (Fleet idle). Critic **PASS** `fleet-idle-critic.md`. Prior 10:58Z sign historical.                                                                                                                                     |
 | Track 8b–8f                        | CP+app saas  | **8a–8f live**                                                                    | **8f yes** `71f78ecb` / `640d5ac1`         | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic                 | live + spec  | `plan-matrix-scale-t1e.md` + `plan-matrix-895b942d.md` + `plan-matrix-free-t7.md` | **PASS** Scale t1e on `895b942d`           | t1a Pro + t1e Scale + t7 Free. `/sso/new` unlocked. No IdP.                                                                                                                                                                                    |
 | Projection replay / stale / expiry | live + tests | `this-fire/projection-probes.json`                                                | **yes** `40be439d`                         | Replay 204, stale 409, garbage 401. Paid Growth not dropped by trial clock. Unit exact-expiry 12/12.                                                                                                                                           |
@@ -781,6 +781,28 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 `loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
 
 ## This fire (2026-08-15, orchestrator)
+
+Fleet: live web `e20c0eef` SUCCESS `sha256:895b942d…` (`cb3c65420`),
+region only `us-east4-eqdc4a`. Worker `adc52e84`, hourly `e232e3f8`,
+daily `7f893013`, migrator `141d5a5d` same digest. `635cdb149` is an
+ancestor. **No deploy.** Ready 200 on gauntlet / t1a / t1e / t7.
+
+Stripe-live: first t1a + t1e payments + t1e period-end Growth
+schedule already finalized — **not repeated.**
+
+CP-create: 3-Free already live `c5a484d` / `80c8301e`. **No second
+builder.** No isolated worktree to merge.
+
+Verify **PASS 0 HIGH** re-signed on `895b942d` / `b7ae7455`
+(`sweep-e20c0eef.md` 11:13Z). t1a Pro **409**; t1e Scale **409**;
+t7 Growth **303** `checkout.stripe.com`; foreign Origin **403**;
+foreign session **401**; unauth delete/restore **303**. Instances
+**19→19**. Named critic spawn unjoinable; orchestrator live-critic
+**PASS** (`fleet-idle-critic.md`).
+
+No Neon. No live key. Custom domains not started.
+
+Previous fire (t1e period-end schedule):
 
 Fleet: live web `e20c0eef` SUCCESS `sha256:895b942d…` (`cb3c65420`),
 region only `us-east4-eqdc4a`. `635cdb149` is an ancestor. **No
@@ -1516,10 +1538,12 @@ Named critic spawned on the same URLs.
     `lifecycle-https-critic.md`.
 28. ~~**t1e period-end Growth schedule**~~ live Stripe test schedule
     [scale] then [growth]; CP still Scale. `t1e-downgrade-critic.md`.
-    Projection follow-through waits for the Stripe period clock. Do
-    not start custom domains. Do not mint a live key. Do not create
-    Neon unless a same-owner sibling is required and extra spend
-    stays under $50/month.
+    Projection follow-through waits for the Stripe period clock.
+29. ~~**First-customer DoD**~~ customer outcomes met on
+    `895b942d` / `b7ae7455`. See Handover. Parked: custom-domain
+    add/cert (provider); t1e period-end Growth projection (clock);
+    leftover `cp_instances` columns. Do not start custom domains.
+    Do not mint a live key. Do not create Neon.
 
 ## Stale code to remove
 
@@ -1672,17 +1696,38 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 ## Blockers
 
-Stripe **test** payment + webhook finalize is live on t1a **and** t1e.
-Paid Change to Pro is live as a confirm portal session. t1e has a
-test-mode **period-end Growth schedule**; current plan stays Scale.
-8c transfer/leave is live.
-t1a is **Pro paid** after a completed test-mode plan change
-(`loop-evidence/t1a-plan-change.json`). Domains card + identity
-gateway are live (`59da45c2` / `69cb0353`). Live add/cert still
-later. Track 6b leftover `custom_domain*` / `r2_*` dropped in
-`0069`. Remaining parked leftovers: `cp_instances.name`,
-`login_url`, `oidc_client_id`, and the billing sweeper columns
-which still have writers. Walk3 webhook stays disabled.
+None that block the first-customer definition of done.
+
+Parked / clock-wait (not a next loop phase):
+
+- t1e Scale→Growth **schedule** is live; projection follow-through
+  waits on the Stripe period clock (no test clock on that sub).
+- Custom-domain add / DNS / certificate proof stays skipped
+  (provider) until the operator asks. Domains card + gateway are live.
+- Leftover `cp_instances.name`, `login_url`, `oidc_client_id`, and
+  billing-sweeper columns still have writers. Walk3 webhook stays
+  disabled.
+- Switcher Open-to-sibling was not minted on a stranger pair. List
+  - fail-closed open are live. The only same-owner pair is mixed
+    `ws-*` + `e2e-t2` (not identity-capable).
+
+## Handover (first-customer DoD, 2026-08-15)
+
+Live pair: app `e20c0eef` / `sha256:895b942d…` (`cb3c65420`,
+`us-east4-eqdc4a`) and CP `b7ae7455` / `sha256:45b9aebb…` (`8e4c00a`).
+Verify **0 HIGH**. Plan-matrix **PASS** on this pair (Free t7, Pro t1a,
+Scale t1e). Pickup customer-visible shas are live or skip-deploy.
+
+A stranger can: zero-input create → Open → name + required URL →
+outcome starter → Pro trial → test checkout / plan change / portal
+(downgrade schedule, cancel, card) / webhook finalize → named limit
+refusals with a paid overlay → 3 live Free (4th 402) → switcher /
+transfer / leave / usage / export-wipe. Self-host shows none of the
+cloud commercial surface. Custom domains stay disabled.
+
+Stop the 10-minute loop. Do not invent a next phase. Operator may
+later ask for live hostname/cert proof or watch the t1e period-end
+webhook.
 
 Operational defects carried from the prior lead:
 

@@ -2,8 +2,8 @@
 
 Compact Verify of live pair app `e20c0eef` / `sha256:895b942d…`
 `us-east4-eqdc4a` and CP `b7ae7455` / `sha256:45b9aebb…`. Re-signed
-2026-08-15T10:58Z after the t1e period-end Growth schedule. No
-payment, no Neon, no wipe, no hostname add. Facts: `sweep-e20c0eef.json`.
+2026-08-15T11:13Z after Fleet idle (no deploy). No payment, no Neon,
+no wipe, no hostname add. Facts: `sweep-e20c0eef.json`.
 
 | #     | Surface      | Result                                                              | Signal |
 | ----- | ------------ | ------------------------------------------------------------------- | ------ |

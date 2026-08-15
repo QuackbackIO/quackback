@@ -1,0 +1,94 @@
+{
+  "at": "2026-08-15T11:16:01.944Z",
+  "unit": "fleet-idle-critic",
+  "didNotPay": true,
+  "didNotDeploy": true,
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "errors": [],
+  "highs": [],
+  "stripeKeyPrefix": "sk_test_",
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "plans": {
+    "inst_01m00kq6cdf": "pro",
+    "inst_01m021rrsdf": "free",
+    "inst_01m00kprbrf": "scale"
+  },
+  "health": {
+    "https://gauntlet.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://south63792f.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://northfa99f0.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://sup9ca3a708.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    }
+  },
+  "mint": {
+    "t1a": {
+      "consumeStatus": 200,
+      "hasSession": true
+    },
+    "t1e": {
+      "consumeStatus": 200,
+      "hasSession": true
+    },
+    "t7": {
+      "consumeStatus": 200,
+      "hasSession": true
+    }
+  },
+  "t7Upgrade": {
+    "status": 303,
+    "error": null,
+    "locationHost": "checkout.stripe.com",
+    "locationIsLiveCheckout": false
+  },
+  "t1aSamePro": {
+    "status": 409,
+    "error": "already_on_plan",
+    "locationHost": null,
+    "locationIsLiveCheckout": false
+  },
+  "t1eSameScale": {
+    "status": 409,
+    "error": "already_on_plan",
+    "locationHost": null,
+    "locationIsLiveCheckout": false
+  },
+  "t1aForeignOrigin": {
+    "status": 403,
+    "error": "invalid_origin",
+    "locationHost": null,
+    "locationIsLiveCheckout": false
+  },
+  "t1aCookieOnT1e": {
+    "status": 401,
+    "error": "unauthorized"
+  },
+  "lifecycle": {
+    "delete": {
+      "status": 303,
+      "locationHost": "cp.quackback.co.uk",
+      "locationPath": "/auth/login"
+    },
+    "restore": {
+      "status": 303,
+      "locationHost": "cp.quackback.co.uk",
+      "locationPath": "/auth/login"
+    }
+  },
+  "expectedDigest": "sha256:895b942d58b548021837e4abcbdf96156410de149b23fcb2f29041ccaac8e1ab",
+  "ok": true
+}
