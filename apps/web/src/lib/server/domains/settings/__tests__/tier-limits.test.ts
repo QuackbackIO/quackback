@@ -204,11 +204,30 @@ describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
     expect(effective.features.ipAllowlist).toBe(false)
   })
 
+  it('copies Pro-only feature flags from the projected plan, not only entitlements', () => {
+    const effective = resolveEffectiveTierLimits(null, PROJECTION, beforeExpiry)
+    expect(effective.features.analyticsExports).toBe(true)
+    expect(effective.features.customColors).toBe(true)
+    expect(effective.features.customCss).toBe(true)
+    expect(effective.features.integrations).toBe(true)
+  })
+
+  it('keeps Growth feature flags closed for keys that are not entitlements', () => {
+    const growth: BillingProjection = { ...PROJECTION, effectivePlan: 'growth' }
+    const effective = resolveEffectiveTierLimits(null, growth, beforeExpiry)
+    expect(effective.features.analyticsExports).toBe(false)
+    expect(effective.features.integrations).toBe(false)
+    expect(effective.features.customColors).toBe(false)
+    expect(effective.features.customCss).toBe(false)
+  })
+
   it('falls back to projected Free numbers and closed features at exact expiry', () => {
     const effective = resolveEffectiveTierLimits(null, PROJECTION, atExpiry)
     expect(effective.maxBoards).toBe(2)
     expect(effective.features.customDomain).toBe(false)
     expect(effective.features.webhooks).toBe(false)
+    expect(effective.features.analyticsExports).toBe(false)
+    expect(effective.features.integrations).toBe(false)
   })
 
   it('still raises a stored operator floor in the least-restrictive direction', () => {

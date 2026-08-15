@@ -7,6 +7,7 @@ import {
   type BillingProjection,
   type ProjectedLimits,
 } from './cloud/billing-projection'
+import type { PlanId } from './cloud/cloud.types'
 
 type StoredTierLimits = Partial<Omit<TierLimits, 'features'>> & {
   features?: Partial<TierLimits['features']>
@@ -36,6 +37,41 @@ const CLOSED_CLOUD_FEATURES: TierLimits['features'] = {
   integrations: false,
 }
 
+/**
+ * Feature flags that are not entitlements. Must match CP `definitions.ts`
+ * for the same plan. Copied from `effectivePlan` because the projection
+ * entitlements map does not carry these keys.
+ */
+const PLAN_ONLY_FEATURES: Record<
+  PlanId,
+  Pick<TierLimits['features'], 'analyticsExports' | 'customColors' | 'customCss' | 'integrations'>
+> = {
+  free: {
+    analyticsExports: false,
+    customColors: false,
+    customCss: false,
+    integrations: false,
+  },
+  growth: {
+    analyticsExports: false,
+    customColors: false,
+    customCss: false,
+    integrations: false,
+  },
+  pro: {
+    analyticsExports: true,
+    customColors: true,
+    customCss: true,
+    integrations: true,
+  },
+  scale: {
+    analyticsExports: true,
+    customColors: true,
+    customCss: true,
+    integrations: true,
+  },
+}
+
 /** Numeric floor from a projection when the operator has not written a row. */
 export function cloudProjectionFloor(limits: ProjectedLimits): TierLimits {
   return {
@@ -57,8 +93,10 @@ function featuresFromProjection(projection: BillingProjection, now: Date): TierL
     projection.planLimitsExpireAt !== null &&
     now.getTime() >= Date.parse(projection.planLimitsExpireAt)
   const entitlements = expired ? {} : projection.entitlements
+  const planId: PlanId = expired ? 'free' : projection.effectivePlan
   return {
     ...CLOSED_CLOUD_FEATURES,
+    ...PLAN_ONLY_FEATURES[planId],
     customDomain: entitlements.customDomain === true,
     customOidcProvider: entitlements.sso === true,
     webhooks: entitlements.webhooks === true,

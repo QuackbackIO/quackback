@@ -4,7 +4,7 @@
  */
 import { db, eq, settings } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
-import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
+import { DomainException, InternalError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { logger } from '@/lib/server/logger'
 import {
@@ -92,7 +92,9 @@ export async function requireSettingsCached(): Promise<SettingsRecord> {
 
 /** @internal */
 export function wrapDbError(operation: string, error: unknown): never {
-  if (error instanceof NotFoundError || error instanceof ValidationError) throw error
+  // Named refusals (402/403/404/…) must stay themselves. Wrapping a
+  // TierLimitError here turned branding custom-colour saves into 500s.
+  if (error instanceof DomainException) throw error
   const message = error instanceof Error ? error.message : 'Unknown error'
   throw new InternalError('DATABASE_ERROR', `Failed to ${operation}: ${message}`, error)
 }

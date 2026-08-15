@@ -70,6 +70,8 @@ import {
   useUpdatePortalConfig,
 } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { UpgradeModal } from '@/components/admin/upgrade'
+import { describePlanUpgrade, isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import {
   DEFAULT_PORTAL_CONFIG,
   PORTAL_WELCOME_CARD_TITLE_MAX,
@@ -174,6 +176,7 @@ function BrandingPage() {
   const navBaseline = useRef(JSON.stringify(navItems))
 
   const [saving, setSaving] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   const themeDirty =
     state.cssText !== themeBaseline.current.css || state.themeMode !== themeBaseline.current.mode
@@ -229,7 +232,11 @@ function BrandingPage() {
       toast.success('Branding saved')
       startTransition(() => router.invalidate())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't save branding. Try again.")
+      if (isPlanRefusal(error)) {
+        setUpgradeOpen(true)
+      } else {
+        toast.error(error instanceof Error ? error.message : "Couldn't save branding. Try again.")
+      }
     } finally {
       setSaving(false)
     }
@@ -618,6 +625,11 @@ function BrandingPage() {
           </Button>
         </div>
       </div>
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        description={describePlanUpgrade('Custom colours', 'pro')}
+      />
     </div>
   )
 }
