@@ -32,6 +32,10 @@ vi.mock('@tanstack/react-start', () => ({
   useServerFn: (fn: unknown) => fn,
 }))
 
+vi.mock('@/lib/client/hooks/use-user-attributes-queries', () => ({
+  useUserAttributes: () => ({ data: [] }),
+}))
+
 vi.mock('@/lib/server/functions/sso', () => ({
   upsertIdentityProviderFn: upsertSpy,
   deleteIdentityProviderFn: vi.fn(),

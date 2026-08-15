@@ -306,7 +306,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     return {
       ok: false,
       stage: 'token-exchange',
-      hint: "No id_token or access_token returned. Make sure the requested scopes and the IdP application are configured to issue tokens for authorization-code grants.",
+      hint: 'No id_token or access_token returned. Make sure the requested scopes and the IdP application are configured to issue tokens for authorization-code grants.',
       steps,
     }
   }
@@ -474,13 +474,17 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     })
   }
 
-  const accessPayload = !verifiedPayload && tokens.access_token ? decodeJwtSafe(tokens.access_token) : null
+  const accessPayload =
+    !verifiedPayload && tokens.access_token ? decodeJwtSafe(tokens.access_token) : null
 
   return {
     ok: true,
     steps,
     claims: {
-      iss: (verifiedPayload?.iss as string | undefined) ?? (accessPayload?.iss as string | undefined) ?? '',
+      iss:
+        (verifiedPayload?.iss as string | undefined) ??
+        (accessPayload?.iss as string | undefined) ??
+        '',
       sub: identity.id,
       aud:
         (verifiedPayload?.aud as string | string[] | undefined) ??

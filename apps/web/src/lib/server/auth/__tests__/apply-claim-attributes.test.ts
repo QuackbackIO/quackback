@@ -11,7 +11,12 @@ describe('planClaimAttributeWrites', () => {
   it('writes only keys that exist on the definition list', () => {
     const { valid } = planClaimAttributeWrites({
       claims: { dept: 'Eng', unknown: 'x' },
-      mapping: { map: [{ claimPath: 'dept', attributeKey: 'department' }, { claimPath: 'unknown', attributeKey: 'nope' }] },
+      mapping: {
+        map: [
+          { claimPath: 'dept', attributeKey: 'department' },
+          { claimPath: 'unknown', attributeKey: 'nope' },
+        ],
+      },
       existing: {},
       definitions: defs,
     })

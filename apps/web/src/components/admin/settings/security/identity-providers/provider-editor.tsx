@@ -225,9 +225,9 @@ export function ProviderEditor({
   const [idClaim, setIdClaim] = useState(provider?.claimMapping?.profile?.claims?.id ?? '')
   const [emailClaim, setEmailClaim] = useState(provider?.claimMapping?.profile?.claims?.email ?? '')
   const [nameClaim, setNameClaim] = useState(provider?.claimMapping?.profile?.claims?.name ?? '')
-  const [attributeRows, setAttributeRows] = useState<Array<{ claimPath: string; attributeKey: string }>>(
-    () => provider?.claimMapping?.attributes?.map ?? []
-  )
+  const [attributeRows, setAttributeRows] = useState<
+    Array<{ claimPath: string; attributeKey: string }>
+  >(() => provider?.claimMapping?.attributes?.map ?? [])
   const [overrideExisting, setOverrideExisting] = useState(
     provider?.claimMapping?.attributes?.overrideExisting === true
   )
@@ -1375,8 +1375,7 @@ function AdvancedRequestSection({
   onTokenAuthChange: (next: string) => void
 }) {
   const [open, setOpen] = useState(
-    () =>
-      normalizePromptInput(prompt) !== null || normalizeTokenAuthInput(tokenAuth) !== null
+    () => normalizePromptInput(prompt) !== null || normalizeTokenAuthInput(tokenAuth) !== null
   )
 
   return (
@@ -1386,6 +1385,7 @@ function AdvancedRequestSection({
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
         aria-expanded={open}
+        aria-label="Advanced"
       >
         <span>Advanced</span>
         <span>{open ? '−' : '+'}</span>
@@ -1402,7 +1402,11 @@ function AdvancedRequestSection({
               </SelectTrigger>
               <SelectContent>
                 {PROMPT_CHOICES.map((c) => (
-                  <SelectItem key={c.value} value={c.value} data-testid={`prompt-choice-${c.value}`}>
+                  <SelectItem
+                    key={c.value}
+                    value={c.value}
+                    data-testid={`prompt-choice-${c.value}`}
+                  >
                     {c.label}
                   </SelectItem>
                 ))}

@@ -25,7 +25,9 @@ beforeAll(() => {
 
 const { upsertSpy } = vi.hoisted(() => ({
   upsertSpy: vi.fn(
-    async (_args: { data: { kind: string | null; claimMapping: unknown } }) => undefined
+    async (_args: {
+      data: { kind: string | null; claimMapping: unknown; prompt?: string | null }
+    }) => undefined
   ),
 }))
 

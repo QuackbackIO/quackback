@@ -27,7 +27,11 @@ import { requireAuth } from './auth-helpers'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
-import { allowsMissingEmail, identitySourcesFor, profileClaimFor } from '@/lib/shared/oidc-claim-mapping'
+import {
+  allowsMissingEmail,
+  identitySourcesFor,
+  profileClaimFor,
+} from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 

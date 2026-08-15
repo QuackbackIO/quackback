@@ -41,6 +41,7 @@ vi.mock('@/lib/server/db', () => ({
   account: { userId: 'account.userId', providerId: 'account.providerId' },
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
   eq: (...args: unknown[]) => mockEq(...args),
+  desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
 }))
 
 vi.mock('@/lib/server/audit/log', () => ({

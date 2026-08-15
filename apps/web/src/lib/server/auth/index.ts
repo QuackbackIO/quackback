@@ -159,7 +159,10 @@ async function createAuth() {
     accountId: string
   ): Promise<string> => {
     const existing = await db.query.account.findFirst({
-      where: and(eq(accountTable.providerId, registrationId), eq(accountTable.accountId, accountId)),
+      where: and(
+        eq(accountTable.providerId, registrationId),
+        eq(accountTable.accountId, accountId)
+      ),
       columns: { userId: true },
     })
     if (existing?.userId) {

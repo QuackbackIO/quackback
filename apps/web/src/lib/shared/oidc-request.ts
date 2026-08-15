@@ -67,7 +67,7 @@ export function authorizeRequestFor(provider: AuthorizeRequestSource): Authorize
     : DEFAULT_TOKEN_AUTH_METHOD
 
   return {
-    scopes: effectiveScopes(provider),
+    scopes: effectiveScopes({ scopes: provider.scopes ?? null }),
     prompt: prompt === 'omit' ? undefined : prompt,
     tokenAuth,
   }
