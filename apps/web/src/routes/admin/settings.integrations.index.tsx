@@ -11,13 +11,13 @@ import { describePlanUpgrade } from '@/lib/shared/describe-upgrade'
 export const Route = createFileRoute('/admin/settings/integrations/')({
   loader: async ({ context }) => {
     const { queryClient } = context
-    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-    const [limits] = await Promise.all([
-      getTierLimits(),
+    const { hasTierFeatureFn } = await import('@/lib/server/functions/entitlement-status')
+    const [integrationsEnabled] = await Promise.all([
+      hasTierFeatureFn({ data: { feature: 'integrations' } }),
       queryClient.ensureQueryData(adminQueries.integrationCatalog()),
       queryClient.ensureQueryData(adminQueries.integrations()),
     ])
-    return { integrationsEnabled: limits.features.integrations }
+    return { integrationsEnabled }
   },
   component: IntegrationsPage,
 })

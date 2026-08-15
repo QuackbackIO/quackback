@@ -24,4 +24,25 @@ export const listEntitlementsFn = createServerFn({ method: 'GET' }).handler(asyn
   return listEntitlements()
 })
 
+const TIER_FEATURE_KEYS = [
+  'customDomain',
+  'customOidcProvider',
+  'ipAllowlist',
+  'webhooks',
+  'mcpServer',
+  'analyticsExports',
+  'customColors',
+  'customCss',
+  'integrations',
+] as const
+
+/** Non-throwing feature check for loaders (same shape as hasEntitlementFn). */
+export const hasTierFeatureFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ feature: z.enum(TIER_FEATURE_KEYS) }))
+  .handler(async ({ data }) => {
+    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+    const limits = await getTierLimits()
+    return limits.features[data.feature]
+  })
+
 export const ENTITLEMENT_STATUS_KEYS = ENTITLEMENT_KEYS
