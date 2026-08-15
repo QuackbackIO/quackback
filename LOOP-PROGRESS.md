@@ -37,10 +37,10 @@ Custom Hostnames integration proves both hostname and SSL readiness.
   `ghcr.io/quackbackio/quackback@sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80`
   (Docker `31855839488`). Web `371883f5` SUCCESS, region only
   `us-east4-eqdc4a`.
-- Control plane tip `940c984` live as `9aaa6ff2` (8f wipe + account
-  delete; still `sfo`).
+- Control plane tip `dc86c83` live as `3006af01` (catalogue stickers
+  match `definitions.ts`; still `sfo`).
 - Last known deployed workspace: `e22e3884e` / `sha256:71f78ecb…` (2026-08-15)
-- Last known deployed control plane: `9aaa6ff2` (2026-08-15)
+- Last known deployed control plane: `3006af01` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -135,11 +135,11 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                            | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
 | Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep-52e78237.md`     | FAIL 1 HIGH (HC writer)            | Fuller sweep on `52e78237`. HIGH: cloud Help Center local writer. Fixer `ce57a0bcc` now live `47e64d52`.                                                                                                                                       |
 | Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1` | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-52e78237.md`                 | FAIL (signed)                      | Catalogue vs enforcement HIGH; Growth webhooks/mcp dual-layer HIGH; missing `N of M` (8e); SSO `/new` reachable. HC writer HIGH fixed on `47e64d52` after this matrix.                                                                         |
+| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-52e78237.md`                 | FAIL (signed on `52e78237`)        | Catalogue stickers **fixed live** `dc86c83` / `3006af01`. Remaining HIGH: Growth webhooks/mcp grant vs feature. Re-sign §H on `71f78ecb` / `8edadea8`.                                                                                         |
 
 **Fleet note:** one deploy thread. Live pair is app `371883f5` /
 `sha256:71f78ecb…` (`e22e3884e`, includes `635cdb149`) and CP
-`9aaa6ff2` (`940c984`). No undeployed customer-visible product tip.
+`3006af01` (`dc86c83`). No undeployed customer-visible product tip.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -757,9 +757,24 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
-Fleet: `635cdb149` already live (ancestor of `71f78ecb` / `e22e3884e`).
-Stripe-live first-pay already on t1a — not repeated. CP-create 3-Free
-already live — no second builder.
+Fleet: `635cdb149` already live (ancestor of `71f78ecb`). Stripe-live
+first-pay already on t1a — not repeated. CP-create 3-Free already live —
+no second builder.
+
+Compact Verify on `71f78ecb` / `640d5ac1`: **0 HIGH**
+(`loop-evidence/verify-2026-08-15/sweep.md`). Row 9 stays
+`skipped (provider)`. §H not re-signed this fire (same-hosts after
+catalogue deploy).
+
+Catalogue stickers: CP `dc86c83` tests 3/3. `railway up` from
+`/home/james/quackback-cp` → `3006af01` SUCCESS `sha256:8edadea8…`.
+Live `GET /catalogue` 200: Free/Growth `2/3 boards · 50 posts`, no
+unlimited posts, no Growth integrations/webhooks, no Pro `1M API`.
+Instances **17→17**. Critic PASS
+`loop-evidence/catalogue-stickers/critic.md`. Growth grant vs feature
+HIGH still open.
+
+Previous fire (8f export/wipe) is historical.
 
 8f: General danger card (workspace-local export + owner wipe) and CP
 account delete. Tests CP 21/21, app 15/15. First `railway up` from the
@@ -770,8 +785,7 @@ wrong cwd FAILED (`f12c4ffa`). Retry from `/home/james/quackback-cp`
 worker `b56b36fa`, hourly `597ee448`, daily `9bac011c`, migrator
 `af9e6263`. All `us-east4-eqdc4a`. Digest matches. Ready 200 on five
 health URLs. Live critic PASS. Instances **17→17**. Did not POST a
-real wipe. No Neon. No live key. Custom domains not started. Verify
-not re-run on this digest (last compact PASS `52e78237`).
+real wipe. No Neon. No live key. Custom domains not started.
 
 ### Critic (2026-08-15, 8f export/wipe `940c984` / `e22e3884e`)
 
@@ -1095,11 +1109,10 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: Verify sweep on `71f78ecb` / `640d5ac1`; §H HIGH
-(catalogue vs enforcement; Growth webhooks/mcp). Domains card and
-first-win still open. Walk3 webhook stays disabled. Live app
-`371883f5` / `sha256:71f78ecb…` `us-east4-eqdc4a`. Live CP `9aaa6ff2`
-(`940c984`). Instance rows 17.
+Remaining: re-sign §H on `71f78ecb` / `8edadea8`; Growth webhooks/mcp
+grant vs feature HIGH. Domains card and first-win still open. Walk3
+webhook stays disabled. Live app `371883f5` / `sha256:71f78ecb…`
+`us-east4-eqdc4a`. Live CP `3006af01` (`dc86c83`). Instance rows 17.
 
 Operational defects carried from the prior lead:
 
