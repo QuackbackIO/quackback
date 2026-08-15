@@ -33,10 +33,10 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `52c1ab397` (leftover board access). Live
+- Workspace tip: `40e1e6bf1` (widget install Outlet). Live still
   `ghcr.io/quackbackio/quackback@sha256:25319ded06a84cc0b6be9c95a5c738186210a7cc04ffff382c189dfee439ab86`
   (Docker `31860058211`). Web `c5d64208` SUCCESS, region only
-  `us-east4-eqdc4a`.
+  `us-east4-eqdc4a`. Docker `31870327511` queued for `40e1e6bf1`.
 - Control plane tip `64ca931` live as `1931dc38` (Growth webhooks/MCP
   both layers; still `sfo`).
 - Last known deployed workspace: `52c1ab397` / `sha256:25319ded…` (2026-08-15)
@@ -117,7 +117,7 @@ remains.
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan **PASS**                                                            | `loop-evidence/track6-scan/critic.md`; `BILLING_*` gone from fleet roles                                          |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | product-feedback **live** on t1a; all four outcomes + self-host **local**; support / HC live remain        | `52c1ab397`; `loop-evidence/t7-first-win/`                                                                        |
+| 7 PLG + first-win proof          | product-feedback **live** on t1a; support + HC **live** on existing hosts; self-host local                 | `52c1ab397`; `loop-evidence/t7-first-win/live-existing/`                                                          |
 | 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                                        |
 
 ## Pickup for critics and later fires
@@ -136,7 +136,9 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-25319ded.md`     | **PASS 0 HIGH** on `25319ded`       | Fuller 1–32 on leftover-access image. Prior `71f78ecb` sweep is historical.                                                                                                                                                                    |
 | Track 8b–8f                      | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-25319ded.md`                 | **PASS** on `25319ded` / `79030f27` | Prior PASS on `71f78ecb` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
-| Product-feedback first-win       | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC live walks remain (no Neon this fire).                                                                                                |
+| Product-feedback first-win       | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”.                                                                                                                                                    |
+| Support + HC live first-win      | live        | existing `sup9ca3a708` / `hc9ca3a708`                   | **yes** hosts 200                   | Change goal + first-win reached. Support conversation + “You’re up and running”. HC article published + milestone 15 Aug 2026. `live-existing/`. Critic in flight.                                                                             |
+| Widget install Outlet            | app         | `40e1e6bf1`                                             | **no** Docker `31870327511`         | `/admin/settings/widget/install` mounted parent settings (no Outlet). Tests 33. Deploy this digest, then prove Enable Messenger.                                                                                                               |
 | Self-host + internal first-win   | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | General name only; no billing/switcher/URL. Launch plan Internal + “Collect your first team idea” reached. `self-host-walk-critic.md`.                                                                                                         |
 | Self-host support + HC first-win | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | Support conversation + HC article milestones reached; useCase restored to internal. `self-host-outcomes-critic.md`.                                                                                                                            |
 | Change goal UI support + HC      | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | Change goal picker after hydration; Connect Messenger / Open Help Center; restored Internal. `self-host-changegoal-critic.md`.                                                                                                                 |
@@ -146,7 +148,8 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 
 **Fleet note:** one deploy thread. Live pair is app `c5d64208` /
 `sha256:25319ded…` (`52c1ab397`, includes `635cdb149`) and CP
-`1931dc38` (`64ca931`). No undeployed customer-visible product tip.
+`1931dc38` (`64ca931`). Undeployed customer-visible: `40e1e6bf1`
+(widget install Outlet). Docker `31870327511` in flight.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -765,15 +768,32 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 ## This fire (2026-08-15, orchestrator)
 
 Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
-web `c5d64208`, `us-east4-eqdc4a`. Health 200. No deploy. Stripe-live
-not repeated. CP-create already live; no second builder. No Neon.
-No live key. Custom domains not started. Instances **17**.
+web `c5d64208`, `us-east4-eqdc4a`. Five health 200. t1e Upgrade **303**
+`cs_test_` (foreign/missing Origin 403). Fleet critic
+`this-fire/fleet-critic.md` **PASS**. No 635cdb149 deploy.
 
-No allowed builder: support / HC live first-win need Neon; Domains
-card parked; Track 6b leftover columns still have replica SELECTs
-(`login_url`, `oidc_client_id`, instance Stripe item ids). Compact
-Verify **PASS 0 HIGH** (`compact-25319ded.md`). Fuller sweep / §H
-remain signed on this pair.
+Stripe-live: t1a Growth paid (sub active, item, outbox v4, checkout
+completed processed). **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Instances **19→19**. Two t7 hosts already existed (`sup9ca3a708`,
+`hc9ca3a708`); this fire created no Neon.
+
+Track 7 on those hosts: Change goal (after hydration) to Customer
+support / Help Center. Support: Conversations toggle + visitor
+`Ask a question` → first conversation; launch **You’re up and
+running** + milestone. HC: article published; launch **You’re up
+and running** + **Publish your first article** (15 Aug 2026). Shots
+`loop-evidence/t7-first-win/live-existing/`. Named critic spawned.
+
+HIGH: `/admin/settings/widget/install` rendered the parent Widget
+page (no Outlet). Fixer `40e1e6bf1` tests 33/33. Pushed. Docker
+`31870327511` dispatched `--ref saas`. Deploy + live Enable
+Messenger critic still required. No live key. Custom domains not
+started.
+
+Previous fire (Change goal UI):
 
 Previous fire (Change goal UI):
 
