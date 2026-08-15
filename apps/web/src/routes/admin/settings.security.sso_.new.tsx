@@ -15,8 +15,8 @@ export const Route = createFileRoute('/admin/settings/security/sso_/new')({
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
   },
   loader: async () => {
-    const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
-    return { ssoEntitled: await hasEntitlement('sso') }
+    const { hasSsoEntitlementFn } = await import('@/lib/server/functions/sso-entitlement')
+    return { ssoEntitled: await hasSsoEntitlementFn() }
   },
   component: SsoCreateRoute,
 })

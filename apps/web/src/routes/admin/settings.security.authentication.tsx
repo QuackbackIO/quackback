@@ -38,7 +38,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     // Both tabs are loaded up front so switching tabs doesn't trigger
     // a server round-trip. Auth config + portal config + provider
     // credential status are cheap (settings cache hits).
-    const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    const { hasSsoEntitlementFn } = await import('@/lib/server/functions/sso-entitlement')
     const [, ssoEntitled] = await Promise.all([
       Promise.all([
         queryClient.ensureQueryData(settingsQueries.authConfig()),
@@ -54,7 +54,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
           adminQueries.auditEvents({ from: rangeToFromIso('30d'), limit: 200 })
         ),
       ]),
-      hasEntitlement('sso'),
+      hasSsoEntitlementFn(),
     ])
 
     return { ssoEntitled }
