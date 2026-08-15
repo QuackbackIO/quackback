@@ -33,13 +33,13 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `e22e3884e` (8f General export/wipe). Live
-  `ghcr.io/quackbackio/quackback@sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80`
-  (Docker `31855839488`). Web `371883f5` SUCCESS, region only
+- Workspace tip: `52c1ab397` (leftover board access). Live
+  `ghcr.io/quackbackio/quackback@sha256:25319ded06a84cc0b6be9c95a5c738186210a7cc04ffff382c189dfee439ab86`
+  (Docker `31860058211`). Web `c5d64208` SUCCESS, region only
   `us-east4-eqdc4a`.
 - Control plane tip `64ca931` live as `1931dc38` (Growth webhooks/MCP
   both layers; still `sfo`).
-- Last known deployed workspace: `e22e3884e` / `sha256:71f78ecb…` (2026-08-15)
+- Last known deployed workspace: `52c1ab397` / `sha256:25319ded…` (2026-08-15)
 - Last known deployed control plane: `1931dc38` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
@@ -117,7 +117,7 @@ remains.
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan **PASS**                                                            | `loop-evidence/track6-scan/critic.md`; `BILLING_*` gone from fleet roles                                          |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | launch plan + first-win card **live**; five-outcome walks remain                                           | `33c15ba53`; critic `loop-evidence/t7-first-win/critic.md`                                                        |
+| 7 PLG + first-win proof          | product-feedback first-win **live** on t1a; leftover board-access crash fixed; other outcomes remain       | `52c1ab397`; `loop-evidence/t7-first-win/`                                                                        |
 | 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                                        |
 
 ## Pickup for critics and later fires
@@ -133,12 +133,13 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
 | Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
-| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep.md`              | **PASS 0 HIGH** on `71f78ecb`       | Fuller 1–32. HC local writer gone. 8e/8f surfaces present. §H not this file.                                                                                                                                                                   |
+| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep.md`              | **PASS 0 HIGH** on prior `71f78ecb` | Re-sweep §A–G against `25319ded` next fire.                                                                                                                                                                                                    |
 | Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-71f78ecb.md`                 | **PASS** on `71f78ecb` / `79030f27` | Prior HIGHs cleared. No unpaid Free / Scale / cancel fixture.                                                                                                                                                                                  |
+| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-71f78ecb.md`                 | **PASS** on prior `71f78ecb`        | Re-sign §H against `25319ded` / `1931dc38` after Verify.                                                                                                                                                                                       |
+| Product-feedback first-win     | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC / internal / self-host walks remain (no Neon this fire).                                                                              |
 
-**Fleet note:** one deploy thread. Live pair is app `371883f5` /
-`sha256:71f78ecb…` (`e22e3884e`, includes `635cdb149`) and CP
+**Fleet note:** one deploy thread. Live pair is app `c5d64208` /
+`sha256:25319ded…` (`52c1ab397`, includes `635cdb149`) and CP
 `1931dc38` (`64ca931`). No undeployed customer-visible product tip.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
@@ -757,15 +758,31 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
-Fleet: `635cdb149` already live (ancestor of `71f78ecb` / web
-`371883f5`). Stripe-live first-pay already on t1a — not repeated.
-CP-create 3-Free already live — no second builder.
+Fleet: `635cdb149` already an ancestor of live `52c1ab397`. Stripe-live
+first-pay already on t1a — not repeated. CP-create 3-Free already live
+— no second builder. No Neon. No live Stripe key. Custom domains not
+started. Instances **17→17**.
 
-Track 7 critic: live launch-plan + first-win card on `71f78ecb`.
-Outcome titles and one primary CTA in served JS. Tests 30/30. Did not
-walk support / Help Center / internal / self-host fresh mailboxes.
-`loop-evidence/t7-first-win/critic.md`. No deploy. Custom domains not
-started.
+Track 7 product-feedback first-win was blocked: leftover t1a board
+`access` is `{ view: anonymous, submit: authenticated }` with no
+`moderation`. Signed-in public board crashed
+`board.access.moderation.signedPosts` (Railway logs + React #419
+skeleton). `52c1ab397` defaults missing vote/comment/segments/moderation
+to the public-preset inherit shape. Tests 200/200 (boards schema +
+policy). Docker `31860058211` → `sha256:25319ded…`. `source.image` +
+`railway redeploy --from-source`: web `c5d64208`, worker `086ed99a`,
+hourly `b48414aa`, daily `518eae03`, migrator `e7d2d36a`. All
+`us-east4-eqdc4a`. Digest matches. Ready 200 on five health URLs.
+
+Live: portal sign-in on t1a; after the image, signed-in board hydrates
+and accepts Submit. One customer post + auto-vote. Owner getting-started
+“You’re up and running”. Shots: `loop-evidence/t7-first-win/`. Critic
+**PASS** (`loop-evidence/t7-first-win/critic.md`). Support / Help Center
+/ internal / self-host walks remain (would need Neon or a local
+self-host host). Verify / §H still signed against the prior `71f78ecb`
+pair — re-sweep next fire.
+
+Previous fire (launch-plan card critic) is historical.
 
 Previous fire (Track 6 scan) is historical.
 
@@ -985,7 +1002,9 @@ Named critic spawned on the same URLs.
     no price list. Cards live in `02cb4329`. **Change to {plan}**
     must open a Stripe confirm session for that price (this unit).
     Upgrades now (pro-rata); downgrades at period end.
-18. First-win journeys. Checkout attaches to an existing workspace only.
+18. First-win journeys. Product-feedback first-win is live on t1a
+    (`52c1ab397`). Remaining: support / Help Center / internal / self-host
+    (no Neon unless extra spend stays under $50/month).
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
@@ -1139,10 +1158,11 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: five-outcome first-win walks (support / Help Center /
-internal / self-host); Domains card (do not start live certs until
-asked). Track 6 scan closed. Walk3 webhook stays disabled. Live app `371883f5` / `sha256:71f78ecb…`
-`us-east4-eqdc4a`. Live CP `1931dc38` (`64ca931`). Instance rows 17.
+Remaining: support / Help Center / internal / self-host first-win
+walks; Domains card (do not start live certs until asked). Track 6
+scan closed. Walk3 webhook stays disabled. Live app `c5d64208` /
+`sha256:25319ded…` `us-east4-eqdc4a`. Live CP `1931dc38` (`64ca931`).
+Instance rows 17. Product-feedback first-win is live on t1a.
 
 Operational defects carried from the prior lead:
 

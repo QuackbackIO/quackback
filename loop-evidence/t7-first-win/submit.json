@@ -1,0 +1,35 @@
+{
+  "titlePrefix": "First customer idea",
+  "steps": [
+    {
+      "step": "ready",
+      "submitCount": 1,
+      "buttons": [
+        "Toggle theme",
+        "?",
+        "Product feedback",
+        "sign out",
+        "Cancel",
+        "Submit",
+        "Trending",
+        "Top",
+        "New",
+        "Search",
+        "Filter",
+        "View all posts",
+        "Product feedback"
+      ]
+    },
+    {
+      "step": "submit_visible",
+      "enabled": true
+    },
+    {
+      "step": "after",
+      "url": "https://south63792f.quackback.co.uk/?sort=trending",
+      "hasTitle": true,
+      "snippet": "Track1 Alpha Toggle theme ? Feedback Roadmap Changelog Support Trending Top New Search Filter 1 Open First customer idea dd838bc5 Anonymous · less than a minute ago BOARDS View all posts Product feedback Powered by Quackback Feedback submitted View"
+    }
+  ],
+  "errors": []
+}

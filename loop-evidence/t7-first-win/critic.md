@@ -1,18 +1,21 @@
-# PASS — live launch plan + first-win card (not the five-outcome walk)
+# PASS — product-feedback first-win on t1a (not the five-outcome walk)
 
-Independent critic 2026-08-15 on app `371883f5` / `sha256:71f78ecb…`
-`us-east4-eqdc4a`. No deploy, no Neon, no pay, no wipe. Instances unchanged.
+Independent live probe 2026-08-15 after leftover-access fix `52c1ab397`.
+App `c5d64208` / `sha256:25319ded…` `us-east4-eqdc4a`. Critic spawn was
+unjoinable; orchestrator re-hit the live URLs. No Neon, no pay, no wipe.
+Instances 17.
 
-| Probe                                        | Result                                                                                                      |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `GET …/assets/getting-started-DvgW2s7H.js`   | 200 “Your launch plan” + `first_win`                                                                        |
-| `GET …/assets/launch-checklist-C-ROpigZ.js`  | 200 outcome first-win titles (post/vote, conversation, article, team idea) + Copy board / Connect Messenger |
-| `GET …/assets/activation-action-JARzZW_-.js` | 200 one-primary-action helpers                                                                              |
-| Verify row 3                                 | `/admin/getting-started` 200 primary **Copy board link** (t1a product feedback)                             |
-| Focused tests                                | 30/30 (`plg-events`, `launch-checklist`, `activation-wins`)                                                 |
-| PLG vocabulary                               | `first_win_reached` + bounded fields; extras/URLs/emails rejected                                           |
+| Probe                                                           | Result                                                                                                    |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Public `GET https://south63792f.quackback.co.uk/?sort=trending` | 200 titled Feedback; body contains `First customer idea`                                                  |
+| Signed-in public board                                          | After deploy, hydrates (placeholder present, no React #419). Submit posted `First customer idea dd838bc5` |
+| Owner `/admin/getting-started`                                  | 200 “Your launch plan” + “You’re up and running”                                                          |
+| Tenant counts                                                   | t1a posts=1 externalPosts=1 externalVotes=1; t1e still 0                                                  |
+| Fleet                                                           | five health URLs 200; digest `25319ded`; web region only `us-east4-eqdc4a`                                |
+| Instances                                                       | 17 before and after; t1a/t1e remain                                                                       |
 
-Did **not** walk a fresh mailbox through support / Help Center / internal /
-self-host. Those journeys remain.
+Did **not** walk support / Help Center / internal / self-host. Those
+journeys remain and need new workspaces or a local self-host host.
 
-Health: gauntlet/south/north already 200 on this digest.
+Prior crash (Railway `board.access.moderation.signedPosts`, skeleton
+board) is gone on this digest.
