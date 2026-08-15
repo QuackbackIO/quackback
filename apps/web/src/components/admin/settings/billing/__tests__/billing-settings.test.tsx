@@ -119,6 +119,25 @@ describe('BillingPlansView', () => {
     )
   })
 
+  it('shows finite usage as N of M', () => {
+    render(
+      <BillingPlansView
+        overview={overview}
+        catalogue={catalogue}
+        catalogueError={null}
+        invoices={[]}
+        invoicesError={null}
+        usage={[
+          { key: 'maxBoards', label: 'boards', used: 1, limit: 3 },
+          { key: 'maxTeamSeats', label: 'seats', used: 1, limit: 1 },
+        ]}
+      />
+    )
+    expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument()
+    expect(screen.getByText('1 of 3')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1')).toBeInTheDocument()
+  })
+
   it('shows annual monthly equivalent from the catalogue', () => {
     render(
       <BillingPlansView

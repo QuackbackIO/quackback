@@ -15,6 +15,7 @@ export function BillingSettings() {
   const { data: overview } = useSuspenseQuery(billingQueries.overview())
   const catalogue = useQuery(billingQueries.catalogue())
   const invoices = useQuery(billingQueries.invoices())
+  const usage = useQuery(billingQueries.usage())
   if (!overview) return null
   return (
     <BillingPlansView
@@ -23,6 +24,7 @@ export function BillingSettings() {
       catalogueError={catalogue.error instanceof Error ? catalogue.error.message : null}
       invoices={invoices.data ?? []}
       invoicesError={invoices.error instanceof Error ? invoices.error.message : null}
+      usage={usage.data ?? []}
     />
   )
 }
@@ -41,6 +43,7 @@ export function BillingPlansView(props: {
   catalogueError: string | null
   invoices: CustomerInvoice[]
   invoicesError: string | null
+  usage?: Array<{ key: string; label: string; used: number; limit: number | null }>
 }) {
   const [period, setPeriod] = useState<'monthly' | 'annual'>('annual')
   const { overview, catalogue } = props
@@ -77,6 +80,21 @@ export function BillingPlansView(props: {
           </p>
         )}
       </SettingsCard>
+
+      {props.usage && props.usage.length > 0 ? (
+        <SettingsCard title="Usage" description="How much of this plan you are using.">
+          <ul className="space-y-1.5 text-[13px]">
+            {props.usage.map((line) => (
+              <li key={line.key} className="flex justify-between gap-3">
+                <span className="text-muted-foreground capitalize">{line.label}</span>
+                <span className="font-mono tabular-nums">
+                  {line.limit == null ? line.used : `${line.used} of ${line.limit}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SettingsCard>
+      ) : null}
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
