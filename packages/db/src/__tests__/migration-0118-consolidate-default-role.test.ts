@@ -32,6 +32,12 @@ describe.skipIf(!dbAvailable)('migration 0118 consolidate default role', () => {
     if (!db) return
     await db
       .transaction(async (tx) => {
+        // 0127 dropped this column. Recreate it for the pin so 0118 still
+        // runs against the shape it originally saw.
+        await tx.execute(
+          sql`ALTER TABLE "identity_provider" ADD COLUMN IF NOT EXISTS "attribute_mapping" jsonb`
+        )
+
         const mapping = {
           claimPath: 'groups',
           rules: [{ whenContains: 'admins', role: 'admin' }],
