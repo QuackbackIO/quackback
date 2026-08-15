@@ -220,6 +220,10 @@ export async function leaveCloudWorkspace(email: string): Promise<void> {
   await callWorkspaceControlPlane('/api/v1/internal/membership/leave', { email })
 }
 
+export async function wipeCloudWorkspace(): Promise<void> {
+  await callWorkspaceControlPlane('/api/v1/internal/lifecycle/soft-delete', { confirm: 'wipe' })
+}
+
 export async function openOwnerWorkspace(instanceId: string): Promise<string> {
   const result = await callWorkspaceControlPlane<{ url?: unknown }>(
     '/api/v1/internal/workspaces/open',

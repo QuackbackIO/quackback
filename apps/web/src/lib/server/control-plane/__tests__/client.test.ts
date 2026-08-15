@@ -14,6 +14,7 @@ import {
   fetchBillingCatalogue,
   fetchOwnerWorkspaces,
   leaveCloudWorkspace,
+  wipeCloudWorkspace,
   openOwnerWorkspace,
   transferWorkspaceOwnership,
   reportTrialActivation,
@@ -131,7 +132,9 @@ describe('workspace control-plane credential', () => {
   })
 
   it('transfers ownership with only toEmail', async () => {
-    hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ ownerEmail: 'mate@example.com' }), { status: 200 }))
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ ownerEmail: 'mate@example.com' }), { status: 200 })
+    )
     await transferWorkspaceOwnership('mate@example.com')
     const [, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
     expect(String(hoisted.fetch.mock.calls[0][0])).toContain('/api/v1/internal/ownership')
@@ -142,8 +145,21 @@ describe('workspace control-plane credential', () => {
   it('leaves with only email', async () => {
     hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ left: true }), { status: 200 }))
     await leaveCloudWorkspace('mate@example.com')
-    expect(JSON.parse(String((hoisted.fetch.mock.calls[0] as [URL, RequestInit])[1].body))).toEqual({
-      email: 'mate@example.com',
-    })
+    expect(JSON.parse(String((hoisted.fetch.mock.calls[0] as [URL, RequestInit])[1].body))).toEqual(
+      {
+        email: 'mate@example.com',
+      }
+    )
+  })
+
+  it('wipes with only confirm wipe and no workspace id', async () => {
+    hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ wiped: true }), { status: 200 }))
+    await wipeCloudWorkspace()
+    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(url)).toContain('/api/v1/internal/lifecycle/soft-delete')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ confirm: 'wipe' })
+    expect(String(init.body)).not.toContain('workspaceId')
+    expect(String(init.body)).not.toContain('instanceId')
   })
 })

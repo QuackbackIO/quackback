@@ -29,6 +29,7 @@ import {
   type ProductId,
 } from '@/lib/shared/types'
 import { Switch } from '@/components/ui/switch'
+import { WorkspaceDangerCard } from '@/components/admin/settings/workspace-danger-card'
 
 export const Route = createFileRoute('/admin/settings/general')({
   loader: async ({ context }) => {
@@ -224,6 +225,8 @@ function GeneralSettingsPage() {
           ))}
         </div>
       </SettingsCard>
+
+      <WorkspaceDangerCard cloudEnabled={Boolean(cloudIdentity)} />
     </div>
   )
 }
