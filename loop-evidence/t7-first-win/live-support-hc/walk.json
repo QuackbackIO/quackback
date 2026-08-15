@@ -1,0 +1,39 @@
+{
+  "at": "2026-08-15T06:27:34.842Z",
+  "expectedMonthlyExtraUsd": "<10",
+  "spendCapUsd": 50,
+  "neonVia": "control-plane provisioner (qb-cp-* prefix)",
+  "walks": [
+    {
+      "goalLabel": "Customer support",
+      "name": "Support walk",
+      "label": "sup",
+      "steps": [
+        {
+          "step": "mailbox",
+          "at": "2026-08-15T06:27:36.428Z",
+          "emailDomain": "guerrillamailblock.com",
+          "local": "walk-t7-sup-3b234d5e"
+        },
+        {
+          "step": "cp-session",
+          "at": "2026-08-15T06:27:49.503Z",
+          "status": 302
+        },
+        {
+          "step": "dashboard",
+          "at": "2026-08-15T06:27:50.893Z",
+          "status": 200,
+          "url": "https://cp.quackback.co.uk/setup/org_01m021nvsyfan9v4beh2ff9nwb",
+          "creating": true
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "errors": [
+    "Error: railway run failed: 65:47)\n      at readableAddChunkPushByteMode (internal:streams/readable:243:18)\n      at data (node:net:280:52)\n      at cachedError (/home/james/quackback-cp/node_modules/postgres/src/query.js:170:27)\n      at Query (/home/james/quackback-cp/node_modules/postgres/src/query.js:53:17)\n      at sql (/home/james/quackback-cp/node_modules/postgres/src/index.js:151:10)\n\nBun v"
+  ],
+  "instanceCountBefore": 17,
+  "instanceCountAfter": 17
+}

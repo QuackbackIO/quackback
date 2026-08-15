@@ -1104,8 +1104,12 @@ Named critic spawned on the same URLs.
     Upgrades now (pro-rata); downgrades at period end.
 18. First-win journeys. Product-feedback first-win is live on t1a
     (`52c1ab397`). All four outcomes + self-host Bar C proved on
-    local `:3000` (skip-deploy). Remaining: support / Help Center
-    **live** (no Neon unless extra spend stays under $50/month).
+    local `:3000` (skip-deploy). **Live Neon authorized 2026-08-15:**
+    Support `sup9ca3a708` (`inst_01m021rrsd…`, Neon
+    `qb-cp-ffe2b4983034867ff50fdf54`) and Help Center `hc9ca3a708`
+    (`inst_01m021xvy6…`, Neon `qb-cp-8c38697ef940ff0d53bd1d68`).
+    Instances 17→19. Ready 200. Starters still defaulted to product
+    feedback — Change goal + conversation/article first-win remain.
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
@@ -1260,13 +1264,14 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: support / Help Center **live** first-win walks (need Neon);
+Remaining: Change goal + first-win on live Support
+`sup9ca3a708` / Help Center `hc9ca3a708` (Neons created);
 Domains card (do not start live certs until asked). All four
 outcomes + self-host Bar C proved locally. Track 6 scan closed.
 Walk3 webhook stays disabled. Live app `c5d64208` /
 `sha256:25319ded…` `us-east4-eqdc4a`. Live CP `1931dc38`
-(`64ca931`). Instance rows 17. Product-feedback first-win is live
-on t1a.
+(`64ca931`). Instance rows **19** (two new live first-win hosts).
+Product-feedback first-win is live on t1a.
 
 Operational defects carried from the prior lead:
 
