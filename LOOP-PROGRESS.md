@@ -769,6 +769,19 @@ web `c5d64208`, `us-east4-eqdc4a`. Health 200. No deploy. Stripe-live
 not repeated. CP-create already live; no second builder. No Neon.
 No live key. Custom domains not started. Instances **17**.
 
+No allowed builder: support / HC live first-win need Neon; Domains
+card parked; Track 6b leftover columns still have replica SELECTs
+(`login_url`, `oidc_client_id`, instance Stripe item ids). Compact
+Verify **PASS 0 HIGH** (`compact-25319ded.md`). Fuller sweep / §H
+remain signed on this pair.
+
+Previous fire (Change goal UI):
+
+Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
+web `c5d64208`, `us-east4-eqdc4a`. Health 200. No deploy. Stripe-live
+not repeated. CP-create already live; no second builder. No Neon.
+No live key. Custom domains not started. Instances **17**.
+
 Track 7: Change goal UI on local `:3000` after hydration. Support +
 Help Center first-win via **Change goal → Use this goal**, then
 restored Internal. Prior picker miss was a too-early click /
