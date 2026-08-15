@@ -1,0 +1,32 @@
+{
+  "at": "2026-08-15T09:50:49.566Z",
+  "unit": "stripe-live-t1e-scale",
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "didNotAddIdp": true,
+  "printedCredentials": false,
+  "errors": ["column w.projection does not exist"],
+  "stripeKeyPrefix": "sk_test_",
+  "instanceCount": {
+    "before": 19
+  },
+  "before": {
+    "t1ePlan": "growth",
+    "t1eSubStatus": "active",
+    "t1aPlan": "pro",
+    "hasItem": true
+  },
+  "gateway": {
+    "status": 200,
+    "urlHost": "billing.stripe.com",
+    "error": null
+  },
+  "scalePricePrefix": "price_",
+  "stripeUpdate": {
+    "status": "active",
+    "livemode": false,
+    "itemCount": 1,
+    "priceIsScale": true
+  },
+  "ok": false
+}

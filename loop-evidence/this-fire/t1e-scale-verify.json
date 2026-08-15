@@ -1,0 +1,51 @@
+{
+  "at": "2026-08-15T09:51:44.997Z",
+  "unit": "stripe-live-t1e-scale-verify",
+  "didNotPay": true,
+  "didNotAddIdp": true,
+  "errors": [],
+  "polls": 1,
+  "after": {
+    "t1ePlan": "scale",
+    "t1eEffective": "scale",
+    "t1eSso": "true",
+    "t1eSubStatus": "active",
+    "outboxStatus": "delivered",
+    "outboxVersion": "6",
+    "t1aPlan": "pro",
+    "instances": 19
+  },
+  "webhooks": [
+    {
+      "type": "customer.subscription.updated",
+      "processed": true
+    },
+    {
+      "type": "invoice.paid",
+      "processed": true
+    },
+    {
+      "type": "customer.subscription.updated",
+      "processed": true
+    },
+    {
+      "type": "invoice.paid",
+      "processed": true
+    },
+    {
+      "type": "customer.subscription.updated",
+      "processed": true
+    },
+    {
+      "type": "customer.subscription.updated",
+      "processed": true
+    }
+  ],
+  "ssoNew": {
+    "status": 200,
+    "lockedCopy": false,
+    "hasCreateFields": true,
+    "scaleCta": false
+  },
+  "ok": true
+}
