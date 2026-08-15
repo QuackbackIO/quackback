@@ -119,13 +119,16 @@ export async function resolveIdentity({
         ? asNonEmptyString(getClaimByPath(claims, 'id'))
         : undefined)
 
-    // OIDC Core 5.3.2: a userinfo response whose subject differs from the ID
-    // token's must be discarded. Observed rather than enforced by default.
+    // OIDC Core 5.3.2: a userinfo response whose subject differs from the
+    // already-resolved id must be discarded. When identity is already
+    // complete, skip the document entirely. Wholesale userinfo-win is only
+    // for the legacy incomplete-token path (observe mode).
     if (source === 'userinfo' && id && claimedId && claimedId !== id) {
       if (subjectMismatch === 'enforce') {
         return { ok: false, reason: 'subject_mismatch', claims: merged }
       }
       warnings.push('subject_mismatch')
+      if (id && email && name) continue
       id = undefined
       email = undefined
       name = undefined

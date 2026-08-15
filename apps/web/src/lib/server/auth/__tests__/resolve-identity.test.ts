@@ -98,6 +98,34 @@ describe('resolveIdentity — subject consistency (OIDC Core 5.3.2)', () => {
     expect(result.identity.sources.id).toBe('userinfo')
   })
 
+  it('keeps a complete ID-token identity when userinfo disagrees, and does not merge it', async () => {
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({
+          sub: 'from-token',
+          email: 'token@x.com',
+          name: 'From Token',
+        }),
+        accessToken: 'at',
+      },
+      fetchUserInfo: async () => ({
+        sub: 'from-userinfo',
+        email: 'attacker@example.com',
+        name: 'Someone Else',
+        groups: ['injected'],
+      }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('from-token')
+    expect(result.identity.email).toBe('token@x.com')
+    expect(result.identity.name).toBe('From Token')
+    expect(result.identity.sources.id).toBe('idToken')
+    expect(result.identity.warnings).toContain('subject_mismatch')
+    expect(result.identity.claims).not.toHaveProperty('groups')
+    expect(JSON.stringify(result)).not.toContain('attacker@example.com')
+  })
+
   it('does NOT apply the rule to the access token, whose subject may differ', async () => {
     const result = await resolveIdentity({
       tokens: {
@@ -253,7 +281,7 @@ describe('resolveIdentity — subject mismatch, observe vs enforce', () => {
     fetchUserInfo: async () => ({ sub: 'from-userinfo', email: 'e@x.com', name: 'N' }),
   }
 
-  it('observes by default: resolves as today and flags it', async () => {
+  it('observes by default: incomplete identity still lets userinfo win wholesale', async () => {
     const result = await resolveIdentity(mismatched)
     expect(result.ok).toBe(true)
     if (!result.ok) return
