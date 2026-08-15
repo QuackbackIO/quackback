@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from 'react'
-import { toast } from 'sonner'
 import {
   themePresets,
   primaryPresetIds,
@@ -15,7 +14,6 @@ import {
   type ParsedCssVariables,
 } from '@/lib/shared/theme'
 import { useSaveBrandingTheme } from '@/lib/client/mutations/settings'
-import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 
 // Each `value` family must be self-hosted in globals.css (matching the @fontsource
 // @font-face family name), or the selection falls back to the generic stack.
@@ -311,10 +309,6 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
 
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
-    } catch (error) {
-      if (isPlanRefusal(error)) throw error
-      console.error('Failed to save theme:', error)
-      toast.error(error instanceof Error ? error.message : "Couldn't save branding. Try again.")
     } finally {
       setIsSaving(false)
     }

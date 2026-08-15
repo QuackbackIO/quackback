@@ -65,9 +65,41 @@ export function cataloguePlanFor(
 /** True for a 402 plan refusal from a server function or REST handler. */
 export function isPlanRefusal(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
-  const status = (error as { statusCode?: unknown }).statusCode
-  if (status === 402) return true
+  const record = error as {
+    statusCode?: unknown
+    error?: unknown
+    message?: unknown
+    result?: unknown
+  }
+  if (record.statusCode === 402) return true
+  if (record.error === 'tier_limit_exceeded' || record.error === 'entitlement_required') return true
   const message =
-    error instanceof Error ? error.message : String((error as { message?: unknown }).message ?? '')
-  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
+    error instanceof Error
+      ? error.message
+      : String(record.message ?? (record.error as { message?: unknown } | undefined)?.message ?? '')
+  return (
+    /upgrade to(?: \w+)? to enable it/i.test(message) ||
+    /not (?:available|included) (?:in|on) your plan/i.test(message)
+  )
+}
+
+/**
+ * TanStack Start often delivers a thrown server-fn as HTTP 200 with an
+ * error payload. Treat that as a failure so callers cannot toast success.
+ */
+export function throwIfServerFnFailed(result: unknown): void {
+  if (result == null || typeof result !== 'object') return
+  const record = result as { error?: unknown; message?: unknown }
+  if (record.error === true || typeof record.error === 'string') {
+    const message =
+      typeof record.message === 'string'
+        ? record.message
+        : typeof record.error === 'string'
+          ? record.error
+          : 'Request failed'
+    throw Object.assign(new Error(message), { statusCode: 402, error: record.error })
+  }
+  if (record.error && typeof record.error === 'object') {
+    throwIfServerFnFailed(record.error)
+  }
 }

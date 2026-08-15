@@ -5,6 +5,7 @@ import {
   describeEntitlementUpgrade,
   describePlanUpgrade,
   isPlanRefusal,
+  throwIfServerFnFailed,
 } from '../describe-upgrade'
 
 const catalogue = {
@@ -40,6 +41,31 @@ describe('isPlanRefusal', () => {
     ).toBe(true)
     expect(isPlanRefusal(new Error('boom'))).toBe(false)
     expect(isPlanRefusal(null)).toBe(false)
+  })
+
+  it('recognizes a tier-feature sentence with no plan name', () => {
+    expect(
+      isPlanRefusal(
+        new Error('Custom colours is not available on your plan. Upgrade to enable it.')
+      )
+    ).toBe(true)
+    expect(isPlanRefusal({ error: 'tier_limit_exceeded', message: 'locked' })).toBe(true)
+  })
+})
+
+describe('throwIfServerFnFailed', () => {
+  it('throws a plan refusal out of a 200 server-fn envelope', () => {
+    expect(() =>
+      throwIfServerFnFailed({
+        error: true,
+        message: 'Custom CSS is not available on your plan. Upgrade to enable it.',
+      })
+    ).toThrow(/Custom CSS is not available/)
+  })
+
+  it('leaves a successful payload alone', () => {
+    expect(() => throwIfServerFnFailed({ preset: 'cozy' })).not.toThrow()
+    expect(() => throwIfServerFnFailed(undefined)).not.toThrow()
   })
 })
 

@@ -532,11 +532,16 @@ export function useSaveBrandingTheme() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: { brandingConfig: Record<string, unknown>; customCss: string }) =>
-      Promise.all([
+    mutationFn: async (input: { brandingConfig: Record<string, unknown>; customCss: string }) => {
+      const { throwIfServerFnFailed } = await import('@/lib/shared/describe-upgrade')
+      const [theme, css] = await Promise.all([
         updateThemeFn({ data: { brandingConfig: input.brandingConfig } }),
         updateCustomCssFn({ data: { customCss: input.customCss } }),
-      ]),
+      ])
+      throwIfServerFnFailed(theme)
+      throwIfServerFnFailed(css)
+      return [theme, css] as const
+    },
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: settingsQueries.branding().queryKey }),
