@@ -252,11 +252,10 @@ export function ProviderEditor({
     // A role mapping with no rules and no sign-in sync does nothing, so omit
     // it. A custom claim path alone is inert. Auto-create off keeps the stored
     // role section so hiding the editor doesn't wipe it.
-    const roleToSave = autoCreateUsers
-      ? mapping && (mapping.rules.length > 0 || mapping.syncOnEverySignIn === true)
+    const roleToSave =
+      mapping && (mapping.rules.length > 0 || mapping.syncOnEverySignIn === true)
         ? mapping
         : undefined
-      : (provider?.claimMapping?.role ?? undefined)
     const sourcesAreDefault =
       sources.length === DEFAULT_IDENTITY_SOURCES.length &&
       DEFAULT_IDENTITY_SOURCES.every((s, i) => sources[i] === s)
@@ -549,43 +548,41 @@ export function ProviderEditor({
               </div>
 
               {autoCreateUsers && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="idp-default-role" className="font-medium">
-                      Default role
-                    </Label>
-                    <Select
-                      value={autoProvisionRole}
-                      onValueChange={(r) => setAutoProvisionRole(r as Role)}
-                      disabled={saving}
-                    >
-                      <SelectTrigger
-                        id="idp-default-role"
-                        className="w-[220px]"
-                        aria-label="Default role"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="member">Member</SelectItem>
-                        <SelectItem value="user">User (portal only)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      New users get this role unless a rule below matches one of their claims.
-                    </p>
-                  </div>
-
-                  <ClaimMappingEditor
-                    mapping={mapping}
+                <div className="space-y-2">
+                  <Label htmlFor="idp-default-role" className="font-medium">
+                    Default role
+                  </Label>
+                  <Select
+                    value={autoProvisionRole}
+                    onValueChange={(r) => setAutoProvisionRole(r as Role)}
                     disabled={saving}
-                    registrationId={registrationId}
-                    canTest={!!provider}
-                    onChange={setMapping}
-                  />
+                  >
+                    <SelectTrigger
+                      id="idp-default-role"
+                      className="w-[220px]"
+                      aria-label="Default role"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="user">User (portal only)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    New users get this role unless a rule below matches one of their claims.
+                  </p>
                 </div>
               )}
+
+              <ClaimMappingEditor
+                mapping={mapping}
+                disabled={saving}
+                registrationId={registrationId}
+                canTest={!!provider}
+                onChange={setMapping}
+              />
             </div>
           </div>
         </ScrollArea>
@@ -1477,6 +1474,7 @@ function IdentitySourcesSection({
   onNameClaim: (next: string) => void
 }) {
   const toggle = (source: IdentitySource) => {
+    if (sources.length === 1 && sources[0] === source) return
     const next = new Set(sources)
     if (next.has(source)) next.delete(source)
     else next.add(source)
@@ -1516,7 +1514,7 @@ function IdentitySourcesSection({
             <Checkbox
               checked={sources.includes(source)}
               onCheckedChange={() => toggle(source)}
-              disabled={disabled}
+              disabled={disabled || (sources.length === 1 && sources[0] === source)}
               aria-label={SOURCE_LABELS[source]}
             />
             <span>{SOURCE_LABELS[source]}</span>

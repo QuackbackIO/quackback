@@ -302,11 +302,11 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     Array.isArray(sources) && sources.includes('accessTokenJwt') && !sources.includes('idToken')
   const hasIdToken = typeof tokens.id_token === 'string' && tokens.id_token.length > 0
 
-  if (!hasIdToken && !accessTokenOnly && !tokens.access_token) {
+  if (!hasIdToken && !accessTokenOnly) {
     return {
       ok: false,
       stage: 'token-exchange',
-      hint: 'No id_token or access_token returned. Make sure the requested scopes and the IdP application are configured to issue tokens for authorization-code grants.',
+      hint: "No id_token returned. Make sure 'openid' is in the requested scopes and your IdP is configured to issue ID tokens, or set identity sources to access-token JWT only.",
       steps,
     }
   }

@@ -219,6 +219,32 @@ describe('runHandshake — provider that releases no email', () => {
   })
 })
 
+describe('runHandshake — default sources still require an id_token', () => {
+  it('fails when there is only an access_token and identity still reads the ID token', async () => {
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://idp.example',
+          token_endpoint: 'https://idp.example/token',
+          jwks_uri: 'https://idp.example/jwks',
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: 'opaque', token_type: 'Bearer' }), {
+        status: 200,
+      })
+    )
+
+    const result = await runHandshake({ ...baseInput })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.stage).toBe('token-exchange')
+    expect(result.hint).toMatch(/id_token/i)
+  })
+})
+
 describe('runHandshake — access-token-only IdP', () => {
   const accessTokenJwt = (payload: Record<string, unknown>) => {
     const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')

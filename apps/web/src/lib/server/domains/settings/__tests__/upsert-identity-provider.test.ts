@@ -297,6 +297,32 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
   })
 
+  it('restamps detailsChangedAt when prompt changes', async () => {
+    const before = Date.now()
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      prompt: 'omit',
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
+  it('restamps detailsChangedAt when claimMapping changes', async () => {
+    const before = Date.now()
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      claimMapping: { profile: { allowMissingEmail: true } },
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
   it('does NOT restamp when discoveryUrl is omitted (patch semantics, no change signal)', async () => {
     const { discoveryUrl: _omit, ...inputWithoutUrl } = BASE_INPUT
 

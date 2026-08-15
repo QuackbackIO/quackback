@@ -384,6 +384,7 @@ export async function upsertIdentityProvider(
         // authorization/token/userinfo URLs). The gate `isSsoTestValid`
         // compares `lastSuccessfulTestAt` vs `detailsChangedAt`; without this
         // stamp a pre-edit test could vouch for a swapped token endpoint.
+        const jsonUnchanged = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
         const connectionChanged =
           input.clientId !== existing.clientId ||
           (input.discoveryUrl !== undefined && input.discoveryUrl !== existing.discoveryUrl) ||
@@ -392,7 +393,13 @@ export async function upsertIdentityProvider(
           (input.tokenUrl !== undefined && input.tokenUrl !== existing.tokenUrl) ||
           (input.userInfoUrl !== undefined && input.userInfoUrl !== existing.userInfoUrl) ||
           (input.jwksUri !== undefined && input.jwksUri !== existing.jwksUri) ||
-          (input.issuer !== undefined && input.issuer !== existing.issuer)
+          (input.issuer !== undefined && input.issuer !== existing.issuer) ||
+          (input.scopes !== undefined && input.scopes !== existing.scopes) ||
+          (input.prompt !== undefined && input.prompt !== existing.prompt) ||
+          (input.tokenEndpointAuthMethod !== undefined &&
+            input.tokenEndpointAuthMethod !== existing.tokenEndpointAuthMethod) ||
+          (input.claimMapping !== undefined &&
+            !jsonUnchanged(input.claimMapping, existing.claimMapping))
         if (connectionChanged) {
           patch.detailsChangedAt = new Date()
         }

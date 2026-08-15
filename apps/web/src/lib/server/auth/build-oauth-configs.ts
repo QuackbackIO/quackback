@@ -224,8 +224,10 @@ export async function buildGenericOAuthConfigs({
       const picture = claims.picture
       const image = typeof picture === 'string' && picture.length > 0 ? picture : undefined
 
+      // Only identity columns. Extra claims stay on the stash for role /
+      // attribute hooks — spreading them here would write JWT keys onto
+      // the user row (isAnonymous, twoFactorEnabled, …).
       return {
-        ...claims,
         id,
         emailVerified: minted ? false : emailVerified,
         ...(resolvedEmail ? { email: resolvedEmail } : {}),

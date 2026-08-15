@@ -275,7 +275,7 @@ describe('buildGenericOAuthConfigs identity cascade', () => {
       accessToken: 'at',
     })
     expect(info?.email).toBe('from-userinfo@x.com')
-    expect(info?.groups).toEqual(['staff'])
+    expect(info).not.toHaveProperty('groups')
     expect(fetchUserInfo).toHaveBeenCalledWith('https://idp/userinfo', 'at')
   })
 

@@ -144,10 +144,10 @@ describe('<ProviderEditor> provisioning consolidation', () => {
     expect(screen.queryByText('No rules. Everyone gets the default role.')).not.toBeInTheDocument()
   })
 
-  it('hides the role controls entirely when auto-create is off', () => {
+  it('hides default role when auto-create is off but keeps claim-to-role mapping', () => {
     renderEditor(makeProvider({ autoCreateUsers: false }))
     expect(screen.queryByLabelText('Default role')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Map roles from claims/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Map roles from claims/ })).toBeInTheDocument()
   })
 
   it('persists claimMapping=null when saved with no rules and sync off', async () => {
