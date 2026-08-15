@@ -399,7 +399,7 @@ export async function upsertIdentityProvider(
           (input.tokenEndpointAuthMethod !== undefined &&
             input.tokenEndpointAuthMethod !== existing.tokenEndpointAuthMethod) ||
           (input.claimMapping !== undefined &&
-            !jsonUnchanged(input.claimMapping, existing.claimMapping))
+            !jsonUnchanged(input.claimMapping?.profile, existing.claimMapping?.profile))
         if (connectionChanged) {
           patch.detailsChangedAt = new Date()
         }

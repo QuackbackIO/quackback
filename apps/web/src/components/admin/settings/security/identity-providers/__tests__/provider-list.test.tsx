@@ -20,6 +20,9 @@ import { IdentityProvidersSection } from '../provider-list'
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
   useRouteContext: () => ({ managedFieldPaths: [] }),
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
 }))
 
 const { upsertSpy } = vi.hoisted(() => ({
@@ -62,7 +65,7 @@ vi.mock('../../sso/test-sign-in-button', () => ({
   ),
 }))
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
-  useSsoTestSignIn: () => ({ open: vi.fn() }),
+  useSsoTestSignIn: () => ({ open: vi.fn(), lastSuccess: null }),
   SsoTestSignInProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 // Recovery codes nest inside this section now; stub it so the test doesn't

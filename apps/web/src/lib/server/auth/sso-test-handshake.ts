@@ -87,11 +87,19 @@ export type HandshakeResult =
         hasRefreshToken: boolean
         expiresIn?: number
       }
-      /** Full decoded ID-token payload, exactly as the IdP returned it. Lets
-       *  admins see non-standard claims (groups, roles, ...) when debugging
+      /** Merged claims the resolver saw (earlier source wins). Lets admins
+       *  see non-standard claims (groups, roles, ...) when debugging
        *  claim-to-role mapping. The curated `claims` above is for the friendly
        *  display + identity match; this is the complete set. */
       allClaims?: Record<string, JsonValue>
+      /** Resolved identity + per-field provenance. Feeds the editor's
+       *  session-scoped outcome preview. */
+      identity?: {
+        id: string
+        email?: string
+        name?: string
+        sources: Partial<Record<'id' | 'email' | 'name', string>>
+      }
     }
   | {
       ok: false
@@ -501,7 +509,13 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       hasRefreshToken: !!tokens.refresh_token,
       expiresIn: tokens.expires_in,
     },
-    allClaims: (verifiedPayload ?? identity.claims) as unknown as Record<string, JsonValue>,
+    allClaims: identity.claims as unknown as Record<string, JsonValue>,
+    identity: {
+      id: identity.id,
+      email: identity.email,
+      name: identity.name,
+      sources: identity.sources,
+    },
   }
 }
 

@@ -6,53 +6,14 @@
  * a value when the claim disappears.
  */
 
-import { coerceAttributeValue } from '@/lib/server/domains/user-attributes/coerce'
-import { getClaimByPath, claimMappingFor } from '@/lib/shared/oidc-claim-mapping'
-import type { UserAttributeType } from '@/lib/server/db'
+import { claimMappingFor } from '@/lib/shared/oidc-claim-mapping'
+import {
+  planClaimAttributeWrites,
+  type AttributeDefinition,
+} from '@/lib/shared/plan-claim-attribute-writes'
 
-export interface AttributeDefinition {
-  key: string
-  type: UserAttributeType
-}
-
-export function planClaimAttributeWrites({
-  claims,
-  mapping,
-  existing,
-  definitions,
-}: {
-  claims: Record<string, unknown>
-  mapping: NonNullable<ReturnType<typeof claimMappingFor>['attributes']>
-  existing: Record<string, unknown>
-  definitions: AttributeDefinition[]
-}): { valid: Record<string, unknown>; removals: string[] } {
-  const defs = new Map(definitions.map((d) => [d.key, d]))
-  const valid: Record<string, unknown> = {}
-  const removals: string[] = []
-  const override = mapping.overrideExisting === true
-  const sync = mapping.syncOnSignIn === true
-
-  for (const entry of mapping.map ?? []) {
-    const def = defs.get(entry.attributeKey)
-    if (!def) continue
-    const raw = getClaimByPath(claims, entry.claimPath)
-    const missing = raw === undefined || raw === null || raw === ''
-    if (missing) {
-      if (sync && Object.prototype.hasOwnProperty.call(existing, entry.attributeKey)) {
-        removals.push(entry.attributeKey)
-      }
-      continue
-    }
-    const coerced = coerceAttributeValue(raw, def.type)
-    if (coerced === undefined) continue
-    const hasExisting =
-      existing[entry.attributeKey] !== undefined && existing[entry.attributeKey] !== null
-    if (hasExisting && !override) continue
-    valid[entry.attributeKey] = coerced
-  }
-
-  return { valid, removals }
-}
+export { planClaimAttributeWrites }
+export type { AttributeDefinition }
 
 /**
  * Apply `claim_mapping.attributes` for the callback provider. Independent of

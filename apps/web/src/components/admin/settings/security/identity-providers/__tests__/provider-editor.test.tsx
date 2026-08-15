@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
@@ -26,14 +27,29 @@ beforeAll(() => {
 const { upsertSpy } = vi.hoisted(() => ({
   upsertSpy: vi.fn(
     async (_args: {
-      data: { kind: string | null; claimMapping: unknown; prompt?: string | null }
+      data: {
+        kind: string | null
+        claimMapping: unknown
+        prompt?: string | null
+        scopes?: string | null
+      }
     }) => undefined
   ),
 }))
 
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | { registrationId: string; allClaims: Record<string, unknown> },
+    current: null as null | {
+      registrationId: string
+      capturedAt: string
+      identity: {
+        id: string
+        email?: string
+        name?: string
+        sources: Partial<Record<'id' | 'email' | 'name', string>>
+      }
+      claims: Record<string, unknown>
+    },
   },
 }))
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
@@ -46,6 +62,7 @@ vi.mock('@tanstack/react-start', () => ({ useServerFn: (fn: unknown) => fn }))
 
 vi.mock('@tanstack/react-router', () => ({
   useRouteContext: () => ({ baseUrl: 'https://app.example.com' }),
+  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
 }))
 
 vi.mock('@/lib/server/functions/sso', () => ({
@@ -63,9 +80,9 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 // Stub the Test sign-in button so the editor doesn't pull in the test-flow
 // server fns / context.
 vi.mock('../../sso/test-sign-in-button', () => ({
-  TestSignInButton: ({ disabled }: { disabled?: boolean }) => (
+  TestSignInButton: ({ disabled, children }: { disabled?: boolean; children?: ReactNode }) => (
     <button type="button" disabled={disabled}>
-      Test sign-in
+      {children ?? 'Test sign-in'}
     </button>
   ),
 }))
@@ -114,11 +131,38 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
   }
 }
 
-function renderEditor(provider: IdentityProvider) {
+function makeCapture(
+  over: Partial<NonNullable<(typeof ssoTestRef)['current']>> & {
+    claims: Record<string, unknown>
+  }
+): NonNullable<(typeof ssoTestRef)['current']> {
+  return {
+    registrationId: 'oidc_x',
+    capturedAt: '2026-08-15T12:00:00.000Z',
+    identity: {
+      id: '00u1',
+      email: 'jane@acme.com',
+      name: 'Jane Diaz',
+      sources: { id: 'idToken', email: 'idToken', name: 'userinfo' },
+    },
+    ...over,
+  }
+}
+
+function typeClaimPath(ariaLabel: string, value: string) {
+  fireEvent.click(screen.getByRole('combobox', { name: ariaLabel }))
+  fireEvent.change(screen.getByPlaceholderText('Search or type…'), { target: { value } })
+  fireEvent.click(screen.getByText(new RegExp(`Use ["“]${value}["”]`)))
+}
+
+function renderEditor(
+  provider: IdentityProvider,
+  opts: { onOpenChange?: (open: boolean) => void } = {}
+) {
   const qc = new QueryClient()
   return render(
     <QueryClientProvider client={qc}>
-      <ProviderEditor provider={provider} open onOpenChange={vi.fn()} />
+      <ProviderEditor provider={provider} open onOpenChange={opts.onOpenChange ?? vi.fn()} />
     </QueryClientProvider>
   )
 }
@@ -201,7 +245,7 @@ describe('<ProviderEditor> connection-test status', () => {
     renderEditor(
       makeProvider({ lastSuccessfulTestAt: '2026-05-02T00:00:00.000Z', detailsChangedAt: null })
     )
-    expect(screen.getByText(/ready to enforce SSO/)).toBeInTheDocument()
+    expect(screen.getByText(/months ago|hours ago|days ago|just now/i)).toBeInTheDocument()
   })
 
   it('shows the stale status when the connection changed since the last test', () => {
@@ -217,35 +261,40 @@ describe('<ProviderEditor> connection-test status', () => {
 
 describe('<ProviderEditor> claim-mapping autocomplete', () => {
   it('names the observed claims inline and drops the old assist block', () => {
-    ssoTestRef.current = {
-      registrationId: 'oidc_x', // matches makeProvider().registrationId
-      allClaims: { groups: ['11111111-2222'], roles: ['admin'] },
-    }
+    ssoTestRef.current = makeCapture({
+      claims: { groups: ['11111111-2222'], roles: ['admin'] },
+    })
     renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
-    // Inline hint names the observed claims (disclosure auto-opens on suggestions).
     expect(screen.getByText('From your test sign-in: groups, roles')).toBeInTheDocument()
-    // The old batch-add block's caption is gone.
     expect(screen.queryByText(/Run a test as another user/)).not.toBeInTheDocument()
-    // Claim path is now an autocomplete (combobox), not a plain textbox.
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toBeInTheDocument()
   })
 
   it('auto-fills the claim path when the test returned exactly one array claim', () => {
-    ssoTestRef.current = { registrationId: 'oidc_x', allClaims: { roles: ['admin'] } }
+    ssoTestRef.current = makeCapture({ claims: { roles: ['admin'] } })
     renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
+  })
+
+  it('offers the same suggestions on identity and attribute claim paths', () => {
+    ssoTestRef.current = makeCapture({
+      claims: { groups: ['eng'], email: 'jane@acme.com', department: 'Eng' },
+    })
+    renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Email claim' }))
+    expect(screen.getAllByText('email').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('combobox', { name: 'Claim path (attribute 1)' }))
+    expect(screen.getAllByText('groups').length).toBeGreaterThan(0)
   })
 
   it('persists allowMissingEmail, access-token source, and attribute map', async () => {
     renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     fireEvent.click(screen.getByLabelText('Allow accounts without an email address'))
-    fireEvent.click(screen.getByLabelText('Access token JWT (opt-in)'))
+    fireEvent.click(screen.getByLabelText('Access token JWT'))
     fireEvent.click(screen.getByRole('button', { name: 'Add mapping' }))
-    fireEvent.change(screen.getByLabelText('Claim path (attribute 1)'), {
-      target: { value: 'department' },
-    })
-    fireEvent.click(screen.getByLabelText('Overwrite existing attribute values'))
-    fireEvent.click(screen.getByLabelText('Sync attributes on every sign-in'))
+    typeClaimPath('Claim path (attribute 1)', 'department')
+    fireEvent.click(screen.getByLabelText('Mirror the IdP for attributes'))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
     const saved = upsertSpy.mock.calls.at(-1)![0].data.claimMapping as {
@@ -276,14 +325,82 @@ describe('<ProviderEditor> claim-mapping autocomplete', () => {
 
 describe('<ProviderEditor> claim-mapping autocomplete leftovers', () => {
   it('shows no inline suggestions for a test of a different provider', () => {
-    ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { roles: ['admin'] } }
+    ssoTestRef.current = makeCapture({
+      registrationId: 'oidc_other',
+      claims: { roles: ['admin'] },
+    })
     renderEditor(
       makeProvider({
         autoCreateUsers: true,
         claimMapping: { role: { claimPath: 'groups', rules: [] } },
       })
     )
-    // Disclosure auto-opens because a mapping object exists; no "from your test" hint.
     expect(screen.queryByText(/From your test sign-in:/)).not.toBeInTheDocument()
+  })
+})
+
+describe('<ProviderEditor> save stays open', () => {
+  it('keeps the editor open after save and labels the dismiss action Close', async () => {
+    const onOpenChange = vi.fn()
+    renderEditor(makeProvider({}), { onOpenChange })
+    expect(screen.getByText('Saving keeps this editor open.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Edit identity provider' })).toBeInTheDocument()
+  })
+})
+
+describe('<ProviderEditor> task groups', () => {
+  it('orders Connect, Verify, Identity, Access, Rollout', () => {
+    renderEditor(makeProvider({}))
+    const groups = ['Connect', 'Verify', 'Identity', 'Access', 'Rollout']
+    const positions = groups.map((g) => screen.getByText(g).compareDocumentPosition)
+    const texts = groups.map((g) => screen.getByText(g))
+    for (let i = 1; i < texts.length; i++) {
+      expect(
+        texts[i - 1]!.compareDocumentPosition(texts[i]!) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+    }
+    expect(positions.length).toBe(5)
+  })
+})
+
+describe('<ProviderEditor> outcome preview', () => {
+  it('hides the rail when there is no capture', () => {
+    renderEditor(makeProvider({}))
+    expect(screen.queryByText('Outcome preview')).not.toBeInTheDocument()
+  })
+
+  it('evaluates a typed claim path against the capture with no fetch', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    ssoTestRef.current = makeCapture({
+      claims: { email: 'jane@acme.com', upn: 'jane.diaz@acme.com', name: 'Jane Diaz' },
+    })
+    renderEditor(makeProvider({}))
+    expect(screen.getByText('Outcome preview')).toBeInTheDocument()
+    expect(screen.getByText('jane@acme.com')).toBeInTheDocument()
+    typeClaimPath('Email claim', 'upn')
+    expect(screen.getByText('upn', { selector: 'span' })).toBeInTheDocument()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
+  })
+})
+
+describe('<ProviderEditor> scopes', () => {
+  it('stores null for the default set and the string when groups is added', async () => {
+    renderEditor(makeProvider({ scopes: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls.at(-1)![0].data.scopes).toBeNull()
+
+    upsertSpy.mockClear()
+    fireEvent.change(screen.getByLabelText('Scopes'), {
+      target: { value: 'openid email profile groups' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls.at(-1)![0].data.scopes).toBe('openid email profile groups')
   })
 })

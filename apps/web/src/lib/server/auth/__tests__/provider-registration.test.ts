@@ -78,6 +78,44 @@ describe('buildGenericOAuthConfigs', () => {
     expect(cfgs[0].authentication).toBe('basic')
   })
 
+  it('sends an explicit stored prompt even when the IdP does not advertise it', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'sso',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          prompt: 'login',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery: async () => ({ prompt_values_supported: ['consent', 'none'] }),
+    })
+    expect(cfgs[0].prompt).toBe('login')
+  })
+
+  it('still filters the implicit default prompt against prompt_values_supported', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'sso',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          prompt: null,
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery: async () => ({ prompt_values_supported: ['consent', 'none'] }),
+    })
+    expect(cfgs[0]).not.toHaveProperty('prompt')
+  })
+
   it('skips disabled providers and providers without credentials', async () => {
     const cfgs = await buildGenericOAuthConfigs({
       providers: [

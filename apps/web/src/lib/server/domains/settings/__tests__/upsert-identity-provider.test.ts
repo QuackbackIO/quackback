@@ -310,7 +310,7 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     )
   })
 
-  it('restamps detailsChangedAt when claimMapping changes', async () => {
+  it('restamps detailsChangedAt when claimMapping.profile changes', async () => {
     const before = Date.now()
     await upsertIdentityProvider({
       ...BASE_INPUT,
@@ -321,6 +321,28 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
       before
     )
+  })
+
+  it('does NOT restamp detailsChangedAt when only claimMapping.role changes', async () => {
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      claimMapping: {
+        role: { claimPath: 'groups', rules: [{ whenContains: 'admins', role: 'admin' }] },
+      },
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
+  })
+
+  it('does NOT restamp detailsChangedAt when only claimMapping.attributes change', async () => {
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      claimMapping: {
+        attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+      },
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
   })
 
   it('does NOT restamp when discoveryUrl is omitted (patch semantics, no change signal)', async () => {

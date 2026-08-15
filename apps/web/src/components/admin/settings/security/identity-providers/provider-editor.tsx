@@ -19,7 +19,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useServerFn } from '@tanstack/react-start'
-import { useRouteContext } from '@tanstack/react-router'
+import { Link, useRouteContext } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -74,7 +74,6 @@ import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.type
 import { getIdpShortcut, inferIdpKind, IDP_KIND_NAMES, type IdpKind } from '../idp-shortcuts'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
-import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
 import { Autocomplete } from '@/components/ui/autocomplete'
 import {
   DEFAULT_OIDC_PROMPT,
@@ -85,18 +84,34 @@ import {
   normalizeTokenAuthInput,
 } from '@/lib/shared/oidc-request'
 import {
+  DEFAULT_OIDC_SCOPES,
+  REQUIRED_OIDC_SCOPE,
+  normalizeScopesInput,
+  parseScopes,
+} from '@/lib/shared/oidc-scopes'
+import {
   IDENTITY_SOURCES,
   DEFAULT_IDENTITY_SOURCES,
   identitySourcesFor,
   type IdentitySource,
 } from '@/lib/shared/oidc-claim-mapping'
+import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
+import { ClaimPathInput, useClaimSuggestions } from './claim-path-input'
+import { OutcomePreviewRail } from './outcome-preview-rail'
 
 type Role = 'admin' | 'member' | 'user'
 type Mapping = NonNullable<NonNullable<IdentityProvider['claimMapping']>['role']>
 
 const ROLES: Role[] = ['admin', 'member', 'user']
+const ROLE_LABELS: Record<Role, string> = {
+  admin: 'Admin',
+  member: 'Member',
+  user: 'User (portal only)',
+}
 const IDENTITY_PROVIDERS_KEY = ['settings', 'identityProviders'] as const
+const GROUP_EYEBROW =
+  'font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground'
 
 const IDP_KIND_OPTIONS: IdpKind[] = ['okta', 'auth0', 'entra', 'keycloak', 'google', 'other']
 
@@ -228,14 +243,19 @@ export function ProviderEditor({
   const [attributeRows, setAttributeRows] = useState<
     Array<{ claimPath: string; attributeKey: string }>
   >(() => provider?.claimMapping?.attributes?.map ?? [])
-  const [overrideExisting, setOverrideExisting] = useState(
-    provider?.claimMapping?.attributes?.overrideExisting === true
+  // Mixed stored rows (exactly one of overrideExisting / syncOnSignIn) show
+  // ON; the next save canonicalizes to both-true. Readers stay tolerant.
+  const [mirrorAttributes, setMirrorAttributes] = useState(
+    provider?.claimMapping?.attributes?.overrideExisting === true ||
+      provider?.claimMapping?.attributes?.syncOnSignIn === true
   )
-  const [syncOnSignIn, setSyncOnSignIn] = useState(
-    provider?.claimMapping?.attributes?.syncOnSignIn === true
+  const [scopesDraft, setScopesDraft] = useState(
+    () => provider?.scopes ?? DEFAULT_OIDC_SCOPES.join(' ')
   )
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const { lastSuccess } = useSsoTestSignIn()
+  const capture = lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null
 
   const verifiedDomainCount = (provider?.domains ?? []).filter((d) => d.verifiedAt).length
   const hasVerifiedDomain = verifiedDomainCount > 0
@@ -274,9 +294,11 @@ export function ProviderEditor({
       .filter((r) => r.claimPath && r.attributeKey)
     const attributesToSave = {
       ...(attrMap.length > 0 ? { map: attrMap } : {}),
-      ...(overrideExisting ? { overrideExisting: true as const } : {}),
-      ...(syncOnSignIn ? { syncOnSignIn: true as const } : {}),
+      ...(mirrorAttributes ? { overrideExisting: true as const, syncOnSignIn: true as const } : {}),
     }
+    const scopeTokens = parseScopes(scopesDraft)
+    if (!scopeTokens.includes(REQUIRED_OIDC_SCOPE)) scopeTokens.unshift(REQUIRED_OIDC_SCOPE)
+    const scopesToSave = normalizeScopesInput(scopeTokens)
     const claimMapping = {
       ...(Object.keys(profileToSave).length > 0 ? { profile: profileToSave } : {}),
       ...(roleToSave ? { role: roleToSave } : {}),
@@ -303,6 +325,7 @@ export function ProviderEditor({
           issuer: kind === 'other' ? manual.issuer.trim() || null : null,
           prompt: normalizePromptInput(prompt),
           tokenEndpointAuthMethod: normalizeTokenAuthInput(tokenAuth),
+          scopes: scopesToSave,
           enabled,
           autoCreateUsers,
           // Role only applies when auto-create is on; null it out otherwise
@@ -318,13 +341,10 @@ export function ProviderEditor({
       }
       await queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
       toast.success('Identity provider saved.')
-      // Editing closes; creating hands the saved row up so the parent can
-      // reopen on it (domains/visibility need a persisted id).
-      if (provider) {
-        onOpenChange(false)
-      } else {
-        onSaved?.(saved)
-      }
+      // Stay open so the admin can test and iterate. Creating still hands
+      // the saved row up so the parent can switch onto the persisted id
+      // (domains / test need one).
+      onSaved?.(saved)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save the identity provider.')
     } finally {
@@ -350,7 +370,12 @@ export function ProviderEditor({
 
   return (
     <Dialog open={open} onOpenChange={(o) => (saving ? undefined : onOpenChange(o))}>
-      <DialogContent className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        className={cn(
+          'flex h-[85vh] flex-col gap-0 overflow-hidden p-0',
+          capture ? 'max-w-5xl' : 'max-w-2xl'
+        )}
+      >
         <DialogHeader className="shrink-0 border-b border-border/50 px-6 py-4">
           <DialogTitle>{provider ? 'Edit identity provider' : 'Add identity provider'}</DialogTitle>
           <DialogDescription>
@@ -358,234 +383,252 @@ export function ProviderEditor({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="space-y-6 px-6 py-5">
-            {/* Display name */}
-            <div className="space-y-2">
-              <Label htmlFor="idp-label">Display name</Label>
-              <Input
-                id="idp-label"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Acme SSO"
-                disabled={saving}
-              />
-              {label.trim() && (
-                <p className="text-xs text-muted-foreground">
-                  Button reads: &ldquo;Sign in with {label.trim()}&rdquo;
-                </p>
-              )}
-            </div>
-
-            {/* Identity provider picker + discovery */}
-            <div className="space-y-3">
-              <Label>Identity provider</Label>
-              <RadioGroup
-                value={kind}
-                onValueChange={(v) => {
-                  const next = v as IdpKind
-                  setKind(next)
-                  // Fixed-discovery kinds (Google) have no shortcut input — seed
-                  // the canonical URL now so the saved row is well-formed without
-                  // a render-time state write.
-                  const def = getIdpShortcut(next)
-                  if (next !== 'other' && def.fields.length === 0) {
-                    const url = def.build({})
-                    if (url) setDiscoveryUrl(url)
-                  }
-                }}
-                className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
-              >
-                {IDP_KIND_OPTIONS.map((k) => (
-                  <RadioGroupPrimitive.Item
-                    key={k}
-                    value={k}
-                    id={`idp-kind-${k}`}
-                    disabled={saving}
-                    className={cn(
-                      'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
-                      'hover:border-border hover:bg-accent/40',
-                      'focus-visible:ring-2 focus-visible:ring-ring/50',
-                      'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
-                      'disabled:cursor-not-allowed disabled:opacity-60'
-                    )}
-                  >
-                    <IdpLogo
-                      kind={k}
-                      className="h-8 w-8 shrink-0"
-                      iconClassName="h-[18px] w-[18px]"
-                    />
-                    <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
-                  </RadioGroupPrimitive.Item>
-                ))}
-              </RadioGroup>
-              <IdpDiscoveryFields
-                kind={kind}
-                discoveryUrl={discoveryUrl}
-                disabled={saving}
-                onChange={setDiscoveryUrl}
-              />
-              {kind === 'other' && (
-                <ManualEndpointsSection
-                  values={manual}
-                  disabled={saving}
-                  onChange={(patch) => setManual((m) => ({ ...m, ...patch }))}
-                />
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="idp-client-id">Client ID</Label>
-              <Input
-                id="idp-client-id"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="idp-client-secret">Client secret</Label>
-              <Input
-                id="idp-client-secret"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                value={secretDraft}
-                onChange={(e) => setSecretDraft(e.target.value)}
-                placeholder={provider ? 'Leave blank to keep the current secret' : ''}
-                disabled={saving}
-              />
-            </div>
-
-            <AdvancedRequestSection
-              prompt={prompt}
-              tokenAuth={tokenAuth}
-              disabled={saving}
-              onPromptChange={setPrompt}
-              onTokenAuthChange={setTokenAuth}
-            />
-
-            <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
-
-            {/* Connection test — the capstone of the connection block. A
-              successful test validates discovery + credentials + the registered
-              redirect URI, and is the precondition that unlocks enforcement. */}
-            <ConnectionTestRow
-              provider={provider}
-              registrationId={registrationId}
-              disabled={saving}
-            />
-
-            {/* Domains */}
-            <DomainsSection provider={provider} disabled={saving} />
-
-            {/* Visibility — the single switch for whether this provider shows a
-              public sign-in button. Off hides it: a routed provider (verified
-              domain) stays email-routed only; a domain-less provider is parked
-              until the toggle is turned back on. */}
-            <div className="space-y-2 border-t border-border/40 pt-5">
-              <Label className="font-medium">Visibility</Label>
-              <label className="flex items-start gap-2 text-sm">
-                <Checkbox
-                  checked={showButton}
-                  onCheckedChange={(v) => setShowButton(v === true)}
-                  disabled={saving}
-                  aria-label="Show a sign-in button"
-                  className="mt-0.5"
-                />
-                <span>
-                  Show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {hasVerifiedDomain
-                      ? 'Off keeps it email-routed only: people at a verified domain are sent here, with no public button.'
-                      : 'Off hides it from the sign-in screen entirely.'}
-                  </span>
-                </span>
-              </label>
-            </div>
-
-            <IdentitySourcesSection
-              allowMissingEmail={allowMissingEmail}
-              sources={sources}
-              idClaim={idClaim}
-              emailClaim={emailClaim}
-              nameClaim={nameClaim}
-              disabled={saving}
-              onAllowMissingEmail={setAllowMissingEmail}
-              onSourcesChange={setSources}
-              onIdClaim={setIdClaim}
-              onEmailClaim={setEmailClaim}
-              onNameClaim={setNameClaim}
-            />
-
-            <AttributeMapSection
-              rows={attributeRows}
-              overrideExisting={overrideExisting}
-              syncOnSignIn={syncOnSignIn}
-              disabled={saving}
-              onRowsChange={setAttributeRows}
-              onOverrideExisting={setOverrideExisting}
-              onSyncOnSignIn={setSyncOnSignIn}
-            />
-
-            {/* Provisioning */}
-            <div className="space-y-4 border-t border-border/40 pt-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <Label className="font-medium">Auto-create accounts on first sign-in</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Create an account the first time someone signs in through this provider.
-                  </p>
-                </div>
-                <Switch
-                  checked={autoCreateUsers}
-                  onCheckedChange={setAutoCreateUsers}
-                  disabled={saving}
-                  aria-label="Auto-create accounts on first sign-in"
-                  className="mt-0.5 shrink-0"
-                />
-              </div>
-
-              {autoCreateUsers && (
+        <div
+          className={cn(
+            'flex min-h-0 flex-1 flex-col',
+            capture && 'lg:grid lg:grid-cols-[1fr_20rem]'
+          )}
+        >
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="space-y-6 px-6 py-5">
+              <section className="space-y-4">
+                <div className={GROUP_EYEBROW}>Connect</div>
                 <div className="space-y-2">
-                  <Label htmlFor="idp-default-role" className="font-medium">
-                    Default role
-                  </Label>
-                  <Select
-                    value={autoProvisionRole}
-                    onValueChange={(r) => setAutoProvisionRole(r as Role)}
+                  <Label htmlFor="idp-label">Display name</Label>
+                  <Input
+                    id="idp-label"
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    placeholder="Acme SSO"
                     disabled={saving}
-                  >
-                    <SelectTrigger
-                      id="idp-default-role"
-                      className="w-[220px]"
-                      aria-label="Default role"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="member">Member</SelectItem>
-                      <SelectItem value="user">User (portal only)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    New users get this role unless a rule below matches one of their claims.
-                  </p>
+                  />
+                  {label.trim() && (
+                    <p className="text-xs text-muted-foreground">
+                      Button reads: &ldquo;Sign in with {label.trim()}&rdquo;
+                    </p>
+                  )}
                 </div>
-              )}
 
-              <ClaimMappingEditor
-                mapping={mapping}
+                <div className="space-y-3">
+                  <Label>Identity provider</Label>
+                  <RadioGroup
+                    value={kind}
+                    onValueChange={(v) => {
+                      const next = v as IdpKind
+                      setKind(next)
+                      const def = getIdpShortcut(next)
+                      if (next !== 'other' && def.fields.length === 0) {
+                        const url = def.build({})
+                        if (url) setDiscoveryUrl(url)
+                      }
+                    }}
+                    className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
+                  >
+                    {IDP_KIND_OPTIONS.map((k) => (
+                      <RadioGroupPrimitive.Item
+                        key={k}
+                        value={k}
+                        id={`idp-kind-${k}`}
+                        disabled={saving}
+                        className={cn(
+                          'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
+                          'hover:border-border hover:bg-accent/40',
+                          'focus-visible:ring-2 focus-visible:ring-ring/50',
+                          'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
+                          'disabled:cursor-not-allowed disabled:opacity-60'
+                        )}
+                      >
+                        <IdpLogo
+                          kind={k}
+                          className="h-8 w-8 shrink-0"
+                          iconClassName="h-[18px] w-[18px]"
+                        />
+                        <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
+                      </RadioGroupPrimitive.Item>
+                    ))}
+                  </RadioGroup>
+                  <IdpDiscoveryFields
+                    kind={kind}
+                    discoveryUrl={discoveryUrl}
+                    disabled={saving}
+                    onChange={setDiscoveryUrl}
+                  />
+                  {kind === 'other' && (
+                    <ManualEndpointsSection
+                      values={manual}
+                      disabled={saving}
+                      onChange={(patch) => setManual((m) => ({ ...m, ...patch }))}
+                    />
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="idp-client-id">Client ID</Label>
+                    <Input
+                      id="idp-client-id"
+                      value={clientId}
+                      onChange={(e) => setClientId(e.target.value)}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="idp-client-secret">Client secret</Label>
+                    <Input
+                      id="idp-client-secret"
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={secretDraft}
+                      onChange={(e) => setSecretDraft(e.target.value)}
+                      placeholder={provider ? 'Leave blank to keep current' : ''}
+                      disabled={saving}
+                    />
+                  </div>
+                </div>
+
+                <AdvancedRequestSection
+                  prompt={prompt}
+                  tokenAuth={tokenAuth}
+                  scopesDraft={scopesDraft}
+                  disabled={saving}
+                  onPromptChange={setPrompt}
+                  onTokenAuthChange={setTokenAuth}
+                  onScopesChange={setScopesDraft}
+                />
+
+                <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
+              </section>
+
+              <section className="space-y-3 border-t border-border/40 pt-5">
+                <div className={GROUP_EYEBROW}>Verify</div>
+                <ConnectionTestRow
+                  provider={provider}
+                  registrationId={registrationId}
+                  disabled={saving}
+                  capturedEmail={capture?.identity.email}
+                />
+              </section>
+
+              <IdentitySourcesSection
+                allowMissingEmail={allowMissingEmail}
+                sources={sources}
+                idClaim={idClaim}
+                emailClaim={emailClaim}
+                nameClaim={nameClaim}
                 disabled={saving}
                 registrationId={registrationId}
                 canTest={!!provider}
-                onChange={setMapping}
+                onAllowMissingEmail={setAllowMissingEmail}
+                onSourcesChange={setSources}
+                onIdClaim={setIdClaim}
+                onEmailClaim={setEmailClaim}
+                onNameClaim={setNameClaim}
               />
+
+              <section className="space-y-4 border-t border-border/40 pt-5">
+                <div className={GROUP_EYEBROW}>Access</div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <Label className="font-medium">Auto-create accounts on first sign-in</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Create an account the first time someone signs in through this provider.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={autoCreateUsers}
+                    onCheckedChange={setAutoCreateUsers}
+                    disabled={saving}
+                    aria-label="Auto-create accounts on first sign-in"
+                    className="mt-0.5 shrink-0"
+                  />
+                </div>
+
+                {autoCreateUsers && (
+                  <div className="space-y-2">
+                    <Label htmlFor="idp-default-role" className="font-medium">
+                      Default role
+                    </Label>
+                    <Select
+                      value={autoProvisionRole}
+                      onValueChange={(r) => setAutoProvisionRole(r as Role)}
+                      disabled={saving}
+                    >
+                      <SelectTrigger
+                        id="idp-default-role"
+                        className="w-[220px]"
+                        aria-label="Default role"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="member">Member</SelectItem>
+                        <SelectItem value="user">User (portal only)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      New users get this role unless a rule below matches one of their claims.
+                    </p>
+                  </div>
+                )}
+
+                <ClaimMappingEditor
+                  mapping={mapping}
+                  disabled={saving}
+                  registrationId={registrationId}
+                  canTest={!!provider}
+                  onChange={setMapping}
+                />
+
+                <AttributeMapSection
+                  rows={attributeRows}
+                  mirrorAttributes={mirrorAttributes}
+                  disabled={saving}
+                  registrationId={registrationId}
+                  canTest={!!provider}
+                  onRowsChange={setAttributeRows}
+                  onMirrorAttributes={setMirrorAttributes}
+                />
+              </section>
+
+              <section className="space-y-4 border-t border-border/40 pt-5">
+                <div className={GROUP_EYEBROW}>Rollout</div>
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    checked={showButton}
+                    onCheckedChange={(v) => setShowButton(v === true)}
+                    disabled={saving}
+                    aria-label="Show a sign-in button"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {hasVerifiedDomain
+                        ? 'Off keeps it email-routed only: people at a verified domain are sent here, with no public button.'
+                        : 'Off hides it from the sign-in screen entirely.'}
+                    </span>
+                  </span>
+                </label>
+                <DomainsSection provider={provider} disabled={saving} />
+              </section>
             </div>
-          </div>
-        </ScrollArea>
+          </ScrollArea>
+          {capture && (
+            <OutcomePreviewRail
+              capture={capture}
+              provider={provider}
+              idClaim={idClaim}
+              emailClaim={emailClaim}
+              nameClaim={nameClaim}
+              roleMapping={mapping}
+              attributeRows={attributeRows}
+              mirrorAttributes={mirrorAttributes}
+              registrationId={registrationId}
+            />
+          )}
+        </div>
 
         <DialogFooter className="shrink-0 items-center border-t border-border/50 px-6 py-4 sm:justify-between">
           {provider ? (
@@ -612,13 +655,14 @@ export function ProviderEditor({
             <span />
           )}
           <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">Saving keeps this editor open.</p>
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
-              Cancel
+              Close
             </Button>
             <Button type="button" onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : 'Save'}
@@ -818,10 +862,12 @@ function ConnectionTestRow({
   provider,
   registrationId,
   disabled,
+  capturedEmail,
 }: {
   provider: IdentityProvider | null
   registrationId: string
   disabled: boolean
+  capturedEmail?: string
 }) {
   const state = getConnectionTestState(provider)
   return (
@@ -841,9 +887,10 @@ function ConnectionTestRow({
             </span>
           )}
           {state.kind === 'verified' && (
-            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+            <span className="inline-flex flex-wrap items-center gap-1 text-green-600 dark:text-green-400">
               <CheckCircleIcon className="size-3.5 shrink-0" />
-              Verified <TimeAgo date={state.testedAt} />, ready to enforce SSO.
+              Verified <TimeAgo date={state.testedAt} />
+              {capturedEmail ? <span>· claims captured from {capturedEmail}</span> : null}
             </span>
           )}
           {state.kind === 'stale' && (
@@ -853,6 +900,9 @@ function ConnectionTestRow({
             </span>
           )}
         </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Tests run against the saved provider. Save first if you changed connection settings.
+        </p>
       </div>
       <TestSignInButton registrationId={registrationId} disabled={disabled || !provider} />
     </div>
@@ -1173,13 +1223,8 @@ function ClaimMappingEditor({
   const current: Mapping = mapping ?? { claimPath: 'groups', rules: [] }
   const update = (patch: Partial<Mapping>) => onChange({ ...current, ...patch })
 
-  const { lastSuccess } = useSsoTestSignIn()
-  const suggestions =
-    lastSuccess && lastSuccess.registrationId === registrationId
-      ? deriveClaimSuggestions(lastSuccess.allClaims)
-      : null
+  const suggestions = useClaimSuggestions(registrationId)
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
-  const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
   const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({
     value: v,
   }))
@@ -1232,28 +1277,14 @@ function ClaimMappingEditor({
 
           <div className="space-y-1.5">
             <Label htmlFor="idp-claim-path">Claim path</Label>
-            <Autocomplete
+            <ClaimPathInput
               value={current.claimPath}
-              onValueChange={(v) => update({ claimPath: v })}
-              suggestions={pathSuggestions}
+              onChange={(v) => update({ claimPath: v })}
+              registrationId={registrationId}
+              canTest={canTest}
+              placeholder="groups, realm_access.roles, or a namespaced claim"
               ariaLabel="Claim path"
-              placeholder="groups, realm_access.roles, https://acme.com/roles"
-              emptyHint={
-                <div className="space-y-2 px-1 py-3 text-center">
-                  <p className="text-xs text-muted-foreground">
-                    Run a test sign-in to discover your IdP&apos;s claims.
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Or type a path like groups, realm_access.roles, or https://acme.com/roles.
-                  </p>
-                  <TestSignInButton
-                    registrationId={registrationId}
-                    disabled={disabled || !canTest}
-                  />
-                </div>
-              }
               disabled={disabled}
-              className="w-full"
             />
             {hasSuggestions && suggestions && (
               <p className="text-xs text-muted-foreground">
@@ -1263,7 +1294,7 @@ function ClaimMappingEditor({
           </div>
 
           <div className="space-y-2">
-            <Label>Rules</Label>
+            <Label>Rules · first match wins</Label>
             {current.rules.length === 0 && (
               <p className="text-xs text-muted-foreground">
                 No rules. Everyone gets the default role.
@@ -1306,7 +1337,7 @@ function ClaimMappingEditor({
                   <SelectContent>
                     {ROLES.map((r) => (
                       <SelectItem key={r} value={r}>
-                        {r}
+                        {ROLE_LABELS[r]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1345,11 +1376,11 @@ function ClaimMappingEditor({
               onCheckedChange={(v) => update({ syncOnEverySignIn: v })}
               className="mt-0.5"
               disabled={disabled}
+              aria-label="Mirror the IdP for roles"
             />
             <span>
-              <span className="font-medium">Sync role on every sign-in.</span> Re-applies the rules
-              so a role can be promoted or demoted when their claims change. Off: set once, on first
-              sign-in.
+              <span className="font-medium">Mirror the IdP.</span> Re-applies the rules on every
+              sign-in, so roles can be promoted or demoted. Off: set once at first sign-in.
             </span>
           </label>
         </div>
@@ -1361,18 +1392,25 @@ function ClaimMappingEditor({
 function AdvancedRequestSection({
   prompt,
   tokenAuth,
+  scopesDraft,
   disabled,
   onPromptChange,
   onTokenAuthChange,
+  onScopesChange,
 }: {
   prompt: string
   tokenAuth: string
+  scopesDraft: string
   disabled: boolean
   onPromptChange: (next: string) => void
   onTokenAuthChange: (next: string) => void
+  onScopesChange: (next: string) => void
 }) {
   const [open, setOpen] = useState(
-    () => normalizePromptInput(prompt) !== null || normalizeTokenAuthInput(tokenAuth) !== null
+    () =>
+      normalizePromptInput(prompt) !== null ||
+      normalizeTokenAuthInput(tokenAuth) !== null ||
+      normalizeScopesInput(parseScopes(scopesDraft)) !== null
   )
 
   return (
@@ -1390,6 +1428,22 @@ function AdvancedRequestSection({
       {open && (
         <div className="space-y-3 border-t border-border/40 px-3 py-3">
           <div className="space-y-1.5">
+            <Label htmlFor="idp-scopes" className="text-xs">
+              Scopes
+            </Label>
+            <Input
+              id="idp-scopes"
+              value={scopesDraft}
+              onChange={(e) => onScopesChange(e.target.value)}
+              disabled={disabled}
+              className="h-8 font-mono text-[13px]"
+              aria-label="Scopes"
+            />
+            <p className="text-xs text-muted-foreground">
+              Space or comma separated. openid is required and kept automatically.
+            </p>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="idp-prompt" className="text-xs">
               Sign-in prompt
             </Label>
@@ -1404,15 +1458,14 @@ function AdvancedRequestSection({
                     value={c.value}
                     data-testid={`prompt-choice-${c.value}`}
                   >
-                    {c.label}
+                    {c.value === DEFAULT_OIDC_PROMPT ? `${c.label} (default)` : c.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              What your provider does when someone already has a session with it.{' '}
-              <strong>Don&apos;t send a prompt</strong> leaves it to behave normally;{' '}
-              <strong>Silent</strong> fails outright when nobody is signed in.
+              What your provider does when someone already has a session with it. Your choice is
+              always sent.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -1426,7 +1479,7 @@ function AdvancedRequestSection({
               <SelectContent>
                 {TOKEN_AUTH_CHOICES.map((c) => (
                   <SelectItem key={c.value} value={c.value}>
-                    {c.label}
+                    {c.value === DEFAULT_TOKEN_AUTH_METHOD ? `${c.label} (default)` : c.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1445,7 +1498,7 @@ function AdvancedRequestSection({
 const SOURCE_LABELS: Record<IdentitySource, string> = {
   idToken: 'ID token',
   userinfo: 'Userinfo endpoint',
-  accessTokenJwt: 'Access token JWT (opt-in)',
+  accessTokenJwt: 'Access token JWT',
 }
 
 function IdentitySourcesSection({
@@ -1455,6 +1508,8 @@ function IdentitySourcesSection({
   emailClaim,
   nameClaim,
   disabled,
+  registrationId,
+  canTest,
   onAllowMissingEmail,
   onSourcesChange,
   onIdClaim,
@@ -1467,6 +1522,8 @@ function IdentitySourcesSection({
   emailClaim: string
   nameClaim: string
   disabled: boolean
+  registrationId: string
+  canTest: boolean
   onAllowMissingEmail: (next: boolean) => void
   onSourcesChange: (next: IdentitySource[]) => void
   onIdClaim: (next: string) => void
@@ -1482,13 +1539,77 @@ function IdentitySourcesSection({
   }
 
   return (
-    <div className="space-y-4 border-t border-border/40 pt-5">
-      <div>
-        <Label className="font-medium">Identity</Label>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Where to read the account id, email, and name — and optional claim paths when this
-          provider does not use the standard ones.
+    <section className="space-y-4 border-t border-border/40 pt-5">
+      <div className={GROUP_EYEBROW}>Identity</div>
+      <div className="space-y-2">
+        <Label className="text-xs">Identity sources</Label>
+        <p className="text-xs text-muted-foreground">
+          Tried in this order; an earlier source wins for each field.
         </p>
+        {IDENTITY_SOURCES.map((source) => (
+          <label key={source} className="flex items-start gap-2 text-sm">
+            <Checkbox
+              checked={sources.includes(source)}
+              onCheckedChange={() => toggle(source)}
+              disabled={disabled || (sources.length === 1 && sources[0] === source)}
+              aria-label={SOURCE_LABELS[source]}
+              className="mt-0.5"
+            />
+            <span>
+              {SOURCE_LABELS[source]}
+              {source === 'accessTokenJwt' && (
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Audience-scoped; its subject can legitimately differ from the ID token. Enable
+                  only if identity lives here.
+                </span>
+              )}
+            </span>
+          </label>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="idp-claim-id" className="text-xs">
+            Account id claim
+          </Label>
+          <ClaimPathInput
+            value={idClaim}
+            onChange={onIdClaim}
+            registrationId={registrationId}
+            canTest={canTest}
+            placeholder="sub"
+            ariaLabel="Account id claim"
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="idp-claim-email" className="text-xs">
+            Email claim
+          </Label>
+          <ClaimPathInput
+            value={emailClaim}
+            onChange={onEmailClaim}
+            registrationId={registrationId}
+            canTest={canTest}
+            placeholder="email"
+            ariaLabel="Email claim"
+            disabled={disabled}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="idp-claim-name" className="text-xs">
+            Name claim
+          </Label>
+          <ClaimPathInput
+            value={nameClaim}
+            onChange={onNameClaim}
+            registrationId={registrationId}
+            canTest={canTest}
+            placeholder="name"
+            ariaLabel="Name claim"
+            disabled={disabled}
+          />
+        </div>
       </div>
       <label className="flex items-start gap-2 text-sm">
         <Checkbox
@@ -1501,119 +1622,72 @@ function IdentitySourcesSection({
         <span>
           Allow accounts without an email address
           <span className="mt-0.5 block text-xs text-muted-foreground">
-            For providers that release no email. Quackback creates a placeholder so people can still
-            sign in. Placeholders are permanent: turning this off later does not convert accounts
-            that already have one.
+            For providers that release no email. Creates a permanent placeholder like{' '}
+            <span className="font-mono">sso-acme-7c2f…@{ANON_EMAIL_DOMAIN}</span>; these accounts
+            cannot receive email. Turning this off later does not convert existing accounts.
           </span>
         </span>
       </label>
-      <div className="space-y-2">
-        <Label className="text-xs">Identity sources</Label>
-        {IDENTITY_SOURCES.map((source) => (
-          <label key={source} className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={sources.includes(source)}
-              onCheckedChange={() => toggle(source)}
-              disabled={disabled || (sources.length === 1 && sources[0] === source)}
-              aria-label={SOURCE_LABELS[source]}
-            />
-            <span>{SOURCE_LABELS[source]}</span>
-          </label>
-        ))}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="idp-claim-id" className="text-xs">
-            Account id claim
-          </Label>
-          <Input
-            id="idp-claim-id"
-            value={idClaim}
-            onChange={(e) => onIdClaim(e.target.value)}
-            placeholder="sub"
-            disabled={disabled}
-            className="h-8 text-[13px]"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="idp-claim-email" className="text-xs">
-            Email claim
-          </Label>
-          <Input
-            id="idp-claim-email"
-            value={emailClaim}
-            onChange={(e) => onEmailClaim(e.target.value)}
-            placeholder="email"
-            disabled={disabled}
-            className="h-8 text-[13px]"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="idp-claim-name" className="text-xs">
-            Name claim
-          </Label>
-          <Input
-            id="idp-claim-name"
-            value={nameClaim}
-            onChange={(e) => onNameClaim(e.target.value)}
-            placeholder="name"
-            disabled={disabled}
-            className="h-8 text-[13px]"
-          />
-        </div>
-      </div>
-    </div>
+    </section>
   )
 }
 
 function AttributeMapSection({
   rows,
-  overrideExisting,
-  syncOnSignIn,
+  mirrorAttributes,
   disabled,
+  registrationId,
+  canTest,
   onRowsChange,
-  onOverrideExisting,
-  onSyncOnSignIn,
+  onMirrorAttributes,
 }: {
   rows: Array<{ claimPath: string; attributeKey: string }>
-  overrideExisting: boolean
-  syncOnSignIn: boolean
+  mirrorAttributes: boolean
   disabled: boolean
+  registrationId: string
+  canTest: boolean
   onRowsChange: (next: Array<{ claimPath: string; attributeKey: string }>) => void
-  onOverrideExisting: (next: boolean) => void
-  onSyncOnSignIn: (next: boolean) => void
+  onMirrorAttributes: (next: boolean) => void
 }) {
   const { data: attributes } = useUserAttributes()
   const defs = attributes ?? []
 
   return (
-    <div className="space-y-4 border-t border-border/40 pt-5">
+    <div className="space-y-4">
       <div>
         <Label className="font-medium">User attributes</Label>
         <p className="mt-1 text-xs text-muted-foreground">
-          Copy a claim onto a defined user attribute at sign-in. Board access still uses those
-          attributes through dynamic segments.
+          Copy a claim onto a defined user attribute at sign-in.{' '}
+          <Link to="/admin/settings/people" className="text-primary hover:underline">
+            Define attributes in People ↗
+          </Link>
+          {' · '}
+          <Link to="/admin/settings/people" className="text-primary hover:underline">
+            Dynamic segments ↗
+          </Link>
         </p>
       </div>
       {defs.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Define user attributes in Settings before mapping claims onto them.
+          <Link to="/admin/settings/people" className="text-primary hover:underline">
+            Define user attributes
+          </Link>{' '}
+          before mapping claims onto them.
         </p>
       ) : (
         <div className="space-y-2">
           {rows.map((row, index) => (
             <div key={index} className="flex items-center gap-2">
-              <Input
+              <ClaimPathInput
                 value={row.claimPath}
-                onChange={(e) =>
-                  onRowsChange(
-                    rows.map((r, i) => (i === index ? { ...r, claimPath: e.target.value } : r))
-                  )
+                onChange={(v) =>
+                  onRowsChange(rows.map((r, i) => (i === index ? { ...r, claimPath: v } : r)))
                 }
+                registrationId={registrationId}
+                canTest={canTest}
                 placeholder="claim path"
-                aria-label={`Claim path (attribute ${index + 1})`}
+                ariaLabel={`Claim path (attribute ${index + 1})`}
                 disabled={disabled}
-                className="h-8 flex-1 text-[13px]"
               />
               <span className="shrink-0 text-xs text-muted-foreground">→</span>
               <Select
@@ -1667,24 +1741,17 @@ function AttributeMapSection({
         </div>
       )}
       <label className="flex items-start gap-2 text-xs">
-        <Checkbox
-          checked={overrideExisting}
-          onCheckedChange={(v) => onOverrideExisting(v === true)}
+        <Switch
+          checked={mirrorAttributes}
+          onCheckedChange={onMirrorAttributes}
           disabled={disabled}
-          aria-label="Overwrite existing attribute values"
+          aria-label="Mirror the IdP for attributes"
           className="mt-0.5"
         />
-        <span>Overwrite existing attribute values</span>
-      </label>
-      <label className="flex items-start gap-2 text-xs">
-        <Checkbox
-          checked={syncOnSignIn}
-          onCheckedChange={(v) => onSyncOnSignIn(v === true)}
-          disabled={disabled}
-          aria-label="Sync attributes on every sign-in"
-          className="mt-0.5"
-        />
-        <span>Sync on every sign-in. Clears an attribute when the claim disappears.</span>
+        <span>
+          <span className="font-medium">Mirror the IdP.</span> Overwrites on every sign-in and
+          clears a value when its claim disappears. Off: fills only empty attributes.
+        </span>
       </label>
     </div>
   )

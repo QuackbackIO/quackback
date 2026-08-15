@@ -176,9 +176,15 @@ export async function buildGenericOAuthConfigs({
     }
 
     const request = authorizeRequestFor(provider)
-    const prompt = supportsPrompt(request.prompt, promptValuesSupported)
-      ? request.prompt
-      : undefined
+    // Filter the implicit default against `prompt_values_supported`. An
+    // explicit stored prompt is always sent: the admin picked it, and an
+    // IdP rejection is visible where a silent omission is not.
+    const prompt =
+      provider.prompt != null
+        ? request.prompt
+        : supportsPrompt(request.prompt, promptValuesSupported)
+          ? request.prompt
+          : undefined
 
     const rowUserInfoUrl = provider.userInfoUrl || undefined
     const getUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {

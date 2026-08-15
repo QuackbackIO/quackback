@@ -156,6 +156,12 @@ describe('runHandshake', () => {
     ])
     expect(result.allClaims?.iss).toBe(issuer)
     expect(result.allClaims?.sub).toBe('user-sub-123')
+    expect(result.identity).toEqual({
+      id: 'user-sub-123',
+      email: 'alice@idp.example',
+      name: 'Alice Example',
+      sources: { id: 'idToken', email: 'idToken', name: 'idToken' },
+    })
   })
 })
 

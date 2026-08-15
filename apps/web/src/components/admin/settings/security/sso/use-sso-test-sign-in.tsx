@@ -74,11 +74,23 @@ interface OpenOptions {
   registrationId?: string
 }
 
+export interface SsoTestCapture {
+  registrationId: string
+  capturedAt: string
+  identity: {
+    id: string
+    email?: string
+    name?: string
+    sources: Partial<Record<'id' | 'email' | 'name', string>>
+  }
+  claims: Record<string, JsonValue>
+}
+
 interface SsoTestSignInContextValue {
   open: (opts?: OpenOptions) => void
   /** The most recent successful test sign-in, tagged with the provider it ran
    *  against so a consumer only uses claims from a test of THAT provider. */
-  lastSuccess: { registrationId: string; allClaims: Record<string, JsonValue> } | null
+  lastSuccess: SsoTestCapture | null
 }
 
 const SsoTestSignInContext = createContext<SsoTestSignInContextValue | null>(null)
@@ -97,10 +109,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const pollResult = useServerFn(getSsoTestResultFn)
   const [state, dispatch] = useReducer(ssoTestReducer, initialSsoTestState)
   const [applying, setApplying] = useState(false)
-  const [lastSuccess, setLastSuccess] = useState<{
-    registrationId: string
-    allClaims: Record<string, JsonValue>
-  } | null>(null)
+  const [lastSuccess, setLastSuccess] = useState<SsoTestCapture | null>(null)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onSuccessRef = useRef<OnSuccess | null>(null)
@@ -170,7 +179,14 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
       if (result.ok) {
         setLastSuccess({
           registrationId: registrationIdRef.current,
-          allClaims: result.allClaims ?? {},
+          capturedAt: new Date().toISOString(),
+          identity: result.identity ?? {
+            id: result.claims.sub,
+            email: result.claims.email,
+            name: result.claims.name,
+            sources: {},
+          },
+          claims: result.allClaims ?? {},
         })
         void runAutoApply()
       }
