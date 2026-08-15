@@ -3,6 +3,14 @@ import { z } from 'zod'
 import { isSameOriginFormPost } from '@/lib/server/http/same-origin-form'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
+export function billingSessionErrorResponse(error: unknown): Response {
+  const message = error instanceof Error ? error.message : 'Billing is temporarily unavailable.'
+  if (message === 'already_on_plan') {
+    return Response.json({ error: 'already_on_plan' }, { status: 409 })
+  }
+  return Response.json({ error: message }, { status: 503 })
+}
+
 const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('portal') }),
   z.object({
@@ -40,12 +48,7 @@ export const Route = createFileRoute('/api/billing/session')({
           const url = await createHostedBillingSession(parsed.data)
           return new Response(null, { status: 303, headers: { location: url } })
         } catch (error) {
-          return Response.json(
-            {
-              error: error instanceof Error ? error.message : 'Billing is temporarily unavailable.',
-            },
-            { status: 503 }
-          )
+          return billingSessionErrorResponse(error)
         }
       },
     },
