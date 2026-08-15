@@ -1130,8 +1130,8 @@ Named critic spawned on the same URLs.
     Support `sup9ca3a708` (`inst_01m021rrsd…`, Neon
     `qb-cp-ffe2b4983034867ff50fdf54`) and Help Center `hc9ca3a708`
     (`inst_01m021xvy6…`, Neon `qb-cp-8c38697ef940ff0d53bd1d68`).
-    Instances 19. Ready 200. This fire: Change goal + first-win
-    reached on both hosts. Next: deploy `40e1e6bf1` (install Outlet).
+    Instances 19. Ready 200. Change goal + first-win reached.
+    Install Outlet live `27e0c23d`.
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
