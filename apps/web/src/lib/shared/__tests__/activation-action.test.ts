@@ -152,4 +152,55 @@ describe('selectActivationAction', () => {
     expect(ctas.primary.destination).toBe('/admin/feedback')
     expect(ctas.share).toBeNull()
   })
+
+  it.each([
+    {
+      startingPoint: {
+        outcome: 'customer_support' as const,
+        resourceType: 'messenger' as const,
+        resourceId: null,
+        source: 'wizard' as const,
+        resolution: 'created' as const,
+        completedAt: '2026-08-14T12:00:00.000Z',
+      },
+      id: 'connect-messenger',
+      destination: '/admin/settings/widget/install',
+    },
+    {
+      startingPoint: {
+        outcome: 'help_center' as const,
+        resourceType: 'article' as const,
+        resourceId: 'art_1',
+        source: 'wizard' as const,
+        resolution: 'created' as const,
+        completedAt: '2026-08-14T12:00:00.000Z',
+      },
+      id: 'continue-help-article',
+      destination: '/admin/help-center/articles/art_1',
+    },
+    {
+      startingPoint: {
+        outcome: 'internal' as const,
+        resourceType: 'board' as const,
+        resourceId: 'board_1',
+        source: 'wizard' as const,
+        resolution: 'created' as const,
+        completedAt: '2026-08-14T12:00:00.000Z',
+      },
+      id: 'invite-teammate',
+      destination: '/admin/settings/members',
+    },
+  ])('Ready primary for $startingPoint.outcome is $id', ({ startingPoint, id, destination }) => {
+    const ctas = resolveOnboardingHandoffCtas({ startingPoint, status: base })
+    expect(ctas.primary).toMatchObject({ id, kind: 'link', destination })
+    expect(ctas.share).toBeNull()
+  })
+
+  it('does not offer Messenger as the product-feedback Ready action', () => {
+    const ctas = resolveOnboardingHandoffCtas({
+      startingPoint: createdBoard,
+      status: { ...base, useCase: 'product_feedback' },
+    })
+    expect(ctas.primary.id).not.toBe('connect-messenger')
+  })
 })

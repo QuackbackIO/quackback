@@ -147,6 +147,17 @@ describe('buildLaunchTasks V2', () => {
   })
 
   it.each([
+    ['product_feedback', 'Receive your first customer post or vote'],
+    ['customer_support', 'Receive your first customer conversation'],
+    ['help_center', 'Publish your first article'],
+    ['internal', 'Collect your first team idea'],
+  ] as const)('first-win title for %s', (useCase, title) => {
+    const task = buildLaunchTasks({ ...base, useCase }).find((row) => row.id === 'first-win')
+    expect(task?.title).toBe(title)
+    expect(task?.classification).toBe('first_win')
+  })
+
+  it.each([
     { publicBoardLinkCopiedAt: '2026-08-14T10:00:00.000Z' },
     { hasWidgetInstalled: true },
     { hasFirstWin: true },
