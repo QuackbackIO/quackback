@@ -33,16 +33,18 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `d39f4243d` (Open handoff lands on `/`). Live web
-  `f04b339a` / `sha256:f9c64853…`, region only `us-east4-eqdc4a`.
-  Earlier named-billing image `sha256:895b942d…` (`cb3c65420`) is an
-  ancestor. Verify / §H last signed on that older pair.
+- Workspace tip: `5834951f7` (catalogue-backed upgrade offer). Live web
+  `48468c28` / `sha256:b358f971…`, region only `us-east4-eqdc4a`.
+  Open-to-root `d39f4243d` / `sha256:f9c64853…` is an ancestor. Verify
+  / §H last signed on the older `895b942d` pair.
 - Control plane tip `4ad81fc` live as `4a5ea8d7`
   (`sha256:43e28d87…`, sfo). SQL `0069` still applied. Open-to-root
   `4824f23` is an ancestor.
-- Last known deployed workspace: `d39f4243d` / `sha256:f9c64853…` (2026-08-15)
+- Last known deployed workspace: `5834951f7` / `sha256:b358f971…` (2026-08-15)
+  web `48468c28` SUCCESS, region `us-east4-eqdc4a`. Docker `31897613997`.
 - Last known deployed control plane: `4a5ea8d7` / `4ad81fc` (2026-08-15)
-- App `saas` has no undeployed customer-visible sha after `d39f4243d`.
+- App `saas` tip `5834951f7` is live (upgrade offer). No further undeployed
+  customer-visible sha.
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -135,6 +137,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CF for SaaS origin + client        | zone + CP    | `de0b038`; fallback **active**                                                    | token on CP, skip-deploy                   | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                  |
 | Identity gateway + Domains card    | CP + app     | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2`                           | **yes** in `40be439d` / `753d3b86`         | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                            |
 | CP list official + custom hosts    | CP           | `4ad81fc`                                                                         | **yes** `4a5ea8d7` / `sha256:43e28d87…`    | Dashboard tiles print identity `platform_hostname` and ready custom hosts. Generated `ws-*` omitted. t1a live: `south63792f.quackback.co.uk` present, no `ws-*`. No custom rows yet. Tests: one-screen 11, list-addresses 6, siblings 26.      |
+| Plan upgrade offer                 | app          | `5834951f7`                                                                       | **yes** `48468c28` / `sha256:b358f971…`    | Access & Security no longer 402s the page. Audit/SSO/Domains share one offer from `billingQueries.catalogue()`. Export 402 opens the same modal. t1a Pro: Portal access 200; audit tab names Scale; Sign-in shows the SSO offer.               |
 | Same-plan billing 409              | CP + app     | CP `f4e3844` / `7cecf06d`; app `be3e41b01` / `95610fd8`                           | **yes** in `895b942d` / `753d3b86`         | t1a same-plan Pro monthly **409** `already_on_plan` (not 503). Scale **303** `billing.stripe.com`. Origin 403. Evidence `this-fire/ws-already-on-plan.json`.                                                                                   |
 | Named billing session refusals     | app          | `cb3c65420` / `932a38f9`                                                          | **yes** `895b942d`                         | No-cookie **401** `unauthorized`. t1a cookie on t1e **401** (was 500). Tests 5/5. `this-fire/billing-authz.json`.                                                                                                                              |
 | Plan catalogue + invoices          | CP + app     | CP `2fb9488`, app `6418785c8`                                                     | **yes** API; UI in `02cb4329`              | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
