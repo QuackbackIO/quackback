@@ -179,8 +179,8 @@ function WidgetInstallPage() {
                 </Badge>
               </Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Attach conversations to a person. Your server signs a short-lived token with their
-                user id — the browser never sends raw id or email.
+                Attach conversations to a person. Your server signs a short-lived token; the browser
+                only sends that token, never raw id or email.
               </p>
             </div>
             <Switch

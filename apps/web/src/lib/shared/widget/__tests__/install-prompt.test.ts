@@ -37,19 +37,22 @@ describe('buildWidgetInstallPrompt', () => {
 })
 
 describe('buildWidgetInstallSnippet', () => {
-  it('includes verified identify with the host user id by default', () => {
+  it('documents identify primitives without assuming a host session API', () => {
     const snippet = buildWidgetInstallSnippet({
       instanceUrl: 'https://feedback.example.com/',
     })
 
     expect(snippet).toContain('https://feedback.example.com/api/widget/sdk.js')
     expect(snippet).toContain('Quackback("init")')
-    expect(snippet).toContain('String(user.id)')
     expect(snippet).toContain('ssoToken')
-    expect(snippet).toContain('Quackback("identify"')
+    expect(snippet).toContain('Quackback("identify", { ssoToken })')
     expect(snippet).toContain('Quackback("logout")')
     expect(snippet).toContain(WIDGET_SECRET_ENV)
+    expect(snippet).toContain('stable unique user id')
     expect(snippet).not.toContain('Quackback("identify", { id')
+    expect(snippet).not.toContain('fetch(')
+    expect(snippet).not.toContain('/api/quackback')
+    expect(snippet).not.toContain('user.id')
   })
 
   it('omits identify when the switch is off', () => {

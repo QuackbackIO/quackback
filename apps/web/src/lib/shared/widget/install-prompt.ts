@@ -78,26 +78,19 @@ export function buildWidgetInstallSnippet(input: WidgetInstallSnippetInput): str
   ${loader}
   Quackback("init");
 
-  // Recommended: identify signed-in users once per session so threads attach to a person.
-  // Your server signs a ~5m HS256 JWT with QUACKBACK_WIDGET_SECRET and returns { ssoToken }.
-  // Claims: sub = String(user.id) — a stable unique id, never email — plus email, optional name.
-  // Call this on first load if already signed in, and right after login/signup. Not on every navigation.
-  // Return 401 when nobody is signed in; the widget stays anonymous.
+  // Identify signed-in users once per session so threads attach to a person.
+  // Call when you first know who they are — app load if already signed in,
+  // and right after login/signup. Not on every navigation.
   //
-  // Server (jose):
-  //   await new SignJWT({ sub: String(user.id), email: user.email, name: user.name })
-  //     .setProtectedHeader({ alg: "HS256" }).setExpirationTime("5m")
-  //     .sign(new TextEncoder().encode(process.env.QUACKBACK_WIDGET_SECRET))
+  // Server: sign a ~5m HS256 JWT with QUACKBACK_WIDGET_SECRET.
+  //   sub   — stable unique user id (never email)
+  //   email — required
+  //   name  — optional
+  // Hand { ssoToken } to the page however you already expose session data.
+  // Never put the secret in the browser. Never send raw id or email.
   //
-  // Replace /api/quackback/sso with your route. Never put the secret in the browser.
-  fetch("/api/quackback/sso", { credentials: "same-origin" })
-    .then(function (res) { return res.ok ? res.json() : null; })
-    .then(function (data) {
-      if (data && data.ssoToken) Quackback("identify", { ssoToken: data.ssoToken });
-    })
-    .catch(function () {});
-
-  // On logout: Quackback("logout");
+  // Quackback("identify", { ssoToken });
+  // Quackback("logout");
 </script>`
 }
 
