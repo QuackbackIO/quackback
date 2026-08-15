@@ -29,6 +29,7 @@ describe('identity_provider schema', () => {
       'showButton',
       'detailsChangedAt',
       'lastSuccessfulTestAt',
+      'lastTestCapture',
       'createdAt',
     ]) {
       expect(cols).toContain(c)

@@ -255,7 +255,16 @@ export function ProviderEditor({
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const { lastSuccess } = useSsoTestSignIn()
-  const capture = lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null
+  const sessionCapture =
+    lastSuccess && lastSuccess.registrationId === registrationId ? lastSuccess : null
+  const capture = sessionCapture ?? provider?.lastTestCapture ?? null
+
+  // A successful test in this sitting also stamps the row. Refresh so the
+  // connection line and the persisted fixture stay in lockstep.
+  useEffect(() => {
+    if (!sessionCapture) return
+    void queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
+  }, [sessionCapture, queryClient])
 
   const verifiedDomainCount = (provider?.domains ?? []).filter((d) => d.verifiedAt).length
   const hasVerifiedDomain = verifiedDomainCount > 0

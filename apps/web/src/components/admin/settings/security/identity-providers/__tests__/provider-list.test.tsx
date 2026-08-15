@@ -118,6 +118,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     showButton: false,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
+    lastTestCapture: null,
     createdAt: '2026-05-01T00:00:00.000Z',
     domains: [],
     visibility: 'button',

@@ -124,6 +124,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     showButton: false,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
+    lastTestCapture: null,
     createdAt: '2026-05-01T00:00:00.000Z',
     domains: [],
     visibility: 'button',
@@ -370,6 +371,19 @@ describe('<ProviderEditor> outcome preview', () => {
   it('hides the rail when there is no capture', () => {
     renderEditor(makeProvider({}))
     expect(screen.queryByText('Outcome preview')).not.toBeInTheDocument()
+  })
+
+  it('hydrates the rail from a persisted capture with no session test', () => {
+    renderEditor(
+      makeProvider({
+        lastTestCapture: makeCapture({
+          claims: { email: 'jane@acme.com', name: 'Jane Diaz', groups: ['eng'] },
+        }),
+      })
+    )
+    expect(screen.getByText('Outcome preview')).toBeInTheDocument()
+    expect(screen.getByText('jane@acme.com')).toBeInTheDocument()
+    expect(screen.getByText('Jane Diaz')).toBeInTheDocument()
   })
 
   it('evaluates a typed claim path against the capture with no fetch', () => {

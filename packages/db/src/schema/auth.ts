@@ -364,6 +364,23 @@ export type IdentityProviderClaimMapping = {
 }
 
 /**
+ * Last successful Test sign-in fixture. Stored as the admin saw it — merged
+ * claims plus resolved identity. Mapping is an administrative choice; the
+ * column does not redact fields.
+ */
+export type IdentityProviderTestCapture = {
+  registrationId: string
+  capturedAt: string
+  identity: {
+    id: string
+    email?: string
+    name?: string
+    sources: Partial<Record<'id' | 'email' | 'name', string>>
+  }
+  claims: Record<string, unknown>
+}
+
+/**
  * Identity provider — the single source of truth for an OIDC IdP.
  *
  * Consolidates the two legacy OIDC config models. `id` is the internal
@@ -421,6 +438,7 @@ export const identityProvider = pgTable(
     /** Bumped when redirect-affecting details change; freshness baseline. */
     detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),
     lastSuccessfulTestAt: timestamp('last_successful_test_at', { withTimezone: true }),
+    lastTestCapture: jsonb('last_test_capture').$type<IdentityProviderTestCapture>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

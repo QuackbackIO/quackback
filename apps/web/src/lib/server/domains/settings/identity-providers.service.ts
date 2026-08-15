@@ -22,6 +22,7 @@ import {
   type IdentityProviderClaimMapping,
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
+import { parseSsoTestCapture, type SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { logger } from '@/lib/server/logger'
 import {
   getPlatformCredentials,
@@ -82,6 +83,8 @@ export interface IdentityProvider {
   detailsChangedAt: string | null
   /** ISO-8601 UTC; null until a test sign-in succeeds. */
   lastSuccessfulTestAt: string | null
+  /** Last successful Test fixture, as captured. Null until a test succeeds. */
+  lastTestCapture: SsoTestCapture | null
   createdAt: string
   domains: VerifiedDomain[]
   /** `routed` iff ≥1 linked domain is verified; otherwise `button`. */
@@ -184,6 +187,7 @@ function rowToIdentityProvider(
     showButton: row.showButton,
     detailsChangedAt: row.detailsChangedAt ? row.detailsChangedAt.toISOString() : null,
     lastSuccessfulTestAt: row.lastSuccessfulTestAt ? row.lastSuccessfulTestAt.toISOString() : null,
+    lastTestCapture: parseSsoTestCapture(row.lastTestCapture),
     createdAt: row.createdAt.toISOString(),
     domains,
     visibility: deriveVisibility({ domains }),
@@ -496,7 +500,7 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
  */
 async function stampTimestamp(
   id: IdentityProviderId,
-  set: { detailsChangedAt: Date } | { lastSuccessfulTestAt: Date }
+  set: { detailsChangedAt: Date } | { lastSuccessfulTestAt: Date; lastTestCapture?: SsoTestCapture }
 ): Promise<void> {
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
   const { resetAuth } = await import('@/lib/server/auth')
@@ -529,11 +533,17 @@ export async function stampDetailsChanged(id: IdentityProviderId): Promise<void>
   }
 }
 
-/** Stamp `last_successful_test_at = now()` after a successful test sign-in. */
-export async function markTestSucceeded(id: IdentityProviderId): Promise<void> {
+/** Stamp `last_successful_test_at = now()` and persist the test fixture. */
+export async function markTestSucceeded(
+  id: IdentityProviderId,
+  capture?: SsoTestCapture
+): Promise<void> {
   log.info({ id }, 'mark identity provider test succeeded')
   try {
-    await stampTimestamp(id, { lastSuccessfulTestAt: new Date() })
+    await stampTimestamp(id, {
+      lastSuccessfulTestAt: new Date(),
+      ...(capture ? { lastTestCapture: capture } : {}),
+    })
   } catch (error) {
     log.error({ err: error }, 'mark identity provider test succeeded failed')
     wrapDbError('mark identity provider test succeeded', error)

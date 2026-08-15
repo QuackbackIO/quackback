@@ -48,7 +48,9 @@ import {
   type WireResult,
   type SsoTestState,
 } from './sso-test-state'
-import type { JsonValue } from '@/lib/shared/json'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+
+export type { SsoTestCapture }
 
 const POLL_INTERVAL_MS = 2000
 // 150 polls * 2s = 5 minutes. Redis test-session TTL is 10 minutes;
@@ -72,18 +74,6 @@ interface OpenOptions {
    *  to `'sso'` for the legacy single-provider gate prompts (Enable /
    *  Require-SSO), which have no per-provider context. */
   registrationId?: string
-}
-
-export interface SsoTestCapture {
-  registrationId: string
-  capturedAt: string
-  identity: {
-    id: string
-    email?: string
-    name?: string
-    sources: Partial<Record<'id' | 'email' | 'name', string>>
-  }
-  claims: Record<string, JsonValue>
 }
 
 interface SsoTestSignInContextValue {
