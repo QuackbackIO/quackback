@@ -4,13 +4,15 @@ import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tansta
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
-  ArrowTopRightOnSquareIcon,
   CheckCircleIcon,
   ClipboardDocumentIcon,
   CodeBracketIcon,
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { copyWithFallback } from '@/components/admin/activation-action-button'
@@ -18,8 +20,10 @@ import { CopyAgentPromptButton } from '@/components/admin/settings/widget/copy-a
 import {
   WIDGET_SKILL_REPO,
   buildWidgetInstallPrompt,
+  buildWidgetInstallSnippet,
   maskWidgetSecretInPrompt,
 } from '@/lib/shared/widget/install-prompt'
+import { widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { configureWidgetForActivationFn } from '@/lib/server/functions/settings'
@@ -56,16 +60,14 @@ function WidgetInstallPage() {
       ? Boolean(config.tabs?.messenger && config.messenger?.enabled)
       : Boolean(config.tabs?.feedback && config.defaultBoard))
   const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
+  const [identifyUsers, setIdentifyUsers] = useState(true)
   const snippet = useMemo(
-    () => `<script>
-  (function(w,d){if(w.Quackback)return;w.Quackback=function(){
-  (w.Quackback.q=w.Quackback.q||[]).push(arguments)};
-  var s=d.createElement("script");s.async=true;
-  s.src="${baseUrl ?? ''}/api/widget/sdk.js";
-  d.head.appendChild(s)})(window,document);
-  Quackback("init");
-</script>`,
-    [baseUrl]
+    () =>
+      buildWidgetInstallSnippet({
+        instanceUrl: baseUrl ?? '',
+        identify: identifyUsers,
+      }),
+    [baseUrl, identifyUsers]
   )
   const agentPrompt = useMemo(
     () =>
@@ -168,6 +170,26 @@ function WidgetInstallPage() {
           title="Or add the snippet yourself"
           description="Paste this before the closing body tag if you would rather install it by hand."
         >
+          <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-border/50 p-4">
+            <div className="min-w-0">
+              <Label htmlFor="identify-users" className="cursor-pointer text-sm font-medium">
+                Identify signed-in users
+                <Badge size="sm" shape="pill" variant="secondary">
+                  Recommended
+                </Badge>
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Attach conversations to a person. Your server signs a short-lived token with their
+                user id — the browser never sends raw id or email.
+              </p>
+            </div>
+            <Switch
+              id="identify-users"
+              checked={identifyUsers}
+              onCheckedChange={setIdentifyUsers}
+              aria-label="Identify signed-in users"
+            />
+          </div>
           <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100">
             <code>{snippet}</code>
           </pre>
@@ -180,6 +202,16 @@ function WidgetInstallPage() {
               <ClipboardDocumentIcon className="h-4 w-4" />
               {copying === 'snippet' ? 'Copying…' : 'Copy installation snippet'}
             </Button>
+            {identifyUsers && secretQuery.data && (
+              <Button
+                variant="outline"
+                onClick={() => copy('secret', secretQuery.data!)}
+                disabled={copying !== null}
+              >
+                <ClipboardDocumentIcon className="h-4 w-4" />
+                {copying === 'secret' ? 'Copying…' : 'Copy widget signing secret'}
+              </Button>
+            )}
           </div>
         </SettingsCard>
       )}
@@ -189,65 +221,20 @@ function WidgetInstallPage() {
           title="3. Verify the connection"
           description={
             status.hasWidgetInstalled
-              ? `Verified on ${status.widgetOriginHost ?? 'your site'}`
+              ? widgetOriginVerifiedLabel(status.widgetOriginHost)
               : 'Waiting for the first request from your deployed site. Checking every five seconds.'
           }
         >
           {status.hasWidgetInstalled ? (
-            <div className="space-y-4">
-              <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-                <CheckCircleIcon className="h-5 w-5" /> Widget connection verified
-              </p>
-              {status.widgetOriginHost && (
-                <Button asChild>
-                  <a href={`https://${status.widgetOriginHost}`} target="_blank" rel="noreferrer">
-                    {mode === 'messenger' ? 'Open your site and send a message' : 'Open your site'}
-                    <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-                  </a>
-                </Button>
-              )}
-            </div>
+            <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+              <CheckCircleIcon className="h-5 w-5" /> Widget connection verified
+            </p>
           ) : (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <ArrowPathIcon className="h-4 w-4 animate-spin" /> Waiting for installation…
             </p>
           )}
         </SettingsCard>
-      )}
-
-      {configured && (
-        <details className="rounded-xl border bg-card">
-          <summary className="cursor-pointer px-5 py-4 text-sm font-medium">
-            Identify signed-in users
-          </summary>
-          <div className="space-y-3 border-t px-5 py-4 text-sm text-muted-foreground">
-            <p>
-              The skill does this. The widget appears after init for anonymous visitors. Identify as
-              soon as you know who the user is — when the app loads if they are already signed in,
-              and right after login or signup. Once per session. Your server mints a short-lived
-              token and the client calls
-              <code className="mx-1 rounded bg-muted px-1 py-0.5">
-                Quackback(&quot;identify&quot;, &#123; ssoToken &#125;)
-              </code>
-              . Call
-              <code className="mx-1 rounded bg-muted px-1 py-0.5">
-                Quackback(&quot;logout&quot;)
-              </code>
-              on logout.
-            </p>
-            {secretQuery.data && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => copy('secret', secretQuery.data!)}
-                disabled={copying !== null}
-              >
-                <ClipboardDocumentIcon className="h-4 w-4" />
-                {copying === 'secret' ? 'Copying…' : 'Copy widget signing secret'}
-              </Button>
-            )}
-          </div>
-        </details>
       )}
     </div>
   )

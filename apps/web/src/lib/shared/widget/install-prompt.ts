@@ -47,6 +47,60 @@ The widget appears after init for anonymous visitors. Call identify as soon as y
 `
 }
 
+export interface WidgetInstallSnippetInput {
+  instanceUrl: string
+  /** Recommended. When true, the snippet identifies signed-in users. Default true. */
+  identify?: boolean
+}
+
+function widgetLoader(instanceUrl: string): string {
+  const sdk = `${trimTrailingSlash(instanceUrl)}/api/widget/sdk.js`
+  return `(function(w,d){if(w.Quackback)return;w.Quackback=function(){
+    (w.Quackback.q=w.Quackback.q||[]).push(arguments)};
+    var s=d.createElement("script");s.async=true;
+    s.src="${sdk}";
+    d.head.appendChild(s)})(window,document);`
+}
+
+/** Script-tag snippet for hand install. Identify-on is the recommended default. */
+export function buildWidgetInstallSnippet(input: WidgetInstallSnippetInput): string {
+  const loader = widgetLoader(input.instanceUrl)
+  if (input.identify === false) {
+    return `<script>
+  // Quackback: anonymous visitors see the launcher after init.
+  ${loader}
+  Quackback("init");
+</script>`
+  }
+
+  return `<script>
+  // Quackback widget. Init first so anonymous visitors still get the launcher.
+  ${loader}
+  Quackback("init");
+
+  // Recommended: identify signed-in users once per session so threads attach to a person.
+  // Your server signs a ~5m HS256 JWT with QUACKBACK_WIDGET_SECRET and returns { ssoToken }.
+  // Claims: sub = String(user.id) — a stable unique id, never email — plus email, optional name.
+  // Call this on first load if already signed in, and right after login/signup. Not on every navigation.
+  // Return 401 when nobody is signed in; the widget stays anonymous.
+  //
+  // Server (jose):
+  //   await new SignJWT({ sub: String(user.id), email: user.email, name: user.name })
+  //     .setProtectedHeader({ alg: "HS256" }).setExpirationTime("5m")
+  //     .sign(new TextEncoder().encode(process.env.QUACKBACK_WIDGET_SECRET))
+  //
+  // Replace /api/quackback/sso with your route. Never put the secret in the browser.
+  fetch("/api/quackback/sso", { credentials: "same-origin" })
+    .then(function (res) { return res.ok ? res.json() : null; })
+    .then(function (data) {
+      if (data && data.ssoToken) Quackback("identify", { ssoToken: data.ssoToken });
+    })
+    .catch(function () {});
+
+  // On logout: Quackback("logout");
+</script>`
+}
+
 /** Mask the live secret in the on-screen preview so screenshots do not leak it. */
 export function maskWidgetSecretInPrompt(prompt: string, secret: string | null): string {
   if (!secret) return prompt

@@ -74,6 +74,7 @@ import type {
 } from '@/lib/shared/types/settings'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import type { WidgetContentTranslation, WidgetTranslations } from '@/lib/shared/widget/translations'
+import { widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
@@ -234,7 +235,7 @@ function WidgetInstallationStatusCard({
       title="Installation"
       description={
         status.hasWidgetInstalled
-          ? `Verified on ${status.widgetOriginHost ?? 'your site'}`
+          ? widgetOriginVerifiedLabel(status.widgetOriginHost)
           : 'Add the SDK to your site and verify the connection'
       }
     >
