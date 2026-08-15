@@ -28,36 +28,58 @@ import {
 const log = logger.child({ component: 'settings-widget' })
 export const WIDGET_OBSERVATION_THROTTLE_MS = 15 * 60 * 1000
 
-/**
- * Return a normalized external Origin hostname, or null for requests that must
- * not count as installation evidence. Origin is a browser-controlled header;
- * malformed, opaque, originless, same-host, and same-origin preview requests
- * are ignored.
- */
-export function externalWidgetOriginHostname(request: Request): string | null {
-  const originHeader = request.headers.get('origin')
-  if (!originHeader || originHeader === 'null' || originHeader.includes(',')) return null
-  if (request.headers.get('sec-fetch-site') === 'same-origin') return null
-
+function hostnameFromHttpUrl(raw: string, originShaped: boolean): string | null {
   try {
-    const origin = new URL(originHeader)
-    const endpoint = new URL(request.url)
-    if (
-      (origin.protocol !== 'http:' && origin.protocol !== 'https:') ||
-      origin.username ||
-      origin.password ||
-      origin.pathname !== '/' ||
-      origin.search ||
-      origin.hash
-    )
+    const url = new URL(raw)
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password)
       return null
-    const hostname = origin.hostname.toLowerCase().replace(/\.$/, '')
+    if (originShaped && (url.pathname !== '/' || url.search || url.hash)) return null
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, '')
     if (!hostname || hostname.length > 253) return null
-    if (hostname === endpoint.hostname.toLowerCase().replace(/\.$/, '')) return null
     return hostname
   } catch {
     return null
   }
+}
+
+function endpointHostname(request: Request): string | null {
+  const forwarded = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
+  if (forwarded && !forwarded.includes(',')) {
+    return hostnameFromHttpUrl(`http://${forwarded.trim()}`, false)
+  }
+  try {
+    return new URL(request.url).hostname.toLowerCase().replace(/\.$/, '') || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Return a normalized external hostname, or null for requests that must not
+ * count as installation evidence. Prefers Origin (fetch/XHR). Classic script
+ * tags often send no Origin, so Referer is the fallback — path/query/hash on
+ * Referer are ignored. Malformed, opaque, same-host, and same-origin preview
+ * requests are ignored.
+ */
+export function externalWidgetOriginHostname(request: Request): string | null {
+  if (request.headers.get('sec-fetch-site') === 'same-origin') return null
+
+  const originHeader = request.headers.get('origin')
+  const fromOrigin =
+    originHeader && originHeader !== 'null' && !originHeader.includes(',')
+      ? hostnameFromHttpUrl(originHeader, true)
+      : null
+  const refererHeader = request.headers.get('referer')
+  const hostname =
+    fromOrigin ??
+    (refererHeader && !refererHeader.includes(',')
+      ? hostnameFromHttpUrl(refererHeader, false)
+      : null)
+  if (!hostname) return null
+
+  const endpoint = endpointHostname(request)
+  if (!endpoint || hostname === endpoint) return null
+  return hostname
 }
 
 /**
@@ -78,7 +100,7 @@ export async function observeExternalWidgetRequest(
   const updated = await db
     .update(settings)
     .set({
-      widgetInstalledFirstSeenAt: sql`coalesce(${settings.widgetInstalledFirstSeenAt}, ${now})`,
+      widgetInstalledFirstSeenAt: sql`coalesce(${settings.widgetInstalledFirstSeenAt}, now())`,
       widgetInstalledLastSeenAt: now,
       widgetInstalledOriginHost: hostname,
     })
