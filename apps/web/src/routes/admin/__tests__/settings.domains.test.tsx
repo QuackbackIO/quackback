@@ -2,7 +2,12 @@
 import '@testing-library/jest-dom/vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { DomainsCard } from '../settings.domains'
+
+vi.mock('@/components/admin/upgrade', () => ({
+  UpgradeNotice: () => <p>Custom domains are a Growth feature. Upgrade to Growth to enable it.</p>,
+}))
+
+const { DomainsCard } = await import('../settings.domains')
 
 const PENDING = {
   hostname: 'feedback.acme.test',
@@ -31,10 +36,6 @@ describe('domains card', () => {
     )
     expect(screen.getByText(/Custom domains are a Growth feature/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Hostname')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Upgrade to Growth/ })).toHaveAttribute(
-      'href',
-      '/admin/settings/billing'
-    )
   })
 
   it('shows DNS instructions and does not print a provider id', () => {

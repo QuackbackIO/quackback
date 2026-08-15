@@ -4,7 +4,7 @@ import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { ProviderCreatePage } from '@/components/admin/settings/security/identity-providers/provider-create-page'
-import { SsoUpgradeNotice } from '@/components/admin/settings/security/identity-providers/sso-upgrade-notice'
+import { UpgradeScreen } from '@/components/admin/upgrade'
 import { SIGN_IN_TAB } from '@/components/admin/settings/security/identity-providers/provider-shared'
 
 // The trailing underscore on "sso_" escapes nesting under
@@ -15,8 +15,8 @@ export const Route = createFileRoute('/admin/settings/security/sso_/new')({
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
   },
   loader: async () => {
-    const { hasSsoEntitlementFn } = await import('@/lib/server/functions/sso-entitlement')
-    return { ssoEntitled: await hasSsoEntitlementFn() }
+    const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
+    return { ssoEntitled: await hasEntitlementFn({ data: { key: 'sso' } }) }
   },
   component: SsoCreateRoute,
 })
@@ -31,7 +31,7 @@ function SsoCreateRoute() {
         title="Add identity provider"
         description="Single sign-on is not included on this plan."
       />
-      <SsoUpgradeNotice />
+      <UpgradeScreen entitlement="sso" />
     </div>
   )
 }

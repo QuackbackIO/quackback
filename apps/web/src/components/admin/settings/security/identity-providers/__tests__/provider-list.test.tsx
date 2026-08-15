@@ -20,6 +20,10 @@ const { upsertSpy } = vi.hoisted(() => ({
   upsertSpy: vi.fn(async (_args: { data: { id: string; enabled: boolean } }) => undefined),
 }))
 
+vi.mock('@/components/admin/upgrade', () => ({
+  UpgradeNotice: () => <p>Single sign-on is a Scale feature. Upgrade to Scale to enable it.</p>,
+}))
+
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
   useRouteContext: () => ({ managedFieldPaths: [] }),

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { UpgradeNotice } from '@/components/admin/upgrade'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -121,14 +122,7 @@ export function DomainsCard(props: {
       description="Point a hostname you own at this workspace. Traffic goes through Quackback Cloud."
     >
       {!props.entitled ? (
-        <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Custom domains are a Growth feature. Upgrade to Growth to add your own hostname.
-          </p>
-          <Button asChild variant="outline" size="sm" className="mt-3">
-            <a href="/admin/settings/billing">Upgrade to Growth</a>
-          </Button>
-        </div>
+        <UpgradeNotice entitlement="customDomain" />
       ) : (
         <form
           className="max-w-xl space-y-3"

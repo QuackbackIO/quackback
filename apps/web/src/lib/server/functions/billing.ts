@@ -14,8 +14,15 @@ export const fetchBillingOverviewFn = createServerFn({ method: 'GET' }).handler(
   return await getBillingProjectionOverview()
 })
 
+/**
+ * Advertised plan stickers. Same payload Plan & billing renders.
+ * Any signed-in teammate may read it so upgrade offers stay consistent;
+ * checkout and invoices stay billing.manage.
+ */
 export const fetchBillingCatalogueFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+  await requireAuth()
+  const { getCloudConfig } = await import('@/lib/server/domains/settings/cloud/cloud.service')
+  if (!(await getCloudConfig()).enabled) return null
   const { fetchBillingCatalogue } = await import('@/lib/server/control-plane/client')
   return fetchBillingCatalogue()
 })

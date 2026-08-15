@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 
+/** @deprecated Use hasEntitlementFn({ data: { key: 'sso' } }). */
 export const hasSsoEntitlementFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
-  return hasEntitlement('sso')
+  const { hasEntitlementFn } = await import('./entitlement-status')
+  return hasEntitlementFn({ data: { key: 'sso' } })
 })

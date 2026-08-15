@@ -38,6 +38,17 @@ export function isAuthorizationError(error: Error): boolean {
   return /access denied/i.test(error.message)
 }
 
+/**
+ * True for a plan entitlement refusal that leaked into a route error
+ * boundary. Those sentences are commercial outcomes, not crashes.
+ */
+export function isEntitlementError(error: Error): boolean {
+  return (
+    /upgrade to \w+ to enable it/i.test(error.message) ||
+    /not included in your plan/i.test(error.message)
+  )
+}
+
 export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
   // Teammates who bounce off an admin-only page get a path back to their work
   // surfaces; portal visitors get the public exit (for them "Back to Feedback"
@@ -73,9 +84,39 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
   )
 }
 
+export function EntitlementRequiredPage({
+  error,
+  fullPage = true,
+}: {
+  error: Error
+  fullPage?: boolean
+}) {
+  const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+
+  return (
+    <FriendlyShell fullPage={fullPage}>
+      <h1 className="text-2xl font-semibold tracking-tight">This is a plan feature</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <div className="mt-6 flex items-center justify-center gap-3">
+        {isAdminArea ? (
+          <Button asChild>
+            <a href="/admin/settings/billing">See plans</a>
+          </Button>
+        ) : null}
+        <Button variant="outline" asChild>
+          <a href={isAdminArea ? '/admin/settings' : '/'}>Go back</a>
+        </Button>
+      </div>
+    </FriendlyShell>
+  )
+}
+
 export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
   if (isAuthorizationError(error)) {
     return <PermissionDeniedPage fullPage={fullPage} />
+  }
+  if (isEntitlementError(error)) {
+    return <EntitlementRequiredPage error={error} fullPage={fullPage} />
   }
 
   return (

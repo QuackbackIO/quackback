@@ -8,6 +8,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
+import { formatUsd } from '@/lib/shared/format-usd'
 import { MENU_LABEL } from '@/components/ui/menu'
 
 /** Workspace-local presentation of the control-plane billing projection. */
@@ -351,13 +352,4 @@ function formatDate(iso: string): string {
   return Number.isNaN(date.getTime())
     ? iso
     : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-}
-
-function formatUsd(cents: number, fractionDigits: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(cents / 100)
 }

@@ -50,6 +50,46 @@ vi.mock('@/lib/server/audit/log', () => ({
 await import('../audit-log')
 const listAuditEvents = handlers[0]
 
+import { ENTITLEMENT_KEYS, PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
+
+const LIMITS = {
+  maxBoards: 25,
+  maxPosts: 1_000,
+  maxTeamSeats: 10,
+  maxStatusComponents: 25,
+  maxCustomRoles: 5,
+  maxSendingDomains: 3,
+  aiTokensPerMonth: 100_000,
+  apiRequestsPerMonth: 100_000,
+  apiRequestsPerMinute: 600,
+}
+
+function storedCloud(
+  plan: 'free' | 'growth' | 'pro' | 'scale',
+  entitlements?: Partial<Record<(typeof ENTITLEMENT_KEYS)[number], boolean>>
+) {
+  const grants = new Set(PLAN_CATALOGUE[plan].grants)
+  return {
+    enabled: true,
+    projection: {
+      version: 1,
+      effectivePlan: plan,
+      trialStartedAt: null,
+      trialExpiresAt: null,
+      subscriptionStatus: null,
+      entitlements:
+        entitlements ?? Object.fromEntries(ENTITLEMENT_KEYS.map((key) => [key, grants.has(key)])),
+      freeLimits: LIMITS,
+      planLimits: LIMITS,
+      planLimitsExpireAt: null,
+      canUpgrade: true,
+      canManageBilling: false,
+      renewalAt: null,
+      cancellationAt: null,
+    },
+  }
+}
+
 function withCloud(cloud: unknown): void {
   hoisted.mockGetWorkspaceSettings.mockResolvedValue({ settings: { id: 'ws_1', cloud } })
 }
@@ -81,7 +121,7 @@ describe('listAuditEventsFn — no cloud config', () => {
 
 describe('listAuditEventsFn — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'pro' })
+    withCloud(storedCloud('pro'))
 
     const refusal = await listAuditEvents({ data: {} }).catch((error: unknown) => error)
 
@@ -98,21 +138,21 @@ describe('listAuditEventsFn — plan gate', () => {
   })
 
   it('returns events on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'scale' })
+    withCloud(storedCloud('scale'))
     await expect(listAuditEvents({ data: {} })).resolves.toMatchObject({ hasMore: false })
     expect(hoisted.mockQueryAuditEvents).toHaveBeenCalledOnce()
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { auditLog: true } })
+    withCloud(storedCloud('free', { auditLog: true }))
     await expect(listAuditEvents({ data: {} })).resolves.toBeDefined()
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { auditLog: false } })
+    withCloud(storedCloud('scale', { auditLog: false }))
     await expect(listAuditEvents({ data: {} })).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 
   it('refuses before the query even for an admin (the gate is not a permission check)', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud(storedCloud('growth'))
     await expect(listAuditEvents({ data: { limit: 10 } })).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )
