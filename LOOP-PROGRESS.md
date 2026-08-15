@@ -33,11 +33,11 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `be3e41b01` (map `already_on_plan` to 409). Live
-  `ghcr.io/quackbackio/quackback@sha256:40be439d1c2d55957265723bef94b9eda49523d3fee8954de7c2385b595a76f2`
-  (Docker `31872616168`). Web `95610fd8` SUCCESS, region only
-  `us-east4-eqdc4a`. Worker `9cd49fe5`, hourly `2634ef48`, daily
-  `057206ec`, migrator `def8cdde` same digest.
+- Workspace tip: `cb3c65420` (named billing 401/403). Live
+  `ghcr.io/quackbackio/quackback@sha256:895b942d58b548021837e4abcbdf96156410de149b23fcb2f29041ccaac8e1ab`
+  (Docker `31875492036`). Web `932a38f9` SUCCESS, region only
+  `us-east4-eqdc4a`. Worker `adc52e84`, hourly `e232e3f8`, daily
+  `7f893013`, migrator `141d5a5d` same digest.
 - Control plane tip `f4e3844` live as `7cecf06d`
   (`sha256:753d3b86…`, sfo). SQL `0069` still applied.
 - Last known deployed workspace: `be3e41b01` / `sha256:40be439d…` (2026-08-15)
@@ -133,7 +133,8 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Limits overlay                     | app          | `31330d85b` / `b0c13a366`                                                 | **yes** `cb186135`                  | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
 | CF for SaaS origin + client        | zone + CP    | `de0b038`; fallback **active**                                            | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                  |
 | Identity gateway + Domains card    | CP + app     | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2`                   | **yes** in `40be439d` / `753d3b86`  | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                            |
-| Same-plan billing 409              | CP + app     | CP `f4e3844` / `7cecf06d`; app `be3e41b01` / `95610fd8`                   | **yes** `40be439d` / `753d3b86`     | t1a same-plan Pro monthly **409** `already_on_plan` (not 503). Scale **303** `billing.stripe.com`. t1e Upgrade **303** `cs_test_`. Origin 403. Evidence `this-fire/ws-already-on-plan.json`.                                                   |
+| Same-plan billing 409              | CP + app     | CP `f4e3844` / `7cecf06d`; app `be3e41b01` / `95610fd8`                   | **yes** in `895b942d` / `753d3b86`  | t1a same-plan Pro monthly **409** `already_on_plan` (not 503). Scale **303** `billing.stripe.com`. Origin 403. Evidence `this-fire/ws-already-on-plan.json`.                                                                                   |
+| Named billing session refusals     | app          | `cb3c65420` / `932a38f9`                                                  | **yes** `895b942d`                  | No-cookie **401** `unauthorized`. t1a cookie on t1e **401** (was 500). Tests 5/5. `this-fire/billing-authz.json`.                                                                                                                              |
 | Plan catalogue + invoices          | CP + app     | CP `2fb9488`, app `6418785c8`                                             | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch                   | CP + app     | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c`                   | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
 | Completed plan change + cancel     | live Stripe  | t1a `inst_01m00kq6cdfzzb19gfjz8pt0s7`                                     | **yes**                             | Growth → Pro monthly (`always_invoice`); webhook wrote `plan_id=pro`. `cancel_at_period_end` true then cleared. Evidence `loop-evidence/t1a-plan-change.json`. t1a is now Pro paid.                                                            |
@@ -152,11 +153,10 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name             | app          | `8cb12d5f1`                                                               | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 | PLG emit self-host skip            | app tests    | `3b4556ae2`                                                               | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
-**Fleet note:** one deploy thread. Live pair is app `95610fd8` /
-`sha256:40be439d…` (`be3e41b01`) and CP `7cecf06d` (`f4e3844`).
-`635cdb149` is an ancestor of this image (https Origin already live).
-No undeployed customer-visible product tip. Verify / §H re-signed on
-`40be439d` / `753d3b86` with t1e Growth paid.
+**Fleet note:** one deploy thread. Live pair is app `932a38f9` /
+`sha256:895b942d…` (`cb3c65420`) and CP `7cecf06d` (`f4e3844`).
+`635cdb149` is an ancestor. No undeployed customer-visible product
+tip. Verify / §H last signed on `40be439d` — re-sign on this digest.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -773,6 +773,30 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 `loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
 
 ## This fire (2026-08-15, orchestrator)
+
+Fleet: `635cdb149` already an ancestor. Customer-visible
+`cb3c65420` (named billing refusals) Docker `31875492036` →
+`sha256:895b942d…`. `source.image` + `redeploy --from-source`:
+
+| role     | deployment | digest     | region            |
+| -------- | ---------- | ---------- | ----------------- |
+| web      | `932a38f9` | `895b942d` | `us-east4-eqdc4a` |
+| worker   | `adc52e84` | `895b942d` | `us-east4-eqdc4a` |
+| hourly   | `e232e3f8` | `895b942d` | `us-east4-eqdc4a` |
+| daily    | `7f893013` | `895b942d` | `us-east4-eqdc4a` |
+| migrator | `141d5a5d` | `895b942d` | `us-east4-eqdc4a` |
+
+Ready 200. Tests 5/5. Live: no-cookie **401** `unauthorized`; t1a
+cookie on t1e **401** `unauthorized` (was 500); t1e same-plan
+**409**; Origin 403. Critic **PASS** (`billing-authz-critic.md`).
+
+Stripe-live: t1a + t1e already paid. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Instances **19→19**. No Neon. No live key. Custom domains not started.
+
+Previous fire (projection probes):
 
 Fleet: `635cdb149` already in live `95610fd8` / `sha256:40be439d…`,
 `us-east4-eqdc4a`. Gauntlet ready 200. No deploy.

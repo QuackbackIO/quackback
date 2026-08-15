@@ -1,0 +1,30 @@
+{
+  "at": "2026-08-15T08:55:43.669Z",
+  "errors": [],
+  "didNotPay": true,
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "noCookie": {
+    "status": 401,
+    "error": "unauthorized",
+    "locationHost": null
+  },
+  "t1aOnT1e": {
+    "status": 401,
+    "error": "unauthorized",
+    "locationHost": null
+  },
+  "t1eSameGrowth": {
+    "status": 409,
+    "error": "already_on_plan",
+    "locationHost": null
+  },
+  "foreignOrigin": {
+    "status": 403,
+    "error": "invalid_origin",
+    "locationHost": null
+  },
+  "ok": true
+}
