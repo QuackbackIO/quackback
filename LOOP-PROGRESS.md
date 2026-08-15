@@ -35,9 +35,9 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 - Workspace tip: `cb3c65420` (named billing 401/403). Live
   `ghcr.io/quackbackio/quackback@sha256:895b942d58b548021837e4abcbdf96156410de149b23fcb2f29041ccaac8e1ab`
-  (Docker `31875492036`). Web `932a38f9` SUCCESS, region only
-  `us-east4-eqdc4a`. Worker `adc52e84`, hourly `e232e3f8`, daily
-  `7f893013`, migrator `141d5a5d` same digest.
+  (Docker `31875492036`). Web `e20c0eef` SUCCESS (env restore after
+  outage probe), region only `us-east4-eqdc4a`. Worker `adc52e84`,
+  hourly `e232e3f8`, daily `7f893013`, migrator `141d5a5d` same digest.
 - Control plane tip `f4e3844` live as `7cecf06d`
   (`sha256:753d3b86…`, sfo). SQL `0069` still applied.
 - Last known deployed workspace: `cb3c65420` / `sha256:895b942d…` (2026-08-15)
@@ -142,7 +142,8 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Verify sweep                       | live         | `loop-evidence/verify-2026-08-15/sweep-895b942d.md`                | **PASS 0 HIGH** on `895b942d`       | Re-signed after named billing 401. Prior `sweep-40be439d-growth.md` is historical.                                                                                                                                                             |
 | Track 8b–8f                        | CP+app saas  | **8a–8f live**                                                     | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic                 | live + spec  | `loop-evidence/plan-matrix-895b942d.md` + `plan-matrix-free-t7.md` | **PASS** on `895b942d` / `753d3b86` | t1a Pro + t1e Growth + t7 Free. Foreign billing POST 401. No Scale / cancel fixture.                                                                                                                                                           |
-| Projection replay / stale / expiry | live + tests | `this-fire/projection-probes.json`                                 | **yes** `40be439d`                  | Replay 204, stale 409, garbage 401. Paid Growth not dropped by trial clock. Unit exact-expiry 12/12. Did not take CP down.                                                                                                                     |
+| Projection replay / stale / expiry | live + tests | `this-fire/projection-probes.json`                                 | **yes** `40be439d`                  | Replay 204, stale 409, garbage 401. Paid Growth not dropped by trial clock. Unit exact-expiry 12/12.                                                                                                                                           |
+| CP outage (web origin)             | live         | `this-fire/cp-outage-critic.md`                                    | **yes** `e20c0eef` / `895b942d`     | Inbox 200; billing 503 retry copy; restore 303/409. Same digest. CP process not stopped.                                                                                                                                                       |
 | Product-feedback first-win         | app          | `52c1ab397`                                                        | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”.                                                                                                                                                    |
 | Support + HC live first-win        | live         | existing `sup9ca3a708` / `hc9ca3a708`                              | **yes** hosts 200                   | Change goal + first-win reached. Support conversation + “You’re up and running”. HC article published + milestone 15 Aug 2026. Critic **PASS** `live-existing/critic.md`.                                                                      |
 | Widget install Outlet              | app          | `40e1e6bf1`                                                        | **yes** `532dbe27` / `27e0c23d`     | Install page is Connect Messenger + Enable Messenger (not parent Widget). Enable → Channel enabled + Add the SDK. Critic **PASS** `this-fire/install-critic.md`.                                                                               |
@@ -153,7 +154,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name             | app          | `8cb12d5f1`                                                        | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 | PLG emit self-host skip            | app tests    | `3b4556ae2`                                                        | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
-**Fleet note:** one deploy thread. Live pair is app `932a38f9` /
+**Fleet note:** one deploy thread. Live pair is app `e20c0eef` /
 `sha256:895b942d…` (`cb3c65420`) and CP `7cecf06d` (`f4e3844`).
 `635cdb149` is an ancestor. No undeployed customer-visible product
 tip. Verify / §H signed on `895b942d` / `753d3b86`.
@@ -774,6 +775,27 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
+Fleet: `635cdb149` already an ancestor of live `sha256:895b942d…`,
+`us-east4-eqdc4a` only. **No 635cdb149 deploy.** Web-only env flip
+for the outage unit (same image): `3f4a09b0` blackhole then
+`e20c0eef` restore to `https://cp.quackback.co.uk`.
+
+Stripe-live: t1a Pro + t1e Growth still paid. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Live unit: **CP outage** from the workspace (web
+`QUACKBACK_CONTROL_PLANE_URL` → invalid HTTPS origin; CP process
+stayed up). t1a inbox **200** from last projection; Scale and
+same-plan billing **503** with retry copy (not 500). After restore:
+Scale **303** `billing.stripe.com`, same-plan **409**. Critic
+**PASS** (`cp-outage-critic.md`). Instances **19→19**.
+
+Verify / §H still signed on `895b942d` / `753d3b86` (same digest).
+No Neon. No live key. Custom domains not started.
+
+Previous fire (8a restore-at-cap):
+
 Fleet: `635cdb149` already in live `932a38f9` / `sha256:895b942d…`,
 `us-east4-eqdc4a` only (source.image + region pin). Five ready 200. **No deploy.**
 
@@ -1339,9 +1361,9 @@ Named critic spawned on the same URLs.
     t1a remains Pro. Same-plan 409 on both.
 23. ~~**8a restore at 3 live Free**~~ live on `7cecf06d` / `895b942d`
     (`t8a-restore-critic.md`). Soft-delete does not count.
-24. **Control-plane outage** (product from last projection + retryable
-    billing). Unit trial helper skips when CP is down; live CP-down
-    not taken. Next live unit if DoD still open.
+24. ~~**Control-plane outage**~~ live on `895b942d` / `e20c0eef`
+    (`cp-outage-critic.md`). Inbox 200; billing 503 retry copy;
+    recovered 303/409. CP process was not stopped.
 25. SSO downgrade still needs a Scale host (no live Scale fixture).
     Do not start custom domains.
 
@@ -1467,9 +1489,10 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
   sig 400 on live; billing projection replay **204** / stale **409**
   (`projection-probes.json`). Outbox already delivered v5/v6.
 - ~~Created/configured-only trial activation and immutable anchor.~~ live on both `ws-*` hosts.
-- Control-plane outage behavior for normal use and billing actions. App retry
-  helper is live (`57ff32499` in image `703eca7d`); both current `ws-*`
-  workspaces already have a trial so the helper skips.
+- ~~Control-plane outage behavior for normal use and billing actions.~~
+  live `cp-outage-critic.md`: inbox 200 from last projection; billing
+  **503** retry copy; recovered 303/409. Helper `57ff32499` still
+  skips when a trial already exists.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
   All four outcomes + self-host Bar C proved on local `:3000`.
   Support / Help Center still need live workspaces. Ready primaries

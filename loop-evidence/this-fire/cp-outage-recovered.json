@@ -1,0 +1,53 @@
+{
+  "at": "2026-08-15T09:34:34.209Z",
+  "unit": "cp-outage",
+  "phase": "recovered",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "printedCredentials": false,
+  "errors": [],
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "handoff": {
+    "status": 200,
+    "hasSession": true
+  },
+  "ready": {
+    "status": 200,
+    "locationHost": null,
+    "error": null,
+    "retryCopy": false,
+    "role": "web"
+  },
+  "publicHome": {
+    "status": 307,
+    "locationHost": "south63792f.quackback.co.uk",
+    "error": null,
+    "retryCopy": false,
+    "role": null
+  },
+  "inbox": {
+    "status": 200,
+    "locationHost": null,
+    "error": null,
+    "retryCopy": false,
+    "role": null
+  },
+  "billingScale": {
+    "status": 303,
+    "locationHost": "billing.stripe.com",
+    "error": null,
+    "retryCopy": false,
+    "role": null
+  },
+  "billingSamePro": {
+    "status": 409,
+    "locationHost": null,
+    "error": "already_on_plan",
+    "retryCopy": false,
+    "role": null
+  },
+  "ok": true
+}

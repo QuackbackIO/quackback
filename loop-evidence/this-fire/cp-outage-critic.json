@@ -1,0 +1,53 @@
+{
+  "at": "2026-08-15T09:33:25.296Z",
+  "unit": "cp-outage",
+  "phase": "critic",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "printedCredentials": false,
+  "errors": [],
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "handoff": {
+    "status": 200,
+    "hasSession": true
+  },
+  "ready": {
+    "status": 200,
+    "locationHost": null,
+    "error": null,
+    "retryCopy": false,
+    "role": "web"
+  },
+  "publicHome": {
+    "status": 307,
+    "locationHost": "south63792f.quackback.co.uk",
+    "error": null,
+    "retryCopy": false,
+    "role": null
+  },
+  "inbox": {
+    "status": 200,
+    "locationHost": null,
+    "error": null,
+    "retryCopy": false,
+    "role": null
+  },
+  "billingScale": {
+    "status": 503,
+    "locationHost": null,
+    "error": "Quackback Cloud is temporarily unavailable. Please try again.",
+    "retryCopy": true,
+    "role": null
+  },
+  "billingSamePro": {
+    "status": 503,
+    "locationHost": null,
+    "error": "Quackback Cloud is temporarily unavailable. Please try again.",
+    "retryCopy": true,
+    "role": null
+  },
+  "ok": true
+}
