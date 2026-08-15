@@ -1,0 +1,117 @@
+{
+  "at": "2026-08-15T10:30:50.448Z",
+  "unit": "verify-e20c0eef",
+  "errors": [],
+  "highs": [],
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "health": {
+    "https://gauntlet.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://south63792f.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://northfa99f0.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://sup9ca3a708.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    }
+  },
+  "plans": {
+    "inst_01m00kq6cdf": "pro",
+    "inst_01m021rrsdf": "free",
+    "inst_01m00kprbrf": "scale"
+  },
+  "t1a": {
+    "plan": "pro",
+    "unlimited": false,
+    "stored": null,
+    "inbox": 200,
+    "samePro": {
+      "status": 409,
+      "error": "already_on_plan",
+      "locationHost": null
+    },
+    "scale": {
+      "status": 303,
+      "error": null,
+      "locationHost": "billing.stripe.com"
+    },
+    "portal": {
+      "status": 303,
+      "error": null,
+      "locationHost": "billing.stripe.com"
+    },
+    "foreignOrigin": {
+      "status": 403,
+      "error": "invalid_origin"
+    }
+  },
+  "t1e": {
+    "plan": "scale",
+    "unlimited": false,
+    "stored": null,
+    "inbox": 200,
+    "sameScale": {
+      "status": 409,
+      "error": "already_on_plan",
+      "locationHost": null
+    },
+    "portal": {
+      "status": 303,
+      "error": null,
+      "locationHost": "billing.stripe.com"
+    }
+  },
+  "t7": {
+    "plan": "free",
+    "unlimited": false,
+    "stored": null,
+    "growth": {
+      "status": 303,
+      "error": null,
+      "locationHost": "checkout.stripe.com"
+    },
+    "portal": {
+      "status": 403,
+      "error": "billing_action_unavailable",
+      "locationHost": null
+    }
+  },
+  "isolation": {
+    "noBearer": {
+      "status": 401,
+      "error": "unauthorized"
+    },
+    "t1aTokenOnT1eHost": {
+      "status": 401,
+      "error": "unauthorized"
+    },
+    "t1eToken": {
+      "status": 409,
+      "error": "already_on_plan"
+    }
+  },
+  "lifecycle": {
+    "delete": {
+      "status": 303,
+      "locationPath": "/auth/login"
+    },
+    "restore": {
+      "status": 303,
+      "locationPath": "/auth/login"
+    }
+  },
+  "publicHome": {
+    "status": 307
+  },
+  "ok": true
+}
