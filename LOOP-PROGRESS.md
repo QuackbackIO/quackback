@@ -38,10 +38,10 @@ Custom Hostnames integration proves both hostname and SSL readiness.
   (Docker `31875492036`). Web `e20c0eef` SUCCESS (env restore after
   outage probe), region only `us-east4-eqdc4a`. Worker `adc52e84`,
   hourly `e232e3f8`, daily `7f893013`, migrator `141d5a5d` same digest.
-- Control plane tip `ef31b2a` live as `3a9bc4ee`
-  (`sha256:aed43943…`, sfo). SQL `0069` still applied.
+- Control plane tip `8e4c00a` live as `b7ae7455`
+  (`sha256:45b9aebb…`, sfo). SQL `0069` still applied.
 - Last known deployed workspace: `cb3c65420` / `sha256:895b942d…` (2026-08-15)
-- Last known deployed control plane: `3a9bc4ee` (2026-08-15)
+- Last known deployed control plane: `b7ae7455` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -157,9 +157,9 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | PLG emit self-host skip            | app tests    | `3b4556ae2`                                                                       | skip-deploy (tests-only)                   | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
 **Fleet note:** one deploy thread. Live pair is app `e20c0eef` /
-`sha256:895b942d…` (`cb3c65420`) and CP `3a9bc4ee` (`ef31b2a`).
+`sha256:895b942d…` (`cb3c65420`) and CP `b7ae7455` (`8e4c00a`).
 `635cdb149` is an ancestor. No undeployed customer-visible app tip.
-Verify / §H still signed on `895b942d` (app digest unchanged).
+Verify / §H still signed on app `895b942d`.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -776,6 +776,20 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 `loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
 
 ## This fire (2026-08-15, orchestrator)
+
+Fleet: `635cdb149` already in `e20c0eef` / `sha256:895b942d…`. **No
+635 deploy.** CP `railway up` `8e4c00a` → `b7ae7455` SUCCESS
+`sha256:45b9aebb…` (sfo).
+
+Stripe-live: t1e Scale already paid. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Live unit: **https Location** on unauth delete/restore. Tests 8/8.
+POST t1a delete/restore **303** `https://cp.quackback.co.uk/auth/login`
+(was `http://`). Critic **PASS** (`lifecycle-https-critic.md`).
+
+Previous fire (compact Verify):
 
 Fleet: `635cdb149` already in `e20c0eef` / `sha256:895b942d…`. **No
 635 deploy.**
@@ -1473,6 +1487,8 @@ Named critic spawned on the same URLs.
     No public issuer; no plan change. Do not start custom domains.
 26. ~~**Unauth delete/restore 500**~~ live CP `ef31b2a` / `3a9bc4ee`.
     303 `/auth/login`. `lifecycle-auth-critic.md`.
+27. ~~**https Location**~~ live CP `8e4c00a` / `b7ae7455`.
+    `lifecycle-https-critic.md`.
 
 ## Stale code to remove
 
