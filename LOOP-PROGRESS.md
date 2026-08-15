@@ -138,6 +138,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-25319ded.md`                 | **PASS** on `25319ded` / `79030f27` | Prior PASS on `71f78ecb` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
 | Product-feedback first-win     | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC / internal / self-host walks remain (no Neon this fire).                                                                              |
 | Outcome Ready + first-win copy | app tests   | `587e96847`                                             | skip-deploy (tests-only)            | Ready primaries + first-win titles for all four outcomes. `outcomes-critic.md`.                                                                                                                                                                |
+| Self-host General name         | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 
 **Fleet note:** one deploy thread. Live pair is app `c5d64208` /
 `sha256:25319ded…` (`52c1ab397`, includes `635cdb149`) and CP
@@ -760,9 +761,17 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 ## This fire (2026-08-15, orchestrator)
 
 Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
-web `c5d64208` `us-east4-eqdc4a`. No deploy. Stripe-live first-pay
-already on t1a — not repeated. CP-create 3-Free already live — no
-second builder. No Neon. No live key. Custom domains not started.
+web `c5d64208`. No deploy. Stripe-live not repeated. CP-create not
+started. No Neon. No live key. Custom domains not started.
+
+Track 7 / Bar C: `8cb12d5f1` extracts the self-host General name card
+and proves it has no cloud URL. Cloud URL field does not prefill
+`ws-*`. Tests 12/12 (identity + billing nav + switcher absent). Named
+skip-deploy (self-host surface, live cloud unchanged). Critic
+`loop-evidence/t7-first-win/self-host-critic.md`. Support / HC /
+internal live walks still need Neon.
+
+Previous fire (per-outcome Ready tests) is historical.
 
 Track 7 tests `587e96847`: Ready primary + first-win title for all four
 outcomes. Tests 32/32. Named skip-deploy (tests-only). Critic
