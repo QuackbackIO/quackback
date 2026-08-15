@@ -16,6 +16,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { copyWithFallback } from '@/components/admin/activation-action-button'
 import { CopyAgentPromptButton } from '@/components/admin/settings/widget/copy-agent-prompt-button'
 import {
+  WIDGET_SKILL_REPO,
   buildWidgetInstallPrompt,
   maskWidgetSecretInPrompt,
 } from '@/lib/shared/widget/install-prompt'
@@ -115,7 +116,7 @@ function WidgetInstallPage() {
       <PageHeader
         icon={CodeBracketIcon}
         title={mode === 'messenger' ? 'Connect Messenger' : 'Install feedback widget'}
-        description="Copy a prompt for your coding agent, or add the snippet yourself."
+        description="Copy a prompt that installs the Quackback skill and wires the widget into your codebase."
       />
 
       <SettingsCard
@@ -141,11 +142,20 @@ function WidgetInstallPage() {
       {configured && (
         <SettingsCard
           title="2. Ask your agent"
-          description="Paste this into Claude, Cursor, Codex, or Copilot. It detects your stack and wires up the widget."
+          description="Paste this into Claude, Cursor, Codex, or Copilot. It fetches the install-widget skill, detects your stack, and identifies signed-in users."
         >
           <CopyAgentPromptButton prompt={agentPrompt} />
           <p className="mt-3 text-xs text-muted-foreground">
-            The copied prompt includes your widget secret. Paste it into a local agent only.
+            The prompt points your agent at the{' '}
+            <a
+              href={WIDGET_SKILL_REPO}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2"
+            >
+              install-widget skill
+            </a>{' '}
+            and includes your widget secret. Paste it into a local agent only.
           </p>
           <pre className="mt-4 max-h-72 overflow-auto rounded-lg border border-border/50 bg-muted/30 p-3 text-xs font-mono leading-relaxed text-foreground whitespace-pre-wrap">
             {previewPrompt}
@@ -208,16 +218,22 @@ function WidgetInstallPage() {
       {configured && (
         <details className="rounded-xl border bg-card">
           <summary className="cursor-pointer px-5 py-4 text-sm font-medium">
-            Advanced: identify signed-in users (optional)
+            Identify signed-in users
           </summary>
           <div className="space-y-3 border-t px-5 py-4 text-sm text-muted-foreground">
             <p>
-              Anonymous visitors can already use the widget. To attach conversations and feedback to
-              signed-in customers, mint a short-lived signed SSO token on your backend and call
+              The skill does this. The widget appears after init for anonymous visitors. Identify as
+              soon as you know who the user is — when the app loads if they are already signed in,
+              and right after login or signup. Once per session. Your server mints a short-lived
+              token and the client calls
               <code className="mx-1 rounded bg-muted px-1 py-0.5">
-                Quackback(&quot;identify&quot;)
+                Quackback(&quot;identify&quot;, &#123; ssoToken &#125;)
               </code>
-              .
+              . Call
+              <code className="mx-1 rounded bg-muted px-1 py-0.5">
+                Quackback(&quot;logout&quot;)
+              </code>
+              on logout.
             </p>
             {secretQuery.data && (
               <Button

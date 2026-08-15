@@ -5,15 +5,17 @@ export interface WidgetInstallPromptInput {
 
 export const WIDGET_SECRET_ENV = 'QUACKBACK_WIDGET_SECRET'
 export const WIDGET_SECRET_PLACEHOLDER = 'wgt_YOUR_WIDGET_SECRET'
-
-const INSTALL_DOCS_URL = 'https://quackback.io/docs/widget/installation'
-const IDENTIFY_DOCS_URL = 'https://quackback.io/docs/widget/identify-users'
+export const WIDGET_SKILL_REPO = 'https://github.com/QuackbackIO/skills'
+export const WIDGET_SKILL_RAW =
+  'https://raw.githubusercontent.com/QuackbackIO/skills/main/skills/quackback/install-widget/SKILL.md'
+export const WIDGET_IDENTIFY_RAW =
+  'https://raw.githubusercontent.com/QuackbackIO/skills/main/skills/quackback/install-widget/references/identify-users.md'
 
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '')
 }
 
-/** Canonical prompt an agent can paste to install the widget in a host codebase. */
+/** Short prompt an agent pastes: install the public skill, then use these credentials. */
 export function buildWidgetInstallPrompt(input: WidgetInstallPromptInput): string {
   const instanceUrl = trimTrailingSlash(input.instanceUrl)
   const secret = input.widgetSecret ?? WIDGET_SECRET_PLACEHOLDER
@@ -32,61 +34,16 @@ ${secretNote}
 - Env var name: ${WIDGET_SECRET_ENV}
 
 ## What to do
-Detect this repository's stack and implement a complete install. Do not invent APIs.
+1. Fetch and follow the \`install-widget\` skill:
+   - ${WIDGET_SKILL_RAW}
+   - ${WIDGET_IDENTIFY_RAW}
+2. Follow every step in order. Do not skip identify.
+3. Use the credentials above. Do not invent APIs.
 
-1. Load the widget on every product page where customers should see it.
-   - HTML / any site: paste the snippet before \`</body>\`.
-   - SPA (React, Next, Vue, Svelte): the snippet or \`npm install @quackback/widget\` both work. Prefer the approach that matches existing patterns.
-2. Add a server-only endpoint that signs a short-lived HS256 JWT with \`${WIDGET_SECRET_ENV}\` and returns \`{ ssoToken }\`.
-3. After the host app knows who the user is, call \`Quackback("identify", { ssoToken })\`. Anonymous visitors need no identify call — the widget still appears.
-4. Call \`Quackback("logout")\` from the host logout handler.
-5. Put the secret in \`.env\` / \`.env.local\` (or the host's secret store). Do not import it into client bundles.
+Repo: ${WIDGET_SKILL_REPO}
 
-## Snippet
-\`\`\`html
-<script>
-  (function(w,d){if(w.Quackback)return;w.Quackback=function(){
-  (w.Quackback.q=w.Quackback.q||[]).push(arguments)};
-  var s=d.createElement("script");s.async=true;
-  s.src="${instanceUrl}/api/widget/sdk.js";
-  d.head.appendChild(s)})(window,document);
-
-  Quackback("init");
-</script>
-\`\`\`
-
-## Identity (required for signed-in users)
-Identify is verified-only. The client must not pass raw id/email. Your backend signs:
-
-- alg: HS256
-- claims: \`sub\` (stable host user id, required), \`email\` (required), \`name\` (optional), \`exp\` (~5 minutes from now, required)
-- response JSON key: \`ssoToken\` (not \`token\`)
-
-Example client call after auth resolves:
-
-\`\`\`js
-const { ssoToken } = await fetch("/api/widget-sso", { method: "POST" }).then((r) => {
-  if (!r.ok) throw new Error("Failed to fetch widget token");
-  return r.json();
-});
-Quackback("identify", { ssoToken });
-\`\`\`
-
-## Rules
-- Never put \`${WIDGET_SECRET_ENV}\` in client code, public env vars (\`NEXT_PUBLIC_*\`, \`VITE_*\`), or the snippet.
-- Do not call \`Quackback("identify", { id, email })\` — that unverified shape is rejected.
-- Do not rename \`ssoToken\`.
-- Match the host app's auth, routing, and package manager. Reuse existing session helpers.
-- If you cannot tell where layout or auth live, ask one question, then continue.
-- Fetch these docs if you need more detail:
-  - ${INSTALL_DOCS_URL}
-  - ${IDENTIFY_DOCS_URL}
-
-## Done when
-- The snippet or SDK init runs on the right pages.
-- A server route signs \`ssoToken\` with the widget secret.
-- Signed-in users are identified; logout clears identity.
-- The secret is server-side only.
+## Identify (required for signed-in users)
+The widget appears after init for anonymous visitors. Call identify as soon as you know who the user is: when the app first loads if they are already signed in, and immediately after login or signup. Once per session — not on every navigation. Mint a fresh HS256 JWT at that moment and call \`Quackback("identify", { ssoToken })\`. \`sub\` is a unique stable host user id, not email. Call \`Quackback("logout")\` on logout. Never pass raw id/email from the client.
 `
 }
 

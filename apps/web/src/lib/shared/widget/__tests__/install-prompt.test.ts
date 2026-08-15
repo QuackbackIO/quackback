@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   WIDGET_SECRET_ENV,
   WIDGET_SECRET_PLACEHOLDER,
+  WIDGET_SKILL_RAW,
   buildWidgetInstallPrompt,
   maskWidgetSecretInPrompt,
 } from '../install-prompt'
 
 describe('buildWidgetInstallPrompt', () => {
-  it('includes the instance URL, SDK path, and verified identify rules', () => {
+  it('points the agent at the public skill and includes verified identify rules', () => {
     const prompt = buildWidgetInstallPrompt({
       instanceUrl: 'https://feedback.example.com/',
       widgetSecret: 'wgt_abc123secret',
@@ -17,9 +18,10 @@ describe('buildWidgetInstallPrompt', () => {
     expect(prompt).toContain('https://feedback.example.com/api/widget/sdk.js')
     expect(prompt).toContain('wgt_abc123secret')
     expect(prompt).toContain(WIDGET_SECRET_ENV)
+    expect(prompt).toContain(WIDGET_SKILL_RAW)
     expect(prompt).toContain('ssoToken')
-    expect(prompt).toContain('Do not call `Quackback("identify", { id, email })`')
-    expect(prompt).toContain('https://quackback.io/docs/widget/installation')
+    expect(prompt).toContain('Once per session')
+    expect(prompt).toContain('Never pass raw id/email from the client')
   })
 
   it('uses a placeholder when no secret has been generated', () => {
