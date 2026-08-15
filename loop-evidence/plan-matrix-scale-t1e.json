@@ -1,0 +1,68 @@
+{
+  "at": "2026-08-15T10:01:47.109Z",
+  "unit": "plan-matrix-scale-t1e",
+  "didNotPay": true,
+  "didNotAddIdp": true,
+  "didNotCreateNeon": true,
+  "errors": [],
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "t1aPlan": "pro",
+  "t1ePlan": "scale",
+  "overlay": {
+    "effectivePlan": "scale",
+    "subscriptionStatus": "active",
+    "planLimits": {
+      "maxPosts": null,
+      "maxBoards": null,
+      "maxTeamSeats": null,
+      "maxCustomRoles": null,
+      "aiTokensPerMonth": 200000000,
+      "maxSendingDomains": null,
+      "apiRequestsPerMonth": 2000000,
+      "maxStatusComponents": null,
+      "apiRequestsPerMinute": 1200
+    },
+    "entitlements": {
+      "sso": true,
+      "aiDrafts": true,
+      "auditLog": true,
+      "webhooks": true,
+      "apiAccess": true,
+      "mcpServer": true,
+      "workflows": true,
+      "aiInsights": true,
+      "aiAssistant": true,
+      "customDomain": true
+    }
+  },
+  "storedTierLimits": null,
+  "handoff": {
+    "status": 200,
+    "hasSession": true
+  },
+  "ready": 200,
+  "inbox": 200,
+  "ssoNew": {
+    "status": 200,
+    "lockedCopy": false,
+    "hasCreateFields": true
+  },
+  "members": {
+    "status": 200,
+    "seatCopy": false
+  },
+  "sameScale": {
+    "status": 409,
+    "error": "already_on_plan",
+    "locationHost": null
+  },
+  "portal": {
+    "status": 303,
+    "error": null,
+    "locationHost": "billing.stripe.com"
+  },
+  "ok": true
+}
