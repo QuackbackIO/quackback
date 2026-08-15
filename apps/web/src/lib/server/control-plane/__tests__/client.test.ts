@@ -69,6 +69,21 @@ describe('workspace control-plane credential', () => {
     expect(String(init.body)).not.toContain('instanceId')
   })
 
+  it('sends a custom-domain action without a workspace authority field', async () => {
+    hoisted.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ projectionToken: 'signed-projection' }), { status: 200 })
+    )
+    await requestWorkspaceIdentityMutation({
+      customDomain: { action: 'add', hostname: 'feedback.acme.test' },
+    })
+    const [, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      customDomain: { action: 'add', hostname: 'feedback.acme.test' },
+    })
+    expect(String(init.body)).not.toContain('workspaceId')
+    expect(String(init.body)).not.toContain('instanceId')
+  })
+
   it('loads the billing catalogue over GET without a workspace id', async () => {
     hoisted.fetch.mockResolvedValue(
       new Response(JSON.stringify({ version: 1, plans: [], currency: 'usd' }), { status: 200 })

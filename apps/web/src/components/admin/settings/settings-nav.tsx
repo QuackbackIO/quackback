@@ -26,6 +26,7 @@ import {
   BellIcon,
   BuildingOfficeIcon,
   CreditCardIcon,
+  GlobeAltIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
@@ -68,7 +69,8 @@ export function isNavGroup(entry: NavEntry): entry is NavGroup {
  */
 export function buildNavSections(
   flags?: Partial<FeatureFlags>,
-  billingEnabled = false
+  billingEnabled = false,
+  cloudEnabled = false
 ): NavSection[] {
   const products: NavEntry[] = []
 
@@ -143,6 +145,9 @@ export function buildNavSections(
       label: 'Workspace',
       items: [
         { label: 'General', to: '/admin/settings/general', icon: Cog6ToothIcon },
+        ...(cloudEnabled
+          ? [{ label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon }]
+          : []),
         { label: 'Notifications', to: '/admin/settings/notifications', icon: BellIcon },
         { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
         { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
@@ -185,12 +190,12 @@ export function buildNavSections(
 
 export function SettingsNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { settings, billingEnabled } = useRouteContext({ from: '__root__' })
+  const { settings, billingEnabled, cloudEnabled } = useRouteContext({ from: '__root__' })
   const flags = settings?.featureFlags as FeatureFlags | undefined
 
   const navSections = useMemo(
-    () => buildNavSections(flags, billingEnabled),
-    [flags, billingEnabled]
+    () => buildNavSections(flags, billingEnabled, cloudEnabled),
+    [flags, billingEnabled, cloudEnabled]
   )
 
   return (

@@ -57,6 +57,11 @@ export interface BootstrapData {
    * by the workspace application.
    */
   billingEnabled: boolean
+  /**
+   * Whether this workspace has a signed cloud identity projection.
+   * Gates the Settings Domains row. False on every self-hosted install.
+   */
+  cloudEnabled: boolean
 }
 
 // Returns both the session (with principalType) AND the user role in
@@ -259,6 +264,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     acceptLanguageLocale,
     updateBannerDismissedVersion,
     billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
+    cloudEnabled: cloud.enabled,
   }
 })
 

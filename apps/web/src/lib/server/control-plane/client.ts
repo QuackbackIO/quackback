@@ -11,18 +11,55 @@ export class ControlPlaneUnavailableError extends Error {
   }
 }
 
+export type CustomDomainAction = 'add' | 'refresh' | 'makePrimary' | 'remove'
+
+export type CustomDomainInstruction = {
+  hostname: string
+  readiness: 'pending' | 'ready' | 'failed'
+  isPrimary: boolean
+  updatedAt: string
+  cnameTarget: string
+  ownershipTxt: { name: string; value: string } | null
+}
+
 export async function requestWorkspaceIdentityMutation(input: {
   displayName?: string
   platformLabel?: string
+  customDomain?: { action: CustomDomainAction; hostname: string }
 }): Promise<{ projectionToken: string }> {
-  const result = await callWorkspaceControlPlane<{ projectionToken?: unknown }>(
+  const result = await requestWorkspaceControlPlane<{ projectionToken?: unknown }>(
     '/api/v1/internal/identity',
-    input
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+    input.customDomain ? 25_000 : 10_000
   )
   if (typeof result.projectionToken !== 'string' || result.projectionToken.length === 0) {
     throw new ControlPlaneUnavailableError()
   }
   return { projectionToken: result.projectionToken }
+}
+
+export async function fetchWorkspaceCustomDomains(): Promise<CustomDomainInstruction[]> {
+  const result = await requestWorkspaceControlPlane<{ customDomains?: unknown }>(
+    '/api/v1/internal/identity',
+    { method: 'GET' }
+  )
+  if (!Array.isArray(result.customDomains)) return []
+  return result.customDomains.filter((row): row is CustomDomainInstruction => {
+    if (!row || typeof row !== 'object') return false
+    const domain = row as CustomDomainInstruction
+    return (
+      typeof domain.hostname === 'string' &&
+      (domain.readiness === 'pending' ||
+        domain.readiness === 'ready' ||
+        domain.readiness === 'failed') &&
+      typeof domain.isPrimary === 'boolean' &&
+      typeof domain.cnameTarget === 'string'
+    )
+  })
 }
 
 export function deriveControlPlaneCredential(workspaceSecretKey: string): string {
@@ -62,7 +99,11 @@ export async function getWorkspaceControlPlane<T>(path: string): Promise<T> {
   return requestWorkspaceControlPlane<T>(path, { method: 'GET' })
 }
 
-async function requestWorkspaceControlPlane<T>(path: string, init: RequestInit): Promise<T> {
+async function requestWorkspaceControlPlane<T>(
+  path: string,
+  init: RequestInit,
+  timeoutMs = 10_000
+): Promise<T> {
   const workspace = getCurrentWorkspace()
   const secretKey = getWorkspaceSecretKey()
   if (!workspace || !secretKey) throw new ControlPlaneUnavailableError()
@@ -73,7 +114,7 @@ async function requestWorkspaceControlPlane<T>(path: string, init: RequestInit):
       ...(init.headers ?? {}),
     },
     redirect: 'manual',
-    signal: init.signal ?? AbortSignal.timeout(10_000),
+    signal: init.signal ?? AbortSignal.timeout(timeoutMs),
   }).catch(() => {
     throw new ControlPlaneUnavailableError()
   })

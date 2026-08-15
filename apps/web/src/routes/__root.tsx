@@ -37,6 +37,7 @@ export interface RouterContext {
   acceptLanguageLocale?: SupportedLocale
   updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
   billingEnabled?: boolean
+  cloudEnabled?: boolean
 }
 
 // Paths that are allowed before onboarding is complete
@@ -70,6 +71,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       acceptLanguageLocale,
       updateBannerDismissedVersion,
       billingEnabled,
+      cloudEnabled,
     } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
@@ -118,6 +120,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       acceptLanguageLocale,
       updateBannerDismissedVersion,
       billingEnabled,
+      cloudEnabled,
     }
   },
   head: () => ({

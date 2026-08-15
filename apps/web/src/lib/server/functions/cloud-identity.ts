@@ -50,6 +50,60 @@ export const markCloudWorkspaceDetailsSeenFn = createServerFn({ method: 'POST' }
   }
 )
 
+const customDomainInputSchema = z
+  .object({
+    action: z.enum(['add', 'refresh', 'makePrimary', 'remove']),
+    hostname: z.string().trim().min(1).max(253),
+  })
+  .strict()
+
+export const getCloudCustomDomainsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN })
+  const identity = await currentCloudIdentity()
+  if (!identity) throw new Error('Cloud workspace identity is not enabled')
+  const { fetchWorkspaceCustomDomains } = await import('@/lib/server/control-plane/client')
+  return fetchWorkspaceCustomDomains()
+})
+
+export const hasCustomDomainEntitlementFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN })
+  const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  return hasEntitlement('customDomain')
+})
+
+export const mutateCloudCustomDomainFn = createServerFn({ method: 'POST' })
+  .validator(customDomainInputSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_CUSTOM_DOMAIN })
+    const current = await currentCloudIdentity()
+    if (!current) throw new Error('Cloud workspace identity is not enabled')
+    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    if (data.action === 'add') await requireEntitlement('customDomain')
+
+    const mightChangeOrigin = data.action === 'makePrimary' || data.action === 'remove'
+    let transferToken: string | null = null
+    if (mightChangeOrigin) {
+      const { auth } = await import('@/lib/server/auth')
+      const generated = await auth.api.generateOneTimeToken({ headers: getRequestHeaders() })
+      transferToken = generated.token
+      if (!transferToken) throw new Error('Could not prepare a secure session transfer')
+    }
+
+    const { requestWorkspaceIdentityMutation } = await import('@/lib/server/control-plane/client')
+    const response = await requestWorkspaceIdentityMutation({ customDomain: data })
+    const verified = await verifyIdentityProjectionToken(response.projectionToken)
+    await writeIdentityProjection(verified.workspaceKey, verified.projection)
+
+    const originChanged = verified.projection.canonicalOrigin !== current.canonicalOrigin
+    if (originChanged && !transferToken) {
+      throw new Error('Workspace URL changed concurrently. Reload and try again.')
+    }
+    return {
+      projection: verified.projection,
+      transferToken: originChanged ? transferToken : null,
+    }
+  })
+
 export const updateCloudIdentityFn = createServerFn({ method: 'POST' })
   .validator(cloudIdentityInputSchema)
   .handler(async ({ data }) => {
