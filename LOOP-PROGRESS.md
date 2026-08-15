@@ -133,9 +133,9 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
 | Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
-| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep.md`              | **PASS 0 HIGH** on prior `71f78ecb` | Re-sweep §A–G against `25319ded` next fire.                                                                                                                                                                                                    |
+| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep-25319ded.md`     | **PASS 0 HIGH** on `25319ded`       | Fuller 1–32 on leftover-access image. Prior `71f78ecb` sweep is historical.                                                                                                                                                                    |
 | Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-71f78ecb.md`                 | **PASS** on prior `71f78ecb`        | Re-sign §H against `25319ded` / `1931dc38` after Verify.                                                                                                                                                                                       |
+| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-25319ded.md`                 | **PASS** on `25319ded` / `79030f27` | Prior PASS on `71f78ecb` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
 | Product-feedback first-win     | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC / internal / self-host walks remain (no Neon this fire).                                                                              |
 
 **Fleet note:** one deploy thread. Live pair is app `c5d64208` /
@@ -758,10 +758,18 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
-Fleet: `635cdb149` already an ancestor of live `52c1ab397`. Stripe-live
-first-pay already on t1a — not repeated. CP-create 3-Free already live
-— no second builder. No Neon. No live Stripe key. Custom domains not
-started. Instances **17→17**.
+Fleet: `635cdb149` already an ancestor of live `52c1ab397` /
+`sha256:25319ded…` / web `c5d64208` `us-east4-eqdc4a`. No deploy.
+Stripe-live first-pay already on t1a — not repeated. CP-create 3-Free
+already live — no second builder. No Neon. No live key. Custom domains
+not started.
+
+Verify **PASS 0 HIGH** on `25319ded` / `1931dc38`
+(`sweep-25319ded.md`). Instances **17→17**. Plan-matrix §H **PASS**
+(`plan-matrix-25319ded.md`). Overlay still not unlimited. t1a first-win
+post still public. Support / HC / internal / self-host walks remain.
+
+Previous fire (product-feedback first-win) is historical.
 
 Track 7 product-feedback first-win was blocked: leftover t1a board
 `access` is `{ view: anonymous, submit: authenticated }` with no
@@ -779,8 +787,7 @@ and accepts Submit. One customer post + auto-vote. Owner getting-started
 “You’re up and running”. Shots: `loop-evidence/t7-first-win/`. Critic
 **PASS** (`loop-evidence/t7-first-win/critic.md`). Support / Help Center
 / internal / self-host walks remain (would need Neon or a local
-self-host host). Verify / §H still signed against the prior `71f78ecb`
-pair — re-sweep next fire.
+self-host host). Verify / §H on this pair are this fire.
 
 Previous fire (launch-plan card critic) is historical.
 
@@ -1114,9 +1121,9 @@ HIGH (cloud unlimited overlay). Re-sweep
 Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 `52e78237` / `6f0b0fee`.
 
-- **Plan-matrix critic** (`LOOP-VERIFY.md` §H): every wired numeric
-  limit and entitlement on every active-plan state, UI lock **and**
-  server 402. Not signed yet. t1a = Growth paid, t1e = Pro trial.
+- **Plan-matrix critic** (`LOOP-VERIFY.md` §H): signed **PASS** on
+  `25319ded` / `79030f27` (`plan-matrix-25319ded.md`). t1a = Growth
+  paid, t1e = Pro trial.
   Catalogue / website vs CP `definitions.ts` / `PLAN_GRANTS` drift
   is in-scope HIGH. Do not treat the row-15 limits re-sweep as §H.
 - Least-restrictive numeric limit overlay and exact-expiry tests (unit tests exist).
