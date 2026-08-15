@@ -128,7 +128,7 @@ export async function resolveIdentity({
         return { ok: false, reason: 'subject_mismatch', claims: merged }
       }
       warnings.push('subject_mismatch')
-      if (id && email && name) continue
+      if (email && name) continue
       id = undefined
       email = undefined
       name = undefined
