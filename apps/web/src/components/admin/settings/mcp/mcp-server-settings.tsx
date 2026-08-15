@@ -3,9 +3,12 @@ import { useRouter } from '@tanstack/react-router'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { UpgradeModal } from '@/components/admin/upgrade'
 import { updateDeveloperConfigFn } from '@/lib/server/functions/settings'
+import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 
 interface McpServerSettingsProps {
+  entitled: boolean
   initialEnabled: boolean
   initialDynamicRegistrationEnabled: boolean
 }
@@ -52,12 +55,14 @@ function ToggleRow({
 }
 
 export function McpServerSettings({
+  entitled,
   initialEnabled,
   initialDynamicRegistrationEnabled,
 }: McpServerSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [enabled, setEnabled] = useState(initialEnabled)
   const [dynamicRegistration, setDynamicRegistration] = useState(initialDynamicRegistrationEnabled)
 
@@ -71,6 +76,13 @@ export function McpServerSettings({
       startTransition(() => {
         router.invalidate()
       })
+    } catch (error) {
+      if (data.mcpEnabled === true && isPlanRefusal(error)) {
+        setEnabled(false)
+        setUpgradeOpen(true)
+        return
+      }
+      throw error
     } finally {
       setSaving(false)
     }
@@ -88,6 +100,10 @@ export function McpServerSettings({
         disabled={isBusy}
         busy={isBusy}
         onCheckedChange={(c) => {
+          if (c && !entitled) {
+            setUpgradeOpen(true)
+            return
+          }
           setEnabled(c)
           void save({ mcpEnabled: c })
         }}
@@ -104,6 +120,7 @@ export function McpServerSettings({
           void save({ oauthDynamicClientRegistrationEnabled: c })
         }}
       />
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} entitlement="mcpServer" />
     </div>
   )
 }

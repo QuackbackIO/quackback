@@ -10,11 +10,15 @@ import { WorkflowsManager } from '@/components/admin/automation/workflows-manage
 
 export const Route = createFileRoute('/admin/automation/workflows')({
   loader: async ({ context }) => {
-    await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
-      context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
+    const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
+    const [, workflowsEntitled] = await Promise.all([
+      Promise.all([
+        context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
+        context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
+      ]),
+      hasEntitlementFn({ data: { key: 'workflows' } }),
     ])
-    return {}
+    return { workflowsEntitled }
   },
   component: WorkflowsPageRoute,
 })
@@ -30,6 +34,7 @@ function WorkflowsPageRoute() {
 }
 
 function WorkflowsPage() {
+  const { workflowsEntitled } = Route.useLoaderData()
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="lg:hidden">
@@ -42,7 +47,7 @@ function WorkflowsPage() {
       />
       <AgentPriorityBanner />
       <AbandonedJourneyAutoCloseCard />
-      <WorkflowsManager />
+      <WorkflowsManager entitled={workflowsEntitled} />
     </div>
   )
 }

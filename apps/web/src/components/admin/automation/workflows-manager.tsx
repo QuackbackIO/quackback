@@ -68,6 +68,8 @@ import {
 } from './workflow-graph'
 import { WorkflowTemplateGallery } from './workflow-template-gallery'
 import type { WorkflowTemplate } from './workflow-templates'
+import { UpgradeModal } from '@/components/admin/upgrade'
+import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import { WorkflowRunsSheet } from './workflow-runs-sheet'
 import { cn } from '@/lib/shared/utils'
 import { Badge } from '@/components/ui/badge'
@@ -256,7 +258,7 @@ export function firstMatchRanks(items: readonly WorkflowDTO[]): Map<string, numb
   return ranks
 }
 
-export function WorkflowsManager() {
+export function WorkflowsManager({ entitled = true }: { entitled?: boolean }) {
   const navigate = useNavigate()
   const { data: workflows } = useQuery(workflowsQuery())
   const { data: effectiveness } = useQuery(workflowEffectivenessQuery())
@@ -273,8 +275,17 @@ export function WorkflowsManager() {
   const [statusFilter, setStatusFilter] = useState<'any' | StatusValue>('any')
   const [typeFilter, setTypeFilter] = useState<'any' | (typeof CLASSES)[number]['value']>('any')
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [deleting, setDeleting] = useState<WorkflowDTO | null>(null)
   const [runsWorkflow, setRunsWorkflow] = useState<WorkflowDTO | null>(null)
+
+  const refuseOr = (run: () => void) => {
+    if (!entitled) {
+      setUpgradeOpen(true)
+      return
+    }
+    run()
+  }
 
   const metricsByWorkflow: EffectivenessMap = useMemo(() => {
     const map: EffectivenessMap = new Map()
@@ -317,25 +328,35 @@ export function WorkflowsManager() {
   }
 
   const createFromScratch = () => {
-    create.mutate(
-      {
-        name: 'Untitled workflow',
-        class: 'customer_facing',
-        triggerType: 'conversation.created',
-        graph: treeToGraph(newTree()),
-      },
-      {
-        onSuccess: (wf) => goToBuilder(wf.id),
-        onError: () => toast.error('Could not create the workflow'),
-      }
-    )
+    refuseOr(() => {
+      create.mutate(
+        {
+          name: 'Untitled workflow',
+          class: 'customer_facing',
+          triggerType: 'conversation.created',
+          graph: treeToGraph(newTree()),
+        },
+        {
+          onSuccess: (wf) => goToBuilder(wf.id),
+          onError: (error) => {
+            if (isPlanRefusal(error)) setUpgradeOpen(true)
+            else toast.error('Could not create the workflow')
+          },
+        }
+      )
+    })
   }
 
   const createFromTemplate = (template: WorkflowTemplate) => {
     setGalleryOpen(false)
-    create.mutate(template.payload, {
-      onSuccess: (wf) => goToBuilder(wf.id),
-      onError: () => toast.error('Could not create the workflow from this template'),
+    refuseOr(() => {
+      create.mutate(template.payload, {
+        onSuccess: (wf) => goToBuilder(wf.id),
+        onError: (error) => {
+          if (isPlanRefusal(error)) setUpgradeOpen(true)
+          else toast.error('Could not create the workflow from this template')
+        },
+      })
     })
   }
 
@@ -426,7 +447,13 @@ export function WorkflowsManager() {
                   dialog captures the menu's body pointer-events lock as its
                   restore baseline, and closing it (or navigating away from
                   it) then leaves the whole page unclickable. */}
-              <DropdownMenuItem onSelect={() => setTimeout(() => setGalleryOpen(true), 0)}>
+              <DropdownMenuItem
+                onSelect={() =>
+                  refuseOr(() => {
+                    setTimeout(() => setGalleryOpen(true), 0)
+                  })
+                }
+              >
                 <SparklesIcon className="mr-2 size-4 text-primary" />
                 Create from template
               </DropdownMenuItem>
@@ -500,6 +527,7 @@ export function WorkflowsManager() {
         onOpenChange={setGalleryOpen}
         onSelect={createFromTemplate}
       />
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} entitlement="workflows" />
 
       {deleting && (
         <ConfirmDialog

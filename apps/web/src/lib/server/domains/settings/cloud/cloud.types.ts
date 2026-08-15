@@ -137,7 +137,8 @@ export const ENTITLEMENTS = {
     friendly: 'The MCP server',
     plural: false,
     tierFeature: 'mcpServer',
-    chokepoint: 'lib/server/mcp/handler.ts (handleMcpRequest, after auth)',
+    chokepoint:
+      'lib/server/mcp/handler.ts (handleMcpRequest, after auth), lib/server/domains/settings/settings.service.ts (updateDeveloperConfig when enabling)',
   },
   webhooks: {
     friendly: 'Webhooks',

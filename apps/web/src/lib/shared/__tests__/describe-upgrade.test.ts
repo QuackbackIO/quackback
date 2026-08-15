@@ -4,6 +4,7 @@ import {
   cataloguePlanFor,
   describeEntitlementUpgrade,
   describePlanUpgrade,
+  isPlanRefusal,
 } from '../describe-upgrade'
 
 const catalogue = {
@@ -26,6 +27,19 @@ describe('describeEntitlementUpgrade', () => {
     expect(describeEntitlementUpgrade('customDomain').requiredPlan).toBe('growth')
     expect(describeEntitlementUpgrade('webhooks').requiredPlan).toBe('growth')
     expect(describeEntitlementUpgrade('workflows').requiredPlan).toBe('pro')
+    expect(describeEntitlementUpgrade('mcpServer').requiredPlan).toBe('growth')
+    expect(describeEntitlementUpgrade('aiDrafts').requiredPlan).toBe('growth')
+  })
+})
+
+describe('isPlanRefusal', () => {
+  it('recognizes a 402 and the entitlement sentence', () => {
+    expect(isPlanRefusal({ statusCode: 402, message: 'locked' })).toBe(true)
+    expect(
+      isPlanRefusal(new Error('Webhooks are a Growth feature. Upgrade to Growth to enable it.'))
+    ).toBe(true)
+    expect(isPlanRefusal(new Error('boom'))).toBe(false)
+    expect(isPlanRefusal(null)).toBe(false)
   })
 })
 

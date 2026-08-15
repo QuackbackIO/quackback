@@ -644,9 +644,12 @@ export async function updateDeveloperConfig(
 ): Promise<DeveloperConfig> {
   log.info('update developer config')
   try {
-    // Tier gate: refuse mcpEnabled=true when mcpServer feature is off.
-    // No-op in OSS. Disabling MCP is always allowed (no upgrade required).
+    // Plan first (names Growth), then the operator-cap overlay. Disabling MCP
+    // stays open so a downgraded workspace can turn the endpoint off.
     if (input.mcpEnabled === true) {
+      const { requireEntitlement } =
+        await import('@/lib/server/domains/settings/cloud/entitlements')
+      await requireEntitlement('mcpServer')
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
       await assertTierFeature('mcpServer', 'MCP server')
     }

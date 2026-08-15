@@ -61,3 +61,13 @@ export function cataloguePlanFor(
   if (!catalogue || !planId) return null
   return catalogue.plans.find((plan) => plan.id === planId) ?? null
 }
+
+/** True for a 402 plan refusal from a server function or REST handler. */
+export function isPlanRefusal(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const status = (error as { statusCode?: unknown }).statusCode
+  if (status === 402) return true
+  const message =
+    error instanceof Error ? error.message : String((error as { message?: unknown }).message ?? '')
+  return /upgrade to \w+ to enable it/i.test(message) || /not included in your plan/i.test(message)
+}

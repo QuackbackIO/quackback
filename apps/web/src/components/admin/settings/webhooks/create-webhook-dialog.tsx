@@ -17,14 +17,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { createWebhookFn } from '@/lib/server/functions/webhooks'
+import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/shared/webhook-events'
 
 interface CreateWebhookDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onPlanRefusal?: () => void
 }
 
-export function CreateWebhookDialog({ open, onOpenChange }: CreateWebhookDialogProps) {
+export function CreateWebhookDialog({
+  open,
+  onOpenChange,
+  onPlanRefusal,
+}: CreateWebhookDialogProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [isPending, startTransition] = useTransition()
@@ -62,6 +68,10 @@ export function CreateWebhookDialog({ open, onOpenChange }: CreateWebhookDialogP
       // Show secret reveal
       setCreatedSecret(result.secret)
     } catch (err) {
+      if (isPlanRefusal(err)) {
+        onPlanRefusal?.()
+        return
+      }
       setError(err instanceof Error ? err.message : 'Failed to create webhook')
     }
   }
