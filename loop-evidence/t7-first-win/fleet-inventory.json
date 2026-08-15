@@ -1,0 +1,296 @@
+{
+  "at": "2026-08-15T04:44:00.582Z",
+  "errors": [],
+  "printedCredentials": false,
+  "count": 17,
+  "rows": [
+    {
+      "id": "inst_01kzxqsehnfagvsgd96p43245q",
+      "planId": "starter",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "E2E Test 2",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "e2e-t2.quack",
+      "ownerDomain": "gmail.com",
+      "ownerFp": "501a6c3c2c42",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzy9zwwnfk3tmwbqdmxjq1v9",
+      "planId": "starter",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "Walk msrx530c",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk-msrx530",
+      "ownerDomain": "example.com",
+      "ownerFp": "e5ad41c3806e",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzyb24vde4f9r8zdb0evmc6c",
+      "planId": "starter",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "Walk1 msrxt17d",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk1-msrxt1",
+      "ownerDomain": "example.com",
+      "ownerFp": "3feddf56f4ef",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzycrtqmeh29tvszm2j0ebab",
+      "planId": "starter",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "Walk2 msryvgqj",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk2-msryvg",
+      "ownerDomain": "example.com",
+      "ownerFp": "43408740767f",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzyfj29afvqteaeam23yy85f",
+      "planId": "scale",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "Walk3 mss0m53h",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk3-mss0m5",
+      "ownerDomain": "example.com",
+      "ownerFp": "17a26a0683aa",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzyfyydmfvqteahv2z03mq9s",
+      "planId": "scale",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "walk-msscrita",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk-msscrit",
+      "ownerDomain": "example.com",
+      "ownerFp": "340600699d8a",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzygdffffvqtean75nq11vwz",
+      "planId": "scale",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "walk-msscritb",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk-msscrit",
+      "ownerDomain": "example.com",
+      "ownerFp": "0fd5e36a1ee0",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzzn06yrfvqteb63vwc73caa",
+      "planId": "scale",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "walk-critic-m6qk",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk-critic-",
+      "ownerDomain": "quackback.co.uk",
+      "ownerFp": "59019a7ec6ed",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzzs7c8pfvqtebc1hshz63xz",
+      "planId": "scale",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "walk-critic-a1",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk-critic-",
+      "ownerDomain": "quackback.co.uk",
+      "ownerFp": "37f7821ef0cc",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01kzzvahavfvqtebfjp4fnrmd8",
+      "planId": "scale",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "walk-critic-b1",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "walk-critic-",
+      "ownerDomain": "quackback.co.uk",
+      "ownerFp": "4c1657c2051c",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01m00kprbrfzzb19f490wga8q2",
+      "planId": "free",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "",
+      "leftoverNameEmpty": true,
+      "systemHostPrefix": "ws-4a048e079",
+      "ownerDomain": "guerrillamail.com",
+      "ownerFp": "82568e5500c3",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+      "planId": "growth",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "",
+      "leftoverNameEmpty": true,
+      "systemHostPrefix": "ws-bf8e1c4af",
+      "ownerDomain": "guerrillamail.com",
+      "ownerFp": "4937eb201c84",
+      "subscriptionStatus": "active"
+    },
+    {
+      "id": "inst_01m00mqr1zfzzb19nevwzer2hr",
+      "planId": "pro",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "",
+      "leftoverNameEmpty": true,
+      "systemHostPrefix": "ws-4a3f2fffd",
+      "ownerDomain": "gmail.com",
+      "ownerFp": "4543710272a4",
+      "subscriptionStatus": "active"
+    },
+    {
+      "id": "inst_01m017h6fwfes926nk0mff9svr",
+      "planId": "free",
+      "status": "active",
+      "deleted": false,
+      "leftoverNamePrefix": "",
+      "leftoverNameEmpty": true,
+      "systemHostPrefix": "ws-1d1c2d4d4",
+      "ownerDomain": "gmail.com",
+      "ownerFp": "501a6c3c2c42",
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_cp_t2crit",
+      "planId": null,
+      "status": "provisioning",
+      "deleted": true,
+      "leftoverNamePrefix": "cp-t2crit",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "cp-t2crit.qu",
+      "ownerDomain": null,
+      "ownerFp": null,
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_gauntlet_neon_t1",
+      "planId": null,
+      "status": "active",
+      "deleted": true,
+      "leftoverNamePrefix": "neon-t1",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "neon-t1",
+      "ownerDomain": null,
+      "ownerFp": null,
+      "subscriptionStatus": null
+    },
+    {
+      "id": "inst_gauntlet_neon_t2",
+      "planId": null,
+      "status": "active",
+      "deleted": true,
+      "leftoverNamePrefix": "neon-t2",
+      "leftoverNameEmpty": false,
+      "systemHostPrefix": "neon-t2",
+      "ownerDomain": null,
+      "ownerFp": null,
+      "subscriptionStatus": null
+    }
+  ],
+  "useCases": [
+    {
+      "id": "inst_01kzxqsehnfagvsgd96p43245q",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzy9zwwnfk3tmwbqdmxjq1v9",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzyb24vde4f9r8zdb0evmc6c",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzycrtqmeh29tvszm2j0ebab",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzyfj29afvqteaeam23yy85f",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzyfyydmfvqteahv2z03mq9s",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzygdffffvqtean75nq11vwz",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzzn06yrfvqteb63vwc73caa",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzzs7c8pfvqtebc1hshz63xz",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01kzzvahavfvqtebfjp4fnrmd8",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01m00kprbrfzzb19f490wga8q2",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01m00mqr1zfzzb19nevwzer2hr",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_01m017h6fwfes926nk0mff9svr",
+      "skipped": "tenant_query",
+      "error": "PostgresError: operator does not exist: text ->> unknown"
+    },
+    {
+      "id": "inst_cp_t2crit",
+      "skipped": "deleted"
+    },
+    {
+      "id": "inst_gauntlet_neon_t1",
+      "skipped": "deleted"
+    },
+    {
+      "id": "inst_gauntlet_neon_t2",
+      "skipped": "deleted"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "at": "2026-08-15T04:51:14.961Z",
+  "origin": "http://localhost:3000",
+  "steps": [
+    {
+      "step": "ready",
+      "status": 200,
+      "role": "all",
+      "statusField": "ok"
+    },
+    {
+      "step": "signin",
+      "status": 200,
+      "user": true,
+      "hasToken": true
+    },
+    {
+      "step": "critic-general",
+      "url": "http://localhost:3000/admin/settings/general",
+      "hasPlanBilling": false,
+      "hasSwitchWorkspace": false,
+      "hasQuackbackUrl": false,
+      "hasWsPrefill": false,
+      "hasTrial": false,
+      "hasUpgrade": false,
+      "workspaceNameOnly": true,
+      "acme": false,
+      "internalGoal": false,
+      "firstWinTitle": false,
+      "upAndRunning": false,
+      "milestoneReached": false,
+      "snippet": "Feedback Support Roadmap Changelog Help Center Status Analytics AI & Automation Users Settings View Portal Help DU Quackback v0.13.2 is available — See what's new · Release notes Settings PRODUCTS Feedback & Roadmaps Support Help Center Changelog Status WORKSPACE General Notifications Branding Widget Members & Teams Access & Security Emails Develop",
+      "shot": "loop-evidence/t7-first-win/self-host-walk/critic-general.png"
+    },
+    {
+      "step": "critic-launch",
+      "url": "http://localhost:3000/admin/getting-started",
+      "hasPlanBilling": false,
+      "hasSwitchWorkspace": false,
+      "hasQuackbackUrl": false,
+      "hasWsPrefill": false,
+      "hasTrial": false,
+      "hasUpgrade": false,
+      "workspaceNameOnly": false,
+      "acme": false,
+      "internalGoal": true,
+      "firstWinTitle": true,
+      "upAndRunning": true,
+      "milestoneReached": true,
+      "snippet": "Feedback Support Roadmap Changelog Help Center Status Analytics AI & Automation Users Settings View Portal Help DU Quackback v0.13.2 is available — See what's new · Release notes Your launch plan You’re up and running You’re up and running CURRENT GOAL Internal feedback Change goal Set up the essentials Complete these steps to start getting value f",
+      "shot": "loop-evidence/t7-first-win/self-host-walk/critic-launch.png"
+    }
+  ],
+  "errors": [],
+  "verdict": "PASS",
+  "barC": true,
+  "firstWin": true
+}
