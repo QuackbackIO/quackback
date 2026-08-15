@@ -181,6 +181,20 @@ describe('<IdentityProvidersSection>', () => {
   })
 })
 
+describe('plan gate', () => {
+  it('hides Add provider and names Scale when SSO is not entitled', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
+      </QueryClientProvider>
+    )
+    expect(screen.queryByRole('link', { name: /add provider/i })).toBeNull()
+    expect(screen.getByText(/Single sign-on is a Scale feature/)).toBeTruthy()
+  })
+})
+
 describe('links to the provider pages', () => {
   it('sends Add provider to the create page', () => {
     renderSection()

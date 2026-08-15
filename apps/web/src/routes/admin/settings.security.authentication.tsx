@@ -38,22 +38,26 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     // Both tabs are loaded up front so switching tabs doesn't trigger
     // a server round-trip. Auth config + portal config + provider
     // credential status are cheap (settings cache hits).
-    await Promise.all([
-      queryClient.ensureQueryData(settingsQueries.authConfig()),
-      queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
-      queryClient.ensureQueryData(settingsQueries.portalConfig()),
-      queryClient.ensureQueryData(adminQueries.authProviderStatus()),
-      // Prefetch for <IdentityProvidersSection> (Sign-in tab) which suspends.
-      queryClient.ensureQueryData(settingsQueries.identityProviders()),
-      // Prefetch for <RecoveryCodesSection> (Sign-in tab) which suspends.
-      queryClient.ensureQueryData(adminQueries.recoveryCodes()),
-      // Prefetch the audit tab's default view (same defaults as <AuditLogPage>).
-      queryClient.ensureQueryData(
-        adminQueries.auditEvents({ from: rangeToFromIso('30d'), limit: 200 })
-      ),
+    const { hasEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    const [, ssoEntitled] = await Promise.all([
+      Promise.all([
+        queryClient.ensureQueryData(settingsQueries.authConfig()),
+        queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
+        queryClient.ensureQueryData(settingsQueries.portalConfig()),
+        queryClient.ensureQueryData(adminQueries.authProviderStatus()),
+        // Prefetch for <IdentityProvidersSection> (Sign-in tab) which suspends.
+        queryClient.ensureQueryData(settingsQueries.identityProviders()),
+        // Prefetch for <RecoveryCodesSection> (Sign-in tab) which suspends.
+        queryClient.ensureQueryData(adminQueries.recoveryCodes()),
+        // Prefetch the audit tab's default view (same defaults as <AuditLogPage>).
+        queryClient.ensureQueryData(
+          adminQueries.auditEvents({ from: rangeToFromIso('30d'), limit: 200 })
+        ),
+      ]),
+      hasEntitlement('sso'),
     ])
 
-    return {}
+    return { ssoEntitled }
   },
   component: AuthenticationPage,
 })
@@ -66,12 +70,7 @@ function AuthenticationPage() {
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const credentialStatusQuery = useSuspenseQuery(adminQueries.authProviderStatus())
 
-  // Tier flag from the root context (already populated by BootstrapData
-  // for every admin route).
-  const ctx = Route.useRouteContext()
-  const customOidcProviderTier =
-    (ctx as { tierLimits?: { features?: { customOidcProvider?: boolean } } }).tierLimits?.features
-      ?.customOidcProvider !== false
+  const { ssoEntitled } = Route.useLoaderData()
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -88,7 +87,7 @@ function AuthenticationPage() {
         teamAuthConfig={authConfigQuery.data}
         portalConfig={portalConfigQuery.data}
         credentialStatus={credentialStatusQuery.data}
-        customOidcProviderTier={customOidcProviderTier}
+        customOidcProviderTier={ssoEntitled}
       />
     </div>
   )

@@ -37,6 +37,7 @@ import {
 } from '@/components/admin/settings/team/pending-invitations'
 import { MemberActions } from '@/components/admin/settings/team/member-actions'
 import { CloudOwnershipActions } from '@/components/admin/settings/team/cloud-ownership-actions'
+import { seatInviteBlocked, seatUpgradePlanName } from '@/components/admin/settings/team/seat-usage'
 import { CUSTOM_ROLE_BADGE } from '@/components/admin/settings/team/role-ui'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { isAdmin } from '@/lib/shared/roles'
@@ -117,7 +118,7 @@ interface MembersTabProps {
 export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
   const { session } = useRouteContext({ from: '__root__' })
   const teamDataQuery = useSuspenseQuery(settingsQueries.teamMembersAndInvitations())
-  const { members, avatarMap, formattedInvitations } = teamDataQuery.data
+  const { members, avatarMap, formattedInvitations, seatUsage } = teamDataQuery.data
 
   const [search, setSearch] = useState('')
   const [showInviteDialog, setShowInviteDialog] = useState(false)
@@ -130,6 +131,10 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
   useEffect(() => {
     setInvitations(formattedInvitations)
   }, [formattedInvitations])
+
+  const inviteBlocked = seatInviteBlocked(seatUsage)
+  const seatPlan = seatUpgradePlanName(seatUsage?.limit ?? null)
+  const seatLine = seatUsage?.limit != null ? `${seatUsage.used} of ${seatUsage.limit} seats` : null
 
   const adminCount = members.filter((m) => isAdmin(m.role)).length
   const isLastAdmin = adminCount <= 1
@@ -331,9 +336,13 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
 
       <SettingsCard
         title="Members"
-        description={`Manage who has access to ${workspaceName}`}
+        description={
+          seatLine
+            ? `${seatLine}${inviteBlocked && seatPlan ? ` · Upgrade to ${seatPlan} to invite more` : ''}`
+            : `Manage who has access to ${workspaceName}`
+        }
         action={
-          <Button size="sm" onClick={() => setShowInviteDialog(true)}>
+          <Button size="sm" disabled={inviteBlocked} onClick={() => setShowInviteDialog(true)}>
             <PlusIcon className="h-4 w-4" />
             Invite member
           </Button>
