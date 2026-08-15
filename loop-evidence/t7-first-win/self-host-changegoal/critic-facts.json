@@ -1,0 +1,68 @@
+{
+  "at": "2026-08-15T05:12:15.893Z",
+  "origin": "http://localhost:3000",
+  "method": "change-goal-ui",
+  "steps": [
+    {
+      "step": "signin",
+      "status": 200,
+      "user": true
+    },
+    {
+      "step": "00-internal-before",
+      "url": "http://localhost:3000/admin/getting-started",
+      "hasPlanBilling": false,
+      "hasTrial": false,
+      "goal": "Internal feedback",
+      "firstWinTitle": "Collect your first team idea",
+      "upAndRunning": true,
+      "milestoneReached": true,
+      "readyPrimary": "Invite a teammate",
+      "snippet": "Feedback Support Roadmap Changelog Help Center Status Analytics AI & Automation Users Settings View Portal Help DU Quackback v0.13.2 is available — See what's new · Release notes Your launch plan You’re up and running You’re up and running CURRENT GOAL Internal feedback Change goal Set up the essentials Complete these ",
+      "shot": "loop-evidence/t7-first-win/self-host-changegoal/00-internal-before.png"
+    },
+    {
+      "step": "10-support",
+      "url": "http://localhost:3000/admin/getting-started",
+      "hasPlanBilling": false,
+      "hasTrial": false,
+      "goal": "Customer support",
+      "firstWinTitle": "Receive your first customer conversation",
+      "upAndRunning": true,
+      "milestoneReached": true,
+      "readyPrimary": "Connect Messenger",
+      "snippet": "Feedback Support Roadmap Changelog Help Center Status Analytics AI & Automation Users 1 Launch plan · 1 left Settings View Portal Help DU Quackback v0.13.2 is available — See what's new · Release notes Your launch plan You’re up and running You’re up and running CURRENT GOAL Customer support Change goal NEXT STEP Conne",
+      "shot": "loop-evidence/t7-first-win/self-host-changegoal/10-support.png"
+    },
+    {
+      "step": "20-help-center",
+      "url": "http://localhost:3000/admin/getting-started",
+      "hasPlanBilling": false,
+      "hasTrial": false,
+      "goal": "Help Center",
+      "firstWinTitle": "Publish your first article",
+      "upAndRunning": true,
+      "milestoneReached": true,
+      "readyPrimary": "Open Help Center",
+      "snippet": "Feedback Support Roadmap Changelog Help Center Status Analytics AI & Automation Users Settings View Portal Help DU Quackback v0.13.2 is available — See what's new · Release notes Your launch plan You’re up and running You’re up and running CURRENT GOAL Help Center Change goal Set up the essentials Complete these steps ",
+      "shot": "loop-evidence/t7-first-win/self-host-changegoal/20-help-center.png"
+    },
+    {
+      "step": "30-internal-restored",
+      "url": "http://localhost:3000/admin/getting-started",
+      "hasPlanBilling": false,
+      "hasTrial": false,
+      "goal": "Internal feedback",
+      "firstWinTitle": "Collect your first team idea",
+      "upAndRunning": true,
+      "milestoneReached": true,
+      "readyPrimary": "Invite a teammate",
+      "snippet": "Feedback Support Roadmap Changelog Help Center Status Analytics AI & Automation Users Settings View Portal Help DU Quackback v0.13.2 is available — See what's new · Release notes Your launch plan You’re up and running You’re up and running CURRENT GOAL Internal feedback Change goal Set up the essentials Complete these ",
+      "shot": "loop-evidence/t7-first-win/self-host-changegoal/30-internal-restored.png"
+    }
+  ],
+  "errors": [],
+  "supportOk": true,
+  "helpCenterOk": true,
+  "restoredInternal": true
+}

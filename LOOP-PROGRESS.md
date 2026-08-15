@@ -139,6 +139,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Product-feedback first-win       | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC live walks remain (no Neon this fire).                                                                                                |
 | Self-host + internal first-win   | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | General name only; no billing/switcher/URL. Launch plan Internal + “Collect your first team idea” reached. `self-host-walk-critic.md`.                                                                                                         |
 | Self-host support + HC first-win | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | Support conversation + HC article milestones reached; useCase restored to internal. `self-host-outcomes-critic.md`.                                                                                                                            |
+| Change goal UI support + HC      | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | Change goal picker after hydration; Connect Messenger / Open Help Center; restored Internal. `self-host-changegoal-critic.md`.                                                                                                                 |
 | Outcome Ready + first-win copy   | app tests   | `587e96847`                                             | skip-deploy (tests-only)            | Ready primaries + first-win titles for all four outcomes. `outcomes-critic.md`.                                                                                                                                                                |
 | Self-host General name           | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 | PLG emit self-host skip          | app tests   | `3b4556ae2`                                             | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
@@ -762,6 +763,20 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 `loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
 
 ## This fire (2026-08-15, orchestrator)
+
+Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
+web `c5d64208`, `us-east4-eqdc4a`. Health 200. No deploy. Stripe-live
+not repeated. CP-create already live; no second builder. No Neon.
+No live key. Custom domains not started. Instances **17**.
+
+Track 7: Change goal UI on local `:3000` after hydration. Support +
+Help Center first-win via **Change goal → Use this goal**, then
+restored Internal. Prior picker miss was a too-early click /
+`sr-only` radio, not a product bug. Critic **PASS**
+(`self-host-changegoal-critic.md`). Skip-deploy. Verify / §H still
+signed on `25319ded`.
+
+Previous fire (SQL useCase flip for support/HC):
 
 Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
 web `c5d64208`, `us-east4-eqdc4a`. Health 200. No deploy. Stripe-live
