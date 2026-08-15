@@ -115,7 +115,7 @@ remains.
 | 3 CP billing foundation          | live test-mode **payment** + webhook finalize on existing t1a; checkout/portal + form 303 already proved   | CP `f135274f` / `71e59d9`; app `635cdb149` / `139a4a8c`; see “Track 3 live payment (2026-08-14)”                  |
 | 4 workspace projection + gateway | paid Growth projection v4 on t1a; catalogue+invoices **code** landed, not live                             | projection v4; CP `2fb9488`; app `6418785c8`                                                                      |
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
-| 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
+| 6 remove workspace billing       | implementation complete; boundary scan **PASS**                                                            | `loop-evidence/track6-scan/critic.md`; `BILLING_*` gone from fleet roles                                          |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
 | 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
 | 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                                        |
@@ -761,6 +761,14 @@ Fleet: `635cdb149` already live (ancestor of `71f78ecb` / web
 `371883f5`). Stripe-live first-pay already on t1a — not repeated.
 CP-create 3-Free already live — no second builder.
 
+Track-6 boundary scan **PASS**. No live `BILLING_API_KEY` /
+`BILLING_PRICES` / `BILLING_WEBHOOK_SECRET` on web/worker/crons/
+migrator. No imports of deleted `domain-multi-fn` / `org-billing-fn` /
+`members-fn`. `loop-evidence/track6-scan/critic.md`. No deploy. Custom
+domains not started. First-win still open.
+
+Previous fire (§H PASS) is historical.
+
 Plan-matrix §H **PASS** against `71f78ecb` / `1931dc38`
 (`plan-matrix-71f78ecb.md`). Catalogue stickers honest; Growth
 webhooks/mcp both layers true; usage `N of M`; SSO `/new` locked
@@ -1038,9 +1046,9 @@ cloud URL/domain controls, Stripe remains a customer integration.
 - `apps/web/src/lib/server/domains/billing/provider/` if empty or still
   holding provider clients. Platform billing is projection + CP gateway
   only.
-- Railway web/worker/cron/migrator variables `BILLING_API_KEY`,
-  `BILLING_PRICES`, `BILLING_WEBHOOK_SECRET` (still present on the live
-  web service). They are not read by the deployed image.
+- ~~Railway web/worker/cron/migrator `BILLING_API_KEY` /
+  `BILLING_PRICES` / `BILLING_WEBHOOK_SECRET`~~ removed (skip-deploys).
+  Confirmed absent on all five app roles 2026-08-15.
 - Workspace webhook still targeted at `walk3-mss0m53h` in the Stripe
   test catalogue. Retire that endpoint; do not reattach it to the app.
 - ~~Local onboarding fixture still pre-0262 (13 skipped tests).~~
@@ -1124,7 +1132,7 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
 Remaining: Domains card (do not start provider live certs until
-asked); first-win journeys; Track 6 boundary scan. Walk3 webhook
+asked); first-win journeys. Track 6 scan closed. Walk3 webhook
 stays disabled. Live app `371883f5` / `sha256:71f78ecb…`
 `us-east4-eqdc4a`. Live CP `1931dc38` (`64ca931`). Instance rows 17.
 
