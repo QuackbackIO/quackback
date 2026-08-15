@@ -8,6 +8,15 @@ export function billingSessionErrorResponse(error: unknown): Response {
   if (message === 'already_on_plan') {
     return Response.json({ error: 'already_on_plan' }, { status: 409 })
   }
+  if (message === 'Authentication required') {
+    return Response.json({ error: 'unauthorized' }, { status: 401 })
+  }
+  if (message === 'Access denied: Not a team member') {
+    return Response.json({ error: 'not_teammate' }, { status: 403 })
+  }
+  if (message.startsWith('Access denied:')) {
+    return Response.json({ error: 'forbidden' }, { status: 403 })
+  }
   return Response.json({ error: message }, { status: 503 })
 }
 
@@ -27,13 +36,13 @@ export const Route = createFileRoute('/api/billing/session')({
         if (!isSameOriginFormPost(request)) {
           return Response.json({ error: 'invalid_origin' }, { status: 403 })
         }
-        const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
-        await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
-        const form = await request.formData()
-        const parsed = actionSchema.safeParse(Object.fromEntries(form.entries()))
-        if (!parsed.success)
-          return Response.json({ error: 'invalid_billing_action' }, { status: 400 })
         try {
+          const { requireAuth } = await import('@/lib/server/functions/auth-helpers')
+          await requireAuth({ permission: PERMISSIONS.BILLING_MANAGE })
+          const form = await request.formData()
+          const parsed = actionSchema.safeParse(Object.fromEntries(form.entries()))
+          if (!parsed.success)
+            return Response.json({ error: 'invalid_billing_action' }, { status: 400 })
           const { getCloudConfig } =
             await import('@/lib/server/domains/settings/cloud/cloud.service')
           const cloud = await getCloudConfig()
