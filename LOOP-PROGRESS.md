@@ -117,7 +117,7 @@ remains.
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan **PASS**                                                            | `loop-evidence/track6-scan/critic.md`; `BILLING_*` gone from fleet roles                                          |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | product-feedback **live** on t1a; self-host + internal first-win **local**; support / HC remain            | `52c1ab397`; `loop-evidence/t7-first-win/`                                                                        |
+| 7 PLG + first-win proof          | product-feedback **live** on t1a; all four outcomes + self-host **local**; support / HC live remain        | `52c1ab397`; `loop-evidence/t7-first-win/`                                                                        |
 | 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                                        |
 
 ## Pickup for critics and later fires
@@ -125,22 +125,23 @@ remains.
 Use this table. Do not rediscover work that already has a sha. Do not
 print the Cloudflare token. Preserve uncommitted onboarding files.
 
-| Unit                           | Where       | Sha                                                     | Live?                               | Critic should prove                                                                                                                                                                                                                            |
-| ------------------------------ | ----------- | ------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ready CTA + required cloud URL | app         | `1a39cd7d7`                                             | **yes** `02cb4329`                  | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
-| 3-Free create cap              | CP          | `c5a484d`                                               | **yes** `80c8301e`                  | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                       |
-| Limits overlay                 | app         | `31330d85b` / `b0c13a366`                               | **yes** `cb186135`                  | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
-| CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
-| Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
-| Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
-| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep-25319ded.md`     | **PASS 0 HIGH** on `25319ded`       | Fuller 1–32 on leftover-access image. Prior `71f78ecb` sweep is historical.                                                                                                                                                                    |
-| Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-25319ded.md`                 | **PASS** on `25319ded` / `79030f27` | Prior PASS on `71f78ecb` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
-| Product-feedback first-win     | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC live walks remain (no Neon this fire).                                                                                                |
-| Self-host + internal first-win | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | General name only; no billing/switcher/URL. Launch plan Internal + “Collect your first team idea” reached. `self-host-walk-critic.md`.                                                                                                         |
-| Outcome Ready + first-win copy | app tests   | `587e96847`                                             | skip-deploy (tests-only)            | Ready primaries + first-win titles for all four outcomes. `outcomes-critic.md`.                                                                                                                                                                |
-| Self-host General name         | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
-| PLG emit self-host skip        | app tests   | `3b4556ae2`                                             | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
+| Unit                             | Where       | Sha                                                     | Live?                               | Critic should prove                                                                                                                                                                                                                            |
+| -------------------------------- | ----------- | ------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready CTA + required cloud URL   | app         | `1a39cd7d7`                                             | **yes** `02cb4329`                  | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
+| 3-Free create cap                | CP          | `c5a484d`                                               | **yes** `80c8301e`                  | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                       |
+| Limits overlay                   | app         | `31330d85b` / `b0c13a366`                               | **yes** `cb186135`                  | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
+| CF for SaaS origin + client      | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
+| Plan catalogue + invoices        | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
+| Paid plan switch                 | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
+| Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-25319ded.md`     | **PASS 0 HIGH** on `25319ded`       | Fuller 1–32 on leftover-access image. Prior `71f78ecb` sweep is historical.                                                                                                                                                                    |
+| Track 8b–8f                      | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
+| Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-25319ded.md`                 | **PASS** on `25319ded` / `79030f27` | Prior PASS on `71f78ecb` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
+| Product-feedback first-win       | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC live walks remain (no Neon this fire).                                                                                                |
+| Self-host + internal first-win   | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | General name only; no billing/switcher/URL. Launch plan Internal + “Collect your first team idea” reached. `self-host-walk-critic.md`.                                                                                                         |
+| Self-host support + HC first-win | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | Support conversation + HC article milestones reached; useCase restored to internal. `self-host-outcomes-critic.md`.                                                                                                                            |
+| Outcome Ready + first-win copy   | app tests   | `587e96847`                                             | skip-deploy (tests-only)            | Ready primaries + first-win titles for all four outcomes. `outcomes-critic.md`.                                                                                                                                                                |
+| Self-host General name           | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
+| PLG emit self-host skip          | app tests   | `3b4556ae2`                                             | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
 **Fleet note:** one deploy thread. Live pair is app `c5d64208` /
 `sha256:25319ded…` (`52c1ab397`, includes `635cdb149`) and CP
@@ -763,6 +764,23 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 ## This fire (2026-08-15, orchestrator)
 
 Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
+web `c5d64208`, `us-east4-eqdc4a`. Health 200. No deploy. Stripe-live
+not repeated. CP-create already live; no second builder. No Neon.
+No live key. Custom domains not started. Instances **17**.
+
+Track 7 local support + Help Center first-win: flipped
+`setup_state.useCase` on the existing self-host fixture (Change goal
+UI click did not open the picker), then restored `internal`.
+
+- Support: “Receive your first customer conversation” reached;
+  Ready **Connect Messenger**.
+- Help Center: “Publish your first article” reached 21 Jul 2026.
+- Critic **PASS** (`self-host-outcomes-critic.md`). Skip-deploy.
+- Verify / §H still signed on `25319ded` (no image change).
+
+Previous fire (local self-host + internal first-win):
+
+Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
 web `c5d64208`, region only `us-east4-eqdc4a`. Five health URLs 200.
 No deploy. Stripe-live first t1a payment already finalized — **not
 repeated**. CP-create 3-Free already live `80c8301e` — **no second
@@ -1057,9 +1075,9 @@ Named critic spawned on the same URLs.
     must open a Stripe confirm session for that price (this unit).
     Upgrades now (pro-rata); downgrades at period end.
 18. First-win journeys. Product-feedback first-win is live on t1a
-    (`52c1ab397`). Self-host + internal first-win proved on local
-    `:3000` (skip-deploy). Remaining: support / Help Center **live**
-    (no Neon unless extra spend stays under $50/month).
+    (`52c1ab397`). All four outcomes + self-host Bar C proved on
+    local `:3000` (skip-deploy). Remaining: support / Help Center
+    **live** (no Neon unless extra spend stays under $50/month).
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
@@ -1191,9 +1209,9 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
   helper is live (`57ff32499` in image `703eca7d`); both current `ws-*`
   workspaces already have a trial so the helper skips.
 - Fresh-browser journeys for every onboarding outcome and self-hosted mode.
-  Self-host + internal first-win proved on local `:3000`. Support /
-  Help Center still need live workspaces. Ready primaries are tested
-  (`587e96847`).
+  All four outcomes + self-host Bar C proved on local `:3000`.
+  Support / Help Center still need live workspaces. Ready primaries
+  are tested (`587e96847`).
 - Zero-input first-workspace creation and retry after interrupted provisioning.
 - Live rename handoff, old-host redirect, and session survival on a new
   generated host. Local replay/expiry/wrong-host and pinned asset-origin
@@ -1215,11 +1233,12 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
 Remaining: support / Help Center **live** first-win walks (need Neon);
-Domains card (do not start live certs until asked). Self-host +
-internal first-win proved locally. Track 6 scan closed. Walk3
-webhook stays disabled. Live app `c5d64208` / `sha256:25319ded…`
-`us-east4-eqdc4a`. Live CP `1931dc38` (`64ca931`). Instance rows 17.
-Product-feedback first-win is live on t1a.
+Domains card (do not start live certs until asked). All four
+outcomes + self-host Bar C proved locally. Track 6 scan closed.
+Walk3 webhook stays disabled. Live app `c5d64208` /
+`sha256:25319ded…` `us-east4-eqdc4a`. Live CP `1931dc38`
+(`64ca931`). Instance rows 17. Product-feedback first-win is live
+on t1a.
 
 Operational defects carried from the prior lead:
 
