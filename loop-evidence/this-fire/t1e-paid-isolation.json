@@ -1,0 +1,25 @@
+{
+  "at": "2026-08-15T08:14:19.793Z",
+  "errors": [],
+  "t1eSameGrowth": {
+    "status": 409,
+    "error": "already_on_plan",
+    "urlHost": null
+  },
+  "t1ePortal": {
+    "status": 200,
+    "error": null,
+    "urlHost": "billing.stripe.com"
+  },
+  "t1eScale": {
+    "status": 200,
+    "error": null,
+    "urlHost": "billing.stripe.com"
+  },
+  "t1aSamePro": {
+    "status": 409,
+    "error": "already_on_plan",
+    "urlHost": null
+  },
+  "ok": true
+}

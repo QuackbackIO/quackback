@@ -1,0 +1,47 @@
+{
+  "at": "2026-08-15T08:12:54.816Z",
+  "unit": "stripe-live-t1e-pay-start",
+  "instanceId": "inst_01m00kprbrfzzb19f490wga8q2",
+  "errors": [],
+  "didNotCreateNeon": true,
+  "didNotPay": true,
+  "stripeKeyPrefix": "sk_test_",
+  "instanceCountBefore": 19,
+  "hasT1a": true,
+  "hasT1e": true,
+  "t1aPlan": "pro",
+  "t1ePlan": "free",
+  "workspaceBefore": {
+    "plan_id": "free",
+    "status": "active",
+    "subscription_status": null,
+    "has_sub": false,
+    "latestOutbox": {
+      "projection_version": "2",
+      "status": "delivered",
+      "effective_plan": "pro"
+    }
+  },
+  "checkout": {
+    "status": 200,
+    "error": null,
+    "urlHost": "checkout.stripe.com",
+    "sessionPrefix": "cs_test_"
+  },
+  "stripeSession": {
+    "livemode": false,
+    "mode": "subscription",
+    "status": "open",
+    "paymentStatus": "unpaid",
+    "kind": "workspace_subscription",
+    "instanceId": "inst_01m00kprbrfzzb19f490wga8q2",
+    "planId": "growth",
+    "billingPeriod": "monthly",
+    "successHost": "northfa99f0.quackback.co.uk"
+  },
+  "customerAddressUpdated": {
+    "country": "GB"
+  },
+  "instanceCountAfterCreate": 19,
+  "didNotCreateWorkspace": true
+}

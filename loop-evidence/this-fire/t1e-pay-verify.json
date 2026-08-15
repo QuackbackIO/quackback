@@ -1,0 +1,145 @@
+{
+  "at": "2026-08-15T08:13:43.205Z",
+  "unit": "stripe-live-t1e-pay-verify",
+  "errors": [],
+  "polls": [
+    {
+      "at": "2026-08-15T08:13:44.797Z",
+      "stripe": {
+        "status": "complete",
+        "paymentStatus": "paid",
+        "livemode": false,
+        "kind": "workspace_subscription",
+        "instanceId": "inst_01m00kprbrfzzb19f490wga8q2",
+        "planId": "growth",
+        "hasSubscription": true,
+        "subscriptionPrefix": "sub_1U4c",
+        "subscriptionStatus": "active"
+      },
+      "workspace": {
+        "plan_id": "growth",
+        "status": "active",
+        "has_item": true,
+        "item_prefix": "si_V4mGq",
+        "has_sub": true,
+        "sub_prefix": "sub_1U4c",
+        "subscription_status": "active"
+      },
+      "outbox": {
+        "projection_version": "5",
+        "status": "delivered",
+        "effective_plan": "growth",
+        "subscription_status": "active",
+        "can_manage_billing": "true"
+      },
+      "webhookEvents": [
+        {
+          "id_prefix": "evt_1U4c",
+          "event_type": "checkout.session.completed",
+          "processed": true
+        },
+        {
+          "id_prefix": "evt_1U4c",
+          "event_type": "customer.subscription.created",
+          "processed": true
+        },
+        {
+          "id_prefix": "evt_1U4S",
+          "event_type": "checkout.session.completed",
+          "processed": true
+        },
+        {
+          "id_prefix": "evt_1U4S",
+          "event_type": "customer.subscription.created",
+          "processed": true
+        },
+        {
+          "id_prefix": "evt_1U4S",
+          "event_type": "customer.subscription.created",
+          "processed": true
+        },
+        {
+          "id_prefix": "evt_1U4S",
+          "event_type": "checkout.session.completed",
+          "processed": true
+        }
+      ],
+      "t1aPlan": "pro",
+      "instanceCount": 19
+    }
+  ],
+  "stripeKeyPrefix": "sk_test_",
+  "sessionPrefix": "cs_test_",
+  "final": {
+    "stripe": {
+      "status": "complete",
+      "paymentStatus": "paid",
+      "livemode": false,
+      "kind": "workspace_subscription",
+      "instanceId": "inst_01m00kprbrfzzb19f490wga8q2",
+      "planId": "growth",
+      "hasSubscription": true,
+      "subscriptionPrefix": "sub_1U4c",
+      "subscriptionStatus": "active"
+    },
+    "workspace": {
+      "plan_id": "growth",
+      "status": "active",
+      "has_item": true,
+      "item_prefix": "si_V4mGq",
+      "has_sub": true,
+      "sub_prefix": "sub_1U4c",
+      "subscription_status": "active"
+    },
+    "outbox": {
+      "projection_version": "5",
+      "status": "delivered",
+      "effective_plan": "growth",
+      "subscription_status": "active",
+      "can_manage_billing": "true"
+    },
+    "webhookEvents": [
+      {
+        "id_prefix": "evt_1U4c",
+        "event_type": "checkout.session.completed",
+        "processed": true
+      },
+      {
+        "id_prefix": "evt_1U4c",
+        "event_type": "customer.subscription.created",
+        "processed": true
+      },
+      {
+        "id_prefix": "evt_1U4S",
+        "event_type": "checkout.session.completed",
+        "processed": true
+      },
+      {
+        "id_prefix": "evt_1U4S",
+        "event_type": "customer.subscription.created",
+        "processed": true
+      },
+      {
+        "id_prefix": "evt_1U4S",
+        "event_type": "customer.subscription.created",
+        "processed": true
+      },
+      {
+        "id_prefix": "evt_1U4S",
+        "event_type": "checkout.session.completed",
+        "processed": true
+      }
+    ],
+    "t1aPlan": "pro",
+    "instanceCount": 19
+  },
+  "paid": true,
+  "livemodeFalse": true,
+  "metadataT1e": true,
+  "webhookCheckoutCompleted": true,
+  "planGrowth": true,
+  "outboxGrowth": true,
+  "t1aStillPro": true,
+  "instanceCount": 19,
+  "ok": true
+}

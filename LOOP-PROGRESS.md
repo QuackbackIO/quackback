@@ -137,6 +137,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Plan catalogue + invoices        | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch                 | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
 | Completed plan change + cancel   | live Stripe | t1a `inst_01m00kq6cdfzzb19gfjz8pt0s7`                   | **yes**                             | Growth → Pro monthly (`always_invoice`); webhook wrote `plan_id=pro`. `cancel_at_period_end` true then cleared. Evidence `loop-evidence/t1a-plan-change.json`. t1a is now Pro paid.                                                            |
+| Second paid isolation            | live Stripe | t1e `inst_01m00kprbrfzzb19f490wga8q2`                   | **yes**                             | t1e Growth monthly paid; webhook processed; outbox v5 `growth`. t1a stays Pro. Same-plan 409 on both. Instances 19. `this-fire/t1e-pay-verify.json`.                                                                                           |
 | Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-40be439d.md`     | **PASS 0 HIGH** on `40be439d`       | Fuller 1–32 on already_on_plan image. Prior `2575b236` sweep is historical.                                                                                                                                                                    |
 | Track 8b–8f                      | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-40be439d.md`                 | **PASS** on `40be439d` / `753d3b86` | t1a is Pro paid. Same-plan 409 live. Prior PASS on `2575b236` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                          |
@@ -772,6 +773,27 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
+Fleet: `635cdb149` already an ancestor of live `be3e41b01` /
+`sha256:40be439d…` / web `95610fd8`, `us-east4-eqdc4a`. Five health 200. t1e Upgrade was **303** `cs_test_` before this pay. No
+635cdb149 deploy.
+
+Stripe-live: t1a first pay not repeated. **Second paid** on existing
+t1e (`northfa99f0`, `inst_01m00kprbrfzzb19f490wga8q2`): Growth
+monthly `cs_test_` Checkout paid (4242). Stripe `complete`/`paid`
+`livemode=false` `kind=workspace_subscription` metadata t1e. Webhook
+`checkout.session.completed` + `customer.subscription.created`
+processed (`evt_1U4c…`). t1e `plan_id=growth`, item `si_V4mGq…`,
+outbox v5 delivered. t1a remains Pro. After pay: t1e same-plan
+Growth **409** `already_on_plan`; t1e portal + Scale **200**
+`billing.stripe.com`; t1a same-plan Pro still **409**. Instances
+**19→19**. Critic **PASS** `this-fire/t1e-pay-critic.md`.
+
+CP-create: 3-Free already live. **No second builder.**
+
+No Neon. No live key. Custom domains not started.
+
+Previous fire (already_on_plan 409 deploy):
+
 Fleet: `635cdb149` already an ancestor of live `74024a9cb`. Pickup
 had undeployed customer-visible **already_on_plan** app `be3e41b01`
 (Docker `31872616168` → `sha256:40be439d…`). CP `f4e3844` was already
@@ -1215,6 +1237,8 @@ Named critic spawned on the same URLs.
     (`plan-matrix-40be439d.md`).
 21. ~~**Same-plan 409**~~ live `be3e41b01` / `95610fd8` + CP `f4e3844` /
     `7cecf06d`. t1a same-plan **409** `already_on_plan`.
+22. ~~**Second paid isolation**~~ t1e Growth paid + webhook finalize.
+    t1a remains Pro. Same-plan 409 on both.
 
 ## Stale code to remove
 
@@ -1359,8 +1383,8 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 ## Blockers
 
-Stripe **test** payment + webhook finalize is live on t1a. Paid Change
-to Pro is live as a confirm portal session. 8c transfer/leave is live.
+Stripe **test** payment + webhook finalize is live on t1a **and** t1e.
+Paid Change to Pro is live as a confirm portal session. 8c transfer/leave is live.
 t1a is **Pro paid** after a completed test-mode plan change
 (`loop-evidence/t1a-plan-change.json`). Domains card + identity
 gateway are live (`59da45c2` / `69cb0353`). Live add/cert still

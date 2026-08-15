@@ -7,7 +7,8 @@ sweep (`sweep-40be439d.md`) plus workspace same-plan POST
 (`ws-already-on-plan.json`). No payment, no Neon, no custom-hostname add.
 Instances 19→19.
 
-Fixtures: t1a **Pro paid** (v6); t1e Pro trial. No unpaid Free `ws-*`.
+Fixtures: t1a **Pro paid** (v6); t1e was Pro trial at sign time and is
+now **Growth paid** (v5, this-fire Stripe-live). No unpaid Free `ws-*`.
 No Scale host. No canceled host.
 
 ## Authority (live)
