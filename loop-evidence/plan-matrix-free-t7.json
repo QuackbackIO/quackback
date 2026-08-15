@@ -1,0 +1,135 @@
+{
+  "at": "2026-08-15T08:30:40.004Z",
+  "unit": "plan-matrix-free-t7",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "errors": [],
+  "stripeKeyPrefix": "sk_test_",
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "rows": [
+    {
+      "id": "inst_01m021rrsdfan9v4bzpcec2g3z",
+      "planId": "free",
+      "status": "active",
+      "host": "ws-ffe2b4983034867ff50fdf54.quackback.co.uk"
+    },
+    {
+      "id": "inst_01m021xvy6fan9v4f5271b2496",
+      "planId": "free",
+      "status": "active",
+      "host": "ws-8c38697ef940ff0d53bd1d68.quackback.co.uk"
+    }
+  ],
+  "t7s": {
+    "health": 200,
+    "consumeStatus": 200,
+    "hasSession": true,
+    "storedTierLimits": null,
+    "overlay": {
+      "effectivePlan": "free",
+      "subscriptionStatus": null,
+      "planLimits": {
+        "maxPosts": 50,
+        "maxBoards": 2,
+        "maxTeamSeats": 1,
+        "maxCustomRoles": 0,
+        "aiTokensPerMonth": 100000,
+        "maxSendingDomains": 0,
+        "apiRequestsPerMonth": 10000,
+        "maxStatusComponents": 3,
+        "apiRequestsPerMinute": 60
+      },
+      "entitlements": {
+        "sso": false,
+        "aiDrafts": false,
+        "auditLog": false,
+        "webhooks": false,
+        "apiAccess": false,
+        "mcpServer": false,
+        "workflows": false,
+        "aiInsights": false,
+        "aiAssistant": false,
+        "customDomain": false
+      },
+      "canUpgrade": true,
+      "canManageBilling": false
+    },
+    "unlimited": false,
+    "checkoutGrowth": {
+      "status": 303,
+      "error": null,
+      "locationHost": "checkout.stripe.com",
+      "hasCsTest": true,
+      "hasCsLive": false
+    },
+    "portal": {
+      "status": 403,
+      "error": "billing_action_unavailable",
+      "locationHost": null,
+      "hasCsTest": false,
+      "hasCsLive": false
+    },
+    "ssoNew": {
+      "status": 404,
+      "hasCreateFields": false
+    }
+  },
+  "t7h": {
+    "health": 200,
+    "consumeStatus": 200,
+    "hasSession": true,
+    "storedTierLimits": null,
+    "overlay": {
+      "effectivePlan": "free",
+      "subscriptionStatus": null,
+      "planLimits": {
+        "maxPosts": 50,
+        "maxBoards": 2,
+        "maxTeamSeats": 1,
+        "maxCustomRoles": 0,
+        "aiTokensPerMonth": 100000,
+        "maxSendingDomains": 0,
+        "apiRequestsPerMonth": 10000,
+        "maxStatusComponents": 3,
+        "apiRequestsPerMinute": 60
+      },
+      "entitlements": {
+        "sso": false,
+        "aiDrafts": false,
+        "auditLog": false,
+        "webhooks": false,
+        "apiAccess": false,
+        "mcpServer": false,
+        "workflows": false,
+        "aiInsights": false,
+        "aiAssistant": false,
+        "customDomain": false
+      },
+      "canUpgrade": true,
+      "canManageBilling": false
+    },
+    "unlimited": false,
+    "checkoutGrowth": {
+      "status": 303,
+      "error": null,
+      "locationHost": "checkout.stripe.com",
+      "hasCsTest": true,
+      "hasCsLive": false
+    },
+    "portal": {
+      "status": 403,
+      "error": "billing_action_unavailable",
+      "locationHost": null,
+      "hasCsTest": false,
+      "hasCsLive": false
+    },
+    "ssoNew": {
+      "status": 404,
+      "hasCreateFields": false
+    }
+  },
+  "ok": true
+}
