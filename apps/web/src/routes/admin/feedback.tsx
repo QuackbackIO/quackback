@@ -3,21 +3,26 @@ import { z } from 'zod'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
-  board: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  status: z.array(z.string()).optional(),
-  segments: z.array(z.string()).optional(),
+  board: z.array(z.string()).optional().catch(undefined),
+  tags: z.array(z.string()).optional().catch(undefined),
+  status: z.array(z.string()).optional().catch(undefined),
+  segments: z.array(z.string()).optional().catch(undefined),
   owner: z.string().optional(),
   search: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
-  minVotes: z.string().optional(),
+  minVotes: z.string().optional().catch(undefined),
   minComments: z.string().optional(),
-  responded: z.enum(['all', 'responded', 'unresponded']).optional(),
+  responded: z.enum(['all', 'responded', 'unresponded']).optional().catch(undefined),
   updatedBefore: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().default('newest'),
-  hasDuplicates: z.boolean().optional(),
-  deleted: z.boolean().optional(),
+  // Portal leftover `sort=trending` must not fail this route.
+  sort: z
+    .enum(['newest', 'oldest', 'votes', 'priority'])
+    .optional()
+    .catch('newest')
+    .default('newest'),
+  hasDuplicates: z.boolean().optional().catch(undefined),
+  deleted: z.boolean().optional().catch(undefined),
   post: z.string().optional(),
   // Roadmap-specific
   roadmap: z.string().optional(),

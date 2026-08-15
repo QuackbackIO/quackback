@@ -9,10 +9,10 @@ const searchSchema = z.object({
   roadmap: z.string().optional(),
   post: z.string().optional(),
   search: z.string().optional(),
-  board: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  segments: z.array(z.string()).optional(),
-  sort: z.enum(['votes', 'newest', 'oldest']).optional(),
+  board: z.array(z.string()).optional().catch(undefined),
+  tags: z.array(z.string()).optional().catch(undefined),
+  segments: z.array(z.string()).optional().catch(undefined),
+  sort: z.enum(['votes', 'newest', 'oldest']).optional().catch(undefined),
 })
 
 export const Route = createFileRoute('/admin/roadmap')({

@@ -14,7 +14,7 @@ import { isProductEnabled } from '@/lib/shared/types/settings'
 const searchSchema = z.object({
   board: z.string().optional(),
   search: z.string().optional(),
-  sort: z.enum(['top', 'new', 'trending']).optional().default('trending'),
+  sort: z.enum(['top', 'new', 'trending']).optional().catch('trending').default('trending'),
   status: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   minVotes: z.coerce.number().int().min(1).optional(),

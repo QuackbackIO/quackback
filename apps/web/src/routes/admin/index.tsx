@@ -3,6 +3,9 @@ import { getFirstEnabledAdminProductPath } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/')({
   beforeLoad: ({ context }) => {
-    throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
+    throw redirect({
+      to: getFirstEnabledAdminProductPath(context.settings?.featureFlags),
+      search: {},
+    })
   },
 })

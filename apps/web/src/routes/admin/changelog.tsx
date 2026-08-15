@@ -4,7 +4,7 @@ import { ChangelogList, ChangelogModal } from '@/components/admin/changelog'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
-  status: z.enum(['draft', 'scheduled', 'published']).optional(),
+  status: z.enum(['draft', 'scheduled', 'published']).optional().catch(undefined),
   entry: z.string().optional(), // Entry ID for modal view
   search: z.string().optional(),
 })
