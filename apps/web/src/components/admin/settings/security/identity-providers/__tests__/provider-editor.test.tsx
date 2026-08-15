@@ -15,6 +15,8 @@ import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
+import type { JsonValue } from '@/lib/shared/json'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { ProviderEditor } from '../provider-editor'
 
 beforeAll(() => {
@@ -39,17 +41,7 @@ const { upsertSpy } = vi.hoisted(() => ({
 
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | {
-      registrationId: string
-      capturedAt: string
-      identity: {
-        id: string
-        email?: string
-        name?: string
-        sources: Partial<Record<'id' | 'email' | 'name', string>>
-      }
-      claims: Record<string, unknown>
-    },
+    current: null as null | SsoTestCapture,
   },
 }))
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
@@ -133,10 +125,8 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
 }
 
 function makeCapture(
-  over: Partial<NonNullable<(typeof ssoTestRef)['current']>> & {
-    claims: Record<string, unknown>
-  }
-): NonNullable<(typeof ssoTestRef)['current']> {
+  over: Partial<SsoTestCapture> & { claims: Record<string, JsonValue> }
+): SsoTestCapture {
   return {
     registrationId: 'oidc_x',
     capturedAt: '2026-08-15T12:00:00.000Z',
