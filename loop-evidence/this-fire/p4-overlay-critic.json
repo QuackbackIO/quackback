@@ -1,0 +1,73 @@
+{
+  "at": "2026-08-15T18:30:02.189Z",
+  "unit": "p4-overlay-critic-4bddea06f",
+  "expectedDigest": "sha256:cf2a5726bbad7411bfb7409ddf497af27c156f93cf18bd1be37172d852189132",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "didNotDeploy": true,
+  "didNotWipe": true,
+  "printedCredentials": false,
+  "errors": [],
+  "sessions": {
+    "t1a": {
+      "planId": "pro",
+      "consumeStatus": 200,
+      "hasSession": true
+    },
+    "t7s": {
+      "planId": "free",
+      "consumeStatus": 200,
+      "hasSession": true
+    }
+  },
+  "exportT1a": {
+    "status": 200,
+    "contentType": "text/csv",
+    "jsonError": null,
+    "limit": null,
+    "message": null,
+    "csv": true
+  },
+  "exportT7": {
+    "status": 402,
+    "contentType": "application/json;charset=utf-8",
+    "jsonError": "tier_limit_exceeded",
+    "limit": "features.analyticsExports",
+    "message": "Data export is not available on your plan. Upgrade to enable it.",
+    "csv": false
+  },
+  "integrationsT1a": {
+    "status": 200,
+    "html": true,
+    "hasUpgradeToPro": false,
+    "integrationsIsPro": false,
+    "hasCatalogChrome": true,
+    "hasDefaultError": false
+  },
+  "integrationsT7": {
+    "status": 200,
+    "html": true,
+    "hasUpgradeToPro": true,
+    "integrationsIsPro": true,
+    "hasCatalogChrome": true,
+    "hasDefaultError": false
+  },
+  "brandingPageT7": {
+    "status": 200,
+    "html": true,
+    "hasBranding": true
+  },
+  "brandingSaveT7": {
+    "themeFnStatus": 200,
+    "cssFnStatus": 200,
+    "themeMessage": "Custom colours is not available on your plan. Upgrade to enable it.",
+    "cssMessage": "Custom CSS is not available on your plan. Upgrade to enable it.",
+    "looks500": false,
+    "looksInternalError": false,
+    "upgradeModalOpened": false,
+    "clientToastedSaved": true
+  },
+  "ok": true,
+  "verdict": "PASS"
+}

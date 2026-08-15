@@ -33,26 +33,22 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `e56d00b9a` **live** as web `7057e905` /
-  `sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397`
-  (`us-east4-eqdc4a`). Docker `31898534925` SUCCESS. P2 critic **PASS**
-  (`this-fire/p2-upgrade-critic.md`). Verify / §H last signed on the
+- Workspace tip: `4bddea06f` **live** as web `fd136d22` /
+  `sha256:cf2a5726bbad7411bfb7409ddf497af27c156f93cf18bd1be37172d852189132`
+  (`us-east4-eqdc4a`). Docker `31900766203` SUCCESS. P4 critic **PASS**
+  (`this-fire/p4-overlay-critic.md`). Verify / §H last signed on the
   older `895b942d` pair.
 - Control plane tip `c208c06` (`fix(create): keep restore refusals on
 the dashboard`) live as `9030705d` /
   `sha256:d84fd27c2d2d10ffba14a36b732540d462d396cd5f34a3102a962a9a40928741`
   (sfo). SQL `0069` still applied. P3 live critic **PASS**
   (`this-fire/p3-restore-critic.md`).
-- Last known deployed workspace: `e56d00b9a` / `sha256:27c538ec…`
-  (2026-08-15) web `7057e905` SUCCESS, region `us-east4-eqdc4a`.
-  Docker `31898534925`.
+- Last known deployed workspace: `4bddea06f` / `sha256:cf2a5726…`
+  (2026-08-15) web `fd136d22` SUCCESS, region `us-east4-eqdc4a`.
+  Docker `31900766203`.
 - Last known deployed control plane: `9030705d` / `c208c06` (2026-08-15)
-- App `saas` tip `4bddea06f` (P4 `482f44938` + import-protection
-  `4bddea06f`). Docker `31900508741` **FAILED** import-protection
-  (Integrations loader imported `tier-limits.service`). Redispatched
-  `31900766203` `--ref saas`. Live still `e56d00b9a` / `7057e905` /
-  `sha256:27c538ec…`. Next unit is **Fleet**: wait Docker SUCCESS,
-  patch `source.image`, redeploy, live-critic.
+- App `saas` tip `4bddea06f` is live. P3 critic **PASS**. P4 critic
+  **PASS**. Plan-restriction UX unit closed.
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -148,7 +144,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CP list official + custom hosts     | CP           | `4ad81fc`                                                                         | **yes** `4a5ea8d7` / `sha256:43e28d87…`    | Dashboard tiles print identity `platform_hostname` and ready custom hosts. Generated `ws-*` omitted. t1a live: `south63792f.quackback.co.uk` present, no `ws-*`. No custom rows yet. Tests: one-screen 11, list-addresses 6, siblings 26.                                             |
 | Plan upgrade offer                  | app          | `5834951f7`                                                                       | **yes** `48468c28` / `sha256:b358f971…`    | Access & Security no longer 402s the page. Audit/SSO/Domains share one offer from `billingQueries.catalogue()`. Export 402 opens the same modal. t1a Pro: Portal access 200; audit tab names Scale; Sign-in shows the SSO offer.                                                      |
 | Webhooks/workflows/macros/MCP offer | app          | `e56d00b9a`                                                                       | **yes** `7057e905` / `sha256:27c538ec…`    | Free t7: webhook/MCP **Upgrade to Growth** `$25`/`$300`; workflows **Upgrade to Pro** `$49`/`$588`; macros in-route Growth screen. Mixed Developers 200. t1a Access & Security 200 (audit Scale offer). Live JS gates catalogue/checkout on `billingEnabled`. `p2-upgrade-critic.md`. |
-| Projection feature overlay          | app          | `4bddea06f`                                                                       | **no** Docker `31900766203` queued         | t1a Pro `GET /api/export` not 402; t7 Free still 402 `features.analyticsExports`. Integrations page Upgrade to Pro on Free, catalog on Pro. Branding custom-colour save **402** not 500 + UpgradeOffer.                                                                               |
+| Projection feature overlay          | app          | `4bddea06f`                                                                       | **yes** `fd136d22` / `sha256:cf2a5726…`    | t1a Pro `GET /api/export` **200** CSV; t7 Free **402** `features.analyticsExports`. Integrations Upgrade to Pro on Free, catalog on Pro. Branding save returns TierLimitError copy (not 500). `p4-overlay-critic.md`.                                                                 |
 | Same-plan billing 409               | CP + app     | CP `f4e3844` / `7cecf06d`; app `be3e41b01` / `95610fd8`                           | **yes** in `895b942d` / `753d3b86`         | t1a same-plan Pro monthly **409** `already_on_plan` (not 503). Scale **303** `billing.stripe.com`. Origin 403. Evidence `this-fire/ws-already-on-plan.json`.                                                                                                                          |
 | Named billing session refusals      | app          | `cb3c65420` / `932a38f9`                                                          | **yes** `895b942d`                         | No-cookie **401** `unauthorized`. t1a cookie on t1e **401** (was 500). Tests 5/5. `this-fire/billing-authz.json`.                                                                                                                                                                     |
 | Plan catalogue + invoices           | CP + app     | CP `2fb9488`, app `6418785c8`                                                     | **yes** API; UI in `02cb4329`              | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                                                            |
@@ -173,11 +169,31 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name              | app          | `8cb12d5f1`                                                                       | skip-deploy (self-host only)               | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                                                                  |
 | PLG emit self-host skip             | app tests    | `3b4556ae2`                                                                       | skip-deploy (tests-only)                   | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                                                                     |
 
-**Fleet note:** one deploy thread. Live pair is app `7057e905` /
-`sha256:27c538ec…` (`e56d00b9a`) and CP `9030705d` /
-`sha256:d84fd27c…` (`c208c06`). Docker `31898534925` SUCCESS. P2
-and P3 live critics **PASS**. Verify / §H still signed on the earlier
-`895b942d` / `b7ae7455` pair.
+**Fleet note:** one deploy thread. Live pair is app `fd136d22` /
+`sha256:cf2a5726…` (`4bddea06f`) and CP `9030705d` /
+`sha256:d84fd27c…` (`c208c06`). Docker `31900766203` SUCCESS. P2,
+P3, and P4 live critics **PASS**. Verify / §H still signed on the
+earlier `895b942d` / `b7ae7455` pair.
+
+This fire (P4 Fleet + live critic, 2026-08-15 T18:32Z):
+
+- Docker `31900766203` SUCCESS from `4bddea06f` as
+  `ghcr.io/quackbackio/quackback@sha256:cf2a5726bbad7411bfb7409ddf497af27c156f93cf18bd1be37172d852189132`.
+- JSON-patch `source.image` (service ids) + `redeploy --from-source`.
+  Matching `meta.imageDigest`, web region only `us-east4-eqdc4a`:
+
+  | role     | deployment | digest     | region            |
+  | -------- | ---------- | ---------- | ----------------- |
+  | web      | `fd136d22` | `cf2a5726` | `us-east4-eqdc4a` |
+  | worker   | `59e32c58` | `cf2a5726` | `us-east4-eqdc4a` |
+  | hourly   | `e4f6f888` | `cf2a5726` | `us-east4-eqdc4a` |
+  | daily    | `b2b962d7` | `cf2a5726` | `us-east4-eqdc4a` |
+  | migrator | `eac0ac73` | `cf2a5726` | `us-east4-eqdc4a` |
+
+- Live critic **PASS** (`p4-overlay-critic.md`): t1a export **200**
+  CSV; t7 **402** `features.analyticsExports`; Integrations Upgrade
+  to Pro on Free; branding save returns TierLimitError copy, not 500. No Neon. No pay. Instances unchanged.
+- Plan-restriction UX (P2–P4) closed.
 
 This fire (P3 live critic, 2026-08-15 T18:01Z):
 
@@ -204,7 +220,7 @@ billing projection`. Overlay copies `analyticsExports` /
 - Docker `31900508741` dispatched `--ref saas`. **FAILED**
   import-protection (`tier-limits.service` in Integrations loader).
   Fix `4bddea06f` uses `hasTierFeatureFn`. Redispatched
-  `31900766203`. Not SUCCESS yet. Stay on Fleet.
+  `31900766203`. SUCCESS this fire.
 
 This fire (Fleet + P2 critic, 2026-08-15 T17:49Z):
 
@@ -1527,9 +1543,8 @@ Named critic spawned on the same URLs.
    0b. ~~**P3 live critic**~~ CP `c208c06` / `9030705d` /
    `sha256:d84fd27c…`. Restore at 3-Free **303** dashboard notice.
    Critic **PASS** `p3-restore-critic.md`.
-   0c. **P4 app saas** committed `482f44938`. Tests 33. Docker
-   `31900508741` queued. **Fleet + live critic** is the rest of
-   this unit (analyticsExports/integrations overlay; branding 402).
+   0c. ~~**P4 app saas**~~ `4bddea06f` / `fd136d22` /
+   `sha256:cf2a5726…`. Critic **PASS**.
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
 2. ~~**Unit B — auto-open when ready**~~ OpeningPane posts `/open` on live.
 3. ~~**Unit C — host-independent stored assets**~~ live through `6f255842f` (`sha256:1249693e…`).
