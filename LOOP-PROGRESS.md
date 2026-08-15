@@ -145,7 +145,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Second paid isolation              | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Was Growth; now **Scale** (`t1e-scale-critic.md`). t1a stays Pro.                                                                                                                                                                              |
 | t1e Scale + SSO surface            | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Scale paid; outbox v6; `/sso/new` create fields. No IdP added. `t1e-scale-critic.md`.                                                                                                                                                          |
 | t1e period-end Growth schedule     | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Gateway Growth confirm **200** `billing.stripe.com`. Stripe test schedule **active** [scale] then [growth]. CP still Scale. t1a Pro. Instances 19. `t1e-downgrade-critic.md`.                                                                  |
-| Verify sweep                       | live         | `loop-evidence/verify-2026-08-15/sweep-e20c0eef.md`                               | **PASS 0 HIGH** on `895b942d` / `aed43943` | Compact re-sign after SSO/Scale. Prior `sweep-895b942d.md` historical.                                                                                                                                                                         |
+| Verify sweep                       | live         | `loop-evidence/verify-2026-08-15/sweep-e20c0eef.md`                               | **PASS 0 HIGH** on `895b942d` / `b7ae7455` | Compact re-sign after t1e period-end schedule. Prior `aed43943` sign historical.                                                                                                                                                               |
 | Track 8b–8f                        | CP+app saas  | **8a–8f live**                                                                    | **8f yes** `71f78ecb` / `640d5ac1`         | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic                 | live + spec  | `plan-matrix-scale-t1e.md` + `plan-matrix-895b942d.md` + `plan-matrix-free-t7.md` | **PASS** Scale t1e on `895b942d`           | t1a Pro + t1e Scale + t7 Free. `/sso/new` unlocked. No IdP.                                                                                                                                                                                    |
 | Projection replay / stale / expiry | live + tests | `this-fire/projection-probes.json`                                                | **yes** `40be439d`                         | Replay 204, stale 409, garbage 401. Paid Growth not dropped by trial clock. Unit exact-expiry 12/12.                                                                                                                                           |
@@ -792,6 +792,11 @@ gateway **200** `billing.stripe.com`; Stripe test schedule **active**
 phases [scale] then [growth]; CP `plan_id` / effective still **scale**;
 `pending_plan_id` null; t1a **pro**; instances **19→19**. Critic
 **PASS** (`t1e-downgrade-critic.md`). Did not pay again.
+
+Verify **PASS 0 HIGH** re-signed on `895b942d` / `b7ae7455`
+(`sweep-e20c0eef.md`). t1a Pro **409**; t1e Scale **409**; t7 Growth
+**303** `checkout.stripe.com`; foreign Origin **403**; foreign
+session **401**; unauth delete/restore **303**. Instances **19→19**.
 
 CP-create: 3-Free already live `80c8301e`. **No second builder.**
 
