@@ -1,0 +1,110 @@
+{
+  "at": "2026-08-15T09:18:31.911Z",
+  "unit": "t8a-restore-switcher",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "printedCredentials": false,
+  "errors": [],
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "leftoverCapProbeBefore": 0,
+  "t1a": {
+    "planId": "pro",
+    "hasItem": true,
+    "subscriptionStatus": "active"
+  },
+  "t1e": {
+    "planId": "growth",
+    "hasItem": true,
+    "subscriptionStatus": "active"
+  },
+  "t7": {
+    "sameOwner": false,
+    "ownerDomain": "guerrillamailblock.com",
+    "ownerFp": "e002f4ca4906",
+    "hcOwnerFp": "2084eca811ba",
+    "supStatus": "active",
+    "hcStatus": "active",
+    "supDeleted": false,
+    "hcDeleted": false
+  },
+  "liveFreeBefore": 1,
+  "listNoBearer": {
+    "status": 401,
+    "error": "unauthorized"
+  },
+  "listDummy": {
+    "status": 401,
+    "error": "unauthorized"
+  },
+  "listFromSup": {
+    "status": 200,
+    "error": null,
+    "count": 0,
+    "siblings": []
+  },
+  "listFromHc": {
+    "status": 200,
+    "error": null,
+    "count": 0,
+    "siblings": []
+  },
+  "openNoBearer": {
+    "status": 401,
+    "error": "unauthorized"
+  },
+  "openExtras": {
+    "status": 400,
+    "error": "Invalid input"
+  },
+  "openForeign": {
+    "status": 403,
+    "error": "not_owner"
+  },
+  "openCrossOwner": {
+    "status": 403,
+    "error": "not_owner"
+  },
+  "productReady": {
+    "status": 200,
+    "role": "web"
+  },
+  "actorFp": "1715a4d4a28c",
+  "listFromSupAtCap": {
+    "status": 200,
+    "error": null,
+    "count": 2,
+    "siblings": [
+      {
+        "instanceFp": "4c7b94be5a6d",
+        "isHc": false,
+        "isSup": false,
+        "displayName": "Untitled workspace",
+        "urlHost": null,
+        "urlIsWs": false
+      },
+      {
+        "instanceFp": "f4b3384d5dcc",
+        "isHc": false,
+        "isSup": false,
+        "displayName": "Untitled workspace",
+        "urlHost": null,
+        "urlIsWs": false
+      }
+    ]
+  },
+  "liveFreeAtThree": 3,
+  "restoreAtThree": {
+    "threw": true,
+    "statusCode": 402,
+    "reason": "free_workspace_owner_cap",
+    "named": true
+  },
+  "liveFreeAfterSoftDelete": 2,
+  "ok": true,
+  "leftoverCapProbeAfter": 0,
+  "fixturesRemain": true
+}

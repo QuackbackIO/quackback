@@ -129,7 +129,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Unit                               | Where        | Sha                                                                | Live?                               | Critic should prove                                                                                                                                                                                                                            |
 | ---------------------------------- | ------------ | ------------------------------------------------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ready CTA + required cloud URL     | app          | `1a39cd7d7`                                                        | **yes** `02cb4329`                  | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
-| 3-Free create cap                  | CP           | `c5a484d`                                                          | **yes** `80c8301e`                  | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                       |
+| 3-Free create cap                  | CP           | `c5a484d`                                                          | **yes** `80c8301e`                  | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live **402** same reason (temps, no Neon) on `7cecf06d` / `895b942d`. `t8a-restore-critic.md`.                                                            |
 | Limits overlay                     | app          | `31330d85b` / `b0c13a366`                                          | **yes** `cb186135`                  | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
 | CF for SaaS origin + client        | zone + CP    | `de0b038`; fallback **active**                                     | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                  |
 | Identity gateway + Domains card    | CP + app     | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2`            | **yes** in `40be439d` / `753d3b86`  | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                            |
@@ -775,16 +775,27 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 ## This fire (2026-08-15, orchestrator)
 
 Fleet: `635cdb149` already in live `932a38f9` / `sha256:895b942d…`,
-`us-east4-eqdc4a`. Gauntlet 200. No deploy.
+`us-east4-eqdc4a` only (source.image + region pin). Five ready 200. **No deploy.**
 
-Stripe-live: t1a + t1e already paid. **Not repeated.**
+Stripe-live: t1a Pro + t1e Growth still paid (item + active sub).
+**Not repeated.**
 
 CP-create: 3-Free already live. **No second builder.**
 
-Verify **PASS 0 HIGH** on `895b942d` (`sweep-895b942d.md`). t1a-cookie
-POST on t1e billing is now **401** `unauthorized`. §H **PASS**
-(`plan-matrix-895b942d.md`) with t1a Pro / t1e Growth / t7 Free.
-Instances **19→19**. No Neon. No live key. Custom domains not started.
+Live unit: **8a restore-at-cap + switcher list** on existing t7s
+(`inst_01m021rrs…`). t7s and t7h are different owners — not siblings.
+Temps (no Neon, no `provisionedAt`) raised t7s live-Free 1→3;
+`_internal_restoreInstance` **402** `free_workspace_owner_cap`; trash
+stayed deleted; soft-delete of one temp → 2. Switcher GET 401 / 200
+empty / 200 two untitled siblings with no `ws-*` URL; open extras
+**400**; foreign + cross-owner **403** `not_owner`. Critic **PASS**
+(`t8a-restore-critic.md`). Instances **19→19**. Leftover `inst_cap8a_*`
+**0**.
+
+Verify / §H still signed on `895b942d` / `753d3b86` (no image change).
+No Neon. No live key. Custom domains not started. Did not take CP down.
+
+Previous fire (Verify + named billing 401):
 
 Previous fire (named billing 401/403 deploy):
 
@@ -1326,6 +1337,13 @@ Named critic spawned on the same URLs.
     `7cecf06d`. t1a same-plan **409** `already_on_plan`.
 22. ~~**Second paid isolation**~~ t1e Growth paid + webhook finalize.
     t1a remains Pro. Same-plan 409 on both.
+23. ~~**8a restore at 3 live Free**~~ live on `7cecf06d` / `895b942d`
+    (`t8a-restore-critic.md`). Soft-delete does not count.
+24. **Control-plane outage** (product from last projection + retryable
+    billing). Unit trial helper skips when CP is down; live CP-down
+    not taken. Next live unit if DoD still open.
+25. SSO downgrade still needs a Scale host (no live Scale fixture).
+    Do not start custom domains.
 
 ## Stale code to remove
 
@@ -1464,9 +1482,11 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
   (surface + CP gateway; live provider skipped), Emails without platform
   keys. A cloud workspace must not use the Help Center local domain
   writer as the cloud manager.
-- Track 8: restore vs 3-Free, switcher, ~~transfer/leave~~ live 8c;
-  ~~seats + SSO lock~~ live 8d; ~~visible usage~~ live 8e;
-  ~~export/wipe/account delete~~ live 8f.
+- Track 8: ~~restore vs 3-Free~~ live 8a on `7cecf06d` (temps, no Neon;
+  `t8a-restore-critic.md`). Switcher list + fail-closed open live;
+  no stranger same-owner sibling pair so Open-to-sibling handoff was
+  not minted. ~~transfer/leave~~ live 8c; ~~seats + SSO lock~~ live
+  8d; ~~visible usage~~ live 8e; ~~export/wipe/account delete~~ live 8f.
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
   provider retry, and cross-workspace isolation. Provider client and
   fallback origin are ready (`de0b038`). Workspace Domains card and

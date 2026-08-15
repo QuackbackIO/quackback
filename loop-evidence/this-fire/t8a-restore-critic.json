@@ -1,0 +1,88 @@
+{
+  "at": "2026-08-15T09:20:19.566Z",
+  "unit": "t8a-restore-critic",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "printedCredentials": false,
+  "errors": [],
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "leftoverBefore": 0,
+  "health": {
+    "https://gauntlet.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://south63792f.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://northfa99f0.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://sup9ca3a708.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://hc9ca3a708.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    }
+  },
+  "ownerFp": "e002f4ca4906",
+  "liveFreeBefore": 1,
+  "listNoBearer": {
+    "status": 401,
+    "error": "unauthorized",
+    "count": 0,
+    "anyWsUrl": false
+  },
+  "listDummy": {
+    "status": 401,
+    "error": "unauthorized",
+    "count": 0,
+    "anyWsUrl": false
+  },
+  "listT7s": {
+    "status": 200,
+    "error": null,
+    "count": 0,
+    "anyWsUrl": false
+  },
+  "openNoBearer": {
+    "status": 401,
+    "error": "unauthorized"
+  },
+  "openExtras": {
+    "status": 400,
+    "error": "Invalid input"
+  },
+  "openForeign": {
+    "status": 403,
+    "error": "not_owner"
+  },
+  "openCrossOwner": {
+    "status": 403,
+    "error": "not_owner"
+  },
+  "liveFreeAtThree": 3,
+  "listAtCap": {
+    "status": 200,
+    "error": null,
+    "count": 2,
+    "anyWsUrl": false
+  },
+  "restoreAtThree": {
+    "threw": true,
+    "statusCode": 402,
+    "named": true
+  },
+  "trashStillDeleted": true,
+  "liveFreeAfterSoftDelete": 2,
+  "ok": true,
+  "leftoverAfter": 0,
+  "fixturesRemain": true
+}
