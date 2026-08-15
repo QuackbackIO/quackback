@@ -1,0 +1,314 @@
+{
+  "verdict": "PASS",
+  "reason": "Live web 7057e905 / sha256:27c538ec… us-east4-eqdc4a only; Pro Access & Security 200 with chrome and no DefaultErrorPage; Free webhook/workflow/MCP open catalogue UpgradeModal (Growth $25 / Pro $49, same highlights as Plan & billing); macros is in-route UpgradeScreen; Developers mixed page 200; live JS gates checkout/catalogue on billingEnabled.",
+  "at": "2026-08-15T17:48:02.814Z",
+  "unit": "p2-upgrade-critic-e56d00b9a",
+  "commits": {
+    "app": "e56d00b9a",
+    "appFull": "e56d00b9ac8114816cfabc014e1e4479b6d25b0f",
+    "appMessage": "feat(settings): show catalogue upgrades on webhooks, workflows, macros, and MCP",
+    "ancestorSharedOffer": "5834951f7"
+  },
+  "hitLiveUrls": true,
+  "hostsHit": [
+    "https://gauntlet.quackback.co.uk/api/health/ready",
+    "https://south63792f.quackback.co.uk",
+    "https://sup9ca3a708.quackback.co.uk",
+    "https://hc9ca3a708.quackback.co.uk/api/health/ready"
+  ],
+  "hostsNotUsedAsLockedCreate": ["https://northfa99f0.quackback.co.uk"],
+  "didNotPay": true,
+  "didNotCompletePayment": true,
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "didNotCreateWorkspace": true,
+  "didNotDeploy": true,
+  "didNotWipe": true,
+  "didNotRedeployCp": true,
+  "printedCredentials": false,
+  "errors": [],
+  "sideEffects": {
+    "t7McpToggle": "First click found Enable MCP already on and turned it off. Second click from off opened UpgradeModal and left the switch off. Did not re-enable."
+  },
+  "deployments": {
+    "expectedDigest": "sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397",
+    "expectedImage": "ghcr.io/quackbackio/quackback@sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397",
+    "expectedRegions": ["us-east4-eqdc4a"],
+    "expectedWebDeployPrefix": "7057e905",
+    "dockerWorkflow": {
+      "id": 31898534925,
+      "status": "completed",
+      "conclusion": "success",
+      "commit": "e56d00b9ac8114816cfabc014e1e4479b6d25b0f"
+    },
+    "web": {
+      "serviceId": "0b821c4a-00fd-4302-9957-7707645608c3",
+      "id": "7057e905-0e1a-4a58-9cff-0234981472cd",
+      "idPrefix": "7057e905",
+      "status": "SUCCESS",
+      "imageDigest": "sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397",
+      "regions": ["us-east4-eqdc4a"],
+      "createdAt": "2026-08-15T17:36:42.306Z"
+    },
+    "worker": {
+      "idPrefix": "796aba45",
+      "status": "SUCCESS",
+      "imageDigest": "sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "hourly": {
+      "idPrefix": "4b927894",
+      "status": "SUCCESS",
+      "imageDigest": "sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "daily": {
+      "idPrefix": "0de9564e",
+      "status": "SUCCESS",
+      "imageDigest": "sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "migrator": {
+      "idPrefix": "f92d2783",
+      "status": "SUCCESS",
+      "imageDigest": "sha256:27c538ec143d31f526e7aa8c0042f73c601db04e54c6eaa69240dd06844c2397",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "cp": {
+      "serviceId": "f06ac2e2-3cbb-4a60-95bc-527700ebba31",
+      "idPrefix": "9030705d",
+      "status": "SUCCESS",
+      "imageDigest": "sha256:d84fd27c2d2d10ffba14a36b732540d462d396cd5f34a3102a962a9a40928741",
+      "regions": ["sfo"],
+      "note": "Task mentioned prior live 4a5ea8d7 (now REMOVED). Critic did not redeploy CP."
+    },
+    "webDigestMatch": true,
+    "webRegionOnlyEast4": true
+  },
+  "health": {
+    "gauntletReady": {
+      "url": "https://gauntlet.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "role": "web"
+    },
+    "t1aReady": {
+      "url": "https://south63792f.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "role": "web"
+    },
+    "t7sReady": {
+      "url": "https://sup9ca3a708.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "role": "web"
+    },
+    "t7hReady": {
+      "url": "https://hc9ca3a708.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "role": "web"
+    }
+  },
+  "sessions": {
+    "via": "railway run CP f06ac2e2 tenantDirectDsn + verification one-time-token + GET /auth/open-handoff",
+    "t1a": {
+      "host": "south63792f.quackback.co.uk",
+      "instance": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+      "planId": "pro",
+      "consumeStatus": 200,
+      "hasSession": true
+    },
+    "t7s": {
+      "host": "sup9ca3a708.quackback.co.uk",
+      "instance": "inst_01m021rrsdfan9v4bzpcec2g3z",
+      "planId": "free",
+      "consumeStatus": 200,
+      "hasSession": true
+    }
+  },
+  "http": {
+    "t1aAuth": { "path": "/admin/settings/security/authentication", "status": 200 },
+    "t1aAudit": { "path": "/admin/settings/security/authentication?tab=audit-log", "status": 200 },
+    "t1aSignIn": { "path": "/admin/settings/security/authentication?tab=sign-in", "status": 200 },
+    "t7Developers": { "path": "/admin/settings/developers", "status": 200 },
+    "t7Webhooks": { "path": "/admin/settings/developers?tab=webhooks", "status": 200 },
+    "t7Mcp": { "path": "/admin/settings/developers?tab=mcp", "status": 200 },
+    "t7Workflows": { "path": "/admin/automation/workflows", "status": 200 },
+    "t7Macros": { "path": "/admin/settings/macros", "status": 200 },
+    "t7Billing": { "path": "/admin/settings/billing", "status": 200 }
+  },
+  "proAccessSecurity": {
+    "host": "https://south63792f.quackback.co.uk",
+    "banner": "Pro trial — 14 days left",
+    "defaultErrorPage": false,
+    "chrome": ["Access & Security", "Portal access", "Sign-in", "Audit log"],
+    "portalTab": { "publicPrivate": true, "accountSignup": true },
+    "signInTab": { "emailProviders": true, "socialProviders": true },
+    "auditTab": {
+      "upgradeScreen": true,
+      "heading": "Upgrade to Scale",
+      "body": "The audit log is a Scale feature. Upgrade to Scale to enable it.",
+      "prices": ["$89", "$1,068"],
+      "dialog": false
+    }
+  },
+  "catalogueFromBillingPage": {
+    "currentPlan": "Free",
+    "growth": {
+      "name": "Growth",
+      "prices": ["$25", "$300"],
+      "highlights": [
+        "Support inbox, live chat, email & tickets",
+        "Help center, feedback, roadmap, changelog & status page",
+        "3 boards · 50 posts",
+        "Custom domain · 1 sending domain",
+        "1 teammate seat · 5 lite seats"
+      ]
+    },
+    "pro": {
+      "name": "Pro",
+      "prices": ["$49", "$588"],
+      "highlights": [
+        "Everything in Growth",
+        "Workflows (10 active), SLAs & team routing",
+        "Moderation & private boards",
+        "Customer segments · analytics exports",
+        "AI summaries & sentiment",
+        "10 teammate seats · 25 lite seats · 24h support"
+      ]
+    }
+  },
+  "freeLockedCreates": {
+    "developersMixed": {
+      "url": "https://sup9ca3a708.quackback.co.uk/admin/settings/developers",
+      "status": 200,
+      "defaultErrorPage": false,
+      "chrome": [
+        "Developers",
+        "Keys",
+        "Webhooks",
+        "MCP",
+        "API Keys",
+        "Create your first API key",
+        "Quick Start"
+      ]
+    },
+    "webhook": {
+      "control": "Create your first webhook",
+      "dialogVisible": true,
+      "defaultErrorPage": false,
+      "heading": "Upgrade to Growth",
+      "body": "Webhooks are a Growth feature. Upgrade to Growth to enable it.",
+      "prices": ["$25", "$300"],
+      "highlights": [
+        "Support inbox, live chat, email & tickets",
+        "Help center, feedback, roadmap, changelog & status page",
+        "3 boards · 50 posts",
+        "Custom domain · 1 sending domain",
+        "1 teammate seat · 5 lite seats"
+      ],
+      "maybeLater": true,
+      "genericLockOnly": false,
+      "screenshot": "13-t7-webhook-upgrade.png"
+    },
+    "mcp": {
+      "control": "Enable MCP Server",
+      "firstClick": "toggle was already on; click turned it off; no modal",
+      "secondClickFromOff": {
+        "dialogVisible": true,
+        "switchRemainedOff": true,
+        "defaultErrorPage": false,
+        "heading": "Upgrade to Growth",
+        "body": "The MCP server is a Growth feature. Upgrade to Growth to enable it.",
+        "prices": ["$25", "$300"],
+        "highlights": [
+          "Support inbox, live chat, email & tickets",
+          "Help center, feedback, roadmap, changelog & status page",
+          "3 boards · 50 posts",
+          "Custom domain · 1 sending domain",
+          "1 teammate seat · 5 lite seats"
+        ],
+        "maybeLater": true,
+        "genericLockOnly": false
+      },
+      "screenshot": "17-t7-mcp-upgrade.png"
+    },
+    "workflow": {
+      "control": "New workflow → Create from template",
+      "dialogVisible": true,
+      "defaultErrorPage": false,
+      "heading": "Upgrade to Pro",
+      "body": "Workflows are a Pro feature. Upgrade to Pro to enable it.",
+      "prices": ["$49", "$588"],
+      "highlights": [
+        "Everything in Growth",
+        "Workflows (10 active), SLAs & team routing",
+        "Moderation & private boards",
+        "Customer segments · analytics exports",
+        "AI summaries & sentiment",
+        "10 teammate seats · 25 lite seats · 24h support"
+      ],
+      "maybeLater": true,
+      "genericLockOnly": false,
+      "screenshot": "21-t7-workflow-upgrade.png"
+    },
+    "macros": {
+      "url": "https://sup9ca3a708.quackback.co.uk/admin/settings/macros",
+      "status": 200,
+      "inRouteUpgradeScreen": true,
+      "dialogVisible": false,
+      "defaultErrorPage": false,
+      "pageHeader": "Macros",
+      "heading": "Upgrade to Growth",
+      "body": "AI drafts are a Growth feature. Upgrade to Growth to enable it.",
+      "prices": ["$25", "$300"],
+      "highlights": [
+        "Support inbox, live chat, email & tickets",
+        "Help center, feedback, roadmap, changelog & status page",
+        "3 boards · 50 posts",
+        "Custom domain · 1 sending domain",
+        "1 teammate seat · 5 lite seats"
+      ],
+      "genericLockOnly": false,
+      "screenshot": "30-t7-macros.png"
+    }
+  },
+  "cloudOffProof": {
+    "method": "live JS from authenticated t7 host, not tests",
+    "chunks": [
+      {
+        "path": "/assets/index-pLVwKoNa.js",
+        "fn": "RM",
+        "gates": [
+          "const billingEnabled from __root__",
+          "catalogue query enabled:!!billingEnabled",
+          "checkout CTA only if plan && canCheckout && billingEnabled",
+          "See plans only if billingEnabled",
+          "else no checkout / billing CTA"
+        ],
+        "snippet": "function RM(e){let{billingEnabled:t}=Oe({from:`__root__`}),n=IM(Cn.BILLING_MANAGE),r=Qe({...PM.catalogue(),enabled:!!t}).data??null,... i&&n&&t?(checkout VM):t?(See plans):null"
+      },
+      {
+        "path": "/assets/settings.billing-OIcpRw3k.js",
+        "fn": "k",
+        "gates": [
+          "billingEnabled ? BillingSettings : 'Plan and billing is available only in a Quackback Cloud workspace.'"
+        ]
+      }
+    ]
+  },
+  "screenshots": [
+    "loop-evidence/this-fire/p2-upgrade/01-t1a-security.png",
+    "loop-evidence/this-fire/p2-upgrade/02-t1a-security-audit.png",
+    "loop-evidence/this-fire/p2-upgrade/03-t1a-security-signin.png",
+    "loop-evidence/this-fire/p2-upgrade/10-t7-developers.png",
+    "loop-evidence/this-fire/p2-upgrade/11-t7-billing.png",
+    "loop-evidence/this-fire/p2-upgrade/12-t7-webhooks.png",
+    "loop-evidence/this-fire/p2-upgrade/13-t7-webhook-upgrade.png",
+    "loop-evidence/this-fire/p2-upgrade/14-t7-mcp.png",
+    "loop-evidence/this-fire/p2-upgrade/15-t7-mcp-upgrade.png",
+    "loop-evidence/this-fire/p2-upgrade/16-t7-mcp-before-enable.png",
+    "loop-evidence/this-fire/p2-upgrade/17-t7-mcp-upgrade.png",
+    "loop-evidence/this-fire/p2-upgrade/20-t7-workflows.png",
+    "loop-evidence/this-fire/p2-upgrade/21-t7-workflow-upgrade.png",
+    "loop-evidence/this-fire/p2-upgrade/30-t7-macros.png"
+  ]
+}
