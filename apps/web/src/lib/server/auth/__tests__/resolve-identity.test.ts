@@ -47,12 +47,21 @@ describe('resolveIdentity — the worlds', () => {
   })
 })
 
-describe('resolveIdentity — the fast path', () => {
-  it('does not touch userinfo when the ID token is complete', async () => {
-    const fetchUserInfo = vi.fn(async () => WORLD_A.userinfo)
+describe('resolveIdentity — visiting every configured source', () => {
+  it('still fetches userinfo when the ID token is complete, so extra claims merge', async () => {
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: WORLD_A.expect.id,
+      groups: ['staff'],
+      department: 'Eng',
+    }))
     const result = await resolveIdentity({ tokens: WORLD_A.tokens, fetchUserInfo })
     expect(result.ok).toBe(true)
-    expect(fetchUserInfo).not.toHaveBeenCalled()
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+    if (!result.ok) return
+    expect(result.identity.email).toBe(WORLD_A.expect.email)
+    expect(result.identity.sources.email).toBe('idToken')
+    expect(result.identity.claims.groups).toEqual(['staff'])
+    expect(result.identity.claims.department).toBe('Eng')
   })
 
   it('DOES fetch userinfo when a required field is missing', async () => {

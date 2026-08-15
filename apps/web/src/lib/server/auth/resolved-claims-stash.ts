@@ -7,10 +7,11 @@
  *
  * The two run in the same request but share no context: resolution happens in
  * the plugin's `getUserInfo`, provisioning in an after-hook. So the claims are
- * stashed on the way past and drained on the way through.
+ * stashed on the way past and read by both role and attribute hooks.
  *
- * Same shape as the magic-link and OTP stashes: a short TTL, take-once
- * semantics, and a fallback path that still works if the entry is missed.
+ * Same shape as the magic-link and OTP stashes: a short TTL and a fallback
+ * path that still works if the entry is missed. The entry stays readable
+ * until TTL so both after-hooks can see the same payload.
  */
 
 const TTL_MS = 30_000

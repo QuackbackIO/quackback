@@ -328,9 +328,7 @@ export const settings = pgTable('settings', {
 })
 
 /**
- * Role-mapping rules applied to an OIDC claim at sign-in. Now the `role`
- * section of {@link IdentityProviderClaimMapping}; the shape is unchanged from
- * the former `attribute_mapping` column so migrated rows behave identically.
+ * Role-mapping rules applied to an OIDC claim at sign-in (`claim_mapping.role`).
  */
 export type ClaimRoleMapping = {
   /** Dotted path or namespaced claim on the ID token. */
@@ -345,9 +343,9 @@ export type ClaimRoleMapping = {
 export type IdentityProviderAttributeMapping = ClaimRoleMapping
 
 /**
- * What this provider's claims mean, in one column with named sections.
- *
- * Replaces `attribute_mapping`, which only ever held the role rules above.
+ * What this provider's claims mean: `profile` (identity sources and claim
+ * paths), `role` (first-match-wins role rules), and `attributes` (claim →
+ * user-attribute copy).
  */
 export type IdentityProviderClaimMapping = {
   profile?: {

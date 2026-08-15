@@ -219,6 +219,92 @@ describe('buildGenericOAuthConfigs identity cascade', () => {
     expect(first?.emailVerified).toBe(false)
   })
 
+  it('maps picture onto image so the avatar column still populates', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'oidc_abc',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({
+        sub: 's1',
+        email: 'a@x.com',
+        name: 'A',
+        picture: 'https://idp.example/a.png',
+      }),
+    })
+    expect(info?.image).toBe('https://idp.example/a.png')
+  })
+
+  it('resolves userinfo at request time when build-time discovery missed it', async () => {
+    const discovery = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ userinfo_endpoint: 'https://idp/userinfo' })
+    const fetchUserInfo = vi.fn(async () => ({
+      sub: 's1',
+      email: 'from-userinfo@x.com',
+      groups: ['staff'],
+    }))
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'oidc_abc',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          userInfoUrl: null,
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery,
+      fetchUserInfo,
+    })
+    const info = await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1', name: 'A' }),
+      accessToken: 'at',
+    })
+    expect(info?.email).toBe('from-userinfo@x.com')
+    expect(info?.groups).toEqual(['staff'])
+    expect(fetchUserInfo).toHaveBeenCalledWith('https://idp/userinfo', 'at')
+  })
+
+  it('prefers the row userInfoUrl over request-time discovery', async () => {
+    const discovery = vi.fn(async () => ({ userinfo_endpoint: 'https://discovered/userinfo' }))
+    const fetchUserInfo = vi.fn(async () => ({ sub: 's1', email: 'row@x.com' }))
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'oidc_abc',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+          userInfoUrl: 'https://row/userinfo',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery,
+      fetchUserInfo,
+    })
+    await cfgs[0].getUserInfo?.({
+      idToken: idToken({ sub: 's1' }),
+      accessToken: 'at',
+    })
+    expect(fetchUserInfo).toHaveBeenCalledWith('https://row/userinfo', 'at')
+  })
+
   it('does not mint when the provider has not opted in', async () => {
     const cfgs = await buildGenericOAuthConfigs({
       providers: [

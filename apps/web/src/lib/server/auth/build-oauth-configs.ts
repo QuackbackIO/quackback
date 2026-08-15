@@ -62,8 +62,7 @@ export interface GenericOAuthConfig {
   /** How the client secret reaches the token endpoint. */
   authentication?: 'basic' | 'post'
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
-  // Force the IdP account picker so admins notice when they're already
-  // signed in as a different identity.
+  // Unset means send no `prompt` parameter (the `omit` choice).
   prompt?:
     | 'none'
     | 'login'
@@ -181,20 +180,32 @@ export async function buildGenericOAuthConfigs({
       ? request.prompt
       : undefined
 
-    const resolvedUserInfoUrl = userInfoUrl
+    const rowUserInfoUrl = provider.userInfoUrl || undefined
     const getUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {
+      const mapping = {
+        sources: identitySourcesFor(provider.claimMapping),
+        idClaim: profileClaimFor(provider.claimMapping, 'id'),
+        emailClaim: profileClaimFor(provider.claimMapping, 'email'),
+        nameClaim: profileClaimFor(provider.claimMapping, 'name'),
+      }
+      // Row first, then request-time discovery — never a URL captured at
+      // auth-instance build, which can miss userinfo after a discovery outage.
+      const resolveUserInfoUrl = async (): Promise<string | undefined> => {
+        if (rowUserInfoUrl) return rowUserInfoUrl
+        if (!mapping.sources.includes('userinfo')) return undefined
+        if (!discoveryUrl || !discovery) return undefined
+        const doc = await discovery(discoveryUrl)
+        return typeof doc?.userinfo_endpoint === 'string' ? doc.userinfo_endpoint : undefined
+      }
       const result = await resolveIdentity({
         tokens,
-        fetchUserInfo: async () =>
-          resolvedUserInfoUrl && tokens.accessToken && fetchUserInfo
-            ? await fetchUserInfo(resolvedUserInfoUrl, tokens.accessToken)
-            : null,
-        mapping: {
-          sources: identitySourcesFor(provider.claimMapping),
-          idClaim: profileClaimFor(provider.claimMapping, 'id'),
-          emailClaim: profileClaimFor(provider.claimMapping, 'email'),
-          nameClaim: profileClaimFor(provider.claimMapping, 'name'),
+        fetchUserInfo: async () => {
+          const url = await resolveUserInfoUrl()
+          return url && tokens.accessToken && fetchUserInfo
+            ? await fetchUserInfo(url, tokens.accessToken)
+            : null
         },
+        mapping,
       })
       if (!result.ok) return null
       const { id, email, name, emailVerified, claims, warnings } = result.identity
@@ -210,6 +221,8 @@ export async function buildGenericOAuthConfigs({
         resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
         minted = true
       }
+      const picture = claims.picture
+      const image = typeof picture === 'string' && picture.length > 0 ? picture : undefined
 
       return {
         ...claims,
@@ -217,6 +230,7 @@ export async function buildGenericOAuthConfigs({
         emailVerified: minted ? false : emailVerified,
         ...(resolvedEmail ? { email: resolvedEmail } : {}),
         ...(resolvedName ? { name: resolvedName } : {}),
+        ...(image ? { image } : {}),
       }
     }
 

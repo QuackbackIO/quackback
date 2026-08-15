@@ -2,8 +2,9 @@
  * THE identity resolver. One implementation, shared by production sign-in and
  * the admin connection test.
  *
- * The cascade is ordered and gap-filling: each source contributes only fields
- * still missing, and an earlier source is never overwritten.
+ * Identity fields (id / email / name) are gap-filling: an earlier source is
+ * never overwritten. Every configured source is still loaded so later claims
+ * (`groups`, custom attributes) reach the stash.
  */
 
 import { decodeJwt } from 'jose'
@@ -107,8 +108,6 @@ export async function resolveIdentity({
   }
 
   for (const source of sources) {
-    if (id && email && name) break
-
     const claims = await loadSource(source)
     if (!claims) continue
 
