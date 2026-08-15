@@ -125,17 +125,17 @@ remains.
 Use this table. Do not rediscover work that already has a sha. Do not
 print the Cloudflare token. Preserve uncommitted onboarding files.
 
-| Unit                           | Where       | Sha                                                     | Live?                              | Critic should prove                                                                                                                                                                                                                            |
-| ------------------------------ | ----------- | ------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ready CTA + required cloud URL | app         | `1a39cd7d7`                                             | **yes** `02cb4329`                 | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
-| 3-Free create cap              | CP          | `c5a484d`                                               | **yes** `80c8301e`                 | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                       |
-| Limits overlay                 | app         | `31330d85b` / `b0c13a366`                               | **yes** `cb186135`                 | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
-| CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy           | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
-| Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`      | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
-| Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                            | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
-| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep.md`              | **PASS 0 HIGH** on `71f78ecb`      | Fuller 1–32. HC local writer gone. 8e/8f surfaces present. §H not this file.                                                                                                                                                                   |
-| Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1` | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-52e78237.md`                 | FAIL (signed on `52e78237`)        | Catalogue stickers live `dc86c83`. Growth grant/feature **fixed** `64ca931` / `1931dc38`. Re-sign §H on `71f78ecb` / `79030f27`.                                                                                                               |
+| Unit                           | Where       | Sha                                                     | Live?                               | Critic should prove                                                                                                                                                                                                                            |
+| ------------------------------ | ----------- | ------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready CTA + required cloud URL | app         | `1a39cd7d7`                                             | **yes** `02cb4329`                  | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
+| 3-Free create cap              | CP          | `c5a484d`                                               | **yes** `80c8301e`                  | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                       |
+| Limits overlay                 | app         | `31330d85b` / `b0c13a366`                               | **yes** `cb186135`                  | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
+| CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
+| Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
+| Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
+| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep.md`              | **PASS 0 HIGH** on `71f78ecb`       | Fuller 1–32. HC local writer gone. 8e/8f surfaces present. §H not this file.                                                                                                                                                                   |
+| Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
+| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-71f78ecb.md`                 | **PASS** on `71f78ecb` / `79030f27` | Prior HIGHs cleared. No unpaid Free / Scale / cancel fixture.                                                                                                                                                                                  |
 
 **Fleet note:** one deploy thread. Live pair is app `371883f5` /
 `sha256:71f78ecb…` (`e22e3884e`, includes `635cdb149`) and CP
@@ -757,9 +757,17 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
-Fleet: `635cdb149` already live (ancestor of `71f78ecb`). Stripe-live
-first-pay already on t1a — not repeated. CP-create 3-Free already live —
-no second builder.
+Fleet: `635cdb149` already live (ancestor of `71f78ecb` / web
+`371883f5`). Stripe-live first-pay already on t1a — not repeated.
+CP-create 3-Free already live — no second builder.
+
+Plan-matrix §H **PASS** against `71f78ecb` / `1931dc38`
+(`plan-matrix-71f78ecb.md`). Catalogue stickers honest; Growth
+webhooks/mcp both layers true; usage `N of M`; SSO `/new` locked
+(“not included”); HC local writer absent. Instances **17→17**. No
+Neon. No live key. Custom domains not started.
+
+Previous fire (Growth dual-layer + Verify PASS) is historical.
 
 Fuller Verify **PASS 0 HIGH** on `71f78ecb` / `640d5ac1`
 (`loop-evidence/verify-2026-08-15/sweep.md`). Instances 17→17.
@@ -965,7 +973,8 @@ Named critic spawned on the same URLs.
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
-20. ~~**Plan-matrix critic**~~ signed FAIL on `52e78237`
+20. ~~**Plan-matrix critic**~~ signed **PASS** on `71f78ecb` / `79030f27`
+    (`plan-matrix-71f78ecb.md`). Prior FAIL on `52e78237` is historical.
     (`plan-matrix-52e78237.md`). Next: align catalogue stickers vs
     `definitions.ts` / `PLAN_GRANTS` (do not pick silently); 8e `N of
 M`; lock SSO `/new` on non-Scale. Re-run §H after those land.
@@ -1114,10 +1123,10 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: re-sign §H on `71f78ecb` / `79030f27`. Domains card and
-first-win still open. Walk3 webhook stays disabled. Live app
-`371883f5` / `sha256:71f78ecb…` `us-east4-eqdc4a`. Live CP `1931dc38`
-(`64ca931`). Instance rows 17.
+Remaining: Domains card (do not start provider live certs until
+asked); first-win journeys; Track 6 boundary scan. Walk3 webhook
+stays disabled. Live app `371883f5` / `sha256:71f78ecb…`
+`us-east4-eqdc4a`. Live CP `1931dc38` (`64ca931`). Instance rows 17.
 
 Operational defects carried from the prior lead:
 
