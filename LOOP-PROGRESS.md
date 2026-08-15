@@ -33,19 +33,16 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `cb3c65420` (named billing 401/403). Live
-  `ghcr.io/quackbackio/quackback@sha256:895b942d58b548021837e4abcbdf96156410de149b23fcb2f29041ccaac8e1ab`
-  (Docker `31875492036`). Web `e20c0eef` SUCCESS (env restore after
-  outage probe), region only `us-east4-eqdc4a`. Worker `adc52e84`,
-  hourly `e232e3f8`, daily `7f893013`, migrator `141d5a5d` same digest.
-- Control plane tip `8e4c00a` live as `b7ae7455`
-  (`sha256:45b9aebb…`, sfo). SQL `0069` still applied.
-- Last known deployed workspace: `cb3c65420` / `sha256:895b942d…` (2026-08-15)
-- Last known deployed control plane: `b7ae7455` (2026-08-15)
-- App `saas` git tip is docs-only after `cb3c65420` (no undeployed
-  customer-visible app sha). `635cdb149` is an ancestor of the live
-  image. Confirmed this fire: web `e20c0eef` SUCCESS,
-  `meta` image `sha256:895b942d…`, region only `us-east4-eqdc4a`.
+- Workspace tip: `d39f4243d` (Open handoff lands on `/`). Live web
+  `f04b339a` / `sha256:f9c64853…`, region only `us-east4-eqdc4a`.
+  Earlier named-billing image `sha256:895b942d…` (`cb3c65420`) is an
+  ancestor. Verify / §H last signed on that older pair.
+- Control plane tip `4ad81fc` live as `4a5ea8d7`
+  (`sha256:43e28d87…`, sfo). SQL `0069` still applied. Open-to-root
+  `4824f23` is an ancestor.
+- Last known deployed workspace: `d39f4243d` / `sha256:f9c64853…` (2026-08-15)
+- Last known deployed control plane: `4a5ea8d7` / `4ad81fc` (2026-08-15)
+- App `saas` has no undeployed customer-visible sha after `d39f4243d`.
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -137,6 +134,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Limits overlay                     | app          | `31330d85b` / `b0c13a366`                                                         | **yes** `cb186135`                         | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
 | CF for SaaS origin + client        | zone + CP    | `de0b038`; fallback **active**                                                    | token on CP, skip-deploy                   | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                  |
 | Identity gateway + Domains card    | CP + app     | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2`                           | **yes** in `40be439d` / `753d3b86`         | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                            |
+| CP list official + custom hosts    | CP           | `4ad81fc`                                                                         | **yes** `4a5ea8d7` / `sha256:43e28d87…`    | Dashboard tiles print identity `platform_hostname` and ready custom hosts. Generated `ws-*` omitted. t1a live: `south63792f.quackback.co.uk` present, no `ws-*`. No custom rows yet. Tests: one-screen 11, list-addresses 6, siblings 26.      |
 | Same-plan billing 409              | CP + app     | CP `f4e3844` / `7cecf06d`; app `be3e41b01` / `95610fd8`                           | **yes** in `895b942d` / `753d3b86`         | t1a same-plan Pro monthly **409** `already_on_plan` (not 503). Scale **303** `billing.stripe.com`. Origin 403. Evidence `this-fire/ws-already-on-plan.json`.                                                                                   |
 | Named billing session refusals     | app          | `cb3c65420` / `932a38f9`                                                          | **yes** `895b942d`                         | No-cookie **401** `unauthorized`. t1a cookie on t1e **401** (was 500). Tests 5/5. `this-fire/billing-authz.json`.                                                                                                                              |
 | Plan catalogue + invoices          | CP + app     | CP `2fb9488`, app `6418785c8`                                                     | **yes** API; UI in `02cb4329`              | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
@@ -161,10 +159,10 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name             | app          | `8cb12d5f1`                                                                       | skip-deploy (self-host only)               | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 | PLG emit self-host skip            | app tests    | `3b4556ae2`                                                                       | skip-deploy (tests-only)                   | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
-**Fleet note:** one deploy thread. Live pair is app `e20c0eef` /
-`sha256:895b942d…` (`cb3c65420`) and CP `b7ae7455` (`8e4c00a`).
-`635cdb149` is an ancestor. No undeployed customer-visible app tip.
-Verify / §H still signed on app `895b942d`.
+**Fleet note:** one deploy thread. Live pair is app `f04b339a` /
+`sha256:f9c64853…` (`d39f4243d`) and CP `4a5ea8d7` (`4ad81fc`,
+`sha256:43e28d87…`). No undeployed customer-visible tip. Verify / §H
+still signed on the earlier `895b942d` / `b7ae7455` pair.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -1713,10 +1711,13 @@ Parked / clock-wait (not a next loop phase):
 
 ## Handover (first-customer DoD, 2026-08-15)
 
-Live pair: app `e20c0eef` / `sha256:895b942d…` (`cb3c65420`,
-`us-east4-eqdc4a`) and CP `b7ae7455` / `sha256:45b9aebb…` (`8e4c00a`).
-Verify **0 HIGH**. Plan-matrix **PASS** on this pair (Free t7, Pro t1a,
-Scale t1e). Pickup customer-visible shas are live or skip-deploy.
+Live pair: app `f04b339a` / `sha256:f9c64853…` (`d39f4243d`) and CP
+`4a5ea8d7` / `sha256:43e28d87…` (`4ad81fc`). Operator follow-up after
+DoD: CP workspace tiles show the official Quackback host (t1a
+`south63792f.quackback.co.uk`) and omit generated `ws-*`. Ready custom
+hosts would list under that official line; none are attached yet.
+Verify **0 HIGH** and plan-matrix **PASS** were last signed on the
+earlier `895b942d` / `b7ae7455` pair.
 
 A stranger can: zero-input create → Open → name + required URL →
 outcome starter → Pro trial → test checkout / plan change / portal
