@@ -33,22 +33,22 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `4bddea06f` **live** as web `fd136d22` /
-  `sha256:cf2a5726bbad7411bfb7409ddf497af27c156f93cf18bd1be37172d852189132`
-  (`us-east4-eqdc4a`). Docker `31900766203` SUCCESS. P4 critic **PASS**
-  (`this-fire/p4-overlay-critic.md`). Verify / §H last signed on the
-  older `895b942d` pair.
+- Workspace tip: `a8c673417` **live** as web `035205ad` /
+  `sha256:52a2ae7db5d44effce7567436ccdeea8a266437611f48749fcdc3f8e3fd3f1a6`
+  (`us-east4-eqdc4a`). Docker `31902940317` SUCCESS. Upgrade-SSR
+  critic **PASS** (`this-fire/upgrade-ssr-critic.md`). Verify / §H
+  last signed on the older `895b942d` pair.
 - Control plane tip `c208c06` (`fix(create): keep restore refusals on
 the dashboard`) live as `9030705d` /
   `sha256:d84fd27c2d2d10ffba14a36b732540d462d396cd5f34a3102a962a9a40928741`
   (sfo). SQL `0069` still applied. P3 live critic **PASS**
   (`this-fire/p3-restore-critic.md`).
-- Last known deployed workspace: `4bddea06f` / `sha256:cf2a5726…`
-  (2026-08-15) web `fd136d22` SUCCESS, region `us-east4-eqdc4a`.
-  Docker `31900766203`.
+- Last known deployed workspace: `a8c673417` / `sha256:52a2ae7d…`
+  (2026-08-15) web `035205ad` SUCCESS, region `us-east4-eqdc4a`.
+  Docker `31902940317`.
 - Last known deployed control plane: `9030705d` / `c208c06` (2026-08-15)
-- App `saas` tip `4bddea06f` is live. P3 critic **PASS**. P4 critic
-  **PASS**. Plan-restriction UX unit closed.
+- App `saas` tip `a8c673417` is live. Upgrade screens SSR the
+  catalogue. P3 critic **PASS**. P4 critic **PASS**.
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -142,6 +142,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CF for SaaS origin + client         | zone + CP    | `de0b038`; fallback **active**                                                    | token on CP, skip-deploy                   | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                                                         |
 | Identity gateway + Domains card     | CP + app     | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2`                           | **yes** in `40be439d` / `753d3b86`         | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                                                                   |
 | CP list official + custom hosts     | CP           | `4ad81fc`                                                                         | **yes** `4a5ea8d7` / `sha256:43e28d87…`    | Dashboard tiles print identity `platform_hostname` and ready custom hosts. Generated `ws-*` omitted. t1a live: `south63792f.quackback.co.uk` present, no `ws-*`. No custom rows yet. Tests: one-screen 11, list-addresses 6, siblings 26.                                             |
+| Upgrade offer SSR                   | app          | `a8c673417`                                                                       | **yes** `035205ad` / `sha256:52a2ae7d…`    | First HTML includes catalogue price and period toggle. t7 Free: integrations Pro `$49`, macros Growth `$25`, audit Scale `$89`, each with `billed yearly`. `upgrade-ssr-critic.md`.                                                                                                   |
 | Plan upgrade offer                  | app          | `5834951f7`                                                                       | **yes** `48468c28` / `sha256:b358f971…`    | Access & Security no longer 402s the page. Audit/SSO/Domains share one offer from `billingQueries.catalogue()`. Export 402 opens the same modal. t1a Pro: Portal access 200; audit tab names Scale; Sign-in shows the SSO offer.                                                      |
 | Webhooks/workflows/macros/MCP offer | app          | `e56d00b9a`                                                                       | **yes** `7057e905` / `sha256:27c538ec…`    | Free t7: webhook/MCP **Upgrade to Growth** `$25`/`$300`; workflows **Upgrade to Pro** `$49`/`$588`; macros in-route Growth screen. Mixed Developers 200. t1a Access & Security 200 (audit Scale offer). Live JS gates catalogue/checkout on `billingEnabled`. `p2-upgrade-critic.md`. |
 | Projection feature overlay          | app          | `4bddea06f`                                                                       | **yes** `fd136d22` / `sha256:cf2a5726…`    | t1a Pro `GET /api/export` **200** CSV; t7 Free **402** `features.analyticsExports`. Integrations Upgrade to Pro on Free, catalog on Pro. Branding save returns TierLimitError copy (not 500). `p4-overlay-critic.md`.                                                                 |
@@ -169,11 +170,11 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name              | app          | `8cb12d5f1`                                                                       | skip-deploy (self-host only)               | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                                                                  |
 | PLG emit self-host skip             | app tests    | `3b4556ae2`                                                                       | skip-deploy (tests-only)                   | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                                                                     |
 
-**Fleet note:** one deploy thread. Live pair is app `fd136d22` /
-`sha256:cf2a5726…` (`4bddea06f`) and CP `9030705d` /
-`sha256:d84fd27c…` (`c208c06`). Docker `31900766203` SUCCESS. P2,
-P3, and P4 live critics **PASS**. Verify / §H still signed on the
-earlier `895b942d` / `b7ae7455` pair.
+**Fleet note:** one deploy thread. Live pair is app `035205ad` /
+`sha256:52a2ae7d…` (`a8c673417`) and CP `9030705d` /
+`sha256:d84fd27c…` (`c208c06`). Docker `31902940317` SUCCESS.
+Upgrade-SSR critic **PASS**. Verify / §H still signed on the earlier
+`895b942d` / `b7ae7455` pair.
 
 This fire (P4 Fleet + live critic, 2026-08-15 T18:32Z):
 
