@@ -1,0 +1,14 @@
+{
+  "at": "2026-08-15T07:20:04.748Z",
+  "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+  "host": "south63792f.quackback.co.uk",
+  "via": "Stripe test API on CP env (always_invoice upgrade, then cancel_at_period_end, then undo)",
+  "before": { "planId": "growth", "subscriptionStatus": "active" },
+  "interval": "month",
+  "steps": [
+    { "action": "upgrade", "status": "active", "cancelAtPeriodEnd": false },
+    { "action": "schedule_cancel", "cancelAtPeriodEnd": true, "cancelAt": 1789419322 },
+    { "action": "undo_cancel", "cancelAtPeriodEnd": false, "status": "active" }
+  ],
+  "after": { "planId": "pro", "subscriptionStatus": "active", "poll": 1 }
+}

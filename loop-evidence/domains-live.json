@@ -1,0 +1,25 @@
+{
+  "at": "2026-08-15T07:28:00Z",
+  "host": "https://south63792f.quackback.co.uk/admin/settings/domains",
+  "instanceId": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+  "plan": "pro",
+  "app": {
+    "sha": "74024a9cb",
+    "web": "59da45c2",
+    "digest": "sha256:2575b2360966abb12ef9046c2f93dbb30f1fdb6f71d9d9489fd9b40ac9429353"
+  },
+  "cp": {
+    "sha": "449bd98",
+    "deploy": "69cb0353",
+    "digest": "sha256:d22ba5cf6a7ea838cde6c055558dc0c514f7e31c31c28ea149c7643c7781f605"
+  },
+  "probe": {
+    "consumeStatus": 200,
+    "hasSession": true,
+    "pageStatus": 200,
+    "hasCustomDomain": true,
+    "hasAddDomain": true,
+    "hasGrowthLock": false,
+    "hasDomainsNav": true
+  }
+}

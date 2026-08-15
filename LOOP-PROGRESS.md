@@ -33,14 +33,17 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `40e1e6bf1` (widget install Outlet). Live
-  `ghcr.io/quackbackio/quackback@sha256:27e0c23d6fa7a8b8213d04f24f8edc7e01f24f6c06a04d19e96f32fd85631874`
-  (Docker `31870327511`). Web `532dbe27` SUCCESS, region only
-  `us-east4-eqdc4a`.
-- Control plane tip `64ca931` live as `1931dc38` (Growth webhooks/MCP
-  both layers; still `sfo`).
-- Last known deployed workspace: `40e1e6bf1` / `sha256:27e0c23d…` (2026-08-15)
-- Last known deployed control plane: `1931dc38` (2026-08-15)
+- Workspace tip: `74024a9cb` (Settings Domains card). Live
+  `ghcr.io/quackbackio/quackback@sha256:2575b2360966abb12ef9046c2f93dbb30f1fdb6f71d9d9489fd9b40ac9429353`
+  (Docker `31871725031`). Web `59da45c2` SUCCESS, region only
+  `us-east4-eqdc4a`. Worker `3e1cf61c`, hourly `d96fe07e`, daily
+  `39a14e57`, migrator `97aa0c35` same digest.
+- Control plane tip `449bd98` live as `69cb0353`
+  (`sha256:d22ba5cf…`, sfo). SQL `0069` applied
+  (`cp_workspace_custom_domains` present; leftover
+  `custom_domain*` / `r2_*` columns gone).
+- Last known deployed workspace: `74024a9cb` / `sha256:2575b236…` (2026-08-15)
+- Last known deployed control plane: `69cb0353` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -107,18 +110,18 @@ remains.
 
 ## Tracks
 
-| Track                            | Status                                                                                                     | Evidence                                                                                                          |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                          |
-| 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                              |
-| 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                                       |
-| 3 CP billing foundation          | live test-mode **payment** + webhook finalize on existing t1a; checkout/portal + form 303 already proved   | CP `f135274f` / `71e59d9`; app `635cdb149` / `139a4a8c`; see “Track 3 live payment (2026-08-14)”                  |
-| 4 workspace projection + gateway | paid Growth projection v4 on t1a; catalogue+invoices **code** landed, not live                             | projection v4; CP `2fb9488`; app `6418785c8`                                                                      |
-| 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
-| 6 remove workspace billing       | implementation complete; boundary scan **PASS**                                                            | `loop-evidence/track6-scan/critic.md`; `BILLING_*` gone from fleet roles                                          |
-| 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | product-feedback **live** on t1a; support + HC **live** on existing hosts; self-host local                 | `52c1ab397`; `loop-evidence/t7-first-win/live-existing/`                                                          |
-| 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                                        |
+| Track                            | Status                                                                                                     | Evidence                                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 0 contextual activation          | implemented, focused verification passed                                                                   | `d2b8accca`, `029727e26`                                                                                 |
+| 1 zero-input create + identity   | live rename + stored `/api/storage` src + old-friendly 308 on `689c99d13`; two-mailbox Open already proved | see “Track 1 live walk (2026-08-14)”                                                                     |
+| 2 focused widget activation      | implemented, focused verification passed                                                                   | `13df888fa`                                                                                              |
+| 3 CP billing foundation          | live test-mode **payment** + webhook finalize on existing t1a; checkout/portal + form 303 already proved   | CP `f135274f` / `71e59d9`; app `635cdb149` / `139a4a8c`; see “Track 3 live payment (2026-08-14)”         |
+| 4 workspace projection + gateway | paid Growth projection v4 on t1a; catalogue+invoices **code** landed, not live                             | projection v4; CP `2fb9488`; app `6418785c8`                                                             |
+| 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)” |
+| 6 remove workspace billing       | implementation complete; boundary scan **PASS**                                                            | `loop-evidence/track6-scan/critic.md`; `BILLING_*` gone from fleet roles                                 |
+| 6b remove stale SaaS code        | leftover `custom_domain*` / `r2_*` dropped in `0069`; name/login_url/oidc/billing columns stay             | CP `449bd98`; earlier `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`                              |
+| 7 PLG + first-win proof          | product-feedback **live** on t1a; support + HC **live** on existing hosts; self-host local                 | `52c1ab397`; `loop-evidence/t7-first-win/live-existing/`                                                 |
+| 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                               |
 
 ## Pickup for critics and later fires
 
@@ -130,9 +133,11 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Ready CTA + required cloud URL   | app         | `1a39cd7d7`                                             | **yes** `02cb4329`                  | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`. |
 | 3-Free create cap                | CP          | `c5a484d`                                               | **yes** `80c8301e`                  | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                       |
 | Limits overlay                   | app         | `31330d85b` / `b0c13a366`                               | **yes** `cb186135`                  | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
-| CF for SaaS origin + client      | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
+| CF for SaaS origin + client      | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                  |
+| Identity gateway + Domains card  | CP + app    | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2` | **yes** `2575b236` / `d22ba5cf`     | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                            |
 | Plan catalogue + invoices        | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch                 | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
+| Completed plan change + cancel   | live Stripe | t1a `inst_01m00kq6cdfzzb19gfjz8pt0s7`                   | **yes**                             | Growth → Pro monthly (`always_invoice`); webhook wrote `plan_id=pro`. `cancel_at_period_end` true then cleared. Evidence `loop-evidence/t1a-plan-change.json`. t1a is now Pro paid.                                                            |
 | Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-27e0c23d.md`     | **PASS 0 HIGH** on `27e0c23d`       | Fuller 1–32 on install-Outlet image. Prior `25319ded` sweep is historical.                                                                                                                                                                     |
 | Track 8b–8f                      | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-27e0c23d.md`                 | **PASS** on `27e0c23d` / `79030f27` | Prior PASS on `25319ded` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
@@ -146,9 +151,9 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name           | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 | PLG emit self-host skip          | app tests   | `3b4556ae2`                                             | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
-**Fleet note:** one deploy thread. Live pair is app `532dbe27` /
-`sha256:27e0c23d…` (`40e1e6bf1`, includes `635cdb149`) and CP
-`1931dc38` (`64ca931`). No undeployed customer-visible product tip.
+**Fleet note:** one deploy thread. Live pair is app `59da45c2` /
+`sha256:2575b236…` (`74024a9cb`) and CP `69cb0353` (`449bd98`).
+No undeployed customer-visible product tip.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -1132,8 +1137,8 @@ Named critic spawned on the same URLs.
     CNAMEs (proxied) to the pooled Railway web host — not the old
     originless `100::` Worker pattern. Customer CNAME target is
     `customers.quackback.co.uk`. CP client is in `lib/server/cloudflare/`.
-    Next: identity gateway add/verify/make-primary/remove + workspace
-    Domains card. Do not print the token.
+    Identity gateway + Settings Domains card **live** CP `449bd98` /
+    `69cb0353` + app `74024a9cb` / `59da45c2`. Do not print the token.
 17. Plan & billing page: catalogue + invoices from the control plane
     (`GET /api/v1/internal/billing/catalogue` and `/invoices`). Cards
     use public pricing stickers (annual = 10 months). Workspace holds
@@ -1190,11 +1195,11 @@ cloud URL/domain controls, Stripe remains a customer integration.
   system hostname. Drop the leftover column after no replica
   SELECTs it.
 - ~~`cp_instances.custom_domain*` as a routing source~~ ignored in
-  `6836a6a`. New identity uses `cp_workspace_hostname_claims`.
-  Columns stay until no replica SELECTs them. Still leftover and
-  unread by current code except implicit `SELECT *` / admin-MCP
-  display: `r2_bucket_name`, `r2_token_id`, `oidc_client_id`. Drop
-  after no replica SELECTs them.
+  `6836a6a`, dropped in `449bd98` / SQL `0069`. New identity uses
+  `cp_workspace_hostname_claims` + `cp_workspace_custom_domains`.
+- ~~`r2_bucket_name`, `r2_token_id`~~ dropped in `449bd98` / `0069`.
+  No named SELECT remained. `oidc_client_id` stays: admin/MCP still
+  display the always-null column.
 - ~~`login_url` as a customer door~~ mailed no more in `be35af1`.
   Welcome and the billing notice point at `/dashboard` and refuse
   magic-link strings. Dashboard tiles and ReadyPane already POST
@@ -1299,14 +1304,13 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: Change goal + first-win on live Support
-`sup9ca3a708` / Help Center `hc9ca3a708` (Neons created);
-Domains card (do not start live certs until asked). All four
-outcomes + self-host Bar C proved locally. Track 6 scan closed.
-Walk3 webhook stays disabled. Live app `c5d64208` /
-`sha256:25319ded…` `us-east4-eqdc4a`. Live CP `1931dc38`
-(`64ca931`). Instance rows **19** (two new live first-win hosts).
-Product-feedback first-win is live on t1a.
+t1a is **Pro paid** after a completed test-mode plan change
+(`loop-evidence/t1a-plan-change.json`). Domains card + identity
+gateway are live (`59da45c2` / `69cb0353`). Live add/cert still
+later. Track 6b leftover `custom_domain*` / `r2_*` dropped in
+`0069`. Remaining parked leftovers: `cp_instances.name`,
+`login_url`, `oidc_client_id`, and the billing sweeper columns
+which still have writers. Walk3 webhook stays disabled.
 
 Operational defects carried from the prior lead:
 
