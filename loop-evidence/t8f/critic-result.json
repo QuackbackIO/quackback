@@ -1,0 +1,266 @@
+{
+  "verdict": "PASS",
+  "reason": "Live pair 371883f5/9aaa6ff2: General export/wipe copy served; wipe fail-closed (401 unauthorized, 400 Invalid input); account delete 401 then 403 account_has_live_workspaces; instances 17→17.",
+  "at": "2026-08-15T01:19:31.000Z",
+  "finishedAt": "2026-08-15T01:26:03.000Z",
+  "unit": "track-8f-export-wipe-account-critic",
+  "hitLiveUrls": true,
+  "didNotWipe": true,
+  "didNotPostRealWipeOnly": true,
+  "didNotRestore": true,
+  "didNotTransfer": true,
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "didNotDeploy": true,
+  "printedCredentials": false,
+  "errors": [],
+  "commits": {
+    "app": {
+      "id": "e22e3884e4f91d9e417887139f32714b49da9228",
+      "idPrefix": "e22e3884e",
+      "subject": "feat(admin): export or wipe from General"
+    },
+    "cp": {
+      "id": "940c9846ee91f71f96b0e99c4cec271b21610550",
+      "idPrefix": "940c984",
+      "subject": "feat(create): wipe a workspace and delete the account"
+    }
+  },
+  "deployments": {
+    "expectedDigest": "sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80",
+    "expectedRegions": ["us-east4-eqdc4a"],
+    "expectedCpDigest": "sha256:640d5ac108baa876fe2c76974ca2563f35434b8fa6d04bf2e9a1cf09ded88a8c",
+    "expectedCpDeployPrefix": "9aaa6ff2",
+    "web": {
+      "serviceId": "0b821c4a-00fd-4302-9957-7707645608c3",
+      "id": "371883f5-4e1a-4cbe-88ed-3f31f564146a",
+      "idPrefix": "371883f5",
+      "status": "SUCCESS",
+      "createdAt": "2026-08-15T01:16:30.038Z",
+      "imageDigest": "sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "worker": {
+      "serviceId": "9cd4a749-09a0-4bb7-beea-ec960aa7d283",
+      "idPrefix": "b56b36fa",
+      "status": "SUCCESS",
+      "createdAt": "2026-08-15T01:16:31.333Z",
+      "imageDigest": "sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "hourly": {
+      "serviceId": "bb8fc6ee-10de-4a3b-9731-d976ab709c49",
+      "idPrefix": "597ee448",
+      "status": "SUCCESS",
+      "createdAt": "2026-08-15T01:16:32.553Z",
+      "imageDigest": "sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "daily": {
+      "serviceId": "4bd70297-ee63-4e26-82f2-6efa8b0a612c",
+      "idPrefix": "9bac011c",
+      "status": "SUCCESS",
+      "createdAt": "2026-08-15T01:16:33.729Z",
+      "imageDigest": "sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "migrator": {
+      "serviceId": "6e836ccb-369d-4641-b0f4-0b704326c8e2",
+      "idPrefix": "af9e6263",
+      "status": "SUCCESS",
+      "createdAt": "2026-08-15T01:16:34.910Z",
+      "imageDigest": "sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80",
+      "regions": ["us-east4-eqdc4a"]
+    },
+    "cp": {
+      "serviceId": "f06ac2e2-3cbb-4a60-95bc-527700ebba31",
+      "id": "9aaa6ff2-9949-43de-a9b1-6976b612933d",
+      "idPrefix": "9aaa6ff2",
+      "status": "SUCCESS",
+      "createdAt": "2026-08-15T01:12:07.461Z",
+      "imageDigest": "sha256:640d5ac108baa876fe2c76974ca2563f35434b8fa6d04bf2e9a1cf09ded88a8c",
+      "regions": ["sfo"]
+    }
+  },
+  "health": {
+    "gauntletReady": {
+      "url": "https://gauntlet.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "role": "web",
+      "bodyStatus": "ok"
+    },
+    "t1aReady": {
+      "url": "https://south63792f.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "role": "web",
+      "bodyStatus": "ok"
+    },
+    "t1eReady": {
+      "url": "https://northfa99f0.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "role": "web",
+      "bodyStatus": "ok"
+    },
+    "t1aSystem": {
+      "url": "https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk/api/health",
+      "status": 200,
+      "bodyStatus": "ok"
+    },
+    "t1eSystem": {
+      "url": "https://ws-4a048e07941c5e7840e986c0.quackback.co.uk/api/health",
+      "status": 200,
+      "bodyStatus": "ok"
+    }
+  },
+  "probes": [
+    {
+      "url": "GET https://gauntlet.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "reason": "ok/web"
+    },
+    {
+      "url": "GET https://south63792f.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "reason": "ok/web"
+    },
+    {
+      "url": "GET https://northfa99f0.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "reason": "ok/web"
+    },
+    {
+      "url": "GET https://ws-bf8e1c4affe270eb5a6dda1a.quackback.co.uk/api/health",
+      "status": 200,
+      "reason": "ok"
+    },
+    {
+      "url": "GET https://ws-4a048e07941c5e7840e986c0.quackback.co.uk/api/health",
+      "status": 200,
+      "reason": "ok"
+    },
+    {
+      "url": "POST https://cp.quackback.co.uk/api/account/delete",
+      "status": 401,
+      "reason": "unauthorized",
+      "auth": "none"
+    },
+    {
+      "url": "POST https://cp.quackback.co.uk/api/v1/internal/lifecycle/soft-delete",
+      "status": 401,
+      "reason": "unauthorized",
+      "auth": "none"
+    },
+    {
+      "url": "POST https://cp.quackback.co.uk/api/v1/internal/lifecycle/soft-delete",
+      "status": 401,
+      "reason": "unauthorized",
+      "auth": "dummy"
+    },
+    {
+      "url": "POST https://cp.quackback.co.uk/api/v1/internal/lifecycle/soft-delete",
+      "status": 400,
+      "reason": "Invalid input",
+      "auth": "t1a",
+      "body": "confirm=wipe+instanceId"
+    },
+    {
+      "url": "POST https://cp.quackback.co.uk/api/v1/internal/lifecycle/soft-delete",
+      "status": 400,
+      "reason": "Invalid input",
+      "auth": "t1a",
+      "body": "confirm=wipe+workspaceId"
+    },
+    {
+      "url": "POST https://cp.quackback.co.uk/api/v1/internal/lifecycle/soft-delete",
+      "status": 400,
+      "reason": "Invalid input",
+      "auth": "t1a",
+      "body": "confirm=yes"
+    },
+    {
+      "url": "POST https://cp.quackback.co.uk/api/account/delete",
+      "status": 403,
+      "reason": "account_has_live_workspaces",
+      "auth": "t1a-owner-session"
+    },
+    {
+      "url": "GET https://south63792f.quackback.co.uk/assets/settings.general-CpncR1fM.js",
+      "status": 200,
+      "reason": "Wipe workspace"
+    },
+    {
+      "url": "GET https://south63792f.quackback.co.uk/assets/export-workspace-action-ypBRNNxJ.js",
+      "status": 200,
+      "reason": "Export workspace data"
+    },
+    {
+      "url": "GET https://cp.quackback.co.uk/assets/dashboard.index-DHS8vkfy.js",
+      "status": 200,
+      "reason": "Delete account"
+    }
+  ],
+  "tokenHashMatch": {
+    "inst_01m00kq6cdfzzb19gfjz8pt0s7": true,
+    "inst_01m00kprbrfzzb19f490wga8q2": true
+  },
+  "session": {
+    "exercised403": true,
+    "ownerDomain": "guerrillamail.com",
+    "ownerFp": "4937eb201c84",
+    "operatorMailbox": false,
+    "createdWorkspace": false,
+    "verifyStatus": 200,
+    "deleteStatus": 403,
+    "deleteError": "account_has_live_workspaces"
+  },
+  "replicaStrings": {
+    "exportWorkspaceData": true,
+    "wipeWorkspace": true,
+    "deleteAccount": true,
+    "files": [
+      "/app/.output/server/_ssr/settings.general-Z0jovu3j.mjs",
+      "/app/.output/public/assets/settings.general-CpncR1fM.js",
+      "/app/.output/public/assets/export-workspace-action-ypBRNNxJ.js",
+      "/app/.output/public/assets/dashboard.index-DHS8vkfy.js",
+      "/app/.output/server/_ssr/dashboard.index-CzDg2Zuq.mjs"
+    ],
+    "servedAssets": [
+      {
+        "url": "https://south63792f.quackback.co.uk/assets/settings.general-CpncR1fM.js",
+        "status": 200,
+        "hasWipeWorkspace": true,
+        "hasExportWorkspaceData": false,
+        "importsExportAction": true
+      },
+      {
+        "url": "https://south63792f.quackback.co.uk/assets/export-workspace-action-ypBRNNxJ.js",
+        "status": 200,
+        "hasExportWorkspaceData": true,
+        "hasWipeWorkspace": false
+      },
+      {
+        "url": "https://cp.quackback.co.uk/assets/dashboard.index-DHS8vkfy.js",
+        "status": 200,
+        "hasDeleteAccount": true
+      }
+    ]
+  },
+  "instanceCount": {
+    "before": 17,
+    "after": 17,
+    "recount": 17,
+    "added": [],
+    "removed": [],
+    "t1a": "inst_01m00kq6cdfzzb19gfjz8pt0s7",
+    "t1e": "inst_01m00kprbrfzzb19f490wga8q2",
+    "t1aPresent": true,
+    "t1ePresent": true,
+    "t1aActive": true,
+    "t1eActive": true,
+    "ownerUnchanged": {
+      "t1a": true,
+      "t1e": true
+    }
+  }
+}

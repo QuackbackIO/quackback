@@ -33,14 +33,14 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `3de751c01` (8e usage N of M). Live
-  `ghcr.io/quackbackio/quackback@sha256:0651b0c6effd94534ca80a9ec28613b61b2c46aa60607a4c1b86d82ea1415e58`
-  (Docker `31854913346`). Web `57d9793c` SUCCESS, region only
+- Workspace tip: `e22e3884e` (8f General export/wipe). Live
+  `ghcr.io/quackbackio/quackback@sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80`
+  (Docker `31855839488`). Web `371883f5` SUCCESS, region only
   `us-east4-eqdc4a`.
-- Control plane tip `143184d` live as `9b70f160` (8e N of 3 Free;
-  still `sfo`).
-- Last known deployed workspace: `3de751c01` / `sha256:0651b0c6…` (2026-08-15)
-- Last known deployed control plane: `9b70f160` (2026-08-15)
+- Control plane tip `940c984` live as `9aaa6ff2` (8f wipe + account
+  delete; still `sfo`).
+- Last known deployed workspace: `e22e3884e` / `sha256:71f78ecb…` (2026-08-15)
+- Last known deployed control plane: `9aaa6ff2` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -118,7 +118,7 @@ remains.
 | 6 remove workspace billing       | implementation complete; boundary scan pending                                                             | app `178f0bf9b`, `3908c1031`; CP `8cb9738`, `3bb1c37`                                                             |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
 | 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
-| 8 hosted account operations      | 8a–8e live                                                                                                 | 8e app `57d9793c` / `3de751c01`; CP `9b70f160` / `143184d`                                                        |
+| 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                                        |
 
 ## Pickup for critics and later fires
 
@@ -134,12 +134,12 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`      | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                            | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
 | Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep-52e78237.md`     | FAIL 1 HIGH (HC writer)            | Fuller sweep on `52e78237`. HIGH: cloud Help Center local writer. Fixer `ce57a0bcc` now live `47e64d52`.                                                                                                                                       |
-| Track 8b–8f                    | CP+app saas | 8b–8e live; **8f not started**                          | **8e yes** `0651b0c6` / `9b70f160` | Plan & billing usage + CP `N of 3` Free. Next: 8f export/wipe.                                                                                                                                                                                 |
+| Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1` | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-52e78237.md`                 | FAIL (signed)                      | Catalogue vs enforcement HIGH; Growth webhooks/mcp dual-layer HIGH; missing `N of M` (8e); SSO `/new` reachable. HC writer HIGH fixed on `47e64d52` after this matrix.                                                                         |
 
-**Fleet note:** one deploy thread. Live pair is app `57d9793c` /
-`sha256:0651b0c6…` (`3de751c01`, includes `635cdb149`) and CP
-`9b70f160` (`143184d`). No undeployed customer-visible product tip.
+**Fleet note:** one deploy thread. Live pair is app `371883f5` /
+`sha256:71f78ecb…` (`e22e3884e`, includes `635cdb149`) and CP
+`9aaa6ff2` (`940c984`). No undeployed customer-visible product tip.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -757,9 +757,31 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
-Fleet: `635cdb149` already live (ancestor of `0651b0c6`). Stripe-live
-first-pay already on t1a — not repeated. CP-create 3-Free already live —
-no second builder.
+Fleet: `635cdb149` already live (ancestor of `71f78ecb` / `e22e3884e`).
+Stripe-live first-pay already on t1a — not repeated. CP-create 3-Free
+already live — no second builder.
+
+8f: General danger card (workspace-local export + owner wipe) and CP
+account delete. Tests CP 21/21, app 15/15. First `railway up` from the
+wrong cwd FAILED (`f12c4ffa`). Retry from `/home/james/quackback-cp`
+`940c984` → `9aaa6ff2` SUCCESS `sha256:640d5ac1…`. Docker
+`31855839488` `--ref saas` `e22e3884e` → `sha256:71f78ecb…`.
+`source.image` + `railway redeploy --from-source`: web `371883f5`,
+worker `b56b36fa`, hourly `597ee448`, daily `9bac011c`, migrator
+`af9e6263`. All `us-east4-eqdc4a`. Digest matches. Ready 200 on five
+health URLs. Live critic PASS. Instances **17→17**. Did not POST a
+real wipe. No Neon. No live key. Custom domains not started. Verify
+not re-run on this digest (last compact PASS `52e78237`).
+
+### Critic (2026-08-15, 8f export/wipe `940c984` / `e22e3884e`)
+
+PASS — General serves export + wipe copy; wipe 401 without credential
+and 400 on extras/`confirm:yes`; account delete 401 then 403
+`account_has_live_workspaces` on a live t1a-owner session; instances
+17; digest `71f78ecb` in `us-east4-eqdc4a`. `loop-evidence/t8f/`.
+Did not POST a real wipe. Did not write `deletedAt` on t1a/t1e.
+
+Previous fire (8e usage) is historical.
 
 8e: Plan & billing Usage card (`fetchPlanUsageFn`, finite keys only) +
 CP list `N of 3 Free workspaces`. Tests app 5/5, CP 8/8. Docker
@@ -904,7 +926,8 @@ Named critic spawned on the same URLs.
     ~~8c transfer/leave~~ live CP `6f0b0fee` / `209c8fb`; app
     `93838859` / `ef9fe62b9` (`sha256:52e78237…`, `us-east4-eqdc4a`).
     ~~8d seats + SSO lock~~ live `46c1c602e`. ~~8e usage~~ live
-    `3de751c01` / `143184d`. Next: 8f export/wipe.
+    `3de751c01` / `143184d`. ~~8f export/wipe~~ live `e22e3884e` /
+    `940c984`. Track 8 units closed.
     15b. ~~Ready CTA~~ `1a39cd7d7` in `02cb4329`.
 16. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
     Fallback origin `saas-origin.quackback.co.uk` is **active** and
@@ -1061,8 +1084,8 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
   keys. A cloud workspace must not use the Help Center local domain
   writer as the cloud manager.
 - Track 8: restore vs 3-Free, switcher, ~~transfer/leave~~ live 8c;
-  remaining seats, SSO downgrade, visible usage, export/wipe/account
-  delete.
+  ~~seats + SSO lock~~ live 8d; ~~visible usage~~ live 8e;
+  ~~export/wipe/account delete~~ live 8f.
 - Custom-domain ownership, DNS, hostname/SSL readiness, make-primary, removal,
   provider retry, and cross-workspace isolation. Provider client and
   fallback origin are ready (`de0b038`). Workspace Domains card and
@@ -1072,10 +1095,11 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: 8f export/wipe; §H HIGH (catalogue vs enforcement; Growth
-webhooks/mcp). Walk3 webhook stays disabled. Live app `57d9793c` /
-`sha256:0651b0c6…` `us-east4-eqdc4a`. Live CP `9b70f160` (`143184d`).
-Instance rows 17.
+Remaining: Verify sweep on `71f78ecb` / `640d5ac1`; §H HIGH
+(catalogue vs enforcement; Growth webhooks/mcp). Domains card and
+first-win still open. Walk3 webhook stays disabled. Live app
+`371883f5` / `sha256:71f78ecb…` `us-east4-eqdc4a`. Live CP `9aaa6ff2`
+(`940c984`). Instance rows 17.
 
 Operational defects carried from the prior lead:
 
