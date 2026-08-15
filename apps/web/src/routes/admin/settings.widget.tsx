@@ -1,4 +1,11 @@
-import { createFileRoute, useRouter, useRouteContext, Link } from '@tanstack/react-router'
+import {
+  createFileRoute,
+  useRouter,
+  useRouteContext,
+  Link,
+  Outlet,
+  useChildMatches,
+} from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -86,8 +93,14 @@ export const Route = createFileRoute('/admin/settings/widget')({
 
     return {}
   },
-  component: WidgetSettingsPage,
+  component: WidgetSettingsGate,
 })
+
+export function WidgetSettingsGate() {
+  const childMatches = useChildMatches()
+  if (childMatches.length > 0) return <Outlet />
+  return <WidgetSettingsPage />
+}
 
 function WidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
