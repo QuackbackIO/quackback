@@ -42,6 +42,10 @@ Custom Hostnames integration proves both hostname and SSL readiness.
   (`sha256:45b9aebb…`, sfo). SQL `0069` still applied.
 - Last known deployed workspace: `cb3c65420` / `sha256:895b942d…` (2026-08-15)
 - Last known deployed control plane: `b7ae7455` (2026-08-15)
+- App `saas` git tip is docs-only after `cb3c65420` (no undeployed
+  customer-visible app sha). `635cdb149` is an ancestor of the live
+  image. Confirmed this fire: web `e20c0eef` SUCCESS,
+  `meta` image `sha256:895b942d…`, region only `us-east4-eqdc4a`.
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -140,6 +144,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Completed plan change + cancel     | live Stripe  | t1a `inst_01m00kq6cdfzzb19gfjz8pt0s7`                                             | **yes**                                    | Growth → Pro monthly (`always_invoice`); webhook wrote `plan_id=pro`. `cancel_at_period_end` true then cleared. Evidence `loop-evidence/t1a-plan-change.json`. t1a is now Pro paid.                                                            |
 | Second paid isolation              | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Was Growth; now **Scale** (`t1e-scale-critic.md`). t1a stays Pro.                                                                                                                                                                              |
 | t1e Scale + SSO surface            | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Scale paid; outbox v6; `/sso/new` create fields. No IdP added. `t1e-scale-critic.md`.                                                                                                                                                          |
+| t1e period-end Growth schedule     | live Stripe  | t1e `inst_01m00kprbrfzzb19f490wga8q2`                                             | **yes**                                    | Gateway Growth confirm **200** `billing.stripe.com`. Stripe test schedule **active** [scale] then [growth]. CP still Scale. t1a Pro. Instances 19. `t1e-downgrade-critic.md`.                                                                  |
 | Verify sweep                       | live         | `loop-evidence/verify-2026-08-15/sweep-e20c0eef.md`                               | **PASS 0 HIGH** on `895b942d` / `aed43943` | Compact re-sign after SSO/Scale. Prior `sweep-895b942d.md` historical.                                                                                                                                                                         |
 | Track 8b–8f                        | CP+app saas  | **8a–8f live**                                                                    | **8f yes** `71f78ecb` / `640d5ac1`         | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic                 | live + spec  | `plan-matrix-scale-t1e.md` + `plan-matrix-895b942d.md` + `plan-matrix-free-t7.md` | **PASS** Scale t1e on `895b942d`           | t1a Pro + t1e Scale + t7 Free. `/sso/new` unlocked. No IdP.                                                                                                                                                                                    |
@@ -776,6 +781,21 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 `loop-evidence/verify-2026-08-14/limits-deploy-critic.md`.
 
 ## This fire (2026-08-15, orchestrator)
+
+Fleet: live web `e20c0eef` SUCCESS `sha256:895b942d…` (`cb3c65420`),
+region only `us-east4-eqdc4a`. `635cdb149` is an ancestor. **No
+635cdb149 deploy.** Ready 200 on gauntlet / t1a / t1e.
+
+Stripe-live: first t1a + t1e payments already finalized — **not
+repeated**. Mid-unit **t1e Scale → Growth scheduled at period end**:
+gateway **200** `billing.stripe.com`; Stripe test schedule **active**
+phases [scale] then [growth]; CP `plan_id` / effective still **scale**;
+`pending_plan_id` null; t1a **pro**; instances **19→19**. Critic
+**PASS** (`t1e-downgrade-critic.md`). Did not pay again.
+
+CP-create: 3-Free already live `80c8301e`. **No second builder.**
+
+Previous fire (https Location):
 
 Fleet: `635cdb149` already in `e20c0eef` / `sha256:895b942d…`. **No
 635 deploy.** CP `railway up` `8e4c00a` → `b7ae7455` SUCCESS
@@ -1489,6 +1509,12 @@ Named critic spawned on the same URLs.
     303 `/auth/login`. `lifecycle-auth-critic.md`.
 27. ~~**https Location**~~ live CP `8e4c00a` / `b7ae7455`.
     `lifecycle-https-critic.md`.
+28. ~~**t1e period-end Growth schedule**~~ live Stripe test schedule
+    [scale] then [growth]; CP still Scale. `t1e-downgrade-critic.md`.
+    Projection follow-through waits for the Stripe period clock. Do
+    not start custom domains. Do not mint a live key. Do not create
+    Neon unless a same-owner sibling is required and extra spend
+    stays under $50/month.
 
 ## Stale code to remove
 
@@ -1601,10 +1627,11 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
   Live: Free cap refuses with a named plan; paid overlay lifts it;
   downgrade leaves existing over-cap resources removable.
 - Plan change / downgrade / cancel / update-card through workspace
-  Plan & billing (checkout + portal). Upgrade 303 and one paid
-  finalize are live on t1a. Catalogue cards + invoice list are
-  **code** (`2fb9488` / `6418785c8`), not live. After deploy: four
-  cards, annual default, invoices table, no local price list.
+  Plan & billing (checkout + portal). Upgrade 303 and paid finalize
+  are live on t1a **and** t1e. t1e Scale→Growth is a live Stripe
+  **schedule** at period end (CP still Scale). Cancel-then-clear is
+  live on t1a. Catalogue cards + invoices are live in `02cb4329`.
+  Period-end projection follow-through still waits on the clock.
 - ~~Cross-workspace checkout session metadata.~~ t1e session names t1e;
   extras `instanceId` cannot retarget. Second paid isolation live on
   t1e (`this-fire/t1e-pay-verify.json`).
@@ -1641,7 +1668,9 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 ## Blockers
 
 Stripe **test** payment + webhook finalize is live on t1a **and** t1e.
-Paid Change to Pro is live as a confirm portal session. 8c transfer/leave is live.
+Paid Change to Pro is live as a confirm portal session. t1e has a
+test-mode **period-end Growth schedule**; current plan stays Scale.
+8c transfer/leave is live.
 t1a is **Pro paid** after a completed test-mode plan change
 (`loop-evidence/t1a-plan-change.json`). Domains card + identity
 gateway are live (`59da45c2` / `69cb0353`). Live add/cert still

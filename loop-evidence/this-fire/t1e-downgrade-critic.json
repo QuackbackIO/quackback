@@ -1,0 +1,60 @@
+{
+  "at": "2026-08-15T10:57:21.967Z",
+  "unit": "t1e-downgrade-critic",
+  "didNotPay": true,
+  "didNotMutateStripe": true,
+  "didNotCreateWorkspace": true,
+  "errors": [],
+  "checks": {
+    "stripeTestKey": true,
+    "t1eStillScale": true,
+    "t1eEffectiveScale": true,
+    "t1aStillPro": true,
+    "instances19": true,
+    "stripeTestMode": true,
+    "subActive": true,
+    "currentItemStillScale": true,
+    "scheduleActive": true,
+    "scheduleTwoPhases": true,
+    "currentPhaseScale": true,
+    "laterPhaseGrowth": true,
+    "northReady": true,
+    "southReady": true
+  },
+  "stripeKeyPrefix": "sk_test_",
+  "health": {
+    "north": {
+      "url": "https://northfa99f0.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "ok": true
+    },
+    "south": {
+      "url": "https://south63792f.quackback.co.uk/api/health/ready",
+      "status": 200,
+      "ok": true
+    }
+  },
+  "cp": {
+    "t1ePlan": "scale",
+    "t1eEffective": "scale",
+    "pending": null,
+    "outboxStatus": "delivered",
+    "outboxVersion": "7",
+    "t1eSubStatus": "active",
+    "t1aPlan": "pro",
+    "instances": 19
+  },
+  "stripe": {
+    "livemode": false,
+    "subStatus": "active",
+    "currentItems": ["scale"],
+    "hasSchedule": true,
+    "scheduleStatus": "active",
+    "scheduleLivemode": false,
+    "phaseCount": 2,
+    "phases": [["scale"], ["growth"]],
+    "subPrefix": "sub_",
+    "schedPrefix": "sub_sc"
+  },
+  "ok": true
+}

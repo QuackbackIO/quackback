@@ -1,0 +1,40 @@
+{
+  "at": "2026-08-15T10:51:22.281Z",
+  "unit": "stripe-live-t1e-downgrade-schedule",
+  "didNotCreateNeon": true,
+  "printedCredentials": false,
+  "errors": [],
+  "stripeKeyPrefix": "sk_test_",
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "before": {
+    "t1ePlan": "scale",
+    "t1aPlan": "pro",
+    "pending": null
+  },
+  "gateway": {
+    "status": 200,
+    "urlHost": "billing.stripe.com",
+    "error": null
+  },
+  "stripeSub": {
+    "status": "active",
+    "livemode": false,
+    "hasPeriodEnd": true
+  },
+  "schedule": {
+    "status": "active",
+    "livemode": false,
+    "phaseCount": 2,
+    "phasePrices": [["scale"], ["growth"]]
+  },
+  "after": {
+    "t1ePlan": "scale",
+    "t1eEffective": "scale",
+    "pending": null,
+    "t1aPlan": "pro"
+  },
+  "ok": true
+}
