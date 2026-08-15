@@ -434,6 +434,12 @@ export const identityProvider = pgTable(
     autoCreateUsers: boolean('auto_create_users').notNull().default(true),
     autoProvisionRole: text('auto_provision_role').$type<'admin' | 'member' | 'user'>(),
     claimMapping: jsonb('claim_mapping').$type<IdentityProviderClaimMapping>(),
+    /**
+     * Legacy role-mapping column. 0127 copies it into `claim_mapping.role`
+     * and leaves the column in place so rolling pods still on the previous
+     * schema can select and write it. Unused by this release; drop later.
+     */
+    attributeMapping: jsonb('attribute_mapping').$type<IdentityProviderAttributeMapping>(),
     showButton: boolean('show_button').notNull().default(false),
     /** Bumped when redirect-affecting details change; freshness baseline. */
     detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),

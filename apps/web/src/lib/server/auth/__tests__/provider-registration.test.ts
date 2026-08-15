@@ -257,7 +257,7 @@ describe('buildGenericOAuthConfigs identity cascade', () => {
     expect(first?.emailVerified).toBe(false)
   })
 
-  it('maps picture onto image so the avatar column still populates', async () => {
+  it('maps picture onto image and locale onto the profile', async () => {
     const cfgs = await buildGenericOAuthConfigs({
       providers: [
         {
@@ -277,9 +277,11 @@ describe('buildGenericOAuthConfigs identity cascade', () => {
         email: 'a@x.com',
         name: 'A',
         picture: 'https://idp.example/a.png',
+        locale: 'fr-FR',
       }),
     })
     expect(info?.image).toBe('https://idp.example/a.png')
+    expect(info?.locale).toBe('fr-FR')
   })
 
   it('resolves userinfo at request time when build-time discovery missed it', async () => {

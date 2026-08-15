@@ -32,8 +32,8 @@ describe.skipIf(!dbAvailable)('migration 0118 consolidate default role', () => {
     if (!db) return
     await db
       .transaction(async (tx) => {
-        // 0127 dropped this column. Recreate it for the pin so 0118 still
-        // runs against the shape it originally saw.
+        // 0127 keeps this column for rolling-deploy compatibility. Recreate
+        // it so the pin still runs against a table that never had it.
         await tx.execute(
           sql`ALTER TABLE "identity_provider" ADD COLUMN IF NOT EXISTS "attribute_mapping" jsonb`
         )

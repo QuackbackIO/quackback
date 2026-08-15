@@ -456,16 +456,6 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     })
   }
 
-  if (identity.warnings?.includes('subject_mismatch')) {
-    steps.push({
-      ok: false,
-      stage: 'claim-check',
-      label: 'Subject mismatch between ID token and userinfo',
-      detail:
-        'OIDC requires these to agree. Sign-in still works today, but a future release will refuse it — raise this with your IdP.',
-    })
-  }
-
   if (!identity.email) {
     if (!input.allowMissingEmail) {
       return {

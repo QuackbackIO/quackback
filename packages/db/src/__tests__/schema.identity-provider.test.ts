@@ -26,6 +26,7 @@ describe('identity_provider schema', () => {
       'autoCreateUsers',
       'autoProvisionRole',
       'claimMapping',
+      'attributeMapping',
       'showButton',
       'detailsChangedAt',
       'lastSuccessfulTestAt',

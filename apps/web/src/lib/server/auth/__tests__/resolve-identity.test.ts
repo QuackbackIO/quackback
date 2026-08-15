@@ -78,51 +78,26 @@ describe('resolveIdentity — visiting every configured source', () => {
 })
 
 describe('resolveIdentity — subject consistency (OIDC Core 5.3.2)', () => {
-  it('fails when userinfo reports a different subject, under enforcement', async () => {
-    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH, { subjectMismatch: 'enforce' })
+  it('fails closed when userinfo reports a different subject', async () => {
+    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH)
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.reason).toBe('subject_mismatch')
-  })
-
-  it('does not mix the two sources under enforcement', async () => {
-    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH, { subjectMismatch: 'enforce' })
     expect(JSON.stringify(result)).not.toContain('attacker@example.com')
   })
 
-  it('never mixes the two sources while observing either', async () => {
-    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH)
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.identity.id).toBe('a-different-subject')
-    expect(result.identity.sources.id).toBe('userinfo')
-  })
-
-  it('keeps a complete ID-token identity when userinfo disagrees, and does not merge it', async () => {
+  it('fails closed when the token has email but no name — does not swap', async () => {
     const result = await resolveIdentity({
-      tokens: {
-        idToken: fakeJwt({
-          sub: 'from-token',
-          email: 'token@x.com',
-          name: 'From Token',
-        }),
-        accessToken: 'at',
-      },
+      tokens: { idToken: fakeJwt({ sub: 'from-token', email: 'token@x.com' }), accessToken: 'at' },
       fetchUserInfo: async () => ({
         sub: 'from-userinfo',
         email: 'attacker@example.com',
         name: 'Someone Else',
-        groups: ['injected'],
       }),
     })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.identity.id).toBe('from-token')
-    expect(result.identity.email).toBe('token@x.com')
-    expect(result.identity.name).toBe('From Token')
-    expect(result.identity.sources.id).toBe('idToken')
-    expect(result.identity.warnings).toContain('subject_mismatch')
-    expect(result.identity.claims).not.toHaveProperty('groups')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('subject_mismatch')
     expect(JSON.stringify(result)).not.toContain('attacker@example.com')
   })
 
@@ -256,7 +231,6 @@ describe('resolveIdentity — account identifier compatibility', () => {
     const result = await resolveIdentity({
       tokens: { idToken: fakeJwt({ sub: 'from-token' }) },
       fetchUserInfo: async () => ({ id: 'different', email: 'e@x.com', name: 'N' }),
-      subjectMismatch: 'enforce',
     })
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -272,38 +246,5 @@ describe('resolveIdentity — account identifier compatibility', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.identity.id).toBe('42')
-  })
-})
-
-describe('resolveIdentity — subject mismatch, observe vs enforce', () => {
-  const mismatched = {
-    tokens: { idToken: fakeJwt({ sub: 'from-token' }), accessToken: 'at' },
-    fetchUserInfo: async () => ({ sub: 'from-userinfo', email: 'e@x.com', name: 'N' }),
-  }
-
-  it('observes by default: incomplete identity still lets userinfo win wholesale', async () => {
-    const result = await resolveIdentity(mismatched)
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.identity.id).toBe('from-userinfo')
-    expect(result.identity.email).toBe('e@x.com')
-    expect(result.identity.warnings).toContain('subject_mismatch')
-  })
-
-  it('enforces when asked, refusing to mix the two', async () => {
-    const result = await resolveIdentity({ ...mismatched, subjectMismatch: 'enforce' })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.reason).toBe('subject_mismatch')
-  })
-
-  it('reports no warning when the subjects agree', async () => {
-    const result = await resolveIdentity({
-      tokens: { idToken: fakeJwt({ sub: 'same' }), accessToken: 'at' },
-      fetchUserInfo: async () => ({ sub: 'same', email: 'e@x.com', name: 'N' }),
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.identity.warnings ?? []).not.toContain('subject_mismatch')
   })
 })

@@ -103,7 +103,6 @@ export interface BuildGenericOAuthConfigsArgs {
   ) => Promise<{ userinfo_endpoint?: unknown; prompt_values_supported?: unknown } | null>
   /** Fetches a userinfo document with the bearer token. */
   fetchUserInfo?: (url: string, accessToken: string) => Promise<Record<string, unknown> | null>
-  onResolutionWarning?: (registrationId: string, warnings: readonly string[]) => void
   onResolved?: (registrationId: string, accountId: string, claims: Record<string, unknown>) => void
   /**
    * Read-or-mint placeholder address. `getUserInfo` runs on every sign-in, so
@@ -134,7 +133,6 @@ export async function buildGenericOAuthConfigs({
   tierAllowsOidc,
   discovery,
   fetchUserInfo,
-  onResolutionWarning,
   onResolved,
   placeholderEmailFor,
   mapProfileToUser,
@@ -214,10 +212,7 @@ export async function buildGenericOAuthConfigs({
         mapping,
       })
       if (!result.ok) return null
-      const { id, email, name, emailVerified, claims, warnings } = result.identity
-      if (warnings?.length && onResolutionWarning) {
-        onResolutionWarning(provider.registrationId, warnings)
-      }
+      const { id, email, name, emailVerified, claims } = result.identity
       onResolved?.(provider.registrationId, id, claims)
 
       const resolvedName = name ?? synthesizeName(claims, id)
@@ -229,16 +224,18 @@ export async function buildGenericOAuthConfigs({
       }
       const picture = claims.picture
       const image = typeof picture === 'string' && picture.length > 0 ? picture : undefined
+      const locale = typeof claims.locale === 'string' && claims.locale.length > 0 ? claims.locale : undefined
 
-      // Only identity columns. Extra claims stay on the stash for role /
-      // attribute hooks — spreading them here would write JWT keys onto
-      // the user row (isAnonymous, twoFactorEnabled, …).
+      // Only identity columns plus locale (mapProfileToUser reads it). Extra
+      // claims stay on the stash — spreading them here would write JWT keys
+      // onto the user row (isAnonymous, twoFactorEnabled, …).
       return {
         id,
         emailVerified: minted ? false : emailVerified,
         ...(resolvedEmail ? { email: resolvedEmail } : {}),
         ...(resolvedName ? { name: resolvedName } : {}),
         ...(image ? { image } : {}),
+        ...(locale ? { locale } : {}),
       }
     }
 

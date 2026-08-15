@@ -187,9 +187,6 @@ async function createAuth() {
     onResolved: (registrationId, accountId, claims) => {
       stashResolvedClaims(registrationId, accountId, claims)
     },
-    onResolutionWarning: (registrationId, warnings) => {
-      log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
-    },
     placeholderEmailFor: resolvePlaceholderEmail,
     mapProfileToUser: mapProfileLocale,
     buildLoginHintParams,

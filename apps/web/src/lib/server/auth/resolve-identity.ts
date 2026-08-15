@@ -34,13 +34,9 @@ export interface ResolvedIdentity {
   sources: Partial<Record<'id' | 'email' | 'name', IdentitySource>>
   /** Every raw claim seen, earlier sources winning. */
   claims: Record<string, unknown>
-  /** Discrepancies observed but not treated as fatal. */
-  warnings?: ResolveWarning[]
 }
 
 export type ResolveFailure = 'subject_mismatch' | 'no_identity'
-
-export type ResolveWarning = 'subject_mismatch'
 
 export type ResolveResult =
   | { ok: true; identity: ResolvedIdentity }
@@ -52,12 +48,6 @@ export interface ResolveIdentityArgs {
    *  from. Injected so the resolver stays pure and testable. */
   fetchUserInfo: () => Promise<Record<string, unknown> | null>
   mapping?: IdentityMapping
-  /**
-   * What to do when userinfo reports a different subject from the ID token.
-   * Defaults to observing, so the check does not break providers that already
-   * rely on userinfo winning wholesale.
-   */
-  subjectMismatch?: 'observe' | 'enforce'
 }
 
 /** Decode a JWT payload without verifying it. Possession is the trust anchor:
@@ -82,7 +72,6 @@ export async function resolveIdentity({
   tokens,
   fetchUserInfo,
   mapping,
-  subjectMismatch = 'observe',
 }: ResolveIdentityArgs): Promise<ResolveResult> {
   const idClaim = mapping?.idClaim ?? 'sub'
   const nameClaim = mapping?.nameClaim ?? 'name'
@@ -95,7 +84,6 @@ export async function resolveIdentity({
   let email: string | undefined
   let name: string | undefined
   let emailVerified = false
-  const warnings: ResolveWarning[] = []
 
   const loadSource = async (source: IdentitySource): Promise<Record<string, unknown> | null> => {
     if (source === 'idToken') return decodePayload(tokens.idToken)
@@ -120,22 +108,10 @@ export async function resolveIdentity({
         : undefined)
 
     // OIDC Core 5.3.2: a userinfo response whose subject differs from the
-    // already-resolved id must be discarded. When identity is already
-    // complete, skip the document entirely. Wholesale userinfo-win is only
-    // for the legacy incomplete-token path (observe mode).
+    // already-resolved id is never merged. Mixing them can attach the
+    // wrong account, so sign-in is refused.
     if (source === 'userinfo' && id && claimedId && claimedId !== id) {
-      if (subjectMismatch === 'enforce') {
-        return { ok: false, reason: 'subject_mismatch', claims: merged }
-      }
-      warnings.push('subject_mismatch')
-      if (email && name) continue
-      id = undefined
-      email = undefined
-      name = undefined
-      emailVerified = false
-      found.id = undefined
-      found.email = undefined
-      found.name = undefined
+      return { ok: false, reason: 'subject_mismatch', claims: merged }
     }
 
     for (const [key, value] of Object.entries(claims)) {
@@ -174,7 +150,6 @@ export async function resolveIdentity({
       emailVerified,
       sources: found,
       claims: merged,
-      ...(warnings.length > 0 ? { warnings } : {}),
     },
   }
 }
