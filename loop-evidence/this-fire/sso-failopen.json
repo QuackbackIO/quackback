@@ -1,0 +1,37 @@
+{
+  "at": "2026-08-15T10:12:20.387Z",
+  "unit": "sso-failopen-t1e",
+  "didNotAddRealIdp": true,
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "errors": [],
+  "ownerDomain": "guerrillamail.com",
+  "ownerFp": "82568e5500c3",
+  "before": {
+    "idp": 0,
+    "domains": 0
+  },
+  "inserted": {
+    "idpPrefix": "01a004e8",
+    "domainEnforced": true
+  },
+  "signin": {
+    "status": 302,
+    "locationHasSsoError": false,
+    "bodyHasSsoError": false,
+    "locationPath": "/",
+    "locationError": "password_method_not_allowed"
+  },
+  "magic": {
+    "status": 200,
+    "locationHasSsoError": false,
+    "bodyHasSsoError": false,
+    "locationError": null
+  },
+  "ok": true,
+  "after": {
+    "idp": 0,
+    "domains": 0
+  },
+  "cleaned": true
+}

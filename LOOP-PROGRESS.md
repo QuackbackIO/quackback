@@ -780,6 +780,22 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 Fleet: `635cdb149` already in `e20c0eef` / `sha256:895b942d…`. **No
 635 deploy.**
 
+Stripe-live: t1e Scale already paid. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Live unit: **SSO fail-open** on t1e. Enforced domain + IdP row
+without a credential (not registered). Password **302**
+`password_method_not_allowed`; magic-link **200**; neither is
+`verified_domain_requires_sso`. Probe rows deleted. Critic **PASS**
+(`sso-failopen-critic.md`). Instances **19**. No real issuer. Custom
+domains not started.
+
+Previous fire (§H Scale):
+
+Fleet: `635cdb149` already in `e20c0eef` / `sha256:895b942d…`. **No
+635 deploy.**
+
 Stripe-live: t1e Scale already paid last fire. **Not repeated.**
 
 CP-create: 3-Free already live. **No second builder.**
@@ -1421,10 +1437,11 @@ Named critic spawned on the same URLs.
 24. ~~**Control-plane outage**~~ live on `895b942d` / `e20c0eef`
     (`cp-outage-critic.md`). Inbox 200; billing 503 retry copy;
     recovered 303/409. CP process was not stopped.
-25. **SSO downgrade.** Scale host is t1e; §H Scale **PASS**
-    (`plan-matrix-scale-t1e.md`). `/sso/new` unlocked. Fail-open
-    unit 3/3. Live IdP add → enforce → downgrade still open (no
-    public test issuer added). Do not start custom domains.
+25. **SSO downgrade.** Scale host is t1e; §H Scale **PASS**. Live
+    fail-open **PASS** (`sso-failopen-critic.md`): enforced domain +
+    unregistered IdP does not emit `verified_domain_requires_sso`.
+    Working IdP add → enforce → plan downgrade still open (no public
+    test issuer). Do not start custom domains.
 26. ~~**Unauth delete/restore 500**~~ live CP `ef31b2a` / `3a9bc4ee`.
     303 `/auth/login`. `lifecycle-auth-critic.md`.
 
