@@ -33,17 +33,15 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `74024a9cb` (Settings Domains card). Live
-  `ghcr.io/quackbackio/quackback@sha256:2575b2360966abb12ef9046c2f93dbb30f1fdb6f71d9d9489fd9b40ac9429353`
-  (Docker `31871725031`). Web `59da45c2` SUCCESS, region only
-  `us-east4-eqdc4a`. Worker `3e1cf61c`, hourly `d96fe07e`, daily
-  `39a14e57`, migrator `97aa0c35` same digest.
-- Control plane tip `449bd98` live as `69cb0353`
-  (`sha256:d22ba5cf…`, sfo). SQL `0069` applied
-  (`cp_workspace_custom_domains` present; leftover
-  `custom_domain*` / `r2_*` columns gone).
-- Last known deployed workspace: `74024a9cb` / `sha256:2575b236…` (2026-08-15)
-- Last known deployed control plane: `69cb0353` (2026-08-15)
+- Workspace tip: `be3e41b01` (map `already_on_plan` to 409). Live
+  `ghcr.io/quackbackio/quackback@sha256:40be439d1c2d55957265723bef94b9eda49523d3fee8954de7c2385b595a76f2`
+  (Docker `31872616168`). Web `95610fd8` SUCCESS, region only
+  `us-east4-eqdc4a`. Worker `9cd49fe5`, hourly `2634ef48`, daily
+  `057206ec`, migrator `def8cdde` same digest.
+- Control plane tip `f4e3844` live as `7cecf06d`
+  (`sha256:753d3b86…`, sfo). SQL `0069` still applied.
+- Last known deployed workspace: `be3e41b01` / `sha256:40be439d…` (2026-08-15)
+- Last known deployed control plane: `7cecf06d` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -134,13 +132,14 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | 3-Free create cap                | CP          | `c5a484d`                                               | **yes** `80c8301e`                  | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live 402s the same reason (`0b85cd0` / `e8953f9b`).                                                                                                       |
 | Limits overlay                   | app         | `31330d85b` / `b0c13a366`                               | **yes** `cb186135`                  | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                     |
 | CF for SaaS origin + client      | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                  |
-| Identity gateway + Domains card  | CP + app    | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2` | **yes** `2575b236` / `d22ba5cf`     | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                            |
+| Identity gateway + Domains card  | CP + app    | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2` | **yes** in `40be439d` / `753d3b86`  | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                            |
+| Same-plan billing 409            | CP + app    | CP `f4e3844` / `7cecf06d`; app `be3e41b01` / `95610fd8` | **yes** `40be439d` / `753d3b86`     | t1a same-plan Pro monthly **409** `already_on_plan` (not 503). Scale **303** `billing.stripe.com`. t1e Upgrade **303** `cs_test_`. Origin 403. Evidence `this-fire/ws-already-on-plan.json`.                                                   |
 | Plan catalogue + invoices        | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch                 | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
 | Completed plan change + cancel   | live Stripe | t1a `inst_01m00kq6cdfzzb19gfjz8pt0s7`                   | **yes**                             | Growth → Pro monthly (`always_invoice`); webhook wrote `plan_id=pro`. `cancel_at_period_end` true then cleared. Evidence `loop-evidence/t1a-plan-change.json`. t1a is now Pro paid.                                                            |
-| Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-2575b236.md`     | **PASS 0 HIGH** on `2575b236`       | Fuller 1–32 on Domains-card image. Prior `27e0c23d` sweep is historical.                                                                                                                                                                       |
+| Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-40be439d.md`     | **PASS 0 HIGH** on `40be439d`       | Fuller 1–32 on already_on_plan image. Prior `2575b236` sweep is historical.                                                                                                                                                                    |
 | Track 8b–8f                      | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-2575b236.md`                 | **PASS** on `2575b236` / `d22ba5cf` | t1a is Pro paid. Prior PASS on `27e0c23d` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                              |
+| Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-40be439d.md`                 | **PASS** on `40be439d` / `753d3b86` | t1a is Pro paid. Same-plan 409 live. Prior PASS on `2575b236` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                          |
 | Product-feedback first-win       | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”.                                                                                                                                                    |
 | Support + HC live first-win      | live        | existing `sup9ca3a708` / `hc9ca3a708`                   | **yes** hosts 200                   | Change goal + first-win reached. Support conversation + “You’re up and running”. HC article published + milestone 15 Aug 2026. Critic **PASS** `live-existing/critic.md`.                                                                      |
 | Widget install Outlet            | app         | `40e1e6bf1`                                             | **yes** `532dbe27` / `27e0c23d`     | Install page is Connect Messenger + Enable Messenger (not parent Widget). Enable → Channel enabled + Add the SDK. Critic **PASS** `this-fire/install-critic.md`.                                                                               |
@@ -151,9 +150,11 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name           | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 | PLG emit self-host skip          | app tests   | `3b4556ae2`                                             | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
-**Fleet note:** one deploy thread. Live pair is app `59da45c2` /
-`sha256:2575b236…` (`74024a9cb`) and CP `69cb0353` (`449bd98`).
-No undeployed customer-visible product tip.
+**Fleet note:** one deploy thread. Live pair is app `95610fd8` /
+`sha256:40be439d…` (`be3e41b01`) and CP `7cecf06d` (`f4e3844`).
+`635cdb149` is an ancestor of this image (https Origin already live).
+No undeployed customer-visible product tip. Verify / §H signed on
+`40be439d` / `753d3b86`.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -771,6 +772,42 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
+Fleet: `635cdb149` already an ancestor of live `74024a9cb`. Pickup
+had undeployed customer-visible **already_on_plan** app `be3e41b01`
+(Docker `31872616168` → `sha256:40be439d…`). CP `f4e3844` was already
+live as `7cecf06d` (`sha256:753d3b86…`).
+
+`source.image` + `railway redeploy --from-source`:
+
+| role     | deployment | digest     | region            |
+| -------- | ---------- | ---------- | ----------------- |
+| web      | `95610fd8` | `40be439d` | `us-east4-eqdc4a` |
+| worker   | `9cd49fe5` | `40be439d` | `us-east4-eqdc4a` |
+| hourly   | `2634ef48` | `40be439d` | `us-east4-eqdc4a` |
+| daily    | `057206ec` | `40be439d` | `us-east4-eqdc4a` |
+| migrator | `def8cdde` | `40be439d` | `us-east4-eqdc4a` |
+
+Ready 200 on gauntlet, south, north, support, HC. Workspace owner
+POST t1a same-plan Pro monthly **409** `already_on_plan` (not 503).
+t1a Scale **303** `billing.stripe.com`. t1e Upgrade **303**
+`cs_test_`. Foreign/missing Origin **403** `invalid_origin`.
+Instances **19→19**. Evidence `this-fire/ws-already-on-plan.json`.
+Named critic spawn unjoinable; orchestrator
+live-critic **PASS** (`already-on-plan-critic.md`).
+
+Stripe-live: t1a first payment + Growth→Pro + cancel already
+finalized. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Verify **PASS 0 HIGH** on `40be439d` / `7cecf06d`
+(`sweep-40be439d.md`). Same-plan Pro is now **409** (was 503 on
+`2575b236`). Domains card 200 both hosts; no hostname add. §H **PASS**
+(`plan-matrix-40be439d.md`) with t1a Pro paid. Instances **19→19**.
+No Neon. No live key. Custom domains not started.
+
+Previous fire (Verify on Domains-card image):
+
 Fleet: `635cdb149` already in live `74024a9cb` / `sha256:2575b236…` /
 web `59da45c2`, `us-east4-eqdc4a`. Health 200. t1e Upgrade **303**
 `cs_test_`; Origin 403. No 635cdb149 deploy.
@@ -1172,8 +1209,12 @@ Named critic spawned on the same URLs.
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
-20. ~~**Plan-matrix critic**~~ signed **PASS** on `27e0c23d` / `79030f27`
-    (`plan-matrix-27e0c23d.md`). Prior PASS on `25319ded` is historical.
+20. ~~**Plan-matrix critic**~~ signed **PASS** on `2575b236` / `d22ba5cf`
+    (`plan-matrix-2575b236.md`). Prior PASS on `27e0c23d` is historical.
+    Re-signed **PASS** on `40be439d` / `753d3b86`
+    (`plan-matrix-40be439d.md`).
+21. ~~**Same-plan 409**~~ live `be3e41b01` / `95610fd8` + CP `f4e3844` /
+    `7cecf06d`. t1a same-plan **409** `already_on_plan`.
 
 ## Stale code to remove
 

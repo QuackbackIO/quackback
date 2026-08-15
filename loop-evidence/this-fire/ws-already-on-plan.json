@@ -1,0 +1,95 @@
+{
+  "at": "2026-08-15T07:51:35.747Z",
+  "unit": "ws-already-on-plan-be3e41b01",
+  "liveImage": "sha256:40be439d1c2d55957265723bef94b9eda49523d3fee8954de7c2385b595a76f2",
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "didNotCreateWorkspace": true,
+  "printedCredentials": false,
+  "errors": [],
+  "stripeKeyPrefix": "sk_test_",
+  "health": {
+    "https://gauntlet.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://south63792f.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    },
+    "https://northfa99f0.quackback.co.uk/api/health/ready": {
+      "status": 200,
+      "role": "web"
+    }
+  },
+  "instanceCount": {
+    "before": 19,
+    "after": 19,
+    "didNotRise": true
+  },
+  "plans": {
+    "t1a": "pro",
+    "t1e": "free"
+  },
+  "handoff": {
+    "t1a": {
+      "consumeStatus": 200,
+      "hasSession": true
+    },
+    "t1e": {
+      "consumeStatus": 200,
+      "hasSession": true
+    }
+  },
+  "t1a": {
+    "sameProMonthly": {
+      "status": 409,
+      "error": "already_on_plan",
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false,
+      "sentOrigin": "https://south63792f.quackback.co.uk"
+    },
+    "scaleMonthly": {
+      "status": 303,
+      "error": null,
+      "locationHost": "billing.stripe.com",
+      "locationPath": "/p/session/test_YWNjdF8xU2VKVDFSYnUxRExReGozLF9W",
+      "hasCsTest": false,
+      "hasCsLive": false,
+      "sentOrigin": "https://south63792f.quackback.co.uk"
+    },
+    "foreignOrigin": {
+      "status": 403,
+      "error": "invalid_origin",
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false,
+      "sentOrigin": "https://attacker.test"
+    },
+    "missingOrigin": {
+      "status": 403,
+      "error": "invalid_origin",
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false,
+      "sentOrigin": null
+    }
+  },
+  "t1e": {
+    "growthMonthly": {
+      "status": 303,
+      "error": null,
+      "locationHost": "checkout.stripe.com",
+      "locationPath": "/c/pay/cs_test_…",
+      "hasCsTest": true,
+      "hasCsLive": false,
+      "sentOrigin": "https://northfa99f0.quackback.co.uk"
+    }
+  },
+  "ok": true
+}

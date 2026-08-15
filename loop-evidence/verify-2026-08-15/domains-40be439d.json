@@ -1,0 +1,23 @@
+{
+  "at": "2026-08-15T07:56:40.923Z",
+  "didNotAddDomain": true,
+  "errors": [],
+  "t1a": {
+    "status": 200,
+    "consume": 200,
+    "hasCustomDomain": true,
+    "hasAddDomain": true,
+    "hasDomainsHeading": true,
+    "hasGrowthLock": false,
+    "hasLocalWriter": false
+  },
+  "t1e": {
+    "status": 200,
+    "consume": 200,
+    "hasCustomDomain": true,
+    "hasAddDomain": true,
+    "hasDomainsHeading": true,
+    "hasGrowthLock": false,
+    "hasLocalWriter": false
+  }
+}
