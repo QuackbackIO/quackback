@@ -1,0 +1,141 @@
+{
+  "at": "2026-08-15T18:01:00.900Z",
+  "unit": "p3-restore-notice-c208c06",
+  "expected": {
+    "deployId": "9030705d-f750-4029-b6cf-8887f95b3bb8",
+    "imageDigest": "sha256:d84fd27c2d2d10ffba14a36b732540d462d396cd5f34a3102a962a9a40928741",
+    "commit": "c208c06",
+    "regions": ["sfo"]
+  },
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "didNotStartCustomDomains": true,
+  "didNotDeploy": true,
+  "didNotWipeReal": true,
+  "printedCredentials": false,
+  "errors": [],
+  "instanceCount": {
+    "before": 20,
+    "after": 20
+  },
+  "leftoverBefore": {
+    "p3": 0,
+    "cap8a": 0
+  },
+  "owner": {
+    "domain": "guerrillamailblock.com",
+    "fp": "e002f4ca4906",
+    "planId": "free",
+    "deleted": false
+  },
+  "liveFreeBefore": 1,
+  "unauthRestore": {
+    "status": 303,
+    "location": "https://cp.quackback.co.uk/auth/login",
+    "host": "cp.quackback.co.uk",
+    "path": "/auth/login",
+    "search": "",
+    "notice": null,
+    "contentType": null,
+    "html": false,
+    "json": false,
+    "jsonError": null,
+    "jsonStatus": null,
+    "looksRaw402": false,
+    "hasNoticeCopy": false,
+    "hasAlertRole": false,
+    "hasYourWorkspaces": false,
+    "prefix": ""
+  },
+  "unauthDashboardNotice": {
+    "status": 307,
+    "location": "https://cp.quackback.co.uk/login",
+    "host": "cp.quackback.co.uk",
+    "path": "/login",
+    "search": "",
+    "notice": null,
+    "contentType": null,
+    "html": false,
+    "json": false,
+    "jsonError": null,
+    "jsonStatus": null,
+    "looksRaw402": false,
+    "hasNoticeCopy": false,
+    "hasAlertRole": false,
+    "hasYourWorkspaces": false,
+    "prefix": ""
+  },
+  "temps": {
+    "liveAFp": "b6dd1c52f36a",
+    "liveBFp": "49ebd5bfcc7f",
+    "trashFp": "48c5d4b53303"
+  },
+  "liveFreeAtThree": 3,
+  "mailbox": {
+    "listed": 3,
+    "subjectPrefix": "Your Quackback Cloud sign-in link",
+    "magicPath": "/verify-magic-link",
+    "tokenPresent": true,
+    "otpFromCopy": false
+  },
+  "signin": {
+    "status": 200
+  },
+  "magicVerify": {
+    "status": 302,
+    "locationPath": "/dashboard",
+    "cookieNames": [
+      "__Secure-better-auth.session_token",
+      "__Secure-better-auth.session_data",
+      "__Secure-better-auth.session_token",
+      "__Secure-better-auth.session_data"
+    ],
+    "hasSession": true
+  },
+  "sessionMint": "magic-link-verify",
+  "session": {
+    "hasSession": true,
+    "method": "magic-link-verify"
+  },
+  "restoreAtCap": {
+    "status": 303,
+    "location": "https://cp.quackback.co.uk/dashboard?notice=free_workspace_owner_cap",
+    "host": "cp.quackback.co.uk",
+    "path": "/dashboard",
+    "search": "?notice=free_workspace_owner_cap",
+    "notice": "free_workspace_owner_cap",
+    "contentType": null,
+    "html": false,
+    "json": false,
+    "jsonError": null,
+    "jsonStatus": null,
+    "looksRaw402": false,
+    "hasNoticeCopy": false,
+    "hasAlertRole": false,
+    "hasYourWorkspaces": false,
+    "prefix": ""
+  },
+  "dashboardNotice": {
+    "status": 200,
+    "location": null,
+    "host": null,
+    "path": null,
+    "search": null,
+    "notice": null,
+    "contentType": "text/html; charset=utf-8",
+    "html": true,
+    "json": false,
+    "jsonError": null,
+    "jsonStatus": null,
+    "looksRaw402": false,
+    "hasNoticeCopy": true,
+    "hasAlertRole": true,
+    "hasYourWorkspaces": true,
+    "prefix": "<!DOCTYPE html><html lang=\"en\" class=\"h-full\"><head><meta charSet=\"utf-8\"/><meta"
+  },
+  "trashStillDeleted": true,
+  "fixturesRemainBeforeCleanup": true,
+  "ok": true,
+  "leftoverAfter": 0,
+  "fixturesRemain": true
+}

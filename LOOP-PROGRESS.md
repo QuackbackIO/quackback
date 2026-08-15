@@ -39,17 +39,18 @@ Custom Hostnames integration proves both hostname and SSL readiness.
   (`this-fire/p2-upgrade-critic.md`). Verify / §H last signed on the
   older `895b942d` pair.
 - Control plane tip `c208c06` (`fix(create): keep restore refusals on
-the dashboard`) live as `9030705d` (`sha256:d84fd27c…`, sfo). SQL
-  `0069` still applied. Open-to-root `4824f23` is an ancestor. This
-  fire did not `railway up` CP; a concurrent fire landed P3 code.
-  P3 live critic is **not** signed here.
+the dashboard`) live as `9030705d` /
+  `sha256:d84fd27c2d2d10ffba14a36b732540d462d396cd5f34a3102a962a9a40928741`
+  (sfo). SQL `0069` still applied. P3 live critic **PASS**
+  (`this-fire/p3-restore-critic.md`).
 - Last known deployed workspace: `e56d00b9a` / `sha256:27c538ec…`
   (2026-08-15) web `7057e905` SUCCESS, region `us-east4-eqdc4a`.
   Docker `31898534925`.
 - Last known deployed control plane: `9030705d` / `c208c06` (2026-08-15)
-- App `saas` tip `e56d00b9a` is live. Next unit is **P3 live critic**
-  (restore at 3-Free must stay on the dashboard, no raw JSON), then
-  **P4** numeric caps + overlay/wrapDbError with live proof.
+- App `saas` tip `e56d00b9a` is live. Next unit is **P4** numeric caps
+  - overlay/wrapDbError with live proof (analyticsExports /
+    integrations projection copy; branding `TierLimitError` not 500).
+    Same UpgradeOffer.
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -138,6 +139,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | ----------------------------------- | ------------ | --------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ready CTA + required cloud URL      | app          | `1a39cd7d7`                                                                       | **yes** `02cb4329`                         | Ready always has a primary button (Open your board / launch plan). Cloud URL required; Continue disabled without it; no Skip; no `ws-*` prefilled or printed by the field. Tests: `cloud-details-goal`, `activation-action`, `platform-label`.                                        |
 | 3-Free create cap                   | CP           | `c5a484d`                                                                         | **yes** `80c8301e`                         | 1–3 Free ok; 4th 402 `free_workspace_owner_cap`; paid unlimited. **8a** restore at 3 live **402** same reason (temps, no Neon) on `7cecf06d` / `895b942d`. `t8a-restore-critic.md`.                                                                                                   |
+| Restore refusal stays on dashboard  | CP           | `c208c06`                                                                         | **yes** `9030705d` / `sha256:d84fd27c…`    | Form POST restore at 3-Free **303** `/dashboard?notice=free_workspace_owner_cap` (not JSON 402). Dashboard 200 alert copy. Trash not restored. `p3-restore-critic.md`.                                                                                                                |
 | Limits overlay                      | app          | `31330d85b` / `b0c13a366`                                                         | **yes** `cb186135`                         | Cloud workspace with a projection and no `tier_limits` row is **not** OSS unlimited. Re-sweep row 15 PASS.                                                                                                                                                                            |
 | CF for SaaS origin + client         | zone + CP    | `de0b038`; fallback **active**                                                    | token on CP, skip-deploy                   | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections.                                                                                                         |
 | Identity gateway + Domains card     | CP + app     | CP `449bd98` / `69cb0353`; app `74024a9cb` / `59da45c2`                           | **yes** in `40be439d` / `753d3b86`         | t1a `/admin/settings/domains` 200: Custom domain + Add domain + Domains nav; no Growth lock on Pro. SQL `0069` live. Live add/cert still a later probe. Evidence `loop-evidence/domains-live.json`.                                                                                   |
@@ -169,13 +171,22 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | PLG emit self-host skip             | app tests    | `3b4556ae2`                                                                       | skip-deploy (tests-only)                   | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                                                                     |
 
 **Fleet note:** one deploy thread. Live pair is app `7057e905` /
-`sha256:27c538ec…` (`e56d00b9a`) and CP `9030705d` (`c208c06`).
-Docker `31898534925` SUCCESS. JSON-patch `source.image` +
-`railway redeploy --from-source` on worker `796aba45`, hourly
-`4b927894`, daily `0de9564e`, migrator `f92d2783` (web was already
-`7057e905` from a concurrent patch). All `us-east4-eqdc4a`. P2
-live critic **PASS**. Verify / §H still signed on the earlier
+`sha256:27c538ec…` (`e56d00b9a`) and CP `9030705d` /
+`sha256:d84fd27c…` (`c208c06`). Docker `31898534925` SUCCESS. P2
+and P3 live critics **PASS**. Verify / §H still signed on the earlier
 `895b942d` / `b7ae7455` pair.
+
+This fire (P3 live critic, 2026-08-15 T18:01Z):
+
+- Confirmed CP `9030705d` **SUCCESS**, `meta.imageDigest`
+  `sha256:d84fd27c2d2d10ffba14a36b732540d462d396cd5f34a3102a962a9a40928741`,
+  `cliMessage` “keep restore refusals on the dashboard”, region `sfo`.
+- Live critic **PASS** (`p3-restore-critic.md`): unauth restore 303
+  login (no JSON); owner restore at 3-Free 303
+  `/dashboard?notice=free_workspace_owner_cap`; follow GET 200 HTML
+  with `role=alert` and the 3-Free copy; trash stayed deleted.
+  Temps only, no Neon. Instances 20→20.
+- Did not start P4. Ledger-only commit (named skip-deploy).
 
 This fire (Fleet + P2 critic, 2026-08-15 T17:49Z):
 
@@ -1495,9 +1506,9 @@ Named critic spawned on the same URLs.
 
 0. ~~**P2 Fleet + live critic**~~ `e56d00b9a` / `7057e905` /
    `sha256:27c538ec…`. Critic **PASS**.
-   0b. **P3 live critic** on CP `c208c06` / `9030705d`: restore at
-   3-Free must stay on the dashboard (in-page notice), not dump
-   raw JSON. Code already live from a concurrent `railway up`.
+   0b. ~~**P3 live critic**~~ CP `c208c06` / `9030705d` /
+   `sha256:d84fd27c…`. Restore at 3-Free **303** dashboard notice.
+   Critic **PASS** `p3-restore-critic.md`.
    0c. **P4 app saas:** numeric caps + overlay/`wrapDbError` only with
    live proof.
 1. ~~**Unit A — deploy the current CP**~~ live was `07d5737e` (`6b42ef3`); current live `e28c7b8e` (`71e59d9`).
