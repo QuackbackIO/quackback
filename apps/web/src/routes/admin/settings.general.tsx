@@ -170,30 +170,12 @@ function GeneralSettingsPage() {
           onSubmit={() => identityMutation.mutate()}
         />
       ) : (
-        <SettingsCard title="Workspace" description="The name shown across the portal and emails">
-          <div className="max-w-md space-y-1.5">
-            <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-              Workspace Name
-            </Label>
-            <div className="relative">
-              <Input
-                id="workspace-name"
-                value={workspaceName}
-                onChange={(e) => handleNameChange(e.target.value)}
-                placeholder="My Workspace"
-                disabled={workspaceNameManaged}
-              />
-              {isSavingName && (
-                <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-            </div>
-            {workspaceNameManaged && (
-              <p className="text-xs text-muted-foreground">
-                Managed by your administrator&apos;s config &mdash; edit there.
-              </p>
-            )}
-          </div>
-        </SettingsCard>
+        <LocalWorkspaceNameCard
+          workspaceName={workspaceName}
+          saving={isSavingName}
+          managed={workspaceNameManaged}
+          onWorkspaceNameChange={handleNameChange}
+        />
       )}
 
       <SettingsCard
@@ -228,6 +210,40 @@ function GeneralSettingsPage() {
 
       <WorkspaceDangerCard cloudEnabled={Boolean(cloudIdentity)} />
     </div>
+  )
+}
+
+export function LocalWorkspaceNameCard(props: {
+  workspaceName: string
+  saving: boolean
+  managed: boolean
+  onWorkspaceNameChange: (value: string) => void
+}) {
+  return (
+    <SettingsCard title="Workspace" description="The name shown across the portal and emails">
+      <div className="max-w-md space-y-1.5">
+        <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
+          Workspace Name
+        </Label>
+        <div className="relative">
+          <Input
+            id="workspace-name"
+            value={props.workspaceName}
+            onChange={(e) => props.onWorkspaceNameChange(e.target.value)}
+            placeholder="My Workspace"
+            disabled={props.managed}
+          />
+          {props.saving && (
+            <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
+        {props.managed && (
+          <p className="text-xs text-muted-foreground">
+            Managed by your administrator&apos;s config &mdash; edit there.
+          </p>
+        )}
+      </div>
+    </SettingsCard>
   )
 }
 
