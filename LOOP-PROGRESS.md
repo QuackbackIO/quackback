@@ -117,7 +117,7 @@ remains.
 | 5 authoritative starter trial    | live Pro trial on both `ws-*` hosts; retry helper now in live image `703eca7d`                             | CP `2fa8a08`, `710ab09`; app `57ff32499` deployed `0c42bbe1f`; see “Track 3/5 live billing (2026-08-14)”          |
 | 6 remove workspace billing       | implementation complete; boundary scan **PASS**                                                            | `loop-evidence/track6-scan/critic.md`; `BILLING_*` gone from fleet roles                                          |
 | 6b remove stale SaaS code        | welcome no longer mails `login_url`; local fixture at 0262                                                 | CP `e2219f5`, `7230a32`, `546b26e`, `6836a6a`, `be35af1`; local `quackback` + `quackback_test` migrated to `0262` |
-| 7 PLG + first-win proof          | infrastructure implemented                                                                                 | `33c15ba53`; first-win journeys remain                                                                            |
+| 7 PLG + first-win proof          | launch plan + first-win card **live**; five-outcome walks remain                                           | `33c15ba53`; critic `loop-evidence/t7-first-win/critic.md`                                                        |
 | 8 hosted account operations      | 8a–8f live                                                                                                 | 8f app `371883f5` / `e22e3884e`; CP `9aaa6ff2` / `940c984`                                                        |
 
 ## Pickup for critics and later fires
@@ -761,6 +761,14 @@ Fleet: `635cdb149` already live (ancestor of `71f78ecb` / web
 `371883f5`). Stripe-live first-pay already on t1a — not repeated.
 CP-create 3-Free already live — no second builder.
 
+Track 7 critic: live launch-plan + first-win card on `71f78ecb`.
+Outcome titles and one primary CTA in served JS. Tests 30/30. Did not
+walk support / Help Center / internal / self-host fresh mailboxes.
+`loop-evidence/t7-first-win/critic.md`. No deploy. Custom domains not
+started.
+
+Previous fire (Track 6 scan) is historical.
+
 Track-6 boundary scan **PASS**. No live `BILLING_API_KEY` /
 `BILLING_PRICES` / `BILLING_WEBHOOK_SECRET` on web/worker/crons/
 migrator. No imports of deleted `domain-multi-fn` / `org-billing-fn` /
@@ -1131,9 +1139,9 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: Domains card (do not start provider live certs until
-asked); first-win journeys. Track 6 scan closed. Walk3 webhook
-stays disabled. Live app `371883f5` / `sha256:71f78ecb…`
+Remaining: five-outcome first-win walks (support / Help Center /
+internal / self-host); Domains card (do not start live certs until
+asked). Track 6 scan closed. Walk3 webhook stays disabled. Live app `371883f5` / `sha256:71f78ecb…`
 `us-east4-eqdc4a`. Live CP `1931dc38` (`64ca931`). Instance rows 17.
 
 Operational defects carried from the prior lead:
