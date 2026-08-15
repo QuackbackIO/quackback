@@ -14,6 +14,11 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { copyWithFallback } from '@/components/admin/activation-action-button'
+import { CopyAgentPromptButton } from '@/components/admin/settings/widget/copy-agent-prompt-button'
+import {
+  buildWidgetInstallPrompt,
+  maskWidgetSecretInPrompt,
+} from '@/lib/shared/widget/install-prompt'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { configureWidgetForActivationFn } from '@/lib/server/functions/settings'
@@ -49,7 +54,7 @@ function WidgetInstallPage() {
     (mode === 'messenger'
       ? Boolean(config.tabs?.messenger && config.messenger?.enabled)
       : Boolean(config.tabs?.feedback && config.defaultBoard))
-  const [copying, setCopying] = useState<'snippet' | 'developer' | 'secret' | null>(null)
+  const [copying, setCopying] = useState<'snippet' | 'secret' | null>(null)
   const snippet = useMemo(
     () => `<script>
   (function(w,d){if(w.Quackback)return;w.Quackback=function(){
@@ -61,18 +66,18 @@ function WidgetInstallPage() {
 </script>`,
     [baseUrl]
   )
-  const developerInstructions = `${
-    mode === 'messenger' ? 'Connect Quackback Messenger' : 'Connect Quackback feedback'
-  }
-
-1. Paste this snippet before the closing </body> tag on every page:
-
-${snippet}
-
-2. Deploy the change.
-3. Open the deployed site once. Quackback checks for the installation automatically.
-
-Identifying signed-in users is optional; anonymous visitors can use the widget immediately.`
+  const agentPrompt = useMemo(
+    () =>
+      buildWidgetInstallPrompt({
+        instanceUrl: baseUrl ?? '',
+        widgetSecret: secretQuery.data,
+      }),
+    [baseUrl, secretQuery.data]
+  )
+  const previewPrompt = useMemo(
+    () => maskWidgetSecretInPrompt(agentPrompt, secretQuery.data),
+    [agentPrompt, secretQuery.data]
+  )
 
   const configure = useMutation({
     mutationFn: () => configureWidgetForActivationFn({ data: { mode } }),
@@ -87,11 +92,11 @@ Identifying signed-in users is optional; anonymous visitors can use the widget i
       toast.error(error instanceof Error ? error.message : 'Couldn’t configure the widget'),
   })
 
-  async function copy(kind: 'snippet' | 'developer' | 'secret', text: string) {
+  async function copy(kind: 'snippet' | 'secret', text: string) {
     setCopying(kind)
     try {
       await copyWithFallback(text)
-      toast.success(kind === 'developer' ? 'Developer instructions copied' : 'Copied')
+      toast.success('Copied')
     } catch {
       toast.error('Copy failed. Select the text and copy it manually.')
     } finally {
@@ -110,7 +115,7 @@ Identifying signed-in users is optional; anonymous visitors can use the widget i
       <PageHeader
         icon={CodeBracketIcon}
         title={mode === 'messenger' ? 'Connect Messenger' : 'Install feedback widget'}
-        description="Enable the right channel, add one snippet, and verify the site connection."
+        description="Copy a prompt for your coding agent, or add the snippet yourself."
       />
 
       <SettingsCard
@@ -135,25 +140,35 @@ Identifying signed-in users is optional; anonymous visitors can use the widget i
 
       {configured && (
         <SettingsCard
-          title="2. Add the SDK"
-          description="Paste this minimal snippet before the closing body tag on your site."
+          title="2. Ask your agent"
+          description="Paste this into Claude, Cursor, Codex, or Copilot. It detects your stack and wires up the widget."
+        >
+          <CopyAgentPromptButton prompt={agentPrompt} />
+          <p className="mt-3 text-xs text-muted-foreground">
+            The copied prompt includes your widget secret. Paste it into a local agent only.
+          </p>
+          <pre className="mt-4 max-h-72 overflow-auto rounded-lg border border-border/50 bg-muted/30 p-3 text-xs font-mono leading-relaxed text-foreground whitespace-pre-wrap">
+            {previewPrompt}
+          </pre>
+        </SettingsCard>
+      )}
+
+      {configured && (
+        <SettingsCard
+          title="Or add the snippet yourself"
+          description="Paste this before the closing body tag if you would rather install it by hand."
         >
           <pre className="max-h-72 overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-100">
             <code>{snippet}</code>
           </pre>
           <div className="mt-4 flex flex-wrap gap-2">
-            {!status.hasWidgetInstalled && (
-              <Button onClick={() => copy('snippet', snippet)} disabled={copying !== null}>
-                <ClipboardDocumentIcon className="h-4 w-4" />
-                {copying === 'snippet' ? 'Copying…' : 'Copy installation snippet'}
-              </Button>
-            )}
             <Button
               variant="outline"
-              onClick={() => copy('developer', developerInstructions)}
+              onClick={() => copy('snippet', snippet)}
               disabled={copying !== null}
             >
-              Copy instructions for a developer
+              <ClipboardDocumentIcon className="h-4 w-4" />
+              {copying === 'snippet' ? 'Copying…' : 'Copy installation snippet'}
             </Button>
           </div>
         </SettingsCard>
