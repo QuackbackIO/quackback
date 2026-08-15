@@ -33,13 +33,13 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `40e1e6bf1` (widget install Outlet). Live still
-  `ghcr.io/quackbackio/quackback@sha256:25319ded06a84cc0b6be9c95a5c738186210a7cc04ffff382c189dfee439ab86`
-  (Docker `31860058211`). Web `c5d64208` SUCCESS, region only
-  `us-east4-eqdc4a`. Docker `31870327511` queued for `40e1e6bf1`.
+- Workspace tip: `40e1e6bf1` (widget install Outlet). Live
+  `ghcr.io/quackbackio/quackback@sha256:27e0c23d6fa7a8b8213d04f24f8edc7e01f24f6c06a04d19e96f32fd85631874`
+  (Docker `31870327511`). Web `532dbe27` SUCCESS, region only
+  `us-east4-eqdc4a`.
 - Control plane tip `64ca931` live as `1931dc38` (Growth webhooks/MCP
   both layers; still `sfo`).
-- Last known deployed workspace: `52c1ab397` / `sha256:25319ded…` (2026-08-15)
+- Last known deployed workspace: `40e1e6bf1` / `sha256:27e0c23d…` (2026-08-15)
 - Last known deployed control plane: `1931dc38` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
@@ -137,8 +137,8 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Track 8b–8f                      | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
 | Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-25319ded.md`                 | **PASS** on `25319ded` / `79030f27` | Prior PASS on `71f78ecb` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
 | Product-feedback first-win       | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”.                                                                                                                                                    |
-| Support + HC live first-win      | live        | existing `sup9ca3a708` / `hc9ca3a708`                   | **yes** hosts 200                   | Change goal + first-win reached. Support conversation + “You’re up and running”. HC article published + milestone 15 Aug 2026. `live-existing/`. Critic in flight.                                                                             |
-| Widget install Outlet            | app         | `40e1e6bf1`                                             | **no** Docker `31870327511`         | `/admin/settings/widget/install` mounted parent settings (no Outlet). Tests 33. Deploy this digest, then prove Enable Messenger.                                                                                                               |
+| Support + HC live first-win      | live        | existing `sup9ca3a708` / `hc9ca3a708`                   | **yes** hosts 200                   | Change goal + first-win reached. Support conversation + “You’re up and running”. HC article published + milestone 15 Aug 2026. Critic **PASS** `live-existing/critic.md`.                                                                      |
+| Widget install Outlet            | app         | `40e1e6bf1`                                             | **yes** `532dbe27` / `27e0c23d`     | Install page is Connect Messenger + Enable Messenger (not parent Widget). Enable → Channel enabled + Add the SDK. Critic **PASS** `this-fire/install-critic.md`.                                                                               |
 | Self-host + internal first-win   | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | General name only; no billing/switcher/URL. Launch plan Internal + “Collect your first team idea” reached. `self-host-walk-critic.md`.                                                                                                         |
 | Self-host support + HC first-win | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | Support conversation + HC article milestones reached; useCase restored to internal. `self-host-outcomes-critic.md`.                                                                                                                            |
 | Change goal UI support + HC      | local app   | local `:3000` (cloud off)                               | skip-deploy (self-host only)        | Change goal picker after hydration; Connect Messenger / Open Help Center; restored Internal. `self-host-changegoal-critic.md`.                                                                                                                 |
@@ -146,10 +146,9 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name           | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
 | PLG emit self-host skip          | app tests   | `3b4556ae2`                                             | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
-**Fleet note:** one deploy thread. Live pair is app `c5d64208` /
-`sha256:25319ded…` (`52c1ab397`, includes `635cdb149`) and CP
-`1931dc38` (`64ca931`). Undeployed customer-visible: `40e1e6bf1`
-(widget install Outlet). Docker `31870327511` in flight.
+**Fleet note:** one deploy thread. Live pair is app `532dbe27` /
+`sha256:27e0c23d…` (`40e1e6bf1`, includes `635cdb149`) and CP
+`1931dc38` (`64ca931`). No undeployed customer-visible product tip.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -788,10 +787,13 @@ and running** + **Publish your first article** (15 Aug 2026). Shots
 `loop-evidence/t7-first-win/live-existing/`. Named critic spawned.
 
 HIGH: `/admin/settings/widget/install` rendered the parent Widget
-page (no Outlet). Fixer `40e1e6bf1` tests 33/33. Pushed. Docker
-`31870327511` dispatched `--ref saas`. Deploy + live Enable
-Messenger critic still required. No live key. Custom domains not
-started.
+page (no Outlet). Fixer `40e1e6bf1` tests 33/33. Docker
+`31870327511` → `sha256:27e0c23d…`. `source.image` +
+`railway redeploy --from-source`: web `532dbe27`, worker `c4854a60`,
+hourly `51b82597`, daily `810ae26b`, migrator `3d64955e`. All
+`us-east4-eqdc4a`. Digest matches. Ready 200. Live install page
+Enable Messenger → Channel enabled. Critic **PASS**. No live key.
+Custom domains not started.
 
 Previous fire (Change goal UI):
 
@@ -1128,8 +1130,8 @@ Named critic spawned on the same URLs.
     Support `sup9ca3a708` (`inst_01m021rrsd…`, Neon
     `qb-cp-ffe2b4983034867ff50fdf54`) and Help Center `hc9ca3a708`
     (`inst_01m021xvy6…`, Neon `qb-cp-8c38697ef940ff0d53bd1d68`).
-    Instances 17→19. Ready 200. Starters still defaulted to product
-    feedback — Change goal + conversation/article first-win remain.
+    Instances 19. Ready 200. This fire: Change goal + first-win
+    reached on both hosts. Next: deploy `40e1e6bf1` (install Outlet).
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
