@@ -77,6 +77,20 @@ describe('boardCapabilitiesForActor', () => {
     expect(caps).toEqual({ canSubmit: false, canVote: false, canComment: false })
   })
 
+  it('lets a signed-in customer use a leftover board that has no moderation object', () => {
+    const leftover = { view: 'anonymous', submit: 'authenticated' } as BoardAccess
+    expect(boardCapabilitiesForActor(USER, leftover, true)).toEqual({
+      canSubmit: true,
+      canVote: true,
+      canComment: true,
+    })
+    expect(boardCapabilitiesForActor(ANON, leftover, true)).toEqual({
+      canSubmit: false,
+      canVote: false,
+      canComment: false,
+    })
+  })
+
   it('allows a team member everywhere regardless of the anonymous switch', () => {
     const access = makeAccess({ view: 'team', vote: 'team', comment: 'team', submit: 'team' })
     const caps = boardCapabilitiesForActor(TEAM, access, false)
