@@ -24,7 +24,7 @@ describe('consumeOpenHandoff', () => {
     const result = await consumeOpenHandoff({ ott: 'token-1' })
     expect(result).toEqual({
       kind: 'redirect',
-      to: '/onboarding/workspace',
+      to: '/',
       cookies: ['session=abc; Path=/; HttpOnly'],
     })
     expect(hoisted.handler).toHaveBeenCalledOnce()
@@ -47,9 +47,22 @@ describe('consumeOpenHandoff', () => {
     const headers = new Headers({ cookie: 'session=abc' })
     await expect(consumeOpenHandoff({ ott: 'spent', headers })).resolves.toEqual({
       kind: 'redirect',
-      to: '/onboarding/workspace',
+      to: '/',
       cookies: [],
     })
     expect(hoisted.getSession).toHaveBeenCalledWith({ headers })
+  })
+
+  it('lands on the workspace root even if a wizard returnTo is supplied', async () => {
+    hoisted.handler.mockResolvedValue({
+      ok: true,
+      headers: {
+        getSetCookie: () => ['session=abc; Path=/; HttpOnly'],
+        get: () => null,
+      },
+    })
+    await expect(
+      consumeOpenHandoff({ ott: 'token-1', returnTo: '/onboarding/workspace' })
+    ).resolves.toMatchObject({ kind: 'redirect', to: '/' })
   })
 })

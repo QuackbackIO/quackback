@@ -81,9 +81,12 @@ export async function consumeOpenHandoff(input: {
   returnTo?: string
   headers?: Headers
 }): Promise<OriginTransferResult> {
-  const returnTo = isSafeCallbackUrl(input.returnTo) ? input.returnTo : '/onboarding/workspace'
+  // Always the workspace root. The root route sends incomplete setup to
+  // /onboarding; a finished workspace stays on the portal. Do not honor a
+  // caller returnTo — Open must not drop a finished workspace into the
+  // wizard or /admin.
   if (!input.ott) return { kind: 'error', status: 'invalid' }
-  return consumeOrContinueExistingSession(input.ott, returnTo, input.headers)
+  return consumeOrContinueExistingSession(input.ott, '/', input.headers)
 }
 
 /**
