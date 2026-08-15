@@ -1,0 +1,42 @@
+{
+  "at": "2026-08-15T10:22:21.502Z",
+  "unit": "sso-enforce-t1e",
+  "didNotAddRealIssuer": true,
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "errors": [],
+  "ownerDomain": "guerrillamail.com",
+  "ownerFp": "82568e5500c3",
+  "hasCredTable": true,
+  "enforce": {
+    "password": {
+      "status": 302,
+      "ssoError": true,
+      "error": "verified_domain_requires_sso"
+    },
+    "magic": {
+      "status": 302,
+      "ssoError": true,
+      "error": "verified_domain_requires_sso"
+    }
+  },
+  "failopen": {
+    "password": {
+      "status": 302,
+      "ssoError": false,
+      "error": "password_method_not_allowed"
+    },
+    "magic": {
+      "status": 200,
+      "ssoError": false,
+      "error": null
+    }
+  },
+  "ok": true,
+  "after": {
+    "idp": 0,
+    "domains": 0,
+    "loopCreds": 0
+  },
+  "cleaned": true
+}

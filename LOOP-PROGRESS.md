@@ -784,6 +784,22 @@ Stripe-live: t1e Scale already paid. **Not repeated.**
 
 CP-create: 3-Free already live. **No second builder.**
 
+Live unit: **SSO enforce → fail-open** on t1e. Dummy
+`auth_oidc_loopenforce` credential (no issuer). With cred: password
+and magic-link **302** `verified_domain_requires_sso`. After delete
+cred: magic-link **200**. Probe rows gone. Critic **PASS**
+(`sso-enforce-critic.md`). Instances **19**. Custom domains not
+started.
+
+Previous fire (SSO fail-open only):
+
+Fleet: `635cdb149` already in `e20c0eef` / `sha256:895b942d…`. **No
+635 deploy.**
+
+Stripe-live: t1e Scale already paid. **Not repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
 Live unit: **SSO fail-open** on t1e. Enforced domain + IdP row
 without a credential (not registered). Password **302**
 `password_method_not_allowed`; magic-link **200**; neither is
@@ -1437,11 +1453,10 @@ Named critic spawned on the same URLs.
 24. ~~**Control-plane outage**~~ live on `895b942d` / `e20c0eef`
     (`cp-outage-critic.md`). Inbox 200; billing 503 retry copy;
     recovered 303/409. CP process was not stopped.
-25. **SSO downgrade.** Scale host is t1e; §H Scale **PASS**. Live
-    fail-open **PASS** (`sso-failopen-critic.md`): enforced domain +
-    unregistered IdP does not emit `verified_domain_requires_sso`.
-    Working IdP add → enforce → plan downgrade still open (no public
-    test issuer). Do not start custom domains.
+25. ~~**SSO downgrade lets admins in**~~ live on t1e
+    (`sso-enforce-critic.md`). Enforce 302 `verified_domain_requires_sso`;
+    removing the credential (IdP not viable) restores magic-link **200**.
+    No public issuer; no plan change. Do not start custom domains.
 26. ~~**Unauth delete/restore 500**~~ live CP `ef31b2a` / `3a9bc4ee`.
     303 `/auth/login`. `lifecycle-auth-critic.md`.
 
