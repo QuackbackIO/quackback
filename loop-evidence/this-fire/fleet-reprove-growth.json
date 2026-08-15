@@ -1,0 +1,70 @@
+{
+  "at": "2026-08-15T08:20:26.049Z",
+  "errors": [],
+  "didNotPay": true,
+  "didNotCreateNeon": true,
+  "stripeKeyPrefix": "sk_test_",
+  "instanceCount": {
+    "before": 19,
+    "after": 19
+  },
+  "plans": {
+    "t1a": "pro",
+    "t1e": "growth"
+  },
+  "handoff": {
+    "t1a": {
+      "consumeStatus": 200,
+      "hasSession": true
+    },
+    "t1e": {
+      "consumeStatus": 200,
+      "hasSession": true
+    }
+  },
+  "t1a": {
+    "samePro": {
+      "status": 409,
+      "error": "already_on_plan",
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false
+    }
+  },
+  "t1e": {
+    "sameGrowth": {
+      "status": 409,
+      "error": "already_on_plan",
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false
+    },
+    "scale": {
+      "status": 303,
+      "error": null,
+      "locationHost": "billing.stripe.com",
+      "locationPath": "/p/session/test_YWNjdF8xU2VKVDFSYnUxRExReGozLF9W",
+      "hasCsTest": false,
+      "hasCsLive": false
+    },
+    "foreign": {
+      "status": 403,
+      "error": "invalid_origin",
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false
+    },
+    "missing": {
+      "status": 403,
+      "error": "invalid_origin",
+      "locationHost": null,
+      "locationPath": null,
+      "hasCsTest": false,
+      "hasCsLive": false
+    }
+  },
+  "ok": true
+}
