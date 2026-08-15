@@ -6,8 +6,17 @@
 
 import { Autocomplete } from '@/components/ui/autocomplete'
 import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
+
+function fixtureFor(
+  registrationId: string,
+  capture: SsoTestCapture | null | undefined
+): SsoTestCapture | null {
+  if (capture && capture.registrationId === registrationId) return capture
+  return null
+}
 
 export function ClaimPathInput({
   value,
@@ -17,6 +26,7 @@ export function ClaimPathInput({
   placeholder,
   ariaLabel,
   disabled,
+  capture,
 }: {
   value: string
   onChange: (next: string) => void
@@ -25,12 +35,12 @@ export function ClaimPathInput({
   placeholder?: string
   ariaLabel: string
   disabled?: boolean
+  /** Session or persisted fixture. Falls back to the sitting's lastSuccess. */
+  capture?: SsoTestCapture | null
 }) {
   const { lastSuccess } = useSsoTestSignIn()
-  const suggestions =
-    lastSuccess && lastSuccess.registrationId === registrationId
-      ? deriveClaimSuggestions(lastSuccess.claims)
-      : null
+  const fixture = fixtureFor(registrationId, capture) ?? fixtureFor(registrationId, lastSuccess)
+  const suggestions = fixture ? deriveClaimSuggestions(fixture.claims) : null
   const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
 
   return (
@@ -58,8 +68,9 @@ export function ClaimPathInput({
   )
 }
 
-export function useClaimSuggestions(registrationId: string) {
+export function useClaimSuggestions(registrationId: string, capture?: SsoTestCapture | null) {
   const { lastSuccess } = useSsoTestSignIn()
-  if (!lastSuccess || lastSuccess.registrationId !== registrationId) return null
-  return deriveClaimSuggestions(lastSuccess.claims)
+  const fixture = fixtureFor(registrationId, capture) ?? fixtureFor(registrationId, lastSuccess)
+  if (!fixture) return null
+  return deriveClaimSuggestions(fixture.claims)
 }

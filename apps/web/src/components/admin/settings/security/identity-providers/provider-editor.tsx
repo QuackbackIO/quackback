@@ -98,6 +98,7 @@ import {
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
 import { ClaimPathInput, useClaimSuggestions } from './claim-path-input'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 import { OutcomePreviewRail } from './outcome-preview-rail'
 
 type Role = 'admin' | 'member' | 'user'
@@ -528,6 +529,7 @@ export function ProviderEditor({
                 disabled={saving}
                 registrationId={registrationId}
                 canTest={!!provider}
+                capture={capture}
                 onAllowMissingEmail={setAllowMissingEmail}
                 onSourcesChange={setSources}
                 onIdClaim={setIdClaim}
@@ -587,6 +589,7 @@ export function ProviderEditor({
                   disabled={saving}
                   registrationId={registrationId}
                   canTest={!!provider}
+                  capture={capture}
                   onChange={setMapping}
                 />
 
@@ -596,6 +599,7 @@ export function ProviderEditor({
                   disabled={saving}
                   registrationId={registrationId}
                   canTest={!!provider}
+                  capture={capture}
                   onRowsChange={setAttributeRows}
                   onMirrorAttributes={setMirrorAttributes}
                 />
@@ -1218,6 +1222,7 @@ function ClaimMappingEditor({
   disabled,
   registrationId,
   canTest,
+  capture,
   onChange,
 }: {
   mapping: Mapping | null
@@ -1225,6 +1230,7 @@ function ClaimMappingEditor({
   registrationId: string
   /** True once the provider is saved, so a test sign-in can actually run. */
   canTest: boolean
+  capture: SsoTestCapture | null
   onChange: (mapping: Mapping | null) => void
 }) {
   const ruleCount = mapping?.rules.length ?? 0
@@ -1232,7 +1238,7 @@ function ClaimMappingEditor({
   const current: Mapping = mapping ?? { claimPath: 'groups', rules: [] }
   const update = (patch: Partial<Mapping>) => onChange({ ...current, ...patch })
 
-  const suggestions = useClaimSuggestions(registrationId)
+  const suggestions = useClaimSuggestions(registrationId, capture)
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
   const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({
     value: v,
@@ -1291,6 +1297,7 @@ function ClaimMappingEditor({
               onChange={(v) => update({ claimPath: v })}
               registrationId={registrationId}
               canTest={canTest}
+              capture={capture}
               placeholder="groups, realm_access.roles, or a namespaced claim"
               ariaLabel="Claim path"
               disabled={disabled}
@@ -1519,6 +1526,7 @@ function IdentitySourcesSection({
   disabled,
   registrationId,
   canTest,
+  capture,
   onAllowMissingEmail,
   onSourcesChange,
   onIdClaim,
@@ -1533,6 +1541,7 @@ function IdentitySourcesSection({
   disabled: boolean
   registrationId: string
   canTest: boolean
+  capture: SsoTestCapture | null
   onAllowMissingEmail: (next: boolean) => void
   onSourcesChange: (next: IdentitySource[]) => void
   onIdClaim: (next: string) => void
@@ -1586,6 +1595,7 @@ function IdentitySourcesSection({
             onChange={onIdClaim}
             registrationId={registrationId}
             canTest={canTest}
+            capture={capture}
             placeholder="sub"
             ariaLabel="Account id claim"
             disabled={disabled}
@@ -1600,6 +1610,7 @@ function IdentitySourcesSection({
             onChange={onEmailClaim}
             registrationId={registrationId}
             canTest={canTest}
+            capture={capture}
             placeholder="email"
             ariaLabel="Email claim"
             disabled={disabled}
@@ -1614,6 +1625,7 @@ function IdentitySourcesSection({
             onChange={onNameClaim}
             registrationId={registrationId}
             canTest={canTest}
+            capture={capture}
             placeholder="name"
             ariaLabel="Name claim"
             disabled={disabled}
@@ -1647,6 +1659,7 @@ function AttributeMapSection({
   disabled,
   registrationId,
   canTest,
+  capture,
   onRowsChange,
   onMirrorAttributes,
 }: {
@@ -1655,6 +1668,7 @@ function AttributeMapSection({
   disabled: boolean
   registrationId: string
   canTest: boolean
+  capture: SsoTestCapture | null
   onRowsChange: (next: Array<{ claimPath: string; attributeKey: string }>) => void
   onMirrorAttributes: (next: boolean) => void
 }) {
@@ -1694,6 +1708,7 @@ function AttributeMapSection({
                 }
                 registrationId={registrationId}
                 canTest={canTest}
+                capture={capture}
                 placeholder="claim path"
                 ariaLabel={`Claim path (attribute ${index + 1})`}
                 disabled={disabled}

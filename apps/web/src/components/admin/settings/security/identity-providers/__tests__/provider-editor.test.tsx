@@ -386,6 +386,32 @@ describe('<ProviderEditor> outcome preview', () => {
     expect(screen.getByText('Jane Diaz')).toBeInTheDocument()
   })
 
+  it('offers claim-path suggestions from a persisted capture', () => {
+    renderEditor(
+      makeProvider({
+        lastTestCapture: makeCapture({
+          claims: { groups: ['eng'], roles: ['admin'], email: 'jane@acme.com' },
+        }),
+      })
+    )
+    expect(screen.getByText('From your test sign-in: groups, roles')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('combobox', { name: 'Email claim' }))
+    expect(screen.getAllByText('groups').length).toBeGreaterThan(0)
+  })
+
+  it('ambers the rail when the connection changed after the capture', () => {
+    renderEditor(
+      makeProvider({
+        detailsChangedAt: '2026-08-16T00:00:00.000Z',
+        lastTestCapture: makeCapture({
+          capturedAt: '2026-08-15T12:00:00.000Z',
+          claims: { email: 'jane@acme.com' },
+        }),
+      })
+    )
+    expect(screen.getByText(/Configuration changed since capture/)).toBeInTheDocument()
+  })
+
   it('evaluates a typed claim path against the capture with no fetch', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     ssoTestRef.current = makeCapture({
@@ -398,6 +424,26 @@ describe('<ProviderEditor> outcome preview', () => {
     expect(screen.getByText('upn', { selector: 'span' })).toBeInTheDocument()
     expect(fetchSpy).not.toHaveBeenCalled()
     fetchSpy.mockRestore()
+  })
+})
+
+describe('<ProviderEditor> defaults and canonical saves', () => {
+  it('names the default prompt and token-auth choices', () => {
+    renderEditor(makeProvider({ prompt: null, tokenEndpointAuthMethod: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByLabelText('Sign-in prompt'))
+    expect(screen.getByTestId('prompt-choice-login')).toHaveTextContent('(default)')
+    fireEvent.click(screen.getByLabelText('Client authentication'))
+    expect(
+      screen.getAllByText(/Send credentials in the request body \(default\)/).length
+    ).toBeGreaterThan(0)
+  })
+
+  it('omits the attributes section when mirror is off and no map is set', async () => {
+    renderEditor(makeProvider({ claimMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls.at(-1)![0].data.claimMapping).toBeNull()
   })
 })
 
