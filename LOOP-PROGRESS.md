@@ -37,10 +37,10 @@ Custom Hostnames integration proves both hostname and SSL readiness.
   `ghcr.io/quackbackio/quackback@sha256:71f78ecb9f4ef3a3c4eab729b8265ed462cf359a66fd08f73c41b829a43fca80`
   (Docker `31855839488`). Web `371883f5` SUCCESS, region only
   `us-east4-eqdc4a`.
-- Control plane tip `dc86c83` live as `3006af01` (catalogue stickers
-  match `definitions.ts`; still `sfo`).
+- Control plane tip `64ca931` live as `1931dc38` (Growth webhooks/MCP
+  both layers; still `sfo`).
 - Last known deployed workspace: `e22e3884e` / `sha256:71f78ecb…` (2026-08-15)
-- Last known deployed control plane: `3006af01` (2026-08-15)
+- Last known deployed control plane: `1931dc38` (2026-08-15)
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -133,13 +133,13 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CF for SaaS origin + client    | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy           | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
 | Plan catalogue + invoices      | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`      | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch               | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                            | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
-| Verify sweep                   | live        | `loop-evidence/verify-2026-08-14/sweep-52e78237.md`     | FAIL 1 HIGH (HC writer)            | Fuller sweep on `52e78237`. HIGH: cloud Help Center local writer. Fixer `ce57a0bcc` now live `47e64d52`.                                                                                                                                       |
+| Verify sweep                   | live        | `loop-evidence/verify-2026-08-15/sweep.md`              | **PASS 0 HIGH** on `71f78ecb`      | Fuller 1–32. HC local writer gone. 8e/8f surfaces present. §H not this file.                                                                                                                                                                   |
 | Track 8b–8f                    | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1` | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-52e78237.md`                 | FAIL (signed on `52e78237`)        | Catalogue stickers **fixed live** `dc86c83` / `3006af01`. Remaining HIGH: Growth webhooks/mcp grant vs feature. Re-sign §H on `71f78ecb` / `8edadea8`.                                                                                         |
+| Plan-matrix critic             | live + spec | `loop-evidence/plan-matrix-52e78237.md`                 | FAIL (signed on `52e78237`)        | Catalogue stickers live `dc86c83`. Growth grant/feature **fixed** `64ca931` / `1931dc38`. Re-sign §H on `71f78ecb` / `79030f27`.                                                                                                               |
 
 **Fleet note:** one deploy thread. Live pair is app `371883f5` /
 `sha256:71f78ecb…` (`e22e3884e`, includes `635cdb149`) and CP
-`3006af01` (`dc86c83`). No undeployed customer-visible product tip.
+`1931dc38` (`64ca931`). No undeployed customer-visible product tip.
 
 **Do not invert:** Workers-as-app is out; fallback stays Railway.
 Catalogue is CP-owned. Seat _stickers_ are per-seat; Stripe qty is
@@ -761,18 +761,23 @@ Fleet: `635cdb149` already live (ancestor of `71f78ecb`). Stripe-live
 first-pay already on t1a — not repeated. CP-create 3-Free already live —
 no second builder.
 
-Compact Verify on `71f78ecb` / `640d5ac1`: **0 HIGH**
-(`loop-evidence/verify-2026-08-15/sweep.md`). Row 9 stays
-`skipped (provider)`. §H not re-signed this fire (same-hosts after
-catalogue deploy).
+Fuller Verify **PASS 0 HIGH** on `71f78ecb` / `640d5ac1`
+(`loop-evidence/verify-2026-08-15/sweep.md`). Instances 17→17.
+
+Growth dual-layer: CP `64ca931` tests 7/7. `railway up` from
+`/home/james/quackback-cp` → `1931dc38` SUCCESS `sha256:79030f27…`.
+Live replica Growth features.webhooks/mcp **true** and match
+`PLAN_GRANTS`. Free still false. Critic PASS
+`loop-evidence/growth-grants/critic.md`. §H not re-signed this fire.
+
+Previous fire (catalogue stickers) is historical.
 
 Catalogue stickers: CP `dc86c83` tests 3/3. `railway up` from
 `/home/james/quackback-cp` → `3006af01` SUCCESS `sha256:8edadea8…`.
 Live `GET /catalogue` 200: Free/Growth `2/3 boards · 50 posts`, no
 unlimited posts, no Growth integrations/webhooks, no Pro `1M API`.
 Instances **17→17**. Critic PASS
-`loop-evidence/catalogue-stickers/critic.md`. Growth grant vs feature
-HIGH still open.
+`loop-evidence/catalogue-stickers/critic.md`.
 
 Previous fire (8f export/wipe) is historical.
 
@@ -1109,10 +1114,10 @@ Compact re-sweep after 8c: `sweep-52e78237.md` **PASS** (0 HIGH) on
 
 Stripe **test** payment + webhook finalize is live on t1a. Paid Change
 to Pro is live as a confirm portal session. 8c transfer/leave is live.
-Remaining: re-sign §H on `71f78ecb` / `8edadea8`; Growth webhooks/mcp
-grant vs feature HIGH. Domains card and first-win still open. Walk3
-webhook stays disabled. Live app `371883f5` / `sha256:71f78ecb…`
-`us-east4-eqdc4a`. Live CP `3006af01` (`dc86c83`). Instance rows 17.
+Remaining: re-sign §H on `71f78ecb` / `79030f27`. Domains card and
+first-win still open. Walk3 webhook stays disabled. Live app
+`371883f5` / `sha256:71f78ecb…` `us-east4-eqdc4a`. Live CP `1931dc38`
+(`64ca931`). Instance rows 17.
 
 Operational defects carried from the prior lead:
 
