@@ -133,9 +133,9 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | CF for SaaS origin + client      | zone + CP   | `de0b038`; fallback **active**                          | token on CP, skip-deploy            | Fallback `saas-origin.quackback.co.uk` CNAME to Railway (not `100::`). Customer target `customers.quackback.co.uk`. Client create/get/delete; no provider ids in projections. **Next builder:** identity gateway + Settings Domains card.      |
 | Plan catalogue + invoices        | CP + app    | CP `2fb9488`, app `6418785c8`                           | **yes** API; UI in `02cb4329`       | `GET /catalogue` 200 on live. Four cards. **Change to {plan}** must POST checkout with that planId (not a generic portal).                                                                                                                     |
 | Paid plan switch                 | CP + app    | CP `b7948ee` / `0e8d89a4`; app `717560270` / `1bf7ba8c` | **yes**                             | Existing sub: Stripe confirm session for the target price. Portal config lists every paid price. Upgrades invoice pro-rata now; downgrades wait until period end. Yearly prices map back to the plan.                                          |
-| Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-25319ded.md`     | **PASS 0 HIGH** on `25319ded`       | Fuller 1–32 on leftover-access image. Prior `71f78ecb` sweep is historical.                                                                                                                                                                    |
+| Verify sweep                     | live        | `loop-evidence/verify-2026-08-15/sweep-27e0c23d.md`     | **PASS 0 HIGH** on `27e0c23d`       | Fuller 1–32 on install-Outlet image. Prior `25319ded` sweep is historical.                                                                                                                                                                     |
 | Track 8b–8f                      | CP+app saas | **8a–8f live**                                          | **8f yes** `71f78ecb` / `640d5ac1`  | Export + wipe on General; CP account delete 403 with live workspaces.                                                                                                                                                                          |
-| Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-25319ded.md`                 | **PASS** on `25319ded` / `79030f27` | Prior PASS on `71f78ecb` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
+| Plan-matrix critic               | live + spec | `loop-evidence/plan-matrix-27e0c23d.md`                 | **PASS** on `27e0c23d` / `79030f27` | Prior PASS on `25319ded` is historical. No unpaid Free / Scale / cancel fixture.                                                                                                                                                               |
 | Product-feedback first-win       | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”.                                                                                                                                                    |
 | Support + HC live first-win      | live        | existing `sup9ca3a708` / `hc9ca3a708`                   | **yes** hosts 200                   | Change goal + first-win reached. Support conversation + “You’re up and running”. HC article published + milestone 15 Aug 2026. Critic **PASS** `live-existing/critic.md`.                                                                      |
 | Widget install Outlet            | app         | `40e1e6bf1`                                             | **yes** `532dbe27` / `27e0c23d`     | Install page is Connect Messenger + Enable Messenger (not parent Widget). Enable → Channel enabled + Add the SDK. Critic **PASS** `this-fire/install-critic.md`.                                                                               |
@@ -766,6 +766,22 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 
 ## This fire (2026-08-15, orchestrator)
 
+Fleet: `635cdb149` already in live `40e1e6bf1` / `sha256:27e0c23d…` /
+web `532dbe27`, `us-east4-eqdc4a`. Five health 200. t1e Upgrade **303**
+`cs_test_` (foreign/missing Origin 403). No 635cdb149 deploy.
+
+Stripe-live: t1a Growth paid (sub active, item, outbox v4). **Not
+repeated.**
+
+CP-create: 3-Free already live. **No second builder.**
+
+Verify **PASS 0 HIGH** on `27e0c23d` / `1931dc38`
+(`sweep-27e0c23d.md`). Plan-matrix §H **PASS**
+(`plan-matrix-27e0c23d.md`). Instances **19→19**. No Neon. No live
+key. Custom domains not started.
+
+Previous fire (install Outlet + Track 7 first-win):
+
 Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
 web `c5d64208`, `us-east4-eqdc4a`. Five health 200. t1e Upgrade **303**
 `cs_test_` (foreign/missing Origin 403). Fleet critic
@@ -1135,11 +1151,8 @@ Named critic spawned on the same URLs.
 19. **Deploy paid plan switch** (this unit) on CP + app, then live-
     critic Change to X on t1a (Growth paid). Portal config is created
     on first session if seed has not run.
-20. ~~**Plan-matrix critic**~~ signed **PASS** on `71f78ecb` / `79030f27`
-    (`plan-matrix-71f78ecb.md`). Prior FAIL on `52e78237` is historical.
-    (`plan-matrix-52e78237.md`). Next: align catalogue stickers vs
-    `definitions.ts` / `PLAN_GRANTS` (do not pick silently); 8e `N of
-M`; lock SSO `/new` on non-Scale. Re-run §H after those land.
+20. ~~**Plan-matrix critic**~~ signed **PASS** on `27e0c23d` / `79030f27`
+    (`plan-matrix-27e0c23d.md`). Prior PASS on `25319ded` is historical.
 
 ## Stale code to remove
 
