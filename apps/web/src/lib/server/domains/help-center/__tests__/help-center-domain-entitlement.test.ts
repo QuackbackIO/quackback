@@ -9,8 +9,8 @@
  *     -> getWorkspaceSettings -> resolveCloudConfig -> refuse or proceed
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
+import { ForbiddenError } from '@/lib/shared/errors'
+import { HC_DOMAIN_CLOUD_MANAGED } from '../help-center-domain.service'
 
 const hoisted = vi.hoisted(() => ({
   mockGetWorkspaceSettings: vi.fn(),
@@ -52,45 +52,28 @@ describe('setHelpCenterDomain — unconfigured install', () => {
   })
 })
 
-describe('setHelpCenterDomain — plan gate', () => {
-  it('refuses on a plan without the entitlement, and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'free' })
-
-    let caught: EntitlementRequiredError | null = null
-    try {
-      await setHelpCenterDomain('help.acme.com')
-    } catch (err) {
-      caught = err as EntitlementRequiredError
+describe('setHelpCenterDomain — cloud amputates the local writer', () => {
+  it.each(['free', 'growth', 'pro', 'scale'] as const)(
+    'refuses the local reverse-proxy writer on cloud %s',
+    async (plan) => {
+      withCloud({ enabled: true, plan })
+      await expect(setHelpCenterDomain('help.acme.com')).rejects.toMatchObject({
+        code: HC_DOMAIN_CLOUD_MANAGED,
+        statusCode: 403,
+      })
+      expect(hoisted.mockUpdateHelpCenterConfig).not.toHaveBeenCalled()
     }
+  )
 
-    expect(caught).toBeInstanceOf(EntitlementRequiredError)
-    // The bar: a refusal that says only "not allowed" fails. This one names it.
-    expect(caught!.requiredPlanName).toBe('Growth')
-    expect(caught!.message).toBe(
-      'Custom domains are a Growth feature. Your workspace is on Free. Upgrade to Growth to enable it.'
-    )
-    // Nothing was written.
-    expect(hoisted.mockUpdateHelpCenterConfig).not.toHaveBeenCalled()
-  })
-
-  it('maps to 402 through the plumbing that already exists', async () => {
-    withCloud({ enabled: true, plan: 'free' })
-    await expect(setHelpCenterDomain('help.acme.com')).rejects.toBeInstanceOf(TierLimitError)
-  })
-
-  it('allows the write on a plan that includes it', async () => {
+  it('names the local writer so the refusal is distinguishable', async () => {
     withCloud({ enabled: true, plan: 'pro' })
-    await expect(setHelpCenterDomain('help.acme.com')).resolves.toBeDefined()
-    expect(hoisted.mockUpdateHelpCenterConfig).toHaveBeenCalledOnce()
+    await expect(setHelpCenterDomain('help.acme.com')).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(setHelpCenterDomain('help.acme.com')).rejects.toThrow(
+      'Cloud workspaces cannot use the local reverse-proxy domain writer.'
+    )
   })
 
-  it('allows the write on a grandfathered override above the plan', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { customDomain: true } })
-    await expect(setHelpCenterDomain('help.acme.com')).resolves.toBeDefined()
-  })
-
-  it('still lets a downgraded workspace clear its domain', async () => {
-    // Refusing this would strand the workspace on a domain it cannot manage.
+  it('still lets a cloud workspace clear a leftover domain', async () => {
     withCloud({ enabled: true, plan: 'free' })
     hoisted.mockUpdateHelpCenterConfig.mockResolvedValue({
       domain: { domain: null, verifiedAt: null },

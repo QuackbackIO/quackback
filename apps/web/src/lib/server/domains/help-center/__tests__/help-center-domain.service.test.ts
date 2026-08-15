@@ -7,6 +7,7 @@ const mockUpdateHelpCenterConfig = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getHelpCenterConfig: (...args: unknown[]) => mockGetHelpCenterConfig(...args),
   updateHelpCenterConfig: (...args: unknown[]) => mockUpdateHelpCenterConfig(...args),
+  getWorkspaceSettings: async () => ({ settings: { cloud: null } }),
 }))
 
 const mockResolve4 = vi.fn()
