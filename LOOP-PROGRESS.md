@@ -139,6 +139,7 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Product-feedback first-win     | app         | `52c1ab397`                                             | **yes** `c5d64208` / `25319ded`     | Signed-in t1a public board renders; one customer post; launch plan “You’re up and running”. Support / HC / internal / self-host walks remain (no Neon this fire).                                                                              |
 | Outcome Ready + first-win copy | app tests   | `587e96847`                                             | skip-deploy (tests-only)            | Ready primaries + first-win titles for all four outcomes. `outcomes-critic.md`.                                                                                                                                                                |
 | Self-host General name         | app         | `8cb12d5f1`                                             | skip-deploy (self-host only)        | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                           |
+| PLG emit self-host skip        | app tests   | `3b4556ae2`                                             | skip-deploy (tests-only)            | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                              |
 
 **Fleet note:** one deploy thread. Live pair is app `c5d64208` /
 `sha256:25319ded…` (`52c1ab397`, includes `635cdb149`) and CP
@@ -763,6 +764,14 @@ three health URLs 200; replica exports `resolveEffectiveTierLimits`.
 Fleet: `635cdb149` already in live `52c1ab397` / `sha256:25319ded…` /
 web `c5d64208`. No deploy. Stripe-live not repeated. CP-create not
 started. No Neon. No live key. Custom domains not started.
+
+Track 7 PLG: `3b4556ae2` proves `emitPlgEvent` is a no-op when cloud
+is off and logs only the bounded vocabulary when cloud is on. Tests
+9/9. Named skip-deploy. Critic
+`loop-evidence/t7-first-win/plg-emit-critic.md`. Support / HC /
+internal live walks still need Neon.
+
+Previous fire (self-host General Bar C) is historical.
 
 Track 7 / Bar C: `8cb12d5f1` extracts the self-host General name card
 and proves it has no cloud URL. Cloud URL field does not prefill
