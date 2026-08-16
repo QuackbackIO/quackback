@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { Route } from '../feedback'
 
 function parseFeedbackSearch(search: Record<string, unknown>) {
-  const schema = Route.options.validateSearch as { parse: (input: unknown) => { sort?: string } }
-  return schema.parse(search)
+  const validate = Route.options.validateSearch as (input: Record<string, unknown>) => {
+    sort?: string
+    board?: string[]
+  }
+  return validate(search)
 }
 
 describe('admin feedback search', () => {
@@ -16,7 +19,11 @@ describe('admin feedback search', () => {
   })
 
   it('drops a portal board slug when the admin schema wants a string[]', () => {
-    expect(parseFeedbackSearch({ board: 'product-feedback', sort: 'newest' })).toEqual({
+    const parsed = parseFeedbackSearch({ board: 'product-feedback', sort: 'newest' })
+    expect(parsed.sort).toBe('newest')
+    expect(parsed.board).toBeUndefined()
+    expect({ ...{ board: 'product-feedback', sort: 'newest' }, ...parsed }).toEqual({
+      board: undefined,
       sort: 'newest',
     })
   })

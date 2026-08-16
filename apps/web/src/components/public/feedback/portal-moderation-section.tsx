@@ -190,6 +190,7 @@ export function PortalModerationSection({
           </button>
           <Link
             to="/admin/moderation"
+            search={{}}
             className="inline-flex items-center gap-1 font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
           >
             <FormattedMessage

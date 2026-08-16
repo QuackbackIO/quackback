@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { RoadmapAdmin } from '@/components/admin/roadmap-admin'
 import { RoadmapModal } from '@/components/admin/roadmap-modal'
+import { blankOmittedSearchKeys } from '@/lib/shared/route-search'
 import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
@@ -16,7 +17,8 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/admin/roadmap')({
-  validateSearch: searchSchema,
+  validateSearch: (raw: Record<string, unknown>) =>
+    blankOmittedSearchKeys(raw, searchSchema.parse(raw)),
   beforeLoad: ({ context }) => {
     if (!isProductEnabled(context.settings?.featureFlags, 'feedback')) {
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
