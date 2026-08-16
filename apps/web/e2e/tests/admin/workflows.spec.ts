@@ -110,23 +110,22 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     // issues chip reports 2.
     await expect(page.getByRole('button', { name: '2 issues' })).toBeVisible({ timeout: 10000 })
 
-    // Step list: the trigger card renders the trigger label. The list is the
-    // outline — there is no outline rail.
-    const stepList = page.getByRole('region', { name: 'Workflow steps' })
-    await expect(stepList).toBeVisible()
+    // Canvas: the trigger card renders the trigger label.
     await expect(
       page.locator('[data-step-id]').filter({ hasText: 'New conversation' })
     ).toBeVisible()
-    await expect(page.getByRole('navigation', { name: 'Workflow outline' })).toHaveCount(0)
 
-    // Lane tabs expose every branch path; switching tabs reveals that path's
-    // assign step so it can be selected into the inspector.
-    const laneTabs = page.getByRole('tablist', { name: 'Branch paths' })
-    await expect(laneTabs.getByRole('tab')).toHaveCount(2)
-    await laneTabs.getByRole('tab').nth(1).click()
-    const assignCard = page.locator('[data-step-id]').filter({ hasText: 'Assign to team' })
-    await expect(assignCard).toBeVisible()
-    await assignCard.click()
+    // Outline rail: trigger + branch + both unresolved action steps.
+    const outline = page.getByRole('navigation', { name: 'Workflow outline' })
+    await expect(outline.getByText('New conversation')).toBeVisible()
+    await expect(outline.getByText('Branch · 2 paths')).toBeVisible()
+    const outlineAssignRows = outline.getByRole('button', { name: /Assign to a team/ })
+    await expect(outlineAssignRows.first()).toBeVisible()
+    await expect(outlineAssignRows).toHaveCount(2)
+
+    // Selecting an unconfigured "Assign to team" step shows the inspector's
+    // team select with nothing chosen (placeholder text, not a real team).
+    await outlineAssignRows.first().click()
     const inspector = page.getByRole('complementary')
     // The inspector header title and the action-type select's current value
     // both render "Assign to team" text; scope to the sticky header row.
@@ -170,23 +169,19 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
       { timeout: 15000 }
     )
 
-    // Step list: the trigger card renders the trigger label.
-    const stepList = page.getByRole('region', { name: 'Workflow steps' })
-    await expect(stepList).toBeVisible()
+    // Canvas: the trigger card renders the trigger label.
     await expect(
       page.locator('[data-step-id]').filter({ hasText: 'New conversation' })
     ).toBeVisible()
-    await expect(page.getByRole('navigation', { name: 'Workflow outline' })).toHaveCount(0)
 
-    // Reply-button lane tabs use the button labels (not internal keys).
-    await expect(page.getByRole('tab', { name: /Product question/ })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /Report a bug/ })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /Billing/ })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /Talk to sales/ })).toBeVisible()
-    await page.getByRole('tab', { name: /Product question/ }).click()
-    await page.getByRole('tab', { name: /Report a bug/ }).click()
-    await page.getByRole('tab', { name: /Billing/ }).click()
-    await page.getByRole('tab', { name: /Talk to sales/ }).click()
+    // Outline rail: the reply-buttons step fans out one path per button, and
+    // the path header uses the button's own label (not its internal key).
+    const outline = page.getByRole('navigation', { name: 'Workflow outline' })
+    await expect(outline.getByText('New conversation')).toBeVisible()
+    await expect(outline.getByText('Path A · Product question')).toBeVisible()
+    await expect(outline.getByText('Path B · Report a bug')).toBeVisible()
+    await expect(outline.getByText('Path C · Billing')).toBeVisible()
+    await expect(outline.getByText('Path D · Talk to sales')).toBeVisible()
 
     // Workspace refs plus the unset issue-type branch (11 action/collect
     // sentinels + the branch node).
@@ -199,7 +194,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     const jsonTextbox = page.getByRole('textbox', { name: 'Workflow graph JSON' })
     await expect(jsonTextbox).toBeVisible()
     await expect(jsonTextbox).toHaveValue(/welcome_message/)
-    // ...and switching back to Visual restores the step list.
+    // ...and switching back to Visual restores the canvas.
     await page.getByRole('button', { name: 'Visual' }).click()
     await expect(
       page.locator('[data-step-id]').filter({ hasText: 'New conversation' })

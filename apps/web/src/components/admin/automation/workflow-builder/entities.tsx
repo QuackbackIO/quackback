@@ -1,8 +1,8 @@
 /**
  * Shared entity options for the fullscreen workflow builder (support platform
  * §4.6): teammates, teams, tags, live SLA policies, and live attribute
- * definitions, plus the id -> display name lookups the step-list card
- * summaries need. One provider so the step list and inspector all read
+ * definitions, plus the id -> display name lookups the canvas cards and
+ * inspector need. One provider so the canvas and inspector all read
  * the same cached queries instead of each firing their own.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react'

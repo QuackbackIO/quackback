@@ -105,6 +105,7 @@
     "@tiptap/react": "^3.22.3",
     "@tiptap/starter-kit": "^3.22.3",
     "@tiptap/suggestion": "^3.22.3",
+    "@xyflow/react": "^12.11.2",
     "bcryptjs": "^3.0.3",
     "better-auth": "^1.6.16",
     "bowser": "2.14.1",

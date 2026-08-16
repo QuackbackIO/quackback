@@ -1,8 +1,8 @@
 /**
- * Fullscreen builder top bar (support platform §4.6): back link, an
- * inline-renameable workflow name, status + class pills, the issues chip
- * (jumps to the first invalid step), the Visual/JSON toggle, the dirty-state
- * text, and the explicit Save / Set live / Pause actions.
+ * Fullscreen builder top bar (support platform §4.6): back link, outline
+ * toggle, an inline-renameable workflow name, status + class pills, the
+ * issues chip (jumps to the first invalid step), the Visual/JSON toggle,
+ * the dirty-state text, and the explicit Save / Set live / Pause actions.
  */
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
@@ -12,6 +12,7 @@ import {
   CodeBracketIcon,
   ExclamationTriangleIcon,
   RectangleGroupIcon,
+  ViewColumnsIcon,
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
@@ -73,6 +74,8 @@ export function WorkflowBuilderTopBar({
   onSetLive,
   onPause,
   statusPending,
+  outlineCollapsed,
+  onToggleOutline,
   onOpenHistory,
 }: {
   name: string
@@ -90,6 +93,8 @@ export function WorkflowBuilderTopBar({
   onSetLive: () => void
   onPause: () => void
   statusPending: boolean
+  outlineCollapsed: boolean
+  onToggleOutline: () => void
   /** Opens the version history + rollback sheet (support platform §4.6). */
   onOpenHistory: () => void
 }) {
@@ -101,6 +106,16 @@ export function WorkflowBuilderTopBar({
         <Link to="/admin/automation/workflows" aria-label="Back to workflows">
           <ArrowLeftIcon className="size-4" />
         </Link>
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        onClick={onToggleOutline}
+        aria-label={outlineCollapsed ? 'Show outline' : 'Hide outline'}
+        aria-pressed={!outlineCollapsed}
+      >
+        <ViewColumnsIcon className="size-4" />
       </Button>
       <div className="h-5 w-px bg-border" />
 
