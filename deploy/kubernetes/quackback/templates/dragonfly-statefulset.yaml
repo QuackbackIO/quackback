@@ -1,0 +1,80 @@
+{{- if .Values.dragonfly.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "quackback.fullname" . }}-dragonfly
+  labels:
+    {{- include "quackback.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dragonfly
+spec:
+  serviceName: {{ include "quackback.fullname" . }}-dragonfly
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "quackback.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dragonfly
+  template:
+    metadata:
+      labels:
+        {{- include "quackback.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dragonfly
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: dragonfly
+          image: "{{ .Values.dragonfly.image.repository }}:{{ .Values.dragonfly.image.tag }}"
+          imagePullPolicy: {{ .Values.dragonfly.image.pullPolicy }}
+          # cluster_mode=emulated + lock_on_hashtags is required for BullMQ's
+          # Lua script compatibility — see
+          # https://www.dragonflydb.io/docs/integrations/bullmq
+          args:
+            - dragonfly
+            - --cluster_mode=emulated
+            - --lock_on_hashtags
+            - --maxmemory={{ .Values.dragonfly.maxmemory }}
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.dragonfly.resources | nindent 12 }}
+          volumeMounts:
+            - name: dragonfly-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: dragonfly-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.dragonfly.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.dragonfly.storage.size }}
+{{- end }}
