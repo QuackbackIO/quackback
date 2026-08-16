@@ -25,6 +25,7 @@ import {
   principal,
   user,
   session,
+  conversations,
   posts,
   postComments,
   postCommentReactions,
@@ -421,10 +422,13 @@ export async function listPortalUsers(
  * declares CASCADE or SET NULL (votes, subscriptions, moderation stamps) is
  * left to Postgres. See principals/principal-reattribute.ts for the registry
  * and the audit that keeps it complete.
+ *
+ * Sessions are revoked and visitor email is cleared in the same transaction
+ * so a still-cookied user cannot immediately provision a replacement
+ * principal, and inbound mail stops addressing the removed person.
  */
 export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {
-    // Verify principal exists and has role='user'
     const existingPrincipal = await db.query.principal.findFirst({
       where: and(
         eq(principal.id, principalId),
@@ -443,12 +447,33 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
       )
     }
 
+    const userId = existingPrincipal.userId
+
     await db.transaction(async (tx) => {
       await reattributeAuthoredContent(tx, principalId)
+      await tx
+        .update(conversations)
+        .set({ visitorEmail: null })
+        .where(eq(conversations.visitorPrincipalId, principalId))
+      if (userId) {
+        await tx.delete(session).where(eq(session.userId, userId))
+      }
       // Delete principal record (user record is retained; the FK cascades the
       // other way, from user to principal)
       await tx.delete(principal).where(eq(principal.id, principalId))
     })
+
+    if (userId) {
+      try {
+        const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+        await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(userId))
+      } catch (error) {
+        log.warn(
+          { err: error, user_id: userId },
+          'failed to invalidate principal cache after remove'
+        )
+      }
+    }
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     log.error({ err: error, principalId }, 'failed to remove portal user')

@@ -58,7 +58,7 @@ describe('normalizePromptInput', () => {
   })
 
   it('stores a non-default choice verbatim', () => {
-    expect(normalizePromptInput('login')).toBe('login')
+    expect(normalizePromptInput('select_account')).toBe('select_account')
     expect(normalizePromptInput('omit')).toBe('omit')
   })
 

@@ -1,0 +1,21 @@
+{
+  "name": "Quackback",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "bun run dev",
+      "description": "Quackback web app (TanStack Start) — http://localhost:3000"
+    }
+  ],
+  "ports": [
+    { "name": "web", "port": 3000 },
+    { "name": "mailpit", "port": 8025 },
+    { "name": "minio-console", "port": 9001 }
+  ]
+}

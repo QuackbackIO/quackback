@@ -56,6 +56,13 @@ vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
 }))
 
+vi.mock('@/lib/server/integrations/jira/access-token', () => ({
+  getJiraAccessToken: vi.fn(async (integration: { secrets: unknown }) => {
+    const parsed = JSON.parse(integration.secrets as string) as { accessToken?: string }
+    return parsed.accessToken
+  }),
+}))
+
 vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
   decryptWebhookSecret: vi.fn((s: string) => s),
 }))
@@ -226,6 +233,101 @@ describe('integration mapping caching', () => {
     // Target was returned
     const slackTargets = targets.filter((t) => t.type === 'slack')
     expect(slackTargets).toHaveLength(1)
+  })
+})
+
+describe('integration hook config', () => {
+  function mapping(overrides: Record<string, unknown>) {
+    return {
+      eventType: 'post.created',
+      secrets: JSON.stringify({ accessToken: 'tok' }),
+      actionConfig: { channelId: 'chan' },
+      filters: null,
+      ...overrides,
+    }
+  }
+
+  async function targetsFor(row: Record<string, unknown>) {
+    mockCacheGet.mockResolvedValueOnce([row]).mockResolvedValueOnce([])
+    return getHookTargets(makePostCreatedEvent())
+  }
+
+  it('forwards stored integration config and lets accessToken/rootUrl win', async () => {
+    const [jira] = (
+      await targetsFor(
+        mapping({
+          integrationType: 'jira',
+          integrationConfig: {
+            cloudId: 'cloud-1',
+            siteUrl: 'https://ex.atlassian.net',
+            accessToken: 'stale-from-config',
+            rootUrl: 'https://should-not-use',
+          },
+          actionConfig: { channelId: '10000:10001' },
+        })
+      )
+    ).filter((t) => t.type === 'jira')
+
+    expect(jira.config).toMatchObject({
+      cloudId: 'cloud-1',
+      siteUrl: 'https://ex.atlassian.net',
+      accessToken: 'tok',
+      rootUrl: 'https://test.quackback.io',
+    })
+  })
+
+  it('forwards organizationName, apiKey, and teamId from stored config', async () => {
+    mockCacheGet
+      .mockResolvedValueOnce([
+        mapping({
+          integrationType: 'azure_devops',
+          integrationConfig: { organizationName: 'acme' },
+          actionConfig: { channelId: 'Proj:Task' },
+        }),
+        mapping({
+          integrationType: 'trello',
+          integrationConfig: { apiKey: 'key-1' },
+          actionConfig: { channelId: 'list-1' },
+        }),
+        mapping({
+          integrationType: 'teams',
+          integrationConfig: { teamId: 'team-1' },
+          actionConfig: { channelId: 'ch-1' },
+        }),
+      ])
+      .mockResolvedValueOnce([])
+
+    const targets = await getHookTargets(makePostCreatedEvent())
+    expect(targets.find((t) => t.type === 'azure_devops')?.config).toMatchObject({
+      organizationName: 'acme',
+      accessToken: 'tok',
+    })
+    expect(targets.find((t) => t.type === 'trello')?.config).toMatchObject({ apiKey: 'key-1' })
+    expect(targets.find((t) => t.type === 'teams')?.config).toMatchObject({ teamId: 'team-1' })
+  })
+
+  it('does not put inbound webhook fields on the hook job', async () => {
+    const [jira] = (
+      await targetsFor(
+        mapping({
+          integrationType: 'jira',
+          integrationConfig: {
+            cloudId: 'cloud-1',
+            webhookSecret: 'whsec_should_not_leak',
+            statusMappings: { Done: 'status_1' },
+            statusSyncEnabled: true,
+            externalWebhookId: '99',
+          },
+          actionConfig: { channelId: '10000:10001' },
+        })
+      )
+    ).filter((t) => t.type === 'jira')
+
+    expect(jira.config).toMatchObject({ cloudId: 'cloud-1', accessToken: 'tok' })
+    expect(jira.config).not.toHaveProperty('webhookSecret')
+    expect(jira.config).not.toHaveProperty('statusMappings')
+    expect(jira.config).not.toHaveProperty('statusSyncEnabled')
+    expect(jira.config).not.toHaveProperty('externalWebhookId')
   })
 })
 

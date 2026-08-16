@@ -101,10 +101,22 @@ export function buildIntegrationTargets(
       }
     }
 
+    // Inbound-only fields stay on the integration row; they must not ride
+    // along in hook jobs (webhookSecret especially). Everything else — Jira
+    // cloudId/siteUrl, Azure org name — is what the outbound hook needs.
+    const {
+      webhookSecret: _webhookSecret,
+      statusMappings: _statusMappings,
+      statusSyncEnabled: _statusSyncEnabled,
+      externalWebhookId: _externalWebhookId,
+      ...hookConfig
+    } = integrationConfig
+
     targets.push({
       type: m.integrationType,
       target: { channelId },
       config: {
+        ...hookConfig,
         accessToken,
         rootUrl,
         ...(m.integrationId ? { integrationId: m.integrationId } : {}),

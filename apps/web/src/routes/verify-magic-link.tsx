@@ -9,6 +9,7 @@ import {
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { getInviteBrandingFn } from '@/lib/server/functions/invitations'
+import { parseInvitationId } from '@/lib/shared/parse-invitation-id'
 
 interface InviteBranding {
   workspaceName: string
@@ -22,18 +23,6 @@ const FEATURES = [
   { icon: BoltIcon, label: '24 integrations' },
   { icon: MapIcon, label: 'Roadmap & changelog' },
 ] as const
-
-/** Extract an invitation ID (invite_...) from a callback URL path */
-function parseInvitationId(callbackURL: string | undefined): string | null {
-  if (!callbackURL) return null
-  try {
-    const path = new URL(callbackURL).pathname
-    const match = path.match(/\/complete-signup\/(invite_[a-z0-9]+)/)
-    return match?.[1] ?? null
-  } catch {
-    return null
-  }
-}
 
 export const Route = createFileRoute('/verify-magic-link')({
   validateSearch: (search: Record<string, unknown>) => ({
