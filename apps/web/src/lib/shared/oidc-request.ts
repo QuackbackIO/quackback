@@ -16,12 +16,12 @@
 import { effectiveScopes } from './oidc-scopes'
 
 /**
- * Sent when a provider has no explicit preference. The account picker stops an
- * admin who typed one address being silently signed in as whoever the provider
- * already has a session for — worth keeping as the default, though not every
- * provider implements it.
+ * Sent when a provider has no explicit preference. Re-authenticate so an
+ * admin who typed one address is not silently signed in as whoever the
+ * provider already has a session for. `login` is used rather than
+ * `select_account`, which is OIDC-optional and many IdPs ignore or reject.
  */
-export const DEFAULT_OIDC_PROMPT = 'select_account'
+export const DEFAULT_OIDC_PROMPT = 'login'
 
 /** Credentials in the request body. The other common choice is HTTP Basic. */
 export const DEFAULT_TOKEN_AUTH_METHOD = 'post'

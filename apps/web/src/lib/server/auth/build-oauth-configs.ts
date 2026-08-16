@@ -71,8 +71,8 @@ export interface GenericOAuthConfig {
    *  only one of the two, and this was previously fixed in code. */
   authentication?: 'basic' | 'post'
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
-  // Force the IdP account picker so admins notice when they're already
-  // signed in as a different identity.
+  // Default prompt is `login` (see DEFAULT_OIDC_PROMPT). select_account is
+  // OIDC-optional and many IdPs ignore or reject it.
   prompt?:
     | 'none'
     | 'login'

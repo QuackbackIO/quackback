@@ -97,6 +97,23 @@ describe('buildGenericOAuthConfigs', () => {
     expect(cfgs[0].disableSignUp).toBe(false)
   })
 
+  it('requests the broadly-supported prompt=login, not the OIDC-optional select_account', async () => {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [
+        {
+          id: 'idp_abc',
+          registrationId: 'sso',
+          enabled: true,
+          autoCreateUsers: true,
+          discoveryUrl: 'https://x/.well-known/openid-configuration',
+        },
+      ] as any,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+    })
+    expect(cfgs[0].prompt).toBe('login')
+  })
+
   it('skips disabled providers and providers without credentials', async () => {
     const cfgs = await buildConfigs(
       [

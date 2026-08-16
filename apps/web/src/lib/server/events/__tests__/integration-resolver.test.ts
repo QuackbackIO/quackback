@@ -33,6 +33,40 @@ describe('buildIntegrationTargets (WO-8b)', () => {
     ])
   })
 
+  it('copies stored integration config onto the hook target and strips inbound-only fields', () => {
+    const targets = buildIntegrationTargets(
+      [
+        mapping({
+          integrationType: 'jira',
+          integrationConfig: {
+            channelId: 'PROJ:10001',
+            cloudId: 'cloud-1',
+            siteUrl: 'https://acme.atlassian.net',
+            webhookSecret: 'do-not-send',
+            statusMappings: { Done: 'completed' },
+            statusSyncEnabled: true,
+            externalWebhookId: 'wh-1',
+          },
+          actionConfig: {},
+        }),
+      ],
+      'post.created',
+      [],
+      'https://p',
+      decrypt
+    )
+    expect(targets[0]?.config).toMatchObject({
+      cloudId: 'cloud-1',
+      siteUrl: 'https://acme.atlassian.net',
+      accessToken: 'token-for-enc',
+      rootUrl: 'https://p',
+    })
+    expect(targets[0]?.config).not.toHaveProperty('webhookSecret')
+    expect(targets[0]?.config).not.toHaveProperty('statusMappings')
+    expect(targets[0]?.config).not.toHaveProperty('statusSyncEnabled')
+    expect(targets[0]?.config).not.toHaveProperty('externalWebhookId')
+  })
+
   it('dedupes by (integrationType, channelId)', () => {
     const targets = buildIntegrationTargets(
       [mapping({}), mapping({})],

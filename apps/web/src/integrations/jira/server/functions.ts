@@ -27,7 +27,7 @@ export interface JiraIssueType {
   subtask: boolean
 }
 
-interface JiraIntegrationConfig {
+type JiraIntegrationConfig = {
   cloudId?: string
   siteUrl?: string
   workspaceName?: string

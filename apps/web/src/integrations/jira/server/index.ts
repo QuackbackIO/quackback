@@ -32,10 +32,12 @@ export const jiraIntegration: IntegrationDefinition = {
   issues: jiraIssues,
   archive: closeJiraIssue,
   webhookRegistration: {
-    register: async ({ accessToken, config, callbackUrl, secret }) => {
+    register: async ({ accessToken, config, callbackUrl }) => {
       const cloudId = config.cloudId as string
       if (!cloudId) throw new Error('No Jira Cloud ID configured')
-      const result = await registerJiraWebhook(accessToken, cloudId, callbackUrl, secret)
+      const projectRef = String(config.channelId ?? '').split(':')[0]
+      if (!projectRef) throw new Error('No Jira project configured')
+      const result = await registerJiraWebhook(accessToken, cloudId, callbackUrl, projectRef)
       return { externalWebhookId: result.webhookId }
     },
     unregister: async ({ accessToken, config, externalWebhookId }) => {

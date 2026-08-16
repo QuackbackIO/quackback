@@ -44,6 +44,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptSecrets: vi.fn((s: string) => JSON.parse(s)),
 }))
+vi.mock('@/lib/server/integrations/jira/access-token', () => ({
+  getJiraAccessToken: vi.fn(async (integration: { secrets: unknown }) => {
+    const parsed = JSON.parse(integration.secrets as string) as { accessToken?: string }
+    return parsed.accessToken
+  }),
+}))
 vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
   decryptWebhookSecret: vi.fn((s: string) => s),
 }))
