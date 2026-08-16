@@ -1,11 +1,7 @@
 /**
- * The step palette: shown in the inspector when a "+" connector is active
- * instead of a step. A search box filters by label; groups are SEND and
- * COLLECT (the 8 conversational block kinds, Phase C slice C-5) above the
- * pre-existing Logic (condition/branch/wait) and Actions (all 9 action
- * types) groups, per the design brief's §4/§5.12 — each icon tinted by the
- * same tone the step card for that step kind uses. Clicking an item
- * inserts that step at the active insertion point and selects it.
+ * The step palette: shown in the inspector when a "+" connector is active.
+ * Search filters by label. Groups are Send, Collect, Logic, and Actions;
+ * each icon uses the same tone as that step's card.
  */
 import { useState, type ComponentType } from 'react'
 import { ClockIcon, FunnelIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'

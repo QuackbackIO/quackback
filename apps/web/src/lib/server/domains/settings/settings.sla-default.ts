@@ -17,7 +17,6 @@ import {
 } from '@/lib/shared/sla/default-policy'
 import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
 
-export { DEFAULT_SLA_POLICY_SETTINGS }
 export type { DefaultSlaPolicySettings, UpdateDefaultSlaPolicyInput }
 
 const log = logger.child({ component: 'settings-sla-default' })

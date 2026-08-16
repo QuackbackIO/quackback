@@ -1,8 +1,7 @@
 /**
  * Card copy for the workflow step list: eyebrow, title, tone, chips, and
- * trigger sections. Derived from the former canvas layout helper with every
- * pixel/geometry concern removed. The list and the inspector share these
- * shapes so a step reads the same in both places.
+ * trigger sections. Shared with the inspector so a step reads the same
+ * in both places.
  */
 import {
   ACTION_LABELS,
@@ -200,7 +199,7 @@ export function buildStepNodeData(step: TreeStep, ctx: StepContentContext): Step
         title: `${n} path${n === 1 ? '' : 's'}`,
         icon: 'branch',
         tone: 'violet',
-        meta: `${n} path${n === 1 ? '' : 's'} · evaluated top to bottom`,
+        meta: 'Evaluated top to bottom',
         nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
       }
     }
@@ -327,7 +326,7 @@ function isAudienceConfigured(condition: GraphCondition | undefined): condition 
   return condition !== undefined && Object.keys(condition).length > 0
 }
 
-export function triggerSections(
+function triggerSections(
   channels: string[],
   frequencyCap: FrequencyCap | undefined,
   audience: GraphCondition | undefined,
@@ -462,7 +461,7 @@ export function describeBranchPath(
 
 /** Tab/pill copy for one fan-out path. Branch paths describe their condition;
  *  button/rating/outcome paths just name the choice. */
-export function fanPathParts(
+function fanPathParts(
   step: TreeStep,
   path: KeyedPath,
   attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),

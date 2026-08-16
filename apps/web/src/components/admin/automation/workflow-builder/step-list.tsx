@@ -1,7 +1,6 @@
 /**
- * Vertical step list for the workflow builder. Same tree and card copy the
- * canvas used to draw, rendered as a document: one lane visible at a fork,
- * the rest behind tabs. No pan, zoom, drag, or dot grid.
+ * Vertical step list for the workflow builder: a document of cards, one
+ * lane visible at a fork, the rest behind tabs.
  */
 import { useEffect, useLayoutEffect, useMemo, useState, type ComponentType } from 'react'
 import { useIntl } from 'react-intl'

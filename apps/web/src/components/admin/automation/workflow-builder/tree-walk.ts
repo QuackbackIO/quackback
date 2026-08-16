@@ -1,8 +1,7 @@
 /**
- * Tree walk for the workflow step list. Same derivation the canvas used to
- * fan a trunk into lanes, minus every geometric measurement. A stored graph
- * that is not a tree never reaches this module — the builder opens those in
- * JSON mode via initialGraphDraft.
+ * Tree walk for the workflow step list: a trunk of cards, then one lane
+ * per fork. A stored graph that is not a tree never reaches this module —
+ * the builder opens those in JSON mode via initialGraphDraft.
  */
 import {
   countSteps,
@@ -65,9 +64,7 @@ function walkLane(
     const insertionBefore: Insertion = { location, index: i }
     const data = buildStepNodeData(step, ctx)
     const fan = stepPaths(step)
-    // Empty request_csat starts with paths: [] — still linear until a rating
-    // is wired. `[]` is truthy, so a length check is required.
-    if (fan && fan.length > 0) {
+    if (fan) {
       items.push({
         type: 'fork',
         id: step.id,

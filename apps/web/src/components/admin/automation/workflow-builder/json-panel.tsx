@@ -1,6 +1,5 @@
-/** JSON mode: the graph textarea that replaces the canvas when the top bar's
- *  Visual/JSON toggle is on JSON. Parse/validate-on-toggle-back behavior is
- *  owned by useWorkflowBuilder.setEditorMode; this just edits the text. */
+/** JSON mode: the graph textarea shown when the top bar is on JSON.
+ *  Parse/validate-on-toggle-back is owned by useWorkflowBuilder.setEditorMode. */
 import { Textarea } from '@/components/ui/textarea'
 import type { GraphDraft } from '../workflow-graph'
 
