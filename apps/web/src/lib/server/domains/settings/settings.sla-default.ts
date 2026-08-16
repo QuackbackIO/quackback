@@ -6,7 +6,9 @@
  * Reads default at read time (`DEFAULT_SLA_POLICY_SETTINGS`, no policy) so a
  * workspace that never touched it starts conversations without a stamp.
  */
+import { isTypeId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { ValidationError } from '@/lib/shared/errors'
 import {
   DEFAULT_SLA_POLICY_SETTINGS,
   defaultSlaPolicySchema,
@@ -50,6 +52,17 @@ export async function updateDefaultSlaPolicySettings(
   log.info(input, 'update default SLA policy settings')
   try {
     const validated = defaultSlaPolicySchema.parse(input)
+    if (validated.policyId !== null) {
+      if (!isTypeId(validated.policyId, 'sla_policy')) {
+        throw new ValidationError('SLA_POLICY_NOT_FOUND', 'Choose a live SLA policy')
+      }
+      const { getSlaPolicy } = await import('@/lib/server/domains/sla/sla-policy.service')
+      // Live-only: archived and missing both come back null.
+      const policy = await getSlaPolicy(validated.policyId)
+      if (!policy) {
+        throw new ValidationError('SLA_POLICY_NOT_FOUND', 'Choose a live SLA policy')
+      }
+    }
     await writeMetadataKey(METADATA_KEY, validated)
     return validated
   } catch (error) {

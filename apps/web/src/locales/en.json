@@ -1154,6 +1154,8 @@
   "automation.builder.addStep": "Add step",
   "automation.builder.end": "End",
   "automation.builder.branchPaths": "Branch paths",
+  "automation.builder.deleteFork.title": "Delete this step?",
+  "automation.builder.deleteFork.description": "Its paths and their {count, plural, one {# step} other {# steps}} will be removed.",
   "automation.workflows.closeSpam": "Close spam",
   "automation.workflows.closeSpamHint": "When Quinn classifies a conversation as spam",
   "settings.sla.defaultPolicy": "Default policy",

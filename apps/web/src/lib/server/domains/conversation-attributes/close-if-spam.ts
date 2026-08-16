@@ -1,8 +1,11 @@
 /**
  * Close-spam harvest: when Quinn classifies a conversation as spam (select
  * key `spam`, option label `Spam`) and the workspace setting is on, close
- * via a bounded service actor. Only call after AI-sourced attribute writes
- * land — teammate-authored flips must never reach this function.
+ * via a bounded service actor — the same close a workflow `close` action
+ * uses, not the inbound spam-file primitive. A service-actor close is what
+ * W3 already maps onto the escalated assistant-wait edge. Only call after
+ * AI-sourced attribute writes land — teammate-authored flips must never
+ * reach this function.
  */
 import type { ConversationId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'

@@ -15,7 +15,11 @@ export function JsonPanel({
 }) {
   return (
     <div className="flex-1 space-y-1.5 overflow-auto bg-muted/10 p-4">
-      {draft.notice && <p className="text-xs text-amber-600 dark:text-amber-500">{draft.notice}</p>}
+      {draft.notice && (
+        <p className="truncate text-xs text-amber-600 dark:text-amber-500" title={draft.notice}>
+          {draft.notice}
+        </p>
+      )}
       <Textarea
         value={draft.text}
         onChange={(e) => onChange({ ...draft, text: e.target.value })}

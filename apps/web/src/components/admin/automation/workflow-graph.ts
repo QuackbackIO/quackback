@@ -1165,7 +1165,7 @@ export function stepPaths(step: TreeStep): KeyedPath[] | null {
     case 'reply_buttons':
     case 'request_csat':
     case 'let_assistant_answer':
-      return step.paths
+      return step.paths.length > 0 ? step.paths : null
     default:
       return null
   }
@@ -1793,29 +1793,48 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
       }
 
       // ── request_csat: one path per WIRED rating digit, if any (C-5) ──────
+      // An empty CSAT (no rating edges yet) is linear: one unlabeled
+      // successor is the rest of the lane, same as a message step.
       if (node.type === 'request_csat') {
+        const outs = outgoing.get(node.id) ?? []
+        const unlabeled = outs.filter((e) => e.branch === undefined)
+        const labeled = outs.filter((e) => e.branch !== undefined)
         const edgeByKey = new Map<string, GraphEdge>()
-        for (const edge of outgoing.get(node.id) ?? []) {
-          if (
-            edge.branch === undefined ||
-            !(RATING_KEYS as readonly string[]).includes(edge.branch)
-          ) {
+        for (const edge of labeled) {
+          if (!(RATING_KEYS as readonly string[]).includes(edge.branch!)) {
             return fail(
-              `ask-for-rating "${node.id}" has a connection with an unexpected label ("${edge.branch ?? 'none'}")`
+              `ask-for-rating "${node.id}" has a connection with an unexpected label ("${edge.branch}")`
             )
           }
-          if (edgeByKey.has(edge.branch)) {
+          if (edgeByKey.has(edge.branch!)) {
             return fail(`ask-for-rating "${node.id}" has two connections for rating ${edge.branch}`)
           }
-          edgeByKey.set(edge.branch, edge)
+          edgeByKey.set(edge.branch!, edge)
         }
-        const paths: KeyedPath[] = []
-        for (const key of RATING_KEYS) {
-          const edge = edgeByKey.get(key)
-          if (!edge) continue // that rating isn't wired: no path to show
-          const sub = walkFrom(edge.to)
-          if (!sub.ok) return sub
-          paths.push({ key, label: RATING_LABELS[key], steps: sub.value })
+        if (labeled.length > 0) {
+          if (unlabeled.length > 0) {
+            return fail(`ask-for-rating "${node.id}" has both a continuation and rating paths`)
+          }
+          const paths: KeyedPath[] = []
+          for (const key of RATING_KEYS) {
+            const edge = edgeByKey.get(key)
+            if (!edge) continue
+            const sub = walkFrom(edge.to)
+            if (!sub.ok) return sub
+            paths.push({ key, label: RATING_LABELS[key], steps: sub.value })
+          }
+          steps.push({
+            id: node.id,
+            kind: 'request_csat',
+            body: node.body,
+            allowTypingInterrupt: node.allowTypingInterrupt,
+            commentPrompt: node.commentPrompt,
+            paths,
+          })
+          return { ok: true, value: steps }
+        }
+        if (unlabeled.length > 1) {
+          return fail(`ask-for-rating "${node.id}" has more than one outgoing connection`)
         }
         steps.push({
           id: node.id,
@@ -1823,9 +1842,10 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
           body: node.body,
           allowTypingInterrupt: node.allowTypingInterrupt,
           commentPrompt: node.commentPrompt,
-          paths,
+          paths: [],
         })
-        return { ok: true, value: steps }
+        currentId = unlabeled[0]?.to
+        continue
       }
 
       // ── let_assistant_answer: default (unlabeled) + optional 'escalated' ─

@@ -1154,6 +1154,8 @@
   "automation.builder.addStep": "新增步驟",
   "automation.builder.end": "結束",
   "automation.builder.branchPaths": "分支路徑",
+  "automation.builder.deleteFork.title": "刪除此步驟？",
+  "automation.builder.deleteFork.description": "其路徑及其中的 {count, plural, one {# 個步驟} other {# 個步驟}} 將被刪除。",
   "automation.workflows.closeSpam": "關閉垃圾會話",
   "automation.workflows.closeSpamHint": "當 Quinn 將會話判定為垃圾時",
   "settings.sla.defaultPolicy": "預設政策",

@@ -1154,6 +1154,8 @@
   "automation.builder.addStep": "Adicionar etapa",
   "automation.builder.end": "Fim",
   "automation.builder.branchPaths": "Caminhos do ramo",
+  "automation.builder.deleteFork.title": "Excluir esta etapa?",
+  "automation.builder.deleteFork.description": "Seus caminhos e {count, plural, one {# etapa} other {# etapas}} serão removidos.",
   "automation.workflows.closeSpam": "Fechar spam",
   "automation.workflows.closeSpamHint": "Quando a Quinn classifica uma conversa como spam",
   "settings.sla.defaultPolicy": "Política padrão",

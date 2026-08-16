@@ -65,7 +65,9 @@ function walkLane(
     const insertionBefore: Insertion = { location, index: i }
     const data = buildStepNodeData(step, ctx)
     const fan = stepPaths(step)
-    if (fan) {
+    // Empty request_csat starts with paths: [] — still linear until a rating
+    // is wired. `[]` is truthy, so a length check is required.
+    if (fan && fan.length > 0) {
       items.push({
         type: 'fork',
         id: step.id,

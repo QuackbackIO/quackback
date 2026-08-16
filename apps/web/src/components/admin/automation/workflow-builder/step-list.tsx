@@ -7,24 +7,12 @@ import { useEffect, useLayoutEffect, useMemo, useState, type ComponentType } fro
 import { useIntl } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import {
-  AdjustmentsHorizontalIcon,
-  ArrowUturnLeftIcon,
   BoltIcon,
-  CheckCircleIcon,
   ClockIcon,
-  DocumentTextIcon,
   ExclamationTriangleIcon,
-  FlagIcon,
   FunnelIcon,
-  MoonIcon,
-  PaperAirplaneIcon,
   PlusIcon,
   ShareIcon,
-  ShieldCheckIcon,
-  TagIcon,
-  TicketIcon,
-  UserGroupIcon,
-  UserPlusIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
@@ -32,7 +20,7 @@ import { MENU_LABEL } from '@/components/ui/menu'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { assistantWaitMinutes } from '@/lib/shared/workflows/abandoned-auto-close'
 import { useWorkflowEntities } from './entities'
-import { BLOCK_ICONS, ConfirmDeleteDialog, TONE_TILE } from './step-visuals'
+import { ACTION_ICONS, BLOCK_ICONS, ConfirmDeleteDialog, TONE_TILE } from './step-visuals'
 import { LaneTabs } from './lane-tabs'
 import {
   lanesRevealingNode,
@@ -56,20 +44,7 @@ const ICONS: Record<IconKey, ComponentType<{ className?: string }>> = {
   condition: FunnelIcon,
   branch: ShareIcon,
   wait: ClockIcon,
-  assign_agent: UserPlusIcon,
-  assign_team: UserGroupIcon,
-  add_tag: TagIcon,
-  remove_tag: TagIcon,
-  set_priority: FlagIcon,
-  snooze: MoonIcon,
-  close: CheckCircleIcon,
-  reopen: ArrowUturnLeftIcon,
-  apply_sla: ShieldCheckIcon,
-  set_attribute: AdjustmentsHorizontalIcon,
-  add_note: DocumentTextIcon,
-  set_ticket_status: TicketIcon,
-  convert_to_ticket: TicketIcon,
-  send_webhook: PaperAirplaneIcon,
+  ...ACTION_ICONS,
   ...BLOCK_ICONS,
 }
 
@@ -90,7 +65,11 @@ function Chip({ chip }: { chip: ChipData }) {
 }
 
 function sameInsertion(a: Insertion, b: Insertion): boolean {
-  return a.index === b.index && JSON.stringify(a.location) === JSON.stringify(b.location)
+  if (a.index !== b.index || a.location.path.length !== b.location.path.length) return false
+  return a.location.path.every(
+    (hop, i) =>
+      hop.branchId === b.location.path[i]?.branchId && hop.pathKey === b.location.path[i]?.pathKey
+  )
 }
 
 function PlusConnector({
@@ -131,11 +110,15 @@ function LineConnector() {
 function StepCard({
   data,
   startLabel,
+  deleteTitle,
+  deleteDescription,
   onSelect,
   onRemove,
 }: {
   data: StepNodeData
   startLabel: string
+  deleteTitle: string
+  deleteDescription: string
   onSelect: (id: string) => void
   onRemove: (id: string) => void
 }) {
@@ -218,8 +201,8 @@ function StepCard({
         <ConfirmDeleteDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
-          title="Delete this branch?"
-          description={`Its paths and their ${data.nestedCount} step${data.nestedCount === 1 ? '' : 's'} will be removed.`}
+          title={deleteTitle}
+          description={deleteDescription}
           onConfirm={() => onRemove(data.stepId)}
         />
       )}
@@ -235,6 +218,8 @@ function StepListItems({
   addStepLabel,
   endLabel,
   startLabel,
+  deleteTitle,
+  deleteDescription,
   onSelect,
   onInsert,
   onRemove,
@@ -246,6 +231,8 @@ function StepListItems({
   addStepLabel: string
   endLabel: string
   startLabel: string
+  deleteTitle: string
+  deleteDescription: (count: number) => string
   onSelect: (id: string) => void
   onInsert: (location: StepLocation, index: number) => void
   onRemove: (id: string) => void
@@ -269,6 +256,8 @@ function StepListItems({
               <StepCard
                 data={item.data}
                 startLabel={startLabel}
+                deleteTitle={deleteTitle}
+                deleteDescription={deleteDescription(item.data.nestedCount ?? 0)}
                 onSelect={onSelect}
                 onRemove={onRemove}
               />
@@ -289,6 +278,8 @@ function StepListItems({
               <StepCard
                 data={item.data}
                 startLabel={startLabel}
+                deleteTitle={deleteTitle}
+                deleteDescription={deleteDescription(item.data.nestedCount ?? 0)}
                 onSelect={onSelect}
                 onRemove={onRemove}
               />
@@ -310,6 +301,8 @@ function StepListItems({
                       addStepLabel={addStepLabel}
                       endLabel={endLabel}
                       startLabel={startLabel}
+                      deleteTitle={deleteTitle}
+                      deleteDescription={deleteDescription}
                       onSelect={onSelect}
                       onInsert={onInsert}
                       onRemove={onRemove}
@@ -396,6 +389,19 @@ export function StepList({
     id: 'automation.builder.end',
     defaultMessage: 'End',
   })
+  const deleteTitle = intl.formatMessage({
+    id: 'automation.builder.deleteFork.title',
+    defaultMessage: 'Delete this step?',
+  })
+  const deleteDescription = (count: number) =>
+    intl.formatMessage(
+      {
+        id: 'automation.builder.deleteFork.description',
+        defaultMessage:
+          'Its paths and their {count, plural, one {# step} other {# steps}} will be removed.',
+      },
+      { count }
+    )
 
   const stepDoc = useMemo(
     () =>
@@ -450,6 +456,8 @@ export function StepList({
         <StepCard
           data={stepDoc.trigger}
           startLabel={startLabel}
+          deleteTitle={deleteTitle}
+          deleteDescription={deleteDescription(0)}
           onSelect={onSelectNode}
           onRemove={onRemoveStep}
         />
@@ -461,6 +469,8 @@ export function StepList({
           addStepLabel={addStepLabel}
           endLabel={endLabel}
           startLabel={startLabel}
+          deleteTitle={deleteTitle}
+          deleteDescription={deleteDescription}
           onSelect={onSelectNode}
           onInsert={onSelectInsertion}
           onRemove={onRemoveStep}

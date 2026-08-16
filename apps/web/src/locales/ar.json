@@ -1154,6 +1154,8 @@
   "automation.builder.addStep": "إضافة خطوة",
   "automation.builder.end": "النهاية",
   "automation.builder.branchPaths": "مسارات الفرع",
+  "automation.builder.deleteFork.title": "حذف هذه الخطوة؟",
+  "automation.builder.deleteFork.description": "ستُحذف مساراتها و{count, plural, one {خطوة واحدة} other {# خطوات}}.",
   "automation.workflows.closeSpam": "إغلاق الرسائل المزعجة",
   "automation.workflows.closeSpamHint": "عندما يصنّف كوين المحادثة كرسالة مزعجة",
   "settings.sla.defaultPolicy": "السياسة الافتراضية",

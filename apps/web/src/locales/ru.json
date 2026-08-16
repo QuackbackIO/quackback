@@ -1154,6 +1154,8 @@
   "automation.builder.addStep": "Добавить шаг",
   "automation.builder.end": "Конец",
   "automation.builder.branchPaths": "Ветки",
+  "automation.builder.deleteFork.title": "Удалить этот шаг?",
+  "automation.builder.deleteFork.description": "Его пути и {count, plural, one {# шаг} few {# шага} many {# шагов} other {# шага}} будут удалены.",
   "automation.workflows.closeSpam": "Закрывать спам",
   "automation.workflows.closeSpamHint": "Когда Квинн помечает разговор как спам",
   "settings.sla.defaultPolicy": "Политика по умолчанию",

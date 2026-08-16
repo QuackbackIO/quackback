@@ -5,11 +5,16 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  LET_ASSISTANT_DEFAULT_KEY,
+  LET_ASSISTANT_ESCALATED_KEY,
   ROOT_LOCATION,
   createStep,
+  findStepById,
   graphToTree,
+  initialGraphDraft,
   insertStepAt,
   newTree,
+  stepPaths,
   treeToGraph,
   type TreeStep,
   type WorkflowGraphJson,
@@ -293,6 +298,58 @@ describe('walkStepList — fork', () => {
     const doc = walkStepList(baseInput(tree))
     expect(doc.items.map((item) => item.type)).toEqual(['fork'])
   })
+
+  it('treats an empty request_csat as a linear step, not a fork', () => {
+    let tree = newTree()
+    const csat = createStep(tree, 'request_csat')
+    tree = insertStepAt(tree, ROOT_LOCATION, 0, csat)
+    const doc = walkStepList(baseInput(tree))
+    expect(doc.items.map((item) => item.type)).toEqual(['step', 'add'])
+    expect(doc.items[0]).toMatchObject({ type: 'step', id: csat.id })
+  })
+
+  it('keeps the tail after inserting an empty request_csat between two steps', () => {
+    let tree = newTree()
+    const wait: TreeStep = { id: 'wait-1', kind: 'wait', seconds: 60 }
+    const close: TreeStep = { id: 'close-1', kind: 'action', action: { type: 'close' } }
+    tree = insertStepAt(tree, ROOT_LOCATION, 0, wait)
+    tree = insertStepAt(tree, ROOT_LOCATION, 1, close)
+    const csat = createStep(tree, 'request_csat')
+    tree = insertStepAt(tree, ROOT_LOCATION, 1, csat)
+
+    const doc = walkStepList(baseInput(tree))
+    expect(doc.items.map((item) => ('id' in item ? `${item.type}:${item.id}` : item.type))).toEqual(
+      ['step:wait-1', `step:${csat.id}`, 'step:close-1', 'end']
+    )
+
+    const graph = treeToGraph(tree)
+    const draft = initialGraphDraft(graph)
+    expect(draft.mode).toBe('visual')
+  })
+
+  it('enumerates let_assistant_answer lanes from the graph keys', () => {
+    let tree = newTree()
+    const step = createStep(tree, 'let_assistant_answer')
+    tree = insertStepAt(tree, ROOT_LOCATION, 0, step)
+    const doc = walkStepList(baseInput(tree))
+    const fork = doc.items[0]
+    expect(fork?.type).toBe('fork')
+    if (fork?.type !== 'fork') return
+    expect(forkLaneKeys(fork)).toEqual([LET_ASSISTANT_DEFAULT_KEY, LET_ASSISTANT_ESCALATED_KEY])
+    expect(stepPaths(step)?.map((p) => p.key)).toEqual(forkLaneKeys(fork))
+    expect(fork.lanes.map((lane) => lane.label)).toEqual(['Continues', 'If escalated to a human'])
+  })
+
+  it('enumerates reply_buttons lanes from the option keys', () => {
+    let tree = newTree()
+    const step = createStep(tree, 'reply_buttons') as Extract<TreeStep, { kind: 'reply_buttons' }>
+    tree = insertStepAt(tree, ROOT_LOCATION, 0, step)
+    const doc = walkStepList(baseInput(tree))
+    const fork = doc.items[0]
+    expect(fork?.type).toBe('fork')
+    if (fork?.type !== 'fork') return
+    expect(forkLaneKeys(fork)).toEqual(step.paths.map((p) => p.key))
+  })
 })
 
 describe('lanesRevealingNode', () => {
@@ -318,7 +375,8 @@ describe('gallery templates', () => {
   })).filter((entry) => entry.tree.ok)
 
   it('every template graphToTree accepts must walk', () => {
-    expect(walkable.length).toBeGreaterThan(0)
+    expect(WORKFLOW_TEMPLATES).toHaveLength(12)
+    expect(walkable).toHaveLength(WORKFLOW_TEMPLATES.length)
     for (const { template, tree } of walkable) {
       if (!tree.ok) continue
       const doc = walkStepList(baseInput(tree.value))
@@ -342,11 +400,34 @@ describe('gallery templates', () => {
       if (!tree.ok) continue
       const doc = walkStepList(baseInput(tree.value))
       for (const fork of collectForks(doc.items)) {
+        const found = findStepById(tree.value, fork.id)
+        expect(found, `${template.id}:${fork.id}`).toBeTruthy()
         expect(forkLaneKeys(fork), `${template.id}:${fork.id}`).toEqual(
-          fork.lanes.map((lane) => lane.key)
+          (stepPaths(found!.step) ?? []).map((path) => path.key)
         )
       }
     }
+  })
+
+  it('wired request_csat in the AI-first template enumerates rating keys from the graph', () => {
+    const template = WORKFLOW_TEMPLATES.find((entry) => entry.id === 'ai-first-support')
+    expect(template).toBeTruthy()
+    const graph = template!.payload.graph
+    const csat = graph.nodes.find((node) => node.type === 'request_csat')
+    expect(csat).toBeTruthy()
+    const ratingKeys = graph.edges
+      .filter((edge) => edge.from === csat!.id && edge.branch !== undefined)
+      .map((edge) => edge.branch as string)
+    expect(ratingKeys.length).toBeGreaterThan(0)
+
+    const tree = graphToTree(graph)
+    expect(tree.ok).toBe(true)
+    if (!tree.ok) return
+    const fork = collectForks(walkStepList(baseInput(tree.value)).items).find(
+      (item) => item.id === csat!.id
+    )
+    expect(fork).toBeTruthy()
+    expect(forkLaneKeys(fork!)).toEqual(ratingKeys)
   })
 })
 

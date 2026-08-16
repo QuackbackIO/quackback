@@ -9,6 +9,7 @@
  */
 import { useState, type ComponentType } from 'react'
 import { ClockIcon, FunnelIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'
+import { MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
 import { ACTION_ICONS, BLOCK_ICONS, TONE_TILE } from '../step-visuals'
 import { ACTION_TONE, type Tone } from '../step-content'
 import {
@@ -112,9 +113,7 @@ export function StepPalette({
 function PaletteGroup({ label, items }: { label: string; items: PaletteItem[] }) {
   return (
     <div>
-      <div className="mb-1 px-1 text-[10.5px] font-semibold tracking-wide text-muted-foreground uppercase">
-        {label}
-      </div>
+      <div className={`mb-1 px-1 ${MENU_LABEL}`}>{label}</div>
       <div className="space-y-0.5">
         {items.map((item) => (
           <button
@@ -123,7 +122,7 @@ function PaletteGroup({ label, items }: { label: string; items: PaletteItem[] })
             onClick={item.onSelect}
             disabled={item.disabled}
             title={item.reason}
-            className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left text-xs hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
+            className={`${MENU_ROW} w-full text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <span
               className={`flex size-6 shrink-0 items-center justify-center rounded-md ${TONE_TILE[item.tone]}`}
