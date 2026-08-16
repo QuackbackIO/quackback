@@ -1153,5 +1153,10 @@
   "automation.builder.start": "Start",
   "automation.builder.addStep": "Schritt hinzufügen",
   "automation.builder.end": "Ende",
-  "automation.builder.branchPaths": "Zweigpfade"
+  "automation.builder.branchPaths": "Zweigpfade",
+  "automation.workflows.closeSpam": "Spam schließen",
+  "automation.workflows.closeSpamHint": "Wenn Quinn eine Unterhaltung als Spam einstuft",
+  "settings.sla.defaultPolicy": "Standardrichtlinie",
+  "settings.sla.defaultPolicyHint": "Wird angewendet, wenn eine Unterhaltung startet",
+  "settings.sla.defaultPolicyNone": "Keine"
 }

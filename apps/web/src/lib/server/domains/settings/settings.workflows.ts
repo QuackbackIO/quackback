@@ -23,10 +23,21 @@ import {
   type WorkflowAbandonedAutoCloseSettings,
   type UpdateWorkflowAbandonedAutoCloseInput,
 } from '@/lib/shared/workflows/abandoned-auto-close'
+import {
+  DEFAULT_WORKFLOW_CLOSE_SPAM,
+  workflowCloseSpamSchema,
+  type WorkflowCloseSpamSettings,
+  type UpdateWorkflowCloseSpamInput,
+} from '@/lib/shared/workflows/close-spam'
 import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
 
-export { DEFAULT_WORKFLOW_ABANDONED_AUTO_CLOSE }
-export type { WorkflowAbandonedAutoCloseSettings, UpdateWorkflowAbandonedAutoCloseInput }
+export { DEFAULT_WORKFLOW_ABANDONED_AUTO_CLOSE, DEFAULT_WORKFLOW_CLOSE_SPAM }
+export type {
+  WorkflowAbandonedAutoCloseSettings,
+  UpdateWorkflowAbandonedAutoCloseInput,
+  WorkflowCloseSpamSettings,
+  UpdateWorkflowCloseSpamInput,
+}
 
 const log = logger.child({ component: 'settings-workflows' })
 
@@ -75,5 +86,45 @@ export async function updateWorkflowAbandonedAutoCloseSettings(
   } catch (error) {
     log.error({ err: error }, 'update workflow abandoned auto-close settings failed')
     wrapDbError('update workflow abandoned auto-close settings', error)
+  }
+}
+
+/** Key inside the `settings.metadata` JSON bag. Independent of abandoned auto-close. */
+const CLOSE_SPAM_KEY = 'workflowCloseSpam'
+
+export function resolveWorkflowCloseSpam(metadataJson: string | null): WorkflowCloseSpamSettings {
+  if (!metadataJson) return DEFAULT_WORKFLOW_CLOSE_SPAM
+  try {
+    const meta = JSON.parse(metadataJson) as Record<string, unknown>
+    const parsed = workflowCloseSpamSchema.safeParse(meta[CLOSE_SPAM_KEY])
+    return { ...DEFAULT_WORKFLOW_CLOSE_SPAM, ...(parsed.success ? parsed.data : {}) }
+  } catch {
+    return DEFAULT_WORKFLOW_CLOSE_SPAM
+  }
+}
+
+export async function getWorkflowCloseSpamSettings(): Promise<WorkflowCloseSpamSettings> {
+  try {
+    const org = await requireSettings()
+    return resolveWorkflowCloseSpam(org.metadata)
+  } catch (error) {
+    log.error({ err: error }, 'get workflow close-spam settings failed')
+    wrapDbError('fetch workflow close-spam settings', error)
+  }
+}
+
+export async function updateWorkflowCloseSpamSettings(
+  input: UpdateWorkflowCloseSpamInput
+): Promise<WorkflowCloseSpamSettings> {
+  log.info(input, 'update workflow close-spam settings')
+  try {
+    const validated = workflowCloseSpamSchema.parse(input)
+    const existing = await getWorkflowCloseSpamSettings()
+    const merged = { ...existing, ...validated }
+    await writeMetadataKey(CLOSE_SPAM_KEY, merged)
+    return merged
+  } catch (error) {
+    log.error({ err: error }, 'update workflow close-spam settings failed')
+    wrapDbError('update workflow close-spam settings', error)
   }
 }

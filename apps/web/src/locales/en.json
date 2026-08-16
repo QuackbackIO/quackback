@@ -1153,5 +1153,10 @@
   "automation.builder.start": "Start",
   "automation.builder.addStep": "Add step",
   "automation.builder.end": "End",
-  "automation.builder.branchPaths": "Branch paths"
+  "automation.builder.branchPaths": "Branch paths",
+  "automation.workflows.closeSpam": "Close spam",
+  "automation.workflows.closeSpamHint": "When Quinn classifies a conversation as spam",
+  "settings.sla.defaultPolicy": "Default policy",
+  "settings.sla.defaultPolicyHint": "Applied when a conversation starts",
+  "settings.sla.defaultPolicyNone": "None"
 }

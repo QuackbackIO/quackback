@@ -1153,5 +1153,10 @@
   "automation.builder.start": "开始",
   "automation.builder.addStep": "添加步骤",
   "automation.builder.end": "结束",
-  "automation.builder.branchPaths": "分支路径"
+  "automation.builder.branchPaths": "分支路径",
+  "automation.workflows.closeSpam": "关闭垃圾会话",
+  "automation.workflows.closeSpamHint": "当 Quinn 将会话判定为垃圾时",
+  "settings.sla.defaultPolicy": "默认策略",
+  "settings.sla.defaultPolicyHint": "会话开始时应用",
+  "settings.sla.defaultPolicyNone": "无"
 }

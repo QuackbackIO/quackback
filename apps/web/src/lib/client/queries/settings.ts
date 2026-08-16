@@ -13,6 +13,8 @@ import {
   fetchWidgetConfig,
   fetchWidgetSecret,
   fetchWorkflowAbandonedAutoCloseFn,
+  fetchWorkflowCloseSpamFn,
+  fetchDefaultSlaPolicyFn,
   getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
@@ -223,6 +225,20 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'workflowAbandonedAutoClose'],
       queryFn: fetchWorkflowAbandonedAutoCloseFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  workflowCloseSpam: () =>
+    queryOptions({
+      queryKey: ['settings', 'workflowCloseSpam'],
+      queryFn: fetchWorkflowCloseSpamFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  defaultSlaPolicy: () =>
+    queryOptions({
+      queryKey: ['settings', 'defaultSlaPolicy'],
+      queryFn: fetchDefaultSlaPolicyFn,
       staleTime: STALE_TIME_MEDIUM,
     }),
 

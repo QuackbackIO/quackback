@@ -42,6 +42,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
 import { workflowAbandonedAutoCloseSchema } from '@/lib/shared/workflows/abandoned-auto-close'
+import { workflowCloseSpamSchema } from '@/lib/shared/workflows/close-spam'
+import { defaultSlaPolicySchema } from '@/lib/shared/sla/default-policy'
 import { MAX_TRUSTED_SENDERS } from '@/lib/shared/trusted-senders'
 import { logger } from '@/lib/server/logger'
 
@@ -991,6 +993,46 @@ export const updateWorkflowAbandonedAutoCloseFn = createServerFn({ method: 'POST
     const { updateWorkflowAbandonedAutoCloseSettings } =
       await import('@/lib/server/domains/settings/settings.workflows')
     return await updateWorkflowAbandonedAutoCloseSettings(data)
+  })
+
+export const fetchWorkflowCloseSpamFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch workflow close-spam settings')
+  await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+  const { getWorkflowCloseSpamSettings } =
+    await import('@/lib/server/domains/settings/settings.workflows')
+  return await getWorkflowCloseSpamSettings()
+})
+
+export const updateWorkflowCloseSpamFn = createServerFn({ method: 'POST' })
+  .validator(workflowCloseSpamSchema)
+  .handler(async ({ data }) => {
+    log.info(data, 'update workflow close-spam settings')
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    const { updateWorkflowCloseSpamSettings } =
+      await import('@/lib/server/domains/settings/settings.workflows')
+    return await updateWorkflowCloseSpamSettings(data)
+  })
+
+// ============================================
+// Default SLA policy
+// ============================================
+
+export const fetchDefaultSlaPolicyFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch default SLA policy settings')
+  await requireAuth({ permission: PERMISSIONS.SLA_MANAGE })
+  const { getDefaultSlaPolicySettings } =
+    await import('@/lib/server/domains/settings/settings.sla-default')
+  return await getDefaultSlaPolicySettings()
+})
+
+export const updateDefaultSlaPolicyFn = createServerFn({ method: 'POST' })
+  .validator(defaultSlaPolicySchema)
+  .handler(async ({ data }) => {
+    log.info(data, 'update default SLA policy settings')
+    await requireAuth({ permission: PERMISSIONS.SLA_MANAGE })
+    const { updateDefaultSlaPolicySettings } =
+      await import('@/lib/server/domains/settings/settings.sla-default')
+    return await updateDefaultSlaPolicySettings(data)
   })
 
 // ============================================

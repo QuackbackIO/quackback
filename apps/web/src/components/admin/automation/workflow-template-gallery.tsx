@@ -1,12 +1,10 @@
 /**
- * "Create from template" gallery for the workflows list (support platform
- * §4.6). A left category rail filters the card grid; picking a card hands the
- * template's prebuilt payload back to the caller, which creates the workflow
- * and navigates to the builder. Templates that need workspace-specific setup
- * (a team, SLA policy, or tag) still create fine -- see workflow-templates.ts
- * for why -- they just need a follow-up edit before going live.
+ * "Create from template" gallery. Category rail + cards that show trigger,
+ * class, and the dependencies the admin will hit after create.
  */
 import { useState } from 'react'
+import { useIntl } from 'react-intl'
+import { useRouteContext } from '@tanstack/react-router'
 import {
   Dialog,
   DialogContent,
@@ -14,10 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/shared/utils'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   WORKFLOW_TEMPLATE_CATEGORIES,
+  templateGalleryChips,
+  workflowTemplateCategoryCount,
   workflowTemplatesByCategory,
+  type TemplateGalleryChip,
   type WorkflowTemplate,
   type WorkflowTemplateCategory,
 } from './workflow-templates'
@@ -33,44 +36,78 @@ export function WorkflowTemplateGallery({
   onOpenChange,
   onSelect,
 }: WorkflowTemplateGalleryProps) {
+  const intl = useIntl()
   const [category, setCategory] = useState<WorkflowTemplateCategory>('popular')
   const templates = workflowTemplatesByCategory(category)
+  const { settings } = useRouteContext({ from: '__root__' })
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+  const assistant = settings?.publicWidgetConfig?.messenger?.assistant
+  const quinnOn = Boolean(assistant?.enabled && assistant?.respond)
+  const inboxAiOn = Boolean(flags?.inboxAi)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl p-0 gap-0 overflow-hidden">
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>Create a new workflow</DialogTitle>
+      <DialogContent className="sm:max-w-[660px] p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 pt-5 pb-0 space-y-1">
+          <DialogTitle>
+            {intl.formatMessage({
+              id: 'automation.templates.galleryTitle',
+              defaultMessage: 'Start from a template',
+            })}
+          </DialogTitle>
           <DialogDescription>
-            Start from a template and adjust it, or build one from scratch.
+            {intl.formatMessage({
+              id: 'automation.templates.galleryDescription',
+              defaultMessage:
+                'Ready-made workflows for the things every team automates. Created as a draft; anything marked "needs setup" is flagged until you point it at your own teams and options.',
+            })}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex min-h-[26rem]">
-          <nav className="w-44 shrink-0 space-y-0.5 border-r bg-muted/30 p-3">
-            {WORKFLOW_TEMPLATE_CATEGORIES.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => setCategory(c.key)}
-                className={cn(
-                  'w-full rounded-md px-3 py-1.5 text-left text-sm font-medium transition-colors',
-                  category === c.key
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                {c.label}
-              </button>
-            ))}
+        <div className="flex min-h-[26rem] gap-4 px-5 pb-4 pt-3.5">
+          <nav
+            className="flex w-32 shrink-0 flex-col gap-px"
+            aria-label={intl.formatMessage({
+              id: 'automation.templates.categories',
+              defaultMessage: 'Template categories',
+            })}
+          >
+            {WORKFLOW_TEMPLATE_CATEGORIES.map((c) => {
+              const count = workflowTemplateCategoryCount(c.key)
+              const selected = category === c.key
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setCategory(c.key)}
+                  className={cn(
+                    'flex items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors',
+                    selected
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                  )}
+                >
+                  {intl.formatMessage({ id: c.labelId, defaultMessage: c.label })}
+                  <span className="text-[11px] font-medium text-muted-foreground">{count}</span>
+                </button>
+              )
+            })}
           </nav>
-          <div className="flex-1 overflow-y-auto p-5">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 content-start gap-2.5 sm:grid-cols-2">
               {templates.map((template) => (
-                <TemplateCard key={template.id} template={template} onSelect={onSelect} />
+                <TemplateCard
+                  key={template.id}
+                  template={template}
+                  chips={templateGalleryChips(template, { quinnOn, inboxAiOn })}
+                  onSelect={onSelect}
+                />
               ))}
               {templates.length === 0 && (
                 <p className="col-span-full text-sm text-muted-foreground">
-                  No templates in this category yet.
+                  {intl.formatMessage({
+                    id: 'automation.templates.emptyCategory',
+                    defaultMessage: 'No templates in this category yet.',
+                  })}
                 </p>
               )}
             </div>
@@ -81,34 +118,61 @@ export function WorkflowTemplateGallery({
   )
 }
 
+function chipClass(chip: TemplateGalleryChip): string {
+  if (chip.kind === 'class' && chip.label === 'Customer facing') {
+    return 'border-transparent bg-pink-500/10 text-pink-700 dark:text-pink-300'
+  }
+  if (chip.kind === 'prereq') {
+    return 'border-transparent bg-amber-500/10 text-amber-800 dark:text-amber-300'
+  }
+  if (chip.kind === 'setup') {
+    return 'border-transparent bg-violet-500/10 text-violet-700 dark:text-violet-300'
+  }
+  return 'border-transparent bg-muted text-muted-foreground'
+}
+
 function TemplateCard({
   template,
+  chips,
   onSelect,
 }: {
   template: WorkflowTemplate
+  chips: TemplateGalleryChip[]
   onSelect: (template: WorkflowTemplate) => void
 }) {
   const Icon = template.icon
+
   return (
     <button
       type="button"
       onClick={() => onSelect(template)}
-      className="flex flex-col gap-2 rounded-lg border p-3.5 text-left transition-colors hover:border-primary hover:shadow-sm"
+      className="flex flex-col rounded-[11px] border bg-card px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:shadow-sm"
     >
-      <div
-        className={cn(
-          'flex h-8 w-8 items-center justify-center rounded-lg',
-          template.iconClassName
-        )}
-      >
-        <Icon className="h-4 w-4" />
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            'grid size-[26px] shrink-0 place-items-center rounded-lg',
+            template.iconClassName
+          )}
+        >
+          <Icon className="size-3.5" />
+        </span>
+        <span className="text-[13px] font-semibold leading-tight">{template.title}</span>
       </div>
-      <div className="text-sm font-semibold leading-tight">{template.title}</div>
-      <span className="self-start rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      <p className="mt-1.5 mb-2 text-[11px] leading-snug text-muted-foreground">
         {template.benefit}
-      </span>
-      <div className="mt-auto border-t pt-2 text-xs text-muted-foreground">
-        {template.stepsSummary}
+      </p>
+      <div className="mt-auto flex flex-wrap gap-1">
+        {chips.map((chip) => (
+          <Badge
+            key={`${chip.kind}-${chip.label}`}
+            size="sm"
+            variant="outline"
+            className={cn('font-medium', chipClass(chip))}
+          >
+            {chip.label}
+          </Badge>
+        ))}
       </div>
     </button>
   )

@@ -9,8 +9,10 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 
 const mockUpdateFn = vi.fn(async (input: { data: unknown }) => input.data)
+const mockUpdateCloseSpam = vi.fn(async (input: { data: unknown }) => input.data)
 
 vi.mock('@/lib/server/functions/settings', () => ({
   fetchWorkflowAbandonedAutoCloseFn: vi.fn(async () => ({
@@ -19,6 +21,8 @@ vi.mock('@/lib/server/functions/settings', () => ({
     keepIfEmailCaptured: true,
   })),
   updateWorkflowAbandonedAutoCloseFn: (input: { data: unknown }) => mockUpdateFn(input),
+  fetchWorkflowCloseSpamFn: vi.fn(async () => ({ enabled: false })),
+  updateWorkflowCloseSpamFn: (input: { data: unknown }) => mockUpdateCloseSpam(input),
 }))
 
 import { AbandonedJourneyAutoCloseCard } from '../abandoned-journey-auto-close-card'
@@ -27,7 +31,11 @@ afterEach(cleanup)
 
 function renderWithClient(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  return render(
+    <IntlProvider locale="en" defaultLocale="en" messages={{}}>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </IntlProvider>
+  )
 }
 
 describe('AbandonedJourneyAutoCloseCard', () => {
@@ -64,6 +72,19 @@ describe('AbandonedJourneyAutoCloseCard', () => {
 
     await waitFor(() =>
       expect(mockUpdateFn).toHaveBeenCalledWith({
+        data: expect.objectContaining({ enabled: true }),
+      })
+    )
+  })
+
+  it('saves close-spam independently of abandoned auto-close', async () => {
+    renderWithClient(<AbandonedJourneyAutoCloseCard />)
+    const toggle = await screen.findByLabelText('Close spam')
+    expect(toggle).not.toBeChecked()
+    toggle.click()
+
+    await waitFor(() =>
+      expect(mockUpdateCloseSpam).toHaveBeenCalledWith({
         data: expect.objectContaining({ enabled: true }),
       })
     )

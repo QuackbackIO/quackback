@@ -26,6 +26,8 @@ import {
   updateThemeFn,
   updateCustomCssFn,
   updateWorkflowAbandonedAutoCloseFn,
+  updateWorkflowCloseSpamFn,
+  updateDefaultSlaPolicyFn,
   updateSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import {
@@ -525,6 +527,28 @@ export function useUpdateWorkflowAbandonedAutoClose() {
       updateWorkflowAbandonedAutoCloseFn({ data }),
     onSuccess: (saved) =>
       queryClient.setQueryData(settingsQueries.workflowAbandonedAutoClose().queryKey, saved),
+  })
+}
+
+export function useUpdateWorkflowCloseSpam() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateWorkflowCloseSpamFn>[0]['data']) =>
+      updateWorkflowCloseSpamFn({ data }),
+    onSuccess: (saved) =>
+      queryClient.setQueryData(settingsQueries.workflowCloseSpam().queryKey, saved),
+  })
+}
+
+export function useUpdateDefaultSlaPolicy() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateDefaultSlaPolicyFn>[0]['data']) =>
+      updateDefaultSlaPolicyFn({ data }),
+    onSuccess: (saved) =>
+      queryClient.setQueryData(settingsQueries.defaultSlaPolicy().queryKey, saved),
   })
 }
 

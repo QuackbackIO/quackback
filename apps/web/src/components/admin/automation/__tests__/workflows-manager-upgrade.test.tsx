@@ -5,7 +5,10 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }))
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+  useRouteContext: () => ({ settings: { featureFlags: {}, publicWidgetConfig: {} } }),
+}))
 
 vi.mock('@/lib/server/functions/workflows', () => ({
   listWorkflowsFn: vi.fn().mockResolvedValue([]),
