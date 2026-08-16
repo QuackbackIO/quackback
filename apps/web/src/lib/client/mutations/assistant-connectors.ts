@@ -8,7 +8,6 @@ import {
 } from '@/lib/server/functions/assistant-connectors'
 import type { ConnectorCreateInput, ConnectorUpdateInput } from '@/lib/shared/assistant/connectors'
 import { connectorKeys } from '@/lib/client/queries/assistant-connectors'
-import { assistantKeys } from '@/lib/client/queries/assistant'
 
 export function useCreateConnector() {
   const queryClient = useQueryClient()
@@ -16,7 +15,6 @@ export function useCreateConnector() {
     mutationFn: (input: ConnectorCreateInput) => createConnectorFn({ data: input }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: connectorKeys.all() })
-      void queryClient.invalidateQueries({ queryKey: assistantKeys.configChangelog() })
     },
   })
 }
@@ -28,7 +26,6 @@ export function useUpdateConnector() {
     onSuccess: (_row, input) => {
       void queryClient.invalidateQueries({ queryKey: connectorKeys.all() })
       void queryClient.invalidateQueries({ queryKey: connectorKeys.detail(input.id) })
-      void queryClient.invalidateQueries({ queryKey: assistantKeys.configChangelog() })
     },
   })
 }
@@ -56,7 +53,6 @@ export function useDeleteConnector() {
     mutationFn: (id: string) => deleteConnectorFn({ data: { id } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: connectorKeys.all() })
-      void queryClient.invalidateQueries({ queryKey: assistantKeys.configChangelog() })
     },
   })
 }

@@ -185,7 +185,6 @@ export function AutomationNav() {
                 to={item.to}
                 className={cn(
                   MENU_ROW,
-                  'min-h-9',
                   isActive
                     ? 'bg-primary/10 font-medium text-foreground'
                     : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'

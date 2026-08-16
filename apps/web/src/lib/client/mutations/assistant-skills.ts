@@ -6,7 +6,6 @@ import {
 } from '@/lib/server/functions/assistant-skills'
 import type { SkillInput } from '@/lib/shared/assistant/skills'
 import { skillKeys } from '@/lib/client/queries/assistant-skills'
-import { assistantKeys } from '@/lib/client/queries/assistant'
 
 export function useCreateSkill() {
   const queryClient = useQueryClient()
@@ -14,7 +13,6 @@ export function useCreateSkill() {
     mutationFn: (input: SkillInput) => createSkillFn({ data: input }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: skillKeys.all() })
-      void queryClient.invalidateQueries({ queryKey: assistantKeys.configChangelog() })
     },
   })
 }
@@ -25,7 +23,6 @@ export function useUpdateSkill() {
     mutationFn: (input: SkillInput & { id: string }) => updateSkillFn({ data: input }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: skillKeys.all() })
-      void queryClient.invalidateQueries({ queryKey: assistantKeys.configChangelog() })
     },
   })
 }
@@ -36,7 +33,6 @@ export function useDeleteSkill() {
     mutationFn: (id: string) => deleteSkillFn({ data: { id } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: skillKeys.all() })
-      void queryClient.invalidateQueries({ queryKey: assistantKeys.configChangelog() })
     },
   })
 }

@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { UserGroupIcon } from '@heroicons/react/24/solid'
 import { z } from 'zod'
-import { AssistantConfigChangelogCard } from '@/components/admin/automation/assistant-config-changelog-card'
 import {
   AssistantDirtyStateProvider,
   useAssistantDirtyState,
@@ -11,7 +10,6 @@ import {
 import { CopilotDeploymentCard } from '@/components/admin/automation/copilot-deployment-card'
 import { CopilotKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
-import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
 
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -22,7 +20,7 @@ import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
-const COPILOT_TABS = ['knowledge', 'guidance', 'history'] as const
+const COPILOT_TABS = ['knowledge', 'guidance'] as const
 type CopilotTab = (typeof COPILOT_TABS)[number]
 
 const searchSchema = z.object({
@@ -142,7 +140,6 @@ function AssistantCopilotSettings() {
           </div>
         ) : (
           <>
-            <WhoRepliesFirstCard />
             <CopilotDeploymentCard available={Boolean(flags?.inboxAi)} />
 
             <Tabs value={tab} onValueChange={setTab} variant="line" className="space-y-6">
@@ -160,12 +157,6 @@ function AssistantCopilotSettings() {
                       defaultMessage: 'Guidance',
                     })}
                     {dirtyTabs.has('guidance') && <UnsavedChangesIndicator label={unsavedLabel} />}
-                  </TabsTrigger>
-                  <TabsTrigger value="history">
-                    {intl.formatMessage({
-                      id: 'automation.agent.tabs.history',
-                      defaultMessage: 'History',
-                    })}
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -199,14 +190,6 @@ function AssistantCopilotSettings() {
                   </p>
                 </div>
                 <GuidanceRulesCard agent="copilot" />
-              </TabsContent>
-
-              <TabsContent
-                value="history"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
-                <AssistantConfigChangelogCard />
               </TabsContent>
             </Tabs>
           </>

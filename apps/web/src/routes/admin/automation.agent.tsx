@@ -9,7 +9,6 @@ import {
   AssistantDeploymentCard,
   type WidgetAssistantDeployment,
 } from '@/components/admin/automation/assistant-deployment-card'
-import { AssistantConfigChangelogCard } from '@/components/admin/automation/assistant-config-changelog-card'
 import {
   AssistantDirtyStateProvider,
   useAssistantDirtyState,
@@ -18,7 +17,6 @@ import { AssistantIdentityCard } from '@/components/admin/automation/assistant-i
 import { AssistantVoiceCard } from '@/components/admin/automation/assistant-basics-card'
 import { AgentKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
-import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
 
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -29,7 +27,7 @@ import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
-const AGENT_TABS = ['basics', 'knowledge', 'guidance', 'history'] as const
+const AGENT_TABS = ['basics', 'knowledge', 'guidance'] as const
 type AgentTab = (typeof AGENT_TABS)[number]
 
 const searchSchema = z.object({
@@ -154,7 +152,6 @@ function AssistantAgentSettings() {
           </div>
         ) : (
           <>
-            <WhoRepliesFirstCard />
             <AssistantDeploymentCard
               deployment={deployment}
               available={Boolean(flags?.supportInbox)}
@@ -183,12 +180,6 @@ function AssistantAgentSettings() {
                       defaultMessage: 'Guidance',
                     })}
                     {dirtyTabs.has('guidance') && <UnsavedChangesIndicator label={unsavedLabel} />}
-                  </TabsTrigger>
-                  <TabsTrigger value="history">
-                    {intl.formatMessage({
-                      id: 'automation.agent.tabs.history',
-                      defaultMessage: 'History',
-                    })}
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -232,14 +223,6 @@ function AssistantAgentSettings() {
                   </p>
                 </div>
                 <GuidanceRulesCard agent="agent" />
-              </TabsContent>
-
-              <TabsContent
-                value="history"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
-                <AssistantConfigChangelogCard />
               </TabsContent>
             </Tabs>
           </>

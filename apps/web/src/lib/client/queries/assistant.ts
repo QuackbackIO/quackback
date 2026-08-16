@@ -5,7 +5,6 @@ import {
   listAssistantToolsFn,
 } from '@/lib/server/functions/assistant-guidance'
 import { getGuidanceRuleStatsFn } from '@/lib/server/functions/assistant-guidance-stats'
-import { getAssistantConfigChangelogFn } from '@/lib/server/functions/assistant-config-changelog'
 
 const STALE_TIME = 30 * 1000
 // The tool catalogue is static, so it can sit stale far longer than settings
@@ -17,10 +16,9 @@ export const assistantKeys = {
   guidanceRules: () => ['assistant', 'guidanceRules'] as const,
   guidanceRuleStats: () => ['assistant', 'guidanceRuleStats'] as const,
   tools: () => ['assistant', 'tools'] as const,
-  configChangelog: () => ['assistant', 'configChangelog'] as const,
 }
 
-/** AI agent settings, guidance, action catalogue, and change-history queries. */
+/** AI agent settings, guidance, and action-catalogue queries. */
 export const assistantQueries = {
   settings: () =>
     queryOptions({
@@ -49,13 +47,5 @@ export const assistantQueries = {
       queryKey: assistantKeys.tools(),
       queryFn: listAssistantToolsFn,
       staleTime: TOOLS_STALE_TIME,
-    }),
-
-  /** Privacy-minimal AI agent configuration change history. */
-  configChangelog: () =>
-    queryOptions({
-      queryKey: assistantKeys.configChangelog(),
-      queryFn: getAssistantConfigChangelogFn,
-      staleTime: STALE_TIME,
     }),
 }

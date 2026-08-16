@@ -1,9 +1,7 @@
 /**
- * Single source of truth for the AI config changelog's event -> label map.
- * Read by both the assistant admin page's "Recent changes" card
- * (assistant-config-changelog-card.tsx) and the audit-log page's "AI config"
- * filter group (audit-log-page.tsx), so a new assistant.* event only needs
- * to be added here to show up correctly in both places.
+ * Single source of truth for the audit-log page's "AI config" filter group
+ * (audit-log-page.tsx). A new assistant.* event only needs to be added here
+ * to show up correctly there.
  *
  * Client-safe: `AuditEventType` is imported as a type only, which is erased
  * at compile time, so no server code (db/pino/redis) reaches the client

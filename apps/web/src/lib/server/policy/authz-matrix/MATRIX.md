@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 654 surfaces
+### Server functions (`requireAuth`) — 653 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -210,7 +210,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
 | `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view) |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
-| `lib/server/functions/assistant-config-changelog.ts`::getAssistantConfigChangelogFn | assistant.manage |
 | `lib/server/functions/assistant-connectors.ts`::listConnectorsFn | assistant.manage |
 | `lib/server/functions/assistant-connectors.ts`::getConnectorFn | assistant.manage |
 | `lib/server/functions/assistant-connectors.ts`::createConnectorFn | assistant.manage |
@@ -958,7 +957,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-191 of 962 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+190 of 960 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1073,7 +1072,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/[.]well-known.oauth-protected-resource.ts`::GET | route |
 | `routes/[.]well-known.openid-configuration.ts`::GET | route |
 | `routes/api/admin/assistant/copilot.ts`::POST | route |
-| `routes/api/admin/assistant/sandbox.ts`::POST | route |
 | `routes/api/admin/assistant/transform.ts`::POST | route |
 | `routes/api/auth/$.ts`::GET | route |
 | `routes/api/auth/$.ts`::POST | route |
