@@ -119,6 +119,43 @@ async function triggerLiveAttributeRecheck(conversationId: ConversationId): Prom
  * case ever passes this; every other caller (the ordinary customer-message
  * turn in conversation.service.ts) omits it.
  */
+export type AssistantTurnEligibility = 'eligible' | 'declined'
+
+/**
+ * Cheap gates the orchestrator would exit on before spending on the model.
+ * A workflow "Let Quinn answer" node uses this so a decline can resume the
+ * escalated edge immediately instead of parking forever.
+ */
+export async function previewAssistantTurnForConversation(
+  conversationId: ConversationId,
+  opts?: { surface?: 'widget' | 'workflow_step' }
+): Promise<AssistantTurnEligibility> {
+  if (!isAssistantConfigured()) return 'declined'
+  try {
+    await enforceAiTokenBudget()
+  } catch (err) {
+    if (err instanceof TierLimitError) return 'declined'
+    throw err
+  }
+  const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
+  const messenger = await getMessengerConfig()
+  if (messenger.assistant?.respond !== true) return 'declined'
+
+  const [assistantPrincipalId, threadRows] = await Promise.all([
+    ensureAssistantPrincipalId(),
+    loadConversationThread(conversationId),
+  ])
+  const messages = mapRowsToThreadMessages(threadRows, assistantPrincipalId)
+  if (messages.length === 0) return 'declined'
+  if (!respondEligible(messages)) return 'declined'
+
+  if ((opts?.surface ?? 'widget') === 'widget') {
+    const latest = await getLatestInvolvement(conversationId)
+    if (latest?.status === 'handed_off') return 'declined'
+  }
+  return 'eligible'
+}
+
 export async function runAssistantTurnForConversation(
   conversationId: ConversationId,
   opts?: {

@@ -51,7 +51,8 @@ import type {
   AssistantToolOutcome,
   AssistantToolSpec,
 } from './assistant.toolspec'
-import { listActionSpecsForAgent } from './custom-actions.service'
+import { listConnectorToolSpecsForAgent } from './connectors/connector-tools'
+import { compileSkillCatalogue, countAssignedSkills } from './skills.service'
 import { resolveAssistantKnowledgeSnapshot, type RetrievedItem } from './retrieval-sources'
 import { listEnabledGuidanceCandidates, type AssistantGuidanceRule } from './guidance.service'
 import { selectApplicableGuidance, splitGuidanceCandidates } from './guidance-selector'
@@ -129,8 +130,8 @@ export interface AssistantRuntimeConfig {
   revision: number
   workspaceName: string
   actionsEnabled: boolean
-  /** `assistantCustomActions` flag: gates dynamic custom-action registration (Phase 5). */
-  customActionsEnabled: boolean
+  connectorsEnabled: boolean
+  skillsEnabled: boolean
   configFallbackReason?: string
 }
 
@@ -826,7 +827,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       revision: 1,
       workspaceName: 'this workspace',
       actionsEnabled: false,
-      customActionsEnabled: false,
+      connectorsEnabled: false,
+      skillsEnabled: false,
       configFallbackReason: 'database_read_failed',
     }
   }
@@ -933,6 +935,15 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
 
   // Shared construction point (simulate derives from the null conversation =
   // sandbox; actor defaults to Quinn's bounded set).
+  const agentKind = roleToAgent(role)
+  let skillCount = 0
+  if (runtimeConfig.skillsEnabled) {
+    try {
+      skillCount = await countAssignedSkills(agentKind, execDb)
+    } catch (error) {
+      log.warn({ err: error }, 'skill count failed; omitting use_skill this turn')
+    }
+  }
   const toolContext = makeAssistantToolContext({
     db: execDb,
     assistantPrincipalId: input.assistantPrincipalId,
@@ -948,6 +959,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     latestCustomerMessageId: input.latestCustomerMessageId,
     simulate: input.simulate,
     writeToolPolicy: input.simulate === true ? 'simulate' : rolePolicy.writeToolPolicy,
+    skills: { count: skillCount, loads: 0 },
   })
   const promptChannel = surface === 'widget' || surface === 'email' ? surface : null
   const guidanceChannel = surface
@@ -989,19 +1001,22 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     )
   )
 
-  // Custom actions (Phase 5): when the `assistantCustomActions` flag is on,
-  // resolve every enabled definition assigned to THIS turn's agent into a
-  // dynamic write-risk spec. Turn-scoped like the flag/write-policy read below,
-  // so a retry can't change the set mid-turn. A definition assigned to the
-  // other agent, disabled, or resolved for the wrong agent simply never
-  // appears. Best-effort: a load failure drops custom actions for the turn
-  // rather than failing the whole reply.
-  let customActionSpecs: AssistantToolSpec[] = []
-  if (runtimeConfig.customActionsEnabled) {
+  // Connectors: when the flag is on, resolve every enabled connector assigned
+  // to this turn's agent. A policy of never is filtered before assembly.
+  let connectorSpecs: AssistantToolSpec[] = []
+  if (runtimeConfig.connectorsEnabled) {
     try {
-      customActionSpecs = await listActionSpecsForAgent(roleToAgent(role), execDb)
+      connectorSpecs = await listConnectorToolSpecsForAgent(agentKind, execDb)
     } catch (error) {
-      log.warn({ err: error }, 'custom action load failed; omitting custom actions this turn')
+      log.warn({ err: error }, 'connector load failed; omitting connectors this turn')
+    }
+  }
+  let skillCatalogue: Array<{ name: string; whenToUse: string }> = []
+  if (runtimeConfig.skillsEnabled && skillCount > 0) {
+    try {
+      skillCatalogue = await compileSkillCatalogue(agentKind, execDb)
+    } catch (error) {
+      log.warn({ err: error }, 'skill catalogue load failed; omitting skills this turn')
     }
   }
 
@@ -1014,7 +1029,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     toolContext,
     undefined,
     runtimeConfig.actionsEnabled,
-    customActionSpecs
+    connectorSpecs
   )
   let toolNames = new Set(tools.map((t) => t.name))
 
@@ -1111,6 +1126,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     workflowInstructions: input.stepInstructions,
     attributeCatalogue: attributeDefinitions,
     boardCatalogue,
+    skillCatalogue,
   })
 
   // Instrumentation-only OTel tracing (one span per turn, child spans per tool

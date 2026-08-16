@@ -23,6 +23,7 @@ export const DISPATCHABLE_TRIGGER_TYPES = [
   'message.created',
   'message.note_created',
   'assistant.handed_off',
+  'assistant.resolved',
   // Timer-driven triggers (support platform §4.6): synthetic events emitted by
   // workflow-sweep.ts's 5-minute tick (the unresponsive pair) or the SLA
   // domain's deadline scan (the SLA pair), never by a real user/system action.

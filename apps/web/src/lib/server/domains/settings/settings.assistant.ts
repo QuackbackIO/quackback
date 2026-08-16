@@ -61,9 +61,10 @@ export type AssistantConfigFallbackReason = 'invalid_assistant_config'
 export interface AssistantRuntimeConfigState extends AssistantConfigState {
   workspaceName: string
   actionsEnabled: boolean
-  /** `settings.feature_flags.assistantCustomActions` — gates dynamic
-   *  registration of custom actions into an agent's toolset (Phase 5). */
-  customActionsEnabled: boolean
+  /** Remote MCP connectors mapped onto this turn's agent. */
+  connectorsEnabled: boolean
+  /** Packaged procedures pulled via use_skill. */
+  skillsEnabled: boolean
   configFallbackReason?: AssistantConfigFallbackReason
 }
 
@@ -107,7 +108,8 @@ export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfi
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
     actionsEnabled: flags.assistantTools,
-    customActionsEnabled: flags.assistantCustomActions,
+    connectorsEnabled: flags.assistantConnectors,
+    skillsEnabled: flags.assistantSkills,
   }
   if (parsed.success) return { config: parsed.data, ...runtimeFields }
 

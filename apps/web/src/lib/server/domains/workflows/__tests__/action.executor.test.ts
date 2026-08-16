@@ -39,6 +39,7 @@ const {
   getOfficeHoursSchedule,
   buildReplyTimeMessage,
   runAssistantTurnForConversation,
+  previewAssistantTurnForConversation,
 } = vi.hoisted(() => ({
   assignConversation: vi.fn(),
   assignTeam: vi.fn(),
@@ -59,6 +60,7 @@ const {
   getOfficeHoursSchedule: vi.fn(),
   buildReplyTimeMessage: vi.fn(),
   runAssistantTurnForConversation: vi.fn(),
+  previewAssistantTurnForConversation: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
@@ -87,6 +89,7 @@ vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({ getOffic
 vi.mock('@/lib/server/domains/office-hours/reply-time-message', () => ({ buildReplyTimeMessage }))
 vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
   runAssistantTurnForConversation,
+  previewAssistantTurnForConversation,
 }))
 
 const { safeFetch } = vi.hoisted(() => ({ safeFetch: vi.fn() }))
@@ -180,6 +183,7 @@ beforeEach(() => {
     config: { identity: { name: 'Quinn', avatarUrl: null } },
   })
   appendAssistantReply.mockResolvedValue({ id: 'conversation_message_block_1' })
+  previewAssistantTurnForConversation.mockResolvedValue('eligible')
   safeFetch.mockResolvedValue({ ok: true, status: 200 })
   // convert_to_ticket's Phase 4 type resolution: the customer-category default
   // exists (the 0215 seed) and an explicit type resolves to itself.
@@ -810,6 +814,15 @@ describe('applyAction', () => {
       await expect(applyAction({ type: 'let_assistant_answer' }, ctx)).resolves.toMatchObject({
         label: 'handed to assistant',
       })
+    })
+
+    it('returns assistantDeclined when the orchestrator preview says Quinn will not run', async () => {
+      previewAssistantTurnForConversation.mockResolvedValueOnce('declined')
+      await expect(applyAction({ type: 'let_assistant_answer' }, ctx)).resolves.toMatchObject({
+        label: 'assistant declined',
+        assistantDeclined: true,
+      })
+      expect(runAssistantTurnForConversation).not.toHaveBeenCalled()
     })
   })
 

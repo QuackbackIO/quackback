@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 639 surfaces
+### Server functions (`requireAuth`) — 650 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -211,12 +211,14 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view) |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
 | `lib/server/functions/assistant-config-changelog.ts`::getAssistantConfigChangelogFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::listConnectorsFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::getConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::createConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::updateConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::refreshConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::startConnectorOAuthFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::deleteConnectorFn | assistant.manage |
 | `lib/server/functions/assistant-copilot-analytics.ts`::getCopilotUsageMetricsFn | analytics.view |
-| `lib/server/functions/assistant-custom-actions.ts`::listCustomActionsFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::createCustomActionFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::updateCustomActionFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::deleteCustomActionFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::testCustomActionFn | assistant.manage |
 | `lib/server/functions/assistant-documents.ts`::uploadAssistantDocumentFn | assistant.manage |
 | `lib/server/functions/assistant-documents.ts`::listAssistantDocumentsFn | assistant.manage |
 | `lib/server/functions/assistant-documents.ts`::deleteAssistantDocumentFn | assistant.manage |
@@ -236,6 +238,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-settings.ts`::updateAssistantCopilotKnowledgeFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantCopilotCapabilitiesFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateWidgetAssistantDeploymentFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::listSkillsFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::createSkillFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::updateSkillFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::deleteSkillFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::listSnippetsFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::createSnippetFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::updateSnippetFn | assistant.manage |
@@ -251,8 +257,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderCredentialsMaskedFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderStatusFn | auth.manage |
 | `lib/server/functions/billing.ts`::fetchBillingOverviewFn | billing.manage |
-| `lib/server/functions/billing.ts`::fetchBillingCatalogueFn | billing.manage |
 | `lib/server/functions/billing.ts`::fetchBillingInvoicesFn | billing.manage |
+| `lib/server/functions/billing.ts`::fetchPlanUsageFn | billing.manage |
 | `lib/server/functions/blocking.ts`::getPersonBlockStatusFn | people.view |
 | `lib/server/functions/blocking.ts`::blockPersonFn | people.manage |
 | `lib/server/functions/blocking.ts`::unblockPersonFn | people.manage |
@@ -288,6 +294,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/channel-accounts.ts`::deleteChannelAccountFn | channel_account.manage |
 | `lib/server/functions/cloud-identity.ts`::getCloudIdentityFn | settings.manage |
 | `lib/server/functions/cloud-identity.ts`::markCloudWorkspaceDetailsSeenFn | settings.manage |
+| `lib/server/functions/cloud-identity.ts`::getCloudCustomDomainsFn | settings.custom_domain |
+| `lib/server/functions/cloud-identity.ts`::hasCustomDomainEntitlementFn | settings.custom_domain |
+| `lib/server/functions/cloud-identity.ts`::mutateCloudCustomDomainFn | settings.custom_domain |
 | `lib/server/functions/cloud-identity.ts`::updateCloudIdentityFn | settings.manage |
 | `lib/server/functions/comments.ts`::createCommentFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::addReactionFn | END_USER (any authenticated) |
@@ -463,6 +472,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::archiveNotificationFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | ADMIN-ONLY |
+| `lib/server/functions/owner-workspaces.ts`::listOwnerWorkspacesFn | settings.manage |
+| `lib/server/functions/owner-workspaces.ts`::openOwnerWorkspaceFn | settings.manage |
 | `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
@@ -944,7 +955,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-186 of 938 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+191 of 959 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -969,6 +980,9 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/csat-email.ts`::recordCsatViaTokenFn | server-fn |
 | `lib/server/functions/csat-email.ts`::validateCsatEmailTokenFn | server-fn |
 | `lib/server/functions/embeds.ts`::getEmbedPreviewFn | server-fn |
+| `lib/server/functions/entitlement-status.ts`::hasEntitlementFn | server-fn |
+| `lib/server/functions/entitlement-status.ts`::hasTierFeatureFn | server-fn |
+| `lib/server/functions/entitlement-status.ts`::listEntitlementsFn | server-fn |
 | `lib/server/functions/help-center-redirect-rules.ts`::resolveHelpCenterRedirectFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicArticleBySlugFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicCategoryBySlugFn | server-fn |
@@ -1032,6 +1046,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/settings.ts`::fetchPublicAuthConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchPublicPortalConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchUserProfile | server-fn |
+| `lib/server/functions/sso-entitlement.ts`::hasSsoEntitlementFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusIncidentPublicFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
@@ -1130,6 +1145,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/hc/sitemap[.]xml.ts`::GET | route |
 | `routes/oauth/$integration/callback.ts`::GET | route |
 | `routes/oauth/$integration/connect.ts`::GET | route |
+| `routes/oauth/connector.callback.ts`::GET | route |
 | `routes/robots[.]txt.ts`::GET | route |
 | `routes/sitemap[.]xml.ts`::GET | route |
 | `routes/status/feed.ts`::GET | route |

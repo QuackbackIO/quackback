@@ -2189,20 +2189,34 @@ export async function executeAssistantHandoff(
   const [updated] = await db
     .update(conversations)
     .set({
-      customAttributes: sql`coalesce(${conversations.customAttributes}, '{}'::jsonb) || jsonb_build_object('assistant_escalation_reason', ${reason}::text)`,
       status: 'open',
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId))
     .returning()
+  try {
+    const { ensureAssistantEscalationReasonAttribute } =
+      await import('@/lib/server/domains/conversation-attributes/conversation-attribute.service')
+    const { setConversationAttribute } =
+      await import('@/lib/server/domains/conversation-attributes/set-attribute.service')
+    await ensureAssistantEscalationReasonAttribute()
+    await setConversationAttribute({ conversationId }, 'assistant_escalation_reason', reason, 'ai')
+  } catch (err) {
+    log.warn({ err, conversationId }, 'failed to write escalation reason attribute')
+  }
   // A visitor-visible transition marker so the customer clearly sees the shift
   // from Quinn to the human team (localized on the client via systemEvent.kind).
   await emitSystemMessage(conversationId, 'Connecting you to the team', {
     kind: 'assistant_handoff',
   })
-  const assigned = await assignRoutedConversation(updated)
+  // A live assistant.handed_off workflow owns assignment. The deterministic
+  // router stands down so the customer does not see two assignment notices.
+  const { hasLiveWorkflowForTrigger } =
+    await import('@/lib/server/domains/workflows/workflow.service')
+  const routingWorkflowOwnsHandoff = await hasLiveWorkflowForTrigger('assistant.handed_off')
+  const assigned = routingWorkflowOwnsHandoff ? null : await assignRoutedConversation(updated)
   // assignRoutedConversation broadcasts the assigned DTO itself on success; when
-  // routing declines, still surface the updated attributes/status to the inbox.
+  // routing declines (or a workflow owns the handoff), still surface the update.
   if (!assigned) {
     publishConversationUpdate(updated.id, await conversationToDTO(updated, 'agent'))
   }

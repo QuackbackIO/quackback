@@ -21,9 +21,21 @@ vi.mock('../routing', () => ({
   routeConversation: (...a: unknown[]) => routeConversation(...a),
 }))
 
+const hasLiveWorkflowForTrigger = vi.fn(async () => false)
+vi.mock('@/lib/server/domains/workflows/workflow.service', () => ({
+  hasLiveWorkflowForTrigger: () => hasLiveWorkflowForTrigger(),
+}))
+
 const classifyConversationAttributes = vi.fn()
 vi.mock('@/lib/server/domains/conversation-attributes/ai-classification.service', () => ({
   classifyConversationAttributes: (...a: unknown[]) => classifyConversationAttributes(...a),
+}))
+
+vi.mock('@/lib/server/domains/conversation-attributes/set-attribute.service', () => ({
+  setConversationAttribute: vi.fn(async () => ({})),
+}))
+vi.mock('@/lib/server/domains/conversation-attributes/conversation-attribute.service', () => ({
+  ensureAssistantEscalationReasonAttribute: vi.fn(async () => {}),
 }))
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
@@ -97,6 +109,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   routeConversation.mockResolvedValue({ assignedPrincipalId: null })
   classifyConversationAttributes.mockResolvedValue([])
+  hasLiveWorkflowForTrigger.mockResolvedValue(false)
 })
 
 describe('executeAssistantHandoff bus event', () => {
@@ -139,6 +152,12 @@ describe('executeAssistantHandoff bus event', () => {
 
     expect(classifyConversationAttributes).toHaveBeenCalledWith(convId, { trigger: 'handoff' })
     expect(order).toEqual(['classify', 'dispatch'])
+  })
+
+  it('stands the deterministic router down when a live handoff workflow exists', async () => {
+    hasLiveWorkflowForTrigger.mockResolvedValueOnce(true)
+    await executeAssistantHandoff(convId, 'explicit_request', quinnAuthor)
+    expect(routeConversation).not.toHaveBeenCalled()
   })
 
   it('never lets a classification failure block the handoff', async () => {

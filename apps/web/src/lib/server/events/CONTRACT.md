@@ -16,7 +16,7 @@ checklist.
   - generic lifecycle: `created` · `updated` · `deleted` · `restored` · `archived`
   - semantic (curated): `status_changed`, `assigned`, `owner_assigned`,
     `priority_changed`, `merged`, `unmerged`, `mentioned`, `published`,
-    `replied`, `handed_off`, `csat_submitted`, `breached`, `voted`,
+    `replied`, `handed_off`, `resolved`, `csat_submitted`, `breached`, `voted`,
     `external_status_changed` (a linked tracker issue moved upstream), …
     (add new ones to the list _on purpose_).
 - A new verb is a deliberate decision, not a drive-by string. Adding one and

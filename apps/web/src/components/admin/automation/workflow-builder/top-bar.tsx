@@ -187,7 +187,7 @@ export function WorkflowBuilderTopBar({
       </Button>
       <Button size="sm" variant="outline" onClick={onOpenPreview}>
         <BeakerIcon className="size-3.5" />
-        Test
+        Preview
       </Button>
 
       <span className="hidden text-xs text-muted-foreground sm:inline">

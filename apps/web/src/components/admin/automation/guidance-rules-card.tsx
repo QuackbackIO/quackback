@@ -247,7 +247,8 @@ export function GuidanceRulesCard({ agent }: { agent: AssistantAgentKind }) {
         })}
         description={intl.formatMessage({
           id: 'automation.agent.guidance.description',
-          defaultMessage: 'Tell the AI agent what to do when a conversation matches a situation.',
+          defaultMessage:
+            'Tell the AI agent what to do when a conversation matches a situation. Use this for language the model interprets; use workflow conditions when the same check must be deterministic.',
         })}
         action={
           <Button

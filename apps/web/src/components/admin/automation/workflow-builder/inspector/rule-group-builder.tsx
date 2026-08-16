@@ -399,6 +399,7 @@ function RuleRow({
                 {attributeItems.map((d) => (
                   <SelectItem key={d.key} value={attributeFieldForKey(d.key)}>
                     {d.label}
+                    {d.aiDetect ? ' · AI' : ''}
                   </SelectItem>
                 ))}
               </SelectGroup>

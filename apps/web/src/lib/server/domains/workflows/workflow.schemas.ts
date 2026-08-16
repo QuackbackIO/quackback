@@ -231,13 +231,9 @@ const nodeSchema = z.discriminatedUnion('type', [
   z.object({
     id: z.string().min(1),
     type: z.literal('let_assistant_answer'),
-    // Both optional (Phase C, slice C-6): a one-time per-step instruction
-    // folded into just this turn's prompt (see assistant.runtime.ts's
-    // buildStepInstructionsPrompt), and a reserved auto-close override with
-    // no backing runtime knob yet — see graph.ts's WorkflowNode doc for why
-    // the walker leaves autoCloseOverride deliberately unread.
+    // Optional one-time per-step instruction folded into just this turn's
+    // prompt (see assistant.runtime.ts's buildStepInstructionsPrompt).
     instructions: z.string().max(MAX_ASSISTANT_STEP_INSTRUCTIONS).optional(),
-    autoCloseOverride: z.boolean().optional(),
   }),
   z.object({ id: z.string().min(1), type: z.literal('disable_composer') }),
   z.object({

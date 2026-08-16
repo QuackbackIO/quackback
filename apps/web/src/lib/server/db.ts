@@ -432,11 +432,17 @@ export {
   ASSISTANT_MODEL_HANDOFF_REASONS,
   // Schema tables - assistant guidance rules
   assistantGuidanceRules,
-  // Schema tables - assistant custom actions (Phase 5 library)
-  assistantActions,
-  assistantActionsRelations,
-  type StoredAssistantActionHeader,
-  type StoredAssistantActionVariable,
+  connectors,
+  connectorsRelations,
+  type CachedConnectorTool,
+  type ConnectorToolPolicies,
+  type ConnectorAssignments,
+  type ConnectorAuthMode,
+  type ConnectorStatus,
+  type ConnectorToolPolicy,
+  agentSkills,
+  agentSkillsRelations,
+  type SkillAssignments,
   // Schema tables - assistant snippets
   assistantSnippets,
   assistantSnippetsRelations,

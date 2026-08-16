@@ -16,10 +16,12 @@ import {
   ACTION_TYPES,
   BLOCK_STEP_LABELS,
   COLLECT_BLOCK_KINDS,
+  PARKING_BLOCK_KINDS,
   SEND_BLOCK_KINDS,
   type ActionType,
   type BlockStepKind,
   type TreeStep,
+  type WorkflowClassValue,
 } from '../../workflow-graph'
 
 interface PaletteItem {
@@ -27,21 +29,32 @@ interface PaletteItem {
   icon: ComponentType<{ className?: string }>
   tone: Tone
   onSelect: () => void
+  disabled?: boolean
+  reason?: string
 }
 
 export function StepPalette({
   onInsert,
+  workflowClass = 'customer_facing',
 }: {
   onInsert: (kind: TreeStep['kind'], actionType?: ActionType) => void
+  workflowClass?: WorkflowClassValue
 }) {
   const [query, setQuery] = useState('')
 
-  const blockItem = (kind: BlockStepKind): PaletteItem => ({
-    label: BLOCK_STEP_LABELS[kind],
-    icon: BLOCK_ICONS[kind],
-    tone: 'pink',
-    onSelect: () => onInsert(kind),
-  })
+  const blockItem = (kind: BlockStepKind): PaletteItem => {
+    const parkingBlocked = workflowClass !== 'customer_facing' && PARKING_BLOCK_KINDS.has(kind)
+    return {
+      label: BLOCK_STEP_LABELS[kind],
+      icon: BLOCK_ICONS[kind],
+      tone: 'pink',
+      onSelect: () => {
+        if (!parkingBlocked) onInsert(kind)
+      },
+      disabled: parkingBlocked,
+      reason: parkingBlocked ? 'Only available in customer-facing workflows' : undefined,
+    }
+  }
   const send: PaletteItem[] = SEND_BLOCK_KINDS.map(blockItem)
   const collect: PaletteItem[] = COLLECT_BLOCK_KINDS.map(blockItem)
   const logic: PaletteItem[] = [
@@ -106,14 +119,23 @@ function PaletteGroup({ label, items }: { label: string; items: PaletteItem[] })
             key={item.label}
             type="button"
             onClick={item.onSelect}
-            className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left text-xs hover:bg-muted/60"
+            disabled={item.disabled}
+            title={item.reason}
+            className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left text-xs hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span
               className={`flex size-6 shrink-0 items-center justify-center rounded-md ${TONE_TILE[item.tone]}`}
             >
               <item.icon className="size-3.5" />
             </span>
-            {item.label}
+            <span className="min-w-0 flex-1">
+              {item.label}
+              {item.reason && (
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                  {item.reason}
+                </span>
+              )}
+            </span>
           </button>
         ))}
       </div>

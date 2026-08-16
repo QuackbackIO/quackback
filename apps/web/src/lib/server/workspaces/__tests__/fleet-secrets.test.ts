@@ -4,7 +4,7 @@
  * The control plane seals a value and a fleet replica opens it, in two
  * different repositories. A drift between them does not produce a wrong answer
  * — it produces ciphertext nobody can open, and for `SECRET_KEY` that means
- * integration OAuth tokens, webhook signing secrets and custom-action headers
+ * integration OAuth tokens, webhook signing secrets and connector secrets
  * are gone rather than unreadable.
  *
  * The byte-for-byte vendoring check in `vendor-parity.test.ts` catches the two

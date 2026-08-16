@@ -264,6 +264,23 @@ const HAS_LIVE_KEY = 'has-live'
  */
 export function invalidateHasLiveWorkflowCache(): void {
   hasLiveWorkflowCache.delete(HAS_LIVE_KEY)
+  liveAttributeKeysCache.delete(LIVE_ATTRIBUTE_KEYS_KEY)
+}
+
+/** True when at least one live workflow is subscribed to this trigger. */
+export async function hasLiveWorkflowForTrigger(triggerType: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(
+      and(
+        eq(workflows.triggerType, triggerType),
+        eq(workflows.status, 'live'),
+        isNull(workflows.deletedAt)
+      )
+    )
+    .limit(1)
+  return Boolean(row)
 }
 
 /**
@@ -343,6 +360,20 @@ function collectAttributeKeysFromGraph(graph: unknown, into: Set<string>): void 
   }
 }
 
+function collectAttributeKeysFromWorkflow(
+  workflow: {
+    graph: unknown
+    triggerSettings?: Record<string, unknown> | null
+  },
+  into: Set<string>
+): void {
+  const audience = workflow.triggerSettings?.audience
+  if (audience && typeof audience === 'object' && !Array.isArray(audience)) {
+    collectAttributeKeys(audience as WorkflowCondition, into)
+  }
+  collectAttributeKeysFromGraph(workflow.graph, into)
+}
+
 /** Short-lived cache: a live workflow's conditions rarely change second to
  *  second, and this is read on every inbound customer message via the
  *  assistant orchestrator, so a module-level TTL cache (no existing caching
@@ -372,11 +403,11 @@ export async function getLiveWorkflowReferencedAttributeKeys(): Promise<Readonly
   const cached = liveAttributeKeysCache.get(LIVE_ATTRIBUTE_KEYS_KEY)
   if (cached && cached.expiresAt > now) return cached.keys
   const live = await db
-    .select({ graph: workflows.graph })
+    .select({ graph: workflows.graph, triggerSettings: workflows.triggerSettings })
     .from(workflows)
     .where(and(eq(workflows.status, 'live'), isNull(workflows.deletedAt)))
   const keys = new Set<string>()
-  for (const row of live) collectAttributeKeysFromGraph(row.graph, keys)
+  for (const row of live) collectAttributeKeysFromWorkflow(row, keys)
   liveAttributeKeysCache.set(LIVE_ATTRIBUTE_KEYS_KEY, {
     keys,
     expiresAt: now + LIVE_ATTRIBUTE_KEYS_CACHE_TTL_MS,

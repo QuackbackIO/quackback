@@ -1,10 +1,11 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { useIntl } from 'react-intl'
 import { BoltIcon } from '@heroicons/react/24/solid'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { AgentPriorityBanner } from '@/components/admin/automation/agent-priority-banner'
+import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
 import { AbandonedJourneyAutoCloseCard } from '@/components/admin/automation/abandoned-journey-auto-close-card'
 import { WorkflowsManager } from '@/components/admin/automation/workflows-manager'
 
@@ -36,18 +37,27 @@ function WorkflowsPageRoute() {
 }
 
 function WorkflowsPage() {
+  const intl = useIntl()
   const { workflowsEntitled } = Route.useLoaderData()
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="lg:hidden">
-        <BackLink to="/admin/automation">AI &amp; Automation</BackLink>
+        <BackLink to="/admin/automation">
+          {intl.formatMessage({ id: 'automation.nav.label', defaultMessage: 'AI & Automation' })}
+        </BackLink>
       </div>
       <PageHeader
         icon={BoltIcon}
-        title="Workflows"
-        description="Trigger-driven automation for conversations and tickets"
+        title={intl.formatMessage({
+          id: 'automation.workflows.title',
+          defaultMessage: 'Workflows',
+        })}
+        description={intl.formatMessage({
+          id: 'automation.workflows.description',
+          defaultMessage: 'Trigger-driven automation for conversations and tickets',
+        })}
       />
-      <AgentPriorityBanner />
+      <WhoRepliesFirstCard />
       <AbandonedJourneyAutoCloseCard />
       <WorkflowsManager entitled={workflowsEntitled} />
     </div>

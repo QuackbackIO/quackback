@@ -61,8 +61,26 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
       <div className="flex items-center gap-1.5 font-medium text-foreground">
         <ShieldCheckIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
         {action.label}
+        {action.connector && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            <span className="inline-flex size-4 items-center justify-center rounded-sm bg-primary/15 text-[11px] font-semibold text-primary">
+              {action.connector.initials}
+            </span>
+            {action.connector.name}
+          </span>
+        )}
       </div>
       <p className="text-muted-foreground">{action.summary}</p>
+      {action.argsPreview && Object.keys(action.argsPreview).length > 0 && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+          {Object.entries(action.argsPreview).map(([key, value]) => (
+            <div key={key} className="contents">
+              <dt className="font-medium text-muted-foreground">{key}</dt>
+              <dd className="min-w-0 truncate text-foreground">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {isLoading ? (
         <span className="text-muted-foreground">Checking status…</span>

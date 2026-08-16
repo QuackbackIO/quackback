@@ -79,6 +79,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@quackback/db/client': path.resolve(repoRoot, 'packages/db/src/client.ts'),
+      '@quackback/db/schema-version': path.resolve(repoRoot, 'packages/db/src/schema-version.ts'),
+      '@quackback/db/schema-ops': path.resolve(repoRoot, 'packages/db/src/schema-ops.ts'),
+      '@quackback/db/migrate': path.resolve(repoRoot, 'packages/db/src/migrate-runtime.ts'),
       '@quackback/db/schema': path.resolve(repoRoot, 'packages/db/src/schema/index.ts'),
       '@quackback/db/types': path.resolve(repoRoot, 'packages/db/src/types.ts'),
       '@quackback/db': path.resolve(repoRoot, 'packages/db/index.ts'),

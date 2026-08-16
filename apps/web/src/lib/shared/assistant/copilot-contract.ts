@@ -101,6 +101,8 @@ export interface CopilotProposedAction {
   summary: string
   /** The admin-facing tool name (e.g. "End conversation"), for the card's title. */
   label: string
+  connector?: { name: string; initials: string }
+  argsPreview?: Record<string, string>
 }
 
 /**

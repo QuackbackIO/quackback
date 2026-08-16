@@ -211,14 +211,13 @@ export function eventToWorkflowTrigger(
         message: null,
       }
     }
-    case 'assistant.handed_off': {
-      // The assistant's own service principal authors this event, so the
-      // dispatcher's automated-actor gate would silently swallow it. That gate
+    case 'assistant.handed_off':
+    case 'assistant.resolved': {
+      // The assistant's own service principal authors these events, so the
+      // dispatcher's automated-actor gate would silently swallow them. That gate
       // exists to stop a workflow's own automated action from re-triggering
-      // workflows; a terminal "the assistant gave up, hand off to a human"
-      // signal is not that loop (no workflow action can produce it), so the
-      // trigger opts out explicitly — actorType stays truthful for any other
-      // consumer.
+      // workflows; a terminal "Quinn handed off / Quinn resolved" signal is not
+      // that loop, so the trigger opts out explicitly.
       return {
         triggerType: event.type,
         conversationId: event.data.conversationId as ConversationId,
@@ -568,9 +567,19 @@ export async function dispatchWorkflowsForEvent(event: EventData): Promise<void>
   const inputResume = isVisitorMessage ? await tryResumeInputWait(event) : null
 
   const isClose = event.type === 'conversation.status_changed' && event.data.newStatus === 'closed'
+  const assistantOutcome =
+    event.type === 'assistant.handed_off'
+      ? 'escalated'
+      : event.type === 'assistant.resolved'
+        ? 'resolved'
+        : isClose
+          ? event.actor?.type === 'service'
+            ? 'escalated'
+            : 'resolved'
+          : null
   const assistantResume =
-    !inputResume && (event.type === 'assistant.handed_off' || isClose)
-      ? await tryResumeAssistantWait(trigger.conversationId, isClose ? 'resolved' : 'escalated')
+    !inputResume && assistantOutcome
+      ? await tryResumeAssistantWait(trigger.conversationId, assistantOutcome)
       : null
 
   // Advisory hint for dispatchWorkflowTrigger's own active-customer-facing-run

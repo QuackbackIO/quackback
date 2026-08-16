@@ -1394,7 +1394,25 @@ describe.skipIf(!fixture.available)('runWorkflow (real DB, rolled back)', () => 
       expect(events.map((e) => e.kind).sort()).toEqual(['started', 'waiting'])
     })
 
-    it('never stamps expiresAt on an assistant WaitCursor even when abandoned auto-close is enabled: only a customer-silence input wait can be abandoned', async () => {
+    it('resumes the escalated edge immediately when Quinn declines to run', async () => {
+      applyAction
+        .mockResolvedValueOnce({ label: 'assistant declined', assistantDeclined: true })
+        .mockResolvedValueOnce({ label: 'priority set' })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      expect(run?.state).toBe('done')
+      expect(applyAction).toHaveBeenCalledTimes(2)
+      expect(applyAction.mock.calls[1][0]).toEqual({ type: 'set_priority', priority: 'urgent' })
+    })
+
+    it('stamps expiresAt on an assistant WaitCursor so a silent Quinn cannot hold the lock forever', async () => {
       getWorkflowAbandonedAutoCloseSettings.mockResolvedValueOnce({
         enabled: true,
         waitMinutes: 15,
@@ -1411,9 +1429,8 @@ describe.skipIf(!fixture.available)('runWorkflow (real DB, rolled back)', () => 
 
       const run = await runWorkflow(wf, ctx(), { conversationId })
       expect(run?.cursor).toMatchObject({ waitKind: 'assistant' })
-      expect(run?.cursor).not.toHaveProperty('expiresAt')
-      // The setting isn't even worth reading for a park kind that can never use it.
-      expect(getWorkflowAbandonedAutoCloseSettings).not.toHaveBeenCalled()
+      expect(run?.cursor).toHaveProperty('expiresAt')
+      expect(getWorkflowAbandonedAutoCloseSettings).toHaveBeenCalled()
     })
 
     it('resumes with outcome "escalated": follows the labeled escalated edge', async () => {

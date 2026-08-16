@@ -3,7 +3,9 @@ import { useIntl } from 'react-intl'
 import {
   BeakerIcon,
   BoltIcon,
+  BookOpenIcon,
   ChartBarIcon,
+  LinkIcon,
   SparklesIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/solid'
@@ -21,9 +23,9 @@ interface NavItem {
 }
 
 /**
- * A titled cluster of nav rows. The "Quinn AI" group holds the two peer agents
- * (Agent, Copilot); the trailing untitled group holds the standalone tools
- * (Workflows, Test, Performance) that sit beside Quinn rather than under it.
+ * A titled cluster of nav rows. The Agents group holds the two peer agents
+ * plus their shared catalog (Connectors, Skills); the trailing untitled group
+ * holds standalone tools (Workflows, Test, Performance).
  */
 interface NavSection {
   labelId?: string
@@ -38,10 +40,16 @@ interface AutomationNavPermissions {
 }
 
 export function buildAutomationNavSections(
-  flags: { supportInbox?: boolean } | undefined,
+  flags:
+    | {
+        supportInbox?: boolean
+        assistantConnectors?: boolean
+        assistantSkills?: boolean
+      }
+    | undefined,
   permissions: AutomationNavPermissions
 ): NavSection[] {
-  const quinn: NavItem[] = permissions.assistant
+  const agents: NavItem[] = permissions.assistant
     ? [
         {
           labelId: 'automation.nav.agent',
@@ -55,6 +63,26 @@ export function buildAutomationNavSections(
           to: '/admin/automation/copilot',
           icon: UserGroupIcon,
         },
+        ...(flags?.assistantConnectors
+          ? [
+              {
+                labelId: 'automation.nav.connectors',
+                defaultLabel: 'Connectors',
+                to: '/admin/automation/connectors',
+                icon: LinkIcon,
+              } satisfies NavItem,
+            ]
+          : []),
+        ...(flags?.assistantSkills
+          ? [
+              {
+                labelId: 'automation.nav.skills',
+                defaultLabel: 'Skills',
+                to: '/admin/automation/skills',
+                icon: BookOpenIcon,
+              } satisfies NavItem,
+            ]
+          : []),
       ]
     : []
 
@@ -86,11 +114,11 @@ export function buildAutomationNavSections(
   ].filter((item): item is NavItem => item !== null)
 
   const sections: NavSection[] = []
-  if (quinn.length > 0) {
+  if (agents.length > 0) {
     sections.push({
-      labelId: 'automation.nav.group.quinn',
-      defaultLabel: 'Quinn AI',
-      items: quinn,
+      labelId: 'automation.nav.group.agents',
+      defaultLabel: 'Agents',
+      items: agents,
     })
   }
   if (tools.length > 0) sections.push({ items: tools })

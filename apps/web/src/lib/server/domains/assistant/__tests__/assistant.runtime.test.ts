@@ -187,7 +187,8 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
   revision: 1,
   workspaceName: 'Quackback',
   actionsEnabled: false,
-  customActionsEnabled: false,
+  connectorsEnabled: false,
+  skillsEnabled: false,
 }
 
 const mockGetAssistantRuntimeConfig = vi.fn()

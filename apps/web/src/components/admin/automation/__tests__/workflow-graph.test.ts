@@ -1592,7 +1592,7 @@ describe('conversational block kinds', () => {
     expect(graphToTree(graph)).toEqual({ ok: true, value: tree })
   })
 
-  it('round-trips let_assistant_answer instructions + autoCloseOverride (Phase C, slice C-6)', () => {
+  it('round-trips let_assistant_answer instructions (Phase C, slice C-6)', () => {
     const tree: WorkflowTree = {
       triggerId: 'trigger',
       steps: [
@@ -1600,7 +1600,6 @@ describe('conversational block kinds', () => {
           id: 'quinn-1',
           kind: 'let_assistant_answer',
           instructions: 'Focus on billing only',
-          autoCloseOverride: true,
           paths: [
             { key: LET_ASSISTANT_DEFAULT_KEY, label: 'Continues', steps: [] },
             { key: LET_ASSISTANT_ESCALATED_KEY, label: 'If escalated to a human', steps: [] },
@@ -1611,7 +1610,8 @@ describe('conversational block kinds', () => {
     const graph = treeToGraph(tree)
     expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
     const node = graph.nodes.find((n) => n.id === 'quinn-1')
-    expect(node).toMatchObject({ instructions: 'Focus on billing only', autoCloseOverride: true })
+    expect(node).toMatchObject({ instructions: 'Focus on billing only' })
+    expect(node).not.toHaveProperty('autoCloseOverride')
     expect(graphToTree(graph)).toEqual({ ok: true, value: tree })
   })
 

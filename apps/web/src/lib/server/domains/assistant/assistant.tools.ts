@@ -96,6 +96,8 @@ export function resolveEffectiveToolMode(
   ctx: AssistantToolContext
 ): ToolExecutionMode {
   if (spec.risk === 'control') return 'autonomous'
+  if (spec.approvalPolicy === 'always') return 'autonomous'
+  if (spec.approvalPolicy === 'approval') return 'propose'
   if (spec.risk !== 'write') return 'autonomous'
   // Write-risk from here.
   if (ctx.writeToolPolicy === 'propose') return 'propose'
@@ -115,6 +117,16 @@ function turnParentKind(ctx: AssistantToolContext): 'conversation' | 'ticket' {
   if (ctx.conversationId != null) return 'conversation'
   if (ctx.ticketId != null) return 'ticket'
   return 'conversation'
+}
+
+function previewArgs(args: unknown): Record<string, string> | undefined {
+  if (!args || typeof args !== 'object') return undefined
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+    if (value == null) continue
+    out[key] = typeof value === 'string' ? value : JSON.stringify(value)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 /** JSON.stringify with object keys sorted, so equivalent args always hash the same. */
@@ -219,6 +231,12 @@ async function runWithPipeline(
       toolName: spec.name,
       summary,
       label: spec.label,
+      ...(spec.connector
+        ? {
+            connector: spec.connector,
+            ...(previewArgs(args) ? { argsPreview: previewArgs(args) } : {}),
+          }
+        : {}),
     })
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
     return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
@@ -396,7 +414,7 @@ export async function assembleAssistantToolset(
   ctx: AssistantToolContext,
   specs?: readonly AssistantToolSpec[],
   actionsEnabled = false,
-  customActionSpecs: readonly AssistantToolSpec[] = []
+  connectorSpecs: readonly AssistantToolSpec[] = []
 ): Promise<{ tools: ReturnType<typeof toLegacyServerTool>[]; activeSpecs: AssistantToolSpec[] }> {
   // Unified inbox §2.9/§3.3: never even consider a spec whose `parents`
   // excludes this turn's actual parent kind: a conversation-only write tool
@@ -406,32 +424,27 @@ export async function assembleAssistantToolset(
   const availableForTurn = (spec: AssistantToolSpec) =>
     spec.parents.includes(parentKind) && (spec.availableWhen?.(ctx) ?? true)
 
-  // Custom actions (Phase 5, QUINN-TWO-AGENT-SPEC D6) are write-risk and ALWAYS
-  // run through the execution pipeline — their audit ledger and the copilot
-  // propose path are load-bearing — regardless of the built-in `assistantTools`
-  // flag. The caller only ever passes them when the separate
-  // `assistantCustomActions` flag is on and after resolving them for the turn's
-  // agent, so the two rollout gates stay independent.
-  const customActive = customActionSpecs
+  // Connector specs always ride the execution pipeline — audit and propose
+  // stay load-bearing — regardless of the built-in assistantTools flag.
+  const connectorActive = connectorSpecs
     .filter(availableForTurn)
     .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
-  const customTools = customActive.map(({ spec, mode }) =>
+  const connectorTools = connectorActive.map(({ spec, mode }) =>
     spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
   )
-  const customActiveSpecs = customActive.map((entry) => entry.spec)
+  const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
   if (!actionsEnabled) {
     // Flag off exposes read tools plus core control tools, unwrapped. Write
     // specs must never register without the pipeline, while handoff/inability
     // remain part of Quinn's agent protocol regardless of this feature flag.
-    // Custom actions (when their own flag brought them here) still ride the
-    // pipeline — they are never registered unwrapped.
+    // Connector specs still ride the pipeline — they are never registered unwrapped.
     const legacySpecs = (specs ?? Object.values(ASSISTANT_TOOL_SPECS)).filter(
       (spec) => spec.risk !== 'write' && availableForTurn(spec)
     )
     return {
-      tools: [...legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)), ...customTools],
-      activeSpecs: withDynamicPromptGuidance([...legacySpecs, ...customActiveSpecs], ctx),
+      tools: [...legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)), ...connectorTools],
+      activeSpecs: withDynamicPromptGuidance([...legacySpecs, ...connectorActiveSpecs], ctx),
     }
   }
 
@@ -444,8 +457,8 @@ export async function assembleAssistantToolset(
           runWithPipeline(spec, mode, args, ctx)
         )
       }),
-      ...customTools,
+      ...connectorTools,
     ],
-    activeSpecs: withDynamicPromptGuidance([...resolvedSpecs, ...customActiveSpecs], ctx),
+    activeSpecs: withDynamicPromptGuidance([...resolvedSpecs, ...connectorActiveSpecs], ctx),
   }
 }

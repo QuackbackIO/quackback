@@ -42,6 +42,7 @@ export {
   DEFAULT_INACTIVITY_MINUTES,
   MAX_BREACH_LEAD_MINUTES,
   DEFAULT_BREACH_LEAD_MINUTES,
+  PARKING_BLOCK_KINDS,
 }
 import type {
   ATTRIBUTE_FIELD_PREFIX as ServerAttributeFieldPrefix,
@@ -482,6 +483,8 @@ export interface AttributeFieldDef {
   fieldType: AttributeFieldType
   /** select / multi_select only — option id is the stored value. */
   options?: readonly { id: string; label: string }[]
+  /** When true, this field is AI-populated. */
+  aiDetect?: boolean
 }
 
 /** The operators offered per attribute field type (v1: date stays valueless-only). */
@@ -530,12 +533,19 @@ export function toAttributeFieldDefs(
     label: string
     fieldType: AttributeFieldType
     options?: readonly { id: string; label: string }[] | null
+    aiDetect?: boolean
   }[]
 ): ReadonlyMap<string, AttributeFieldDef> {
   return new Map(
     items.map((d) => [
       d.key,
-      { key: d.key, label: d.label, fieldType: d.fieldType, options: d.options ?? undefined },
+      {
+        key: d.key,
+        label: d.label,
+        fieldType: d.fieldType,
+        options: d.options ?? undefined,
+        aiDetect: d.aiDetect,
+      },
     ])
   )
 }
@@ -756,6 +766,7 @@ export const TRIGGER_LABELS: Record<TriggerType, string> = {
   'conversation.status_changed': 'Status changed',
   'conversation.assigned': 'Assigned to team or agent',
   'assistant.handed_off': 'AI agent handed off to a human',
+  'assistant.resolved': 'AI agent resolved the conversation',
   'conversation.priority_changed': 'Priority changed',
   'conversation.attribute_changed': 'Attribute changed',
   'conversation.csat_submitted': 'CSAT rating submitted',
@@ -1111,13 +1122,12 @@ export type TreeStep =
   | { id: string; kind: 'collect_reply'; body: BlockBody; attributeKey: string }
   /** paths: exactly LET_ASSISTANT_DEFAULT_KEY + LET_ASSISTANT_ESCALATED_KEY,
    *  always both present (not user add/remove/reorderable — see the
-   *  let-assistant editor). instructions/autoCloseOverride (Phase C, slice
-   *  C-6) mirror the server node's own optional fields verbatim. */
+   *  let-assistant editor). instructions (Phase C, slice C-6) mirror the
+   *  server node's own optional field. */
   | {
       id: string
       kind: 'let_assistant_answer'
       instructions?: string
-      autoCloseOverride?: boolean
       paths: KeyedPath[]
     }
   | { id: string; kind: 'reply_buttons'; body: BlockBody; allowTyping: boolean; paths: KeyedPath[] }
@@ -1516,9 +1526,6 @@ export function validateGraph(input: unknown): Result<WorkflowGraphJson> {
             )
           }
         }
-        if (node.autoCloseOverride !== undefined && typeof node.autoCloseOverride !== 'boolean') {
-          return fail(`${where}: "autoCloseOverride" must be true or false when present`)
-        }
         break
       case 'reply_buttons': {
         const err = validateBlockBody(node.body, where)
@@ -1837,7 +1844,6 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
           id: node.id,
           kind: 'let_assistant_answer',
           instructions: node.instructions,
-          autoCloseOverride: node.autoCloseOverride,
           paths: [
             {
               key: LET_ASSISTANT_DEFAULT_KEY,
@@ -2004,7 +2010,6 @@ export function treeToGraph(tree: WorkflowTree): WorkflowGraphJson {
             id: step.id,
             type: 'let_assistant_answer',
             instructions: step.instructions,
-            autoCloseOverride: step.autoCloseOverride,
           })
           emitFixedTwoPathEdges(step, LET_ASSISTANT_DEFAULT_KEY, LET_ASSISTANT_ESCALATED_KEY, emit)
           break
@@ -2898,11 +2903,31 @@ const CLASS_RESTRICTED_STEP_MESSAGE =
  *  more fundamental problem to fix first. Defaults to 'customer_facing' (the
  *  permissive case) so every existing call site/fixture that predates this
  *  parameter keeps behaving exactly as before. */
+function conditionNeedsSetup(condition: GraphCondition | undefined): boolean {
+  if (!condition) return true
+  if ('field' in condition) {
+    if (!condition.field) return true
+    if (VALUELESS_OPERATORS.has(condition.op)) return false
+    const value = condition.value
+    if (value === undefined || value === null || value === '') return true
+    if (Array.isArray(value) && value.length === 0) return true
+    if (typeof value === 'string' && isNeedsSetupRef(value)) return true
+    return false
+  }
+  const children = [...(condition.all ?? []), ...(condition.any ?? [])]
+  if (children.length === 0) return true
+  return children.some(conditionNeedsSetup)
+}
+
 export function collectStepIssues(
   tree: WorkflowTree,
-  workflowClass: WorkflowClassValue = 'customer_facing'
+  workflowClass: WorkflowClassValue = 'customer_facing',
+  triggerSettings?: { audience?: GraphCondition }
 ): Map<string, string> {
   const issues = new Map<string, string>()
+  if (triggerSettings?.audience && conditionNeedsSetup(triggerSettings.audience)) {
+    issues.set('trigger-audience', 'Audience needs a complete condition')
+  }
   const walk = (steps: TreeStep[]) => {
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i]!
@@ -2911,6 +2936,14 @@ export function collectStepIssues(
       } else if (step.kind === 'action') {
         const message = actionIssue(step.action)
         if (message) issues.set(step.id, message)
+      } else if (step.kind === 'condition') {
+        if (conditionNeedsSetup(step.condition)) {
+          issues.set(step.id, 'This condition is missing a value')
+        }
+      } else if (step.kind === 'branch') {
+        if (step.paths.some((path) => conditionNeedsSetup(path.condition))) {
+          issues.set(step.id, 'A branch path is missing a condition value')
+        }
       } else if (step.kind === 'disable_composer') {
         const adjacent = (s: TreeStep | undefined) => !!s && INTERRUPT_RELEVANT_KINDS.has(s.kind)
         if (!adjacent(steps[i - 1]) && !adjacent(steps[i + 1])) {

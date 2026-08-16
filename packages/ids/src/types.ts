@@ -202,8 +202,11 @@ export type AssistantGuidanceRuleId = TypeId<'assistant_guidance'>
 /** Assistant pending action ID - e.g., assistant_action_01h455vb4pex5vsknk084sn02q */
 export type AssistantPendingActionId = TypeId<'assistant_action'>
 
-/** Assistant custom action definition ID - e.g., assistant_custom_action_01h455vb4pex5vsknk084sn02q */
-export type AssistantCustomActionId = TypeId<'assistant_custom_action'>
+/** Remote MCP connector ID - e.g., connector_01h455vb4pex5vsknk084sn02q */
+export type ConnectorId = TypeId<'connector'>
+
+/** Agent skill (packaged procedure) ID - e.g., skill_01h455vb4pex5vsknk084sn02q */
+export type SkillId = TypeId<'skill'>
 
 /** Assistant tool-call audit ID - e.g., assistant_tool_call_01h455vb4pex5vsknk084sn02q */
 export type AssistantToolCallId = TypeId<'assistant_tool_call'>
@@ -436,7 +439,8 @@ export interface EntityIdMap {
   assistant_involvement: AssistantInvolvementId
   assistant_guidance: AssistantGuidanceRuleId
   assistant_action: AssistantPendingActionId
-  assistant_custom_action: AssistantCustomActionId
+  connector: ConnectorId
+  skill: SkillId
   assistant_tool_call: AssistantToolCallId
   assistant_snippet: AssistantSnippetId
   assistant_document: AssistantDocumentId

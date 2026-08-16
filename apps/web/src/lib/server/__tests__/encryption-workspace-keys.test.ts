@@ -3,7 +3,7 @@
  * cannot be got wrong — byte-identity of the single-workspace derivation.
  *
  * Every self-hosted install's integration OAuth tokens, webhook signing secrets
- * and custom-action headers are sealed under the historical derivation. If it
+ * and connector secrets are sealed under the historical derivation. If it
  * changes, those values do not "need migrating"; they are gone. So the expected
  * key is hardcoded rather than recomputed from the source's own constants: a
  * test that derives its expectation the same way the code does would follow the

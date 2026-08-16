@@ -167,7 +167,7 @@ describe('workflowGraphSchema', () => {
       expect(workflowGraphSchema.safeParse(badFieldType).success).toBe(false)
     })
 
-    it('let_assistant_answer (Phase C, slice C-6): accepts instructions + autoCloseOverride, rejects instructions past the bound', () => {
+    it('let_assistant_answer (Phase C, slice C-6): accepts instructions, rejects instructions past the bound', () => {
       const withFields = {
         nodes: [
           {

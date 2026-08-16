@@ -72,7 +72,9 @@ export async function recordSlaFromEvent(event: EventData): Promise<void> {
       case 'message.created': {
         const conversationId = event.data.message.conversationId as ConversationId
         const at = new Date(event.timestamp)
-        if (event.data.message.senderType === 'agent') {
+        if (event.data.message.senderType === 'agent' && event.actor?.type !== 'service') {
+          // Service actors (Quinn, workflow blocks) never satisfy human-response
+          // semantics — the same vocabulary the wait-interrupt path uses.
           // Ordered: the first-response clock settles first, then the armed
           // next-response cycle (if any) — a first reply never double-settles
           // a cycle that only a LATER customer message could have armed.
