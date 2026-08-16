@@ -459,47 +459,21 @@ export function describeBranchPath(
   ]
 }
 
-/** Tab/pill copy for one fan-out path. Branch paths describe their condition;
+/** Tab label for one fan-out path. Branch paths describe their condition;
  *  button/rating/outcome paths just name the choice. */
-function fanPathParts(
-  step: TreeStep,
-  path: KeyedPath,
-  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
-  teams: ReadonlyMap<string, string> = new Map(),
-  personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  ticketTypes: ReadonlyMap<string, string> = new Map()
-): RulePart[] {
-  if (step.kind === 'branch') {
-    const branchPath = step.paths.find((p) => p.key === path.key)
-    return branchPath
-      ? describeBranchPath(
-          branchPath.condition,
-          attributes,
-          teams,
-          personAttributes,
-          companyAttributes,
-          ticketTypes
-        )
-      : []
-  }
-  if (step.kind === 'reply_buttons') return [{ text: `“${path.label}”`, bold: true }]
-  return [{ text: path.label, bold: true }]
-}
-
 export function fanPathLabel(step: TreeStep, path: KeyedPath, ctx: StepContentContext): string {
-  if (step.kind === 'branch') {
-    const parts = fanPathParts(
-      step,
-      path,
-      ctx.labels.attributes,
-      ctx.labels.teams,
-      ctx.labels.personAttributes,
-      ctx.labels.companyAttributes,
-      ctx.labels.ticketTypes
-    )
-    const joined = parts.map((p) => p.text).join('')
-    return joined || path.label
-  }
-  return path.label
+  if (step.kind !== 'branch') return path.label
+  const branchPath = step.paths.find((p) => p.key === path.key)
+  if (!branchPath) return path.label
+  const joined = describeBranchPath(
+    branchPath.condition,
+    ctx.labels.attributes,
+    ctx.labels.teams,
+    ctx.labels.personAttributes,
+    ctx.labels.companyAttributes,
+    ctx.labels.ticketTypes
+  )
+    .map((part) => part.text)
+    .join('')
+  return joined || path.label
 }
