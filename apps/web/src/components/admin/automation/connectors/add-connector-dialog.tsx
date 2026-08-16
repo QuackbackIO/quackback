@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useIntl } from 'react-intl'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
+import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,7 +32,7 @@ export function AddConnectorDialog({
   const create = useCreateConnector()
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
-  const [authMode, setAuthMode] = useState<ConnectorAuthMode>('none')
+  const [authMode, setAuthMode] = useState<ConnectorAuthMode>('oauth')
   const [bearerToken, setBearerToken] = useState('')
   const [advanced, setAdvanced] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +40,7 @@ export function AddConnectorDialog({
   const reset = () => {
     setName('')
     setUrl('')
-    setAuthMode('none')
+    setAuthMode('oauth')
     setBearerToken('')
     setAdvanced(false)
     setError(null)
@@ -51,6 +52,7 @@ export function AddConnectorDialog({
       url,
       authMode,
       bearerToken: authMode === 'bearer' ? bearerToken : undefined,
+      assignments: { agent: true, copilot: true },
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Invalid connector')
@@ -90,7 +92,7 @@ export function AddConnectorDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {intl.formatMessage({
@@ -139,9 +141,12 @@ export function AddConnectorDialog({
           </div>
           <button
             type="button"
-            className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground"
             onClick={() => setAdvanced((value) => !value)}
           >
+            <ChevronDownIcon
+              className={`size-3.5 transition-transform ${advanced ? '' : '-rotate-90'}`}
+            />
             {intl.formatMessage({
               id: 'automation.connectors.add.advanced',
               defaultMessage: 'Advanced · Authentication',
@@ -175,6 +180,13 @@ export function AddConnectorDialog({
                   </Button>
                 ))}
               </div>
+              <p className="text-[11.5px] text-muted-foreground">
+                {intl.formatMessage({
+                  id: 'automation.connectors.auth.oauthHint',
+                  defaultMessage:
+                    'OAuth is negotiated with the server on connect. Pick Bearer token for servers that use a static API key.',
+                })}
+              </p>
               {authMode === 'bearer' && (
                 <Input
                   type="password"

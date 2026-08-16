@@ -1,9 +1,7 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
-import { BoltIcon } from '@heroicons/react/24/solid'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
-import { PageHeader } from '@/components/shared/page-header'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { WhoRepliesFirstCard } from '@/components/admin/automation/who-replies-first-card'
 import { AbandonedJourneyAutoCloseCard } from '@/components/admin/automation/abandoned-journey-auto-close-card'
@@ -46,20 +44,10 @@ function WorkflowsPage() {
           {intl.formatMessage({ id: 'automation.nav.label', defaultMessage: 'AI & Automation' })}
         </BackLink>
       </div>
-      <PageHeader
-        icon={BoltIcon}
-        title={intl.formatMessage({
-          id: 'automation.workflows.title',
-          defaultMessage: 'Workflows',
-        })}
-        description={intl.formatMessage({
-          id: 'automation.workflows.description',
-          defaultMessage: 'Trigger-driven automation for conversations and tickets',
-        })}
-      />
-      <WhoRepliesFirstCard />
+      <WorkflowsManager entitled={workflowsEntitled}>
+        <WhoRepliesFirstCard />
+      </WorkflowsManager>
       <AbandonedJourneyAutoCloseCard />
-      <WorkflowsManager entitled={workflowsEntitled} />
     </div>
   )
 }

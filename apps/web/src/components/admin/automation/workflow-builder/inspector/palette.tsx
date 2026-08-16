@@ -52,7 +52,9 @@ export function StepPalette({
         if (!parkingBlocked) onInsert(kind)
       },
       disabled: parkingBlocked,
-      reason: parkingBlocked ? 'Only available in customer-facing workflows' : undefined,
+      reason: parkingBlocked
+        ? "Customer-facing workflows only: a background run can't wait for the reply"
+        : undefined,
     }
   }
   const send: PaletteItem[] = SEND_BLOCK_KINDS.map(blockItem)

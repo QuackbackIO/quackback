@@ -1,11 +1,15 @@
 import { useState } from 'react'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, Navigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { ChevronRightIcon, LinkIcon, PlusIcon } from '@heroicons/react/24/outline'
 import { AddConnectorDialog } from '@/components/admin/automation/connectors/add-connector-dialog'
+import { UpdateBearerDialog } from '@/components/admin/automation/connectors/update-bearer-dialog'
+import { ConnectorMark } from '@/components/admin/automation/connectors/connector-mark'
+import { ConnectorStatusBadge } from '@/components/admin/automation/connectors/connector-status-badge'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { DefaultErrorPage } from '@/components/shared/error-page'
+import { BackLink } from '@/components/ui/back-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { connectorQueries } from '@/lib/client/queries/assistant-connectors'
@@ -15,7 +19,7 @@ import {
 } from '@/lib/client/mutations/assistant-connectors'
 import { toast } from 'sonner'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
-import type { ConnectorDTO } from '@/lib/shared/assistant/connectors'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/automation/connectors')({
   beforeLoad: ({ context }) => {
@@ -33,39 +37,33 @@ export const Route = createFileRoute('/admin/automation/connectors')({
   component: ConnectorsPage,
 })
 
-function statusBadge(connector: ConnectorDTO) {
-  if (connector.status === 'connected') {
-    return (
-      <Badge size="sm" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-        Connected
-      </Badge>
-    )
-  }
-  if (connector.status === 'error') {
-    return (
-      <Badge size="sm" className="bg-amber-500/10 text-amber-800 dark:text-amber-300">
-        Needs attention
-      </Badge>
-    )
-  }
-  return <Badge size="sm">Disabled</Badge>
-}
-
 function ConnectorsPage() {
   const intl = useIntl()
+  const { settings } = useRouteContext({ from: '__root__' })
+  const flags = settings?.featureFlags as FeatureFlags | undefined
   const list = useQuery(connectorQueries.list())
   const [addOpen, setAddOpen] = useState(false)
+  const [tokenConnectorId, setTokenConnectorId] = useState<string | null>(null)
   const refresh = useRefreshConnector()
   const startOAuth = useStartConnectorOAuth()
   const builtin = list.data?.builtin
   const connectors = list.data?.connectors ?? []
 
+  if (!flags?.assistantConnectors) {
+    return <Navigate to="/admin/automation/agent" />
+  }
+
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
+      <div className="lg:hidden">
+        <BackLink to="/admin/automation">
+          {intl.formatMessage({ id: 'automation.nav.label', defaultMessage: 'AI & Automation' })}
+        </BackLink>
+      </div>
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <LinkIcon className="size-5" />
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <LinkIcon className="size-[18px]" />
           </div>
           <div>
             <h1 className="text-lg font-semibold">
@@ -74,7 +72,7 @@ function ConnectorsPage() {
                 defaultMessage: 'Connectors',
               })}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {intl.formatMessage({
                 id: 'automation.connectors.description',
                 defaultMessage:
@@ -89,19 +87,31 @@ function ConnectorsPage() {
         </Button>
       </div>
 
-      <SettingsCard>
-        {builtin && (
+      {list.isPending ? (
+        <p className="text-sm text-muted-foreground">
+          {intl.formatMessage({
+            id: 'automation.connectors.loading',
+            defaultMessage: 'Loading connectors…',
+          })}
+        </p>
+      ) : list.isError ? (
+        <p className="text-sm text-destructive">
+          {intl.formatMessage({
+            id: 'automation.connectors.loadError',
+            defaultMessage: 'Could not load connectors.',
+          })}
+        </p>
+      ) : (
+        <SettingsCard contentClassName="p-0">
           <Link
             to="/admin/automation/connectors/$connectorId"
             params={{ connectorId: 'quackback' }}
-            className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:bg-foreground/[0.02]"
+            className="flex items-center gap-3 px-4 py-3.5 hover:bg-foreground/[0.02] sm:px-[18px]"
           >
-            <div className="flex size-9 items-center justify-center rounded-lg bg-amber-400 text-xs font-semibold text-amber-950">
-              Q
-            </div>
+            <ConnectorMark name="Quackback" builtin />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Quackback</span>
+              <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
+                Quackback
                 <Badge size="sm">Built-in</Badge>
               </div>
               <p className="truncate text-xs text-muted-foreground">
@@ -111,65 +121,82 @@ function ConnectorsPage() {
                     defaultMessage:
                       '{count} built-in actions · search, tickets, feedback, attributes',
                   },
-                  { count: builtin.tools.length }
+                  { count: builtin?.tools.length ?? 0 }
                 )}
               </p>
             </div>
             <Badge size="sm">Agent</Badge>
             <Badge size="sm">Copilot</Badge>
-            <ChevronRightIcon className="size-4 text-muted-foreground" />
+            <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
           </Link>
-        )}
-        {connectors.map((connector) => (
-          <Link
-            key={connector.id}
-            to="/admin/automation/connectors/$connectorId"
-            params={{ connectorId: connector.id }}
-            className="flex items-center gap-3 border-t border-border/60 py-3 hover:bg-foreground/[0.02]"
-          >
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-              {connector.name.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{connector.name}</span>
-                {statusBadge(connector)}
+          {connectors.map((connector) => (
+            <Link
+              key={connector.id}
+              to="/admin/automation/connectors/$connectorId"
+              params={{ connectorId: connector.id }}
+              className="flex items-center gap-3 border-t border-border/60 px-4 py-3.5 hover:bg-foreground/[0.02] sm:px-[18px]"
+            >
+              <ConnectorMark name={connector.name} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
+                  {connector.name}
+                  <ConnectorStatusBadge status={connector.status} />
+                </div>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {connector.status === 'error' && connector.lastError
+                    ? connector.lastError
+                    : `${connector.url} · ${connector.toolCount} tools`}
+                </p>
               </div>
-              <p className="truncate font-mono text-xs text-muted-foreground">
-                {connector.url} · {connector.toolCount} tools
-              </p>
-            </div>
-            {connector.status === 'error' && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  if (connector.authMode === 'oauth') {
-                    startOAuth.mutate(connector.id, {
-                      onSuccess: (result) => {
-                        window.location.assign(result.authorizationUrl)
-                      },
-                      onError: () => toast.error('Could not reconnect'),
+              {connector.status === 'error' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (connector.authMode === 'oauth') {
+                      startOAuth.mutate(connector.id, {
+                        onSuccess: (result) => {
+                          window.location.assign(result.authorizationUrl)
+                        },
+                        onError: () => toast.error('Could not reconnect'),
+                      })
+                      return
+                    }
+                    if (connector.authMode === 'bearer') {
+                      setTokenConnectorId(connector.id)
+                      return
+                    }
+                    refresh.mutate(connector.id, {
+                      onError: () => toast.error('Could not retry'),
                     })
-                    return
-                  }
-                  refresh.mutate(connector.id, {
-                    onError: () => toast.error('Could not reconnect'),
-                  })
-                }}
-              >
-                Reconnect
-              </Button>
-            )}
-            {connector.assignments.agent && <Badge size="sm">Agent</Badge>}
-            {connector.assignments.copilot && <Badge size="sm">Copilot</Badge>}
-            <ChevronRightIcon className="size-4 text-muted-foreground" />
-          </Link>
-        ))}
-      </SettingsCard>
+                  }}
+                >
+                  {connector.authMode === 'oauth'
+                    ? intl.formatMessage({
+                        id: 'automation.connectors.reconnect',
+                        defaultMessage: 'Reconnect',
+                      })
+                    : connector.authMode === 'bearer'
+                      ? intl.formatMessage({
+                          id: 'automation.connectors.updateToken',
+                          defaultMessage: 'Update token',
+                        })
+                      : intl.formatMessage({
+                          id: 'automation.connectors.retry',
+                          defaultMessage: 'Retry',
+                        })}
+                </Button>
+              )}
+              {connector.assignments.agent && <Badge size="sm">Agent</Badge>}
+              {connector.assignments.copilot && <Badge size="sm">Copilot</Badge>}
+              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            </Link>
+          ))}
+        </SettingsCard>
+      )}
       <p className="text-xs text-muted-foreground">
         {intl.formatMessage({
           id: 'automation.connectors.trust',
@@ -178,6 +205,13 @@ function ConnectorsPage() {
         })}
       </p>
       <AddConnectorDialog open={addOpen} onOpenChange={setAddOpen} />
+      <UpdateBearerDialog
+        connectorId={tokenConnectorId}
+        open={tokenConnectorId !== null}
+        onOpenChange={(open) => {
+          if (!open) setTokenConnectorId(null)
+        }}
+      />
     </div>
   )
 }

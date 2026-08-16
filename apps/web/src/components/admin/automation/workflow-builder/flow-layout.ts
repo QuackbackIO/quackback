@@ -55,6 +55,7 @@ import {
   type WorkflowTree,
 } from '../workflow-graph'
 import { truncate } from '@/lib/shared/utils/string'
+import { ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF } from '@/lib/shared/workflows/abandoned-auto-close'
 
 // ---------------------------------------------------------------------------
 // Layout constants (pixel values, matching the design's reference layout)
@@ -97,6 +98,8 @@ export type IconKey = 'trigger' | 'condition' | 'branch' | 'wait' | ActionType |
 export interface ChipData {
   label: string
   tone?: Tone
+  /** Long warn chips (Let Quinn escalate) wrap inside the 300px card. */
+  wrap?: boolean
 }
 
 export interface StepSectionData {
@@ -209,6 +212,8 @@ export interface FlowLayoutInput {
   labels: EntityLabels
   stepIssues: ReadonlyMap<string, string>
   selectedId: string | null
+  /** Minutes until a silent Quinn park escalates (engine: 10, or auto-close waitMinutes). */
+  assistantEscalateMinutes?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -263,6 +268,10 @@ export function endNodeId(location: StepLocation): string {
 // ---------------------------------------------------------------------------
 // Per-step card content (eyebrow/title/tone/chips/meta)
 // ---------------------------------------------------------------------------
+
+function assistantEscalatePhrase(minutes: number): string {
+  return `${minutes} min`
+}
 
 export const ACTION_TONE: Record<ActionType, Tone> = {
   assign_agent: 'green',
@@ -340,7 +349,7 @@ function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
 
 function buildStepNodeData(
   step: TreeStep,
-  ctx: Pick<FlowLayoutInput, 'labels' | 'stepIssues' | 'selectedId'>
+  ctx: Pick<FlowLayoutInput, 'labels' | 'stepIssues' | 'selectedId' | 'assistantEscalateMinutes'>
 ): StepNodeData {
   const base = {
     stepId: step.id,
@@ -443,11 +452,17 @@ function buildStepNodeData(
     case 'let_assistant_answer':
       return {
         ...base,
-        eyebrow: 'Message',
+        eyebrow: 'Step',
         title: BLOCK_STEP_LABELS.let_assistant_answer,
         icon: 'let_assistant_answer',
         tone: 'pink',
-        meta: 'Hands the turn to Quinn',
+        chips: [
+          {
+            label: `Escalates after ${assistantEscalatePhrase(ctx.assistantEscalateMinutes ?? ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF)} if Quinn can't reply`,
+            tone: 'amber',
+            wrap: true,
+          },
+        ],
         nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
       }
     case 'reply_buttons':

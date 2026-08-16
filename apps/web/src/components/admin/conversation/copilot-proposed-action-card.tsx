@@ -72,11 +72,11 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
       </div>
       <p className="text-muted-foreground">{action.summary}</p>
       {action.argsPreview && Object.keys(action.argsPreview).length > 0 && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded-md bg-muted/70 px-2.5 py-1.5 font-mono text-[11px] text-foreground">
           {Object.entries(action.argsPreview).map(([key, value]) => (
             <div key={key} className="contents">
-              <dt className="font-medium text-muted-foreground">{key}</dt>
-              <dd className="min-w-0 truncate text-foreground">{value}</dd>
+              <dt className="min-w-[74px] text-muted-foreground">{key}</dt>
+              <dd className="min-w-0 truncate">{value}</dd>
             </div>
           ))}
         </dl>

@@ -104,7 +104,7 @@ export function PreviewPanel({
     >
       <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b">
-          <SheetTitle>Test this workflow</SheetTitle>
+          <SheetTitle>Preview</SheetTitle>
           <p className="text-xs text-muted-foreground">
             Runs the last saved version against a real conversation — nothing is sent or recorded.
           </p>

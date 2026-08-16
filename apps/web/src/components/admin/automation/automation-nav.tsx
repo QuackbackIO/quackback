@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link, useRouteContext, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import {
@@ -20,6 +21,7 @@ interface NavItem {
   defaultLabel: string
   to: string
   icon: typeof SparklesIcon
+  badge?: 'new'
 }
 
 /**
@@ -70,6 +72,7 @@ export function buildAutomationNavSections(
                 defaultLabel: 'Connectors',
                 to: '/admin/automation/connectors',
                 icon: LinkIcon,
+                badge: 'new',
               } satisfies NavItem,
             ]
           : []),
@@ -80,6 +83,7 @@ export function buildAutomationNavSections(
                 defaultLabel: 'Skills',
                 to: '/admin/automation/skills',
                 icon: BookOpenIcon,
+                badge: 'new',
               } satisfies NavItem,
             ]
           : []),
@@ -125,6 +129,26 @@ export function buildAutomationNavSections(
   return sections
 }
 
+const NAV_SEEN_CONNECTORS = 'qb.nav.seen.connectors'
+const NAV_SEEN_SKILLS = 'qb.nav.seen.skills'
+
+function useNavSeen(key: string, visiting: boolean): boolean {
+  const [seen, setSeen] = useState(false)
+  useEffect(() => {
+    try {
+      if (visiting) {
+        localStorage.setItem(key, '1')
+        setSeen(true)
+      } else {
+        setSeen(localStorage.getItem(key) === '1')
+      }
+    } catch {
+      setSeen(false)
+    }
+  }, [key, visiting])
+  return seen
+}
+
 export function AutomationNav() {
   const intl = useIntl()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
@@ -136,6 +160,15 @@ export function AutomationNav() {
     analytics: usePermission(PERMISSIONS.ANALYTICS_VIEW),
   }
   const sections = buildAutomationNavSections(flags, permissions)
+  const seenConnectors = useNavSeen(
+    NAV_SEEN_CONNECTORS,
+    pathname === '/admin/automation/connectors' ||
+      pathname.startsWith('/admin/automation/connectors/')
+  )
+  const seenSkills = useNavSeen(
+    NAV_SEEN_SKILLS,
+    pathname === '/admin/automation/skills' || pathname.startsWith('/admin/automation/skills/')
+  )
 
   return (
     <nav
@@ -171,6 +204,13 @@ export function AutomationNav() {
                 <span className="min-w-0 flex-1 truncate">
                   {intl.formatMessage({ id: item.labelId, defaultMessage: item.defaultLabel })}
                 </span>
+                {item.badge === 'new' &&
+                  !(item.to === '/admin/automation/connectors' && seenConnectors) &&
+                  !(item.to === '/admin/automation/skills' && seenSkills) && (
+                    <span className="ms-auto text-[11px] font-semibold uppercase tracking-wide text-primary">
+                      {intl.formatMessage({ id: 'automation.nav.new', defaultMessage: 'New' })}
+                    </span>
+                  )}
               </Link>
             )
           })}

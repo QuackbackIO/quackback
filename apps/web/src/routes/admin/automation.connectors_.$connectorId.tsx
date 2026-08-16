@@ -3,6 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
+import { ConnectorMark } from '@/components/admin/automation/connectors/connector-mark'
+import { ConnectorStatusBadge } from '@/components/admin/automation/connectors/connector-status-badge'
+import {
+  PolicyDefaultSelect,
+  PolicyDial,
+} from '@/components/admin/automation/connectors/policy-dial'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -38,41 +44,6 @@ export const Route = createFileRoute('/admin/automation/connectors_/$connectorId
   component: ConnectorDetailPage,
 })
 
-function PolicyDial({
-  value,
-  onChange,
-}: {
-  value: ConnectorToolPolicy
-  onChange: (next: ConnectorToolPolicy) => void
-}) {
-  const options: Array<{ id: ConnectorToolPolicy; label: string }> = [
-    { id: 'always', label: 'Always allow' },
-    { id: 'approval', label: 'Needs approval' },
-    { id: 'never', label: 'Never' },
-  ]
-  return (
-    <div role="radiogroup" className="flex gap-1">
-      {options.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          role="radio"
-          aria-label={option.label}
-          aria-pressed={value === option.id}
-          onClick={() => onChange(option.id)}
-          className={
-            value === option.id
-              ? 'rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground'
-              : 'rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted'
-          }
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 function ToolGroup({
   title,
   tools,
@@ -91,42 +62,81 @@ function ToolGroup({
   if (tools.length === 0) return null
   return (
     <div>
-      <div className="flex items-center justify-between border-b border-border/60 px-1 py-2">
-        <span className="text-[13px] font-medium">
-          {title} <span className="text-muted-foreground">{tools.length}</span>
+      <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-[18px] py-2.5 text-[12.5px] font-semibold">
+        {title}
+        <span className="rounded-md bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">
+          {tools.length}
         </span>
-        {chips ? (
-          <Badge size="sm">
-            {defaultPolicy === 'always' ? 'Always run' : 'Approval on Copilot'}
-          </Badge>
-        ) : (
-          defaultPolicy && onDefault && <PolicyDial value={defaultPolicy} onChange={onDefault} />
-        )}
+        <span className="ms-auto">
+          {chips ? (
+            <Badge
+              size="sm"
+              className={
+                defaultPolicy === 'always'
+                  ? 'border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                  : 'border-transparent bg-amber-500/10 text-amber-800 dark:text-amber-300'
+              }
+            >
+              {defaultPolicy === 'always'
+                ? 'Always run'
+                : 'Automatic on Agent · Approval on Copilot'}
+            </Badge>
+          ) : (
+            defaultPolicy &&
+            onDefault && <PolicyDefaultSelect value={defaultPolicy} onChange={onDefault} />
+          )}
+        </span>
       </div>
       {tools.map((tool) => (
-        <div key={tool.name} className="flex items-start justify-between gap-3 py-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[13px] font-medium">
-              {tool.title || tool.name}
+        <div
+          key={tool.name}
+          className="flex items-center gap-2.5 border-b border-border/60 py-2.5 pe-[18px] ps-[30px] last:border-0"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium">
+              {chips ? tool.title || tool.name : tool.name}
               {tool.destructive && (
-                <Badge size="sm" className="bg-destructive/10 text-destructive">
+                <Badge
+                  size="sm"
+                  className="border-transparent bg-red-500/10 text-red-700 dark:text-red-400"
+                >
                   destructive
                 </Badge>
               )}
               {tool.isNew && <Badge size="sm">new</Badge>}
             </div>
             {tool.description && (
-              <p className="text-xs text-muted-foreground">{tool.description}</p>
+              <p className="truncate text-[11.5px] text-muted-foreground">{tool.description}</p>
             )}
           </div>
           {chips ? (
-            <div className="flex flex-wrap justify-end gap-1">
-              <Badge size="sm">{tool.group === 'read' ? 'Always runs' : 'Agent: automatic'}</Badge>
-              {tool.group === 'write' && <Badge size="sm">Copilot: approval</Badge>}
+            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+              {tool.group === 'read' ? (
+                <Badge
+                  size="sm"
+                  className="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                >
+                  Always runs
+                </Badge>
+              ) : (
+                <>
+                  <Badge size="sm">Agent: automatic</Badge>
+                  <Badge
+                    size="sm"
+                    className="border-transparent bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                  >
+                    Copilot: approval
+                  </Badge>
+                </>
+              )}
             </div>
           ) : (
             onTool && (
-              <PolicyDial value={tool.policy} onChange={(next) => onTool(tool.name, next)} />
+              <PolicyDial
+                value={tool.policy}
+                labelledBy={tool.name}
+                onChange={(next) => onTool(tool.name, next)}
+              />
             )
           )}
         </div>
@@ -149,27 +159,32 @@ function ConnectorDetailPage() {
   const connector = detail.data?.connector
 
   if (detail.isPending) {
-    return <p className="p-6 text-sm text-muted-foreground">Loading…</p>
+    return <p className="text-sm text-muted-foreground">Loading…</p>
   }
   if (!builtin && !connector) {
-    return <p className="p-6 text-sm text-muted-foreground">Connector not found.</p>
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-4">
+        <BackLink to="/admin/automation/connectors">
+          {intl.formatMessage({ id: 'automation.connectors.title', defaultMessage: 'Connectors' })}
+        </BackLink>
+        <p className="text-sm text-muted-foreground">Connector not found.</p>
+      </div>
+    )
   }
 
   if (builtin) {
     const reads = builtin.tools.filter((tool) => tool.group === 'read')
     const writes = builtin.tools.filter((tool) => tool.group === 'write')
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
         <BackLink to="/admin/automation/connectors">
           {intl.formatMessage({ id: 'automation.connectors.title', defaultMessage: 'Connectors' })}
         </BackLink>
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-amber-400 text-sm font-semibold text-amber-950">
-            Q
-          </div>
+          <ConnectorMark name="Quackback" builtin size="lg" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold">Quackback</h1>
+              <h1 className="text-[17px] font-semibold">Quackback</h1>
               <Badge size="sm">Built-in</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -178,7 +193,7 @@ function ConnectorDetailPage() {
             </p>
           </div>
         </div>
-        <SettingsCard>
+        <SettingsCard contentClassName="p-0">
           <ToolGroup
             title="Read-only tools"
             tools={reads.map((tool) => ({
@@ -242,19 +257,20 @@ function ConnectorDetailPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <BackLink to="/admin/automation/connectors">
         {intl.formatMessage({ id: 'automation.connectors.title', defaultMessage: 'Connectors' })}
       </BackLink>
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">{connector.name}</h1>
-            <Badge size="sm">
-              {connector.status === 'error' ? 'Needs attention' : 'Connected'}
-            </Badge>
+        <div className="flex gap-3">
+          <ConnectorMark name={connector.name} size="lg" />
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[17px] font-semibold">{connector.name}</h1>
+              <ConnectorStatusBadge status={connector.status} />
+            </div>
+            <p className="font-mono text-xs text-muted-foreground">{connector.url}</p>
           </div>
-          <p className="font-mono text-xs text-muted-foreground">{connector.url}</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -287,7 +303,7 @@ function ConnectorDetailPage() {
               className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5"
             >
               <div>
-                <div className="text-[13px] font-medium">
+                <div id={`connector-available-${agent}`} className="text-[13px] font-medium">
                   {agent === 'agent' ? 'Agent' : 'Copilot'}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
@@ -297,6 +313,7 @@ function ConnectorDetailPage() {
                 </p>
               </div>
               <Switch
+                aria-labelledby={`connector-available-${agent}`}
                 checked={connector.assignments[agent]}
                 onCheckedChange={(checked) =>
                   update.mutate(
@@ -320,6 +337,7 @@ function ConnectorDetailPage() {
       <SettingsCard
         title="Tool permissions"
         description="Choose when Quinn is allowed to use each tool."
+        contentClassName="p-0"
       >
         <ToolGroup
           title="Read-only tools"

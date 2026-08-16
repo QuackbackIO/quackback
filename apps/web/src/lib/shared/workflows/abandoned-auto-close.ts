@@ -34,6 +34,19 @@ export const DEFAULT_WORKFLOW_ABANDONED_AUTO_CLOSE: WorkflowAbandonedAutoCloseSe
   keepIfEmailCaptured: true,
 }
 
+/** Matches the engine: an assistant park expires in 10 minutes when
+ *  abandoned auto-close is off. */
+export const ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF = 10
+
+/** Minutes until a silent Quinn park escalates — the number the canvas chip
+ *  and inspector must phrase. */
+export function assistantWaitMinutes(
+  settings: WorkflowAbandonedAutoCloseSettings | null | undefined
+): number {
+  if (settings?.enabled) return settings.waitMinutes
+  return ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF
+}
+
 export const workflowAbandonedAutoCloseSchema = z
   .object({
     enabled: z.boolean(),

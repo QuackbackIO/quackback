@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Navigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { PlusIcon } from '@heroicons/react/24/outline'
+import { BookOpenIcon, PlusIcon } from '@heroicons/react/24/outline'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -28,6 +28,8 @@ import {
 } from '@/lib/client/mutations/assistant-skills'
 import { skillInputSchema, type SkillDTO } from '@/lib/shared/assistant/skills'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { BackLink } from '@/components/ui/back-link'
 
 export const Route = createFileRoute('/admin/automation/skills')({
   beforeLoad: ({ context }) => {
@@ -120,64 +122,126 @@ function SkillsPage() {
   }
 
   const skills = list.data?.skills ?? []
+  const { settings } = useRouteContext({ from: '__root__' })
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+
+  if (!flags?.assistantSkills) {
+    return <Navigate to="/admin/automation/agent" />
+  }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
+      <div className="lg:hidden">
+        <BackLink to="/admin/automation">
+          {intl.formatMessage({ id: 'automation.nav.label', defaultMessage: 'AI & Automation' })}
+        </BackLink>
+      </div>
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold">
-            {intl.formatMessage({ id: 'automation.skills.title', defaultMessage: 'Skills' })}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {intl.formatMessage({
-              id: 'automation.skills.description',
-              defaultMessage:
-                'Packaged procedures the agents pull on demand. Skills teach; they do not grant tools.',
-            })}
-          </p>
+        <div className="flex gap-3">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <BookOpenIcon className="size-[18px]" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold">
+              {intl.formatMessage({ id: 'automation.skills.title', defaultMessage: 'Skills' })}
+            </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.skills.description',
+                defaultMessage:
+                  'Procedures Quinn follows for specific situations. Loaded only when relevant.',
+              })}
+            </p>
+          </div>
         </div>
         <Button size="sm" onClick={openNew}>
           <PlusIcon className="size-4" />
-          {intl.formatMessage({ id: 'automation.skills.add', defaultMessage: 'Add skill' })}
+          {intl.formatMessage({ id: 'automation.skills.add', defaultMessage: 'New skill' })}
         </Button>
       </div>
 
-      <SettingsCard>
-        {skills.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {intl.formatMessage({
-              id: 'automation.skills.empty',
-              defaultMessage: 'No skills yet. Add a procedure the agents can follow.',
-            })}
-          </p>
-        ) : (
-          skills.map((skill) => (
-            <button
-              key={skill.id}
-              type="button"
-              onClick={() => openEdit(skill)}
-              className="flex w-full items-start justify-between gap-3 border-b border-border/60 py-3 text-left last:border-0"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{skill.name}</span>
-                  {!skill.enabled && <Badge size="sm">Off</Badge>}
+      {list.isPending ? (
+        <p className="text-sm text-muted-foreground">
+          {intl.formatMessage({
+            id: 'automation.skills.loading',
+            defaultMessage: 'Loading skills…',
+          })}
+        </p>
+      ) : list.isError ? (
+        <p className="text-sm text-destructive">
+          {intl.formatMessage({
+            id: 'automation.skills.loadError',
+            defaultMessage: 'Could not load skills.',
+          })}
+        </p>
+      ) : (
+        <SettingsCard contentClassName={skills.length === 0 ? undefined : 'p-0'}>
+          {skills.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.skills.empty',
+                defaultMessage: 'No skills yet. Add a procedure the agents can follow.',
+              })}
+            </p>
+          ) : (
+            skills.map((skill) => (
+              <div
+                key={skill.id}
+                className="flex items-center gap-3 border-b border-border/60 px-4 py-3.5 last:border-0 sm:px-[18px]"
+              >
+                <Switch
+                  checked={skill.enabled}
+                  aria-label={skill.enabled ? 'Enabled' : 'Disabled'}
+                  onCheckedChange={(checked) =>
+                    update.mutate(
+                      {
+                        id: skill.id,
+                        name: skill.name,
+                        whenToUse: skill.whenToUse,
+                        instructions: skill.instructions,
+                        assignments: skill.assignments,
+                        enabled: checked,
+                      },
+                      { onError: () => toast.error('Could not update skill') }
+                    )
+                  }
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13.5px] font-semibold">{skill.name}</div>
+                  <p className="truncate text-xs text-muted-foreground">{skill.whenToUse}</p>
                 </div>
-                <p className="truncate text-xs text-muted-foreground">{skill.whenToUse}</p>
-              </div>
-              <div className="flex gap-1">
                 {skill.assignments.agent && <Badge size="sm">Agent</Badge>}
                 {skill.assignments.copilot && <Badge size="sm">Copilot</Badge>}
+                <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(skill)}>
+                  {intl.formatMessage({ id: 'automation.skills.edit', defaultMessage: 'Edit' })}
+                </Button>
               </div>
-            </button>
-          ))
-        )}
-      </SettingsCard>
+            ))
+          )}
+        </SettingsCard>
+      )}
+      <p className="text-xs text-muted-foreground">
+        {intl.formatMessage({
+          id: 'automation.skills.footer',
+          defaultMessage:
+            "Quinn always sees each skill's name and when to use it; the full instructions load only when a conversation calls for them.",
+        })}
+      </p>
 
       <Dialog open={editor !== null} onOpenChange={(open) => !open && setEditor(null)}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editor === 'new' ? 'Add skill' : 'Edit skill'}</DialogTitle>
+            <DialogTitle>
+              {editor === 'new'
+                ? intl.formatMessage({
+                    id: 'automation.skills.editor.new',
+                    defaultMessage: 'New skill',
+                  })
+                : intl.formatMessage({
+                    id: 'automation.skills.editor.edit',
+                    defaultMessage: 'Edit skill',
+                  })}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -191,27 +255,51 @@ function SkillsPage() {
                 value={whenToUse}
                 onChange={(e) => setWhenToUse(e.target.value)}
               />
+              <p className="text-[11.5px] text-muted-foreground">
+                {intl.formatMessage({
+                  id: 'automation.skills.whenHint',
+                  defaultMessage:
+                    'Always visible to Quinn. Keep it to one line; it decides when the skill loads.',
+                })}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="skill-body">Instructions</Label>
               <Textarea
                 id="skill-body"
-                rows={10}
+                className="font-mono text-xs leading-relaxed"
+                rows={8}
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
               />
+              <p className="text-[11.5px] text-muted-foreground">
+                {intl.formatMessage({
+                  id: 'automation.skills.instructionsHint',
+                  defaultMessage: 'Markdown. You can mention connector or built-in tools by name.',
+                })}
+              </p>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[13px]">Available to Agent</span>
-              <Switch checked={agent} onCheckedChange={setAgent} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[13px]">Available to Copilot</span>
-              <Switch checked={copilot} onCheckedChange={setCopilot} />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[13px]">Enabled</span>
-              <Switch checked={enabled} onCheckedChange={setEnabled} />
+            <div className="flex gap-2.5">
+              <div className="flex flex-1 items-center justify-between rounded-lg border border-border px-3 py-2">
+                <span id="skill-assign-agent" className="text-[13px] font-semibold">
+                  Agent
+                </span>
+                <Switch
+                  aria-labelledby="skill-assign-agent"
+                  checked={agent}
+                  onCheckedChange={setAgent}
+                />
+              </div>
+              <div className="flex flex-1 items-center justify-between rounded-lg border border-border px-3 py-2">
+                <span id="skill-assign-copilot" className="text-[13px] font-semibold">
+                  Copilot
+                </span>
+                <Switch
+                  aria-labelledby="skill-assign-copilot"
+                  checked={copilot}
+                  onCheckedChange={setCopilot}
+                />
+              </div>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
@@ -220,11 +308,15 @@ function SkillsPage() {
               <Button
                 type="button"
                 variant="outline"
+                className="me-auto"
                 onClick={() => setDeleting(editor as SkillDTO)}
               >
                 Delete
               </Button>
             )}
+            <Button type="button" variant="outline" onClick={() => setEditor(null)}>
+              {intl.formatMessage({ id: 'common.cancel', defaultMessage: 'Cancel' })}
+            </Button>
             <Button type="button" onClick={save}>
               Save
             </Button>

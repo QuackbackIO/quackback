@@ -30,9 +30,25 @@ vi.mock('@/lib/server/functions/conversation-tags', () => ({
 vi.mock('@/lib/server/functions/sla', () => ({
   listSlaPolicyOptionsFn: vi.fn(async () => []),
 }))
+const AI_ATTRIBUTE = {
+  id: 'attr_issue',
+  key: 'issue_type',
+  label: 'Issue type',
+  description: null,
+  fieldType: 'select',
+  options: [{ id: 'opt_billing', label: 'Billing', description: null }],
+  requiredToClose: false,
+  sourceHint: null,
+  aiDetect: true,
+  detectOnClose: true,
+  archivedAt: null,
+  createdAt: new Date('2026-01-01'),
+  updatedAt: new Date('2026-01-01'),
+}
+
 vi.mock('@/lib/client/queries/conversation-attributes', () => ({
   conversationAttributeQueries: {
-    live: () => ({ queryKey: ['test', 'attributes'], queryFn: async () => [] }),
+    live: () => ({ queryKey: ['test', 'attributes'], queryFn: async () => [AI_ATTRIBUTE] }),
   },
 }))
 vi.mock('@/lib/client/hooks/use-user-attributes-queries', () => ({
@@ -298,5 +314,20 @@ describe('RuleGroupBuilder — depth-capped fallback', () => {
     }
     renderBuilder(tripleNested, 'This audience is too deeply nested to edit here.')
     expect(screen.getByText('This audience is too deeply nested to edit here.')).toBeInTheDocument()
+  })
+})
+
+describe('RuleGroupBuilder — AI-classified attributes', () => {
+  it('shows an indigo AI badge and Inbox AI hint instead of a · AI suffix', async () => {
+    renderBuilder({
+      field: 'conversation.attr.issue_type',
+      op: 'eq',
+      value: 'opt_billing',
+    })
+    expect(await screen.findByLabelText('AI')).toBeInTheDocument()
+    expect(
+      screen.getByText('Classified by Quinn when conversations settle. Requires Inbox AI.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/· AI/)).not.toBeInTheDocument()
   })
 })

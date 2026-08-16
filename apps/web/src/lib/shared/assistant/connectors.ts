@@ -67,7 +67,7 @@ export const connectorCreateInputSchema = z.object({
     }, 'Enter an HTTPS MCP server URL'),
   authMode: connectorAuthModeSchema.default('none'),
   bearerToken: z.string().max(CONNECTOR_BEARER_TOKEN_MAX_LENGTH).optional(),
-  assignments: connectorAssignmentsSchema.default({ agent: false, copilot: false }),
+  assignments: connectorAssignmentsSchema.default({ agent: true, copilot: true }),
 })
 export type ConnectorCreateInput = z.infer<typeof connectorCreateInputSchema>
 

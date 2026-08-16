@@ -2961,6 +2961,43 @@ export function collectStepIssues(
   return issues
 }
 
+/** List-badge counts: empty branch paths are counted individually so two
+ *  unset options read as "2 branch options", not one node-sized issue. */
+export function countSetupIssues(
+  tree: WorkflowTree,
+  workflowClass: WorkflowClassValue = 'customer_facing',
+  triggerSettings?: { audience?: GraphCondition }
+): { branchOptions: number; other: number } {
+  let branchOptions = 0
+  let other = 0
+  if (triggerSettings?.audience && conditionNeedsSetup(triggerSettings.audience)) {
+    other += 1
+  }
+  const walk = (steps: TreeStep[]) => {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i]!
+      if (workflowClass !== 'customer_facing' && PARKING_BLOCK_KINDS.has(step.kind)) {
+        other += 1
+      } else if (step.kind === 'action') {
+        if (actionIssue(step.action)) other += 1
+      } else if (step.kind === 'condition') {
+        if (conditionNeedsSetup(step.condition)) other += 1
+      } else if (step.kind === 'branch') {
+        branchOptions += step.paths.filter((path) => conditionNeedsSetup(path.condition)).length
+      } else if (step.kind === 'disable_composer') {
+        const adjacent = (s: TreeStep | undefined) => !!s && INTERRUPT_RELEVANT_KINDS.has(s.kind)
+        if (!adjacent(steps[i - 1]) && !adjacent(steps[i + 1])) other += 1
+      } else if (blockStepIssue(step)) {
+        other += 1
+      }
+      const paths = stepPaths(step)
+      if (paths) for (const p of paths) walk(p.steps)
+    }
+  }
+  walk(tree.steps)
+  return { branchOptions, other }
+}
+
 export interface DraftIssues {
   count: number
   ids: ReadonlySet<string>
