@@ -20,7 +20,9 @@ import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { ConnectorToolDTO, ConnectorToolPolicy } from '@/lib/shared/assistant/connectors'
 import { useState } from 'react'
 
-export const Route = createFileRoute('/admin/automation/connectors/$connectorId')({
+// Trailing underscore on "connectors_" escapes nesting under the list route,
+// which has no Outlet. URL stays /admin/automation/connectors/:connectorId.
+export const Route = createFileRoute('/admin/automation/connectors_/$connectorId')({
   beforeLoad: ({ context }) => {
     const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
     if (!permissions.includes(PERMISSIONS.ASSISTANT_MANAGE)) {
