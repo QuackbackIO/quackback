@@ -1,6 +1,6 @@
 /**
  * The AG-UI turn hook shared by the admin assistant surfaces (Copilot panel,
- * Test agent card): TanStack AI's `useChat` + `fetchServerSentEvents` as the
+ * Ask AI): TanStack AI's `useChat` + `fetchServerSentEvents` as the
  * transport — the client accumulates the thread and re-sends it natively, so
  * the old hand-built `history[]` request field is gone — surfaced through the
  * turn-shaped callbacks those panels' per-turn state models are built around.

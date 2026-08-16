@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useRouteContext, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import {
-  BeakerIcon,
   BoltIcon,
   BookOpenIcon,
   ChartBarIcon,
@@ -27,7 +26,7 @@ interface NavItem {
 /**
  * A titled cluster of nav rows. The Agents group holds the two peer agents
  * plus their shared catalog (Connectors, Skills); the trailing untitled group
- * holds standalone tools (Workflows, Test, Performance).
+ * holds standalone tools (Workflows, Performance).
  */
 interface NavSection {
   labelId?: string
@@ -97,14 +96,6 @@ export function buildAutomationNavSections(
           defaultLabel: 'Workflows',
           to: '/admin/automation/workflows',
           icon: BoltIcon,
-        }
-      : null,
-    permissions.assistant
-      ? {
-          labelId: 'automation.nav.test',
-          defaultLabel: 'Test agent',
-          to: '/admin/automation/test',
-          icon: BeakerIcon,
         }
       : null,
     permissions.analytics

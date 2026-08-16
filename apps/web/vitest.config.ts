@@ -16,13 +16,7 @@ export default defineConfig({
     testTimeout: 15_000,
     include: ['src/**/*.test.tsx', 'src/**/*.test.ts'],
     setupFiles: [path.resolve(__dirname, '../../vitest.setup.ts')],
-    exclude: [
-      '**/node_modules/**',
-      '**/.output/**',
-      '**/e2e/**',
-      // TanStack route for /admin/automation/test, not a Vitest suite.
-      'src/routes/admin/automation.test.tsx',
-    ],
+    exclude: ['**/node_modules/**', '**/.output/**', '**/e2e/**'],
     env: {
       // Overridable, because `quackback_test` is shared with every other
       // checkout on the machine and a branch mid-rename needs a schema the

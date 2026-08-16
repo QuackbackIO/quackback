@@ -158,7 +158,7 @@ export interface AssistantToolLedger {
    * trying to infer actions from customer-facing prose.
    */
   toolCalls: string[]
-  /** Privacy-safe outcomes for Test agent and operational traces. */
+  /** Privacy-safe outcomes for operational traces. */
   toolOutcomes: AssistantToolOutcome[]
   /** Set only by the handoff_to_human control tool. */
   handoffRequest: AssistantHandoffRequest | null

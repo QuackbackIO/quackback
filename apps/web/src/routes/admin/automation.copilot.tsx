@@ -84,10 +84,6 @@ function AssistantCopilotSettings() {
     })
   }
 
-  function openTestAgent() {
-    void navigate({ to: '/admin/automation/test', search: { agent: 'copilot' } })
-  }
-
   return (
     <>
       <div className="max-w-3xl space-y-6">
@@ -97,38 +93,25 @@ function AssistantCopilotSettings() {
           </BackLink>
         </div>
 
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <UserGroupIcon className="size-4 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">
-                {intl.formatMessage({
-                  id: 'automation.copilot.title',
-                  defaultMessage: 'Quinn Copilot',
-                })}
-              </h1>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'automation.copilot.pageDescription',
-                  defaultMessage:
-                    'The teammate-facing agent. Answers questions and drafts replies in the inbox.',
-                })}
-              </p>
-            </div>
+        <header className="flex items-start gap-2.5">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <UserGroupIcon className="size-4 text-primary" />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 w-full sm:min-h-9 sm:w-auto"
-            onClick={openTestAgent}
-          >
-            {intl.formatMessage({
-              id: 'automation.agent.testSaved',
-              defaultMessage: 'Test saved settings',
-            })}
-          </Button>
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">
+              {intl.formatMessage({
+                id: 'automation.copilot.title',
+                defaultMessage: 'Quinn Copilot',
+              })}
+            </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.copilot.pageDescription',
+                defaultMessage:
+                  'The teammate-facing agent. Answers questions and drafts replies in the inbox.',
+              })}
+            </p>
+          </div>
         </header>
 
         {settingsQuery.isPending ? (

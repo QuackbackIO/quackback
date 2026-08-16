@@ -10,8 +10,7 @@
  * to the conversation/ticket itself and never opens or touches an
  * assistant_involvements row: those side effects live entirely in
  * assistant.orchestrator.ts's runAssistantTurnForConversation, which this
- * route never calls; it calls the runtime seam directly, exactly as the
- * admin sandbox does.
+ * route never calls; it calls the runtime seam directly.
  *
  * WIRE: TanStack AI's AG-UI protocol. The client (useChat) POSTs a
  * `RunAgentInput` — its accumulated message history plus `forwardedProps`

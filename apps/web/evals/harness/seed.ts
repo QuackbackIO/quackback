@@ -542,8 +542,8 @@ export async function seedFixtures(
   // the runtime's conversation-scoped machinery (the zero-tool completion
   // guard, live write execution); scenarios that assert on writes (21/22) or
   // want the full guard set it via fixtures.withConversation. Answer/voice
-  // scenarios run the sandbox path (conversationId null) — the same isolation
-  // the admin Test agent uses — which keeps them off the (model-dependent)
+  // scenarios run the isolated path (conversationId null) — which keeps them
+  // off the (model-dependent)
   // zero-tool evaluator.
   const conversation =
     fixtures?.withConversation || fixtures?.conversationMessages?.length || opts.forceConversation

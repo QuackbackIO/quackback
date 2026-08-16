@@ -247,8 +247,8 @@ interface AssistantTurnCommonInput {
    * Force write tools to report what they would do instead of running, even
    * with a real `conversationId` (which otherwise implies a live run; see
    * `makeAssistantToolContext`). Undefined preserves the existing
-   * conversationId-derived default for every caller. Used by Test agent; live
-   * role policy is selected exclusively by the discriminated role below.
+   * conversationId-derived default for every caller. Live role policy is
+   * selected exclusively by the discriminated role below.
    */
   simulate?: boolean
   /**
@@ -1324,7 +1324,7 @@ export interface StreamAssistantTurnOptions {
   wire: WireRunIds
   /**
    * Maps the turn's post-processed result to this surface's terminal payload
-   * (CopilotFinalPayload, AssistantTestFinalPayload, ...), carried on AG-UI's
+   * (CopilotFinalPayload, ...), carried on AG-UI's
    * standard RUN_FINISHED.result slot. Runs after
    * the turn fully completes — citations relinked, completion validated — so
    * the payload is the enriched result, never the raw model object.

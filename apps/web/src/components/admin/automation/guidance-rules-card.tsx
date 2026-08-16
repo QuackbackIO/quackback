@@ -839,7 +839,7 @@ function GuidanceRuleDialog({
                     {intl.formatMessage({
                       id: 'automation.agent.guidance.conditionHelp',
                       defaultMessage:
-                        'Conditions are interpreted from the conversation. Use Test agent to verify realistic examples.',
+                        'Conditions are interpreted from the conversation. Try a real widget or inbox conversation to verify them.',
                     })}
                   </p>
                   <span

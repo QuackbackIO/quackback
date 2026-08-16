@@ -96,10 +96,6 @@ function AssistantAgentSettings() {
     })
   }
 
-  function openTestAgent() {
-    void navigate({ to: '/admin/automation/test' })
-  }
-
   return (
     <>
       <div className="max-w-3xl space-y-6">
@@ -109,38 +105,25 @@ function AssistantAgentSettings() {
           </BackLink>
         </div>
 
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <SparklesIcon className="size-4 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">
-                {intl.formatMessage({
-                  id: 'automation.agent.title',
-                  defaultMessage: 'Quinn Agent',
-                })}
-              </h1>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'automation.agent.pageDescription',
-                  defaultMessage:
-                    'The customer-facing agent. Replies in Messenger and anywhere else Quinn speaks for you.',
-                })}
-              </p>
-            </div>
+        <header className="flex items-start gap-2.5">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <SparklesIcon className="size-4 text-primary" />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 w-full sm:min-h-9 sm:w-auto"
-            onClick={openTestAgent}
-          >
-            {intl.formatMessage({
-              id: 'automation.agent.testSaved',
-              defaultMessage: 'Test saved settings',
-            })}
-          </Button>
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">
+              {intl.formatMessage({
+                id: 'automation.agent.title',
+                defaultMessage: 'Quinn Agent',
+              })}
+            </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.agent.pageDescription',
+                defaultMessage:
+                  'The customer-facing agent. Replies in Messenger and anywhere else Quinn speaks for you.',
+              })}
+            </p>
+          </div>
         </header>
 
         {settingsQuery.isPending ? (
