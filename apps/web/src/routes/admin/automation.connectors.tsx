@@ -46,7 +46,6 @@ function ConnectorsPage() {
   const [tokenConnectorId, setTokenConnectorId] = useState<string | null>(null)
   const refresh = useRefreshConnector()
   const startOAuth = useStartConnectorOAuth()
-  const builtin = list.data?.builtin
   const connectors = list.data?.connectors ?? []
 
   if (!flags?.assistantConnectors) {
@@ -103,38 +102,16 @@ function ConnectorsPage() {
         </p>
       ) : (
         <SettingsCard contentClassName="p-0">
-          <Link
-            to="/admin/automation/connectors/$connectorId"
-            params={{ connectorId: 'quackback' }}
-            className="flex items-center gap-3 px-4 py-3.5 hover:bg-foreground/[0.02] sm:px-[18px]"
-          >
-            <ConnectorMark name="Quackback" builtin />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
-                Quackback
-                <Badge size="sm">Built-in</Badge>
-              </div>
-              <p className="truncate text-xs text-muted-foreground">
-                {intl.formatMessage(
-                  {
-                    id: 'automation.connectors.builtin.sub',
-                    defaultMessage:
-                      '{count} built-in actions · search, tickets, feedback, attributes',
-                  },
-                  { count: builtin?.tools.length ?? 0 }
-                )}
-              </p>
-            </div>
-            <Badge size="sm">Agent</Badge>
-            <Badge size="sm">Copilot</Badge>
-            <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          </Link>
-          {connectors.map((connector) => (
+          {connectors.map((connector, index) => (
             <Link
               key={connector.id}
               to="/admin/automation/connectors/$connectorId"
               params={{ connectorId: connector.id }}
-              className="flex items-center gap-3 border-t border-border/60 px-4 py-3.5 hover:bg-foreground/[0.02] sm:px-[18px]"
+              className={
+                index === 0
+                  ? 'flex items-center gap-3 px-4 py-3.5 hover:bg-foreground/[0.02] sm:px-[18px]'
+                  : 'flex items-center gap-3 border-t border-border/60 px-4 py-3.5 hover:bg-foreground/[0.02] sm:px-[18px]'
+              }
             >
               <ConnectorMark name={connector.name} />
               <div className="min-w-0 flex-1">

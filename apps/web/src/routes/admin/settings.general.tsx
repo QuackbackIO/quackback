@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { FeatureFlagSections } from '@/components/admin/settings/feature-flag-sections'
 import { Button } from '@/components/ui/button'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
 import {
@@ -22,6 +23,7 @@ import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 import {
   DEFAULT_FEATURE_FLAGS,
+  GA_FEATURE_SECTIONS,
   PRODUCT_DEFINITIONS,
   getProductFlagUpdate,
   isProductEnabled,
@@ -207,6 +209,13 @@ function GeneralSettingsPage() {
           ))}
         </div>
       </SettingsCard>
+
+      <FeatureFlagSections
+        sections={GA_FEATURE_SECTIONS}
+        flags={localFlags}
+        pending={productMutation.isPending}
+        onToggle={(key, value) => productMutation.mutate({ [key]: value })}
+      />
 
       <WorkspaceDangerCard cloudEnabled={Boolean(cloudIdentity)} />
     </div>

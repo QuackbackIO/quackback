@@ -129,7 +129,6 @@ export interface AssistantRuntimeConfig {
   config: AssistantConfig
   revision: number
   workspaceName: string
-  actionsEnabled: boolean
   connectorsEnabled: boolean
   skillsEnabled: boolean
   configFallbackReason?: string
@@ -826,7 +825,6 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       config: structuredClone(DEFAULT_ASSISTANT_CONFIG),
       revision: 1,
       workspaceName: 'this workspace',
-      actionsEnabled: false,
       connectorsEnabled: false,
       skillsEnabled: false,
       configFallbackReason: 'database_read_failed',
@@ -1028,14 +1026,13 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   let { tools, activeSpecs } = await assembleAssistantToolset(
     toolContext,
     undefined,
-    runtimeConfig.actionsEnabled,
     connectorSpecs
   )
   let toolNames = new Set(tools.map((t) => t.name))
 
   // Live attribute catalogue (P0 catalogue injection): fetched only when
   // set_attribute actually made it into this turn's tool set, so a turn with
-  // the tool disabled (or assistantTools off entirely) never pays for the
+  // the tool disabled never pays for the
   // read. IO stays here, not inside buildAssistantSystemPrompt, which is pure.
   let attributeDefinitions: Awaited<ReturnType<typeof listConversationAttributes>> | undefined
   if (toolNames.has('set_attribute')) {

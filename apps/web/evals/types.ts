@@ -139,8 +139,6 @@ export interface ScenarioConfig {
   tone?: AssistantTone
   responseLength?: AssistantResponseLength
   additionalInstructions?: string
-  /** settings.feature_flags.assistantTools — gates write-tool assembly. */
-  assistantTools?: boolean
   /** settings.feature_flags.assistantConnectors */
   connectors?: boolean
   /** settings.feature_flags.assistantSkills */

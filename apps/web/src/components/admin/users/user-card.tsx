@@ -1,6 +1,5 @@
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
-import { Checkbox } from '@/components/ui/checkbox'
 import { TimeAgo, getTimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { countryName, countryFlag } from '@/lib/shared/country'
@@ -20,23 +19,11 @@ interface UserCardProps {
   user: PortalUserListItemView
   isSelected: boolean
   onClick: () => void
-  /** Gates the bulk-selection checkbox, matching the per-user segment editor's admin-only gate. */
-  canManage: boolean
-  checked: boolean
-  onToggleCheck: () => void
   /** Shows the optional Country column, toggled from the list's column picker. */
   showCountry?: boolean
 }
 
-export function UserCard({
-  user,
-  isSelected,
-  onClick,
-  canManage,
-  checked,
-  onToggleCheck,
-  showCountry = false,
-}: UserCardProps) {
+export function UserCard({ user, isSelected, onClick, showCountry = false }: UserCardProps) {
   // Both fields are sanitised in the DTO (`user.service.ts`), so a placeholder
   // is already null by the time it reaches here.
   const displayEmail = user.email ?? user.contactEmail
@@ -52,17 +39,6 @@ export function UserCard({
       )}
       onClick={onClick}
     >
-      {/* Bulk-selection checkbox */}
-      {canManage && (
-        <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={checked}
-            onCheckedChange={onToggleCheck}
-            aria-label={`Select ${user.name || 'this user'}`}
-          />
-        </div>
-      )}
-
       {/* Avatar */}
       <Avatar src={user.image} name={user.name} className="h-8 w-8 shrink-0" />
 

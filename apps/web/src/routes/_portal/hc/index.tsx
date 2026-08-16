@@ -107,7 +107,7 @@ export const Route = createFileRoute('/_portal/hc/')({
 function HelpCenterLandingPage() {
   const { categories, popularArticles, helpCenterConfig } = Route.useLoaderData()
   const { settings } = Route.useRouteContext()
-  const askAiEnabled = !!settings?.featureFlags?.helpCenterAiAnswers
+  const askAiEnabled = !!settings?.featureFlags?.helpCenter
 
   const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
   const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION

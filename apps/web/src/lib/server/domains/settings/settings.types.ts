@@ -1066,29 +1066,17 @@ export interface FeatureFlags {
   changelog: boolean
   /** Help center knowledge base */
   helpCenter: boolean
-  /** AI answers with citations on help-center search surfaces */
-  helpCenterAiAnswers: boolean
   /** Support inbox: messenger widget channel + unified admin inbox. Also
    *  covers conversation niceties like external link preview cards. */
   supportInbox: boolean
   /** Support tickets: durable, trackable requests portal alongside conversations */
   supportTickets: boolean
-  /** Cookieless visitor + pageview analytics (portal and widget) */
-  visitorAnalytics: boolean
-  /** Durable first-party device id: connects visitors to leads and users
-   *  across visits. Subordinate to `visitorAnalytics` — rendered as a nested
-   *  sub-toggle in Labs and only effective when analytics is on. */
-  visitorDeviceTracking: boolean
   /** Teammate-facing AI in the inbox: Copilot's private Q&A tab,
    *  two-way conversation translation, and AI classification of
    *  ai_detect-enabled conversation attributes. Each capability keeps its
    *  own finer-grained controls (copilot.use permission, per-conversation
    *  translation, per-attribute opt-in). */
   inboxAi: boolean
-  /** What the AI assistant may DO: built-in actions such as closing
-   *  conversations and creating tickets. Every action has per-action
-   *  controls and approvals. */
-  assistantTools: boolean
   /** Remote MCP connectors: a shared tool catalog mapped onto Agent and Copilot.
    *  Off by default; gates the Connectors nav, discovery, and runtime wiring. */
   assistantConnectors: boolean
@@ -1113,7 +1101,6 @@ export const LEGACY_FLAG_MAP: Record<string, keyof FeatureFlags> = {
   assistantCopilot: 'inboxAi',
   inboxTranslation: 'inboxAi',
   aiAttributeDetection: 'inboxAi',
-  assistantActions: 'assistantTools',
 }
 
 /**
@@ -1140,10 +1127,9 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
  *
  * Product surfaces (Support, Help Center, Status, tickets, link previews)
  * default **on** so nav and admin shells show the full platform without a
- * Labs treasure-hunt. AI capabilities and anything that collects visitor
- * data stay **off** until an operator opts in — they need a configured
- * model and/or a privacy review (visitor analytics ships before its consent
- * gate, so it must not start collecting on upgrade).
+ * Labs treasure-hunt. Generally-available AI answers, Inbox AI, and visitor
+ * analytics also default **on**. Connectors and Skills stay off until an
+ * operator opts in.
  *
  * Existing workspaces with an explicit `featureFlags` JSON row keep stored
  * values; only missing keys and null rows pick up these defaults (merged in
@@ -1157,12 +1143,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: true,
   supportTickets: true,
   statusPage: true,
-  // AI / privacy-sensitive — opt-in
-  helpCenterAiAnswers: false,
-  visitorAnalytics: false,
-  visitorDeviceTracking: false,
-  inboxAi: false,
-  assistantTools: false,
+  inboxAi: true,
+  // Labs — opt-in
   assistantConnectors: false,
   assistantSkills: false,
 }
@@ -1186,11 +1168,6 @@ export const FEATURE_FLAG_REGISTRY: Record<
     label: 'Help Center',
     description: 'Publish a searchable help center so customers can find answers on their own.',
   },
-  helpCenterAiAnswers: {
-    label: 'Help Center AI Answers',
-    description:
-      'Let customers ask a question and get an instant AI answer with citations, built only from your published help articles. Requires an AI model to be configured.',
-  },
   supportInbox: {
     label: 'Conversations',
     description:
@@ -1201,25 +1178,10 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       'Give customers a Tickets portal for durable, trackable support requests alongside conversations.',
   },
-  visitorAnalytics: {
-    label: 'Visitor Analytics',
-    description:
-      'Measure visitors and pageviews across your portal and widget without cookies or personal data.',
-  },
-  visitorDeviceTracking: {
-    label: 'Visitor Identity',
-    description:
-      'Remember returning visitors with a first-party device id so their activity connects to leads and users. Stores an identifier in the browser; check your privacy requirements before enabling.',
-  },
   inboxAi: {
     label: 'Inbox AI',
     description:
       'AI for your team inside the inbox: a private Copilot tab for asking questions about a conversation, two-way message translation, and automatic classification of conversation attributes you opt in. Requires an AI model to be configured; each capability has its own controls.',
-  },
-  assistantTools: {
-    label: 'Assistant actions',
-    description:
-      'Let the AI assistant take actions such as closing conversations or creating tickets. Actions have per-action controls and approvals.',
   },
   assistantConnectors: {
     label: 'Connectors',
@@ -1332,6 +1294,23 @@ export function getFirstEnabledAdminProductPath(
 }
 
 /**
+ * Generally-available capability toggles on Settings → General. Not products
+ * (those have their own card) and not Labs. A coverage test pins every flag
+ * to exactly one of General products, this list, or Labs.
+ */
+export const GA_FEATURE_SECTIONS: Array<{
+  title: string
+  description: string
+  flags: LabSectionRow[]
+}> = [
+  {
+    title: 'AI',
+    description: 'Generally available inbox AI. Requires a configured model.',
+    flags: [{ key: 'inboxAi' }],
+  },
+]
+
+/**
  * Labs page layout: experimental flags grouped into sections, each rendered as
  * a card with a heading + high-level description. Product flags are surfaced
  * on General instead; a coverage test pins every flag to exactly one page. A
@@ -1352,18 +1331,6 @@ export const LAB_SECTIONS: Array<{
     title: 'AI',
     description:
       'Optional AI capabilities. Require a configured model; off by default until you opt in.',
-    flags: [
-      { key: 'helpCenterAiAnswers' },
-      { key: 'inboxAi' },
-      { key: 'assistantTools' },
-      { key: 'assistantConnectors' },
-      { key: 'assistantSkills' },
-    ],
-  },
-  {
-    title: 'Privacy-sensitive',
-    description:
-      'Analytics about who visits your portal and widget. Review your privacy policy before enabling.',
-    flags: [{ key: 'visitorAnalytics', subFlags: ['visitorDeviceTracking'] }],
+    flags: [{ key: 'assistantConnectors' }, { key: 'assistantSkills' }],
   },
 ]

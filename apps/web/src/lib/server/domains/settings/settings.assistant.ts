@@ -60,7 +60,6 @@ export type AssistantConfigFallbackReason = 'invalid_assistant_config'
 
 export interface AssistantRuntimeConfigState extends AssistantConfigState {
   workspaceName: string
-  actionsEnabled: boolean
   /** Remote MCP connectors mapped onto this turn's agent. */
   connectorsEnabled: boolean
   /** Packaged procedures pulled via use_skill. */
@@ -107,7 +106,6 @@ export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfi
   const runtimeFields = {
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
-    actionsEnabled: flags.assistantTools,
     connectorsEnabled: flags.assistantConnectors,
     skillsEnabled: flags.assistantSkills,
   }

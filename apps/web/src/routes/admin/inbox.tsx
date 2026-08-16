@@ -951,14 +951,6 @@ function InboxPage() {
     [items]
   )
 
-  const toggleSelectAll = useCallback(() => {
-    setSelectedIds((prev) => {
-      const ids = items.map((it) => itemRefId(it))
-      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id))
-      return allSelected ? new Set() : new Set(ids)
-    })
-  }, [items])
-
   // Toast the bulk summary: a clean line on full success, a partial-failure count
   // otherwise. Verb is the past-tense action word ("Closed", "Snoozed", …).
   const summarize = useCallback((verb: string, ok: number, fail: number) => {
@@ -1500,10 +1492,6 @@ function InboxPage() {
           items={items}
           selectedId={selectedId}
           onSelect={setSelectedId}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          onToggleSelectAll={toggleSelectAll}
-          selectionActive={hasSelection}
         />
       )}
 

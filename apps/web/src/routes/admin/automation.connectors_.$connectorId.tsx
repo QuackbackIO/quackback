@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
@@ -161,7 +161,10 @@ function ConnectorDetailPage() {
   if (detail.isPending) {
     return <p className="text-sm text-muted-foreground">Loading…</p>
   }
-  if (!builtin && !connector) {
+  if (builtin || connectorId === 'quackback') {
+    return <Navigate to="/admin/automation/connectors" />
+  }
+  if (!connector) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-4">
         <BackLink to="/admin/automation/connectors">
@@ -171,65 +174,6 @@ function ConnectorDetailPage() {
       </div>
     )
   }
-
-  if (builtin) {
-    const reads = builtin.tools.filter((tool) => tool.group === 'read')
-    const writes = builtin.tools.filter((tool) => tool.group === 'write')
-    return (
-      <div className="mx-auto w-full max-w-3xl space-y-6">
-        <BackLink to="/admin/automation/connectors">
-          {intl.formatMessage({ id: 'automation.connectors.title', defaultMessage: 'Connectors' })}
-        </BackLink>
-        <div className="flex items-center gap-3">
-          <ConnectorMark name="Quackback" builtin size="lg" />
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-[17px] font-semibold">Quackback</h1>
-              <Badge size="sm">Built-in</Badge>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Quinn's built-in actions. Audited on every call; behavior is managed by Quinn and not
-              individually configurable.
-            </p>
-          </div>
-        </div>
-        <SettingsCard contentClassName="p-0">
-          <ToolGroup
-            title="Read-only tools"
-            tools={reads.map((tool) => ({
-              name: tool.name,
-              title: tool.label,
-              description: tool.description,
-              group: tool.group,
-              destructive: false,
-              policy: 'always',
-              isOverride: false,
-              isNew: false,
-            }))}
-            chips
-            defaultPolicy="always"
-          />
-          <ToolGroup
-            title="Write tools"
-            tools={writes.map((tool) => ({
-              name: tool.name,
-              title: tool.label,
-              description: tool.description,
-              group: tool.group,
-              destructive: false,
-              policy: 'approval',
-              isOverride: false,
-              isNew: false,
-            }))}
-            chips
-            defaultPolicy="approval"
-          />
-        </SettingsCard>
-      </div>
-    )
-  }
-
-  if (!connector) return null
 
   const reads = connector.tools.filter((tool) => tool.group === 'read')
   const writes = connector.tools.filter((tool) => tool.group === 'write')

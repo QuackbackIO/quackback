@@ -259,17 +259,12 @@ export async function runToolsetScenario(
     scenario.config?.connectors === true
       ? await listConnectorToolSpecsForAgent(roleToAgent(role), testDb)
       : []
-  const { tools } = await assembleAssistantToolset(
-    ctx,
-    undefined,
-    scenario.config?.assistantTools === true,
-    connectorSpecs
-  )
+  const { tools } = await assembleAssistantToolset(ctx, undefined, connectorSpecs)
   const toolNames = tools.map((t) => t.name)
   const failures = gradeStructural(scenario.structural, { kind: 'toolset', toolNames })
   return {
     failures,
-    detail: { toolNames, role, actionsEnabled: scenario.config?.assistantTools === true },
+    detail: { toolNames, role },
     errored: false,
   }
 }

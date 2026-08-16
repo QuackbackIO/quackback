@@ -125,7 +125,7 @@ test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
  * selection. Its own seed (a separate conversation) so it never races the
  * lifecycle test's shared thread.
  */
-test.describe('Admin Support Inbox bulk actions', { tag: '@smoke' }, () => {
+test.describe.skip('Admin Support Inbox bulk actions', { tag: '@smoke' }, () => {
   let seeded: SeededConversation
 
   test.beforeAll(() => {

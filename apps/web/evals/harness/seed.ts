@@ -117,7 +117,6 @@ export async function applyScenarioSettings(config: ScenarioConfig = {}): Promis
   }
   const assistantConfig = buildScenarioAssistantConfig(config)
   const featureFlags = JSON.stringify({
-    assistantTools: config.assistantTools === true,
     assistantConnectors: config.connectors === true,
     assistantSkills: config.skills === true,
   })

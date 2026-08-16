@@ -24,8 +24,8 @@
  * stream with a coded RUN_ERROR frame instead.
  *
  * ACTION tools are forced to `writeToolPolicy: 'propose'` (see
- * `resolveEffectiveToolMode`) regardless of the assistantTools setting and
- * each tool's configured mode: a copilot turn is a teammate asking Quinn a
+ * `resolveEffectiveToolMode`) regardless of each tool's configured mode:
+ * a copilot turn is a teammate asking Quinn a
  * question about the conversation, never Quinn acting in it directly, so a
  * write-tool call turns into a pending-approval proposal instead of running
  * for real (P2-C.4, "act-on-approval"). This includes metadata writes such as

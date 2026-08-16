@@ -5,12 +5,9 @@
  * live in `jobs/definitions.ts`.
  */
 import { db, refreshVisitorAnalytics } from '@/lib/server/db'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { refreshAnalytics } from './analytics.service'
 
 export async function runAnalyticsRefresh(): Promise<void> {
   await refreshAnalytics()
-  if (await isFeatureEnabled('visitorAnalytics')) {
-    await refreshVisitorAnalytics(db)
-  }
+  await refreshVisitorAnalytics(db)
 }

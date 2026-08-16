@@ -130,13 +130,6 @@ describe('recordPageView', () => {
   it('honors DNT and GPC before reading anything', async () => {
     await recordPageView(makeRequest(validBeacon, { dnt: '1' }))
     await recordPageView(makeRequest(validBeacon, { 'sec-gpc': '1' }))
-    expect(mockIsFeatureEnabled).not.toHaveBeenCalled()
-    expect(mockValues).not.toHaveBeenCalled()
-  })
-
-  it('drops when the visitorAnalytics flag is off', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(false)
-    await recordPageView(makeRequest(validBeacon))
     expect(mockValues).not.toHaveBeenCalled()
   })
 

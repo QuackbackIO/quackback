@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_FEATURE_FLAGS,
   LAB_SECTIONS,
+  GA_FEATURE_SECTIONS,
   PRODUCT_DEFINITIONS,
   FEATURE_FLAG_REGISTRY,
   LEGACY_FLAG_MAP,
@@ -17,7 +18,10 @@ describe('feature flag settings layout', () => {
     const labFlags = LAB_SECTIONS.flatMap((s) =>
       s.flags.flatMap((row) => [row.key, ...(row.subFlags ?? [])])
     )
-    const surfaced = [...productFlags, ...labFlags]
+    const gaFlags = GA_FEATURE_SECTIONS.flatMap((s) =>
+      s.flags.flatMap((row) => [row.key, ...(row.subFlags ?? [])])
+    )
+    const surfaced = [...productFlags, ...labFlags, ...gaFlags]
     // No flag appears twice...
     expect(new Set(surfaced).size).toBe(surfaced.length)
     // ...and the set of surfaced flags is exactly the full flag set, so a new
@@ -69,7 +73,7 @@ describe('feature flag settings layout', () => {
   })
 
   it('only references flags that exist in the registry', () => {
-    for (const section of LAB_SECTIONS) {
+    for (const section of [...LAB_SECTIONS, ...GA_FEATURE_SECTIONS]) {
       for (const row of section.flags) {
         expect(FEATURE_FLAG_REGISTRY[row.key]).toBeDefined()
         for (const sub of row.subFlags ?? []) {
@@ -97,7 +101,9 @@ describe('resolveFeatureFlags', () => {
       const on = resolveFeatureFlags(JSON.stringify({ [legacyKey]: true }))
       expect(on[umbrella], `${legacyKey} -> ${umbrella}`).toBe(true)
       const off = resolveFeatureFlags(JSON.stringify({ [legacyKey]: false }))
-      expect(off[umbrella], `${legacyKey} (false) -> ${umbrella}`).toBe(false)
+      expect(off[umbrella], `${legacyKey} (false) -> ${umbrella}`).toBe(
+        DEFAULT_FEATURE_FLAGS[umbrella]
+      )
     }
   })
 
