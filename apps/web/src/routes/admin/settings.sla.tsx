@@ -190,7 +190,7 @@ function SlaSettingsPage() {
       <PageHeader
         icon={ShieldCheckIcon}
         title="SLA policies"
-        description="Response and resolution targets your team commits to. Apply them to conversations from workflows."
+        description="Response and resolution targets your team commits to. A default can apply when a conversation starts; workflows can still replace it."
       />
 
       <SettingsCard>
