@@ -207,6 +207,11 @@ export const MAX_ASSISTANT_STEP_INSTRUCTIONS = 2000
 const buttonOptionSchema = z.object({ key: z.string().min(1), label: z.string().min(1).max(80) })
 const attributeOptionSchema = z.object({ id: z.string().min(1), label: z.string().min(1) })
 
+// Builder-authored graphs are trees. Forks exist only at branch,
+// reply-buttons, and assistant-outcome steps; there are no rejoins,
+// parallel lanes, or sub-workflows. The block-kind union is closed —
+// new conversational behavior belongs to the agent (skills and
+// guidance), not new block kinds.
 const nodeSchema = z.discriminatedUnion('type', [
   z.object({ id: z.string().min(1), type: z.literal('trigger') }),
   z.object({ id: z.string().min(1), type: z.literal('action'), action: actionSchema }),

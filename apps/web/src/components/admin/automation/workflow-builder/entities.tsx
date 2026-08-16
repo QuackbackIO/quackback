@@ -1,9 +1,9 @@
 /**
  * Shared entity options for the fullscreen workflow builder (support platform
  * §4.6): teammates, teams, tags, live SLA policies, and live attribute
- * definitions, plus the id -> display name lookups the canvas card summaries
- * and outline rows need. One provider so the canvas, outline, and inspector
- * all read the same cached queries instead of each firing their own.
+ * definitions, plus the id -> display name lookups the step-list card
+ * summaries need. One provider so the step list and inspector all read
+ * the same cached queries instead of each firing their own.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'

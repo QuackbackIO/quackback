@@ -202,7 +202,7 @@ export function insertVariableToken(body: BlockBody, key: string): BlockBody {
 export const RATING_KEYS = ['1', '2', '3', '4', '5'] as const
 export type RatingKey = (typeof RATING_KEYS)[number]
 /** Derived from the canonical CSAT_FACES (index = rating-1) rather than its
- *  own hardcoded set, so the canvas summary (flow-layout.ts) shows the exact
+ *  own hardcoded set, so the step-list summary (step-content.ts) shows the exact
  *  row the customer actually taps in the widget — not a lookalike-but-
  *  different emoji set authored separately here. */
 export const RATING_EMOJI: Record<RatingKey, string> = Object.fromEntries(
@@ -1154,7 +1154,7 @@ export interface WorkflowTree {
  * key, since a rule pill's name IS the key there), reply_buttons/
  * request_csat/let_assistant_answer's native KeyedPath. Null for every other
  * kind (nothing to fan out). Shared by the tree-editing helpers below and the
- * canvas auto-layout (flow-layout.ts), which both need to walk/measure every
+ * step-list walk (tree-walk.ts), which both need to walk every
  * fan-out kind the same way instead of hand-copying a `kind === 'branch'`
  * special case per call site.
  */

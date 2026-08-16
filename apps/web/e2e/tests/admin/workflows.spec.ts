@@ -7,13 +7,13 @@ import { setSupportSurfaces } from '../../utils/db-helpers'
  * template gallery, and the fullscreen builder at
  * /admin/automation/workflows/$workflowId.
  *
- * The "Route conversations to the right team" template ships with two
- * needs-setup team placeholders (see workflow-templates.ts), so creating it
- * is also the fixture for exercising the issues chip, the "Needs setup" list
- * badge, and an unresolved action step in the inspector.
+ * The "Route by keywords" template ships with two needs-setup team
+ * placeholders (see workflow-templates.ts), so creating it is also the
+ * fixture for exercising the issues chip, the "Needs setup" list badge,
+ * and an unresolved action step in the inspector.
  */
 
-const TEMPLATE_NAME = 'Route conversations to the right team'
+const TEMPLATE_NAME = 'Route by keywords'
 const FRONT_DOOR_TEMPLATE_NAME = 'Front-door triage bot'
 
 /** The list row is a `div[role=button]` inside the `.divide-y` group list —
@@ -33,7 +33,7 @@ function workflowRow(page: Page, name: string) {
  *  menu item — expecting menu + item + dialog inside one short retry window,
  *  as this originally did, deadlocks against slow hydration. */
 async function openTemplateGallery(page: Page) {
-  const galleryDialog = page.getByRole('dialog', { name: 'Create a new workflow' })
+  const galleryDialog = page.getByRole('dialog', { name: 'Start from a template' })
   await expect(async () => {
     await page.getByRole('button', { name: 'New workflow' }).click()
     await expect(page.getByRole('menu')).toBeVisible({ timeout: 1500 })
@@ -88,10 +88,11 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     const galleryDialog = await openTemplateGallery(page)
 
     // Category rail + template cards.
-    await expect(galleryDialog.getByRole('button', { name: 'Popular' })).toBeVisible()
-    await expect(galleryDialog.getByRole('button', { name: 'Routing' })).toBeVisible()
-    await expect(galleryDialog.getByRole('button', { name: 'SLA & priority' })).toBeVisible()
-    await expect(galleryDialog.getByRole('button', { name: 'Housekeeping' })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /Popular/ })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /Routing/ })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /SLA & priority/ })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /Housekeeping/ })).toBeVisible()
+    await galleryDialog.getByRole('button', { name: /Routing/ }).click()
     const templateCard = galleryDialog.getByRole('button', { name: new RegExp(TEMPLATE_NAME) })
     await expect(templateCard).toBeVisible()
 
@@ -109,22 +110,23 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     // issues chip reports 2.
     await expect(page.getByRole('button', { name: '2 issues' })).toBeVisible({ timeout: 10000 })
 
-    // Canvas: the trigger card renders the trigger label.
+    // Step list: the trigger card renders the trigger label. The list is the
+    // outline — there is no outline rail.
+    const stepList = page.getByRole('region', { name: 'Workflow steps' })
+    await expect(stepList).toBeVisible()
     await expect(
       page.locator('[data-step-id]').filter({ hasText: 'New conversation' })
     ).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Workflow outline' })).toHaveCount(0)
 
-    // Outline rail: trigger + branch + both unresolved action steps.
-    const outline = page.getByRole('navigation', { name: 'Workflow outline' })
-    await expect(outline.getByText('New conversation')).toBeVisible()
-    await expect(outline.getByText('Branch · 2 paths')).toBeVisible()
-    const outlineAssignRows = outline.getByRole('button', { name: /Assign to a team/ })
-    await expect(outlineAssignRows.first()).toBeVisible()
-    await expect(outlineAssignRows).toHaveCount(2)
-
-    // Selecting an unconfigured "Assign to team" step shows the inspector's
-    // team select with nothing chosen (placeholder text, not a real team).
-    await outlineAssignRows.first().click()
+    // Lane tabs expose every branch path; switching tabs reveals that path's
+    // assign step so it can be selected into the inspector.
+    const laneTabs = page.getByRole('tablist', { name: 'Branch paths' })
+    await expect(laneTabs.getByRole('tab')).toHaveCount(2)
+    await laneTabs.getByRole('tab').nth(1).click()
+    const assignCard = page.locator('[data-step-id]').filter({ hasText: 'Assign to team' })
+    await expect(assignCard).toBeVisible()
+    await assignCard.click()
     const inspector = page.getByRole('complementary')
     // The inspector header title and the action-type select's current value
     // both render "Assign to team" text; scope to the sticky header row.
@@ -155,7 +157,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
 
     // The hero template lives in the new "Customer facing" category (Phase C,
     // slice C-5) rather than "Popular", so switch the category rail first.
-    await galleryDialog.getByRole('button', { name: 'Customer facing' }).click()
+    await galleryDialog.getByRole('button', { name: /Customer facing/ }).click()
     const templateCard = galleryDialog.getByRole('button', {
       name: new RegExp(FRONT_DOOR_TEMPLATE_NAME),
     })
@@ -168,27 +170,27 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
       { timeout: 15000 }
     )
 
-    // Canvas: the trigger card renders the trigger label.
+    // Step list: the trigger card renders the trigger label.
+    const stepList = page.getByRole('region', { name: 'Workflow steps' })
+    await expect(stepList).toBeVisible()
     await expect(
       page.locator('[data-step-id]').filter({ hasText: 'New conversation' })
     ).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Workflow outline' })).toHaveCount(0)
 
-    // Outline rail: the reply-buttons step fans out one path per button, and
-    // the path header uses the button's own label (not its internal key).
-    const outline = page.getByRole('navigation', { name: 'Workflow outline' })
-    await expect(outline.getByText('New conversation')).toBeVisible()
-    await expect(outline.getByText('Path A · Product question')).toBeVisible()
-    await expect(outline.getByText('Path B · Report a bug')).toBeVisible()
-    await expect(outline.getByText('Path C · Billing')).toBeVisible()
-    await expect(outline.getByText('Path D · Talk to sales')).toBeVisible()
+    // Reply-button lane tabs use the button labels (not internal keys).
+    await expect(page.getByRole('tab', { name: /Product question/ })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Report a bug/ })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Billing/ })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Talk to sales/ })).toBeVisible()
+    await page.getByRole('tab', { name: /Product question/ }).click()
+    await page.getByRole('tab', { name: /Report a bug/ }).click()
+    await page.getByRole('tab', { name: /Billing/ }).click()
+    await page.getByRole('tab', { name: /Talk to sales/ }).click()
 
-    // Every workspace ref (team/SLA policy/tag/attribute) in the template
-    // ships as an unresolved needs-setup sentinel: 3 "assign to team" from
-    // the Quinn hand-off branch, 1 collect-data attribute + 2 assign/SLA from
-    // the bug path, 2 assign/SLA from the billing path, and 3 assign/tag/
-    // collect-data from the sales path — 11 in total (see
-    // workflow-templates.ts's front-door-triage-bot payload).
-    await expect(page.getByRole('button', { name: '11 issues' })).toBeVisible({
+    // Workspace refs plus the unset issue-type branch (11 action/collect
+    // sentinels + the branch node).
+    await expect(page.getByRole('button', { name: '12 issues' })).toBeVisible({
       timeout: 10000,
     })
 
@@ -197,7 +199,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     const jsonTextbox = page.getByRole('textbox', { name: 'Workflow graph JSON' })
     await expect(jsonTextbox).toBeVisible()
     await expect(jsonTextbox).toHaveValue(/welcome_message/)
-    // ...and switching back to Visual restores the canvas.
+    // ...and switching back to Visual restores the step list.
     await page.getByRole('button', { name: 'Visual' }).click()
     await expect(
       page.locator('[data-step-id]').filter({ hasText: 'New conversation' })

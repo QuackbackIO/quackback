@@ -1111,6 +1111,15 @@
   "automation.whoRepliesFirst.manageQuinn": "Manage Quinn",
   "automation.whoRepliesFirst.officeHoursLink": "Office hours",
   "automation.workflows.new": "New workflow",
+  "automation.templates.galleryTitle": "Start from a template",
+  "automation.templates.galleryDescription": "Ready-made workflows for the things every team automates. Created as a draft; anything marked \"needs setup\" is flagged until you point it at your own teams and options.",
+  "automation.templates.categories": "Template categories",
+  "automation.templates.emptyCategory": "No templates in this category yet.",
+  "automation.templates.cat.popular": "Popular",
+  "automation.templates.cat.customerFacing": "Customer facing",
+  "automation.templates.cat.routing": "Routing",
+  "automation.templates.cat.sla": "SLA & priority",
+  "automation.templates.cat.housekeeping": "Housekeeping",
   "automation.workflows.fromTemplate": "Create from template",
   "automation.workflows.fromScratch": "Create from scratch",
   "automation.workflows.search": "Search workflows…",
@@ -1139,5 +1148,10 @@
   "automation.connectors.loading": "Loading connectors…",
   "automation.connectors.loadError": "Could not load connectors.",
   "automation.skills.loading": "Loading skills…",
-  "automation.skills.loadError": "Could not load skills."
+  "automation.skills.loadError": "Could not load skills.",
+  "automation.builder.laneSteps": "{count, plural, other {# 步}}",
+  "automation.builder.start": "开始",
+  "automation.builder.addStep": "添加步骤",
+  "automation.builder.end": "结束",
+  "automation.builder.branchPaths": "分支路径"
 }

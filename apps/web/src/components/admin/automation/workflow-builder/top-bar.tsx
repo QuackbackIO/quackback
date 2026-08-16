@@ -1,19 +1,17 @@
 /**
- * Fullscreen builder top bar (support platform §4.6): back link, outline
- * toggle, an inline-renameable workflow name, status + class pills, the
- * issues chip (jumps to the first invalid step), the Visual/JSON toggle, the
- * dirty-state text, and the explicit Save / Set live / Pause actions.
+ * Fullscreen builder top bar (support platform §4.6): back link, an
+ * inline-renameable workflow name, status + class pills, the issues chip
+ * (jumps to the first invalid step), the Visual/JSON toggle, the dirty-state
+ * text, and the explicit Save / Set live / Pause actions.
  */
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowLeftIcon,
-  BeakerIcon,
   ClockIcon,
   CodeBracketIcon,
   ExclamationTriangleIcon,
   RectangleGroupIcon,
-  ViewColumnsIcon,
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
@@ -75,10 +73,7 @@ export function WorkflowBuilderTopBar({
   onSetLive,
   onPause,
   statusPending,
-  outlineCollapsed,
-  onToggleOutline,
   onOpenHistory,
-  onOpenPreview,
 }: {
   name: string
   onChangeName: (v: string) => void
@@ -95,12 +90,8 @@ export function WorkflowBuilderTopBar({
   onSetLive: () => void
   onPause: () => void
   statusPending: boolean
-  outlineCollapsed: boolean
-  onToggleOutline: () => void
   /** Opens the version history + rollback sheet (support platform §4.6). */
   onOpenHistory: () => void
-  /** Opens the dry-run preview panel (support platform §4.6). */
-  onOpenPreview: () => void
 }) {
   const classMeta = WORKFLOW_CLASSES.find((c) => c.value === workflowClass)
 
@@ -110,16 +101,6 @@ export function WorkflowBuilderTopBar({
         <Link to="/admin/automation/workflows" aria-label="Back to workflows">
           <ArrowLeftIcon className="size-4" />
         </Link>
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-8"
-        onClick={onToggleOutline}
-        aria-label={outlineCollapsed ? 'Show outline' : 'Hide outline'}
-        aria-pressed={!outlineCollapsed}
-      >
-        <ViewColumnsIcon className="size-4" />
       </Button>
       <div className="h-5 w-px bg-border" />
 
@@ -184,10 +165,6 @@ export function WorkflowBuilderTopBar({
       <Button size="sm" variant="outline" onClick={onOpenHistory}>
         <ClockIcon className="size-3.5" />
         History
-      </Button>
-      <Button size="sm" variant="outline" onClick={onOpenPreview}>
-        <BeakerIcon className="size-3.5" />
-        Preview
       </Button>
 
       <span className="hidden text-xs text-muted-foreground sm:inline">

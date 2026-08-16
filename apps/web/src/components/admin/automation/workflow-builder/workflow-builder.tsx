@@ -1,10 +1,10 @@
 /**
  * The fullscreen workflow builder (support platform §4.6): loads the
  * workflow, wires up the shared entity data (teammates/teams/tags/SLA
- * policies/attributes) once for the outline + canvas + inspector, and lays
- * out the three-panel shell — outline rail, canvas (or the JSON textarea),
- * inspector. All the editing state lives in useWorkflowBuilder; this
- * component just wires it to the panels.
+ * policies/attributes) once for the step list + inspector, and lays out the
+ * two-panel shell — step list (or the JSON textarea) and inspector. All the
+ * editing state lives in useWorkflowBuilder; this component just wires it
+ * to the panels.
  */
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -14,13 +14,11 @@ import { workflowDetailQuery } from '@/lib/client/queries/workflows'
 import type { WorkflowDTO } from '@/lib/server/functions/workflows'
 import { WorkflowEntitiesProvider } from './entities'
 import { WorkflowBuilderTopBar } from './top-bar'
-import { OutlineRail } from './outline-rail'
-import { WorkflowBuilderCanvas } from './canvas'
+import { StepList } from './step-list'
 import { JsonPanel } from './json-panel'
 import { InspectorPanel } from './inspector/inspector-panel'
 import { useWorkflowBuilder } from './use-workflow-builder'
 import { VersionHistorySheet } from './version-history-sheet'
-import { PreviewPanel } from './preview-panel'
 import type { FrequencyCap, GraphCondition, SendWindow } from '../workflow-graph'
 
 export function WorkflowBuilder({ workflowId }: { workflowId: string }) {
@@ -54,7 +52,6 @@ export function WorkflowBuilder({ workflowId }: { workflowId: string }) {
 
 function WorkflowBuilderShell({ workflow }: { workflow: WorkflowDTO }) {
   const b = useWorkflowBuilder(workflow)
-  const stepCount = b.outline.filter((e) => e.kind !== 'path-header' && e.kind !== 'trigger').length
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -76,10 +73,7 @@ function WorkflowBuilderShell({ workflow }: { workflow: WorkflowDTO }) {
         onSetLive={b.setLive}
         onPause={b.pause}
         statusPending={b.statusPending}
-        outlineCollapsed={b.outlineCollapsed}
-        onToggleOutline={b.toggleOutline}
         onOpenHistory={b.openHistorySheet}
-        onOpenPreview={b.openPreviewSheet}
       />
       <VersionHistorySheet
         workflowId={workflow.id}
@@ -87,23 +81,9 @@ function WorkflowBuilderShell({ workflow }: { workflow: WorkflowDTO }) {
         onOpenChange={(open) => (open ? b.openHistorySheet() : b.closeHistorySheet())}
         dirty={b.dirty}
       />
-      <PreviewPanel
-        workflowId={workflow.id}
-        open={b.previewSheetOpen}
-        onOpenChange={(open) => (open ? b.openPreviewSheet() : b.closePreviewSheet())}
-        dirty={b.dirty}
-      />
       <div className="flex min-h-0 flex-1">
-        <OutlineRail
-          outline={b.outline}
-          stepCount={stepCount}
-          selection={b.selection}
-          collapsed={b.outlineCollapsed}
-          onSelectNode={b.selectNode}
-        />
-
         {b.graphDraft.mode === 'visual' ? (
-          <WorkflowBuilderCanvas
+          <StepList
             tree={b.graphDraft.tree}
             triggerLabel={b.triggerLabelText}
             triggerChannels={b.triggerSettings.channels}

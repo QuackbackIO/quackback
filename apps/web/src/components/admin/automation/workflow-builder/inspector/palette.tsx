@@ -4,13 +4,13 @@
  * COLLECT (the 8 conversational block kinds, Phase C slice C-5) above the
  * pre-existing Logic (condition/branch/wait) and Actions (all 9 action
  * types) groups, per the design brief's §4/§5.12 — each icon tinted by the
- * same tone the canvas card for that step kind uses. Clicking an item
+ * same tone the step card for that step kind uses. Clicking an item
  * inserts that step at the active insertion point and selects it.
  */
 import { useState, type ComponentType } from 'react'
 import { ClockIcon, FunnelIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'
 import { ACTION_ICONS, BLOCK_ICONS, TONE_TILE } from '../step-visuals'
-import { ACTION_TONE, type Tone } from '../flow-layout'
+import { ACTION_TONE, type Tone } from '../step-content'
 import {
   ACTION_LABELS,
   ACTION_TYPES,
