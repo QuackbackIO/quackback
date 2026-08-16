@@ -219,6 +219,15 @@ export default defineRailway(() => {
     // out of band. Undeclared, it was on the delete list of every apply.
     QUACKBACK_FLEET_INTERNAL_TOKEN: preserve(),
 
+    // AI via OpenRouter. The key is set out of band; the endpoint and models
+    // are facts about this fleet. Without key + base URL + at least one model,
+    // every AI feature is off (#180). Declared here so the next apply does not
+    // delete a live configuration that was set by hand.
+    OPENAI_API_KEY: preserve(),
+    OPENAI_BASE_URL: 'https://openrouter.ai/api/v1',
+    AI_CHAT_MODEL: 'openai/gpt-4o-mini',
+    AI_EMBEDDING_MODEL: 'openai/text-embedding-3-small',
+
     // Redis is no longer read by the app, but the variable and the database
     // both still exist, and anything absent from this file is a deletion.
     // Preserved rather than removed so that retiring Redis stays a deliberate
