@@ -34,9 +34,11 @@
 
 ## Get Started
 
-**Cloud** — start free at [app.quackback.io](https://app.quackback.io/signup). We host, scale, and maintain it for you. No setup required.
+**Quackback Cloud** — 14-day free trial, every feature, no credit card. We host it.
 
-**Self-hosted** anywhere with [Docker](#docker) or [one click on Railway](#one-click-deploy).
+→ [Start the trial](https://app.quackback.io/signup)
+
+**Self-host** if you want the same product on your own Postgres — [Docker](#docker) or [Railway](#one-click-deploy). Open source (AGPL-3.0).
 
 ## Why Quackback?
 
