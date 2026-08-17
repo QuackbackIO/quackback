@@ -4,16 +4,16 @@
 
 Builder+critic on `saas` (not a piece branch). Commits pushed:
 
-| Unit                      | Sha                             | Critic                    | Live?                                                                                                   |
-| ------------------------- | ------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- |
-| M1 thread & humanize      | `ec8421444` + fixer `3fbbb4670` | PASS_WITH_GAPS then fixer | no (batch deploy with later UI; named skip: outbound mail composition, no live mailbox probe this fire) |
-| M2 descriptor + adapter   | `e7c6509c6`                     | in flight                 | no (same skip until M4 settings surfaces)                                                               |
-| M3 close + ledger + meter | `0874a9c9d`                     | in flight                 | no (needs 0265 on enrolled DBs before code that selects email_log is live)                              |
-| M4 settings IA + UI       | `4f92f96dc`                     | PASS_WITH_GAPS            | no (same skip: tip includes M3 email_log selects; 0265 not on enrolled DBs)                             |
-| M4 critic fixer           | `a7683e137`                     | pending                   | no (same skip)                                                                                          |
-| M5 polish + ack           | `de0eed156`                     | PASS_WITH_GAPS            | no (same skip)                                                                                          |
-| M6 extensibility          | `7a4654b1d`                     | PASS_WITH_GAPS            | no (0266/0267 not on enrolled DBs; same 0265 skip)                                                      |
-| M5/M6 critic fixer        | `c33fcda30`                     | pending                   | no (same skip)                                                                                          |
+| Unit                      | Sha                             | Critic                      | Live?                                                                                                   |
+| ------------------------- | ------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| M1 thread & humanize      | `ec8421444` + fixer `3fbbb4670` | PASS_WITH_GAPS then fixer   | no (batch deploy with later UI; named skip: outbound mail composition, no live mailbox probe this fire) |
+| M2 descriptor + adapter   | `e7c6509c6`                     | in flight                   | no (same skip until M4 settings surfaces)                                                               |
+| M3 close + ledger + meter | `0874a9c9d`                     | FAIL then fixer `ca44e679e` | no (needs 0265 on enrolled DBs before code that selects email_log is live)                              |
+| M4 settings IA + UI       | `4f92f96dc`                     | PASS_WITH_GAPS              | no (same skip: tip includes M3 email_log selects; 0265 not on enrolled DBs)                             |
+| M4 critic fixer           | `a7683e137`                     | pending                     | no (same skip)                                                                                          |
+| M5 polish + ack           | `de0eed156`                     | PASS_WITH_GAPS              | no (same skip)                                                                                          |
+| M6 extensibility          | `7a4654b1d`                     | PASS_WITH_GAPS              | no (0266/0267 not on enrolled DBs; same 0265 skip)                                                      |
+| M5/M6 critic fixer        | `c33fcda30`                     | pending                     | no (same skip)                                                                                          |
 
 Spec M1–M6 plus two critic fixers are on `saas` tip `c33fcda30`. Named skip: do not pin live until 0265–0267 are applied on enrolled workspace DBs (email_log + channel_threads).
 
