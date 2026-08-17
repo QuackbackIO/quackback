@@ -32,6 +32,7 @@ interface ClaimPlan {
 interface JobTierHandle {
   workspaceKey: string
   plan: ClaimPlan
+  listenerCloses: { n: number }
   noteActivity: (source?: 'request' | 'sweep' | 'script' | 'migration') => void
   nextRescanAt: (now: number) => number
   status: () => {
@@ -56,6 +57,7 @@ async function bootJobTier(): Promise<JobTierHandle> {
   process.env.JOB_POLL_INTERVAL_MS = String(POLL_MS)
 
   const plan: ClaimPlan = { claimed: 0, enqueued: 0, poolSize: 0, pendingAt: null }
+  const listenerCloses = { n: 0 }
   const ws = workspace(WORKSPACE_KEY)
 
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
@@ -74,7 +76,12 @@ async function bootJobTier(): Promise<JobTierHandle> {
   }))
   vi.doMock('@/lib/server/jobs/wake', () => ({
     JOB_WAKE_CHANNEL: 'quackback_job_wake',
-    openWakeListener: async () => ({ close: async () => {}, verify: async () => true }),
+    openWakeListener: async () => ({
+      close: async () => {
+        listenerCloses.n += 1
+      },
+      verify: async () => true,
+    }),
   }))
   vi.doMock('@/lib/server/jobs/deadlines', () => ({
     earliestWorkspaceDeadline: async () => null,
@@ -118,6 +125,7 @@ async function bootJobTier(): Promise<JobTierHandle> {
   return {
     workspaceKey: WORKSPACE_KEY,
     plan,
+    listenerCloses,
     noteActivity: (source = 'request') => idle.noteWorkspaceActivity(WORKSPACE_KEY, source),
     nextRescanAt: (now: number) => idle.nextRescanAt(now, policy, WORKSPACE_KEY),
     status: () => {
@@ -173,6 +181,7 @@ describe('a rescan attach that finds no external work', () => {
     await vi.advanceTimersByTimeAsync(POLL_MS + 1)
     expect(handle.status().attached).toBe(false)
     expect(handle.status().detaches).toBe(1)
+    expect(handle.listenerCloses.n).toBeGreaterThanOrEqual(1)
 
     const wait = Math.max(250, handle.nextRescanAt(Date.now()) - Date.now())
     await vi.advanceTimersByTimeAsync(wait)

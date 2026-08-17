@@ -279,6 +279,7 @@ interface RelayIdleHandle {
   workspaceKey: string
   noteActivity: (source?: 'request' | 'sweep' | 'script' | 'migration') => void
   nextRescanAt: (now: number) => number
+  closes: { listener: number; pool: number }
   status: () => {
     attached: boolean
     detaches: number
@@ -301,6 +302,7 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
 
   const workspaceKey = RELAY_WORKSPACE_KEY
   const ws = workspace(workspaceKey)
+  const closes = { listener: 0, pool: 0 }
 
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
   vi.doMock('@/lib/server/workspaces/mode', () => ({
@@ -319,7 +321,9 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
       sql: {},
       db: { __workspace: workspaceKey },
       secrets: { secretKey: 'k', storage: null },
-      close: async () => {},
+      close: async () => {
+        closes.pool += 1
+      },
     }),
   }))
   vi.doMock('@/lib/server/workspaces/workspace-context', () => ({
@@ -334,7 +338,12 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
   }))
   vi.doMock('@/lib/server/jobs/wake', () => ({
     JOB_WAKE_CHANNEL: 'quackback_job_wake',
-    openWakeListener: async () => ({ close: async () => {}, verify: async () => true }),
+    openWakeListener: async () => ({
+      close: async () => {
+        closes.listener += 1
+      },
+      verify: async () => true,
+    }),
   }))
   vi.doMock('../relay', () => ({
     drainOnce: async () => ({ drained: 0, enqueued: 0, skipped: 0, failed: 0, lagMsSamples: [] }),
@@ -363,6 +372,7 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
 
   return {
     workspaceKey,
+    closes,
     noteActivity: (source = 'request') => idle.noteWorkspaceActivity(workspaceKey, source),
     nextRescanAt: (now: number) => idle.nextRescanAt(now, policy, workspaceKey),
     status: () => {
@@ -413,6 +423,8 @@ describe('a rescan attach that publishes nothing', () => {
     await vi.advanceTimersByTimeAsync(POLL_MS + 1)
     expect(relayIdle.status().attached).toBe(false)
     expect(relayIdle.status().detaches).toBe(1)
+    expect(relayIdle.closes.listener).toBeGreaterThanOrEqual(1)
+    expect(relayIdle.closes.pool).toBeGreaterThanOrEqual(1)
 
     const wait = Math.max(250, relayIdle.nextRescanAt(Date.now()) - Date.now())
     await vi.advanceTimersByTimeAsync(wait)

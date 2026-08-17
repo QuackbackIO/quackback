@@ -23,11 +23,13 @@ const hoisted = vi.hoisted(() => ({
   /** The `onPayload` the production code handed to the listener factory. */
   deliver: null as ((raw: string) => void) | null,
   overflow: new Map<string, unknown>(),
+  opens: 0,
 }))
 
 vi.mock('../pg-listener', () => ({
   REALTIME_CHANNEL: 'quackback_realtime',
   openRealtimeListener: async (input: { onPayload: (raw: string) => void }) => {
+    hoisted.opens += 1
     hoisted.deliver = input.onPayload
     return {
       fetchOverflow: async (_t: string, id: string) => hoisted.overflow.get(id) ?? null,
@@ -62,13 +64,14 @@ vi.mock('@/lib/server/db', () => ({
 vi.mock('../../workspaces/mode', () => ({ isPooledTenancy: () => false }))
 vi.mock('../../config', () => ({ config: { databaseUrl: 'postgresql://x/y' } }))
 
-const { subscribe, publishAsync, closeSubscriber } = await import('../pubsub')
+const { subscribe, publishAsync, closeSubscriber, openListenerCount } = await import('../pubsub')
 const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
 
 beforeEach(() => {
   hoisted.notified = []
   hoisted.deliver = null
   hoisted.overflow.clear()
+  hoisted.opens = 0
 })
 
 afterEach(async () => {
@@ -149,5 +152,16 @@ describe('a subscriber refuses an envelope from another workspace', () => {
     expect(bravo.map((m) => JSON.parse(m))).toEqual(['b'])
     await offA()
     await offB()
+  })
+})
+
+describe('a subscribe with no channels', () => {
+  it('does not open a LISTEN — presence-only streams have nothing to hear', async () => {
+    await closeSubscriber()
+    const off = await withWorkspace('workspace-alpha', () => subscribe([], () => {}))
+    expect(hoisted.opens).toBe(0)
+    expect(openListenerCount()).toBe(0)
+    await off()
+    expect(openListenerCount()).toBe(0)
   })
 })
