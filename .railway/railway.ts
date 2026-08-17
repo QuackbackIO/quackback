@@ -403,10 +403,14 @@ export default defineRailway(() => {
     env: { ...fleetEnv, QUACKBACK_ROLE: 'worker', QUACKBACK_CRON_JOB: 'daily' },
   })
 
+  // One housekeeping job: hourly sweeps, a 23 h daily cycle, then migrator
+  // convergence. cron-daily and quackback-migrator stay declared so `plan`
+  // does not propose destroying them; deleting those services is stop-and-ask
+  // after a green housekeeping run history.
   const cronHourly = service('quackback-cron-hourly', {
     ...appBuild,
     deploy: { restartPolicyType: 'NEVER', cronSchedule: '0 * * * *' },
-    env: { ...fleetEnv, QUACKBACK_ROLE: 'worker', QUACKBACK_CRON_JOB: 'hourly' },
+    env: { ...fleetEnv, QUACKBACK_ROLE: 'worker', QUACKBACK_CRON_JOB: 'housekeeping' },
   })
 
   // The control plane. Built from the OTHER repository and deployed by uploading
