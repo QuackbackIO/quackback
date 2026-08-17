@@ -311,11 +311,9 @@ env $(cat pooled.env) bun run scripts/relay-tier-proof.ts poll-fallback --a <id>
 
 ## 11. Known open
 
-- **The tier's status is not on the readiness probe.** `getRelayTierStatus()`
-  exists and is what the harness reads, but `health.ready.ts` does not consult it,
-  so a replica whose relay is running with zero loops is still ready. The
-  queue-migration piece is already reshaping that file for the same reason on the
-  job tier; wiring both at once is cheaper than wiring them twice.
+- **The tier's status is on the readiness probe.** `health.ready.ts` requires
+  the relay to be running whenever `shouldRunWorkers()` is true, and reports
+  loop/attached counts next to the job tier's.
 - **`RELAY_LEASE_TTL_MS` is a fleet-wide number.** A workspace whose drain
   legitimately outruns 30 s loses leadership and logs `leaseLosses`; nothing is
   lost, but the right answer is a heartbeat inside the drain rather than a larger
