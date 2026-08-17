@@ -77,7 +77,8 @@ import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
-import { nudgeWorker } from '@/lib/server/workspaces/wake-nudge'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
+import { noteDurableWork, SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
 import {
   leaseClaimGroupedSql,
   leaseCompleteSql,
@@ -234,6 +235,15 @@ function currentWorkspaceKey(): string | null {
   return getCurrentWorkspace()?.workspaceKey ?? null
 }
 
+/** Workspace the after-commit scheduler should ring for this insert. */
+function workKeyForSignal(): string | null {
+  return currentWorkspaceKey() ?? (isPooledTenancy() ? null : SINGLE_WORKSPACE_KEY)
+}
+
+function noteInsertedWork(executor?: JobSqlExecutor): void {
+  noteDurableWork(workKeyForSignal(), { committed: !executor })
+}
+
 function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value)
 }
@@ -270,12 +280,11 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   `)
 
   const rows = getExecuteRows<{ job_id: string }>(result)
-  const workspaceKey = currentWorkspaceKey()
-  // A nudge inside an open transaction can fire before the row is visible
-  // (or fire for a row that then rolls back). The table trigger's NOTIFY
-  // is commit-gated; leave the HTTP nudge to the auto-commit path.
-  if (!input.executor && workspaceKey) nudgeWorker(workspaceKey)
-  return { jobId, inserted: rows.length > 0 }
+  const inserted = rows.length > 0
+  // Transactional inserts record the workspace and flush only after the
+  // outer commit. Auto-commit inserts are already visible, so they signal now.
+  if (inserted) noteInsertedWork(input.executor)
+  return { jobId, inserted }
 }
 
 /** How many rows one queue may have claimed in a pass, and for how long. */
@@ -332,8 +341,7 @@ export async function enqueueJobs(
     RETURNING dedupe_key
   `)
   const written = getExecuteRows<{ dedupe_key: string | null }>(result)
-  const workspaceKey = currentWorkspaceKey()
-  if (!opts?.executor && workspaceKey) nudgeWorker(workspaceKey)
+  if (written.length > 0) noteInsertedWork(opts?.executor)
   return {
     inserted: written.length,
     insertedDedupeKeys: written.map((r) => r.dedupe_key).filter((k): k is string => k !== null),

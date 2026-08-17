@@ -15,6 +15,7 @@ import {
   getScopedDatabase,
   WorkspaceScopeMissingError,
 } from '@/lib/server/workspaces/workspace-context'
+import { wrapDbTransaction } from '@/lib/server/workspaces/after-commit'
 
 // Import drizzle-orm operators explicitly to work around Nitro bundler issues
 // with nested barrel exports. If we use `export { asc } from 'drizzle-orm'`,
@@ -143,7 +144,12 @@ export const db: Database = new Proxy({} as Database, {
   get(_target, prop) {
     const database = getDatabase()
     const value = Reflect.get(database as object, prop, database)
-    return typeof value === 'function' ? value.bind(database) : value
+    if (typeof value !== 'function') return value
+    const bound = value.bind(database)
+    // Every domain transaction participates in after-commit workspace
+    // signaling. Nested calls are savepoints; only the outer commit flushes.
+    if (prop === 'transaction') return wrapDbTransaction(bound)
+    return bound
   },
 })
 

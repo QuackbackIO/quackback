@@ -671,16 +671,18 @@ describe('per-queue retention', () => {
 })
 
 describe('transactional enqueue', () => {
-  it('commits the job with the caller transaction and does not nudge until then', async () => {
+  it('commits the job with the caller transaction and signals only after commit', async () => {
     const q = queue('tx-commit')
     currentWorkspaceKey = 'ws-tx'
-    await testDb().transaction(async (tx) => {
+    const { wrapDbTransaction } = await import('@/lib/server/workspaces/after-commit')
+    const transaction = wrapDbTransaction(testDb().transaction.bind(testDb()))
+    await transaction(async (tx) => {
       const { inserted } = await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
       expect(inserted).toBe(true)
       expect(nudgeWorker).not.toHaveBeenCalled()
     })
     expect((await rowsFor(q)).length).toBe(1)
-    expect(nudgeWorker).not.toHaveBeenCalled()
+    expect(nudgeWorker).toHaveBeenCalledWith('ws-tx')
   })
 
   it('leaves no row when the caller transaction rolls back', async () => {
