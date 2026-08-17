@@ -17,15 +17,12 @@ import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
 import { activeSecretKey } from '@/lib/server/secret-key'
 import { logger } from '@/lib/server/logger'
-import {
-  getCurrentWorkspace,
-  getWorkspaceScope,
-  runWithWorkspaceScope,
-} from '@/lib/server/workspaces/workspace-context'
+import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { guardBetterAuthUserCreation } from './signup-policy'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
+import { workspaceAuthTrustedOrigins } from './trusted-origins'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -371,24 +368,11 @@ async function createAuth() {
 
   // Origin allowlist. better-auth rejects an auth-protected POST whose Origin
   // is absent from this list — closed but invisibly, which is why §8 calls
-  // TRUSTED_ORIGINS load-bearing.
-  //
-  // Under pooled tenancy the list is the workspace's own hostnames and nothing
-  // else. The process-wide TRUSTED_ORIGINS is a fleet value: honouring it here
-  // would make one workspace's origin trusted on every other workspace, which is a
-  // cross-workspace weakening of exactly the check that exists to prevent one.
-  const currentWorkspace = getCurrentWorkspace()
-  const trustedOrigins = currentWorkspace
-    ? [
-        baseURL,
-        ...currentWorkspace.routing.hostnames.map((h) => `${new URL(baseURL).protocol}//${h}`),
-      ]
-    : [
-        baseURL,
-        ...(process.env.TRUSTED_ORIGINS?.split(',')
-          .map((s) => s.trim())
-          .filter(Boolean) ?? []),
-      ]
+  // TRUSTED_ORIGINS load-bearing. The list is a function so a custom host
+  // added after the first request is trusted without waiting for an
+  // auth_config_version bump (the cached instance would otherwise keep the
+  // snapshot from the first build).
+  const trustedOrigins = async () => workspaceAuthTrustedOrigins()
 
   // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
   // to keep the createAuth() module-loading dependency graph clean.
