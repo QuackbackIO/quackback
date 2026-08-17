@@ -20,5 +20,8 @@ artifacts
 .claude
 .agents
 scratchpad
+loop-evidence
+COLDER-FLEET-SPEC.html
+PROMPT-*.md
 *.log
 *.tsbuildinfo
