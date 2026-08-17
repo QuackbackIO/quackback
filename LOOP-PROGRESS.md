@@ -1,5 +1,35 @@
 # First-customer Loop Progress
 
+## 2026-08-17 — custom-domain serve (Worker-as-origin)
+
+Builder + live E2E on `saas`. The 522 was not HMAC or Railway
+registration: Cloudflare for SaaS only invokes a Worker on custom
+hosts when the fallback is originless and the zone catch-all route
+is present. That path is now live and proved.
+
+| Unit                       | Sha                       | Critic    | Live?                                                     |
+| -------------------------- | ------------------------- | --------- | --------------------------------------------------------- |
+| App HMAC + env-only hosts  | `d08e55cd1` / `344c80050` | this fire | **yes** `00c94934` / `sha256:a89fa4bb…` `us-east4-eqdc4a` |
+| Worker resolveCustomerHost | CP `3b7cbb1` (Worker)     | this fire | **yes** `quackback-saas-origin`                           |
+| Zone catch-all on create   | CP `b0b53a3`              | this fire | **yes** `f52e8643` SUCCESS (sfo)                          |
+
+**Live E2E PASS** (`loop-evidence/this-fire/custom-domain-e2e.md`):
+
+- Fallback `saas-fallback.quackback.co.uk` **active**, AAAA `100::` proxied.
+- Worker routes: catch-all + `saas-fallback.quackback.co.uk/*`.
+- t1a add `t1a-cd.mortondev.com` **200**; cert ready **37s**; t1e same host **409**.
+- `GET https://t1a-cd.mortondev.com/` **307** `/?sort=trending` then **200**
+  `Feedback - Track1 Alpha` with `x-quackback-saas-edge: 1`.
+- South first-party stayed **307** → Track1 Alpha (`railway-hikari`, no Worker).
+- Forged customer-host header on the Railway origin → **307** `/login`, not the workspace.
+- remove **200**; canonical south restored; custom host **522** after CF delete.
+- Instances **20 → 20**. Did not `apply` `.railway/railway.ts`. No Neon.
+
+Custom domains are no longer blocked on hostname/certificate readiness.
+
+**Plan-matrix §H** last signed **FAIL** on `e48af8e3` (MCP/workflows UI, pricing
+page). Not this unit.
+
 ## 2026-08-17 — channels + email spec (operator named this unit)
 
 Builder+critic on `saas` (not a piece branch). Commits pushed:
@@ -73,13 +103,10 @@ SNS + inbox now live as `sha256:84f4e13d…` web `e48af8e3`.
 New workflow have no plan CTA; `quackback.io/pricing` still disagrees
 with CP enforcement. Instances 20→20.
 
-**Custom domains:** Worker `quackback-saas-origin` + HMAC
-`x-quackback-customer-host` (app `d08e55cd1` / live
-`sha256:a89fa4bb…` web `00c94934`). Zone/Railway hostnames are env
-only (`preserve()`). CP `f3f9c89` attaches `hostname/*` to the Worker
-on add. Originless fallback + Worker: first-party south still 307;
-visitor custom host still **522** (Worker does not reliably run on
-active SaaS custom hostnames). Instances 20.
+**Custom domains:** **PASS** 2026-08-17. Originless fallback
+`saas-fallback.quackback.co.uk` + zone catch-all Worker route. Visitor
+GET on `t1a-cd.mortondev.com` is **200** Track1 Alpha with
+`x-quackback-saas-edge: 1`. See fire note above.
 
 ---
 
@@ -1662,13 +1689,12 @@ Named critic spawned on the same URLs.
     `3de751c01` / `143184d`. ~~8f export/wipe~~ live `e22e3884e` /
     `940c984`. Track 8 units closed.
     15b. ~~Ready CTA~~ `1a39cd7d7` in `02cb4329`.
-16. Cloudflare for SaaS: operator token stored on CP (skip-deploy).
-    Fallback origin `saas-origin.quackback.co.uk` is **active** and
-    CNAMEs (proxied) to the pooled Railway web host — not the old
-    originless `100::` Worker pattern. Customer CNAME target is
-    `customers.quackback.co.uk`. CP client is in `lib/server/cloudflare/`.
-    Identity gateway + Settings Domains card **live** CP `449bd98` /
-    `69cb0353` + app `74024a9cb` / `59da45c2`. Do not print the token.
+16. ~~Cloudflare for SaaS custom-host serve~~ live-proved 2026-08-17.
+    Originless fallback `saas-fallback.quackback.co.uk` + zone
+    catch-all Worker. Customer CNAME target
+    `customers.quackback.co.uk`. Identity gateway + Settings Domains
+    card already live. E2E: add / cert / GET Track1 Alpha / restore
+    (`custom-domain-e2e.md`). Do not print the token.
 17. Plan & billing page: catalogue + invoices from the control plane
     (`GET /api/v1/internal/billing/catalogue` and `/invoices`). Cards
     use public pricing stickers (annual = 10 months). Workspace holds
