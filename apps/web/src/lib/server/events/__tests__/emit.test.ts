@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import postgres from 'postgres'
 import { z } from 'zod'
 
 // A real, non-transactional pool that bypasses config.ts's full env validation
@@ -26,7 +29,8 @@ vi.mock('@/lib/server/workspaces/workspace-context', async (importOriginal) => (
   getCurrentWorkspace: () => ({ workspaceKey: 'ws_emit' }),
 }))
 
-import { db, events, auditLog, eq, and } from '@/lib/server/db'
+import { db, events, auditLog, eq, and, sql } from '@/lib/server/db'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { createId } from '@quackback/ids'
 import { emit, inherit } from '../emit'
 import type { EventDefinition } from '../catalogue/define'
@@ -62,6 +66,25 @@ const plainDef: EventDefinition<{ postId: string }> = {
 }
 
 describe('emit()', () => {
+  beforeAll(async () => {
+    const url =
+      process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
+    const admin = postgres(url, { max: 1, onnotice: () => {} })
+    try {
+      await admin.unsafe(
+        readFileSync(
+          path.resolve(
+            __dirname,
+            '../../../../../../../packages/db/drizzle/0269_event_dispatch_owner.sql'
+          ),
+          'utf8'
+        )
+      )
+    } finally {
+      await admin.end({ timeout: 2 })
+    }
+  })
+
   it('inserts exactly one events row with the envelope fields', async () => {
     const entityId = createId('post')
     const eventId = await db.transaction((tx) =>
@@ -85,7 +108,13 @@ describe('emit()', () => {
     expect((row.context as { depth: number; source: string }).depth).toBe(0)
     expect((row.context as { source: string }).source).toBe('api')
     expect(row.publishedAt).toBeNull()
-    expect(nudgeWorker).toHaveBeenCalledWith('ws_emit')
+    expect(row.dispatchOwner).toBe('job')
+    expect(nudgeWorker).not.toHaveBeenCalled()
+    const jobs = await db.execute(sql`
+      SELECT queue FROM job_queue
+      WHERE queue = 'event-dispatch' AND payload->>'eventId' = ${eventId}
+    `)
+    expect(getExecuteRows(jobs).length).toBeGreaterThan(0)
   })
 
   it('rolls back the event when the surrounding transaction aborts', async () => {
@@ -103,6 +132,13 @@ describe('emit()', () => {
 
     const rows = await db.select().from(events).where(eq(events.entityId, entityId))
     expect(rows).toHaveLength(0)
+    const leftover = await db.execute(sql`
+      SELECT 1 FROM job_queue WHERE queue = 'event-dispatch'
+        AND payload->>'eventId' IN (
+          SELECT event_id FROM events WHERE entity_id = ${entityId}
+        )
+    `)
+    expect(getExecuteRows(leftover).length).toBe(0)
   })
 
   it('rejects a payload that fails the catalogue zod schema', async () => {

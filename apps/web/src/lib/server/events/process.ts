@@ -110,7 +110,8 @@ export async function processEvent(event: EventData): Promise<void> {
  * for effectively-once delivery. One statement, whatever the fan-out.
  */
 export async function enqueueHookJobsWithIds(
-  jobs: Array<{ name: string; data: HookJobData; jobId: string }>
+  jobs: Array<{ name: string; data: HookJobData; jobId: string }>,
+  opts?: { executor?: import('@/lib/server/jobs/job-queue').JobSqlExecutor }
 ): Promise<void> {
   if (jobs.length === 0) return
   await enqueueJobs(
@@ -119,7 +120,8 @@ export async function enqueueHookJobsWithIds(
       payload: data as unknown as Record<string, unknown>,
       dedupeKey: jobId,
       maxAttempts: HOOK_RETRY_ATTEMPTS,
-    }))
+    })),
+    opts
   )
 }
 

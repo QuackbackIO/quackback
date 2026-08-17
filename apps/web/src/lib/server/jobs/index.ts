@@ -25,6 +25,7 @@ export {
   type ClaimedJob,
   type EnqueueJobInput,
   type EnqueueJobResult,
+  type JobSqlExecutor,
   type FailOutcome,
   type JobLookup,
   type QueueClaimSpec,

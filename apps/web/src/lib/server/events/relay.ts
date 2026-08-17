@@ -22,7 +22,7 @@
  * so they are not lost or retried.
  */
 import crypto from 'crypto'
-import { db, events, eq, isNull, asc, sql, type Transaction } from '@/lib/server/db'
+import { db, events, eq, isNull, and, asc, sql, type Transaction } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
 import { enqueueHookJobsWithIds } from './process'
@@ -81,7 +81,8 @@ async function markPublished(id: bigint, executor: Transaction | typeof db = db)
  */
 export async function earliestUndeliveredOutboxAt(): Promise<Date | null> {
   const result = await db.execute(sql`
-    SELECT min(occurred_at) AS occurred_at FROM events WHERE published_at IS NULL
+    SELECT min(occurred_at) AS occurred_at FROM events
+    WHERE published_at IS NULL AND dispatch_owner = 'relay'
   `)
   const rows = getExecuteRows<{ occurred_at: Date | string | null }>(result)
   const value = rows[0]?.occurred_at ?? null
@@ -164,7 +165,7 @@ export async function drainOnce(
   const rows = await db
     .select()
     .from(events)
-    .where(isNull(events.publishedAt))
+    .where(and(isNull(events.publishedAt), eq(events.dispatchOwner, 'relay')))
     .orderBy(asc(events.id))
     .limit(batchSize)
 

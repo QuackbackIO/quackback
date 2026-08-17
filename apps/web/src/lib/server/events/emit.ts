@@ -6,14 +6,15 @@
  * payload against the catalogue definition, INSERTs one `events` row on the
  * passed transaction (so the event commits atomically with the mutation), writes
  * an `audit_log` row in the same transaction when the definition opts in, and
- * fires the commit-time doorbell (`pg_notify 'outbox_wake'`) so the relay wakes
- * immediately. It NEVER enqueues BullMQ — the relay is the sole enqueuer.
+ * inserts an `event-dispatch` job_queue row in that same transaction. The
+ * job_queue trigger NOTIFYs on commit. Legacy unpublished rows stay
+ * `dispatch_owner = relay` and are still drained by the outbox relay.
  */
-import { db, events, auditLog, sql, type Database, type Transaction } from '@/lib/server/db'
+import { db, events, auditLog, type Database, type Transaction } from '@/lib/server/db'
 import { createId, type EvtId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
-import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
-import { nudgeWorker } from '@/lib/server/workspaces/wake-nudge'
+import { enqueueJob } from '@/lib/server/jobs/job-queue'
+import { EVENT_DISPATCH_QUEUE } from './event-dispatch-queue'
 import type { EventDefinition } from './catalogue/define'
 import type { DomainEvent, EventActorType, EventContext } from './envelope'
 
@@ -60,6 +61,7 @@ export async function emit<P>(
     context: context as unknown as Record<string, unknown>,
     schemaVersion: def.version,
     dedupeKey: input.dedupeKey ?? null,
+    dispatchOwner: 'job',
   })
 
   // Compliance audit rows are written in the SAME transaction when the
@@ -79,15 +81,15 @@ export async function emit<P>(
     })
   }
 
-  // Commit-time doorbell: Postgres delivers this NOTIFY only if the tx commits,
-  // so the relay is woken exactly when there is a durably-committed event to
-  // drain — and never for a rolled-back one.
-  await tx.execute(sql`select pg_notify('outbox_wake', '')`)
-
-  // Cross-process doorbell. Fire-and-forget — never awaited — so a hung
-  // worker cannot hold this transaction or the request that opened it.
-  const workspaceKey = getCurrentWorkspace()?.workspaceKey
-  if (workspaceKey) nudgeWorker(workspaceKey)
+  // Same transaction as the event (and audit) row. Rollback leaves no
+  // dispatch job. The job_queue wake trigger fires only if this commits.
+  await enqueueJob({
+    queue: EVENT_DISPATCH_QUEUE,
+    payload: { eventId },
+    dedupeKey: `event-dispatch:${eventId}`,
+    maxAttempts: 10,
+    executor: tx,
+  })
 
   return eventId
 }

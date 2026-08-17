@@ -11,10 +11,10 @@ import { join, basename } from 'node:path'
  * repeat into a no-op. A module that reached the queue directly would supply no
  * such key, and its jobs would be delivered again on every re-drain.
  *
- * So `process.ts` owns the enqueue: it holds the queue name, the key derivation
- * and the attempt limit, and every other module in this folder goes through its
- * helpers. This gate fails if any other `events/` module imports the job queue's
- * enqueue functions.
+ * So `process.ts` owns hook enqueue onto `events`. `emit.ts` writes the
+ * `event-dispatch` job in the same transaction as the outbox row — a
+ * different queue, same primitive. This gate fails if any other `events/`
+ * module imports the job queue's enqueue functions.
  *
  * The construct it names is the one that exists **now**. An earlier version of
  * this gate looked for a BullMQ `Queue` and `addBulk`; the package is banned
@@ -28,7 +28,7 @@ import { join, basename } from 'node:path'
 const EVENTS_DIR = join(__dirname, '..')
 
 /** The module that owns the queue: name, dedupe key, attempt limit. */
-const QUEUE_OWNERS = new Set(['process.ts'])
+const QUEUE_OWNERS = new Set(['process.ts', 'emit.ts'])
 
 /** An import of the queue's write side, in any of the spellings that reach it. */
 const ENQUEUE_IMPORT = /\b(?:enqueueJobs?|cancelJob)\b[^\n]*\bfrom\s+['"][^'"]*jobs\/job-queue['"]/
@@ -69,12 +69,12 @@ describe('the enqueue gate', () => {
     expect(walked.length).toBeGreaterThan(20)
     expect(walked.some((f) => basename(f) === 'relay.ts')).toBe(true)
 
-    expect(
-      ENQUEUE_IMPORT.test("import { enqueueJob } from '@/lib/server/jobs/job-queue'")
-    ).toBe(true)
-    expect(
-      ENQUEUE_IMPORT.test("import { enqueueJobs } from '@/lib/server/jobs/job-queue'")
-    ).toBe(true)
+    expect(ENQUEUE_IMPORT.test("import { enqueueJob } from '@/lib/server/jobs/job-queue'")).toBe(
+      true
+    )
+    expect(ENQUEUE_IMPORT.test("import { enqueueJobs } from '@/lib/server/jobs/job-queue'")).toBe(
+      true
+    )
     // The near miss: going through the owner's helper is the sanctioned path.
     expect(ENQUEUE_IMPORT.test("import { enqueueHookJobsWithIds } from './process'")).toBe(false)
   })
