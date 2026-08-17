@@ -8,21 +8,18 @@
  * | Service | Role | Connections | Sleeps |
  * | --- | --- | --- | --- |
  * | `quackback` | `all` | workspace **pooled** endpoints, evicted after 45 s idle. Job wake is the connectionless scheduler: Node timers only, no LISTEN, no idle tenant sockets. | no — the process is always warm; tenant computes still suspend |
- * | `quackback-worker` | `worker` | still declared so `plan` is not a destroy. Live delete is a later apply after soak. | — |
  * | `quackback-cron-*` | `worker`, one-shot | whatever the sweep touches, for the length of the run | n/a — it exits |
  * | `quackback-migrator` | `migrator`, one-shot | the **direct** endpoint of each workspace it claims | n/a — it exits |
  *
- * All five run the same image, pinned by digest. See APP_IMAGE.
+ * App services run the same image, pinned by digest. See APP_IMAGE.
  *
  * `LISTEN` is still silently lost through a transaction-mode pooler (§7.3,
  * measured: a NOTIFY is never delivered, at any concurrency). That used to
  * force a separate worker process on direct connections. The connectionless
  * scheduler does not LISTEN and does not hold a tenant connection between
  * drains, so it can share the HTTP process. Cloud `quackback` is therefore
- * `QUACKBACK_ROLE=all` + `QUACKBACK_WAKE_MODE=scheduler`.
- *
- * `quackback-worker` stays in this file so an apply is variable changes, not
- * a destroy. Deleting the live worker is a later apply after soak.
+ * `QUACKBACK_ROLE=all` + `QUACKBACK_WAKE_MODE=scheduler`. The dedicated
+ * worker replica has been removed.
  *
  * No database appears here. Workspace databases are Neon, one project each, and
  * the control-plane registry is a Neon project too — see the note in the body
