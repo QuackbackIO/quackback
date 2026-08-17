@@ -99,6 +99,13 @@ import {
   type RunnerConfig,
 } from './runner'
 import { openWakeListener, type WakeListener } from './wake'
+import {
+  getProcessScheduler,
+  startWorkspaceScheduler,
+  stopWorkspaceScheduler,
+  wakeMode,
+} from './scheduler'
+import { onDurableWorkCommitted } from '@/lib/server/workspaces/after-commit'
 
 const log = logger.child({ component: 'job-tier' })
 
@@ -168,6 +175,7 @@ const stats = new Map<string, LoopStats>()
 let running = false
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
 let unsubscribeActivity: (() => void) | null = null
+let unsubscribeCommit: (() => void) | null = null
 /** When this process last read the fleet's workspace list from the control database. */
 let lastFleetReadAt = 0
 
@@ -853,19 +861,38 @@ export async function startJobTier(): Promise<void> {
   running = true
   const cfg = runnerConfig()
   const idle = workspaceIdlePolicy()
+  const mode = wakeMode()
 
   // Import every handler module before a single workspace scope is open, so no
   // module can execute its top level under one workspace's connection. See
   // runner.ts's primeJobHandlers for the shape this is guarding against.
   await primeJobHandlers()
 
+  unsubscribeCommit = onDurableWorkCommitted((workspaceKey) => {
+    signalWorkspace(workspaceKey)
+  })
+
+  if (mode === 'scheduler' || mode === 'both') {
+    // `both` still has LISTEN loops, so a second boot scan would double-connect
+    // every tenant. Recovery is the crash window for scheduler-only.
+    await startWorkspaceScheduler({ recover: mode === 'scheduler' })
+  }
+
+  if (mode === 'scheduler') {
+    log.info({ wake_mode: mode }, 'job tier started (scheduler-only; no LISTEN loops)')
+    return
+  }
+
   // A scope opened by anything that is not a tier means the workspace's compute is
   // already awake and being used, so a detached loop should come straight back.
-  unsubscribeActivity = onWorkspaceActivity((workspaceKey) => loops.get(workspaceKey)?.signal())
+  unsubscribeActivity = onWorkspaceActivity((workspaceKey) => signalWorkspace(workspaceKey))
 
   if (!config.isPooledTenancy) {
     startSingleWorkspaceLoop(cfg, idle)
-    log.info({ poll_interval_ms: cfg.pollIntervalMs }, 'job tier started (single workspace)')
+    log.info(
+      { poll_interval_ms: cfg.pollIntervalMs, wake_mode: mode },
+      'job tier started (single workspace)'
+    )
     return
   }
 
@@ -878,6 +905,7 @@ export async function startJobTier(): Promise<void> {
       poll_interval_ms: cfg.pollIntervalMs,
       idle_detach_ms: idle.detachAfterMs,
       idle_rescan_ms: idle.rescanIntervalMs,
+      wake_mode: mode,
     },
     'job tier started (pooled)'
   )
@@ -891,6 +919,9 @@ export async function stopJobTier(): Promise<void> {
   }
   unsubscribeActivity?.()
   unsubscribeActivity = null
+  unsubscribeCommit?.()
+  unsubscribeCommit = null
+  await stopWorkspaceScheduler()
   const all = [...loops.values()]
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
@@ -921,9 +952,10 @@ export function getJobTierStatus(): JobTierStatus {
  */
 export function signalWorkspace(workspaceKey: string): boolean {
   const loop = loops.get(workspaceKey)
-  if (!loop) return false
-  loop.signal()
-  return true
+  if (loop) loop.signal()
+  const scheduler = getProcessScheduler()
+  if (scheduler) scheduler.signal(workspaceKey)
+  return Boolean(loop || scheduler)
 }
 
 /**

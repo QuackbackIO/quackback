@@ -91,3 +91,16 @@ export {
   stopJobTier,
   type JobTierStatus,
 } from './tier'
+
+export {
+  NODE_MAX_TIMEOUT_MS,
+  createWorkspaceScheduler,
+  getProcessScheduler,
+  recoverPendingWork,
+  runWorkspaceUntilQuiescent,
+  startWorkspaceScheduler,
+  stopWorkspaceScheduler,
+  wakeMode,
+  type SchedulerClock,
+  type WorkspaceScheduler,
+} from './scheduler'
