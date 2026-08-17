@@ -154,6 +154,18 @@ export interface EnqueueJobInput {
    * this; a retry would double-import a customer's data.
    */
   maxAttempts?: number
+  /**
+   * Caller's transaction (or any drizzle executor). When set, the INSERT
+   * participates in that transaction: a rollback leaves no job row, and this
+   * function does not fire the HTTP nudge (NOTIFY from the job_queue trigger
+   * is commit-gated). Omit for the historical auto-commit path.
+   */
+  executor?: JobSqlExecutor
+}
+
+/** Narrow enough for `db` and a drizzle transaction. */
+export type JobSqlExecutor = {
+  execute: (query: unknown) => Promise<unknown>
 }
 
 export interface EnqueueJobResult {
@@ -241,7 +253,8 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
     throw new Error(`maxAttempts must be an integer >= 1, received ${String(input.maxAttempts)}`)
   }
 
-  const result = await db.execute(sql`
+  const executor = input.executor ?? db
+  const result = await executor.execute(sql`
     INSERT INTO job_queue (job_id, queue, dedupe_key, workspace_key, payload, run_at, max_attempts)
     VALUES (
       ${jobId},
@@ -258,7 +271,10 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
 
   const rows = getExecuteRows<{ job_id: string }>(result)
   const workspaceKey = currentWorkspaceKey()
-  if (workspaceKey) nudgeWorker(workspaceKey)
+  // A nudge inside an open transaction can fire before the row is visible
+  // (or fire for a row that then rolls back). The table trigger's NOTIFY
+  // is commit-gated; leave the HTTP nudge to the auto-commit path.
+  if (!input.executor && workspaceKey) nudgeWorker(workspaceKey)
   return { jobId, inserted: rows.length > 0 }
 }
 
@@ -284,7 +300,8 @@ export interface QueueClaimSpec {
  * enqueue from a re-drain.
  */
 export async function enqueueJobs(
-  inputs: readonly EnqueueJobInput[]
+  inputs: readonly EnqueueJobInput[],
+  opts?: { executor?: JobSqlExecutor }
 ): Promise<{ inserted: number; insertedDedupeKeys: string[] }> {
   if (inputs.length === 0) return { inserted: 0, insertedDedupeKeys: [] }
 
@@ -303,7 +320,8 @@ export async function enqueueJobs(
     }
   })
 
-  const result = await db.execute(sql`
+  const executor = opts?.executor ?? db
+  const result = await executor.execute(sql`
     INSERT INTO job_queue (job_id, queue, dedupe_key, workspace_key, payload, run_at, max_attempts)
     SELECT x.job_id, x.queue, x.dedupe_key, ${currentWorkspaceKey()}, x.payload, x.run_at, x.max_attempts
     FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(
@@ -315,7 +333,7 @@ export async function enqueueJobs(
   `)
   const written = getExecuteRows<{ dedupe_key: string | null }>(result)
   const workspaceKey = currentWorkspaceKey()
-  if (workspaceKey) nudgeWorker(workspaceKey)
+  if (!opts?.executor && workspaceKey) nudgeWorker(workspaceKey)
   return {
     inserted: written.length,
     insertedDedupeKeys: written.map((r) => r.dedupe_key).filter((k): k is string => k !== null),

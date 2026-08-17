@@ -669,3 +669,29 @@ describe('per-queue retention', () => {
     expect(rows.map((r) => r.status)).toEqual(['failed'])
   })
 })
+
+describe('transactional enqueue', () => {
+  it('commits the job with the caller transaction and does not nudge until then', async () => {
+    const q = queue('tx-commit')
+    currentWorkspaceKey = 'ws-tx'
+    await testDb().transaction(async (tx) => {
+      const { inserted } = await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
+      expect(inserted).toBe(true)
+      expect(nudgeWorker).not.toHaveBeenCalled()
+    })
+    expect((await rowsFor(q)).length).toBe(1)
+    expect(nudgeWorker).not.toHaveBeenCalled()
+  })
+
+  it('leaves no row when the caller transaction rolls back', async () => {
+    const q = queue('tx-rollback')
+    await expect(
+      testDb().transaction(async (tx) => {
+        await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
+        throw new Error('boom')
+      })
+    ).rejects.toThrow('boom')
+    expect((await rowsFor(q)).length).toBe(0)
+    expect(nudgeWorker).not.toHaveBeenCalled()
+  })
+})
