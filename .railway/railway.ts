@@ -225,6 +225,12 @@ export default defineRailway(() => {
     // out of band. Undeclared, it was on the delete list of every apply.
     QUACKBACK_FLEET_INTERNAL_TOKEN: preserve(),
 
+    // Control-plane projection public key. Live on every app service; the
+    // matching private key is on the control plane. Undeclared, the next
+    // apply deletes it from all five and billing/projection verify fails open
+    // or closed depending on the call site.
+    QUACKBACK_CP_PROJECTION_PUBLIC_KEY: preserve(),
+
     // AI via OpenRouter. The key is set out of band; the endpoint and models
     // are facts about this fleet. Without key + base URL + at least one model,
     // every AI feature is off (#180). Declared here so the next apply does not
@@ -309,7 +315,15 @@ export default defineRailway(() => {
     ...appBuild,
     healthcheckPath: '/api/health/ready',
     healthcheckTimeout: 300,
-    env: { ...fleetEnv, QUACKBACK_ROLE: 'web' },
+    env: {
+      ...fleetEnv,
+      QUACKBACK_ROLE: 'web',
+      // Live on web + worker only. Do not hoist into fleetEnv: preserve()
+      // cannot bootstrap a value onto cron/migrator, which do not hold it.
+      QUACKBACK_CONTROL_PLANE_URL: preserve(),
+      // Web-only: the public /api/storage proxy. Worker never serves it.
+      S3_PROXY: preserve(),
+    },
   })
 
   // The conductor (§1.3): one always-warm tier running the relay for every
@@ -319,7 +333,11 @@ export default defineRailway(() => {
     ...appBuild,
     healthcheckPath: '/api/health/ready',
     healthcheckTimeout: 300,
-    env: { ...fleetEnv, QUACKBACK_ROLE: 'worker' },
+    env: {
+      ...fleetEnv,
+      QUACKBACK_ROLE: 'worker',
+      QUACKBACK_CONTROL_PLANE_URL: preserve(),
+    },
   })
 
   // The schema step of a rollout (§10.3), and the first half of §10.8's deploy
@@ -414,7 +432,9 @@ export default defineRailway(() => {
       ADMIN_EMAILS: preserve(),
       BASE_URL: preserve(),
       BETTER_AUTH_SECRET: preserve(),
+      BILLING_PROJECTION_PRIVATE_KEY: preserve(),
       CLOUDFLARE_ACCOUNT_ID: preserve(),
+      CLOUDFLARE_API_TOKEN: preserve(),
       // The queue carrying outbound delivery events, and the credential that
       // pulls from it. Read AND write, because acking a message mutates the
       // queue, so a read-only consumer would hold every event until its
@@ -422,6 +442,10 @@ export default defineRailway(() => {
       CLOUDFLARE_EMAIL_EVENTS_QUEUE_ID: preserve(),
       CLOUDFLARE_EMAIL_TOKEN: preserve(),
       CLOUDFLARE_QUEUES_TOKEN: preserve(),
+      CLOUDFLARE_SAAS_CNAME_TARGET: preserve(),
+      CLOUDFLARE_SAAS_FALLBACK_ORIGIN: preserve(),
+      CLOUDFLARE_SAAS_WORKER_SCRIPT: preserve(),
+      CLOUDFLARE_ZONE_ID: preserve(),
       CLUSTER_ENV: preserve(),
       CP_ROLE: preserve(),
       EMAIL_FROM: preserve(),
@@ -470,6 +494,7 @@ export default defineRailway(() => {
       // here into the suppression list, so losing this name stops the fleet
       // learning that an address is undeliverable.
       SES_EVENTS_QUEUE_URL: preserve(),
+      STRIPE_PUBLISHABLE_KEY: preserve(),
       STRIPE_SECRET_KEY: preserve(),
       STRIPE_WEBHOOK_SECRET: preserve(),
     },
