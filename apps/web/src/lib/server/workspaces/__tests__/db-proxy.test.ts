@@ -53,7 +53,7 @@ function makeHandle(label: string) {
     seenThis: null as unknown,
     plainValue: `value-of-${label}`,
     select(this: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       ;(this as any).seenThis = this
       return this
     },

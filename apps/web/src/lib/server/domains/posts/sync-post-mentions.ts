@@ -13,7 +13,7 @@
  *  - After dispatch, mark notifiedAt = now() so future edits don't re-fire.
  */
 
-// Per eslint.config.js — app files must import schema via @/lib/server/db,
+// Per .oxlintrc.json — app files must import schema via @/lib/server/db,
 // NOT directly from @quackback/db.
 import { db, postMentions, principal, eq, and, inArray } from '@/lib/server/db'
 import { dispatchPostMentioned, type EventActor } from '../../events/dispatch'

@@ -19,10 +19,16 @@ import postgres from 'postgres'
 // The lint rule reserves @quackback/db/client for db.ts; test fixtures that
 // need their own short-lived connection are sanctioned callers, same as
 // db-test-fixture.ts and jobs/__tests__/harness.ts.
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import { createDbFromSql, type Database } from '@quackback/db/client'
-import { createWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
-import { makeWorkspaceDescriptor, makeWorkspaceSecrets } from '@/lib/server/__tests__/workspace-scope'
+import {
+  createWorkspaceScope,
+  runWithWorkspaceScope,
+} from '@/lib/server/workspaces/workspace-context'
+import {
+  makeWorkspaceDescriptor,
+  makeWorkspaceSecrets,
+} from '@/lib/server/__tests__/workspace-scope'
 
 const URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'

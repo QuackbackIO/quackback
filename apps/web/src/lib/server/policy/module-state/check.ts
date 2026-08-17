@@ -6,7 +6,7 @@
  * things: an unledgered site, a stale entry, or a category the source
  * contradicts.
  */
-import * as ts from 'typescript'
+import * as ts from '@typescript/typescript6'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { scanRoots, siteId, type ScanRoot, type StateSite } from './scan'

@@ -181,9 +181,9 @@ function expectDTOFrom(row: Record<string, unknown>): Partial<AssistantPendingAc
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const approve = (data: any) => approveAssistantActionFn({ data })
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const reject = (data: any) => rejectAssistantActionFn({ data })
 
 beforeEach(() => {

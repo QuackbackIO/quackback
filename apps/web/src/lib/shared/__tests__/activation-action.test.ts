@@ -158,7 +158,7 @@ describe('selectActivationAction', () => {
       startingPoint: {
         outcome: 'customer_support' as const,
         resourceType: 'messenger' as const,
-        resourceId: null,
+        resourceId: undefined,
         source: 'wizard' as const,
         resolution: 'created' as const,
         completedAt: '2026-08-14T12:00:00.000Z',

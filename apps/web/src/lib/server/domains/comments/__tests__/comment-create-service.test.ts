@@ -207,7 +207,7 @@ async function mockPostWithApproval(approvalComments: boolean) {
         },
       },
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal fixture
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any -- minimal fixture
   } as any)
 }
 
@@ -419,7 +419,7 @@ describe('createComment — soft-deleted board is rejected as POST_NOT_FOUND', (
           moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
         },
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal fixture
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any -- minimal fixture
     } as any)
 
     const { createComment } = await import('../comment.service')

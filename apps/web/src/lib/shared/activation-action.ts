@@ -6,10 +6,7 @@ import {
 } from '@/lib/shared/launch-checklist'
 
 export type ActivationSurface =
-  | 'onboarding_handoff'
-  | 'feedback_empty'
-  | 'conversation_empty'
-  | 'launch_plan'
+  'onboarding_handoff' | 'feedback_empty' | 'conversation_empty' | 'launch_plan'
 
 export type ActivationAction =
   | {
@@ -195,7 +192,7 @@ export function selectActivationAction({
  * a copyable board link is a share action, not the only exit.
  */
 export function resolveOnboardingHandoffCtas(input: Omit<ActivationActionContext, 'surface'>): {
-  primary: ActivationAction
+  primary: Exclude<ActivationAction, { kind: 'copy' }>
   share: Extract<ActivationAction, { kind: 'copy' }> | null
 } {
   const selected = selectActivationAction({ ...input, surface: 'onboarding_handoff' })

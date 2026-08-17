@@ -66,7 +66,7 @@ export class QuackbackClient {
       if (cursor) queryParams.cursor = cursor
 
       const response = await this.get<ApiResponse<T[]>>(path, queryParams)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- response shape varies by endpoint
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any -- response shape varies by endpoint
       const raw = response as Record<string, any>
       const data = raw.data ?? response
       if (Array.isArray(data)) {

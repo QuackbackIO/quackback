@@ -54,7 +54,7 @@ export interface ActivityRow {
   // Stored rows may contain retired activity values. Reads keep the raw string,
   // while CreateActivityOpts only accepts currently supported variants.
   type: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   metadata: Record<string, any>
   createdAt: Date
   actorName: string | null

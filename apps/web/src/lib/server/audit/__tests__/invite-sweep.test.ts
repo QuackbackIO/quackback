@@ -21,13 +21,13 @@ const mockDbReturning = vi.fn()
 // update chain: db.update(table).set({}).where(...).returning(...)
 mockDbWhere.mockReturnValue({ returning: mockDbReturning })
 mockDbSet.mockReturnValue({ where: mockDbWhere })
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const mockDbUpdate = vi.fn((_table?: any) => ({ set: mockDbSet }))
 
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: { invitation: { findMany: (a: unknown) => mockFindMany(a) } },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     update: (a: unknown) => mockDbUpdate(a as any),
   },
   invitation: { kind: 'kind', status: 'status', expiresAt: 'expiresAt', id: 'id' },

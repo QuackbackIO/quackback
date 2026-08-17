@@ -2,14 +2,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-const save = vi.fn(async () => undefined)
+const save = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
 }))
 
 vi.mock('@/lib/server/functions/settings', () => ({
-  updateDeveloperConfigFn: (...args: unknown[]) => save(...args),
+  updateDeveloperConfigFn: (arg: unknown) => save(arg),
 }))
 
 vi.mock('@/components/admin/upgrade', () => ({

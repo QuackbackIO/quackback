@@ -22,7 +22,7 @@
 import { describe, it, expect } from 'vitest'
 import { extractSites, mutatesBinding, type StateSite } from '../scan'
 import { readsRealTenancyMode } from '../check'
-import * as ts from 'typescript'
+import * as ts from '@typescript/typescript6'
 
 function sites(source: string): StateSite[] {
   return extractSites('probe.ts', source)

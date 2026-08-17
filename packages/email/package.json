@@ -17,15 +17,15 @@
     "./ses-identity": "./src/ses-identity.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-sesv2": "^3.1107.0",
+    "@aws-sdk/client-sesv2": "^3.1111.0",
     "@quackback/logger": "workspace:*",
-    "@react-email/components": "^1.0.11",
-    "nodemailer": "^9.0.1",
-    "react": "^19.2.4",
-    "resend": "^6.10.0"
+    "@react-email/components": "^1.0.12",
+    "nodemailer": "^9.0.5",
+    "react": "^19.2.8",
+    "resend": "^6.20.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.1",
-    "@types/react": "^19.2.14"
+    "@types/react": "^19.2.18"
   }
 }

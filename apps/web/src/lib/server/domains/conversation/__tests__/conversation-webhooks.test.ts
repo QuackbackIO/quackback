@@ -17,12 +17,14 @@ const dispatch = vi.hoisted(() => ({
 vi.mock('@/lib/server/events/dispatch', () => dispatch)
 
 const defaultSla = vi.hoisted(() => ({
-  getDefaultSlaPolicySettings: vi.fn(async () => ({ policyId: null })),
+  getDefaultSlaPolicySettings: vi.fn(async (): Promise<{ policyId: string | null }> => ({
+    policyId: null,
+  })),
 }))
 vi.mock('@/lib/server/domains/settings/settings.sla-default', () => defaultSla)
 
 const slaService = vi.hoisted(() => ({
-  applySlaToConversation: vi.fn(async () => ({})),
+  applySlaToConversation: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/sla/sla.service', () => slaService)
 

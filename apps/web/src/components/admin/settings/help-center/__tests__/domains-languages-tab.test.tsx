@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { DomainsLanguagesTab } from '../domains-languages-tab'
+import { DEFAULT_HELP_CENTER_CONFIG } from '@/lib/server/domains/settings/settings.types'
 
 const { mockBillingEnabled } = vi.hoisted(() => ({
   mockBillingEnabled: { current: false },
@@ -43,10 +44,9 @@ vi.mock('@/lib/server/functions/help-center', () => ({
 }))
 
 const config = {
+  ...DEFAULT_HELP_CENTER_CONFIG,
   domain: { domain: null, verifiedAt: null },
-  seo: { indexable: false },
-  locales: { default: 'en' as const, additional: [], chrome: {} },
-  autoTranslate: { enabled: false, protectedTerms: [] },
+  seo: { ...DEFAULT_HELP_CENTER_CONFIG.seo, indexable: false },
 }
 
 describe('DomainsLanguagesTab', () => {

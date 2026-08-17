@@ -14,6 +14,7 @@ import {
 } from '../ses'
 import type { SesSendClient } from '../ses'
 import { getEmailProvider, sendRawEmail, sendStatusChangeEmail } from '../index'
+import { sendingAs } from './brands'
 
 /**
  * The SES rung, offline. Every send here goes through an injected client or a
@@ -301,10 +302,20 @@ describe('configuration that cannot send', () => {
 
   it('refuses a send with no region, permanently, and names the variable', async () => {
     await expect(
-      sendRawEmail({ from: 'a@platform.test', to: 'c@d.test', subject: 's', html: '<p>hi</p>' })
+      sendRawEmail({
+        from: sendingAs('a@platform.test'),
+        to: 'c@d.test',
+        subject: 's',
+        html: '<p>hi</p>',
+      })
     ).rejects.toMatchObject({ name: 'SesEmailError', retryable: false })
     await expect(
-      sendRawEmail({ from: 'a@platform.test', to: 'c@d.test', subject: 's', html: '<p>hi</p>' })
+      sendRawEmail({
+        from: sendingAs('a@platform.test'),
+        to: 'c@d.test',
+        subject: 's',
+        html: '<p>hi</p>',
+      })
     ).rejects.toThrow(/EMAIL_SES_REGION/)
     expect(sdkSend).not.toHaveBeenCalled()
   })
@@ -682,7 +693,12 @@ describe('provider text is scrubbed before it can be kept', () => {
     const error = await sendViaSes(
       { from: 'hi@platform.test', to: 'victim@customer.test', subject: 's' },
       DEPS(client)
-    ).catch((e: unknown) => e as SesEmailError)
+    ).then(
+      () => {
+        throw new Error('expected SES to reject')
+      },
+      (e: unknown) => e as SesEmailError
+    )
 
     expect(error.message).not.toContain('victim@customer.test')
     expect(error.message).toContain('[address]')
@@ -773,7 +789,7 @@ describe('dispatch on the ses rung', () => {
 
   it('strips Message-ID but sends In-Reply-To and References', async () => {
     const result = await sendRawEmail({
-      from: 'Support <support@platform.test>',
+      from: sendingAs('Support <support@platform.test>'),
       to: 'customer@example.test',
       subject: 'Re: your question',
       html: '<p>hi</p>',
@@ -798,7 +814,7 @@ describe('dispatch on the ses rung', () => {
     // is the region whose host finishes them.
     process.env.EMAIL_SES_REGION = 'eu-west-2'
     const result = await sendRawEmail({
-      from: 'Support <support@platform.test>',
+      from: sendingAs('Support <support@platform.test>'),
       to: 'customer@example.test',
       subject: 's',
       html: '<p>hi</p>',
@@ -818,7 +834,7 @@ describe('dispatch on the ses rung', () => {
 
   it('keeps a display-name From as one RFC 5322 string', async () => {
     await sendRawEmail({
-      from: 'Support <support@platform.test>',
+      from: sendingAs('Support <support@platform.test>'),
       to: 'customer@example.test',
       subject: 's',
       html: '<p>hi</p>',
@@ -832,7 +848,7 @@ describe('dispatch on the ses rung', () => {
     // whatever the operator typed into configuration, and no route in
     // validates it.
     await sendRawEmail({
-      from: 'Acme, Inc <support@platform.test>',
+      from: sendingAs('Acme, Inc <support@platform.test>'),
       to: 'customer@example.test',
       subject: 's',
       html: '<p>hi</p>',
@@ -845,7 +861,7 @@ describe('dispatch on the ses rung', () => {
 
   it('still refuses a synthetic anonymous recipient before any request', async () => {
     const result = await sendRawEmail({
-      from: 'Support <support@platform.test>',
+      from: sendingAs('Support <support@platform.test>'),
       to: 'temp-abc123@anon.quackback.io',
       subject: 's',
       html: '<p>hi</p>',
@@ -877,7 +893,7 @@ describe('a workspace sending as its own domain', () => {
 
   it('sends a customer-owned From through SES rather than dropping a rung', async () => {
     const result = await sendRawEmail({
-      from: 'Support <support@customer-owned.test>',
+      from: sendingAs('Support <support@customer-owned.test>'),
       to: 'customer@example.test',
       subject: 's',
       html: '<p>hi</p>',
@@ -897,7 +913,7 @@ describe('a self-hoster on SMTP', () => {
     process.env.EMAIL_SMTP_HOST = 'smtp.invalid.test'
 
     await sendRawEmail({
-      from: 'Support <support@customer-owned.test>',
+      from: sendingAs('Support <support@customer-owned.test>'),
       to: 'customer@example.test',
       subject: 's',
       html: '<p>hi</p>',
@@ -912,7 +928,12 @@ describe('why a send did not happen', () => {
 
   it('reports no provider when nothing is configured', async () => {
     expect(
-      await sendRawEmail({ from: 'a@b.test', to: 'c@d.test', subject: 's', html: '<p>hi</p>' })
+      await sendRawEmail({
+        from: sendingAs('a@b.test'),
+        to: 'c@d.test',
+        subject: 's',
+        html: '<p>hi</p>',
+      })
     ).toEqual({ sent: false, reason: 'no_provider' })
   })
 
@@ -926,7 +947,7 @@ describe('why a send did not happen', () => {
     logWarn.mockClear()
 
     await sendRawEmail({
-      from: 'a@b.test',
+      from: sendingAs('a@b.test'),
       to: 'customer@example.test',
       subject: 's',
       html: '<p>hi</p>',
@@ -944,7 +965,12 @@ describe('why a send did not happen', () => {
     // log window that opened after the first send.
     logWarn.mockClear()
     for (let i = 0; i < 3; i++) {
-      await sendRawEmail({ from: 'a@b.test', to: 'c@d.test', subject: 's', html: '<p>hi</p>' })
+      await sendRawEmail({
+        from: sendingAs('a@b.test'),
+        to: 'c@d.test',
+        subject: 's',
+        html: '<p>hi</p>',
+      })
     }
     expect(logWarn).toHaveBeenCalledTimes(3)
   })

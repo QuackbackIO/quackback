@@ -412,16 +412,14 @@ export async function assembleAssistantToolset(
   const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
   const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableForTurn)
+  const builtInTools = resolvedSpecs.map((spec) => {
+    const mode = resolveEffectiveToolMode(spec, ctx)
+    return spec.definition.server<AssistantToolContext>((args) =>
+      runWithPipeline(spec, mode, args, ctx)
+    )
+  })
   return {
-    tools: [
-      ...resolvedSpecs.map((spec) => {
-        const mode = resolveEffectiveToolMode(spec, ctx)
-        return spec.definition.server<AssistantToolContext>((args) =>
-          runWithPipeline(spec, mode, args, ctx)
-        )
-      }),
-      ...connectorTools,
-    ],
+    tools: [...builtInTools, ...connectorTools] as AssembledServerTool[],
     activeSpecs: withDynamicPromptGuidance([...resolvedSpecs, ...connectorActiveSpecs], ctx),
   }
 }

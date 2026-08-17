@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Bypass config's full env validation (see emit.test.ts / frequency-cap-race).
 vi.mock('@/lib/server/db', async (importOriginal) => {
+  // oxlint-disable-next-line no-restricted-imports -- sanctioned test fixture, same as db-test-fixture.ts
   const { createDb } = await import('@quackback/db/client')
   const url =
     process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
@@ -16,8 +17,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
  * enqueue shapes are replaced: `enqueueJobs` is the bulk insert the relay is
  * supposed to reach, `enqueueJob` is the per-row round trip it must not.
  */
-const bulkInserts: Array<Array<{ queue: string; dedupeKey?: string | null; maxAttempts?: number }>> =
-  []
+const bulkInserts: Array<
+  Array<{ queue: string; dedupeKey?: string | null; maxAttempts?: number }>
+> = []
 const singleInserts: Array<{ queue: string }> = []
 
 vi.mock('@/lib/server/jobs/job-queue', async (importOriginal) => ({

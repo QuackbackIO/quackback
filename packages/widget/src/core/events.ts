@@ -8,12 +8,12 @@ export interface Emitter {
 
 export function createEmitter(): Emitter {
   // Internal storage uses `any` arrays; the public API preserves full type-safety.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const listeners: { [K in EventName]?: any[] } = {}
 
   return {
     on(name, handler) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       const list: any[] = (listeners[name] ??= [])
       list.push(handler)
       return () => {

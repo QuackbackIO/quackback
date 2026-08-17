@@ -7,6 +7,7 @@ import { z } from 'zod'
 // emit.ts itself only imports table objects + `sql` from here (it takes the tx
 // as a parameter), so those still come through from the original module.
 vi.mock('@/lib/server/db', async (importOriginal) => {
+  // oxlint-disable-next-line no-restricted-imports -- sanctioned test fixture, same as db-test-fixture.ts
   const { createDb } = await import('@quackback/db/client')
   const url =
     process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'

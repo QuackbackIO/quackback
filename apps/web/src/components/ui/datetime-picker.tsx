@@ -173,7 +173,7 @@ export function DateTimePicker({
           selected={value}
           onSelect={handleDateSelect}
           disabled={isDateDisabled}
-          initialFocus
+          autoFocus
         />
         {!dateOnly && (
           <div className="border-t border-border/50 px-3 py-2">

@@ -20,8 +20,12 @@ describe('upgrade catalogue SSR prefetch', () => {
       billingEnabled: true,
       permissions: ['settings.manage', 'assistant.manage', 'workflow.manage'],
     }
-    await settingsRoute.options.loader?.({ context } as never)
-    await automationRoute.options.loader?.({ context } as never)
+    const runLoader = async (loader: unknown) => {
+      if (typeof loader !== 'function') throw new Error('expected a function loader')
+      await loader({ context })
+    }
+    await runLoader(settingsRoute.options.loader)
+    await runLoader(automationRoute.options.loader)
     expect(ensureBillingCatalogue).toHaveBeenCalledWith(queryClient, true)
     expect(ensureBillingCatalogue).toHaveBeenCalledTimes(2)
   })

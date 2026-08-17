@@ -95,7 +95,7 @@ export interface RepointStep {
  * Loosely-typed drizzle table handle for the factories: the column set varies
  * per table, and the factories address columns by their TS key.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type RepointTable = any
 
 /** `principal_id` -> `principalId`: derive the drizzle TS key from the SQL name. */

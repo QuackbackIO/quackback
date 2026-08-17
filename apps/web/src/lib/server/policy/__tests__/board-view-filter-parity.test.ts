@@ -29,7 +29,7 @@ import { boards, type BoardAccess, type Database } from '@/lib/server/db'
 // connection (and close it cleanly in afterAll). The lint rule
 // reserves @quackback/db/client for the canonical db.ts entry; this
 // test file is the legitimate second caller of `createDb`.
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import { createDb } from '@quackback/db/client'
 import { canViewBoard, boardViewFilter } from '../boards'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'

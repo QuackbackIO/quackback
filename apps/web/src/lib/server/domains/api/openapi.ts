@@ -205,7 +205,7 @@ export function createRequestBodySchema<T extends z.ZodRawShape>(shape: T, descr
  * This works around a type inference issue between Zod v4 and zod-openapi v5
  * where different package versions cause nominal type mismatches.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export function asSchema<T extends z.ZodTypeAny>(schema: T): any {
   return schema
 }

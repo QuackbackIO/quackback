@@ -76,7 +76,7 @@
  * strictly better and is a follow-up. Until then this scanner is what makes the
  * unused dependency stay unused.
  */
-import * as ts from 'typescript'
+import * as ts from '@typescript/typescript6'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
@@ -84,12 +84,7 @@ import { join, relative } from 'node:path'
 export const BANNED_PACKAGE = 'bullmq'
 
 export type BannedImportKind =
-  | 'import'
-  | 'export-from'
-  | 'dynamic-import'
-  | 'require'
-  | 'import-equals'
-  | 'import-type'
+  'import' | 'export-from' | 'dynamic-import' | 'require' | 'import-equals' | 'import-type'
 
 export interface BannedImport {
   /** Path relative to the scanned root, posix-normalized. */

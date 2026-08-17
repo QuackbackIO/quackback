@@ -17,11 +17,7 @@ const searchSchema = z.object({
   responded: z.enum(['all', 'responded', 'unresponded']).optional().catch(undefined),
   updatedBefore: z.string().optional(),
   // Portal leftover `sort=trending` must not fail this route.
-  sort: z
-    .enum(['newest', 'oldest', 'votes', 'priority'])
-    .optional()
-    .catch('newest')
-    .default('newest'),
+  sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().catch(undefined),
   hasDuplicates: z.boolean().optional().catch(undefined),
   deleted: z.boolean().optional().catch(undefined),
   post: z.string().optional(),

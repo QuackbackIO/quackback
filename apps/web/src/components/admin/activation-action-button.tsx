@@ -36,7 +36,7 @@ export function ActivationActionButton({
 }: {
   action: ActivationAction
   surface: ActivationSurface
-  variant?: 'default' | 'outline'
+  variant?: 'default' | 'outline' | 'ghost'
   className?: string
   onCompleted?: () => void | Promise<void>
 }) {

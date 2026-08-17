@@ -40,9 +40,15 @@ describe('WebhooksSettings create lock', () => {
       id: 'webhook_1',
       url: 'https://example.com/hook',
       events: ['post.created'],
+      boardIds: null,
       status: 'active',
       failureCount: 0,
-    } as Webhook
+      lastError: null,
+      lastTriggeredAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdById: 'principal_1',
+    } as unknown as Webhook
     render(<WebhooksSettings webhooks={[webhook]} entitled={false} />)
     expect(screen.getByText('https://example.com/hook')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Create Webhook/ }))

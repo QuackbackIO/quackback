@@ -682,7 +682,7 @@ export interface ConversationGroundingFacts {
  * guards the one place a caller-authored value sits on a trusted line.
  */
 function sanitizeFactValue(value: string, max = 200): string {
-  // eslint-disable-next-line no-control-regex
+  // oxlint-disable-next-line no-control-regex
   const flattened = value.replace(/[\u0000-\u001F\u007F]+/g, ' ').trim()
   return flattened.length > max ? `${flattened.slice(0, max)}…` : flattened
 }

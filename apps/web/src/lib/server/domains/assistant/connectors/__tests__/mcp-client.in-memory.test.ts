@@ -9,7 +9,20 @@ import { resolveToolPolicy, toolGroupFromAnnotations } from '@/lib/shared/assist
 describe('connector MCP session (in-process transport)', () => {
   it('discovers tools, applies group defaults, and executes a read', async () => {
     const server = new McpServer({ name: 'fixture', version: '1.0.0' })
-    server.registerTool(
+    // MCP SDK types against a different Zod copy than the workspace pin.
+    const register = server.registerTool.bind(server) as (
+      name: string,
+      config: {
+        title: string
+        description: string
+        inputSchema: Record<string, unknown>
+        annotations: { readOnlyHint?: boolean; destructiveHint?: boolean }
+      },
+      handler: (args: {
+        invoice_id: string
+      }) => Promise<{ content: { type: 'text'; text: string }[] }>
+    ) => void
+    register(
       'get_invoice',
       {
         title: 'Get invoice',
@@ -21,7 +34,7 @@ describe('connector MCP session (in-process transport)', () => {
         content: [{ type: 'text', text: JSON.stringify({ invoice_id, total: 49 }) }],
       })
     )
-    server.registerTool(
+    register(
       'issue_refund',
       {
         title: 'Issue refund',

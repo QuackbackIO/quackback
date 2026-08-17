@@ -98,7 +98,7 @@ function toolThenError(message: string) {
 /** Stream that throws on first pull — a defensive path (the real adapter never
  *  does this, but a thrown iterator must still classify as pristine). */
 function throwingStream(err: Error): AsyncGenerator<unknown> {
-  // eslint-disable-next-line require-yield -- models an iterator that rejects before yielding
+  // oxlint-disable-next-line require-yield -- models an iterator that rejects before yielding
   return (async function* () {
     throw err
   })()

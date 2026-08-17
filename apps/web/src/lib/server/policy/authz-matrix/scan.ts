@@ -20,7 +20,7 @@
  * AST-only, no type-checker: parse-and-walk is fast enough to run in a single
  * test and never needs a resolved program.
  */
-import * as ts from 'typescript'
+import * as ts from '@typescript/typescript6'
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { walkSourceFiles } from '../source-files'

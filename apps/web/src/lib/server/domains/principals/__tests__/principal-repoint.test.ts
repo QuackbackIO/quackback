@@ -18,7 +18,7 @@ import { isNull, eq } from '@/lib/server/db'
 const FROM = createId('principal')
 const TO = createId('principal')
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const tx = mockTx as any
 
 describe('REPOINT_STEPS registry', () => {

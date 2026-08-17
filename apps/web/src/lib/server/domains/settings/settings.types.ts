@@ -276,13 +276,7 @@ export interface PortalAccessConfig {
  * external link.
  */
 export type PortalNavItemType =
-  | 'feedback'
-  | 'roadmap'
-  | 'changelog'
-  | 'help'
-  | 'support'
-  | 'status'
-  | 'link'
+  'feedback' | 'roadmap' | 'changelog' | 'help' | 'support' | 'status' | 'link'
 
 /** An ordered, admin-configurable tab in the portal top-nav. */
 export interface PortalNavItemConfig {
@@ -594,11 +588,7 @@ export type PublicMessengerConfig = Omit<
  * Future types (e.g. recent tickets) extend this union.
  */
 export type WidgetHomeCardType =
-  | 'feedback'
-  | 'new_conversation'
-  | 'article_search'
-  | 'latest_updates'
-  | 'link'
+  'feedback' | 'new_conversation' | 'article_search' | 'latest_updates' | 'link'
 
 /** Which visitors a Home card is shown to (visitor-vs-user content). */
 export type WidgetCardAudience = 'everyone' | 'anonymous' | 'identified'
@@ -1011,7 +1001,7 @@ export interface SettingsBrandingData {
  */
 export interface WorkspaceSettings {
   /** Raw settings record from database (opaque on client, typed on server) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   settings: Record<string, any>
   /** Workspace name */
   name: string
@@ -1208,11 +1198,7 @@ export interface ProductDefinition {
   description: string
   featureFlags: readonly (keyof FeatureFlags)[]
   adminPath:
-    | '/admin/feedback'
-    | '/admin/inbox'
-    | '/admin/help-center'
-    | '/admin/changelog'
-    | '/admin/status'
+    '/admin/feedback' | '/admin/inbox' | '/admin/help-center' | '/admin/changelog' | '/admin/status'
 }
 
 /**

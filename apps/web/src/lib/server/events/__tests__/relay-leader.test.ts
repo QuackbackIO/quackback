@@ -18,7 +18,7 @@ import postgres from 'postgres'
 // The lint rule reserves @quackback/db/client for db.ts; test fixtures that need
 // their own short-lived connection are sanctioned callers, same as
 // db-test-fixture.ts and the job-queue harness.
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import { createDbFromSql, type Database } from '@quackback/db/client'
 
 const URL =

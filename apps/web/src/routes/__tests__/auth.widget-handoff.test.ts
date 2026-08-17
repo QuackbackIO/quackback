@@ -26,16 +26,16 @@ vi.mock('@/lib/server/config', () => ({
 // Audit log mock
 const mockRecordAuditEvent = vi.fn()
 vi.mock('@/lib/server/audit/log', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   recordAuditEvent: (arg: any) => mockRecordAuditEvent(arg),
 }))
 
 // DB mock
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const mockOnConflictDoNothing: any = vi.fn()
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const mockInsertValues: any = vi.fn(() => ({ onConflictDoNothing: mockOnConflictDoNothing }))
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const mockDbInsert: any = vi.fn(() => ({ values: mockInsertValues }))
 // Provenance lookup: tests default to hmacVerified=true so the
 // existing redirect/audit assertions still exercise the success
@@ -44,7 +44,7 @@ const mockDbInsert: any = vi.fn(() => ({ values: mockInsertValues }))
 const mockWidgetIdentifiedFindFirst = vi.fn(async () => ({ hmacVerified: true }))
 vi.mock('@/lib/server/db', () => ({
   db: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     insert: (arg: any) => mockDbInsert(arg),
     query: {
       widgetIdentifiedSession: {
@@ -164,7 +164,7 @@ async function runHandoffLoader(search: string) {
     await recordAuditEvent({
       event: 'portal.widget_handshake.invalid',
       outcome: 'failure',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       actor: { userId: userId as any },
       target: { type: 'session', id: sessionId },
       metadata: { reason: 'unverified_provenance' },
@@ -178,7 +178,7 @@ async function runHandoffLoader(search: string) {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     await (db.insert(widgetOriginSession) as any)
       .values({ sessionId, userId })
       .onConflictDoNothing()
@@ -189,7 +189,7 @@ async function runHandoffLoader(search: string) {
   await recordAuditEvent({
     event: 'portal.widget_handshake.consumed',
     outcome: 'success',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     actor: { userId: userId as any },
     target: { type: 'session', id: sessionId },
   })

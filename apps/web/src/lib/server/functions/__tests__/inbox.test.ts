@@ -60,7 +60,7 @@ const AUTH = {
 }
 const ACTOR = { principalId: 'principal_agent1' }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const call = (data: any) => listInboxItemsFn({ data })
 
 beforeEach(() => {

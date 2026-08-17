@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, cleanup, fireEvent, screen } from '@testing-library/react'
+import { render, cleanup, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -57,7 +57,9 @@ vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: vi.fn() }))
 
 const { mockSiblings, mockBillingEnabled } = vi.hoisted(() => ({
-  mockSiblings: { current: [] as Array<{ instanceId: string; displayName: string; url: string | null }> },
+  mockSiblings: {
+    current: [] as Array<{ instanceId: string; displayName: string; url: string | null }>,
+  },
   mockBillingEnabled: { current: false },
 }))
 
@@ -95,7 +97,11 @@ describe('AdminSidebar — workspace switcher', () => {
   it('is absent when cloud is off', () => {
     mockBillingEnabled.current = false
     mockSiblings.current = [
-      { instanceId: 'inst_south', displayName: 'South', url: 'https://south63792f.quackback.co.uk' },
+      {
+        instanceId: 'inst_south',
+        displayName: 'South',
+        url: 'https://south63792f.quackback.co.uk',
+      },
     ]
     renderSidebar('admin')
     expect(screen.queryByRole('button', { name: 'Switch workspace' })).toBeNull()
@@ -111,7 +117,11 @@ describe('AdminSidebar — workspace switcher', () => {
   it('lists sibling names and friendly URLs, never a generated host', () => {
     mockBillingEnabled.current = true
     mockSiblings.current = [
-      { instanceId: 'inst_south', displayName: 'South', url: 'https://south63792f.quackback.co.uk' },
+      {
+        instanceId: 'inst_south',
+        displayName: 'South',
+        url: 'https://south63792f.quackback.co.uk',
+      },
       {
         instanceId: 'inst_raw',
         displayName: 'Untitled workspace',

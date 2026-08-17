@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- companyFilterConditions composes the external-id,
+/* oxlint-disable max-lines -- companyFilterConditions composes the external-id,
    segment, and tag restriction joins alongside the existing CRUD */
 /**
  * Companies service (support platform §4.4): CRUD plus the person-to-company

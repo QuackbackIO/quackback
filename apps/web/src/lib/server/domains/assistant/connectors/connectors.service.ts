@@ -271,7 +271,7 @@ export async function createConnector(
   }
 
   let tools: CachedConnectorTool[]
-  let toolPolicies: ConnectorToolPolicies
+  let toolPolicies: ConnectorToolPolicies = { ...DEFAULT_CONNECTOR_TOOL_POLICIES }
   const status: ConnectorRow['status'] = 'connected'
   const lastError: string | null = null
   try {

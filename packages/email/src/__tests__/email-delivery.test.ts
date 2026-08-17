@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { sendInvitationEmail, sendRawEmail } from '../index'
+import { sealedTo, sendingAs } from './brands'
 import {
   clearMailbox,
   getHeaders,
@@ -32,7 +33,7 @@ describe.skipIf(!mailpitAvailable)('email delivery (real SMTP via mailpit)', () 
 
   it('delivers a branded template as a real MIME message', async () => {
     const result = await sendInvitationEmail({
-      to: 'invitee@example.test',
+      to: sealedTo('invitee@example.test'),
       invitedByName: 'Ada Lovelace',
       workspaceName: 'Acme Corp',
       inviteLink: 'https://acme.test/invite/abc123',
@@ -55,7 +56,7 @@ describe.skipIf(!mailpitAvailable)('email delivery (real SMTP via mailpit)', () 
     // The conversation channel replies as the inbox identity
     // (channel_accounts.address), which is the whole point of sendRawEmail.
     const result = await sendRawEmail({
-      from: 'Support <support@acme.test>',
+      from: sendingAs('Support <support@acme.test>'),
       to: 'customer@example.test',
       subject: 'Re: your question',
       html: '<p>Thanks for getting in touch.</p>',
@@ -72,7 +73,7 @@ describe.skipIf(!mailpitAvailable)('email delivery (real SMTP via mailpit)', () 
     const rootId = 'conv-42-root@quackback.test'
 
     await sendRawEmail({
-      from: 'Support <support@acme.test>',
+      from: sendingAs('Support <support@acme.test>'),
       to: 'customer@example.test',
       subject: 'Re: your question',
       html: '<p>Following up.</p>',
@@ -97,7 +98,7 @@ describe.skipIf(!mailpitAvailable)('email delivery (real SMTP via mailpit)', () 
     // Anonymous principals carry temp-<id>@anon.quackback.io, which is not
     // deliverable. The guard should drop it before it reaches the transport.
     const result = await sendRawEmail({
-      from: 'Support <support@acme.test>',
+      from: sendingAs('Support <support@acme.test>'),
       to: 'temp-abc123@anon.quackback.io',
       subject: 'Should never arrive',
       html: '<p>nope</p>',

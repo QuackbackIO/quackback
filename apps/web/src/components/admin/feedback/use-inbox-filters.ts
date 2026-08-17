@@ -38,7 +38,7 @@ export function useInboxFilters() {
       responded: search.responded,
       updatedBefore: search.updatedBefore,
       hasDuplicates: search.hasDuplicates,
-      sort: search.sort,
+      sort: search.sort ?? 'newest',
       showDeleted: search.deleted,
     }),
     [search]

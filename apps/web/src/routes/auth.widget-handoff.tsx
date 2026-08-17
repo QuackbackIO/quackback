@@ -1,3 +1,4 @@
+/* oxlint-disable no-restricted-imports -- lazy server imports live inside createServerFn / createServerOnlyFn */
 /**
  * Widget OTT handoff route — server-side session creation.
  *
@@ -65,6 +66,7 @@ import type { UserId } from '@quackback/ids'
 export const isWidgetSessionHmacVerified = createServerOnlyFn(
   async (sessionId: string): Promise<boolean> => {
     try {
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
       const { db, widgetIdentifiedSession, eq } = await import('@/lib/server/db')
       const row = await db.query.widgetIdentifiedSession.findFirst({
         where: eq(widgetIdentifiedSession.sessionId, sessionId),
@@ -72,6 +74,7 @@ export const isWidgetSessionHmacVerified = createServerOnlyFn(
       })
       return row?.hmacVerified === true
     } catch (err) {
+      // oxlint-disable-next-line no-restricted-imports -- createServerOnlyFn body; stripped from the client graph
       const { logger } = await import('@/lib/server/logger')
       logger.child({ component: 'widget-handoff' }).error({ err }, 'provenance lookup failed')
       return false
@@ -99,8 +102,7 @@ type LoaderData = { status: 'invalid' | 'expired' | 'error' }
 // ---------------------------------------------------------------------------
 
 type HandoffResult =
-  | { kind: 'redirect'; to: string }
-  | { kind: 'error'; status: 'invalid' | 'expired' | 'error' }
+  { kind: 'redirect'; to: string } | { kind: 'error'; status: 'invalid' | 'expired' | 'error' }
 
 /**
  * Verify the OTT against BA, forward Set-Cookie to the browser, insert the
