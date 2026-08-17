@@ -50,6 +50,7 @@ export const listInboxItemsSchema = z.object({
   sort: inboxSortSchema.optional(),
   limit: z.number().int().min(1).max(100).optional(),
   cursor: z.string().optional(),
+  channel: z.enum(['messenger', 'email']).optional(),
 })
 
 /** The unified inbox list (union of conversations + tickets, RBAC-scoped
@@ -93,6 +94,7 @@ export const listInboxItemsFn = createServerFn({ method: 'GET' })
       sort: data.sort,
       limit: data.limit,
       cursor: data.cursor,
+      channel: data.channel,
     })
   })
 

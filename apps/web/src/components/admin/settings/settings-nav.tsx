@@ -42,6 +42,8 @@ interface NavItem {
 interface NavGroup {
   label: string
   icon: typeof Cog6ToothIcon
+  /** When set, the group label is also a page (Channels hub). */
+  to?: string
   kids: NavItem[]
 }
 
@@ -91,10 +93,16 @@ export function buildNavSections(
     ...(flags?.supportInbox
       ? [
           {
-            label: 'Messenger',
-            to: '/admin/settings/conversations',
+            label: 'Channels',
+            to: '/admin/settings/channels',
             icon: ChatBubbleLeftRightIcon,
           },
+          {
+            label: 'Messenger',
+            to: '/admin/settings/channels/messenger',
+            icon: ChatBubbleLeftRightIcon,
+          },
+          { label: 'Email', to: '/admin/settings/channels/email', icon: EnvelopeIcon },
           { label: 'Macros', to: '/admin/settings/macros', icon: DocumentDuplicateIcon },
           { label: 'Office Hours', to: '/admin/settings/office-hours', icon: ClockIcon },
           { label: 'SLA policies', to: '/admin/settings/sla', icon: ShieldCheckIcon },
@@ -157,9 +165,6 @@ export function buildNavSections(
           to: '/admin/settings/security/authentication',
           icon: ShieldCheckIcon,
         },
-        ...(flags?.supportInbox
-          ? [{ label: 'Emails', to: '/admin/settings/channels', icon: EnvelopeIcon }]
-          : []),
         { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
         { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
         ...(billingEnabled
@@ -314,7 +319,9 @@ function NavLink({
   pathname: string
   tabbable: boolean
 }) {
-  const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
+  const isActive =
+    pathname === item.to ||
+    (item.to !== '/admin/settings/channels' && pathname.startsWith(`${item.to}/`))
   const Icon = item.icon
 
   return (

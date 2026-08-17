@@ -1,6 +1,11 @@
 import { memo, useState, type ReactNode } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
-import type { ConversationDTO, ConversationPriority } from '@/lib/shared/conversation/types'
+import type {
+  ConversationDTO,
+  ConversationPriority,
+  Channel,
+} from '@/lib/shared/conversation/types'
+import { listChannelDescriptors } from '@/lib/shared/channels'
 import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
 import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons/react/24/solid'
@@ -166,6 +171,8 @@ interface ConversationListColumnProps {
   ticketTypeFilter?: string
   onTicketTypeFilter?: (id: string | undefined) => void
   ticketTypeOptions?: Array<{ id: string; name: string; icon: string | null; color: string }>
+  channelFilter?: Channel
+  onChannelFilter?: (value: Channel | undefined) => void
   sort: ConversationSort
   onSort: (value: ConversationSort) => void
   loading: boolean
@@ -197,6 +204,8 @@ export function ConversationListColumn({
   ticketTypeFilter,
   onTicketTypeFilter,
   ticketTypeOptions,
+  channelFilter,
+  onChannelFilter,
   sort,
   onSort,
   loading,
@@ -346,6 +355,43 @@ export function ConversationListColumn({
 
             {/* Registry-type filter (Phase 4) — the Tickets-section scopes
                 only; the route scopes the options to the view's category. */}
+            {onChannelFilter && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Filter by channel"
+                    className={cn(
+                      'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
+                      channelFilter
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-muted'
+                    )}
+                  >
+                    {channelFilter
+                      ? (listChannelDescriptors().find((d) => d.id === channelFilter)?.label ??
+                        'Channel')
+                      : 'Channel'}
+                    <ChevronDownIcon className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => onChannelFilter(undefined)}>
+                    Any channel
+                  </DropdownMenuItem>
+                  {listChannelDescriptors().map((d) => (
+                    <DropdownMenuItem
+                      key={d.id}
+                      onClick={() => onChannelFilter(d.id)}
+                      className={cn(d.id === channelFilter && 'text-primary')}
+                    >
+                      {d.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
             {ticketTypeOptions && onTicketTypeFilter && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -403,6 +449,7 @@ export function ConversationListColumn({
             const isFiltered =
               searchInput.trim().length > 0 ||
               priorityFilter !== 'all' ||
+              !!channelFilter ||
               (facet !== 'all' && facet !== 'open')
             const isAllClear =
               isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction

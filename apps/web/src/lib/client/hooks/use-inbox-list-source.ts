@@ -53,6 +53,8 @@ export interface UseInboxListSourceParams {
    *  polling fallback below is unnecessary extra load; it re-arms the moment
    *  the stream drops or hasn't connected yet. */
   streamConnected: boolean
+  /** Conversation channel chip (messenger / email). */
+  channel?: 'messenger' | 'email'
 }
 
 export interface UseInboxListSourceResult {
@@ -77,6 +79,7 @@ export function useInboxListSource({
   aiBucket,
   isSaved,
   streamConnected,
+  channel,
 }: UseInboxListSourceParams): UseInboxListSourceResult {
   const useUnified = usesUnifiedInboxList(nav, activeViewFilters)
   // A custom view's legacy-path rules are pre-translated to the conversation
@@ -97,7 +100,8 @@ export function useInboxListSource({
         companyId,
         sort,
         activeViewFilters,
-        ticketTypeId
+        ticketTypeId,
+        channel
       )
     ),
     // Ticket SSE has landed (M3) and drives real-time updates via
@@ -118,7 +122,8 @@ export function useInboxListSource({
       companyId,
       sort,
       customParams,
-      aiBucket
+      aiBucket,
+      channel
     ),
     // Polling fallback if the stream drops; skipped while connected (same
     // reasoning as the unified query above).

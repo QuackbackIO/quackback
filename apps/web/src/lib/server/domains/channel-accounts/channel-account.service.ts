@@ -128,13 +128,25 @@ export async function getSendingDomain(id: SendingDomainId): Promise<EmailSendin
  * in use before the account approaches its quota; the plan cap is what keeps
  * that from becoming urgent.
  *
- * A sending address that named the removed domain is left alone and stops
- * resolving on its own: the guard refuses an address whose domain is no longer
- * verified, and the reply goes out from the platform sender instead of not
- * going out. Deleting those rows here would silently discard configuration a
- * person typed in order to fix a mistake they made next to it.
+ * A sending address that still names the domain is a live From identity, so
+ * the delete is refused while any such row exists (the FK is ON DELETE
+ * RESTRICT). The person has to remove or retarget those addresses first —
+ * deleting them here would silently discard configuration they typed.
  */
+export class SendingDomainInUseError extends Error {
+  constructor() {
+    super('Remove the sending addresses that use this domain first.')
+    this.name = 'SendingDomainInUseError'
+  }
+}
+
 export async function deleteSendingDomain(id: SendingDomainId): Promise<void> {
+  const [referenced] = await db
+    .select({ id: channelAccounts.id })
+    .from(channelAccounts)
+    .where(and(eq(channelAccounts.sendingDomainId, id), isNull(channelAccounts.deletedAt)))
+    .limit(1)
+  if (referenced) throw new SendingDomainInUseError()
   await db.delete(emailSendingDomains).where(eq(emailSendingDomains.id, id))
 }
 
@@ -347,6 +359,60 @@ export async function setInboundForwardingTarget(input: {
       config: { ...existing.config, forwardingTarget, provider },
       updatedAt: new Date(),
     })
+    .where(eq(channelAccounts.id, existing.id))
+    .returning()
+  return row
+}
+
+/** Sender trust on the workspace inbound route (strict | lenient). */
+export async function updateInboundTrust(input: {
+  owningTeamId: TeamId
+  inboundTrust: 'strict' | 'lenient'
+}): Promise<ChannelAccount> {
+  const existing = await getInboundRoute(input.owningTeamId)
+  if (!existing) {
+    return createInboundRoute({
+      owningTeamId: input.owningTeamId,
+      config: { provider: await inboundProvider() },
+      inboundTrust: input.inboundTrust,
+    })
+  }
+  const [row] = await db
+    .update(channelAccounts)
+    .set({ inboundTrust: input.inboundTrust, updatedAt: new Date() })
+    .where(eq(channelAccounts.id, existing.id))
+    .returning()
+  return row
+}
+
+/** Drop the opt-in forwarding target; the platform inbox stays. */
+export async function clearInboundForwarding(owningTeamId: TeamId): Promise<ChannelAccount | null> {
+  const existing = await getInboundRoute(owningTeamId)
+  if (!existing) return null
+  const { forwardingTarget: _dropped, ...rest } = existing.config
+  const [row] = await db
+    .update(channelAccounts)
+    .set({ config: rest, updatedAt: new Date() })
+    .where(eq(channelAccounts.id, existing.id))
+    .returning()
+  return row
+}
+
+/** Per-address SMTP override on a sending identity. Pass null to clear. */
+export async function updateSendingAddressSmtp(input: {
+  id: ChannelAccountId
+  smtp: NonNullable<ChannelAccountConfig['smtp']> | null
+}): Promise<ChannelAccount> {
+  const existing = await getChannelAccount(input.id)
+  if (!existing || existing.role !== 'sending') {
+    throw new Error('That sending address no longer exists.')
+  }
+  const config: ChannelAccountConfig = { ...existing.config }
+  if (input.smtp) config.smtp = input.smtp
+  else delete config.smtp
+  const [row] = await db
+    .update(channelAccounts)
+    .set({ config, updatedAt: new Date() })
     .where(eq(channelAccounts.id, existing.id))
     .returning()
   return row

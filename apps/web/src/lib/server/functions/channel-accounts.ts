@@ -18,7 +18,11 @@ import {
   setInboundForwardingTarget,
   createSendingAddress,
   deleteSendingDomain,
+  SendingDomainInUseError,
   softDeleteChannelAccount,
+  updateInboundTrust,
+  clearInboundForwarding,
+  updateSendingAddressSmtp,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import { platformInboxAddress } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
@@ -51,6 +55,7 @@ function domainActionMessage(error: unknown, fallback: string): string {
   if (
     error instanceof SendingDomainRefusedError ||
     error instanceof SendingIdentityRefusedError ||
+    error instanceof SendingDomainInUseError ||
     error instanceof TierLimitError
   ) {
     return error.message
@@ -92,6 +97,9 @@ export interface ChannelAccountDTO {
   address: string | null
   module: string | null
   config: JsonObject
+  inboundTrust: 'strict' | 'lenient'
+  sendingDomainId: string | null
+  sendingDomain: { domain: string; status: string } | null
 }
 
 export interface SendingDomainDTO {
@@ -119,13 +127,21 @@ export interface EmailChannelConfigDTO {
   platformAddress: string | null
 }
 
-const toAccount = (a: ChannelAccount): ChannelAccountDTO => ({
-  id: a.id,
-  role: a.role,
-  address: a.address,
-  module: a.module,
-  config: a.config as JsonObject,
-})
+const toAccount = (a: ChannelAccount, domains: EmailSendingDomain[] = []): ChannelAccountDTO => {
+  const domain = a.sendingDomainId
+    ? (domains.find((d) => d.id === a.sendingDomainId) ?? null)
+    : null
+  return {
+    id: a.id,
+    role: a.role,
+    address: a.address,
+    module: a.module,
+    config: a.config as JsonObject,
+    inboundTrust: a.inboundTrust,
+    sendingDomainId: a.sendingDomainId,
+    sendingDomain: domain ? { domain: domain.domain, status: domain.status } : null,
+  }
+}
 
 const toDomain = (d: EmailSendingDomain): SendingDomainDTO => ({
   id: d.id,
@@ -157,8 +173,10 @@ export const getEmailChannelConfigFn = createServerFn({ method: 'GET' }).handler
       listSendingDomains(teamId),
     ])
     return {
-      inboundRoute: inbound ? toAccount(inbound) : null,
-      sendingAddresses: accounts.filter((a) => a.role === 'sending').map(toAccount),
+      inboundRoute: inbound ? toAccount(inbound, domains) : null,
+      sendingAddresses: accounts
+        .filter((a) => a.role === 'sending')
+        .map((a) => toAccount(a, domains)),
       domains: domains.map(toDomain),
       platformAddress,
     }
@@ -247,8 +265,54 @@ export const deleteSendingDomainFn = createServerFn({ method: 'POST' })
     // Removes our row and the plan slot it held. The identity on the shared
     // provider account is deliberately left for an operator to reap; see
     // `deleteSendingDomain` for why nothing here is allowed to delete one.
-    await deleteSendingDomain(data.id as SendingDomainId)
+    await withDomainActionMessage(
+      'Could not remove the domain. Check the server logs.',
+      async () => {
+        await deleteSendingDomain(data.id as SendingDomainId)
+      }
+    )
     return { id: data.id }
+  })
+
+export const updateInboundTrustFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ inboundTrust: z.enum(['strict', 'lenient']) }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    const teamId = await requireDefaultTeam()
+    return toAccount(
+      await updateInboundTrust({ owningTeamId: teamId, inboundTrust: data.inboundTrust })
+    )
+  })
+
+export const clearInboundForwardingFn = createServerFn({ method: 'POST' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+  const teamId = await requireDefaultTeam()
+  const row = await clearInboundForwarding(teamId)
+  return row ? toAccount(row) : null
+})
+
+const smtpOverrideSchema = z.object({
+  host: z.string().min(1).max(255),
+  port: z.number().int().min(1).max(65535),
+  secure: z.boolean(),
+  user: z.string().min(1).max(255),
+})
+
+export const updateSendingAddressSmtpFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      id: z.string(),
+      smtp: smtpOverrideSchema.nullable(),
+    })
+  )
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    return toAccount(
+      await updateSendingAddressSmtp({
+        id: data.id as ChannelAccountId,
+        smtp: data.smtp,
+      })
+    )
   })
 
 export const deleteChannelAccountFn = createServerFn({ method: 'POST' })

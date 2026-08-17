@@ -1064,6 +1064,8 @@ export interface ConversationListFilter {
   /** Inbound source discriminator ('widget' today; email/others join later).
    *  Plumbing for channel/source nav scopes — the column is plain text. */
   source?: string
+  /** Active conversation channel (messenger / email). */
+  channel?: 'messenger' | 'email'
   priority?: 'none' | 'low' | 'medium' | 'high' | 'urgent'
   assignedAgentPrincipalId?: PrincipalId
   /** Unassigned queue: only conversations with no assigned agent. */
@@ -1593,6 +1595,7 @@ export async function listConversationsForAgent(
           : or(isNull(conversations.endReason), ne(conversations.endReason, 'spam')),
         filter.status ? eq(conversations.status, filter.status) : undefined,
         filter.source ? eq(conversations.source, filter.source) : undefined,
+        filter.channel ? eq(conversations.channel, filter.channel) : undefined,
         filter.visitorPrincipalId
           ? eq(conversations.visitorPrincipalId, filter.visitorPrincipalId)
           : undefined,

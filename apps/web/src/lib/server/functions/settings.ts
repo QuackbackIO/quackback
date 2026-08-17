@@ -935,6 +935,29 @@ export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(asyn
   return await getOfficeHoursSchedule()
 })
 
+const conversationRoutingSchema = z.object({
+  enabled: z.boolean(),
+  strategy: z.literal('auto_assign_active'),
+})
+
+export const fetchConversationRoutingFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch conversation routing')
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { getConversationRouting } =
+    await import('@/lib/server/domains/settings/settings.conversation-routing')
+  return await getConversationRouting()
+})
+
+export const updateConversationRoutingFn = createServerFn({ method: 'POST' })
+  .validator(conversationRoutingSchema)
+  .handler(async ({ data }) => {
+    log.info({ enabled: data.enabled }, 'update conversation routing')
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { updateConversationRouting } =
+      await import('@/lib/server/domains/settings/settings.conversation-routing')
+    return await updateConversationRouting(data)
+  })
+
 export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
   .validator(officeHoursScheduleSchema)
   .handler(async ({ data }) => {

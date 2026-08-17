@@ -32,3 +32,14 @@ export function NoEmailBadge() {
     </span>
   )
 }
+
+/** Unreachable on the conversation's current channel. */
+export function UnreachableBadge({ channel }: { channel: Channel }) {
+  if (channel === 'email') return <NoEmailBadge />
+  const label = getChannelDescriptor(channel)?.label ?? 'channel'
+  return (
+    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
+      Unreachable on {label}
+    </span>
+  )
+}

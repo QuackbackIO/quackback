@@ -172,6 +172,39 @@ describe('buildListParams', () => {
     ).toBeUndefined()
   })
 
+  it('carries an explicit channel filter on conversation scopes', () => {
+    expect(
+      buildListParams(
+        view('all'),
+        'open',
+        'all',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'email'
+      )
+    ).toMatchObject({
+      assignee: 'all',
+      channel: 'email',
+    })
+    expect(
+      buildListParams(
+        { kind: 'team', teamId },
+        'open',
+        'all',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'messenger'
+      )
+    ).toMatchObject({ teamId, channel: 'messenger' })
+    expect(buildListParams(view('all'), 'open', 'all', '')).not.toHaveProperty('channel')
+  })
+
   it('maps a team scope to a teamId filter', () => {
     expect(buildListParams({ kind: 'team', teamId }, 'open', 'high', 'bug')).toMatchObject({
       teamId,

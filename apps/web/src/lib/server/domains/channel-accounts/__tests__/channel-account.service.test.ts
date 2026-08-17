@@ -32,10 +32,14 @@ import {
   getSendingAddress,
   getSendingDomain,
   deleteSendingDomain,
+  SendingDomainInUseError,
   listChannelAccounts,
   softDeleteChannelAccount,
   resolveChannelAccountByRecipient,
   resolveSendingAddress,
+  updateInboundTrust,
+  clearInboundForwarding,
+  updateSendingAddressSmtp,
 } from '../channel-account.service'
 
 const fixture = await createDbTestFixture({
@@ -136,6 +140,56 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
     expect(await getSendingDomain(domain.id)).toBeNull()
     const again = await createSendingDomain({ owningTeamId: teamId, domain: 'mail.acme.com' })
     expect(again.status).toBe('pending')
+  })
+
+  it('refuses to delete a sending domain while an address still names it', async () => {
+    const teamId = await seedTeam()
+    const domain = await createSendingDomain({ owningTeamId: teamId, domain: 'mail.acme.com' })
+    await createSendingAddress({
+      owningTeamId: teamId,
+      address: 'help@acme.com',
+      module: 'support',
+      sendingDomainId: domain.id,
+    })
+    await expect(deleteSendingDomain(domain.id)).rejects.toBeInstanceOf(SendingDomainInUseError)
+    expect(await getSendingDomain(domain.id)).not.toBeNull()
+  })
+
+  it('updates inbound trust and can clear the forwarding target', async () => {
+    const teamId = await seedTeam()
+    await setInboundForwardingTarget({
+      owningTeamId: teamId,
+      forwardingTarget: 'support@acme.com',
+    })
+    const trusted = await updateInboundTrust({ owningTeamId: teamId, inboundTrust: 'lenient' })
+    expect(trusted.inboundTrust).toBe('lenient')
+    expect(trusted.config.forwardingTarget).toBe('support@acme.com')
+
+    const cleared = await clearInboundForwarding(teamId)
+    expect(cleared?.config.forwardingTarget).toBeUndefined()
+    expect(cleared?.inboundTrust).toBe('lenient')
+    expect(await getInboundRoute(teamId)).not.toBeNull()
+  })
+
+  it('sets and clears a per-address SMTP override', async () => {
+    const teamId = await seedTeam()
+    const sending = await createSendingAddress({
+      owningTeamId: teamId,
+      address: 'help@acme.com',
+      module: 'support',
+    })
+    const withSmtp = await updateSendingAddressSmtp({
+      id: sending.id,
+      smtp: { host: 'smtp.example.com', port: 587, secure: true, user: 'help' },
+    })
+    expect(withSmtp.config.smtp).toEqual({
+      host: 'smtp.example.com',
+      port: 587,
+      secure: true,
+      user: 'help',
+    })
+    const cleared = await updateSendingAddressSmtp({ id: sending.id, smtp: null })
+    expect(cleared.config.smtp).toBeUndefined()
   })
 
   it('resolves a channel account by a sending address or the inbound forwarding target', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNavSections } from '../settings-nav'
+import { buildNavSections, isNavGroup } from '../settings-nav'
 
 const FLAGS = { supportInbox: true, supportTickets: true }
 
@@ -14,7 +14,7 @@ describe('settings nav with cloud identity off', () => {
           ? {
               ...section,
               items: section.items.filter(
-                (item) => !('to' in item) || item.to !== '/admin/settings/domains'
+                (item) => isNavGroup(item) || item.to !== '/admin/settings/domains'
               ),
             }
           : section
@@ -28,7 +28,7 @@ describe('settings nav with cloud identity off', () => {
 
   it('adds exactly one Domains row next to General when cloud is on', () => {
     const workspace = buildNavSections(FLAGS, false, true).find((s) => s.label === 'Workspace')!
-    const added = workspace.items.filter((item) => 'to' in item && item.to.includes('domains'))
+    const added = workspace.items.filter((item) => !isNavGroup(item) && item.to.includes('domains'))
     expect(added).toHaveLength(1)
     expect(added[0]).toMatchObject({ label: 'Domains', to: '/admin/settings/domains' })
     const generalIndex = workspace.items.findIndex(

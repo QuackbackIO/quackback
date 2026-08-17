@@ -96,6 +96,7 @@ export interface InboxListFilter {
   sort?: InboxSort
   limit?: number
   cursor?: string
+  channel?: 'messenger' | 'email'
 }
 
 export interface InboxListPage {
@@ -353,6 +354,7 @@ async function fetchConversationBranch(
       teamId: filter.teamId,
       companyId: filter.companyId,
       search: filter.search,
+      channel: filter.channel,
       // Convergence alias semantics: the Tickets-section scopes list a linked
       // pair as its ONE item — this branch's conversation row (the ticket
       // branch's exclusion keeps the pair off a second row).

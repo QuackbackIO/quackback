@@ -566,8 +566,11 @@ export interface MessengerConfig {
    * code writes it and it is not projected into the public widget config.
    */
   officeHours?: OfficeHoursConfig
-  /** Conversation routing: auto-assign new conversations to an active agent.
-   *  Agent-only; never projected into the public config. */
+  /**
+   * @deprecated Migration-only. Canonical routing now lives in the
+   * `settings.metadata` bag (`conversationRouting`). This field types the
+   * released stored config that the read-time fallback still honours.
+   */
   routing?: {
     enabled: boolean
     /** Only one strategy today: assign to an online agent. */

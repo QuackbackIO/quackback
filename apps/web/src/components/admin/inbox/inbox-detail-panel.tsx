@@ -43,7 +43,7 @@ import { AssigneeControl } from '@/components/admin/conversation/assignee-contro
 import { ConversationTagsEditor } from '@/components/admin/conversation/conversation-tags-editor'
 import { ConversationAttributesEditor } from '@/components/admin/conversation/conversation-attributes-editor'
 import { StatusControl } from '@/components/admin/conversation/status-control'
-import { NoEmailBadge, CHANNEL_LABEL } from '@/components/admin/conversation/channel-badge'
+import { UnreachableBadge, CHANNEL_LABEL } from '@/components/admin/conversation/channel-badge'
 import { TONE_CLASSES } from '@/components/admin/conversation/sla-chip'
 import { CompanyCard } from '@/components/admin/conversation/company-card'
 import { CopilotPanel } from '@/components/admin/conversation/copilot-panel'
@@ -394,7 +394,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     </p>
                   ) : (
                     <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      Anonymous <NoEmailBadge />
+                      Anonymous <UnreachableBadge channel={conversation?.channel ?? 'email'} />
                     </p>
                   )
                 ) : null}

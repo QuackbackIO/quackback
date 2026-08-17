@@ -8,7 +8,7 @@
  * are split only because lint forbids `lib/` importing from `components/`.
  */
 import { describe, expect, it } from 'vitest'
-import { buildNavSections } from '../settings-nav'
+import { buildNavSections, isNavGroup } from '../settings-nav'
 
 const FLAGS = { supportInbox: true, supportTickets: true }
 
@@ -26,7 +26,7 @@ describe('settings nav with billing unconfigured', () => {
           ? {
               ...section,
               items: section.items.filter(
-                (item) => !('to' in item) || item.to !== '/admin/settings/billing'
+                (item) => isNavGroup(item) || item.to !== '/admin/settings/billing'
               ),
             }
           : section
@@ -42,7 +42,7 @@ describe('settings nav with billing unconfigured', () => {
 
   it('adds exactly one row, in the Workspace section, when billing is on', () => {
     const workspace = buildNavSections(FLAGS, true).find((s) => s.label === 'Workspace')!
-    const added = workspace.items.filter((item) => 'to' in item && item.to.includes('billing'))
+    const added = workspace.items.filter((item) => !isNavGroup(item) && item.to.includes('billing'))
     expect(added).toHaveLength(1)
     expect(added[0]).toMatchObject({ label: 'Plan & billing', to: '/admin/settings/billing' })
 

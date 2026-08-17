@@ -53,10 +53,7 @@ export type InboxView =
   | 'tickets_tracker'
 
 type TicketInboxView =
-  | 'tickets_all'
-  | 'tickets_customer'
-  | 'tickets_back_office'
-  | 'tickets_tracker'
+  'tickets_all' | 'tickets_customer' | 'tickets_back_office' | 'tickets_tracker'
 type TypedTicketInboxView = Exclude<TicketInboxView, 'tickets_all'>
 
 const TICKET_VIEW_TYPE: Record<TypedTicketInboxView, TicketType> = {
@@ -141,6 +138,8 @@ export interface InboxSearch {
    *  `q` is set, 'recent' otherwise). */
   sort?: ConversationSort
   q?: string
+  /** Conversation channel (messenger / email). */
+  channel?: 'messenger' | 'email'
   /** Company refinement (deep-linked from the conversation CompanyCard): restrict
    *  the list to conversations whose visitor belongs to this company. */
   company?: string
@@ -179,7 +178,8 @@ export function buildListParams(
   companyId?: CompanyId,
   sort?: ConversationSort,
   customParams?: ConversationViewListParams,
-  aiBucket?: AiBucket
+  aiBucket?: AiBucket,
+  channel?: 'messenger' | 'email'
 ) {
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const statusParam = status === 'all' ? undefined : status
@@ -199,6 +199,7 @@ export function buildListParams(
       search: q,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   if (nav.kind === 'tag')
     return {
@@ -208,6 +209,7 @@ export function buildListParams(
       search: q,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   if (nav.kind === 'segment')
     return {
@@ -217,6 +219,7 @@ export function buildListParams(
       search: q,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   if (nav.view === 'mentions')
     return { view: 'mentions' as const, search: q, companyId: company, sort: sortParam }
@@ -244,7 +247,15 @@ export function buildListParams(
       : nav.view === 'unassigned'
         ? ('unassigned' as const)
         : ('all' as const)
-  return { status: statusParam, priority, assignee, search: q, companyId: company, sort: sortParam }
+  return {
+    status: statusParam,
+    priority,
+    assignee,
+    search: q,
+    companyId: company,
+    sort: sortParam,
+    ...(channel ? { channel } : {}),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +321,7 @@ export interface InboxListParams {
   teamId?: string
   companyId?: string
   sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'relevance'
+  channel?: 'messenger' | 'email'
 }
 
 /**
@@ -356,7 +368,8 @@ export function buildInboxListParams(
   activeViewFilters?: ConversationViewFilters,
   /** The tickets-branch registry-type dropdown (Phase 4); only meaningful on
    *  the Tickets-section scopes, ignored elsewhere. */
-  ticketTypeId?: string
+  ticketTypeId?: string,
+  channel?: 'messenger' | 'email'
 ): InboxListParams {
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const searchParam = search || undefined
@@ -391,6 +404,7 @@ export function buildInboxListParams(
       search: searchParam,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   }
   if (nav.kind === 'view' && isTicketInboxView(nav.view)) {
@@ -421,6 +435,7 @@ export function buildInboxListParams(
       search: searchParam,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   }
   // 'mine' | 'unassigned' — the only other scopes this function is called for.
@@ -438,5 +453,6 @@ export function buildInboxListParams(
     search: searchParam,
     companyId: company,
     sort: sortParam,
+    ...(channel ? { channel } : {}),
   }
 }
