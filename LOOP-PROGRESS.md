@@ -1,5 +1,32 @@
 # First-customer Loop Progress
 
+## 2026-08-17 — CP signup → paid Growth → custom domain
+
+Operator asked to clean `t1a-cd` and prove the stranger path on a
+new tenant. `t1a-cd.mortondev.com` is unregistered again (522);
+south still 307 Track1 Alpha.
+
+Playwright MCP is in `~/.grok/config.toml` (`npx @playwright/mcp@latest`,
+headless/isolated/chromium). This session did not load its tools;
+the walk used the same Chromium via local Playwright.
+
+**New tenant** `inst_01m07qdz94fvh9rsmdvp6c12dz`
+`ws-a988a63c3ebd7dd2b3e40a9f.quackback.co.uk` (instances 20→21).
+
+| Step                        | Result                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------------- |
+| CP `/signup` + OTP          | landed, workspace provisioned                                                      |
+| Free Domains                | Upgrade to Growth card; identity add **402** `Custom domains are a Growth feature` |
+| Test checkout Growth        | **303** `cs_test_`; Pay completed; `plan_id=growth`                                |
+| First add after pay         | **402** — domain gate read leftover org Stripe columns                             |
+| Fix                         | CP `e2e9d7a` live `4b2b2ac6` uses instance subscription                            |
+| Add `walk-cd.mortondev.com` | **200**; cert ready **25s**                                                        |
+| Visitor GET                 | **307** → **200** `Feedback - Untitled workspace` `x-quackback-saas-edge: 1`       |
+| South                       | still first-party **307**                                                          |
+
+Domain left attached so the operator can visit
+`https://walk-cd.mortondev.com/`.
+
 ## 2026-08-17 — custom-domain serve (Worker-as-origin)
 
 Builder + live E2E on `saas`. The 522 was not HMAC or Railway
