@@ -96,7 +96,7 @@ import {
   createWorkspaceScope,
   runWithWorkspaceScope,
 } from '@/lib/server/workspaces/workspace-context'
-import { drainOnce, type DrainResult } from './relay'
+import { drainOnce, earliestUndeliveredOutboxAt, type DrainResult } from './relay'
 import {
   claimRelayLease,
   isMissingRelayLeaderTable,
@@ -387,6 +387,8 @@ function startLoop(opts: {
   let lastWorkAtOnAttach = lastWorkAt
   let detachedAt = 0
   let signalled = false
+  /** Earliest unpublished outbox due time, read on detach. */
+  let deadlineAt: number | null = null
   /** Why the current attach happened, including `boot` (stats omit that). */
   let attachReason: ReattachReason = 'boot'
   /** The first drain (or follower miss) after attach is what fast-detach inspects. */
@@ -501,6 +503,7 @@ function startLoop(opts: {
     s.attached = true
     lastWorkAt = Date.now()
     lastWorkAtOnAttach = lastWorkAt
+    deadlineAt = null
     attachReason = reason
     firstPassOfAttach = true
     emptyRescanDetach = false
@@ -531,6 +534,19 @@ function startLoop(opts: {
     s.detaches += 1
     live.stopped = true
 
+    deadlineAt = null
+    try {
+      // Same instant the job tier reads `job_queue.run_at`: last chance to ask
+      // this connection when unpublished work is due, before we drop it.
+      const due = await held.scoped(() => earliestUndeliveredOutboxAt())
+      if (due) deadlineAt = due.getTime()
+    } catch (err) {
+      log.warn(
+        { err, workspaceKey: opts.workspaceKey },
+        'could not read the outbox deadline on detach'
+      )
+    }
+
     if (lease) {
       await held
         .scoped(() => releaseRelayLease(held.db, lease as RelayLease))
@@ -548,15 +564,26 @@ function startLoop(opts: {
     await held.close().catch(() => {})
     detachedAt = Date.now()
     log.info(
-      { workspaceKey: opts.workspaceKey, idle_ms: detachedAt - lastWorkAt },
+      {
+        workspaceKey: opts.workspaceKey,
+        deadline_at: deadlineAt ? new Date(deadlineAt).toISOString() : null,
+        idle_ms: detachedAt - lastWorkAt,
+      },
       'outbox relay tier detached from workspace — pool, doorbell and lease released'
     )
   }
 
-  const detachedWaitMs = (): number =>
-    Math.max(250, nextRescanAt(Date.now(), opts.idle, opts.workspaceKey) - Date.now())
+  const detachedWaitMs = (): number => {
+    const rescanAt = nextRescanAt(Date.now(), opts.idle, opts.workspaceKey)
+    const at = deadlineAt !== null ? Math.min(deadlineAt, rescanAt) : rescanAt
+    return Math.max(250, at - Date.now())
+  }
 
-  const wakeReason = (): ReattachReason => (signalled ? 'signal' : 'rescan')
+  const wakeReason = (): ReattachReason => {
+    if (signalled) return 'signal'
+    if (deadlineAt !== null && Date.now() >= deadlineAt) return 'deadline'
+    return 'rescan'
+  }
 
   /**
    * Nothing drained, nothing failed, nothing signalled, for long enough.

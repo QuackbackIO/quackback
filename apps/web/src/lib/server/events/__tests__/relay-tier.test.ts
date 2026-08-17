@@ -116,6 +116,7 @@ async function runTier(opts: {
   }))
   vi.doMock('../relay', () => ({
     drainOnce: async () => ({ drained: 0, enqueued: 0, skipped: 0, failed: 0, lagMsSamples: [] }),
+    earliestUndeliveredOutboxAt: async () => null,
   }))
   vi.doMock('../relay-leader', () => {
     class Missing extends Error {}
@@ -281,6 +282,7 @@ interface RelayIdleHandle {
   nextRescanAt: (now: number) => number
   /** Fires inside the first drain/claim so a mid-pass signal can be injected. */
   onPass: { fn: (() => void) | null }
+  plan: { pendingAt: Date | null }
   closes: { listener: number; pool: number }
   status: () => {
     attached: boolean
@@ -306,6 +308,7 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
   const ws = workspace(workspaceKey)
   const closes = { listener: 0, pool: 0 }
   const onPass: { fn: (() => void) | null } = { fn: null }
+  const plan: { pendingAt: Date | null } = { pendingAt: null }
 
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
   vi.doMock('@/lib/server/workspaces/mode', () => ({
@@ -353,6 +356,7 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
       onPass.fn?.()
       return { drained: 0, enqueued: 0, skipped: 0, failed: 0, lagMsSamples: [] }
     },
+    earliestUndeliveredOutboxAt: async () => plan.pendingAt,
   }))
   vi.doMock('../relay-leader', () => ({
     claimRelayLease: async () => {
@@ -382,6 +386,7 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
     workspaceKey,
     closes,
     onPass,
+    plan,
     noteActivity: (source = 'request') => idle.noteWorkspaceActivity(workspaceKey, source),
     nextRescanAt: (now: number) => idle.nextRescanAt(now, policy, workspaceKey),
     status: () => {
@@ -476,6 +481,26 @@ describe('a rescan attach that publishes nothing', () => {
     expect(relayIdle.status().lastReattachReason).toBe('rescan')
     expect(relayIdle.status().attached).toBe(true)
     expect(relayIdle.status().detaches).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
+    expect(relayIdle.status().attached).toBe(true)
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2 + POLL_MS)
+    expect(relayIdle.status().attached).toBe(false)
+  })
+})
+
+describe('a deadline attach that publishes nothing', () => {
+  it('wakes at the unpublished outbox due time', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    relayIdle = await bootRelayIdle()
+    relayIdle.plan.pendingAt = new Date(Date.now() + DETACH_MS + POLL_MS + 80)
+    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
+    expect(relayIdle.status().attached).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(250)
+    expect(relayIdle.status().attached).toBe(true)
+    expect(relayIdle.status().lastReattachReason).toBe('deadline')
 
     await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
     expect(relayIdle.status().attached).toBe(true)

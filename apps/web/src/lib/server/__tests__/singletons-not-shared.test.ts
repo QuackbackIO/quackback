@@ -242,6 +242,7 @@ describe('the relay is per workspace, not one leader for whichever database this
         failed: 0,
         lagMsSamples: [],
       }),
+      earliestUndeliveredOutboxAt: async () => null,
     }))
     vi.doMock('../events/relay-leader', () => ({
       claimRelayLease: async () => null,

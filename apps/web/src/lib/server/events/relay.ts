@@ -22,7 +22,8 @@
  * so they are not lost or retried.
  */
 import crypto from 'crypto'
-import { db, events, eq, isNull, asc, type Transaction } from '@/lib/server/db'
+import { db, events, eq, isNull, asc, sql, type Transaction } from '@/lib/server/db'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
 import { enqueueHookJobsWithIds } from './process'
 import { resolveTargets } from './resolvers/registry'
@@ -67,6 +68,25 @@ function targetKey(target: HookTarget): string {
 
 async function markPublished(id: bigint, executor: Transaction | typeof db = db): Promise<void> {
   await executor.update(events).set({ publishedAt: new Date() }).where(eq(events.id, id))
+}
+
+/**
+ * The earliest unpublished outbox row's due time.
+ *
+ * Read by the relay on the connection it is about to drop, matching the job
+ * tier's detach-time deadline. Unpublished rows are due at `occurred_at` —
+ * a scheduled delivery that has not been stamped `published_at` yet. Null
+ * means the outbox is empty and the detached wait may sleep on the rescan
+ * floor alone.
+ */
+export async function earliestUndeliveredOutboxAt(): Promise<Date | null> {
+  const result = await db.execute(sql`
+    SELECT min(occurred_at) AS occurred_at FROM events WHERE published_at IS NULL
+  `)
+  const rows = getExecuteRows<{ occurred_at: Date | string | null }>(result)
+  const value = rows[0]?.occurred_at ?? null
+  if (value === null) return null
+  return value instanceof Date ? value : new Date(value)
 }
 
 export interface DrainResult {
