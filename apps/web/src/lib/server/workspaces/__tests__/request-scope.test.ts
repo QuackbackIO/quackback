@@ -76,33 +76,33 @@ describe('resolveWorkspaceAndContinue', () => {
   })
 
   it('resolves a third-party custom host from a signed customer-host header on a trusted origin', async () => {
-    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'saas-origin.quackback.co.uk'
+    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'origin.saas.example'
     process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
     const { signCustomerHost } = await import('../saas-edge-host')
     acquireScopeForHost.mockResolvedValue({
       kind: 'unknown_host',
-      hostname: 't1a-cd.mortondev.com',
+      hostname: 'shop.customer.test',
     })
     const { resolveWorkspaceAndContinue } = await import('../request-scope')
     await resolveWorkspaceAndContinue({
-      request: new Request('http://saas-origin.quackback.co.uk/', {
+      request: new Request('http://origin.saas.example/', {
         headers: {
-          host: 'saas-origin.quackback.co.uk',
-          'x-quackback-customer-host': 't1a-cd.mortondev.com',
+          host: 'origin.saas.example',
+          'x-quackback-customer-host': 'shop.customer.test',
           'x-quackback-customer-host-sig': signCustomerHost(
             'test-edge-secret',
-            't1a-cd.mortondev.com'
+            'shop.customer.test'
           ),
         },
       }),
       next: async () => 'served',
       log: silentLog as never,
     })
-    expect(acquireScopeForHost).toHaveBeenCalledWith('t1a-cd.mortondev.com', 'request')
+    expect(acquireScopeForHost).toHaveBeenCalledWith('shop.customer.test', 'request')
   })
 
   it('ignores a spoofed customer-host header when the request Host is not a trusted origin', async () => {
-    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'saas-origin.quackback.co.uk'
+    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'origin.saas.example'
     process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
     const { signCustomerHost } = await import('../saas-edge-host')
     acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'south.example.com' })
@@ -111,10 +111,10 @@ describe('resolveWorkspaceAndContinue', () => {
       request: new Request('http://south.example.com/', {
         headers: {
           host: 'south.example.com',
-          'x-quackback-customer-host': 't1a-cd.mortondev.com',
+          'x-quackback-customer-host': 'shop.customer.test',
           'x-quackback-customer-host-sig': signCustomerHost(
             'test-edge-secret',
-            't1a-cd.mortondev.com'
+            'shop.customer.test'
           ),
         },
       }),
@@ -125,28 +125,25 @@ describe('resolveWorkspaceAndContinue', () => {
   })
 
   it('ignores a customer-host header on the Railway origin when the HMAC is missing or wrong', async () => {
-    process.env.QUACKBACK_SAAS_RAILWAY_ORIGIN = 'quackback-production-9e99.up.railway.app'
+    process.env.QUACKBACK_SAAS_RAILWAY_ORIGIN = 'app.up.example'
     process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
     acquireScopeForHost.mockResolvedValue({
       kind: 'unknown_host',
-      hostname: 'quackback-production-9e99.up.railway.app',
+      hostname: 'app.up.example',
     })
     const { resolveWorkspaceAndContinue } = await import('../request-scope')
     await resolveWorkspaceAndContinue({
-      request: new Request('http://quackback-production-9e99.up.railway.app/', {
+      request: new Request('http://app.up.example/', {
         headers: {
-          host: 'quackback-production-9e99.up.railway.app',
-          'x-quackback-customer-host': 't1a-cd.mortondev.com',
+          host: 'app.up.example',
+          'x-quackback-customer-host': 'shop.customer.test',
           'x-quackback-customer-host-sig': '00'.repeat(32),
         },
       }),
       next: async () => 'served',
       log: silentLog as never,
     })
-    expect(acquireScopeForHost).toHaveBeenCalledWith(
-      'quackback-production-9e99.up.railway.app',
-      'request'
-    )
+    expect(acquireScopeForHost).toHaveBeenCalledWith('app.up.example', 'request')
   })
 
   it('404s an unclaimed hostname without touching any database', async () => {

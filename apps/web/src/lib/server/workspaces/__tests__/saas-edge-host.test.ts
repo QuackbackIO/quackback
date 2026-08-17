@@ -6,8 +6,9 @@ import {
 } from '../saas-edge-host'
 
 const SECRET = 'test-edge-secret'
-const CUSTOMER = 't1a-cd.mortondev.com'
-const RAILWAY = 'quackback-production-9e99.up.railway.app'
+const CUSTOMER = 'shop.customer.test'
+const RAILWAY = 'app.up.example'
+const FIRST_PARTY = 'south.saas.example'
 
 function request(host: string, headers: Record<string, string> = {}) {
   return new Request(`http://${host}/`, { headers: { host, ...headers } })
@@ -42,7 +43,7 @@ describe('saas-edge-host', () => {
     const sig = signCustomerHost(SECRET, CUSTOMER)
     expect(
       requestWorkspaceHost(
-        request('south63792f.quackback.co.uk', {
+        request(FIRST_PARTY, {
           'x-quackback-customer-host': CUSTOMER,
           'x-quackback-customer-host-sig': sig,
         }),
@@ -51,7 +52,7 @@ describe('saas-edge-host', () => {
           QUACKBACK_SAAS_EDGE_SECRET: SECRET,
         } as NodeJS.ProcessEnv
       )
-    ).toBe('south63792f.quackback.co.uk')
+    ).toBe(FIRST_PARTY)
   })
 
   it('ignores a header on the Railway origin when the secret is unset', () => {

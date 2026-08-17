@@ -1,8 +1,8 @@
 /**
  * How a Cloudflare-for-SaaS custom host becomes a workspace Host.
  *
- * Railway only accepts names we registered. The edge Worker fetches our
- * `*.up.railway.app` origin and sends the visitor's hostname in
+ * Railway only accepts names we registered. The edge Worker fetches the
+ * origin in QUACKBACK_SAAS_RAILWAY_ORIGIN and sends the visitor hostname in
  * `x-quackback-customer-host`, signed with `QUACKBACK_SAAS_EDGE_SECRET`.
  *
  * Trust that header only when:
