@@ -864,6 +864,23 @@ describe('dispatch on the ses rung', () => {
     expect(command.input.ReplyToAddresses).toEqual(['"Acme, Inc" <c.abc@platform.test>'])
   })
 
+  it('wraps From with fromDisplayName on the SES FromEmailAddress', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendConversationMessageEmail({
+      to: 'customer@example.test',
+      direction: 'agent_reply',
+      senderName: 'Alex',
+      messagePreview: 'hello',
+      bodyHtml: '<p>hello</p>',
+      ctaUrl: 'https://acme.example/c',
+      workspaceName: 'Acme',
+      channel: 'email',
+      fromDisplayName: 'Alex (Acme)',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.FromEmailAddress).toBe('"Alex (Acme)" <notifications@platform.test>')
+  })
+
   it('renders a text/plain alternative and uses the human reply subject', async () => {
     process.env.EMAIL_FROM = 'notifications@platform.test'
     await sendConversationMessageEmail({

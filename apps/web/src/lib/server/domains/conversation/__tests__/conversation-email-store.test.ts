@@ -247,6 +247,12 @@ describe('priorInboundEmailMessageIds', () => {
     const result = await priorInboundEmailMessageIds('conversation_abc' as never)
     expect(result).toEqual(['cust-old@x', 'cust-new@x'])
   })
+
+  it('drops transport dedupe keys that are not RFC Message-IDs', async () => {
+    selectRows = [{ messageId: 'qb-transport:ses-1' }, { messageId: 'cust@x' }]
+    const result = await priorInboundEmailMessageIds('conversation_abc' as never)
+    expect(result).toEqual(['cust@x'])
+  })
 })
 
 describe('threadIdsForOutbound', () => {

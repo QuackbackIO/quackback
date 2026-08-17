@@ -25,6 +25,11 @@ const log = logger.child({ component: 'conversation-email-store' })
 
 const EMAIL_CHANNEL = 'email'
 
+/** True when the stored inbound id is an RFC 5322 msg-id, not a transport dedupe key. */
+function isRfcMessageId(id: string): boolean {
+  return id.includes('@') && !id.toLowerCase().startsWith('qb-transport:')
+}
+
 /** Normalize a Message-ID to the stored form: strip angle brackets, lower-case. */
 function normalizeMessageId(id: string): string {
   return stripAngleBrackets(id).toLowerCase()
@@ -136,7 +141,7 @@ export async function priorInboundEmailMessageIds(
     .limit(limit)
   return rows
     .map((r) => r.messageId)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .filter((id): id is string => typeof id === 'string' && isRfcMessageId(id))
     .reverse()
 }
 
@@ -183,7 +188,7 @@ export async function threadIdsForOutbound(
   const outbound = outboundRows.map((r) => r.messageId).reverse()
   const inbound = inboundRows
     .map((r) => r.messageId)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .filter((id): id is string => typeof id === 'string' && isRfcMessageId(id))
     .reverse()
 
   const merged = [
@@ -192,7 +197,9 @@ export async function threadIdsForOutbound(
       createdAt: r.createdAt,
     })),
     ...inboundRows.flatMap((r) =>
-      r.messageId ? [{ messageId: r.messageId, createdAt: r.createdAt }] : []
+      r.messageId && isRfcMessageId(r.messageId)
+        ? [{ messageId: r.messageId, createdAt: r.createdAt }]
+        : []
     ),
   ]
     .sort((a, b) => asTime(a.createdAt) - asTime(b.createdAt))
