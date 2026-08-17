@@ -416,8 +416,8 @@ function ModulesCard({
           <div className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5">
             <p className="text-xs text-muted-foreground">
               Enable Messenger in{' '}
-              <Link to="/admin/settings/conversations" className="font-medium text-primary">
-                Conversations settings
+              <Link to="/admin/settings/channels/messenger" className="font-medium text-primary">
+                Messenger settings
               </Link>{' '}
               to add a Messages tab.
             </p>

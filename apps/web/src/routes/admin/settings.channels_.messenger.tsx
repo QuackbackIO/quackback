@@ -250,7 +250,13 @@ function MessengerChannelPage() {
 
       <SettingsCard title="Quinn" description="Assistant identity is configured in Automation.">
         <div className="flex items-center justify-between py-1">
-          <p className="text-sm text-muted-foreground">Fronting conversations · answering off</p>
+          <p className="text-sm text-muted-foreground">
+            {messengerConfig?.assistant?.enabled === false
+              ? 'Off'
+              : messengerConfig?.assistant?.respond
+                ? 'Fronting conversations · answering on'
+                : 'Fronting conversations · answering off'}
+          </p>
           <Link to="/admin/automation/assistant" className="text-sm font-medium text-primary">
             Configure in Automation
           </Link>

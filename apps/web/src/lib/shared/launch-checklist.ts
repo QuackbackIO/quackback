@@ -54,7 +54,7 @@ export type LaunchTaskHref =
   | '/admin/settings/branding'
   | '/admin/settings/widget'
   | '/admin/settings/widget/install'
-  | '/admin/settings/conversations'
+  | '/admin/settings/channels/messenger'
   | '/admin/settings/integrations'
   | '/admin/help-center'
   | '/admin/status'

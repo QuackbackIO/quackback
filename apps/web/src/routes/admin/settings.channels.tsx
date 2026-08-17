@@ -12,20 +12,18 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { emailChannelConfigQuery } from '@/lib/client/queries/channel-accounts'
 import {
   fetchConversationRoutingFn,
+  getEmailChannelStatusFn,
   updateConversationRoutingFn,
 } from '@/lib/server/functions/settings'
 import { useQuery } from '@tanstack/react-query'
+import { getChannelDescriptor } from '@/lib/shared/channels'
 
 export const Route = createFileRoute('/admin/settings/channels')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
-    await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
-      context.queryClient.ensureQueryData(emailChannelConfigQuery()),
-    ])
+    await context.queryClient.ensureQueryData(settingsQueries.widgetConfig())
     return {}
   },
   component: ChannelsHubRoute,
@@ -40,7 +38,11 @@ function ChannelsHubRoute() {
 
 function ChannelsHubPage() {
   const widget = useSuspenseQuery(settingsQueries.widgetConfig())
-  const email = useQuery(emailChannelConfigQuery())
+  const emailStatusQuery = useQuery({
+    queryKey: ['settings', 'email-channel-status'],
+    queryFn: () => getEmailChannelStatusFn(),
+    staleTime: 60_000,
+  })
   const routingQuery = useQuery({
     queryKey: ['conversation-routing'],
     queryFn: () => fetchConversationRoutingFn(),
@@ -50,15 +52,13 @@ function ChannelsHubPage() {
   const [, startTransition] = useTransition()
 
   const enabled = routingEnabled ?? routingQuery.data?.enabled ?? false
+  const messenger = getChannelDescriptor('messenger')
+  const email = getChannelDescriptor('email')
   const messengerOn = widget.data.messenger?.enabled === true
-  const inboundAddress =
-    typeof email.data?.inboundRoute?.config?.forwardingTarget === 'string'
-      ? email.data.inboundRoute.config.forwardingTarget
-      : (email.data?.platformAddress ?? null)
-  const receiving = !!email.data?.platformAddress || !!inboundAddress
-  const sendingOnly = !receiving && (email.data?.sendingAddresses?.length ?? 0) > 0
+  const receiving = emailStatusQuery.data?.inboundConfigured === true
+  const sendingOnly = !receiving && !!emailStatusQuery.data?.fromAddress
   const emailStatus = receiving ? 'Receiving' : sendingOnly ? 'Sending only' : 'Set up'
-  const emailSubtitle = inboundAddress ?? 'Add an inbound route'
+  const emailSubtitle = emailStatusQuery.data?.inboundDomain ?? 'Add an inbound route'
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -79,7 +79,7 @@ function ChannelsHubPage() {
           <div className="flex items-center gap-3">
             <ChatBubbleLeftRightIcon className="size-4 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">Messenger</p>
+              <p className="text-sm font-medium">{messenger?.label ?? 'Messenger'}</p>
               <p className="text-xs text-muted-foreground">Widget and portal</p>
             </div>
           </div>
@@ -94,7 +94,7 @@ function ChannelsHubPage() {
           <div className="flex items-center gap-3">
             <EnvelopeIcon className="size-4 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">Email</p>
+              <p className="text-sm font-medium">{email?.label ?? 'Email'}</p>
               <p className="text-xs text-muted-foreground">{emailSubtitle}</p>
             </div>
           </div>

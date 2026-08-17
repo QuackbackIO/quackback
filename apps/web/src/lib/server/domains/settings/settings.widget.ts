@@ -182,7 +182,12 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
   try {
     const org = await requireSettings()
     const existing = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
-    const updated = deepMerge(existing, input as Partial<WidgetConfig>)
+    const incoming = { ...input } as Partial<WidgetConfig>
+    if (incoming.messenger && 'routing' in incoming.messenger) {
+      const { routing: _routing, ...messenger } = incoming.messenger
+      incoming.messenger = messenger
+    }
+    const updated = deepMerge(existing, incoming)
     // The translations map replaces wholesale — deepMerge would union locale
     // keys, so a removed locale or a cleared field could never disappear.
     if (input.translations !== undefined) updated.translations = input.translations

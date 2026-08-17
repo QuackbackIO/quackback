@@ -240,6 +240,7 @@ export function buildListParams(
       search: q,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   const assignee =
     nav.view === 'mine'
@@ -393,6 +394,7 @@ export function buildInboxListParams(
       search: searchParam,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   }
   if (nav.kind === 'team') {
@@ -425,6 +427,7 @@ export function buildInboxListParams(
       search: searchParam,
       companyId: company,
       sort: sortParam,
+      ...(channel ? { channel } : {}),
     }
   }
   if (nav.kind === 'view' && nav.view === 'all') {
