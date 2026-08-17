@@ -874,6 +874,31 @@ export function mintNoteOutboundMessageId(
 }
 
 // ============================================================================
+// Team-alert threading. Agent-facing mail about a visitor message, in its own
+// `team.` namespace — disjoint from customer `c.` ids and internal `note.` ids
+// so a teammate's alert thread never joins the customer's mailbox thread.
+// ============================================================================
+
+export function teamThreadRootMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  return `team.${idSuffix(conversationId, CONVERSATION_PREFIX)}@${domain}`
+}
+
+export function mintTeamOutboundMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  const nonce = randomBytes(6).toString('base64url')
+  return `team.${idSuffix(conversationId, CONVERSATION_PREFIX)}.${nonce}@${domain}`
+}
+
+// ============================================================================
 // Ticket reply-to addressing. Same grammar and signing secret as the
 // conversation addresses above, with a `t` marker where those carry `c`:
 // `<slug>+t<id-suffix>.<tag>@<inbound-domain>`. A ticket address fed to the

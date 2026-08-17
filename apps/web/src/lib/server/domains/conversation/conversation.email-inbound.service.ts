@@ -781,6 +781,15 @@ async function ingestColdInbound(
       senderAuthSignal: authSignal,
     },
   })
+  if (opts.autoResponder !== true) {
+    void import('./conversation.auto-ack').then(({ maybeSendColdInboundAck }) =>
+      maybeSendColdInboundAck({
+        parsed,
+        conversationId,
+        conversationSubject: parsed.subject,
+      })
+    )
+  }
   return { status: 'ingested', conversationId }
 }
 

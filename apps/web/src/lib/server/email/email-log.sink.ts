@@ -14,6 +14,7 @@ async function writeOutbound(entry: EmailLogSinkEntry): Promise<void> {
       emailType: entry.emailType,
       provider: entry.provider,
       messageId: entry.messageId ?? null,
+      providerMessageId: entry.providerMessageId ?? null,
       address: entry.to,
       subject: entry.subject.slice(0, SUBJECT_MAX),
       status: entry.status,

@@ -218,6 +218,7 @@ interface ThreadingOptions {
   messageId?: string
   inReplyTo?: string
   references?: string[]
+  extraHeaders?: Record<string, string>
 }
 
 export interface EmailLogSinkEntry {
@@ -228,6 +229,7 @@ export interface EmailLogSinkEntry {
   subject: string
   status: 'sent' | 'failed' | 'skipped'
   messageId?: string | null
+  providerMessageId?: string | null
   error?: string
   billable: boolean
 }
@@ -251,7 +253,7 @@ function recordOutboundLog(entry: EmailLogSinkEntry): void {
 }
 
 function buildThreadingHeaders(options: ThreadingOptions): Record<string, string> {
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { ...(options.extraHeaders ?? {}) }
   if (options.messageId) headers['Message-ID'] = angleId(options.messageId)
   if (options.inReplyTo) headers['In-Reply-To'] = angleId(options.inReplyTo)
   if (options.references && options.references.length > 0) {
@@ -401,6 +403,7 @@ async function dispatch(
       subject: options.subject,
       status: 'sent',
       messageId: result.messageId,
+      providerMessageId: result.messageId,
       billable,
     })
     return { sent: true, messageId: result.messageId }
@@ -418,6 +421,7 @@ async function dispatch(
       messageId: threadingHeaders['Message-ID'],
       inReplyTo: threadingHeaders['In-Reply-To'],
       references: threadingHeaders['References'],
+      headers: options.extraHeaders,
     })
     log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
     recordOutboundLog({
@@ -428,6 +432,7 @@ async function dispatch(
       subject: options.subject,
       status: 'sent',
       messageId: result.messageId,
+      providerMessageId: result.messageId,
       billable,
     })
   } catch (error) {
@@ -906,6 +911,7 @@ export async function sendConversationMessageEmail(
     senderName,
     workspaceName,
     conversationSubject,
+    preview: messagePreview,
     channel,
     isFirstMessage,
     correspondence,
@@ -983,6 +989,41 @@ export async function sendConversationClosedEmail(params: {
     inReplyTo: params.inReplyTo,
     references: params.references,
     emailType: 'ConversationClosedEmail',
+  })
+}
+
+export async function sendConversationAutoAckEmail(params: {
+  to: string
+  workspaceName: string
+  conversationSubject?: string | null
+  replyTo?: string
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+  from?: SendingIdentity
+}): Promise<EmailResult> {
+  const subject =
+    conversationReplySubject(params.conversationSubject) ??
+    `Re: your message to ${params.workspaceName}`
+  return sendEmail({
+    to: params.to,
+    subject,
+    react: ConversationReplyEmail({
+      bodyHtml: `<p>We received your email and will get back to you shortly.</p>`,
+      messagePreview: 'We received your email and will get back to you shortly.',
+      agentName: params.workspaceName,
+      teamName: params.workspaceName,
+    }),
+    replyTo: params.replyTo,
+    from: params.from,
+    messageId: params.messageId,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
+    extraHeaders: {
+      'Auto-Submitted': 'auto-replied',
+      Precedence: 'auto_reply',
+    },
+    emailType: 'ConversationAutoAckEmail',
   })
 }
 
@@ -1570,6 +1611,7 @@ export {
   assembleOutboundThreading,
   isHumanReplyTemplate,
   agentReplyDisplayName,
+  teamAlertSubject,
 } from './conversation-copy'
 export { ConversationClosedEmail } from './templates/conversation-closed'
 export { EMAIL_BILLABLE, isEmailBillable } from './mail-class'

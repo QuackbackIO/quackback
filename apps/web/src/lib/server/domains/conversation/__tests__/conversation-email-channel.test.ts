@@ -19,6 +19,8 @@ import {
   mintOutboundMessageId,
   mintNoteOutboundMessageId,
   noteThreadRootMessageId,
+  teamThreadRootMessageId,
+  mintTeamOutboundMessageId,
   ticketRootMessageId,
   outboundMessageIdDomain,
   ownEmailDomains,
@@ -946,6 +948,23 @@ describe('internal-note Message-ID threading', () => {
   it('returns null when no sending domain is configured', () => {
     expect(noteThreadRootMessageId(REAL_ID, {})).toBeNull()
     expect(mintNoteOutboundMessageId(REAL_ID, {})).toBeNull()
+  })
+})
+
+describe('team-alert Message-ID threading', () => {
+  const FROM_ENV = { EMAIL_FROM: 'Support <noreply@acme.example>' }
+
+  it('derives a deterministic team-thread root', () => {
+    expect(teamThreadRootMessageId(REAL_ID, FROM_ENV)).toBe(
+      'team.01kw8qxn1eeh4t2rek7varh032@acme.example'
+    )
+  })
+
+  it('stays disjoint from customer and note namespaces', () => {
+    const id = teamThreadRootMessageId(REAL_ID, FROM_ENV)!
+    expect(id.startsWith('team.')).toBe(true)
+    expect(id).not.toBe(noteThreadRootMessageId(REAL_ID, FROM_ENV))
+    expect(mintTeamOutboundMessageId(REAL_ID, FROM_ENV)).toMatch(/^team\./)
   })
 })
 

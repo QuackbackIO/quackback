@@ -48,6 +48,10 @@ export async function handleInboundEmailWebhook(request: Request): Promise<Respo
   const type = (event as { type?: unknown })?.type
   // Only inbound receipts are actionable; ack the rest so retries stop.
   if (typeof type === 'string' && type !== 'email.received') {
+    if (type === 'email.bounced' || type === 'email.complained') {
+      const { applyDeliveryEvent } = await import('@/lib/server/email/email-delivery-events')
+      await applyDeliveryEvent(event)
+    }
     return new Response('', { status: 200 })
   }
 

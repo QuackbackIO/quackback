@@ -322,3 +322,9 @@ export const deleteChannelAccountFn = createServerFn({ method: 'POST' })
     await softDeleteChannelAccount(data.id as ChannelAccountId)
     return { id: data.id }
   })
+
+export const listRecentEmailLogFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+  const { listRecentEmailLog } = await import('@/lib/server/email/email-log.query')
+  return listRecentEmailLog(50)
+})

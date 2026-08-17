@@ -9,6 +9,7 @@ export const EMAIL_BILLABLE: Record<string, boolean> = {
   ConversationMessageEmail: true,
   ConversationReplyEmail: true,
   ConversationClosedEmail: true,
+  ConversationAutoAckEmail: true,
   CsatRequestEmail: true,
   TicketEventEmail: true,
   ChangelogPublishedEmail: true,

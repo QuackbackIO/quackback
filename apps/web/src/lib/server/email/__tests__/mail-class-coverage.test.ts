@@ -30,6 +30,7 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   // No capability: may follow the contact address.
   sendConversationMessageEmail: 'contact',
   sendConversationClosedEmail: 'contact',
+  sendConversationAutoAckEmail: 'contact',
   sendCsatRequestEmail: 'contact',
   sendStatusChangeEmail: 'contact',
   sendNewCommentEmail: 'contact',

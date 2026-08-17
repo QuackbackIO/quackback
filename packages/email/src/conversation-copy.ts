@@ -25,6 +25,19 @@ export function isHumanReplyTemplate(
   return theirs && (direction === 'agent_reply' || direction === 'agent_started')
 }
 
+/** `{visitor}: {subject|preview}` for teammate alerts. */
+export function teamAlertSubject(
+  visitorName: string,
+  subject: string | null | undefined,
+  preview?: string | null
+): string {
+  const topic =
+    subject?.replace(/^\s*(re:\s*)+/i, '').trim() ||
+    preview?.replace(/\s+/g, ' ').trim().slice(0, 80) ||
+    'New message'
+  return `${visitorName}: ${topic}`
+}
+
 export function agentReplyDisplayName(agentName: string, workspaceName: string): string {
   return `${agentName} (${workspaceName})`
 }
@@ -34,6 +47,8 @@ export function conversationMessageCopy(opts: {
   senderName: string
   workspaceName: string
   conversationSubject?: string | null
+  /** Team-alert subject fallback when the conversation has no subject. */
+  preview?: string | null
   channel?: string
   isFirstMessage?: boolean
   /** When set, overrides the channel string for the human-template gate. */
@@ -56,7 +71,7 @@ export function conversationMessageCopy(opts: {
         ? `${senderName} started a conversation in ${workspaceName}.`
         : `${senderName} sent a new message in ${workspaceName}.`
     return {
-      subject: `New message in ${workspaceName}`,
+      subject: teamAlertSubject(senderName, opts.conversationSubject, opts.preview),
       heading: 'New message',
       intro,
       ctaLabel: 'Open inbox',

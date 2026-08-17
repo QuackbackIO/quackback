@@ -86,6 +86,18 @@ describe('conversationMessageCopy', () => {
     expect(first.intro).toBe('Priya started a conversation in Acme.')
     expect(follow.intro).toBe('Priya sent a new message in Acme.')
     expect(follow.useHumanTemplate).toBe(false)
+    expect(first.subject).toBe('Priya: New message')
+  })
+
+  it('forwards the visitor name and subject on team alerts', () => {
+    const copy = conversationMessageCopy({
+      direction: 'visitor_message',
+      senderName: 'Priya',
+      workspaceName: 'Acme',
+      conversationSubject: 'Re: Billing overcharge',
+      preview: 'The invoice looks wrong',
+    })
+    expect(copy.subject).toBe('Priya: Billing overcharge')
   })
 })
 
