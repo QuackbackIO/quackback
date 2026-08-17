@@ -80,7 +80,7 @@ docker build -t quackback -f apps/web/Dockerfile .
 docker run -p 3000:3000 --env-file .env quackback
 ```
 
-Requires PostgreSQL and a Redis-compatible store. Set all variables in the canonical [runtime configuration table](docs/configuration.md). Migrations run automatically on startup.
+Requires PostgreSQL. Set all variables in the canonical [runtime configuration table](docs/configuration.md). Migrations run automatically on startup.
 
 ## Contributing
 
@@ -105,8 +105,7 @@ Log in with `demo@example.com` / `password`.
 ### Tech Stack
 
 - [TanStack Start](https://tanstack.com/start) + [TanStack Router](https://tanstack.com/router) · Full-stack React framework
-- [PostgreSQL](https://www.postgresql.org/) + [Drizzle ORM](https://orm.drizzle.team/) · Database and type-safe ORM
-- [BullMQ](https://docs.bullmq.io/) · Background job processing
+- [PostgreSQL](https://www.postgresql.org/) + [Drizzle ORM](https://orm.drizzle.team/) · Database, type-safe ORM, and background job queue
 - [Better Auth](https://www.better-auth.com/) · Authentication
 - [Tailwind CSS v4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) · Styling
 - [Bun](https://bun.sh/) · Runtime and package manager

@@ -82,7 +82,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./docker/postgres/init-pgcron.sql:/docker-entrypoint-initdb.d/init-pgcron.sql
-    # pg_cron is required for scheduled analytics/materialized-view refreshes.
+    # pg_cron is preloaded for existing volumes; the `analytics` queue runs on
+    # the app job tier, not through pg_cron. Do not drop the preload: that is a
+    # self-host image change with upgrade-path risk for those volumes.
     command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=${POSTGRES_DB:-quackback} -c max_connections=200
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']

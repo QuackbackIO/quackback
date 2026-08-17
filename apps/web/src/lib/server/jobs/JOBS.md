@@ -4,7 +4,7 @@ Background work on Postgres, per workspace, with leases. This is the substrate t
 replaces Redis for the background tier (`SAAS-HOSTING-STACK.md` §7).
 
 `QUACKBACK_TENANCY=single` — the default and every self-hosted install — gets one
-loop, no workspace scope, and the same seven sweeps on the same cadences they have
+loop, no workspace scope, and the same scheduled jobs on the cadences they have
 always run on. Nothing here needs a registry or a control plane.
 
 ---
@@ -185,7 +185,7 @@ module-scope `Map` keyed on the schedule name, and that is a cross-workspace def
 one process runs one loop per workspace, so whichever workspace reached a slot first
 advanced a counter every other workspace then read as "already done". Measured live
 on two Neon workspaces, each minute's sweep landed on exactly one of them. It
-affected all seven sweeps, and only `page-view-partitions` had a backstop.
+affected every scheduled sweep, and only `page-view-partitions` had a backstop.
 
 Keying the map by workspace would have fixed the instance. Making the state a
 parameter fixes the class — there is no shared object left to key wrongly, and
@@ -238,7 +238,7 @@ the next day's run restores it.
 ## 7. Shape of the tier
 
 `tier.ts` runs **one loop per workspace**, each with its own listener.
-`tenancy/fleet.ts` already answers "iterate all workspaces per tick", and that is the
+`workspaces/fleet.ts` already answers "iterate all workspaces per tick", and that is the
 right answer for a periodic sweep and the wrong one for a queue: the latency of an
 on-demand job would become the tick interval times the workspace count, and the whole
 point of the doorbell is that a job enqueued now starts now.
@@ -267,7 +267,7 @@ has not loaded the full application config.
 | `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
 | `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
 
-`QUACKBACK_ROLE=web` does not start the tier, the same gate `startOutboxRelay`
+`QUACKBACK_ROLE=web` does not start the tier, the same gate `startRelayTier`
 uses.
 
 ## 9. Workspace scope, and the shape this must not reproduce
@@ -294,8 +294,8 @@ rather than asserting it:
   level under that workspace's connection.
 
   **That guarantee reaches exactly as far as the static import graph, and an
-  earlier version of this document overstated it.** Priming loads the seven
-  handler _wrapper_ modules; three of them deferred their sweep modules to call
+  earlier version of this document overstated it.** Priming loads every
+  handler _wrapper_ module; three of them deferred their sweep modules to call
   time, which is inside the per-pass workspace scope — and `resolveHandler`'s
   warning could not see it, because it only guards the outer import. Proven on
   the pooled fleet with a top-level probe in `sla.sweep.ts`: `(module not
@@ -309,8 +309,8 @@ imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
   runs — because the scan proves only that the modules _can_ be primed.
 
   **The scan is one level deep, and the boundary is a cross-piece contract.** It
-  reads the seven wrapper files, not their graph. Deepening it was measured and
-  rejected: the modules those seven statically import carry 32 call-time imports
+  reads the wrapper files named by `JOB_DEFINITIONS`, not their graph. Deepening it was measured and
+  rejected: the modules those wrappers statically import carry 32 call-time imports
   across 12 files (`settings.service` 24, `conversation.service` 6,
   `pending-actions.service` 2) — ordinary lazy loading, none of it
   queue-specific. So the guarantee is: **the wrappers and their static graph load
@@ -359,6 +359,7 @@ went stale the moment a queue moved.
 | `snooze-sweep`           | `* * * * *`   | 1           | 3           | 60s   |
 | `workflow-sweep`         | `*/5 * * * *` | 1           | 3           | 60s   |
 | `workflow-retention`     | `0 4 * * *`   | 1           | 3           | 60s   |
+| `email-log-retention`    | `0 6 * * *`   | 1           | 3           | 60s   |
 | `spam-retention`         | `0 5 * * *`   | 1           | 3           | 60s   |
 | `sending-domain-recheck` | `20 6 * * *`  | 1           | 3           | 60s   |
 | `analytics`              | `0 * * * *`   | 1           | 3           | 60s   |
@@ -506,10 +507,10 @@ scheduling it on every workspace's loop would have each workspace poll the _same
 mailbox and ingest the same message into its own database. Not a regression: the
 BullMQ worker was never started under pooled tenancy either.
 
-**The outbox relay is still not started under pooled tenancy.** It needs a
-session-mode connection for `LISTEN` and `pg_advisory_lock` per workspace, which is
-the relay-tier piece's work. Its _enqueue_ is now this queue's, so what it needs
-is a per-workspace loop of exactly the shape `tier.ts` already runs.
+**The outbox relay is started under pooled tenancy** by `startRelayTier()`,
+on session-mode connections so `LISTEN` and the leader lease stay honest.
+Its _enqueue_ is this queue's; the relay loop is the matching per-workspace
+drain, the same shape `tier.ts` already runs for jobs.
 
 ## 11. Running the evidence
 
