@@ -1035,3 +1035,30 @@ export function getRelayTierStatus(): RelayTierStatus {
     workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),
   }
 }
+
+/**
+ * Ring this workspace's relay loop if it exists.
+ *
+ * Matching `signalWorkspace` on the job tier so the wake route can knock on
+ * both doors without knowing which map holds the key.
+ */
+export function signalWorkspace(workspaceKey: string): boolean {
+  const loop = loops.get(workspaceKey)
+  if (!loop) return false
+  loop.signal()
+  return true
+}
+
+/**
+ * Re-read the active workspace set and start any missing relay loops.
+ *
+ * Used by the internal wake route when a key has no loop yet. The caller
+ * rate-limits; this is the unthrottled reconcile.
+ */
+export function requestWorkspaceLoopRefresh(): void {
+  if (!running) return
+  if (!config.isPooledTenancy) return
+  void refreshWorkspaceLoops(relayTierConfig(), workspaceIdlePolicy()).catch((err) =>
+    log.error({ err }, 'outbox relay tier workspace refresh failed')
+  )
+}

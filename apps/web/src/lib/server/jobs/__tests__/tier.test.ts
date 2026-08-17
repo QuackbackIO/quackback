@@ -266,6 +266,22 @@ describe('a signal attach that finds no external work', () => {
     expect(handle.status().attached).toBe(false)
     expect(handle.status().lastReattachReason).toBe('signal')
   })
+
+  it('signalWorkspace reattaches a detached loop and returns false for an unknown key', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    handle = await bootJobTier()
+    await settle()
+    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
+    expect(handle.status().attached).toBe(false)
+
+    const mod = await import('../tier')
+    expect(mod.signalWorkspace('ws_missing')).toBe(false)
+    expect(mod.signalWorkspace(WORKSPACE_KEY)).toBe(true)
+    await settle()
+    expect(handle.status().attached).toBe(true)
+    expect(handle.status().lastReattachReason).toBe('signal')
+  })
 })
 
 describe('a deadline attach that finds no external work', () => {

@@ -911,3 +911,31 @@ export function getJobTierStatus(): JobTierStatus {
     workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),
   }
 }
+
+/**
+ * Ring this workspace's loop if it exists.
+ *
+ * Returns false when there is no loop — the wake route uses that to kick a
+ * fleet refresh rather than to answer 404, so a freshly provisioned workspace
+ * is not distinguishable from an unknown one.
+ */
+export function signalWorkspace(workspaceKey: string): boolean {
+  const loop = loops.get(workspaceKey)
+  if (!loop) return false
+  loop.signal()
+  return true
+}
+
+/**
+ * Re-read the active workspace set and start any missing loops.
+ *
+ * Used by the internal wake route when a key has no loop yet. The caller
+ * rate-limits; this is the unthrottled reconcile.
+ */
+export function requestWorkspaceLoopRefresh(): void {
+  if (!running) return
+  if (!config.isPooledTenancy) return
+  void refreshWorkspaceLoops(runnerConfig(), workspaceIdlePolicy()).catch((err) =>
+    log.error({ err }, 'job tier workspace refresh failed')
+  )
+}

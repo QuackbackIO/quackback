@@ -1046,4 +1046,13 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'once, which is then called per workspace. Setting it clears the cache above, so a swapped ' +
       'custodian cannot serve secrets the previous one resolved.',
   },
+  {
+    file: 'apps/web/src/routes/api/internal/wake.ts',
+    name: 'lastRefreshAt',
+    category: 'process-lifetime',
+    reason:
+      'Rate-limit latch for kicking both tiers to re-read the active workspace set. One number ' +
+      'per process, about this replica talking to the control database, not about any workspace. ' +
+      'A per-workspace latch would let an enumeration of unknown keys hammer the registry.',
+  },
 ]

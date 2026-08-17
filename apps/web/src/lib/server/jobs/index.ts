@@ -82,4 +82,11 @@ export {
 
 export { JOB_WAKE_CHANNEL, openWakeListener, type WakeListener } from './wake'
 
-export { getJobTierStatus, startJobTier, stopJobTier, type JobTierStatus } from './tier'
+export {
+  getJobTierStatus,
+  requestWorkspaceLoopRefresh,
+  signalWorkspace,
+  startJobTier,
+  stopJobTier,
+  type JobTierStatus,
+} from './tier'
