@@ -95,4 +95,27 @@ describe('workspaceAuthTrustedOrigins', () => {
     const { workspaceAuthTrustedOrigins } = await import('../trusted-origins')
     expect(workspaceAuthTrustedOrigins()).toContain('https://attacker.example')
   })
+
+  it('adds the request Origin when its host is already on the workspace', async () => {
+    const { runWithWorkspaceScope } = await import('@/lib/server/workspaces/workspace-context')
+    const { workspaceAuthTrustedOrigins } = await import('../trusted-origins')
+    const request = new Request('https://shop.customer.test/api/auth/sign-in/email-otp', {
+      headers: { origin: 'https://shop.customer.test' },
+    })
+    const origins = runWithWorkspaceScope(
+      scopeFor('inst_t1', 'ws-abc.saas.example', ['ws-abc.saas.example', 'shop.customer.test']),
+      () => workspaceAuthTrustedOrigins(request)
+    )
+    expect(origins).toContain('https://shop.customer.test')
+    const foreign = runWithWorkspaceScope(
+      scopeFor('inst_t1', 'ws-abc.saas.example', ['ws-abc.saas.example']),
+      () =>
+        workspaceAuthTrustedOrigins(
+          new Request('https://ws-abc.saas.example/api/auth/sign-in/email-otp', {
+            headers: { origin: 'https://evil.example' },
+          })
+        )
+    )
+    expect(foreign).not.toContain('https://evil.example')
+  })
 })

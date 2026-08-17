@@ -366,13 +366,12 @@ async function createAuth() {
   // `secure` flag below follow the hostname the request arrived on.
   const baseURL = config.baseUrl
 
-  // Origin allowlist. better-auth rejects an auth-protected POST whose Origin
-  // is absent from this list — closed but invisibly, which is why §8 calls
-  // TRUSTED_ORIGINS load-bearing. The list is a function so a custom host
-  // added after the first request is trusted without waiting for an
-  // auth_config_version bump (the cached instance would otherwise keep the
-  // snapshot from the first build).
-  const trustedOrigins = async () => workspaceAuthTrustedOrigins()
+  // Origin allowlist. Better Auth rejects an auth POST whose Origin is
+  // absent. The list is the documented per-request callback
+  // (trustedOrigins: async (request) => …) so a custom host added after
+  // the first request is trusted without an auth_config_version bump.
+  // The callback reads the request-scoped registry record — it does not
+  // fetch on every request.
 
   // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
   // to keep the createAuth() module-loading dependency graph clean.
@@ -434,11 +433,8 @@ async function createAuth() {
     // Base URL for auth callbacks and redirects
     baseURL,
 
-    // Trusted origins for CORS/CSRF protection. Built above: TRUSTED_ORIGINS
-    // (comma-separated) adds extra origins on a single-workspace install — useful
-    // for dev/test where BASE_URL differs from the browser origin (e.g. ngrok +
-    // localhost) — and a pooled workspace gets its own hostnames instead.
-    trustedOrigins,
+    // https://better-auth.com/docs/reference/security#dynamic-origin-list
+    trustedOrigins: async (request) => workspaceAuthTrustedOrigins(request),
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and

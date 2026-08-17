@@ -1,5 +1,18 @@
 # First-customer Loop Progress
 
+## 2026-08-17 — auth on every registered workspace host
+
+Signing in on `walk-cd.mortondev.com` returned Better Auth
+**Invalid origin**. The registry already listed system + custom +
+friendly hosts; `createAuth` snapshotted `trustedOrigins` on first
+build and only rebuilt on `auth_config_version`. Adding a custom
+domain does not bump that version.
+
+App `6ce2613cf` + follow-up uses Better Auth's per-request
+`trustedOrigins: async (request) => …` from the live registry
+record (no extra fetch). Focused tests 6/6. Not pinned yet.
+Until the new digest is live, sign in on CP or the system host.
+
 ## 2026-08-17 — CP signup → paid Growth → custom domain
 
 Operator asked to clean `t1a-cd` and prove the stranger path on a

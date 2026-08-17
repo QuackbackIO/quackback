@@ -36,17 +36,49 @@ export function originsForWorkspaceHostnames(baseUrl: string, hostnames: string[
   return [...origins]
 }
 
-export function workspaceAuthTrustedOrigins(env: NodeJS.ProcessEnv = process.env): string[] {
+/**
+ * Better Auth `trustedOrigins` callback. Invoked per request.
+ *
+ * Does not fetch: the request scope already holds the registry record
+ * (Host / signed customer-host lookup ran before auth). Adding a custom
+ * domain updates that record; the next request sees the new origin.
+ */
+export function workspaceAuthTrustedOrigins(
+  request?: Request,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
   const workspace = getCurrentWorkspace()
   if (workspace) {
-    return originsForWorkspaceHostnames(
+    const origins = originsForWorkspaceHostnames(
       workspace.routing.baseUrl || config.baseUrl,
       workspace.routing.hostnames
     )
+    return withMatchingRequestOrigin(origins, request, workspace.routing.hostnames)
   }
   const extra = (env.TRUSTED_ORIGINS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
   return [...originsForWorkspaceHostnames(config.baseUrl, []), ...extra]
+}
+
+function withMatchingRequestOrigin(
+  origins: string[],
+  request: Request | undefined,
+  hostnames: string[]
+): string[] {
+  if (!request) return origins
+  const raw = request.headers.get('origin')
+  if (!raw) return origins
+  let origin: URL
+  try {
+    origin = new URL(raw)
+  } catch {
+    return origins
+  }
+  const host = origin.hostname.toLowerCase()
+  const allowed = new Set(hostnames.map((h) => h.trim().toLowerCase().split(':')[0] ?? ''))
+  if (!allowed.has(host)) return origins
+  if (origins.includes(origin.origin)) return origins
+  return [...origins, origin.origin]
 }
