@@ -104,6 +104,7 @@ const PROJECTED_LIMITS: ProjectedLimits = {
   maxCustomRoles: 5,
   maxSendingDomains: 3,
   aiTokensPerMonth: 100_000,
+  emailsPerMonth: null,
   apiRequestsPerMonth: 100_000,
   apiRequestsPerMinute: 600,
 }

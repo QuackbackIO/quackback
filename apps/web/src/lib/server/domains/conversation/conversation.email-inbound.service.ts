@@ -942,5 +942,30 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
     if (full?.html) parsed.html = full.html
   }
 
-  return ingestParsedEmail(parsed)
+  const result = await ingestParsedEmail(parsed)
+  void import('@/lib/server/email/email-log.sink').then(({ recordInboundEmailLog }) =>
+    recordInboundEmailLog({
+      emailType:
+        result.status === 'ingested'
+          ? 'reply'
+          : result.status === 'quarantined'
+            ? 'rejected'
+            : result.status === 'ingested_ticket'
+              ? 'reply'
+              : result.status === 'no_conversation'
+                ? 'cold_inbound'
+                : 'rejected',
+      address: parsed.from ?? '',
+      subject: parsed.subject,
+      conversationId: 'conversationId' in result ? result.conversationId : null,
+      ticketId: 'ticketId' in result ? result.ticketId : null,
+      status:
+        result.status === 'ingested' || result.status === 'ingested_ticket'
+          ? 'received'
+          : 'rejected',
+      error: result.status,
+      messageId: parsed.messageId,
+    })
+  )
+  return result
 }

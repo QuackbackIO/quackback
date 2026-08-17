@@ -41,7 +41,9 @@ import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
 import { ConversationReplyEmail } from './templates/conversation-reply'
-import { conversationMessageCopy } from './conversation-copy'
+import { conversationMessageCopy, conversationReplySubject } from './conversation-copy'
+import { ConversationClosedEmail } from './templates/conversation-closed'
+import { isEmailBillable } from './mail-class'
 import { PostMentionEmail } from './templates/post-mention'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
@@ -218,6 +220,36 @@ interface ThreadingOptions {
   references?: string[]
 }
 
+export interface EmailLogSinkEntry {
+  direction: 'outbound'
+  emailType: string
+  provider: string
+  to: string
+  subject: string
+  status: 'sent' | 'failed' | 'skipped'
+  messageId?: string | null
+  error?: string
+  billable: boolean
+}
+
+export type EmailLogSink = (entry: EmailLogSinkEntry) => void | Promise<void>
+
+let emailLogSink: EmailLogSink | null = null
+
+/** Registered by apps/web. The sink must never throw; dispatch swallows sink errors. */
+export function setEmailLogSink(sink: EmailLogSink | null): void {
+  emailLogSink = sink
+}
+
+function recordOutboundLog(entry: EmailLogSinkEntry): void {
+  if (!emailLogSink) return
+  try {
+    void Promise.resolve(emailLogSink(entry)).catch(() => undefined)
+  } catch {
+    // A ledger failure must never block a send.
+  }
+}
+
 function buildThreadingHeaders(options: ThreadingOptions): Record<string, string> {
   const headers: Record<string, string> = {}
   if (options.messageId) headers['Message-ID'] = angleId(options.messageId)
@@ -286,6 +318,15 @@ async function dispatch(
   // realEmail(), but if one slips through, drop it here rather than bounce.
   if (isSyntheticAnonEmail(options.to)) {
     log.warn('refusing to send to synthetic anonymous address')
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType: options.emailType ?? 'RawEmail',
+      provider: getProvider(),
+      to: options.to,
+      subject: options.subject,
+      status: 'skipped',
+      billable: false,
+    })
     return { sent: false, reason: 'anon_recipient' }
   }
 
@@ -294,8 +335,10 @@ async function dispatch(
   // Console provider never sends. Handled before `from` is resolved because
   // getEmailFrom() throws when EMAIL_FROM is unset, which is the normal dev
   // case and must not stop a preview from being logged.
+  const emailType = options.emailType ?? 'RawEmail'
+  const billable = isEmailBillable(emailType)
+
   if (provider === 'console') {
-    const emailType = options.emailType ?? 'RawEmail'
     // Said out loud, once per dropped message. The other two rungs announce
     // themselves when they initialize; this one delivers nothing and its
     // preview sits at `debug`, so a production deploy that dropped every
@@ -310,6 +353,15 @@ async function dispatch(
       { email_type: emailType, to: options.to, ...options.preview },
       '[dev] email preview (console provider)'
     )
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'console',
+      to: options.to,
+      subject: options.subject,
+      status: 'skipped',
+      billable: false,
+    })
     return { sent: false, reason: 'no_provider' }
   }
 
@@ -341,6 +393,16 @@ async function dispatch(
     // the threading map both name the message by. A raw inbound header quotes
     // the same id at a host, so a search across the two has to expect the pair.
     log.info({ provider: 'ses', message_id: result.messageId }, 'email sent')
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'ses',
+      to: options.to,
+      subject: options.subject,
+      status: 'sent',
+      messageId: result.messageId,
+      billable,
+    })
     return { sent: true, messageId: result.messageId }
   }
 
@@ -358,6 +420,16 @@ async function dispatch(
       references: threadingHeaders['References'],
     })
     log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'smtp',
+      to: options.to,
+      subject: options.subject,
+      status: 'sent',
+      messageId: result.messageId,
+      billable,
+    })
   } catch (error) {
     // Reset transporter on connection errors so next attempt creates a fresh connection
     if (
@@ -368,6 +440,16 @@ async function dispatch(
       smtpTransporter = null
     }
     log.error({ err: error, provider: 'smtp' }, 'email send failed')
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'smtp',
+      to: options.to,
+      subject: options.subject,
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'send failed',
+      billable,
+    })
     throw error
   }
   return { sent: true }
@@ -863,6 +945,44 @@ export async function sendConversationMessageEmail(
     fromDisplayName,
     emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
     preview: { ctaUrl },
+  })
+}
+
+export async function sendConversationClosedEmail(params: {
+  to: string
+  workspaceName: string
+  variant: 'closed' | 'auto_closed'
+  conversationSubject?: string | null
+  viewUrl?: string
+  csatPrompt?: string
+  ratingUrls?: readonly [string, string, string, string, string]
+  replyTo?: string
+  from?: SendingIdentity
+  fromDisplayName?: string
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+}): Promise<EmailResult> {
+  const subject =
+    conversationReplySubject(params.conversationSubject) ??
+    `Re: your conversation with ${params.workspaceName}`
+  return sendEmail({
+    to: params.to,
+    subject,
+    react: ConversationClosedEmail({
+      workspaceName: params.workspaceName,
+      variant: params.variant,
+      viewUrl: params.viewUrl,
+      csatPrompt: params.csatPrompt,
+      ratingUrls: params.ratingUrls,
+    }),
+    replyTo: params.replyTo,
+    from: params.from,
+    fromDisplayName: params.fromDisplayName,
+    messageId: params.messageId,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
+    emailType: 'ConversationClosedEmail',
   })
 }
 
@@ -1451,6 +1571,8 @@ export {
   isHumanReplyTemplate,
   agentReplyDisplayName,
 } from './conversation-copy'
+export { ConversationClosedEmail } from './templates/conversation-closed'
+export { EMAIL_BILLABLE, isEmailBillable } from './mail-class'
 
 // ============================================================================
 // Address verification (add or change)

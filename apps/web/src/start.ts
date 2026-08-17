@@ -28,6 +28,8 @@ const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === 'serverFn',
 })
 
+void import('@/lib/server/email/email-log.sink').then((m) => m.ensureEmailLogSink())
+
 export const startInstance = createStart(() => {
   return {
     // Request-context/logging first so even CSRF-rejected requests get a

@@ -377,6 +377,7 @@ export {
   postActivityRelations,
   // Schema tables - ai usage log
   aiUsageLog,
+  emailLog,
   // Schema tables - analytics
   analyticsDailyStats,
   analyticsTopPosts,

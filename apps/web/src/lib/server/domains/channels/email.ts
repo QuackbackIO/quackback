@@ -29,8 +29,14 @@ export const emailAdapter: ChannelAdapter = {
     })
   },
 
-  async deliverLifecycleEvent() {
-    // M3: notifyConversationClosed as this adapter's closed / auto_closed mail.
+  async deliverLifecycleEvent(kind, ctx) {
+    const { notifyConversationClosed } =
+      await import('@/lib/server/domains/conversation/conversation.notify-closed')
+    await notifyConversationClosed({
+      conversationId: ctx.conversationId,
+      variant: kind,
+      closerPrincipalId: ctx.closerPrincipalId,
+    })
   },
 
   async deliverCsatRequest(ctx) {

@@ -302,7 +302,7 @@ async function closeIfAbandoned(
   if (!convo || convo.status === 'closed') return
   if (await hasVisitorMessage(conversationId)) return
   if (keepIfEmailCaptured && (await hasCapturedEmail(conversationId))) return
-  await setConversationStatus(conversationId, 'closed', sweepActor())
+  await setConversationStatus(conversationId, 'closed', sweepActor(), undefined, 'auto_closed')
 }
 
 /**

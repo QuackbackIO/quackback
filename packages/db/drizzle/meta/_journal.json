@@ -1681,6 +1681,13 @@
       "tag": "0264_drop_assistant_custom_actions",
       "breakpoints": true,
       "idx": 239
+    },
+    {
+      "version": "7",
+      "when": 1786880000002,
+      "tag": "0265_email_log",
+      "breakpoints": true,
+      "idx": 240
     }
   ]
 }

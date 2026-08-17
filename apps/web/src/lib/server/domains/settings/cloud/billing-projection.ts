@@ -16,6 +16,7 @@ export const PROJECTED_LIMIT_KEYS = [
   'maxCustomRoles',
   'maxSendingDomains',
   'aiTokensPerMonth',
+  'emailsPerMonth',
   'apiRequestsPerMonth',
   'apiRequestsPerMinute',
 ] as const satisfies readonly (keyof TierLimits)[]

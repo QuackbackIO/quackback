@@ -146,6 +146,7 @@ export const ID_PREFIXES = {
   // AI
   sentiment: 'sentiment',
   ai_usage: 'ailog',
+  email_log: 'emaillog',
   pipeline_log: 'plog',
 
   // Feedback aggregation

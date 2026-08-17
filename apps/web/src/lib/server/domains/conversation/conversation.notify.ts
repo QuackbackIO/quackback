@@ -392,6 +392,17 @@ export async function sendVisitorConversationEmail(opts: {
     resolvedFrom && fromDisplayName
       ? formatNamedSendingAddress(resolvedFrom, fromDisplayName)
       : resolvedFrom
+  try {
+    const { enforceEmailBudget } = await import('@/lib/server/domains/settings/tier-enforce')
+    await enforceEmailBudget()
+  } catch (err) {
+    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+    if (err instanceof TierLimitError) {
+      log.warn({ conversation_id: opts.conversationId }, 'email budget exhausted; send skipped')
+      return
+    }
+    throw err
+  }
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const result = await sendWithRetry(opts.conversationId, () =>
     sendConversationMessageEmail({

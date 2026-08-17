@@ -930,7 +930,8 @@ export async function setConversationStatus(
   conversationId: ConversationId,
   status: ConversationStatus,
   actor: Actor,
-  attribution?: SystemNoticeAttribution
+  attribution?: SystemNoticeAttribution,
+  lifecycle?: 'closed' | 'auto_closed'
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -981,6 +982,18 @@ export async function setConversationStatus(
   // classification hooks (assistant_closed / handoff). Fire-and-forget: the
   // classifier is flag-gated and never throws on its own, and the extra
   // catch here is defense in depth so a failure can never affect the close.
+  if (status === 'closed' && previous !== 'closed') {
+    void import('@/lib/server/domains/channels')
+      .then(({ requireChannelAdapter }) =>
+        requireChannelAdapter(updated.channel).deliverLifecycleEvent(lifecycle ?? 'closed', {
+          conversationId,
+          closerPrincipalId: actor.principalId,
+        })
+      )
+      .catch((err) => {
+        log.warn({ err, conversationId }, 'conversation close lifecycle delivery failed')
+      })
+  }
   if (status === 'closed' && previous !== 'closed' && actor.principalType === 'user') {
     void classifyConversationAttributes(conversationId, { trigger: 'teammate_close' }).catch(
       (err) => {

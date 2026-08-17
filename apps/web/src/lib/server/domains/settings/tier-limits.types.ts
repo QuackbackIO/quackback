@@ -77,6 +77,7 @@ export interface TierLimits {
    * Embeddings are excluded (they're tracked but not billed).
    */
   aiTokensPerMonth: TierLimit<number>
+  emailsPerMonth: TierLimit<number>
 
   apiRequestsPerMonth: TierLimit<number>
   apiRequestsPerMinute: TierLimit<number>
@@ -95,6 +96,7 @@ export const OSS_TIER_LIMITS: TierLimits = {
   maxSendingDomains: null,
 
   aiTokensPerMonth: null,
+  emailsPerMonth: null,
 
   apiRequestsPerMonth: null,
   apiRequestsPerMinute: null,

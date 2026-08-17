@@ -82,6 +82,7 @@ export function cloudProjectionFloor(limits: ProjectedLimits): TierLimits {
     maxCustomRoles: limits.maxCustomRoles,
     maxSendingDomains: limits.maxSendingDomains,
     aiTokensPerMonth: limits.aiTokensPerMonth,
+    emailsPerMonth: limits.emailsPerMonth,
     apiRequestsPerMonth: limits.apiRequestsPerMonth,
     apiRequestsPerMinute: limits.apiRequestsPerMinute,
     features: { ...CLOSED_CLOUD_FEATURES },

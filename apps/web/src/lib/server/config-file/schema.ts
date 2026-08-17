@@ -86,6 +86,7 @@ const tierLimitsSchema = z
     maxStatusComponents: tierLimitNumberSchema.optional(),
     maxSendingDomains: tierLimitNumberSchema.optional(),
     aiTokensPerMonth: tierLimitNumberSchema.optional(),
+    emailsPerMonth: tierLimitNumberSchema.optional(),
     apiRequestsPerMonth: tierLimitNumberSchema.optional(),
     apiRequestsPerMinute: tierLimitNumberSchema.optional(),
     features: tierFeatureFlagsSchema,

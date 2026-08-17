@@ -220,6 +220,13 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     // cascades across a conversation's whole child graph, so it is the last
     // thing that should run concurrently with anon-sweep, which contends for
     // the same rows from the other direction.
+    name: 'email-log-retention',
+    cron: '0 6 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/email/email-log.retention').then((m) => m.runEmailLogRetention),
+  },
+  {
     name: 'spam-retention',
     cron: '0 5 * * *',
     maxAttempts: 3,

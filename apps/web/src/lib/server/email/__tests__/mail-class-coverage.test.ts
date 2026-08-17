@@ -29,6 +29,7 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
 
   // No capability: may follow the contact address.
   sendConversationMessageEmail: 'contact',
+  sendConversationClosedEmail: 'contact',
   sendCsatRequestEmail: 'contact',
   sendStatusChangeEmail: 'contact',
   sendNewCommentEmail: 'contact',
@@ -71,5 +72,18 @@ describe('mail class coverage', () => {
     const exported = new Set(Object.keys(mail))
     const stale = Object.keys(MAIL_CLASS).filter((k) => !exported.has(k))
     expect(stale, `Classified but no longer exported:\n${stale.join('\n')}`).toEqual([])
+  })
+
+  it('every exported sender has a billable class', async () => {
+    const { EMAIL_BILLABLE } = await import('@quackback/email')
+    const exported = Object.keys(mail).filter((k) => /^send\w*Email$/.test(k))
+    const missing = exported.filter((k) => {
+      const emailType = k.slice(4)
+      return !(emailType in EMAIL_BILLABLE)
+    })
+    expect(
+      missing,
+      `New mail sender(s) with no billable class. Add them to EMAIL_BILLABLE:\n${missing.join('\n')}`
+    ).toEqual([])
   })
 })

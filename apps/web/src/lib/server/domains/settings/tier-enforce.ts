@@ -151,3 +151,21 @@ export async function enforceAiTokenBudget(): Promise<void> {
         : `You've used your AI token budget for this month (${used.toLocaleString()} of ${limits.aiTokensPerMonth.toLocaleString()}). Upgrade to increase it.`,
   })
 }
+
+/** Pre-compose gate for billable outbound mail. Null = unlimited. */
+export async function enforceEmailBudget(): Promise<void> {
+  const limits = await getTierLimits()
+  if (limits.emailsPerMonth === null) return
+  const { emailsSentThisMonth } = await import('@/lib/server/email/email-budget')
+  const used = await emailsSentThisMonth()
+  if (used < limits.emailsPerMonth) return
+  throw new TierLimitError({
+    limit: 'emailsPerMonth',
+    current: used,
+    max: limits.emailsPerMonth,
+    message:
+      limits.emailsPerMonth === 0
+        ? 'Outbound email is not included on your plan. Upgrade to enable it.'
+        : `You've reached your email budget for this month (${used.toLocaleString()} of ${limits.emailsPerMonth.toLocaleString()}). Upgrade to increase it.`,
+  })
+}

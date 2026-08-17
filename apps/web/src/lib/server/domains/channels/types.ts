@@ -38,6 +38,7 @@ export interface CsatDeliveryCtx {
 
 export interface LifecycleDeliveryCtx {
   conversationId: ConversationId
+  closerPrincipalId?: PrincipalId | null
 }
 
 export interface ChannelAdapter {

@@ -181,6 +181,9 @@ export type SentimentId = TypeId<'sentiment'>
 /** AI usage log entry ID - e.g., ailog_01h455vb4pex5vsknk084sn02q */
 export type AiUsageLogId = TypeId<'ailog'>
 
+/** Email ledger row ID - e.g., emaillog_01h455vb4pex5vsknk084sn02q */
+export type EmailLogId = TypeId<'emaillog'>
+
 /** Pipeline audit log entry ID - e.g., plog_01h455vb4pex5vsknk084sn02q */
 export type PipelineLogId = TypeId<'plog'>
 
@@ -430,6 +433,7 @@ export interface EntityIdMap {
   role_assignment: RoleAssignmentId
   sentiment: SentimentId
   ai_usage: AiUsageLogId
+  email_log: EmailLogId
   pipeline_log: PipelineLogId
   post_activity: PostActivityId
   page_view: PageViewId
