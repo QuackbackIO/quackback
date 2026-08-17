@@ -35,6 +35,7 @@ async function serve(
 describe('resolveWorkspaceAndContinue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN
   })
 
   it('serves the workspace inside the workspace scope when the record is good', async () => {
@@ -70,6 +71,43 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(result).toBe('served')
     // The scope must be live INSIDE next(), which is the only place it matters.
     expect(seen).toEqual([handle])
+  })
+
+  it('resolves a third-party custom host from the customer-host header on the fallback origin', async () => {
+    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'saas-origin.quackback.co.uk'
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'unknown_host',
+      hostname: 't1a-cd.mortondev.com',
+    })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    await resolveWorkspaceAndContinue({
+      request: new Request('http://saas-origin.quackback.co.uk/', {
+        headers: {
+          host: 'saas-origin.quackback.co.uk',
+          'x-quackback-customer-host': 't1a-cd.mortondev.com',
+        },
+      }),
+      next: async () => 'served',
+      log: silentLog as never,
+    })
+    expect(acquireScopeForHost).toHaveBeenCalledWith('t1a-cd.mortondev.com', 'request')
+  })
+
+  it('ignores a spoofed customer-host header when the request Host is not the fallback', async () => {
+    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'saas-origin.quackback.co.uk'
+    acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'south.example.com' })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    await resolveWorkspaceAndContinue({
+      request: new Request('http://south.example.com/', {
+        headers: {
+          host: 'south.example.com',
+          'x-quackback-customer-host': 't1a-cd.mortondev.com',
+        },
+      }),
+      next: async () => 'served',
+      log: silentLog as never,
+    })
+    expect(acquireScopeForHost).toHaveBeenCalledWith('south.example.com', 'request')
   })
 
   it('404s an unclaimed hostname without touching any database', async () => {

@@ -66,6 +66,30 @@ function refusal(status: number, body: string, extra?: Record<string, string>): 
  */
 const FLEET_PATHS = ['/api/health', '/api/health/ready']
 
+function hostnameOnly(value: string | null): string | null {
+  if (!value) return null
+  const host = value.split(':')[0]?.trim().toLowerCase() ?? ''
+  return host.length > 0 ? host : null
+}
+
+/**
+ * Customer custom hostnames CNAME to our SaaS target. Cloudflare then
+ * connects to Railway with our fallback origin Host/SNI (Railway only
+ * accepts hostnames we registered). The original customer Host is copied
+ * onto `x-quackback-customer-host` at the edge. Trust that header only
+ * when this request already arrived as the fallback origin — a stranger
+ * hitting the fallback directly gets their own Host rewritten to itself.
+ */
+export function requestWorkspaceHost(request: Request): string | null {
+  const host = hostnameOnly(request.headers.get('host'))
+  const fallback = hostnameOnly(process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN ?? null)
+  if (host && fallback && host === fallback) {
+    const customer = hostnameOnly(request.headers.get('x-quackback-customer-host'))
+    if (customer && customer !== fallback && customer.includes('.')) return customer
+  }
+  return host
+}
+
 export async function resolveWorkspaceAndContinue<T>({
   request,
   next,
@@ -77,7 +101,7 @@ export async function resolveWorkspaceAndContinue<T>({
 }): Promise<T | Response> {
   if (FLEET_PATHS.includes(new URL(request.url).pathname)) return next()
 
-  const host = request.headers.get('host')
+  const host = requestWorkspaceHost(request)
   const acquisition = await acquireScopeForHost(host, 'request')
 
   switch (acquisition.kind) {

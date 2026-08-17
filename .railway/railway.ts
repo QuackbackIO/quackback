@@ -67,7 +67,7 @@ import { bucket, defineRailway, image, preserve, project, redis, service } from 
  * enough for every role the rollout touches.
  */
 const APP_IMAGE =
-  'ghcr.io/quackbackio/quackback@sha256:a856b3089163248702119996447e104999695708814f44417b5f31c87830571b'
+  'ghcr.io/quackbackio/quackback@sha256:84f4e13d4877eab71bb747555ded4b5a4c104ee75a5a7d050031c6496a3d6d61'
 
 /** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
  * is declared intent only — `plan` never diffs placement and `apply` never
@@ -117,6 +117,10 @@ export default defineRailway(() => {
     // boot with one, because a stray fleet-wide DSN would let a missing workspace
     // scope connect somewhere real instead of throwing.
     QUACKBACK_TENANCY: 'pooled',
+    // Fallback origin Host Railway already serves. Third-party custom hosts
+    // CNAME to customers.quackback.co.uk; the edge copies the customer Host
+    // and connects here so Railway sees a hostname it has a certificate for.
+    QUACKBACK_SAAS_FALLBACK_ORIGIN: 'saas-origin.quackback.co.uk',
     // The Neon control project (see the note above). A secret, so it is set out
     // of band and preserved here rather than written into source.
     QUACKBACK_CONTROL_DATABASE_URL: preserve(),
