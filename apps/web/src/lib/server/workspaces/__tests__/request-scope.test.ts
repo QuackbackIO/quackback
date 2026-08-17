@@ -36,6 +36,8 @@ describe('resolveWorkspaceAndContinue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     delete process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN
+    delete process.env.QUACKBACK_SAAS_RAILWAY_ORIGIN
+    delete process.env.QUACKBACK_SAAS_EDGE_SECRET
   })
 
   it('serves the workspace inside the workspace scope when the record is good', async () => {
@@ -73,8 +75,10 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(seen).toEqual([handle])
   })
 
-  it('resolves a third-party custom host from the customer-host header on the fallback origin', async () => {
+  it('resolves a third-party custom host from a signed customer-host header on a trusted origin', async () => {
     process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'saas-origin.quackback.co.uk'
+    process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
+    const { signCustomerHost } = await import('../saas-edge-host')
     acquireScopeForHost.mockResolvedValue({
       kind: 'unknown_host',
       hostname: 't1a-cd.mortondev.com',
@@ -85,6 +89,10 @@ describe('resolveWorkspaceAndContinue', () => {
         headers: {
           host: 'saas-origin.quackback.co.uk',
           'x-quackback-customer-host': 't1a-cd.mortondev.com',
+          'x-quackback-customer-host-sig': signCustomerHost(
+            'test-edge-secret',
+            't1a-cd.mortondev.com'
+          ),
         },
       }),
       next: async () => 'served',
@@ -93,8 +101,10 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(acquireScopeForHost).toHaveBeenCalledWith('t1a-cd.mortondev.com', 'request')
   })
 
-  it('ignores a spoofed customer-host header when the request Host is not the fallback', async () => {
+  it('ignores a spoofed customer-host header when the request Host is not a trusted origin', async () => {
     process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'saas-origin.quackback.co.uk'
+    process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
+    const { signCustomerHost } = await import('../saas-edge-host')
     acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'south.example.com' })
     const { resolveWorkspaceAndContinue } = await import('../request-scope')
     await resolveWorkspaceAndContinue({
@@ -102,12 +112,41 @@ describe('resolveWorkspaceAndContinue', () => {
         headers: {
           host: 'south.example.com',
           'x-quackback-customer-host': 't1a-cd.mortondev.com',
+          'x-quackback-customer-host-sig': signCustomerHost(
+            'test-edge-secret',
+            't1a-cd.mortondev.com'
+          ),
         },
       }),
       next: async () => 'served',
       log: silentLog as never,
     })
     expect(acquireScopeForHost).toHaveBeenCalledWith('south.example.com', 'request')
+  })
+
+  it('ignores a customer-host header on the Railway origin when the HMAC is missing or wrong', async () => {
+    process.env.QUACKBACK_SAAS_RAILWAY_ORIGIN = 'quackback-production-9e99.up.railway.app'
+    process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'unknown_host',
+      hostname: 'quackback-production-9e99.up.railway.app',
+    })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    await resolveWorkspaceAndContinue({
+      request: new Request('http://quackback-production-9e99.up.railway.app/', {
+        headers: {
+          host: 'quackback-production-9e99.up.railway.app',
+          'x-quackback-customer-host': 't1a-cd.mortondev.com',
+          'x-quackback-customer-host-sig': '00'.repeat(32),
+        },
+      }),
+      next: async () => 'served',
+      log: silentLog as never,
+    })
+    expect(acquireScopeForHost).toHaveBeenCalledWith(
+      'quackback-production-9e99.up.railway.app',
+      'request'
+    )
   })
 
   it('404s an unclaimed hostname without touching any database', async () => {

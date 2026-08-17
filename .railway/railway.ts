@@ -118,9 +118,11 @@ export default defineRailway(() => {
     // scope connect somewhere real instead of throwing.
     QUACKBACK_TENANCY: 'pooled',
     // Fallback origin Host Railway already serves. Third-party custom hosts
-    // CNAME to customers.quackback.co.uk; the edge copies the customer Host
-    // and connects here so Railway sees a hostname it has a certificate for.
+    // CNAME to customers.quackback.co.uk; the edge Worker fetches the
+    // Railway origin below and signs the customer Host.
     QUACKBACK_SAAS_FALLBACK_ORIGIN: 'saas-origin.quackback.co.uk',
+    QUACKBACK_SAAS_RAILWAY_ORIGIN: 'quackback-production-9e99.up.railway.app',
+    QUACKBACK_SAAS_EDGE_SECRET: preserve(),
     // The Neon control project (see the note above). A secret, so it is set out
     // of band and preserved here rather than written into source.
     QUACKBACK_CONTROL_DATABASE_URL: preserve(),
