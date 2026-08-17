@@ -1,18 +1,18 @@
 -- Outbound/inbound email ledger. Self-hosters get delivery debugging; the
 -- partial index is the month-quota counter for emailsPerMonth.
 CREATE TABLE "email_log" (
-  "id" text PRIMARY KEY NOT NULL,
+  "id" uuid PRIMARY KEY NOT NULL,
   "direction" varchar(16) NOT NULL,
   "email_type" varchar(64) NOT NULL,
   "provider" varchar(32),
   "message_id" text,
   "provider_message_id" text,
-  "principal_id" text,
+  "principal_id" uuid,
   "address" text NOT NULL,
   "subject" text,
-  "conversation_id" text,
-  "ticket_id" text,
-  "post_id" text,
+  "conversation_id" uuid,
+  "ticket_id" uuid,
+  "post_id" uuid,
   "status" varchar(16) NOT NULL,
   "error" text,
   "billable" boolean NOT NULL DEFAULT false,

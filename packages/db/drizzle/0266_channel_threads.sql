@@ -10,10 +10,10 @@ ALTER TABLE "channel_accounts" DROP CONSTRAINT IF EXISTS "channel_accounts_role_
 ALTER TABLE "channel_accounts" ADD CONSTRAINT "channel_accounts_role_check" CHECK ("role" IN ('inbound','sending','connection'));
 --> statement-breakpoint
 CREATE TABLE "channel_threads" (
-  "id" text PRIMARY KEY NOT NULL,
-  "channel_account_id" text NOT NULL,
+  "id" uuid PRIMARY KEY NOT NULL,
+  "channel_account_id" uuid NOT NULL,
   "external_thread_key" text NOT NULL,
-  "conversation_id" text NOT NULL,
+  "conversation_id" uuid NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
