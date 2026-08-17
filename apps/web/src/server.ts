@@ -24,6 +24,7 @@ if (process.env.QUACKBACK_BUILD !== '1') {
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
+    import('@/lib/server/email/email-log.sink').then((m) => m.ensureEmailLogSink()),
   ]).catch(() => {
     // Pool initialization happens inside getDatabase(); if the
     // first probe fails the next real query will retry from cold.
