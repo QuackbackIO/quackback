@@ -45,6 +45,30 @@ Builder+critic on `saas` (not a piece branch). Commits pushed:
 
 App `saas` tip `fac1beed8`. CP `saas` tip `5359852`.
 
+## 2026-08-17 — remaining items (builder+critic)
+
+Operator authorized `mortondev.com` subdomains. DNS-only CNAME
+`t1a-cd.mortondev.com` → `customers.quackback.co.uk` created (not proxied).
+Custom-domain live critic in flight.
+
+**Verify** on `910244e5` **FAIL** (`sweep-910244e5.md`): live CP
+projections omitted `emailsPerMonth`, so `parseBillingProjection`
+returned null. Workspace billing POSTs **403**
+`billing_action_unavailable`; Free export **200** CSV (OSS unlimited).
+
+**Fixer (HIGH):** app `3dff45137` accepts nine-key projections (missing
+`emailsPerMonth` = unlimited). CP `c4ebe3d` projects the key as null.
+Docker `32011761628` SUCCESS `sha256:a856b308…`. Web `4ebf7d43` SUCCESS
+`us-east4-eqdc4a`. CP `d9eb0196` SUCCESS.
+
+Live re-prove: t1a portal **303** `billing.stripe.com`; t1a Change-to-Scale
+**303** confirm; t7 authed `GET /api/export` **402**
+`features.analyticsExports`.
+
+Also cherry-picked onto `saas` (not in `a856b308` yet): SNS signature
+`d7865b4f2`, inbox registry `df95d6249`, send-site tests `35338c068`.
+Docker `32012218387` dispatched for that tip.
+
 ---
 
 # First-customer Loop Progress (historical)

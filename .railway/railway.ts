@@ -67,7 +67,7 @@ import { bucket, defineRailway, image, preserve, project, redis, service } from 
  * enough for every role the rollout touches.
  */
 const APP_IMAGE =
-  'ghcr.io/quackbackio/quackback@sha256:910244e58bcf1c195363a971cbaa54d420d978a61cd4d3a5dc6a29dd8f65ce79'
+  'ghcr.io/quackbackio/quackback@sha256:a856b3089163248702119996447e104999695708814f44417b5f31c87830571b'
 
 /** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
  * is declared intent only — `plan` never diffs placement and `apply` never
