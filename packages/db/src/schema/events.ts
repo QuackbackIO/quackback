@@ -58,12 +58,11 @@ export const events = pgTable(
     /** NULL = outbox-pending; set by the relay once fanned out. */
     publishedAt: timestamp('published_at', { withTimezone: true }),
     /**
-     * Who may drain this unpublished row during the relay → job_queue cutover.
-     * `relay` is the default so rows written by an old image stay on the
-     * outbox loop. `job` is stamped by new emits and handled only by
-     * `event-dispatch`.
+     * Who may drain this unpublished row. New rows default to `job`.
+     * Leftover `relay` rows are converted onto the job path at job-tier /
+     * scheduler start.
      */
-    dispatchOwner: text('dispatch_owner').notNull().default('relay'),
+    dispatchOwner: text('dispatch_owner').notNull().default('job'),
   },
   (table) => [
     uniqueIndex('events_event_id_idx').on(table.eventId),

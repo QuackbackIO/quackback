@@ -15,8 +15,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-import { db, events, eq } from '@/lib/server/db'
-import { runEventDispatch } from '../event-dispatch-queue'
+import { db, events, eq, sql } from '@/lib/server/db'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
+import {
+  __resetRelayOwnedConvertForTests,
+  convertRelayOwnedEvents,
+  runEventDispatch,
+} from '../event-dispatch-queue'
 import { MAX_STRICT_RESOLVE_ATTEMPTS } from '../outbox'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import type { HookTarget } from '../hook-types'
@@ -84,6 +89,15 @@ describe('runEventDispatch', () => {
           path.resolve(
             __dirname,
             '../../../../../../../packages/db/drizzle/0269_event_dispatch_owner.sql'
+          ),
+          'utf8'
+        )
+      )
+      await admin.unsafe(
+        readFileSync(
+          path.resolve(
+            __dirname,
+            '../../../../../../../packages/db/drizzle/0270_event_dispatch_owner_default_job.sql'
           ),
           'utf8'
         )
@@ -228,5 +242,49 @@ describe('runEventDispatch', () => {
     expect(relayRow.publishedAt).toBeNull()
     expect(jobRow.dispatchOwner).toBe('job')
     expect(relayRow.dispatchOwner).toBe('relay')
+  })
+
+  it('marks the event published after the last attempt still fails', async () => {
+    const eventId = await insertEvent({ owner: 'job' })
+    await expect(
+      runEventDispatch(job(eventId, 10), {
+        resolve: async () => {
+          throw new Error('all sinks down')
+        },
+      })
+    ).resolves.toBeUndefined()
+    const [row] = await db.select().from(events).where(eq(events.eventId, eventId))
+    expect(row.publishedAt).not.toBeNull()
+  })
+
+  it('converts leftover relay-owned rows onto event-dispatch jobs', async () => {
+    __resetRelayOwnedConvertForTests()
+    const leftover = await insertEvent({ owner: 'relay' })
+    const alreadyJob = await insertEvent({ owner: 'job' })
+    const publishedRelay = await insertEvent({ owner: 'relay', published: true })
+
+    const first = await convertRelayOwnedEvents({ force: true })
+    expect(first.converted).toBeGreaterThanOrEqual(1)
+
+    const [converted] = await db.select().from(events).where(eq(events.eventId, leftover))
+    expect(converted.dispatchOwner).toBe('job')
+    expect(converted.publishedAt).toBeNull()
+
+    const [jobRow] = await db.select().from(events).where(eq(events.eventId, alreadyJob))
+    expect(jobRow.dispatchOwner).toBe('job')
+    expect(jobRow.publishedAt).toBeNull()
+
+    const [stillRelay] = await db.select().from(events).where(eq(events.eventId, publishedRelay))
+    expect(stillRelay.dispatchOwner).toBe('relay')
+    expect(stillRelay.publishedAt).not.toBeNull()
+
+    const jobs = await db.execute(sql`
+      SELECT dedupe_key FROM job_queue
+      WHERE queue = 'event-dispatch' AND payload->>'eventId' = ${leftover}
+    `)
+    expect(getExecuteRows(jobs).length).toBeGreaterThan(0)
+
+    const again = await convertRelayOwnedEvents()
+    expect(again.converted).toBe(0)
   })
 })

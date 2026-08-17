@@ -92,6 +92,9 @@ async function bootJobTier(): Promise<JobTierHandle> {
     earliestPendingJobAt: async () => plan.pendingAt,
     isMissingJobQueue: () => false,
   }))
+  vi.doMock('@/lib/server/events/event-dispatch-queue', () => ({
+    convertRelayOwnedEvents: async () => ({ converted: 0, enqueued: 0 }),
+  }))
   vi.doMock('../runner', () => ({
     primeJobHandlers: async () => {},
     resetJobHandlers: () => {},

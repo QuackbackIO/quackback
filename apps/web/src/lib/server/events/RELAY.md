@@ -26,9 +26,11 @@ See `jobs/JOBS.md` for the remaining always-warm tier.
 
 ## What stayed, and why
 
-- **`dispatch_owner`** remains on `events`. New rows are `'job'`. Leftover
-  `'relay'` rows are skipped by `runEventDispatch` and are not drained.
-  The column stays for one more soak; it is not a feature flag.
+- **`dispatch_owner`** remains on `events`. New rows default to `'job'`.
+  Leftover unpublished `'relay'` rows are converted onto the job path at
+  job-tier / scheduler start (`convertRelayOwnedEvents`) and then drained
+  like any other `event-dispatch` job. The column stays for one more soak;
+  it is not a feature flag.
 - **`outbox_relay_leader`** (migration 0256) stays in the schema for
   rollback safety. Nothing acquires or renews the lease.
 
