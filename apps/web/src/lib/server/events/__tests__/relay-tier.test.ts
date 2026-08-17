@@ -279,6 +279,8 @@ interface RelayIdleHandle {
   workspaceKey: string
   noteActivity: (source?: 'request' | 'sweep' | 'script' | 'migration') => void
   nextRescanAt: (now: number) => number
+  /** Fires inside the first drain/claim so a mid-pass signal can be injected. */
+  onPass: { fn: (() => void) | null }
   closes: { listener: number; pool: number }
   status: () => {
     attached: boolean
@@ -303,6 +305,7 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
   const workspaceKey = RELAY_WORKSPACE_KEY
   const ws = workspace(workspaceKey)
   const closes = { listener: 0, pool: 0 }
+  const onPass: { fn: (() => void) | null } = { fn: null }
 
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
   vi.doMock('@/lib/server/workspaces/mode', () => ({
@@ -346,13 +349,18 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
     }),
   }))
   vi.doMock('../relay', () => ({
-    drainOnce: async () => ({ drained: 0, enqueued: 0, skipped: 0, failed: 0, lagMsSamples: [] }),
+    drainOnce: async () => {
+      onPass.fn?.()
+      return { drained: 0, enqueued: 0, skipped: 0, failed: 0, lagMsSamples: [] }
+    },
   }))
   vi.doMock('../relay-leader', () => ({
-    claimRelayLease: async () =>
-      opts?.claimFails
+    claimRelayLease: async () => {
+      onPass.fn?.()
+      return opts?.claimFails
         ? null
-        : { owner: 'o', fence: '1', expiresAt: new Date(Date.now() + 30_000) },
+        : { owner: 'o', fence: '1', expiresAt: new Date(Date.now() + 30_000) }
+    },
     renewRelayLease: async () => ({
       owner: 'o',
       fence: '1',
@@ -373,6 +381,7 @@ async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdle
   return {
     workspaceKey,
     closes,
+    onPass,
     noteActivity: (source = 'request') => idle.noteWorkspaceActivity(workspaceKey, source),
     nextRescanAt: (now: number) => idle.nextRescanAt(now, policy, workspaceKey),
     status: () => {
@@ -447,6 +456,31 @@ describe('a rescan attach that publishes nothing', () => {
     expect(relayIdle.status().attached).toBe(false)
     expect(relayIdle.status().detaches).toBeGreaterThanOrEqual(2)
     expect(relayIdle.status().leader).toBe(false)
+  })
+
+  it('does not fast-detach when a signal lands during the first empty pass', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    relayIdle = await bootRelayIdle()
+    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
+    expect(relayIdle.status().attached).toBe(false)
+
+    relayIdle.onPass.fn = () => {
+      relayIdle!.onPass.fn = null
+      vi.setSystemTime(Date.now() + 1)
+      relayIdle!.noteActivity('request')
+    }
+
+    const wait = Math.max(250, relayIdle.nextRescanAt(Date.now()) - Date.now())
+    await vi.advanceTimersByTimeAsync(wait)
+    expect(relayIdle.status().lastReattachReason).toBe('rescan')
+    expect(relayIdle.status().attached).toBe(true)
+    expect(relayIdle.status().detaches).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
+    expect(relayIdle.status().attached).toBe(true)
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2 + POLL_MS)
+    expect(relayIdle.status().attached).toBe(false)
   })
 })
 

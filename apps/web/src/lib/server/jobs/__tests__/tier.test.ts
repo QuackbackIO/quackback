@@ -27,6 +27,8 @@ interface ClaimPlan {
   enqueued: number
   poolSize: number
   pendingAt: Date | null
+  /** Fires inside the claim pass so a mid-pass signal can be injected. */
+  onPass?: () => void
 }
 
 interface JobTierHandle {
@@ -110,7 +112,10 @@ async function bootJobTier(): Promise<JobTierHandle> {
       nextSlotAt: null,
     }),
     runMaintenanceTick: async () => ({ requeued: 0, terminated: 0 }),
-    dispatchPass: async () => ({ claimed: plan.claimed, saturated: true }),
+    dispatchPass: async () => {
+      plan.onPass?.()
+      return { claimed: plan.claimed, saturated: true }
+    },
     runJob: async () => 'succeeded',
     awaitPool: async () => {},
   }))
@@ -210,6 +215,34 @@ describe('a rescan attach that finds no external work', () => {
     expect(handle.status().lastReattachReason).toBe('rescan')
     expect(handle.status().attached).toBe(false)
     expect(handle.status().detaches).toBeGreaterThanOrEqual(2)
+  })
+
+  it('does not fast-detach when a signal lands during the first empty pass', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    handle = await bootJobTier()
+    await settle()
+    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
+    expect(handle.status().attached).toBe(false)
+
+    handle.plan.onPass = () => {
+      handle!.plan.onPass = undefined
+      // Move the clock so lastExternalAt is observably newer than attach.
+      vi.setSystemTime(Date.now() + 1)
+      handle!.noteActivity('request')
+    }
+
+    const wait = Math.max(250, handle.nextRescanAt(Date.now()) - Date.now())
+    await vi.advanceTimersByTimeAsync(wait)
+    await settle()
+    expect(handle.status().lastReattachReason).toBe('rescan')
+    expect(handle.status().attached).toBe(true)
+    expect(handle.status().detaches).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
+    expect(handle.status().attached).toBe(true)
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2 + POLL_MS)
+    expect(handle.status().attached).toBe(false)
   })
 })
 

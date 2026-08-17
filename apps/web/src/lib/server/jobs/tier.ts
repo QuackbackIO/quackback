@@ -103,15 +103,12 @@ import { openWakeListener, type WakeListener } from './wake'
 const log = logger.child({ component: 'job-tier' })
 
 /**
- * How often the pooled tier re-reads the workspace list while it is serving anyone.
+ * How often the pooled tier *considers* a workspace-list re-read.
  *
- * This read goes to the **control** database, which is now expected to suspend
- * when the fleet goes quiet, so a fixed 60-second timer would be the client that
- * keeps it awake for ever — the same defect as the workspace doorbells, one level
- * up. While any workspace is attached the fleet is doing something and the control
- * database is being read on the request path anyway, so 60 seconds costs
- * nothing; once every loop has detached, the interval stretches to the rescan
- * interval so the control compute can go down with the workspaces.
+ * The timer always fires on this interval. The read itself is skipped while
+ * every loop is detached and the shared rescan grid is not yet due — stretching
+ * the interval was wrong, because the timer is armed at boot before any loop
+ * has attached. See `scheduleWorkspaceRefresh`.
  */
 const WORKSPACE_REFRESH_MS = 60_000
 
@@ -251,6 +248,8 @@ function startLoop(opts: {
   let attached = false
   /** Last time something happened that this loop did not cause itself. */
   let lastExternalAt = Date.now()
+  /** `lastExternalAt` at attach. A mid-pass `signal()` overwrites it. */
+  let lastExternalAtOnAttach = lastExternalAt
   /**
    * Jobs this loop's own scheduler has enqueued and not yet seen claimed.
    *
@@ -270,7 +269,8 @@ function startLoop(opts: {
   let firstPassOfAttach = false
   /**
    * A rescan that claimed no external work: drop the linger. Cleared if a
-   * signal arrives while that pass is still running.
+   * signal arrives while that pass is still running. The first-pass assignment
+   * only sets this when `lastExternalAt` is still the attach snapshot.
    */
   let emptyRescanDetach = false
   /** Doorbell verification is per DSN, so it runs once per revision, not per attach. */
@@ -387,6 +387,7 @@ function startLoop(opts: {
     attached = true
     s.attached = true
     lastExternalAt = Date.now()
+    lastExternalAtOnAttach = lastExternalAt
     deadlineAt = null
     attachReason = reason
     firstPassOfAttach = true
@@ -563,7 +564,11 @@ function startLoop(opts: {
         selfEnqueued = Math.max(0, selfEnqueued - result.claimed)
         if (external > 0) lastExternalAt = Date.now()
         if (firstPassOfAttach) {
-          emptyRescanDetach = attachReason === 'rescan' && external === 0 && poolSize(pool) === 0
+          emptyRescanDetach =
+            attachReason === 'rescan' &&
+            external === 0 &&
+            poolSize(pool) === 0 &&
+            lastExternalAt === lastExternalAtOnAttach
           firstPassOfAttach = false
         }
 

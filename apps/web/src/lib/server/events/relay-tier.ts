@@ -119,7 +119,13 @@ export const OUTBOX_WAKE_CHANNEL = 'outbox_wake'
 /** Sentinel workspace id for a single-workspace install. Never a real workspace id. */
 const SINGLE = '__single__'
 
-/** How often the pooled tier re-reads the workspace list. */
+/**
+ * How often the pooled tier *considers* a workspace-list re-read.
+ *
+ * The timer always fires on this interval. The read itself is skipped while
+ * every loop is detached and the shared rescan grid is not yet due. See
+ * `scheduleWorkspaceRefresh`.
+ */
 const WORKSPACE_REFRESH_MS = 60_000
 
 export interface RelayTierConfig {
@@ -377,6 +383,8 @@ function startLoop(opts: {
   let listener: WakeListener | null = null
   let live = { stopped: false }
   let lastWorkAt = Date.now()
+  /** `lastWorkAt` at attach. A mid-pass `signal()` overwrites it. */
+  let lastWorkAtOnAttach = lastWorkAt
   let detachedAt = 0
   let signalled = false
   /** Why the current attach happened, including `boot` (stats omit that). */
@@ -385,7 +393,8 @@ function startLoop(opts: {
   let firstPassOfAttach = false
   /**
    * A rescan that published nothing: drop the linger. Cleared if a signal
-   * arrives while that pass is still running.
+   * arrives while that pass is still running. The first-pass assignment only
+   * sets this when `lastWorkAt` is still the attach snapshot.
    */
   let emptyRescanDetach = false
 
@@ -491,6 +500,7 @@ function startLoop(opts: {
     listener = await opts.openListener(ring, live, s)
     s.attached = true
     lastWorkAt = Date.now()
+    lastWorkAtOnAttach = lastWorkAt
     attachReason = reason
     firstPassOfAttach = true
     emptyRescanDetach = false
@@ -606,7 +616,7 @@ function startLoop(opts: {
           s.leader = false
           s.fence = null
           if (firstPassOfAttach) {
-            emptyRescanDetach = attachReason === 'rescan'
+            emptyRescanDetach = attachReason === 'rescan' && lastWorkAt === lastWorkAtOnAttach
             firstPassOfAttach = false
           }
           // A follower must not drain. Re-ask on its own cadence rather than the
@@ -641,7 +651,11 @@ function startLoop(opts: {
         record(res)
         if (res.drained > 0 || res.failed > 0) lastWorkAt = Date.now()
         if (firstPassOfAttach) {
-          emptyRescanDetach = attachReason === 'rescan' && res.drained === 0 && res.failed === 0
+          emptyRescanDetach =
+            attachReason === 'rescan' &&
+            res.drained === 0 &&
+            res.failed === 0 &&
+            lastWorkAt === lastWorkAtOnAttach
           firstPassOfAttach = false
         }
         if (wokenAt !== null && res.drained > 0) {
