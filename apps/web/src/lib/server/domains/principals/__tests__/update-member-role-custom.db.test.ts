@@ -25,6 +25,10 @@ vi.mock('@/lib/server/domains/teams', () => ({
   addPrincipalToDefaultTeam: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
+  enqueueMembershipSync: vi.fn(async () => {}),
+}))
+
 import { updateMemberRole } from '../principal.service'
 
 const fixture = await createDbTestFixture({

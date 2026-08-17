@@ -41,6 +41,10 @@ vi.mock('@/lib/server/domains/teams', () => ({
   addPrincipalToDefaultTeam: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
+  enqueueMembershipSync: vi.fn(async () => {}),
+}))
+
 import { setPrincipalRole } from '../principal.factory'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 

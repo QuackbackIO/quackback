@@ -617,8 +617,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       const targetKey = (m as { targetKey?: string }).targetKey || 'default'
       const actionConfig = (m.actionConfig as Record<string, unknown>) || {}
       const channelId = (actionConfig.channelId || integrationConfig.channelId) as
-        | string
-        | undefined
+        string | undefined
 
       if (!channelId) continue
 
@@ -1143,6 +1142,9 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       createdAt: now,
       magicLinkTokens: [magicLinkToken],
     })
+    const { enqueueMembershipSync } =
+      await import('@/lib/server/domains/principals/membership-sync')
+    await enqueueMembershipSync()
 
     const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined

@@ -11,6 +11,10 @@ import type { PrincipalId, UserId } from '@quackback/ids'
 
 const mockCacheDel = vi.fn()
 
+vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
+  enqueueMembershipSync: vi.fn(async () => {}),
+}))
+
 vi.mock('@/lib/server/cache', () => ({
   cacheDel: (...args: unknown[]) => mockCacheDel(...args),
   CACHE_KEYS: {

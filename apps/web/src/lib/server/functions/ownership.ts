@@ -31,9 +31,8 @@ export const transferWorkspaceOwnershipFn = createServerFn({ method: 'POST' })
     if (!(await cloudBillingOn())) {
       throw new Error('Cloud workspace actions are not available')
     }
-    const { fetchWorkspaceOwnerEmail, transferWorkspaceOwnership } = await import(
-      '@/lib/server/control-plane/client'
-    )
+    const { fetchWorkspaceOwnerEmail, transferWorkspaceOwnership } =
+      await import('@/lib/server/control-plane/client')
     const owner = await fetchWorkspaceOwnerEmail()
     const me = auth.user.email?.trim().toLowerCase()
     if (!me || !owner || me !== owner.trim().toLowerCase()) {
@@ -42,6 +41,9 @@ export const transferWorkspaceOwnershipFn = createServerFn({ method: 'POST' })
     const toEmail = data.toEmail.trim().toLowerCase()
     try {
       await transferWorkspaceOwnership(toEmail)
+      const { enqueueMembershipSync } =
+        await import('@/lib/server/domains/principals/membership-sync')
+      await enqueueMembershipSync()
     } catch (error) {
       if (
         error instanceof ControlPlaneUnavailableError &&
@@ -65,9 +67,8 @@ export const leaveCloudWorkspaceFn = createServerFn({ method: 'POST' })
     }
     const email = auth.user.email?.trim().toLowerCase()
     if (!email) throw new Error('You need an email to leave')
-    const { fetchWorkspaceOwnerEmail, leaveCloudWorkspace } = await import(
-      '@/lib/server/control-plane/client'
-    )
+    const { fetchWorkspaceOwnerEmail, leaveCloudWorkspace } =
+      await import('@/lib/server/control-plane/client')
     const owner = await fetchWorkspaceOwnerEmail()
     if (owner && email === owner.trim().toLowerCase()) {
       throw new Error('The owner cannot leave. Transfer the workspace first.')
