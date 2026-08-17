@@ -313,6 +313,9 @@ export default defineRailway(() => {
   // is silent and every workspace compute it touched can suspend.
   const web = service('quackback', {
     ...appBuild,
+    // Live store is 4, not the shared appBuild 3. Declaring 3 here would
+    // redeploy web on the next apply for a number that is not this change.
+    deploy: { restartPolicyMaxRetries: 4 },
     healthcheckPath: '/api/health/ready',
     healthcheckTimeout: 300,
     env: {
@@ -331,6 +334,7 @@ export default defineRailway(() => {
   // routes user traffic here.
   const worker = service('quackback-worker', {
     ...appBuild,
+    deploy: { restartPolicyMaxRetries: 7 },
     healthcheckPath: '/api/health/ready',
     healthcheckTimeout: 300,
     env: {
@@ -401,7 +405,7 @@ export default defineRailway(() => {
 
   const cronHourly = service('quackback-cron-hourly', {
     ...appBuild,
-    deploy: { restartPolicyType: 'NEVER', cronSchedule: '23 * * * *' },
+    deploy: { restartPolicyType: 'NEVER', cronSchedule: '0 * * * *' },
     env: { ...fleetEnv, QUACKBACK_ROLE: 'worker', QUACKBACK_CRON_JOB: 'hourly' },
   })
 
