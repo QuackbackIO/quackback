@@ -4,8 +4,8 @@ Phase 0 note for collapsing the SaaS fleet to `quackback` + `quackback-control-p
 
 Recorded against:
 
-- app `/home/james/quackback-wt/saas-merge` `saas` @ `4a1efa0678e68890b46ece07fa5db58d59bc5071`
-- CP `/home/james/quackback-cp` `saas` @ `36565cc8be20b34dda9934db9baf7cfeae95ff61`
+- app `/home/james/quackback-wt/saas-merge` `saas` @ `43109b1e397530167f41199bc9adf4977aad86cf` (Phase 1 landed; this file tracks the programme)
+- CP `/home/james/quackback-cp` `saas` @ `51594c4f392fe75244ed6998945f28ce667f579f`
 - colder-fleet spec rev 6 at `/tmp/claude-1000/-home-james-quackback/108ea693-3ede-4321-91f4-1c69c03076a1/scratchpad/colder-fleet.html`
 
 Do not treat this file as permission to delete live Railway services. IaC may declare intent; live destroy is separately gated.
@@ -25,7 +25,7 @@ Do not treat this file as permission to delete live Railway services. IaC may de
 | 3 migrator entrypoint                      | **landed, not deployed**                 | `7ac4e4b55`                                                                         | Keep                                                                                                                          |
 | 4 membership skip suspended                | **landed, not deployed**                 | CP `abefa938`                                                                       | Phase 5 replaces the remaining fan-out with `membership-sync`                                                                 |
 | 5.1 PG locks/limits                        | **landed, not deployed**                 | CP `36565cc`                                                                        | Keep. Complements “no Redis”                                                                                                  |
-| 5.2 BullMQ dispatch                        | **in progress** (other agent on CP)      | do not edit CP until that lands                                                     | Reconcile; do not duplicate                                                                                                   |
+| 5.2 BullMQ dispatch                        | **landed** (not deployed)                | CP `51594c4`                                                                        | Keep. Redis service still live until stop-and-ask                                                                             |
 | 5.3 delete Redis                           | **not started** (stop-and-ask)           | Redis still live                                                                    | Phase 6 / later, after approval                                                                                               |
 | 6 HTTP nudge                               | **landed, not deployed; critic FAIL**    | wake route not in `FLEET_PATHS` (404 on worker Host); `emit()` nudges inside the tx | **Do not fix-forward as a permanent path.** Phase 3 after-commit + in-process scheduler replace it; Phase 4 deletes the route |
 | 7 4h rescan / membership push / duty stats | **not started**                          | —                                                                                   | **Do not implement.** No blind rescan; membership is Phase 5 jobs                                                             |
@@ -82,9 +82,23 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 
 ## Phase order from here
 
-1. Transactional `enqueueJob` + `event-dispatch` + `dispatch_owner` compatibility (relay still drains `relay`-owned rows).
-2. After soak: delete the relay subsystem.
-3. After-commit signals + one process scheduler; then delete LISTEN/poll/rescan.
+1. **Landed.** Transactional `enqueueJob` + `event-dispatch` + `dispatch_owner` (relay still drains `relay`-owned rows).
+2. After soak: delete the relay subsystem. Do not delete yet.
+3. **In progress.** After-commit signals + one process scheduler (`QUACKBACK_WAKE_MODE=listener|both|scheduler`, default `listener`). LISTEN/poll/rescan stay until `scheduler` has soaked.
 4. Run scheduler in `quackback` (`ROLE=all`); prepare IaC to drop the worker (live delete gated).
 5. `membership-sync` job; delete CP tenant fan-out.
 6. Remove cron/migrator resources only after replacements have a green run + approval.
+
+### Temporary flags
+
+| Flag                  | Values                                               | Rollback                                                     | Progress metric                                                            | Delete when                  |
+| --------------------- | ---------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------- | ---------------------------- |
+| event ownership       | `dispatch_owner=relay\|job` (row marker, not an env) | new instances keep writing `job`; relay still drains `relay` | unpublished `relay` rows drain to 0                                        | Phase 2, after soak          |
+| `QUACKBACK_WAKE_MODE` | `listener` (default) / `both` / `scheduler`          | set back to `listener`                                       | scheduler-only: no `LISTEN` in `pg_stat_activity`, jobs still meet latency | Phase 3 deletion, after soak |
+| unified runtime       | web `ROLE=web` + worker stays until Phase 4          | keep the worker service                                      | one `quackback` replica runs the scheduler                                 | Phase 4, after approval      |
+
+## Crash window and fleet size
+
+There is a process-local window between commit and the after-commit callback. Startup recovery (`recoverPendingWork`) enumerates active workspaces once, with `JOB_STARTUP_SCAN_CONCURRENCY` (default 4). It is not repeated.
+
+Revisit this when **startup exceeds ~30s** or the **active fleet exceeds ~200 workspaces**. At that point an external durable scheduler (still not a second queue) may be cheaper than a boot scan. Current fleet is under 20 workspaces.

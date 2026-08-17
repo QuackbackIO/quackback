@@ -723,6 +723,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'process, carrying no workspace.',
   },
   {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'unsubscribeCommit',
+    category: 'process-lifetime',
+    reason:
+      "The job tier's handle for detaching its after-commit listener at shutdown. One closure per " +
+      'process, carrying no workspace.',
+  },
+  {
     file: 'apps/web/src/lib/server/events/relay-tier.ts',
     name: 'unsubscribeActivity',
     category: 'process-lifetime',
@@ -1064,5 +1072,75 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'When this process last POSTed a wake for a workspace. Keyed by workspaceKey so two ' +
       'workspaces cannot share a throttle window; a hit for the wrong key would only skip a ' +
       'nudge, which the rescan already bounds.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/after-commit.ts',
+    name: 'frames',
+    category: 'process-lifetime',
+    reason:
+      'AsyncLocalStorage that CARRIES the pending workspace-key set for the open transaction. ' +
+      'One store per process is required so db.transaction wrapping and enqueueJob see the same ' +
+      'frame. What it holds is per-async-context, never a cross-workspace value: each frame is ' +
+      'a Set of workspace keys recorded during that transaction.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/after-commit.ts',
+    name: 'sinks',
+    category: 'process-lifetime',
+    reason:
+      'The process-level list of after-commit listeners (the job scheduler). Not workspace data: ' +
+      'each sink is a function this replica registered at start. A second workspace hitting the ' +
+      'same list is the point — one scheduler serves every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/scheduler.ts',
+    name: 'processScheduler',
+    category: 'process-lifetime',
+    reason:
+      'The one in-process deadline scheduler for this replica. It holds no tenant connection; ' +
+      'the heap is keyed by workspaceKey so two workspaces cannot share a timer generation. A ' +
+      'cross-workspace hit on this binding would mean two schedulers, which is what the latch ' +
+      'prevents.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/channels/registry.ts',
+    name: 'ADAPTERS',
+    category: 'process-lifetime',
+    reason:
+      'Process-wide channel adapter table, keyed by channel id. The same adapter implementation ' +
+      'serves every workspace; a cross-workspace hit returns the same code module, not another ' +
+      "workspace's data.",
+  },
+  {
+    file: 'apps/web/src/lib/shared/channels/registry.ts',
+    name: 'DESCRIPTORS',
+    category: 'process-lifetime',
+    reason:
+      'Process-wide channel descriptor table, keyed by channel id. Descriptors are compile-time ' +
+      'product metadata, identical for every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/email/email-log.sink.ts',
+    name: 'registered',
+    category: 'process-lifetime',
+    reason:
+      'Once-per-process latch that the email log sink has been installed. It is a boolean about ' +
+      'this replica, not about a workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/email/sns-signature.ts',
+    name: 'certCache',
+    category: 'content-addressed',
+    reason:
+      'SNS signing cert PEM keyed by the certificate URL. A cross-workspace hit returns the same ' +
+      'bytes the requesting workspace would have fetched.',
+  },
+  {
+    file: 'packages/email/src/index.ts',
+    name: 'emailLogSink',
+    category: 'process-lifetime',
+    reason:
+      'The installed email-log callback for this process. apps/web plugs it in once; every ' +
+      'workspace uses the same function, which then writes through the active workspace scope.',
   },
 ]
