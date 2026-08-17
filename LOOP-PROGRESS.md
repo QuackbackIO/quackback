@@ -13,6 +13,12 @@ is present. That path is now live and proved.
 | Worker resolveCustomerHost | CP `3b7cbb1` (Worker)     | this fire | **yes** `quackback-saas-origin`                           |
 | Zone catch-all on create   | CP `b0b53a3`              | this fire | **yes** `f52e8643` SUCCESS (sfo)                          |
 
+Independent critic **PASS** (`custom-domain-critic-2.md`) on the same
+pair after CP `f52e8643` (`sha256:734f3f1a…`): add **200**, cert **36s**,
+custom host **307 → 200** Track1 Alpha with `x-quackback-saas-edge: 1`,
+t1e **409**, forged Railway header **404** Unknown workspace, remove
+restores south, instances 20→20.
+
 **Live E2E PASS** (`loop-evidence/this-fire/custom-domain-e2e.md`):
 
 - Fallback `saas-fallback.quackback.co.uk` **active**, AAAA `100::` proxied.
