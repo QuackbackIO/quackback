@@ -37,7 +37,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import { logger } from '@/lib/server/logger'
-import { permittedSendingIdentity } from './outbound-identity'
+import { permittedSendingIdentity, withSendingDisplayName } from './outbound-identity'
 
 const log = logger.child({ component: 'channel-accounts' })
 
@@ -461,6 +461,17 @@ export async function getSendingAddress(
  * proved it owns would be an impersonation the provider would carry out. See
  * `outbound-identity.ts`.
  */
+/**
+ * RFC 5322 display-name wrapper for a resolved sending address:
+ * `"Alex (Acme)" <support@acme.com>`. Does not change address resolution.
+ */
+export function formatNamedSendingAddress(
+  address: SendingIdentity,
+  displayName: string
+): SendingIdentity {
+  return withSendingDisplayName(address, displayName)
+}
+
 export async function resolveSendingAddress(
   assignedTeamId: TeamId | null,
   module: SendingModule = 'support'

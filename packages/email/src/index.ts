@@ -21,7 +21,7 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
-import { isSesEmailConfigured, sendViaSes } from './ses'
+import { applyDisplayName, isSesEmailConfigured, sendViaSes } from './ses'
 // Capability-bearing senders declare `to: SecureRecipient` so a contact address
 // cannot be passed to one. See ./recipient for why the classes are shaped this
 // way, and why the guarantee belongs here rather than at the call sites.
@@ -40,6 +40,8 @@ import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
+import { ConversationReplyEmail } from './templates/conversation-reply'
+import { conversationMessageCopy } from './conversation-copy'
 import { PostMentionEmail } from './templates/post-mention'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
@@ -273,6 +275,8 @@ async function dispatch(
     emailType?: string
     /** Extra identifying fields for the dev preview line (links, codes). */
     preview?: Record<string, unknown>
+    /** Display name wrapped around `from` (or EMAIL_FROM) as RFC 5322. */
+    fromDisplayName?: string
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const threadingHeaders = buildThreadingHeaders(options)
@@ -309,8 +313,13 @@ async function dispatch(
     return { sent: false, reason: 'no_provider' }
   }
 
-  const from = options.from ?? getEmailFrom()
+  const resolvedFrom = options.from ?? getEmailFrom()
+  const from = options.fromDisplayName
+    ? applyDisplayName(resolvedFrom, options.fromDisplayName)
+    : resolvedFrom
   const html = options.html ?? (options.react ? await render(options.react) : undefined)
+  const text =
+    options.text ?? (options.react ? await render(options.react, { plainText: true }) : undefined)
 
   if (provider === 'ses') {
     // Message-ID is platform-controlled: the transport drops ours on the way
@@ -324,7 +333,7 @@ async function dispatch(
       to: options.to,
       subject: options.subject,
       ...(html !== undefined ? { html } : {}),
-      ...(options.text !== undefined ? { text: options.text } : {}),
+      ...(text !== undefined ? { text } : {}),
       ...(options.replyTo !== undefined ? { replyTo: options.replyTo } : {}),
       ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
     })
@@ -342,7 +351,7 @@ async function dispatch(
       to: options.to,
       subject: options.subject,
       html,
-      text: options.text,
+      text,
       replyTo: options.replyTo,
       messageId: threadingHeaders['Message-ID'],
       inReplyTo: threadingHeaders['In-Reply-To'],
@@ -381,6 +390,7 @@ async function sendEmail(
     emailType?: string
     /** Extra identifying fields for the dev preview line (links, codes). */
     preview?: Record<string, unknown>
+    fromDisplayName?: string
   } & ThreadingOptions
 ): Promise<EmailResult> {
   return dispatch(options)
@@ -749,7 +759,6 @@ interface SendConversationMessageEmailParams {
   ctaUrl: string
   workspaceName: string
   logoUrl?: string
-  unsubscribeUrl?: string
   /** Conversation-specific reply address so a visitor's reply routes back to
    *  the right thread (inbound email channel). */
   replyTo?: string
@@ -764,6 +773,19 @@ interface SendConversationMessageEmailParams {
   /** Send from a per-team sending address (§4.8) instead of the branded
    *  EMAIL_FROM. Absent = the workspace default. */
   from?: SendingIdentity
+  /**
+   * Active conversation channel. `email` selects the human reply template for
+   * agent correspondence; messenger keeps the notification card.
+   */
+  channel?: string
+  /** Stored `conversations.subject`; when set, visitor-facing mail uses `Re:`. */
+  conversationSubject?: string | null
+  /** Team-alert copy: first visitor message vs a follow-up. */
+  isFirstMessage?: boolean
+  /** Immediately previous message, quoted one level on the human template. */
+  quotedPrevious?: { date: Date | string; name: string; text: string }
+  /** Display name for the From header (`Alex (Acme)`). */
+  fromDisplayName?: string
 }
 
 /**
@@ -782,60 +804,60 @@ export async function sendConversationMessageEmail(
     ctaUrl,
     workspaceName,
     logoUrl,
-    unsubscribeUrl,
     replyTo,
     messageId,
     inReplyTo,
     references,
     from,
+    channel,
+    conversationSubject,
+    isFirstMessage,
+    quotedPrevious,
+    fromDisplayName,
   } = params
 
-  const isReply = direction === 'agent_reply'
-  const isStarted = direction === 'agent_started'
-  const heading = isReply
-    ? `New reply from ${workspaceName}`
-    : isStarted
-      ? `New message from ${workspaceName}`
-      : 'New message'
-  const intro = isReply
-    ? `${senderName} replied to your conversation with ${workspaceName}.`
-    : isStarted
-      ? `${senderName} from ${workspaceName} sent you a message.`
-      : `${senderName} started a conversation in ${workspaceName}.`
-  const ctaLabel = isReply || isStarted ? 'View conversation' : 'Open inbox'
-  const reason = isReply
-    ? 'You received this email because you have an open conversation with this team.'
-    : isStarted
-      ? `You received this email because ${workspaceName} sent you a message.`
-      : 'You received this email because you are a member of this workspace.'
-  const subject = isReply
-    ? `New reply from ${workspaceName}`
-    : isStarted
-      ? `New message from ${workspaceName}`
-      : `New message in ${workspaceName}`
+  const copy = conversationMessageCopy({
+    direction,
+    senderName,
+    workspaceName,
+    conversationSubject,
+    channel,
+    isFirstMessage,
+  })
+
+  const react = copy.useHumanTemplate
+    ? ConversationReplyEmail({
+        bodyHtml,
+        messagePreview,
+        agentName: senderName,
+        teamName: workspaceName,
+        viewUrl: ctaUrl,
+        quotedPrevious,
+      })
+    : ConversationMessageEmail({
+        heading: copy.heading,
+        intro: copy.intro,
+        senderName,
+        messagePreview,
+        bodyHtml,
+        ctaUrl,
+        ctaLabel: copy.ctaLabel,
+        organizationName: workspaceName,
+        reason: copy.reason,
+        logoUrl,
+      })
 
   return sendEmail({
     to,
-    subject,
-    react: ConversationMessageEmail({
-      heading,
-      intro,
-      senderName,
-      messagePreview,
-      bodyHtml,
-      ctaUrl,
-      ctaLabel,
-      organizationName: workspaceName,
-      reason,
-      unsubscribeUrl,
-      logoUrl,
-    }),
+    subject: copy.subject,
+    react,
     replyTo,
     messageId,
     inReplyTo,
     references,
     from,
-    emailType: 'ConversationMessageEmail',
+    fromDisplayName,
+    emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
     preview: { ctaUrl },
   })
 }
@@ -1388,7 +1410,7 @@ export async function sendCsatRequestEmail(
 
   return sendEmail({
     to,
-    subject: `How did we do, ${workspaceName}?`,
+    subject: 'How did we do?',
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
     from,
     emailType: 'CsatRequestEmail',
@@ -1416,6 +1438,15 @@ export { StatusIncidentPublishedEmail } from './templates/status-incident-publis
 export type { IncidentImpact } from './templates/status-incident-published'
 export { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 export { CsatRequestEmail, CSAT_FACES as CSAT_REQUEST_EMAIL_FACES } from './templates/csat-request'
+export { ConversationReplyEmail } from './templates/conversation-reply'
+export { ConversationMessageEmail } from './templates/conversation-message'
+export {
+  conversationReplySubject,
+  conversationMessageCopy,
+  assembleOutboundThreading,
+  isHumanReplyTemplate,
+  agentReplyDisplayName,
+} from './conversation-copy'
 
 // ============================================================================
 // Address verification (add or change)

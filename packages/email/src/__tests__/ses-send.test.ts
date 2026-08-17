@@ -13,7 +13,12 @@ import {
   stripPlatformControlledHeaders,
 } from '../ses'
 import type { SesSendClient } from '../ses'
-import { getEmailProvider, sendRawEmail, sendStatusChangeEmail } from '../index'
+import {
+  getEmailProvider,
+  sendConversationMessageEmail,
+  sendRawEmail,
+  sendStatusChangeEmail,
+} from '../index'
 import { sendingAs } from './brands'
 
 /**
@@ -857,6 +862,27 @@ describe('dispatch on the ses rung', () => {
     const command = sdkSend.mock.calls[0][0] as SendEmailCommand
     expect(command.input.FromEmailAddress).toBe('"Acme, Inc" <support@platform.test>')
     expect(command.input.ReplyToAddresses).toEqual(['"Acme, Inc" <c.abc@platform.test>'])
+  })
+
+  it('renders a text/plain alternative and uses the human reply subject', async () => {
+    process.env.EMAIL_FROM = 'notifications@platform.test'
+    await sendConversationMessageEmail({
+      to: 'customer@example.test',
+      direction: 'agent_reply',
+      senderName: 'Alex',
+      messagePreview: 'I checked the invoice.',
+      bodyHtml: '<p>I checked the invoice.</p>',
+      ctaUrl: 'https://acme.example/support/c1',
+      workspaceName: 'Acme',
+      channel: 'email',
+      conversationSubject: 'Re: Billing overcharge',
+    })
+    const command = sdkSend.mock.calls[0][0] as SendEmailCommand
+    expect(command.input.Content?.Simple?.Subject?.Data).toBe('Re: Billing overcharge')
+    expect(command.input.Content?.Simple?.Body?.Text?.Data).toMatch(/I checked the invoice/)
+    expect(command.input.Content?.Simple?.Body?.Html?.Data).toContain('I checked the invoice.')
+    expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('New reply from Acme')
+    expect(command.input.Content?.Simple?.Body?.Html?.Data).not.toContain('Unsubscribe')
   })
 
   it('still refuses a synthetic anonymous recipient before any request', async () => {

@@ -28,8 +28,10 @@ import {
   permittedSendingIdentity,
   platformSendingDomains,
   toAsciiDomain,
+  withSendingDisplayName,
   type SendingIdentityContext,
 } from '../outbound-identity'
+import type { SendingIdentity } from '@quackback/email/sender'
 
 /** Workspace B: on the fleet, with its own slug, owning nothing of its own. */
 const workspaceB: SendingIdentityContext = {
@@ -181,6 +183,21 @@ describe('an internationalised domain is one domain, not two', () => {
  * domain grants a workspace the right to send from its own label is the wiring
  * above it, and the two look identical from inside the rule.
  */
+describe('withSendingDisplayName', () => {
+  it('wraps a bare address with a quoted display name when needed', () => {
+    const named = withSendingDisplayName('support@acme.com' as SendingIdentity, 'Alex (Acme)')
+    expect(named).toBe('"Alex (Acme)" <support@acme.com>')
+  })
+
+  it('replaces an existing display name without changing the addr-spec', () => {
+    const named = withSendingDisplayName(
+      'Support <support@acme.com>' as SendingIdentity,
+      'Alex (Acme)'
+    )
+    expect(named).toBe('"Alex (Acme)" <support@acme.com>')
+  })
+})
+
 describe('the send guard reads the minting domain, not the accept-set', () => {
   const env = {
     QUACKBACK_TENANCY: 'pooled',

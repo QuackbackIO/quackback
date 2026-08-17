@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let selectRows: Array<Record<string, unknown>> = []
+let selectQueue: Array<Array<Record<string, unknown>>> = []
 let insertedValues: Record<string, unknown> | undefined
 let upsertConfig: { target?: unknown; set?: Record<string, unknown> } | undefined
 const { eqSpy, inArraySpy } = vi.hoisted(() => ({
@@ -18,7 +19,7 @@ vi.mock('@/lib/server/db', () => {
     from: () => selectChain,
     where: () => selectChain,
     orderBy: () => selectChain,
-    limit: async () => selectRows,
+    limit: async () => (selectQueue.length > 0 ? selectQueue.shift()! : selectRows),
   }
   return {
     db: {
@@ -58,6 +59,13 @@ vi.mock('@/lib/server/db', () => {
       conversationId: 'conversationOutboundEmails.conversationId',
       createdAt: 'conversationOutboundEmails.createdAt',
     },
+    conversationMessages: {
+      metadata: 'conversationMessages.metadata',
+      conversationId: 'conversationMessages.conversationId',
+      createdAt: 'conversationMessages.createdAt',
+      deletedAt: 'conversationMessages.deletedAt',
+    },
+    isNull: (col: unknown) => ({ _t: 'isNull', col }),
   }
 })
 
@@ -67,11 +75,14 @@ import {
   recordOutboundEmail,
   recordEmailIdentity,
   priorOutboundMessageIds,
+  priorInboundEmailMessageIds,
+  threadIdsForOutbound,
 } from '../conversation.email-store'
 
 beforeEach(() => {
   vi.clearAllMocks()
   selectRows = []
+  selectQueue = []
   insertedValues = undefined
   upsertConfig = undefined
 })
@@ -227,5 +238,35 @@ describe('priorOutboundMessageIds', () => {
     selectRows = [{ messageId: 'newest@d' }, { messageId: '0100018f-abc' }, { messageId: 'old@d' }]
     const result = await priorOutboundMessageIds('conversation_abc' as never)
     expect(result).toEqual(['old@d', '0100018f-abc', 'newest@d'])
+  })
+})
+
+describe('priorInboundEmailMessageIds', () => {
+  it('returns inbound Message-IDs oldest-first', async () => {
+    selectRows = [{ messageId: 'cust-new@x' }, { messageId: 'cust-old@x' }]
+    const result = await priorInboundEmailMessageIds('conversation_abc' as never)
+    expect(result).toEqual(['cust-old@x', 'cust-new@x'])
+  })
+})
+
+describe('threadIdsForOutbound', () => {
+  it('merges inbound and outbound ids in created-at order', async () => {
+    const t1 = new Date('2026-08-16T09:00:00Z')
+    const t2 = new Date('2026-08-16T10:00:00Z')
+    const t3 = new Date('2026-08-16T11:00:00Z')
+    // Query order: outbound, then inbound. Each page is newest-first.
+    selectQueue = [
+      [
+        { messageId: 'ours-2@x', createdAt: t3 },
+        { messageId: 'ours-1@x', createdAt: t2 },
+      ],
+      [{ messageId: 'cust-1@x', createdAt: t1 }],
+    ]
+
+    const result = await threadIdsForOutbound('conversation_abc' as never)
+
+    expect(result.inbound).toEqual(['cust-1@x'])
+    expect(result.outbound).toEqual(['ours-1@x', 'ours-2@x'])
+    expect(result.merged).toEqual(['cust-1@x', 'ours-1@x', 'ours-2@x'])
   })
 })

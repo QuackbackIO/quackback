@@ -65,10 +65,20 @@ vi.mock('../csat-email-token', () => ({
 // Outbound-email persistence (threading map + channel identities). No-op here;
 // exercised in its own suite. Keeps notify's fire-and-forget path off the db.
 const priorOutboundMessageIds = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => [])
+const priorInboundEmailMessageIds = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => [])
+const threadIdsForOutbound = vi.fn<
+  (...a: unknown[]) => Promise<{ inbound: string[]; outbound: string[]; merged: string[] }>
+>(async () => {
+  const outbound = await priorOutboundMessageIds()
+  const inbound = await priorInboundEmailMessageIds()
+  return { inbound, outbound, merged: [...inbound, ...outbound] }
+})
 const recordOutboundEmail = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 const recordEmailIdentity = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 vi.mock('../conversation.email-store', () => ({
   priorOutboundMessageIds: (...a: unknown[]) => priorOutboundMessageIds(...a),
+  priorInboundEmailMessageIds: (...a: unknown[]) => priorInboundEmailMessageIds(...a),
+  threadIdsForOutbound: (...a: unknown[]) => threadIdsForOutbound(...a),
   recordOutboundEmail: (...a: unknown[]) => recordOutboundEmail(...a),
   recordEmailIdentity: (...a: unknown[]) => recordEmailIdentity(...a),
 }))
@@ -134,6 +144,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     c.from = () => c
     c.leftJoin = () => c
     c.where = () => c
+    c.orderBy = () => c
     c.limit = async () => (limitQueue.length ? limitQueue.shift()! : visitorRows)
     c.then = (resolve: (v: unknown) => unknown) => resolve(teamRows)
     return c
@@ -235,6 +246,7 @@ describe('notifyVisitorMessage', () => {
       to: 'a@x.com',
       direction: 'visitor_message',
       senderName: 'Jane',
+      isFirstMessage: false,
       ctaUrl: `https://acme.example.com/admin/inbox?i=${conversationId}`,
       workspaceName: 'Acme',
     })
@@ -937,6 +949,57 @@ describe('threading headers (P4.6 regression guard)', () => {
       const call = sendConversationMessageEmail.mock.calls[0][0]
       expect(call.references).toEqual(prior)
       expect(call.inReplyTo).toBe('c.1.bbb@tenaevexeo.resend.app')
+    })
+
+    it('forwards the stored conversation subject to the sender', async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      limitQueue = [
+        [{ type: 'user', email: 'account@x.com' }],
+        [{ subject: 'Re: Billing overcharge', channel: 'email' }],
+      ]
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Alex',
+        channel: 'email',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.conversationSubject).toBe('Re: Billing overcharge')
+      expect(call.channel).toBe('email')
+    })
+
+    it("puts the customer's inbound Message-ID in In-Reply-To and References", async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      priorOutboundMessageIds.mockResolvedValue(['c.1.aaa@tenaevexeo.resend.app'])
+      priorInboundEmailMessageIds.mockResolvedValue(['cust-inbound@mail.example'])
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Agent',
+        channel: 'email',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.inReplyTo).toBe('cust-inbound@mail.example')
+      expect(call.references).toEqual([
+        'cust-inbound@mail.example',
+        'c.1.aaa@tenaevexeo.resend.app',
+      ])
+      expect(call.channel).toBe('email')
+      // Named From is on the resolved identity when one exists, else on
+      // fromDisplayName so dispatch can wrap EMAIL_FROM.
+      expect(
+        [call.from, call.fromDisplayName].some(
+          (value) => typeof value === 'string' && value.includes('Agent (Acme)')
+        )
+      ).toBe(true)
     })
 
     /**

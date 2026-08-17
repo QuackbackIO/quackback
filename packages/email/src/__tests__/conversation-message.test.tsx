@@ -30,9 +30,17 @@ describe('ConversationMessageEmail', () => {
     expect(html).toContain('https://acme.example.com/support/conversation_1')
   })
 
-  it('falls back to the italic messagePreview quote when bodyHtml is absent', async () => {
+  it('falls back to the messagePreview when bodyHtml is absent, without italic quote styling', async () => {
     const html = await render(<ConversationMessageEmail {...base} />)
     expect(html).toContain('Short preview excerpt')
+    expect(html).not.toContain('font-style:italic')
     expect(html).toContain('View conversation')
+  })
+
+  it('uses a text-weight CTA and does not offer unsubscribe', async () => {
+    const html = await render(<ConversationMessageEmail {...base} />)
+    expect(html).toContain('View conversation')
+    expect(html).not.toContain('Unsubscribe from this post')
+    expect(html.toLowerCase()).not.toContain('<button')
   })
 })

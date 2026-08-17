@@ -18,8 +18,22 @@
  *    elsewhere is no evidence the reply was seen (see notifyAgentReply). An
  *    anonymous visitor with no captured address stays unreachable either way.
  */
-import { db, eq, inArray, principal, user, conversations } from '@/lib/server/db'
-import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import {
+  db,
+  eq,
+  inArray,
+  desc,
+  and,
+  isNull,
+  principal,
+  user,
+  conversations,
+  conversationMessages,
+} from '@/lib/server/db'
+import {
+  formatNamedSendingAddress,
+  resolveConversationFrom,
+} from '@/lib/server/domains/channel-accounts/channel-account.service'
 import type { Conversation } from '@/lib/server/db'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/core'
@@ -36,7 +50,7 @@ import {
 } from './conversation.email-channel'
 import { currentMailSlug } from './conversation.mail-slug'
 import {
-  priorOutboundMessageIds,
+  threadIdsForOutbound,
   recordOutboundEmail,
   recordEmailIdentity,
 } from './conversation.email-store'
@@ -80,10 +94,10 @@ function messageBodyHtml(content: string, contentJson?: JSONContent | null): str
 
 /**
  * Threading headers for a visitor-facing conversation email: a fresh
- * deterministic Message-ID plus the References chain from prior outbound mails
- * (so mail clients thread the conversation, and a reply that strips the
- * plus-address still routes home via In-Reply-To/References). Absent when no
- * sending domain is configured.
+ * deterministic Message-ID plus the References chain of prior outbound ids
+ * AND the customer's inbound Message-IDs (so the reply joins the thread they
+ * started). In-Reply-To is the latest inbound id when one exists, else the
+ * latest outbound. Absent when no sending domain is configured.
  */
 async function outboundThreading(conversationId: ConversationId): Promise<{
   messageId?: string
@@ -92,12 +106,57 @@ async function outboundThreading(conversationId: ConversationId): Promise<{
 }> {
   const messageId = mintOutboundMessageId(conversationId)
   if (!messageId) return {}
-  const prior = await priorOutboundMessageIds(conversationId)
+  const thread = await threadIdsForOutbound(conversationId)
+  const inReplyTo = thread.inbound.at(-1) ?? thread.outbound.at(-1)
   return {
     messageId,
-    inReplyTo: prior[prior.length - 1],
-    references: prior.length > 0 ? prior : undefined,
+    inReplyTo,
+    references: thread.merged.length > 0 ? thread.merged : undefined,
   }
+}
+
+async function loadQuotedPreviousMessage(
+  conversationId: ConversationId
+): Promise<{ date: Date; name: string; text: string } | null> {
+  const rows = await db
+    .select({
+      content: conversationMessages.content,
+      createdAt: conversationMessages.createdAt,
+      senderType: conversationMessages.senderType,
+      name: user.name,
+    })
+    .from(conversationMessages)
+    .leftJoin(principal, eq(conversationMessages.principalId, principal.id))
+    .leftJoin(user, eq(principal.userId, user.id))
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        isNull(conversationMessages.deletedAt),
+        eq(conversationMessages.isInternal, false)
+      )
+    )
+    .orderBy(desc(conversationMessages.createdAt))
+    .limit(2)
+
+  const previous = rows[1]
+  if (!previous?.content) return null
+  const name = previous.name?.trim() || (previous.senderType === 'agent' ? 'Support' : 'Customer')
+  return { date: previous.createdAt, name, text: previous.content }
+}
+
+async function loadConversationMailContext(conversationId: ConversationId): Promise<{
+  subject: string | null
+  channel: Conversation['channel'] | undefined
+}> {
+  const [conv] = await db
+    .select({
+      subject: conversations.subject,
+      channel: conversations.channel,
+    })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return { subject: conv?.subject ?? null, channel: conv?.channel }
 }
 
 /**
@@ -197,6 +256,8 @@ export async function notifyVisitorMessage(opts: {
               ctaUrl,
               workspaceName: ctx.workspaceName,
               logoUrl: ctx.logoUrl ?? undefined,
+              isFirstMessage: opts.isFirstMessage,
+              conversationSubject: opts.conversation.subject,
             })
           )
       )
@@ -299,6 +360,7 @@ async function sendVisitorConversationEmail(opts: {
   contentJson?: JSONContent | null
   ctaUrl: string
   ctx: { workspaceName: string; logoUrl: string | null }
+  channel?: Conversation['channel']
 }): Promise<void> {
   // Only advertise a reply address we can actually receive on, so a visitor's
   // email reply threads back into this conversation (inbound email channel).
@@ -309,11 +371,23 @@ async function sendVisitorConversationEmail(opts: {
     ? (inboundReplyToAddress(opts.conversationId, currentMailSlug()) ?? undefined)
     : undefined
   const threading = await outboundThreading(opts.conversationId)
+  const mailCtx = await loadConversationMailContext(opts.conversationId)
+  const channel = opts.channel ?? mailCtx.channel
+  const quotedPrevious =
+    channel === 'email'
+      ? ((await loadQuotedPreviousMessage(opts.conversationId)) ?? undefined)
+      : undefined
   // Reply from the address the customer wrote to when this workspace has proved
   // it may send as that domain, else the assigned team's sending address, else
   // the branded workspace default (EMAIL_FROM). A thread that arrived at the
   // customer's own support address should not change identity on the way back.
-  const from = (await resolveConversationFrom(opts.conversationId)) ?? undefined
+  const resolvedFrom = (await resolveConversationFrom(opts.conversationId)) ?? undefined
+  const fromDisplayName =
+    channel === 'email' ? `${opts.senderName} (${opts.ctx.workspaceName})` : undefined
+  const from =
+    resolvedFrom && fromDisplayName
+      ? formatNamedSendingAddress(resolvedFrom, fromDisplayName)
+      : resolvedFrom
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const result = await sendWithRetry(opts.conversationId, () =>
     sendConversationMessageEmail({
@@ -329,6 +403,10 @@ async function sendVisitorConversationEmail(opts: {
       logoUrl: opts.ctx.logoUrl ?? undefined,
       replyTo,
       from,
+      fromDisplayName: from ? undefined : fromDisplayName,
+      channel,
+      conversationSubject: mailCtx.subject,
+      quotedPrevious,
       ...threading,
     })
   )
@@ -425,6 +503,7 @@ export async function notifyAgentReply(opts: {
         contentJson: opts.contentJson,
         ctaUrl,
         ctx,
+        channel: opts.channel,
       })
     }
 
@@ -452,6 +531,7 @@ export async function notifyAgentReply(opts: {
             contentJson: opts.contentJson,
             ctaUrl,
             ctx,
+            channel: opts.channel,
           })
         } catch (err) {
           log.warn(

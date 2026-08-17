@@ -10,8 +10,10 @@ import {
   eq,
   inArray,
   desc,
+  isNull,
   sql,
   channelIdentities,
+  conversationMessages,
   conversationOutboundEmails,
 } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
@@ -107,6 +109,96 @@ export async function priorOutboundMessageIds(
     .limit(limit)
   // Fetched newest-first for the LIMIT; return oldest-first for the header.
   return rows.map((r) => r.messageId).reverse()
+}
+
+/**
+ * Customer's inbound Message-IDs on this conversation (`metadata.emailMessageId`),
+ * oldest first. Used so outbound In-Reply-To / References name the mail they
+ * sent, not only the ones we sent.
+ */
+export async function priorInboundEmailMessageIds(
+  conversationId: ConversationId,
+  limit = 20
+): Promise<string[]> {
+  const rows = await db
+    .select({
+      messageId: sql<string>`${conversationMessages.metadata} ->> 'emailMessageId'`,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        isNull(conversationMessages.deletedAt),
+        sql`${conversationMessages.metadata} ->> 'emailMessageId' IS NOT NULL`
+      )
+    )
+    .orderBy(desc(conversationMessages.createdAt))
+    .limit(limit)
+  return rows
+    .map((r) => r.messageId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .reverse()
+}
+
+function asTime(value: Date | string | number): number {
+  if (value instanceof Date) return value.getTime()
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime()
+}
+
+/**
+ * Outbound + inbound Message-IDs for the next visitor-facing mail, merged
+ * oldest-first by `created_at` so References is a real chronological chain.
+ */
+export async function threadIdsForOutbound(
+  conversationId: ConversationId,
+  limit = 20
+): Promise<{ inbound: string[]; outbound: string[]; merged: string[] }> {
+  const outboundRows = await db
+    .select({
+      messageId: conversationOutboundEmails.messageId,
+      createdAt: conversationOutboundEmails.createdAt,
+    })
+    .from(conversationOutboundEmails)
+    .where(eq(conversationOutboundEmails.conversationId, conversationId))
+    .orderBy(desc(conversationOutboundEmails.createdAt))
+    .limit(limit)
+
+  const inboundRows = await db
+    .select({
+      messageId: sql<string>`${conversationMessages.metadata} ->> 'emailMessageId'`,
+      createdAt: conversationMessages.createdAt,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        isNull(conversationMessages.deletedAt),
+        sql`${conversationMessages.metadata} ->> 'emailMessageId' IS NOT NULL`
+      )
+    )
+    .orderBy(desc(conversationMessages.createdAt))
+    .limit(limit)
+
+  const outbound = outboundRows.map((r) => r.messageId).reverse()
+  const inbound = inboundRows
+    .map((r) => r.messageId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .reverse()
+
+  const merged = [
+    ...outboundRows.map((r) => ({
+      messageId: r.messageId,
+      createdAt: r.createdAt,
+    })),
+    ...inboundRows.flatMap((r) =>
+      r.messageId ? [{ messageId: r.messageId, createdAt: r.createdAt }] : []
+    ),
+  ]
+    .sort((a, b) => asTime(a.createdAt) - asTime(b.createdAt))
+    .map((r) => r.messageId)
+
+  return { inbound, outbound, merged: [...new Set(merged)] }
 }
 
 /**

@@ -64,7 +64,7 @@
  * `domains/conversation` entirely, which is a move across modules this change
  * does not otherwise touch. The cycle is the deliberate choice until then.
  */
-import { addressDomain, parseAddress } from '@quackback/email/ses'
+import { addressDomain, applyDisplayName, parseAddress } from '@quackback/email/ses'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { createLogger } from '@quackback/logger'
 import { db, eq, emailSendingDomains } from '@/lib/server/db'
@@ -241,6 +241,18 @@ async function sendingIdentityContext(env: EnvLike = process.env): Promise<Sendi
  * cannot prove it owns, and the right answer to that is a reply that arrives
  * from an honest address plus a line saying so — not a reply that never arrives.
  */
+/**
+ * Wrap an already-permitted address with an RFC 5322 display name. The address
+ * is unchanged; only the phrase in front of it is. The brand is preserved
+ * because this is formatting, not a new identity claim.
+ */
+export function withSendingDisplayName(
+  identity: SendingIdentity,
+  displayName: string
+): SendingIdentity {
+  return applyDisplayName(identity, displayName) as SendingIdentity
+}
+
 export async function permittedSendingIdentity(
   from: string | null
 ): Promise<SendingIdentity | null> {

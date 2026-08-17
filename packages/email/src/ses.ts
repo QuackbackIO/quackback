@@ -103,6 +103,13 @@ export function formatAddress(value: string): string {
   return `${encodeDisplayName(parsed.name)} <${parsed.address}>`
 }
 
+/** Replace (or add) the display name on an addr-spec or `Name <addr>` value. */
+export function applyDisplayName(from: string, displayName: string): string {
+  const parsed = parseAddress(from)
+  const address = typeof parsed === 'string' ? parsed : parsed.address
+  return formatAddress(`${displayName} <${address}>`)
+}
+
 /** The domain of an `addr` or `Name <addr>` value, lower-cased, or null. */
 export function addressDomain(value: string | undefined): string | null {
   if (!value) return null
