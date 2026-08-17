@@ -33,7 +33,13 @@ Builder+critic on `saas` (not a piece branch). Commits pushed:
   | migrator | `ba0bfb0b` | `910244e5` | `us-east4-eqdc4a` |
 
 - Ready 200 on gauntlet, `south63792f`, `northfa99f0`.
-- Live critic **PASS** (`channels-email-critic.md`): t1a unauth Channels 307 sign-in; authed hub/messenger/email **200** (email copy + activity, no email_log 500); conversations **307** → messenger; inbox **200**. Instances 20→20. Named skip: no outbound mailbox probe.
+- Live critic **PASS** (`channels-email-critic.md` + `.json`):
+  independent walk on t1a. Unauth Channels 307 named sign-in; gauntlet
+  404 Unknown workspace; authed hub/messenger/email **200** (Email
+  inbound + auto-ack + “No email recorded yet.”; no email_log 500);
+  conversations **307** → messenger; inbox **200**. Settings nav
+  Channels → `/admin/settings/channels`. Instances 20→20. Named skip:
+  no outbound mailbox probe.
 - CP unchanged `108c480c` (`sfo`).
 - Did not `apply` `.railway/railway.ts`. `APP_IMAGE` pin updated in the file to match live.
 
