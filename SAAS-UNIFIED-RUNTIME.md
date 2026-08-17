@@ -56,19 +56,19 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 
 **Scheduled deadlines** — job-tier `cron` + `cronEnabled` (`sla-breach-sweep`, `snooze-sweep`, others in `definitions.ts`); `earliestPendingJobAt` + `earliestWorkspaceDeadline()` providers; delayed `events` jobs (`addDelayedJob`).
 
-**Membership changes** — workspace invite/accept/remove/role paths (app). CP still _pulls_ seats every 15 min via `workspace-membership-sweep.ts` (WS-4 skips suspended/provisioning). No durable push job yet.
+**Membership changes** — workspace invite/accept/remove/role/owner paths enqueue `membership-sync` on the per-tenant job_queue (after-commit). The handler reads this workspace's team (`principal.type='user'` and role in admin/member) and pushes the desired set to the control plane. Self-host without `QUACKBACK_CONTROL_PLANE_URL` is a successful no-op. Owner seat on create stays (`recordOwnerSeat`).
 
 ## Connection classes (today)
 
-| Class                 | Where                           | Idle behaviour                                                                                   |
-| --------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Request pooled        | `pool-cache.ts`                 | `idle_timeout` 45s + LRU evict                                                                   |
-| Job LISTEN            | `jobs/wake.ts` + `jobs/tier.ts` | session-mode, `idle_timeout: 0`, closed on detach                                                |
-| App control-DB        | `workspaces/registry.ts`        | `idle_timeout` ≈ TTL+15s                                                                         |
-| CP `DATABASE_URL`     | CP `src/db`                     | `idle_timeout` default 10s                                                                       |
-| CP membership clients | `workspace-membership-sweep.ts` | `max:1`, `idle_timeout:5`, `end()` in finally; still fans out to every _active_ tenant each tick |
-| SSE / realtime        | `pubsub.ts`, `pg-listener.ts`   | presence-only no longer LISTENs; heartbeat tears abandoned streams                               |
-| Migrator / admin      | `fleet/migrator.ts`             | one-shot `max:1`                                                                                 |
+| Class                 | Where                                              | Idle behaviour                                                                                        |
+| --------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Request pooled        | `pool-cache.ts`                                    | `idle_timeout` 45s + LRU evict                                                                        |
+| Job LISTEN            | `jobs/wake.ts` + `jobs/tier.ts`                    | session-mode, `idle_timeout: 0`, closed on detach                                                     |
+| App control-DB        | `workspaces/registry.ts`                           | `idle_timeout` ≈ TTL+15s                                                                              |
+| CP `DATABASE_URL`     | CP `src/db`                                        | `idle_timeout` default 10s                                                                            |
+| CP membership clients | ~~`workspace-membership-sweep.ts` tenant fan-out~~ | Removed. The 15-min registrar restamps owner seats from CP columns only and does not open tenant DBs. |
+| SSE / realtime        | `pubsub.ts`, `pg-listener.ts`                      | presence-only no longer LISTENs; heartbeat tears abandoned streams                                    |
+| Migrator / admin      | `fleet/migrator.ts`                                | one-shot `max:1`                                                                                      |
 
 ## What this programme will not do
 
@@ -84,7 +84,7 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 2. **Landed.** Relay subsystem deleted. Job path is the only drain. `dispatch_owner` and `outbox_relay_leader` stay for soak / rollback.
 3. **In progress.** After-commit signals + one process scheduler (`QUACKBACK_WAKE_MODE=listener|both|scheduler`, default `listener`). LISTEN/poll/rescan stay until `scheduler` has soaked.
 4. Run scheduler in `quackback` (`ROLE=all`); prepare IaC to drop the worker (live delete gated).
-5. `membership-sync` job; delete CP tenant fan-out.
+5. **Landed.** `membership-sync` job; CP sweep no longer opens tenant DBs.
 6. Remove cron/migrator resources only after replacements have a green run + approval.
 
 ### Temporary flags
