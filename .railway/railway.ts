@@ -326,6 +326,12 @@ export default defineRailway(() => {
       QUACKBACK_CONTROL_PLANE_URL: preserve(),
       // Web-only: the public /api/storage proxy. Worker never serves it.
       S3_PROXY: preserve(),
+      // Best-effort doorbell into the worker. Absent on every other role,
+      // including self-host `all`, so the nudge is a no-op there and the
+      // in-process activity signal covers it. The path is the worker's
+      // private HTTP origin plus the wake route.
+      QUACKBACK_WORKER_WAKE_URL:
+        'http://${{quackback-worker.RAILWAY_PRIVATE_DOMAIN}}:3000/api/internal/wake',
     },
   })
 

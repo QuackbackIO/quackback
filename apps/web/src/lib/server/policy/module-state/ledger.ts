@@ -1055,4 +1055,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'per process, about this replica talking to the control database, not about any workspace. ' +
       'A per-workspace latch would let an enumeration of unknown keys hammer the registry.',
   },
+  {
+    file: 'apps/web/src/lib/server/workspaces/wake-nudge.ts',
+    name: 'lastByWorkspace',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'When this process last POSTed a wake for a workspace. Keyed by workspaceKey so two ' +
+      'workspaces cannot share a throttle window; a hit for the wrong key would only skip a ' +
+      'nudge, which the rescan already bounds.',
+  },
 ]

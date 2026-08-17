@@ -48,7 +48,7 @@
  * 3. **The rescan.** The safety net, `rescanIntervalMs`, for work that arrived
  *    without either of the above.
  *
- * ## The signal is in-process only, and that is a real limit
+ * ## The in-process signal cannot cross the web/worker split
  *
  * Under `QUACKBACK_ROLE=all` — one process serving requests and running the
  * tiers — signal (1) covers every enqueue, because every enqueue happens inside
@@ -56,14 +56,14 @@
  * deployment it does not: the web replica opens the scope and the worker replica
  * is the one that has detached.
  *
- * A cross-process signal was designed and then withdrawn, and the reason belongs
- * here rather than in a commit message. The natural home for it is the control
- * database — one `LISTEN` there, rung by whichever replica opened the scope,
- * costs nothing per workspace and reaches every replica. But a permanent `LISTEN`
- * is a permanently-connected client, and the control database is now required to
- * suspend when the fleet goes quiet for exactly the same reason the workspaces are.
- * The two cannot both be had. So there is no cross-process signal, and under a
- * split deployment externally-enqueued work waits for the rescan.
+ * A control-database `LISTEN` was designed and then withdrawn: a permanent
+ * listener is a permanently-connected client, and the control database is now
+ * required to suspend when the fleet goes quiet. The two cannot both be had.
+ *
+ * The replacement is a best-effort HTTP nudge (`workspaces/wake-nudge.ts`) from
+ * a web replica to `POST /api/internal/wake` on the worker. It holds no
+ * database connection, has no ack and no retry, and a lost call costs only
+ * latency — the deadline read and the rescan remain the correctness floor.
  *
  * ## Why these numbers
  *
@@ -87,12 +87,11 @@
  * to suspend after 60s; lowering it is strictly better than lengthening this.
  *
  * Fifteen minutes is what the *other* side of the trade will bear. Two things
- * are bounded by it: a job enqueued by another replica under a split deployment,
- * and the per-minute cron sweeps (`snooze-sweep`, `sla-breach-sweep`), which do
- * not tick while detached. Those sweeps are catch-up sweeps — one run after a
- * gap does everything the skipped runs would have — so the cost is staleness,
- * not lost work, and fifteen minutes of staleness on a workspace with literally no
- * traffic is a fair price for a compute that is off.
+ * are bounded by it: a nudge that was lost (the worker unreachable in the
+ * seconds after a commit), and the per-minute cron sweeps (`snooze-sweep`,
+ * `sla-breach-sweep`), which do not tick while detached. Those sweeps are
+ * catch-up sweeps — one run after a gap does everything the skipped runs
+ * would have — so the cost is staleness, not lost work.
  *
  * The wait is not `detachedAt + rescanIntervalMs`. That precessed: each
  * reconnect added the linger, so the fleet never shared a wake window with

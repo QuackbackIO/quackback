@@ -12,6 +12,8 @@
 import { db, events, auditLog, sql, type Database, type Transaction } from '@/lib/server/db'
 import { createId, type EvtId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { nudgeWorker } from '@/lib/server/workspaces/wake-nudge'
 import type { EventDefinition } from './catalogue/define'
 import type { DomainEvent, EventActorType, EventContext } from './envelope'
 
@@ -81,6 +83,11 @@ export async function emit<P>(
   // so the relay is woken exactly when there is a durably-committed event to
   // drain — and never for a rolled-back one.
   await tx.execute(sql`select pg_notify('outbox_wake', '')`)
+
+  // Cross-process doorbell. Fire-and-forget — never awaited — so a hung
+  // worker cannot hold this transaction or the request that opened it.
+  const workspaceKey = getCurrentWorkspace()?.workspaceKey
+  if (workspaceKey) nudgeWorker(workspaceKey)
 
   return eventId
 }

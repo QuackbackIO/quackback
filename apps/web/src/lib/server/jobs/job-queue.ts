@@ -77,6 +77,7 @@ import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
 import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { nudgeWorker } from '@/lib/server/workspaces/wake-nudge'
 import {
   leaseClaimGroupedSql,
   leaseCompleteSql,
@@ -256,6 +257,8 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   `)
 
   const rows = getExecuteRows<{ job_id: string }>(result)
+  const workspaceKey = currentWorkspaceKey()
+  if (workspaceKey) nudgeWorker(workspaceKey)
   return { jobId, inserted: rows.length > 0 }
 }
 
@@ -311,6 +314,8 @@ export async function enqueueJobs(
     RETURNING dedupe_key
   `)
   const written = getExecuteRows<{ dedupe_key: string | null }>(result)
+  const workspaceKey = currentWorkspaceKey()
+  if (workspaceKey) nudgeWorker(workspaceKey)
   return {
     inserted: written.length,
     insertedDedupeKeys: written.map((r) => r.dedupe_key).filter((k): k is string => k !== null),

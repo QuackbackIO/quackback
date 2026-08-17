@@ -17,6 +17,15 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
+const nudgeWorker = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/workspaces/wake-nudge', () => ({
+  nudgeWorker: (...a: unknown[]) => nudgeWorker(...a),
+}))
+vi.mock('@/lib/server/workspaces/workspace-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/workspaces/workspace-context')>()),
+  getCurrentWorkspace: () => ({ workspaceKey: 'ws_emit' }),
+}))
+
 import { db, events, auditLog, eq, and } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import { emit, inherit } from '../emit'
@@ -76,6 +85,7 @@ describe('emit()', () => {
     expect((row.context as { depth: number; source: string }).depth).toBe(0)
     expect((row.context as { source: string }).source).toBe('api')
     expect(row.publishedAt).toBeNull()
+    expect(nudgeWorker).toHaveBeenCalledWith('ws_emit')
   })
 
   it('rolls back the event when the surrounding transaction aborts', async () => {

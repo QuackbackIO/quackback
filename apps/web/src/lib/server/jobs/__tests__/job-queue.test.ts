@@ -47,6 +47,11 @@ vi.mock('@/lib/server/workspaces/workspace-context', () => ({
     currentWorkspaceKey === null ? null : { workspaceKey: currentWorkspaceKey },
 }))
 
+const nudgeWorker = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/workspaces/wake-nudge', () => ({
+  nudgeWorker: (...a: unknown[]) => nudgeWorker(...a),
+}))
+
 import {
   cancelJob,
   claimJobs,
@@ -75,6 +80,7 @@ beforeAll(async () => {
 
 afterEach(() => {
   currentWorkspaceKey = null
+  nudgeWorker.mockClear()
 })
 
 afterAll(async () => {
@@ -87,9 +93,11 @@ const LEASE = 30_000
 describe('enqueue', () => {
   it('writes a runnable row', async () => {
     const q = queue('enqueue')
+    currentWorkspaceKey = 'ws_enqueue'
     const { jobId, inserted } = await enqueueJob({ queue: q, payload: { hello: 'world' } })
     expect(inserted).toBe(true)
     expect(jobId).toMatch(/^job_/)
+    expect(nudgeWorker).toHaveBeenCalledWith('ws_enqueue')
 
     const rows = await rowsFor(q)
     expect(rows).toHaveLength(1)
