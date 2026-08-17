@@ -30,7 +30,18 @@ function targetKey(target: HookTarget): string {
     .slice(0, 24)
 }
 
-export async function runEventDispatch(job: ClaimedJob): Promise<void> {
+export interface EventDispatchDeps {
+  resolve?: typeof resolveTargets
+  enqueue?: typeof enqueueHookJobsWithIds
+}
+
+export async function runEventDispatch(
+  job: ClaimedJob,
+  deps: EventDispatchDeps = {}
+): Promise<void> {
+  const resolve = deps.resolve ?? resolveTargets
+  const enqueue = deps.enqueue ?? enqueueHookJobsWithIds
+
   const eventId = typeof job.payload.eventId === 'string' ? job.payload.eventId : null
   if (!eventId) {
     log.error(
@@ -70,7 +81,7 @@ export async function runEventDispatch(job: ClaimedJob): Promise<void> {
   }
 
   const degraded = job.attempts >= MAX_STRICT_RESOLVE_ATTEMPTS
-  const targets = await resolveTargets(event, degraded ? { bestEffort: true } : undefined)
+  const targets = await resolve(event, degraded ? { bestEffort: true } : undefined)
 
   await db.transaction(async (tx) => {
     if (targets.length > 0) {
@@ -80,7 +91,7 @@ export async function runEventDispatch(job: ClaimedJob): Promise<void> {
         data: { hookType: t.type, event: legacy, target: t.target, config: t.config },
         jobId: `${event.eventId}:${t.type}:${targetKey(t)}`,
       }))
-      await enqueueHookJobsWithIds(jobs, { executor: tx })
+      await enqueue(jobs, { executor: tx })
     }
     await tx.update(events).set({ publishedAt: new Date() }).where(eq(events.id, row.id))
   })

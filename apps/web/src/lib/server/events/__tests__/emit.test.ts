@@ -121,8 +121,8 @@ describe('emit()', () => {
     const entityId = createId('post')
     await expect(
       db.transaction(async (tx) => {
-        await emit(tx, plainDef, {
-          payload: { postId: entityId },
+        await emit(tx, auditedDef, {
+          payload: { postId: entityId, note: 'nope' },
           actor: { type: 'service' },
           entityId,
         })
@@ -139,6 +139,32 @@ describe('emit()', () => {
         )
     `)
     expect(getExecuteRows(leftover).length).toBe(0)
+    const leftoverAudit = await db.select().from(auditLog).where(eq(auditLog.targetId, entityId))
+    expect(leftoverAudit).toHaveLength(0)
+  })
+
+  it('commits event, audit, and dispatch job together', async () => {
+    const entityId = createId('post')
+    const eventId = await db.transaction((tx) =>
+      emit(tx, auditedDef, {
+        payload: { postId: entityId, note: 'atomic' },
+        actor: { type: 'user', id: createId('principal') },
+        entityId,
+      })
+    )
+    const eventRows = await db.select().from(events).where(eq(events.eventId, eventId))
+    const auditRows = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.eventType, 'test.emit_audited'), eq(auditLog.targetId, entityId)))
+    const jobs = await db.execute(sql`
+      SELECT queue FROM job_queue
+      WHERE queue = 'event-dispatch' AND payload->>'eventId' = ${eventId}
+    `)
+    expect(eventRows).toHaveLength(1)
+    expect(eventRows[0].dispatchOwner).toBe('job')
+    expect(auditRows).toHaveLength(1)
+    expect(getExecuteRows(jobs).length).toBeGreaterThan(0)
   })
 
   it('rejects a payload that fails the catalogue zod schema', async () => {
