@@ -65,7 +65,9 @@ import { listActiveWorkspaces, type WorkspaceDescriptor } from '@/lib/server/wor
 import { resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
 import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import {
+  CONTROL_FLEET_RESCAN_KEY,
   idleDetachDisabled,
+  nextRescanAt,
   onWorkspaceActivity,
   workspaceIdlePolicy,
   type ReattachReason,
@@ -262,6 +264,15 @@ function startLoop(opts: {
   let deadlineAt: number | null = null
   /** Set when a signal arrives while detached, so the wake reports its cause. */
   let signalled = false
+  /** Why the current attach happened, including `boot` (stats omit that). */
+  let attachReason: ReattachReason = 'boot'
+  /** The first claim pass after attach is what fast-detach inspects. */
+  let firstPassOfAttach = false
+  /**
+   * A rescan that claimed no external work: drop the linger. Cleared if a
+   * signal arrives while that pass is still running.
+   */
+  let emptyRescanDetach = false
   /** Doorbell verification is per DSN, so it runs once per revision, not per attach. */
   let verifiedRevision: number | null = null
   // This loop's own scheduler memory. Per workspace by construction: the state is
@@ -308,6 +319,7 @@ function startLoop(opts: {
    */
   const signal = () => {
     lastExternalAt = Date.now()
+    emptyRescanDetach = false
     if (attached) return
     signalled = true
     nudge()
@@ -376,6 +388,9 @@ function startLoop(opts: {
     s.attached = true
     lastExternalAt = Date.now()
     deadlineAt = null
+    attachReason = reason
+    firstPassOfAttach = true
+    emptyRescanDetach = false
     // Tick the schedule on the next pass whatever `nextSlotAt` last said.
     //
     // Measured: without this a workspace woken for its own deadline enqueued
@@ -439,7 +454,10 @@ function startLoop(opts: {
       // Not fatal: losing the deadline costs latency on delayed work, which the
       // rescan still bounds. Losing the detach would cost the compute.
       if (!isMissingJobQueue(err)) {
-        log.warn({ err, workspaceKey: opts.workspaceKey }, 'could not read the queue deadline on detach')
+        log.warn(
+          { err, workspaceKey: opts.workspaceKey },
+          'could not read the queue deadline on detach'
+        )
       }
     }
 
@@ -457,7 +475,7 @@ function startLoop(opts: {
 
   /** How long to sleep while detached, and what to call the wake when it ends. */
   const detachedWaitMs = (): number => {
-    const rescanAt = detachedAt + opts.idle.rescanIntervalMs
+    const rescanAt = nextRescanAt(Date.now(), opts.idle, opts.workspaceKey)
     const at = deadlineAt !== null ? Math.min(deadlineAt, rescanAt) : rescanAt
     // A floor so a deadline already in the past cannot spin the loop.
     return Math.max(250, at - Date.now())
@@ -470,7 +488,9 @@ function startLoop(opts: {
   }
 
   const shouldDetach = (): boolean =>
-    canDetach && poolSize(pool) === 0 && Date.now() - lastExternalAt >= opts.idle.detachAfterMs
+    canDetach &&
+    poolSize(pool) === 0 &&
+    (emptyRescanDetach || Date.now() - lastExternalAt >= opts.idle.detachAfterMs)
 
   const loop = async () => {
     while (running && !stopped) {
@@ -542,6 +562,10 @@ function startLoop(opts: {
         const external = result.claimed - Math.min(result.claimed, selfEnqueued)
         selfEnqueued = Math.max(0, selfEnqueued - result.claimed)
         if (external > 0) lastExternalAt = Date.now()
+        if (firstPassOfAttach) {
+          emptyRescanDetach = attachReason === 'rescan' && external === 0 && poolSize(pool) === 0
+          firstPassOfAttach = false
+        }
 
         if (wokenAt !== null && result.claimed > 0) {
           s.lastWakeLatencyMs = Date.now() - wokenAt
@@ -790,15 +814,15 @@ async function refreshWorkspaceLoops(cfg: RunnerConfig, idle: WorkspaceIdlePolic
  *
  * So the timer always fires on the minute and the *read* is what is conditional:
  * free while the fleet is doing something, skipped while it is not, and forced
- * once per rescan interval regardless so a newly provisioned workspace is still
- * discovered on a fleet that is otherwise asleep.
+ * on the same wall-clock rescan grid the workspaces use so the control database
+ * shares the fleet's wake window rather than inventing one of its own.
  */
 function scheduleWorkspaceRefresh(cfg: RunnerConfig, idle: WorkspaceIdlePolicy): void {
   if (!running) return
   refreshTimer = setTimeout(() => {
     if (!running) return
     const anyAttached = [...loops.values()].some((l) => l.isAttached())
-    const overdue = Date.now() - lastFleetReadAt >= idle.rescanIntervalMs
+    const overdue = Date.now() >= nextRescanAt(lastFleetReadAt, idle, CONTROL_FLEET_RESCAN_KEY)
     if (!anyAttached && !overdue) {
       scheduleWorkspaceRefresh(cfg, idle)
       return
@@ -841,6 +865,7 @@ export async function startJobTier(): Promise<void> {
   }
 
   await refreshWorkspaceLoops(cfg, idle)
+  lastFleetReadAt = Date.now()
   scheduleWorkspaceRefresh(cfg, idle)
   log.info(
     {

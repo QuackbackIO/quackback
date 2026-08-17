@@ -94,6 +94,15 @@
  * not lost work, and fifteen minutes of staleness on a workspace with literally no
  * traffic is a fair price for a compute that is off.
  *
+ * The wait is not `detachedAt + rescanIntervalMs`. That precessed: each
+ * reconnect added the linger, so the fleet never shared a wake window with
+ * itself or with the control database. `nextRescanAt` snaps to the next
+ * epoch-aligned multiple of `rescanIntervalMs` plus a stable per-workspace
+ * offset of at most 30s, and a rescan that finds nothing detaches again
+ * immediately. Signal, deadline, and boot attaches still linger for
+ * `detachAfterMs` — those have a user or due work on the other side, and
+ * thrash protection matters there.
+ *
  * Set `TENANT_IDLE_DETACH_MS=0` to disable detaching entirely and get the old
  * always-warm behaviour back, which is the correct setting for a single-workspace
  * install on a database that is never billed for idleness.
@@ -135,6 +144,59 @@ export function workspaceIdlePolicy(): WorkspaceIdlePolicy {
 /** True when this process should keep the old always-warm behaviour. */
 export function idleDetachDisabled(policy: WorkspaceIdlePolicy): boolean {
   return policy.detachAfterMs <= 0
+}
+
+/**
+ * Inclusive ceiling on the per-workspace rescan offset, in milliseconds.
+ *
+ * Thirty seconds is long enough to stop every workspace reconnecting in the
+ * same instant, and short enough that the fleet still shares one wake window
+ * against the platform's suspend timer.
+ */
+export const RESCAN_JITTER_MAX_MS = 30_000
+
+/**
+ * Stable key used to snap the control-database fleet re-read to the same
+ * wall-clock grid the workspaces wake on. Not a real workspace.
+ */
+export const CONTROL_FLEET_RESCAN_KEY = '__control_fleet__'
+
+/**
+ * Per-workspace offset on the rescan grid, in `[0, 30_000]` ms.
+ *
+ * djb2 over `workspaceKey`, then modulo 30001. The same key always lands on
+ * the same offset, so a workspace's place on the grid never drifts across
+ * detaches or process restarts.
+ */
+export function rescanJitterMs(workspaceKey: string): number {
+  let hash = 5381
+  for (let i = 0; i < workspaceKey.length; i++) {
+    hash = Math.imul(hash, 33) + workspaceKey.charCodeAt(i)
+  }
+  return (hash >>> 0) % (RESCAN_JITTER_MAX_MS + 1)
+}
+
+/**
+ * Next instant a detached tier (or the fleet re-read) should look again.
+ *
+ * Wake instants are `k * policy.rescanIntervalMs + jitter` for integer `k` —
+ * epoch-aligned, then shifted by {@link rescanJitterMs}. The returned value
+ * is the smallest such instant strictly after `now`.
+ *
+ * When detach is disabled this is a passthrough (`now + rescanIntervalMs`)
+ * that does not invent a grid wake. Callers already skip the detached wait
+ * in that case; the passthrough is so a stray call cannot schedule one.
+ */
+export function nextRescanAt(
+  now: number,
+  policy: WorkspaceIdlePolicy,
+  workspaceKey: string
+): number {
+  if (idleDetachDisabled(policy)) return now + policy.rescanIntervalMs
+  const interval = policy.rescanIntervalMs
+  const jitter = rescanJitterMs(workspaceKey)
+  const slot = Math.floor((now - jitter) / interval) + 1
+  return slot * interval + jitter
 }
 
 /**

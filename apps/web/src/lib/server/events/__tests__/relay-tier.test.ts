@@ -9,7 +9,7 @@
  * Where a resolved hook job LANDS is pinned in `relay.test.ts`, against the real
  * drain rather than against this file's stubs.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 interface FakeWorkspace {
   workspaceKey: string
@@ -72,7 +72,10 @@ async function runTier(opts: {
   vi.doMock('@/lib/server/workspaces/registry', () => ({
     listActiveWorkspaces: async () => ({
       workspaces: opts.workspaces,
-      refused: (opts.registryRefused ?? []).map((id) => ({ workspaceKey: id, code: 'invalid_record' })),
+      refused: (opts.registryRefused ?? []).map((id) => ({
+        workspaceKey: id,
+        code: 'invalid_record',
+      })),
     }),
   }))
   vi.doMock('@/lib/server/workspaces/pool-cache', () => ({
@@ -257,5 +260,201 @@ describe('a refusal no retry can fix stops being retried, and stays visible', ()
     const run = await runTier({ workspaces: [workspace('t-a'), workspace('t-b')] })
     expect(run.drainedFor).toEqual(['t-a', 't-b'])
     expect(run.schemaMissingFor).toEqual([])
+  })
+})
+
+const DETACH_MS = 1_000
+const RESCAN_MS = 5_000
+const POLL_MS = 100
+const RELAY_WORKSPACE_KEY = 'relay_idle_ws'
+
+const relayEnvKeys = [
+  'TENANT_IDLE_DETACH_MS',
+  'TENANT_IDLE_RESCAN_MS',
+  'RELAY_POLL_INTERVAL_MS',
+  'RELAY_FOLLOWER_RETRY_MS',
+] as const
+
+interface RelayIdleHandle {
+  workspaceKey: string
+  noteActivity: (source?: 'request' | 'sweep' | 'script' | 'migration') => void
+  nextRescanAt: (now: number) => number
+  status: () => {
+    attached: boolean
+    detaches: number
+    reattaches: number
+    lastReattachReason: string | null
+    leader: boolean
+    drained: number
+  }
+  stop: () => Promise<void>
+}
+
+async function bootRelayIdle(opts?: { claimFails?: boolean }): Promise<RelayIdleHandle> {
+  vi.resetModules()
+  const saved: Record<string, string | undefined> = {}
+  for (const key of relayEnvKeys) saved[key] = process.env[key]
+  process.env.TENANT_IDLE_DETACH_MS = String(DETACH_MS)
+  process.env.TENANT_IDLE_RESCAN_MS = String(RESCAN_MS)
+  process.env.RELAY_POLL_INTERVAL_MS = String(POLL_MS)
+  process.env.RELAY_FOLLOWER_RETRY_MS = String(POLL_MS)
+
+  const workspaceKey = RELAY_WORKSPACE_KEY
+  const ws = workspace(workspaceKey)
+
+  vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
+  vi.doMock('@/lib/server/workspaces/mode', () => ({
+    isPooledTenancy: () => true,
+    POOLED_TENANCY: 'pooled',
+  }))
+  vi.doMock('@/lib/server/config', () => ({
+    config: { isPooledTenancy: true, databaseUrl: 'postgres://direct/single' },
+  }))
+  vi.doMock('@/lib/server/workspaces/registry', () => ({
+    listActiveWorkspaces: async () => ({ workspaces: [ws], refused: [] }),
+  }))
+  vi.doMock('@/lib/server/workspaces/pool-cache', () => ({
+    resolveWorkspacePassword: async () => 'pw',
+    openWorkspaceDirectPool: async () => ({
+      sql: {},
+      db: { __workspace: workspaceKey },
+      secrets: { secretKey: 'k', storage: null },
+      close: async () => {},
+    }),
+  }))
+  vi.doMock('@/lib/server/workspaces/workspace-context', () => ({
+    createWorkspaceScope: (init: Record<string, unknown>) => {
+      const secrets = init.secrets as { secretKey?: string } | undefined
+      if (!secrets?.secretKey) throw new Error('createWorkspaceScope: no resolved SECRET_KEY')
+      const scope = { ...init }
+      delete scope.secrets
+      return scope
+    },
+    runWithWorkspaceScope: async (_scope: unknown, fn: () => unknown) => fn(),
+  }))
+  vi.doMock('@/lib/server/jobs/wake', () => ({
+    JOB_WAKE_CHANNEL: 'quackback_job_wake',
+    openWakeListener: async () => ({ close: async () => {}, verify: async () => true }),
+  }))
+  vi.doMock('../relay', () => ({
+    drainOnce: async () => ({ drained: 0, enqueued: 0, skipped: 0, failed: 0, lagMsSamples: [] }),
+  }))
+  vi.doMock('../relay-leader', () => ({
+    claimRelayLease: async () =>
+      opts?.claimFails
+        ? null
+        : { owner: 'o', fence: '1', expiresAt: new Date(Date.now() + 30_000) },
+    renewRelayLease: async () => ({
+      owner: 'o',
+      fence: '1',
+      expiresAt: new Date(Date.now() + 30_000),
+    }),
+    releaseRelayLease: async () => true,
+    isMissingRelayLeaderTable: () => false,
+    relayOwnerId: () => 'owner-1',
+  }))
+  vi.doMock('../resolvers', () => ({ registerAllResolvers: () => {} }))
+
+  const idle = await import('@/lib/server/workspaces/idle')
+  const mod = await import('../relay-tier')
+  await mod.startRelayTier()
+  await vi.advanceTimersByTimeAsync(0)
+  const policy = idle.workspaceIdlePolicy()
+
+  return {
+    workspaceKey,
+    noteActivity: (source = 'request') => idle.noteWorkspaceActivity(workspaceKey, source),
+    nextRescanAt: (now: number) => idle.nextRescanAt(now, policy, workspaceKey),
+    status: () => {
+      const row = mod.getRelayTierStatus().workspaces.find((t) => t.workspaceKey === workspaceKey)
+      if (!row) throw new Error('relay loop missing from status')
+      return {
+        attached: row.attached,
+        detaches: row.detaches,
+        reattaches: row.reattaches,
+        lastReattachReason: row.lastReattachReason,
+        leader: row.leader,
+        drained: row.drained,
+      }
+    },
+    stop: async () => {
+      await mod.stopRelayTier()
+      const { __resetQuarantineForTests } = await import('@/lib/server/workspaces/quarantine')
+      idle.__resetWorkspaceActivityForTests()
+      __resetQuarantineForTests()
+      vi.resetModules()
+      for (const key of relayEnvKeys) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
+    },
+  }
+}
+
+let relayIdle: RelayIdleHandle | null = null
+
+afterEach(async () => {
+  if (relayIdle) {
+    await relayIdle.stop()
+    relayIdle = null
+  }
+  vi.useRealTimers()
+})
+
+describe('a rescan attach that publishes nothing', () => {
+  it('detaches a leader on the empty pass instead of waiting detachAfterMs', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    relayIdle = await bootRelayIdle()
+    expect(relayIdle.status().attached).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(DETACH_MS - 1)
+    expect(relayIdle.status().attached).toBe(true)
+    await vi.advanceTimersByTimeAsync(POLL_MS + 1)
+    expect(relayIdle.status().attached).toBe(false)
+    expect(relayIdle.status().detaches).toBe(1)
+
+    const wait = Math.max(250, relayIdle.nextRescanAt(Date.now()) - Date.now())
+    await vi.advanceTimersByTimeAsync(wait)
+    expect(relayIdle.status().lastReattachReason).toBe('rescan')
+    expect(relayIdle.status().attached).toBe(false)
+    expect(relayIdle.status().detaches).toBeGreaterThanOrEqual(2)
+  })
+
+  it('detaches a follower that published nothing instead of lingering', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    relayIdle = await bootRelayIdle({ claimFails: true })
+    expect(relayIdle.status().attached).toBe(true)
+    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
+    expect(relayIdle.status().detaches).toBe(1)
+
+    const wait = Math.max(250, relayIdle.nextRescanAt(Date.now()) - Date.now())
+    await vi.advanceTimersByTimeAsync(wait)
+    expect(relayIdle.status().lastReattachReason).toBe('rescan')
+    expect(relayIdle.status().attached).toBe(false)
+    expect(relayIdle.status().detaches).toBeGreaterThanOrEqual(2)
+    expect(relayIdle.status().leader).toBe(false)
+  })
+})
+
+describe('a signal attach that publishes nothing', () => {
+  it('waits detachAfterMs before letting go', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    relayIdle = await bootRelayIdle()
+    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
+    expect(relayIdle.status().attached).toBe(false)
+
+    relayIdle.noteActivity('request')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(relayIdle.status().attached).toBe(true)
+    expect(relayIdle.status().lastReattachReason).toBe('signal')
+
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
+    expect(relayIdle.status().attached).toBe(true)
+    await vi.advanceTimersByTimeAsync(DETACH_MS / 2 + POLL_MS)
+    expect(relayIdle.status().attached).toBe(false)
+    expect(relayIdle.status().lastReattachReason).toBe('signal')
   })
 })

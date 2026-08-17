@@ -71,9 +71,14 @@ import { shouldRunWorkers } from '@/lib/server/process-role'
 import { openWakeListener, type WakeListener } from '@/lib/server/jobs/wake'
 import { warnIfPooled } from './direct-session'
 import { listActiveWorkspaces, type WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
-import { openWorkspaceDirectPool, resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
 import {
+  openWorkspaceDirectPool,
+  resolveWorkspacePassword,
+} from '@/lib/server/workspaces/pool-cache'
+import {
+  CONTROL_FLEET_RESCAN_KEY,
   idleDetachDisabled,
+  nextRescanAt,
   onWorkspaceActivity,
   workspaceIdlePolicy,
   type ReattachReason,
@@ -87,7 +92,10 @@ import {
   refusalCode,
   reportQuarantine,
 } from '@/lib/server/workspaces/quarantine'
-import { createWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
+import {
+  createWorkspaceScope,
+  runWithWorkspaceScope,
+} from '@/lib/server/workspaces/workspace-context'
 import { drainOnce, type DrainResult } from './relay'
 import {
   claimRelayLease,
@@ -371,6 +379,15 @@ function startLoop(opts: {
   let lastWorkAt = Date.now()
   let detachedAt = 0
   let signalled = false
+  /** Why the current attach happened, including `boot` (stats omit that). */
+  let attachReason: ReattachReason = 'boot'
+  /** The first drain (or follower miss) after attach is what fast-detach inspects. */
+  let firstPassOfAttach = false
+  /**
+   * A rescan that published nothing: drop the linger. Cleared if a signal
+   * arrives while that pass is still running.
+   */
+  let emptyRescanDetach = false
 
   /**
    * A doorbell arrived.
@@ -400,6 +417,7 @@ function startLoop(opts: {
    */
   const signal = () => {
     lastWorkAt = Date.now()
+    emptyRescanDetach = false
     if (attachment) return
     signalled = true
     const resolve = wakeResolve
@@ -459,7 +477,10 @@ function startLoop(opts: {
           )
         }
       } else {
-        log.error({ err, workspaceKey: opts.workspaceKey }, 'outbox relay tier could not open the database')
+        log.error(
+          { err, workspaceKey: opts.workspaceKey },
+          'outbox relay tier could not open the database'
+        )
       }
       return null
     }
@@ -470,10 +491,16 @@ function startLoop(opts: {
     listener = await opts.openListener(ring, live, s)
     s.attached = true
     lastWorkAt = Date.now()
+    attachReason = reason
+    firstPassOfAttach = true
+    emptyRescanDetach = false
     if (reason !== 'boot') {
       s.reattaches += 1
       s.lastReattachReason = reason
-      log.info({ workspaceKey: opts.workspaceKey, reason }, 'outbox relay tier re-attached to workspace')
+      log.info(
+        { workspaceKey: opts.workspaceKey, reason },
+        'outbox relay tier re-attached to workspace'
+      )
     }
     return attachment
   }
@@ -497,7 +524,9 @@ function startLoop(opts: {
     if (lease) {
       await held
         .scoped(() => releaseRelayLease(held.db, lease as RelayLease))
-        .catch((err) => log.warn({ err, workspaceKey: opts.workspaceKey }, 'failed to release relay lease'))
+        .catch((err) =>
+          log.warn({ err, workspaceKey: opts.workspaceKey }, 'failed to release relay lease')
+        )
       lease = null
       leaseRenewAt = 0
       s.leader = false
@@ -515,7 +544,7 @@ function startLoop(opts: {
   }
 
   const detachedWaitMs = (): number =>
-    Math.max(250, detachedAt + opts.idle.rescanIntervalMs - Date.now())
+    Math.max(250, nextRescanAt(Date.now(), opts.idle, opts.workspaceKey) - Date.now())
 
   const wakeReason = (): ReattachReason => (signalled ? 'signal' : 'rescan')
 
@@ -528,7 +557,7 @@ function startLoop(opts: {
    * warm — the same row that already hot-spins the poll today.
    */
   const shouldDetach = (): boolean =>
-    canDetach && Date.now() - lastWorkAt >= opts.idle.detachAfterMs
+    canDetach && (emptyRescanDetach || Date.now() - lastWorkAt >= opts.idle.detachAfterMs)
 
   const loop = async () => {
     while (running && !stopped) {
@@ -576,8 +605,21 @@ function startLoop(opts: {
           leaseRenewAt = 0
           s.leader = false
           s.fence = null
+          if (firstPassOfAttach) {
+            emptyRescanDetach = attachReason === 'rescan'
+            firstPassOfAttach = false
+          }
           // A follower must not drain. Re-ask on its own cadence rather than the
-          // poll interval: it is asking about leadership, not about work.
+          // poll interval: it is asking about leadership, not about work. A
+          // rescan that found no lease and published nothing must not linger
+          // either — holding the sockets for detachAfterMs is the whole cost.
+          if (!running || stopped) break
+          if (shouldDetach()) {
+            await detach()
+            if (!running || stopped) break
+            await waitForWork(detachedWaitMs())
+            continue
+          }
           await waitForWork(opts.config.followerRetryMs)
           continue
         }
@@ -598,6 +640,10 @@ function startLoop(opts: {
         const res = await held.scoped(() => drainOnce({ batchSize: opts.config.batchSize }))
         record(res)
         if (res.drained > 0 || res.failed > 0) lastWorkAt = Date.now()
+        if (firstPassOfAttach) {
+          emptyRescanDetach = attachReason === 'rescan' && res.drained === 0 && res.failed === 0
+          firstPassOfAttach = false
+        }
         if (wokenAt !== null && res.drained > 0) {
           s.wakeToDrainMs.push(Date.now() - wokenAt)
           if (s.wakeToDrainMs.length > LAG_RING) s.wakeToDrainMs.shift()
@@ -636,7 +682,11 @@ function startLoop(opts: {
   }
 
   void runWithLogContext(
-    { request_id: crypto.randomUUID(), route: 'events:relay-tier', workspace_key: opts.workspaceKey },
+    {
+      request_id: crypto.randomUUID(),
+      route: 'events:relay-tier',
+      workspace_key: opts.workspaceKey,
+    },
     loop
   ).catch((err) => log.error({ err, workspaceKey: opts.workspaceKey }, 'outbox relay loop exited'))
 
@@ -747,7 +797,10 @@ function startWorkspaceLoop(
   // Named before the connection is opened, so the likeliest misconfiguration is
   // reported against the field that carries it rather than as a doorbell that
   // quietly never rings. The NOTIFY round trip later is still the authority.
-  warnIfPooled(workspace.database.directUrl, { workspaceKey: workspace.workspaceKey, use: 'the outbox relay' })
+  warnIfPooled(workspace.database.directUrl, {
+    workspaceKey: workspace.workspaceKey,
+    use: 'the outbox relay',
+  })
 
   const holder: { ring: (() => void) | null } = { ring: null }
   /**
@@ -817,7 +870,10 @@ function startWorkspaceLoop(
  * a workspace-specific reason any more: the refusal happens inside the loop, where
  * it can be classified and where a terminal one can stop the loop reconnecting.
  */
-async function refreshWorkspaceLoops(cfg: RelayTierConfig, idle: WorkspaceIdlePolicy): Promise<void> {
+async function refreshWorkspaceLoops(
+  cfg: RelayTierConfig,
+  idle: WorkspaceIdlePolicy
+): Promise<void> {
   const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) {
     log.error(
@@ -873,15 +929,15 @@ async function refreshWorkspaceLoops(cfg: RelayTierConfig, idle: WorkspaceIdlePo
  *
  * So the timer always fires on the minute and the *read* is what is conditional:
  * free while the fleet is doing something, skipped while it is not, and forced
- * once per rescan interval regardless so a newly provisioned workspace is still
- * discovered on a fleet that is otherwise asleep.
+ * on the same wall-clock rescan grid the workspaces use so the control database
+ * shares the fleet's wake window rather than inventing one of its own.
  */
 function scheduleWorkspaceRefresh(cfg: RelayTierConfig, idle: WorkspaceIdlePolicy): void {
   if (!running) return
   refreshTimer = setTimeout(() => {
     if (!running) return
     const anyAttached = [...loops.values()].some((l) => l.isAttached())
-    const overdue = Date.now() - lastFleetReadAt >= idle.rescanIntervalMs
+    const overdue = Date.now() >= nextRescanAt(lastFleetReadAt, idle, CONTROL_FLEET_RESCAN_KEY)
     if (!anyAttached && !overdue) {
       scheduleWorkspaceRefresh(cfg, idle)
       return
@@ -925,6 +981,7 @@ export async function startRelayTier(): Promise<void> {
   }
 
   await refreshWorkspaceLoops(cfg, idle)
+  lastFleetReadAt = Date.now()
   scheduleWorkspaceRefresh(cfg, idle)
   log.info(
     {
