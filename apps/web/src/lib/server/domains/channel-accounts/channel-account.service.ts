@@ -27,7 +27,14 @@ import {
   type ChannelAccountConfig,
   type SendingDomainDnsRecord,
 } from '@/lib/server/db'
-import type { ChannelAccountId, ConversationId, SendingDomainId, TeamId } from '@quackback/ids'
+import type {
+  ChannelAccountId,
+  ConversationId,
+  IntegrationId,
+  SendingDomainId,
+  TeamId,
+} from '@quackback/ids'
+import { requireChannelDescriptor } from '@/lib/shared/channels'
 import type { SendingIdentity } from '@quackback/email/sender'
 import { enforceSendingDomainLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
@@ -485,8 +492,9 @@ export async function createSendingAddress(input: {
 export async function createConnectionAccount(input: {
   owningTeamId: TeamId
   channel: string
-  integrationId: string
+  integrationId: IntegrationId
 }): Promise<ChannelAccount> {
+  requireChannelDescriptor(input.channel)
   const [row] = await db
     .insert(channelAccounts)
     .values({

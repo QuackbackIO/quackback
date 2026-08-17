@@ -239,7 +239,6 @@ export async function notifyVisitorMessage(opts: {
       const { teamThreadRootMessageId, mintTeamOutboundMessageId } =
         await import('@/lib/server/domains/conversation/conversation.email-channel')
       const teamRoot = teamThreadRootMessageId(opts.conversation.id)
-      const teamMessageId = mintTeamOutboundMessageId(opts.conversation.id)
       // Contact class: the only link is an /admin/inbox URL, which carries no
       // capability — the session does. So a teammate reachable only via their
       // contact address is correctly included, which the old truthiness filter
@@ -264,7 +263,7 @@ export async function notifyVisitorMessage(opts: {
               logoUrl: ctx.logoUrl ?? undefined,
               isFirstMessage: opts.isFirstMessage,
               conversationSubject: opts.conversation.subject,
-              messageId: teamMessageId ?? undefined,
+              messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
               inReplyTo: teamRoot ?? undefined,
               references: teamRoot ? [teamRoot] : undefined,
             })

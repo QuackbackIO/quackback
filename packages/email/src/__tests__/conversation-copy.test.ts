@@ -99,6 +99,16 @@ describe('conversationMessageCopy', () => {
     })
     expect(copy.subject).toBe('Priya: Billing overcharge')
   })
+
+  it('falls back to the preview when the conversation has no subject', () => {
+    const copy = conversationMessageCopy({
+      direction: 'visitor_message',
+      senderName: 'Priya',
+      workspaceName: 'Acme',
+      preview: 'The invoice looks wrong',
+    })
+    expect(copy.subject).toBe('Priya: The invoice looks wrong')
+  })
 })
 
 describe('assembleOutboundThreading', () => {

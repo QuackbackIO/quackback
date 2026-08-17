@@ -1695,6 +1695,13 @@
       "tag": "0266_channel_threads",
       "breakpoints": true,
       "idx": 241
+    },
+    {
+      "version": "7",
+      "when": 1786880000004,
+      "tag": "0267_channel_threads_conversation_fk",
+      "breakpoints": true,
+      "idx": 242
     }
   ]
 }

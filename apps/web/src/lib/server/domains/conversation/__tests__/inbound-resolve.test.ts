@@ -24,4 +24,19 @@ describe('resolveInboundConversation', () => {
     })
     expect(create).toBeNull()
   })
+
+  it('uses the sender fallback only after a miss on the correlation key', async () => {
+    const order: string[] = []
+    await resolveInboundConversation({
+      lookupCorrelation: async () => {
+        order.push('key')
+        return null
+      },
+      lookupOpenBySender: async () => {
+        order.push('open')
+        return ID
+      },
+    })
+    expect(order).toEqual(['key', 'open'])
+  })
 })

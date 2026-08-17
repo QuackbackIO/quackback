@@ -3,8 +3,9 @@
  * maps to a conversation. Email keeps its Message-ID map as the authority;
  * other channels store their thread keys here.
  */
-import { pgTable, text, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, uniqueIndex, index, foreignKey } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
+import { conversations } from './conversation'
 
 export const channelThreads = pgTable(
   'channel_threads',
@@ -21,6 +22,11 @@ export const channelThreads = pgTable(
       table.externalThreadKey
     ),
     index('channel_threads_conversation_idx').on(table.conversationId),
+    foreignKey({
+      name: 'channel_threads_conversation_id_fkey',
+      columns: [table.conversationId],
+      foreignColumns: [conversations.id],
+    }).onDelete('cascade'),
   ]
 )
 

@@ -69,11 +69,24 @@ export async function maybeSendColdInboundAck(opts: {
   }
 
   try {
+    const { enforceEmailBudget } = await import('@/lib/server/domains/settings/tier-enforce')
+    await enforceEmailBudget()
+  } catch (err) {
+    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+    if (err instanceof TierLimitError) {
+      log.warn({ reason: 'budget' }, 'auto-ack skipped')
+      return 'skipped'
+    }
+    throw err
+  }
+
+  try {
     const { sendConversationAutoAckEmail } = await import('@quackback/email')
     const { inboundReplyToAddress, mintOutboundMessageId } =
       await import('./conversation.email-channel')
     const { currentMailSlug } = await import('./conversation.mail-slug')
-    const { mailContact, typedAddressRecipient } = await import('@/lib/server/email/recipient')
+    const { typedAddressRecipient } = await import('@/lib/server/email/recipient')
+    const { recordOutboundEmail } = await import('./conversation.email-store')
     const { requireSettings } = await import('@/lib/server/domains/settings/settings.helpers')
     const org = await requireSettings()
     const workspaceName = org.name ?? 'Support'
@@ -81,14 +94,18 @@ export async function maybeSendColdInboundAck(opts: {
     if (!to) return 'no_sender'
     const replyTo = inboundReplyToAddress(opts.conversationId, currentMailSlug())
     const inboundId = opts.parsed.messageId
-    await mailContact(sendConversationAutoAckEmail, to, {
+    const minted = mintOutboundMessageId(opts.conversationId) ?? undefined
+    const result = await sendConversationAutoAckEmail({
+      to,
       workspaceName,
       conversationSubject: opts.conversationSubject,
       replyTo: replyTo ?? undefined,
-      messageId: mintOutboundMessageId(opts.conversationId) ?? undefined,
+      messageId: minted,
       inReplyTo: inboundId ?? undefined,
       references: inboundId ? [inboundId] : undefined,
     })
+    const outboundId = result.messageId === undefined ? minted : (result.messageId ?? undefined)
+    if (outboundId) await recordOutboundEmail(outboundId, opts.conversationId)
     return 'sent'
   } catch (err) {
     log.warn({ err }, 'auto-ack send failed')
