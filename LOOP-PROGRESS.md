@@ -4,18 +4,40 @@
 
 Builder+critic on `saas` (not a piece branch). Commits pushed:
 
-| Unit                      | Sha                             | Critic                      | Live?                                                                                                   |
-| ------------------------- | ------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| M1 thread & humanize      | `ec8421444` + fixer `3fbbb4670` | PASS_WITH_GAPS then fixer   | no (batch deploy with later UI; named skip: outbound mail composition, no live mailbox probe this fire) |
-| M2 descriptor + adapter   | `e7c6509c6`                     | in flight                   | no (same skip until M4 settings surfaces)                                                               |
-| M3 close + ledger + meter | `0874a9c9d`                     | FAIL then fixer `ca44e679e` | no (needs 0265 on enrolled DBs before code that selects email_log is live)                              |
-| M4 settings IA + UI       | `4f92f96dc`                     | PASS_WITH_GAPS              | no (same skip: tip includes M3 email_log selects; 0265 not on enrolled DBs)                             |
-| M4 critic fixer           | `a7683e137`                     | pending                     | no (same skip)                                                                                          |
-| M5 polish + ack           | `de0eed156`                     | PASS_WITH_GAPS              | no (same skip)                                                                                          |
-| M6 extensibility          | `7a4654b1d`                     | PASS_WITH_GAPS              | no (0266/0267 not on enrolled DBs; same 0265 skip)                                                      |
-| M5/M6 critic fixer        | `c33fcda30`                     | pending                     | no (same skip)                                                                                          |
+| Unit                      | Sha                             | Critic                     | Live?                               |
+| ------------------------- | ------------------------------- | -------------------------- | ----------------------------------- |
+| M1 thread & humanize      | `ec8421444` + fixer `3fbbb4670` | PASS_WITH_GAPS then fixer  | **yes** in `910244e5` / `57068471`  |
+| M2 descriptor + adapter   | `e7c6509c6`                     | PASS_WITH_GAPS             | **yes** same digest                 |
+| M3 close + ledger + meter | `0874a9c9d` + `ca44e679e`       | FAIL then fixer; live PASS | **yes** (0265 on enrolled DBs)      |
+| M4 settings IA + UI       | `4f92f96dc` + `a7683e137`       | PASS_WITH_GAPS             | **yes**                             |
+| M5 polish + ack           | `de0eed156`                     | PASS_WITH_GAPS             | **yes**                             |
+| M6 extensibility          | `7a4654b1d` + `c33fcda30`       | PASS_WITH_GAPS             | **yes** (0266/0267 on enrolled DBs) |
+| TypeID uuid SQL           | `daf740885`                     | needed for 0266 FK         | **yes** (applied before pin)        |
+| Import-protection sink    | `fac1beed8`                     | needed for Docker          | **yes** tip                         |
+| Ledger notes              | `155177c9b` / `a1fca4ef2`       | n/a                        | skip-deploy (docs)                  |
 
-Spec M1–M6 plus two critic fixers are on `saas` tip `c33fcda30`. Named skip: do not pin live until 0265–0267 are applied on enrolled workspace DBs (email_log + channel_threads).
+**This fire (Fleet, 2026-08-17):** 0265–0267 applied, then pin + live critic.
+
+- Blocked half-written `inst_01m00mqr1zfzzb19nevwzer2hr` (no servable registry record).
+- First `set-target 0267` + run **failed** on all 18: `channel_threads.channel_account_id` was `text` vs `channel_accounts.id` uuid. Nothing applied (transactional). `daf740885` stores TypeID columns as uuid.
+- Re-run: claimed=18 reconciled=18, ledger 240→243, current **0267**, post=true. `MIN_SCHEMA_VERSION` still `0258`.
+- Docker `32008528009` FAILED import-protection (`start.ts` → `email-log.sink` → `db`). `fac1beed8` registers the sink from `server.ts`. Redispatch `32009201320` SUCCESS from `fac1beed8` as `sha256:910244e58bcf1c195363a971cbaa54d420d978a61cd4d3a5dc6a29dd8f65ce79`.
+- `source.image` + `redeploy --from-source`. Matching `meta.imageDigest`, web region only `us-east4-eqdc4a`:
+
+  | role     | deployment | digest     | region            |
+  | -------- | ---------- | ---------- | ----------------- |
+  | web      | `57068471` | `910244e5` | `us-east4-eqdc4a` |
+  | worker   | `a71325a8` | `910244e5` | `us-east4-eqdc4a` |
+  | hourly   | `72676920` | `910244e5` | `us-east4-eqdc4a` |
+  | daily    | `5c904fa3` | `910244e5` | `us-east4-eqdc4a` |
+  | migrator | `ba0bfb0b` | `910244e5` | `us-east4-eqdc4a` |
+
+- Ready 200 on gauntlet, `south63792f`, `northfa99f0`.
+- Live critic **PASS** (`channels-email-critic.md`): t1a unauth Channels 307 sign-in; authed hub/messenger/email **200** (email copy + activity, no email_log 500); conversations **307** → messenger; inbox **200**. Instances 20→20. Named skip: no outbound mailbox probe.
+- CP unchanged `108c480c` (`sfo`).
+- Did not `apply` `.railway/railway.ts`. `APP_IMAGE` pin updated in the file to match live.
+
+App `saas` tip `fac1beed8`. CP `saas` tip `5359852`.
 
 ---
 
@@ -54,22 +76,20 @@ Custom Hostnames integration proves both hostname and SSL readiness.
 
 ## Current revisions
 
-- Workspace tip: `a8c673417` **live** as web `035205ad` /
-  `sha256:52a2ae7db5d44effce7567436ccdeea8a266437611f48749fcdc3f8e3fd3f1a6`
-  (`us-east4-eqdc4a`). Docker `31902940317` SUCCESS. Upgrade-SSR
-  critic **PASS** (`this-fire/upgrade-ssr-critic.md`). Verify / §H
-  last signed on the older `895b942d` pair.
-- Control plane tip `c208c06` (`fix(create): keep restore refusals on
-the dashboard`) live as `9030705d` /
-  `sha256:d84fd27c2d2d10ffba14a36b732540d462d396cd5f34a3102a962a9a40928741`
-  (sfo). SQL `0069` still applied. P3 live critic **PASS**
-  (`this-fire/p3-restore-critic.md`).
-- Last known deployed workspace: `a8c673417` / `sha256:52a2ae7d…`
-  (2026-08-15) web `035205ad` SUCCESS, region `us-east4-eqdc4a`.
-  Docker `31902940317`.
-- Last known deployed control plane: `9030705d` / `c208c06` (2026-08-15)
-- App `saas` tip `a8c673417` is live. Upgrade screens SSR the
-  catalogue. P3 critic **PASS**. P4 critic **PASS**.
+- Workspace tip: `fac1beed8` **live** as web `57068471` /
+  `sha256:910244e58bcf1c195363a971cbaa54d420d978a61cd4d3a5dc6a29dd8f65ce79`
+  (`us-east4-eqdc4a`). Docker `32009201320` SUCCESS. Channels/Email
+  critic **PASS** (`this-fire/channels-email-critic.md`). Enrolled
+  workspace DBs at `0267`. Verify / §H last signed on the older
+  `895b942d` pair.
+- Control plane tip `5359852` live as `108c480c` (sfo). SQL `0069`
+  still applied. P3 restore critic remains **PASS** on the earlier
+  `9030705d` / `c208c06` pair (`this-fire/p3-restore-critic.md`).
+- Last known deployed workspace: `fac1beed8` / `sha256:910244e5…`
+  (2026-08-17) web `57068471` SUCCESS, region `us-east4-eqdc4a`.
+  Docker `32009201320`.
+- Last known deployed control plane: `108c480c` / `5359852` live
+  (sfo). SQL `0069` still applied.
 
 The Development fleet now runs a paired image/code pair for identity and
 billing-ownership work. Fresh-browser onboarding/rename journeys are still
@@ -191,11 +211,10 @@ print the Cloudflare token. Preserve uncommitted onboarding files.
 | Self-host General name              | app          | `8cb12d5f1`                                                                       | skip-deploy (self-host only)               | Local name card has no Quackback URL; billing nav and switcher stay absent when cloud is off. `self-host-critic.md`.                                                                                                                                                                  |
 | PLG emit self-host skip             | app tests    | `3b4556ae2`                                                                       | skip-deploy (tests-only)                   | Cloud-off emits nothing; cloud-on logs bounded fields only. `plg-emit-critic.md`.                                                                                                                                                                                                     |
 
-**Fleet note:** one deploy thread. Live pair is app `035205ad` /
-`sha256:52a2ae7d…` (`a8c673417`) and CP `9030705d` /
-`sha256:d84fd27c…` (`c208c06`). Docker `31902940317` SUCCESS.
-Upgrade-SSR critic **PASS**. Verify / §H still signed on the earlier
-`895b942d` / `b7ae7455` pair.
+**Fleet note:** one deploy thread. Live pair is app `57068471` /
+`sha256:910244e5…` (`fac1beed8`) and CP `108c480c` (`5359852`, sfo).
+Docker `32009201320` SUCCESS. Channels/Email critic **PASS**.
+Verify / §H still signed on the earlier `895b942d` / `b7ae7455` pair.
 
 This fire (P4 Fleet + live critic, 2026-08-15 T18:32Z):
 
