@@ -84,23 +84,22 @@ describe('the pooled worker starts no fleet-fanning timers', () => {
   const startupSource = read('startup.ts')
 
   it('returns before the sweep schedule when tenancy is pooled', () => {
-    // The structural claim: the job tier and the relay tier are started BEFORE
-    // the pooled branch (both run under either tenancy mode), the branch ends in
-    // a `return`, and the whole sweep schedule sits after it — so nothing that
-    // fans out across the fleet on a timer can arm on a pooled worker.
+    // The structural claim: the job tier is started BEFORE the pooled branch
+    // (it runs under either tenancy mode), the branch ends in a `return`, and
+    // the whole sweep schedule sits after it — so nothing that fans out
+    // across the fleet on a timer can arm on a pooled worker.
     const fn = startupSource.slice(startupSource.indexOf('function startBackgroundProcessing'))
     expect(fn).not.toBe('')
 
     const jobTier = fn.indexOf('startJobTier')
-    const relayStart = fn.indexOf('startRelayTier')
     const branch = fn.indexOf('if (config.isPooledTenancy)')
     // The import expression, not the bare path — the branch's own comment and
     // its log line both name `cron/fleet-jobs.ts`, and matching those would
     // measure the prose rather than the schedule.
     const scheduleStart = fn.indexOf("import('@/lib/server/cron/fleet-jobs')")
     expect(jobTier).toBeGreaterThan(-1)
-    expect(relayStart).toBeGreaterThan(jobTier)
-    expect(branch).toBeGreaterThan(relayStart)
+    expect(fn).not.toContain('startRelayTier')
+    expect(branch).toBeGreaterThan(jobTier)
     expect(scheduleStart).toBeGreaterThan(branch)
 
     // The `return` belongs to the pooled branch, not to something after the

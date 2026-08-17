@@ -4,9 +4,9 @@
  * QUACKBACK_ROLE=web     Serve HTTP only. Queue modules stay producer-only:
  *                        they can enqueue and register schedules, but nothing
  *                        claims a job.
- * QUACKBACK_ROLE=worker  Run the job tier, the outbox relay and the periodic
- *                        sweepers. Still serves HTTP (health probes work
- *                        unchanged); just don't route user traffic to it.
+ * QUACKBACK_ROLE=worker  Run the job tier and the periodic sweepers. Still
+ *                        serves HTTP (health probes work unchanged); just
+ *                        don't route user traffic to it.
  * QUACKBACK_ROLE=all     Both — the default, matching single-container
  *                        self-host deployments.
  * QUACKBACK_ROLE=migrator Reconcile workspace schemas toward the control plane's
@@ -35,9 +35,9 @@ export type ProcessRole = (typeof PROCESS_ROLES)[number]
  *
  * **Not `all`.** The old code warned and returned `all`, which is fail-OPEN
  * into the exact topology the design forbids: measured, `QUACKBACK_ROLE=banana`
- * — and `MIGRATOR`, and `Migrator` — booted the Postgres job tier, the outbox
- * relay and the sweepers together. A typo in a deployment manifest is not a
- * licence to run every background subsystem against every workspace.
+ * — and `MIGRATOR`, and `Migrator` — booted the Postgres job tier and the
+ * sweepers together. A typo in a deployment manifest is not a licence to run
+ * every background subsystem against every workspace.
  *
  * `web` is the closed direction: it serves HTTP and starts nothing. A fleet
  * that briefly runs no background work is degraded and obvious; a fleet where
@@ -92,9 +92,8 @@ export class InvalidProcessRole extends Error {
   constructor(raw: string) {
     super(
       `QUACKBACK_ROLE='${raw}' is not one of ${PROCESS_ROLES.join(' | ')}. Refusing to start: ` +
-        'the previous behaviour was to fall back to `all`, which boots the job tier, the outbox ' +
-        'relay and the sweepers — so a typo silently produced the one topology pooled tenancy ' +
-        'forbids.'
+        'the previous behaviour was to fall back to `all`, which boots the job tier and the ' +
+        'sweepers — so a typo silently produced the one topology pooled tenancy forbids.'
     )
     this.name = 'InvalidProcessRole'
   }

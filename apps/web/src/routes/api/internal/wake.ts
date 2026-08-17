@@ -17,14 +17,10 @@ import {
   requestWorkspaceLoopRefresh as refreshJobWorkspaceLoops,
   signalWorkspace as signalJobWorkspace,
 } from '@/lib/server/jobs/tier'
-import {
-  requestWorkspaceLoopRefresh as refreshRelayWorkspaceLoops,
-  signalWorkspace as signalRelayWorkspace,
-} from '@/lib/server/events/relay-tier'
 
 const log = logger.child({ component: 'internal-wake' })
 
-/** Floor on kicking both tiers to re-read the active workspace set. */
+/** Floor on kicking the job tier to re-read the active workspace set. */
 const REFRESH_MIN_MS = 30_000
 
 let lastRefreshAt = 0
@@ -39,7 +35,6 @@ function kickLoopRefresh(): void {
   if (now - lastRefreshAt < REFRESH_MIN_MS) return
   lastRefreshAt = now
   refreshJobWorkspaceLoops()
-  refreshRelayWorkspaceLoops()
 }
 
 export async function handleInternalWake(request: Request): Promise<Response> {
@@ -64,8 +59,7 @@ export async function handleInternalWake(request: Request): Promise<Response> {
   }
 
   const job = signalJobWorkspace(workspaceKey)
-  const relay = signalRelayWorkspace(workspaceKey)
-  if (!job || !relay) kickLoopRefresh()
+  if (!job) kickLoopRefresh()
   return new Response(null, { status: 204 })
 }
 

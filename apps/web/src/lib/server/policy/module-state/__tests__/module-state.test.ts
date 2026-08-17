@@ -75,7 +75,7 @@ describe('the scanner is looking at something', () => {
       'apps/web/src/lib/server/domains/analytics/visitor-hash.ts#cachedSalts',
       'apps/web/src/lib/server/domains/settings/tier-limits.service.ts#cachedLimits',
       'apps/web/src/lib/server/domains/ai/config.ts#openai',
-      'apps/web/src/lib/server/events/relay.ts#strictAttempts',
+      'apps/web/src/lib/server/jobs/tier.ts#loops',
       'apps/web/src/lib/server/domains/workflows/workflow.service.ts#hasLiveWorkflowCache',
       'apps/web/src/lib/server/domains/workflows/workflow.service.ts#liveAttributeKeysCache',
       'apps/web/src/lib/server/realtime/stream-connection-limit.ts#streamLimiter',

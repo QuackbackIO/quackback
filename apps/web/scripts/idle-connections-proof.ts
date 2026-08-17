@@ -61,7 +61,6 @@ import { closeAllTenantPools } from '@/lib/server/tenancy/pool-cache'
 import { invalidateTenantCache } from '@/lib/server/tenancy/resolver'
 import { enqueueJob } from '@/lib/server/jobs/job-queue'
 import { getJobTierStatus, startJobTier, stopJobTier } from '@/lib/server/jobs/tier'
-import { getRelayTierStatus, startRelayTier, stopRelayTier } from '@/lib/server/events/relay-tier'
 import { listQuarantinedTenants } from '@/lib/server/tenancy/quarantine'
 import { deriveTenantSecret, sealSecretKeyCanary } from '@/lib/server/tenancy/vendor/fleet-secrets'
 
@@ -264,15 +263,11 @@ async function drive(tenantId: string): Promise<void> {
 
 function tierSummary(): string {
   const jobs = getJobTierStatus()
-  const relay = getRelayTierStatus()
   const attached = (n: number, total: number) => `${n}/${total}`
   return (
-    `jobs attached=${attached(jobs.tenants.filter((t) => t.attached).length, jobs.tenants.length)}` +
-    ` detaches=${jobs.tenants.reduce((n, t) => n + t.detaches, 0)}` +
-    ` reattaches=${jobs.tenants.reduce((n, t) => n + t.reattaches, 0)}` +
-    ` | relay attached=${attached(relay.tenants.filter((t) => t.attached).length, relay.tenants.length)}` +
-    ` detaches=${relay.tenants.reduce((n, t) => n + t.detaches, 0)}` +
-    ` reattaches=${relay.tenants.reduce((n, t) => n + t.reattaches, 0)}`
+    `jobs attached=${attached(jobs.workspaces.filter((t) => t.attached).length, jobs.workspaces.length)}` +
+    ` detaches=${jobs.workspaces.reduce((n, t) => n + t.detaches, 0)}` +
+    ` reattaches=${jobs.workspaces.reduce((n, t) => n + t.reattaches, 0)}`
   )
 }
 
@@ -290,7 +285,6 @@ async function measure(): Promise<void> {
   await sample(observer, 'before the tiers start')
 
   await startJobTier()
-  await startRelayTier()
   await sleep(2_000)
   await sample(observer, 'tiers started')
 
@@ -338,7 +332,6 @@ async function measure(): Promise<void> {
   process.stdout.write(`  ${''.padEnd(34)} ${tierSummary()}\n`)
 
   await stopJobTier()
-  await stopRelayTier()
   // Production's shutdown does not do this — it calls `process.exit(0)`, which
   // takes every socket with it. The harness outlives its own tiers, so it has to
   // close the request pool cache and the control handle explicitly or the final
@@ -381,7 +374,6 @@ async function refusal(): Promise<void> {
   invalidateTenantCache()
 
   await startJobTier()
-  await startRelayTier()
   process.stdout.write('\n  --- one tenant refused with a scheme this build cannot resolve ---\n')
   for (let i = 1; i <= 6; i++) {
     await sleep(5_000)
@@ -398,7 +390,7 @@ async function refusal(): Promise<void> {
   )
   process.stdout.write(
     `  job tier reports refused: ${JSON.stringify(
-      getJobTierStatus().tenants.map((t) => ({ t: t.tenantId, code: t.refusedCode }))
+      getJobTierStatus().workspaces.map((t) => ({ t: t.workspaceKey, code: t.refusedCode }))
     )}\n`
   )
 
@@ -426,62 +418,8 @@ async function refusal(): Promise<void> {
   process.stdout.write(`  still quarantined: ${listQuarantinedTenants().length}\n`)
 
   await stopJobTier()
-  await stopRelayTier()
   await closeControlSql()
   await observer.end()
-}
-
-// ---------------------------------------------------------------------------
-// lease
-// ---------------------------------------------------------------------------
-
-/**
- * How many times a minute does holding the leadership lease write to disk?
- *
- * Counted from `pg_stat_user_tables.n_tup_upd` on `outbox_relay_leader`, which
- * is written by nothing but the relay's own lease. That specificity is the point
- * of choosing it: `job_queue` and the kv tables are written continuously by
- * unrelated work, so a counter over either of those could not answer "did this
- * change anything" — it would move whatever happened.
- *
- * `RELAY_LEASE_RENEW_MS` set to the poll interval reproduces the old behaviour
- * exactly, so the control arm is the previous code rather than a description of
- * it.
- */
-async function lease(): Promise<void> {
-  const windowMs = Number(process.env.PROBE_LEASE_WINDOW_MS ?? 30_000)
-  const tenant = TENANTS[0]!
-  const counter = postgres(tenantDsn(tenant.db), { max: 1, onnotice: () => {} })
-
-  const reads = async (): Promise<number> => {
-    const rows = (await counter`
-      SELECT coalesce(n_tup_upd, 0) + coalesce(n_tup_ins, 0) AS writes
-        FROM pg_stat_user_tables WHERE relname = 'outbox_relay_leader'
-    `) as unknown as Array<{ writes: string | number }>
-    return Number(rows[0]?.writes ?? 0)
-  }
-
-  const renewMs = process.env.RELAY_LEASE_RENEW_MS ?? '(default: TTL/3)'
-  const pollMs = process.env.RELAY_POLL_INTERVAL_MS ?? '1000'
-  process.stdout.write(`  RELAY_LEASE_RENEW_MS=${renewMs}  poll=${pollMs}ms\n`)
-
-  await startRelayTier()
-  // Let leadership settle before the window opens, so the one-off claim write is
-  // not counted as part of the steady-state rate.
-  await sleep(3_000)
-  const before = await reads()
-  await sleep(windowMs)
-  const after = await reads()
-
-  const perMinute = ((after - before) * 60_000) / windowMs
-  process.stdout.write(
-    `  outbox_relay_leader writes: ${after - before} in ${windowMs / 1000}s ` +
-      `= ${perMinute.toFixed(1)}/minute/tenant\n`
-  )
-
-  await stopRelayTier()
-  await closeControlSql()
-  await counter.end()
 }
 
 // ---------------------------------------------------------------------------
@@ -613,7 +551,6 @@ const commands: Record<string, () => Promise<void>> = {
   setup,
   measure,
   refusal,
-  lease,
   wakes,
 }
 const run = commands[command]

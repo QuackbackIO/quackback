@@ -30,7 +30,7 @@ import { markerSearchForms } from '../db'
 import { blocked, control, decide, dirFrom, describeResponse, halt } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, WorkspaceHandle, WorkspaceSlot } from '../types'
 
-/** How long to let queues and the outbox relay settle before scanning. */
+/** How long to let queues settle before scanning. */
 const SETTLE_MS = 4000
 
 const JOB_LEAK_REASON =

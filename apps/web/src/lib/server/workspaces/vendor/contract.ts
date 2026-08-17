@@ -144,10 +144,10 @@ export type WorkspaceRecord = {
     /** Transaction-mode pooled endpoint. The web tier. Password-less. */
     pooledUrl: string
     /**
-     * Session-mode direct endpoint. The outbox relay, the queue poller and the
+     * Session-mode direct endpoint. The job-tier doorbell and the
      * migrator (§7.3): LISTEN registration is silently lost through a
-     * transaction pooler, and pg_advisory_lock / CREATE INDEX CONCURRENTLY
-     * cannot run through one. Password-less.
+     * transaction pooler, and CREATE INDEX CONCURRENTLY cannot run through
+     * one. Password-less.
      */
     directUrl: string
     name: string

@@ -57,8 +57,8 @@ describe('getProcessRole', () => {
   })
 
   // The measured failure: `banana`, `MIGRATOR`, `Migrator` and `'migrator '`
-  // all returned 'all' and booted the Postgres job tier, the outbox relay AND
-  // the sweepers. The allowlist was over the ProcessRole union rather than over the
+  // all returned 'all' and booted the Postgres job tier AND the sweepers. The
+  // allowlist was over the ProcessRole union rather than over the
   // environment string, so a case typo missed every comparison and fell through
   // to a default that starts everything.
   // 'all ' and ' ' are deliberately NOT here: they trim to 'all' and to unset

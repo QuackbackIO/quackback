@@ -29,7 +29,11 @@ import {
   type WorkspaceDescriptor,
   type WorkspaceLookup,
 } from './registry'
-import { createWorkspaceScope, type WorkspaceScope, type WorkspaceScopeOrigin } from './workspace-context'
+import {
+  createWorkspaceScope,
+  type WorkspaceScope,
+  type WorkspaceScopeOrigin,
+} from './workspace-context'
 
 const log = logger.child({ component: 'workspace-resolver' })
 
@@ -107,9 +111,9 @@ export type WorkspaceAcquisition =
 /**
  * Which scope origins count as "somebody is using this workspace".
  *
- * `queue` and `relay` are the always-warm tiers themselves. Counting their own
- * polling as activity would make every workspace permanently busy, which is exactly
- * the state `idle.ts` exists to end — so the exclusion is the load-bearing part
+ * `queue` is the always-warm job tier itself. Counting its own polling as
+ * activity would make every workspace permanently busy, which is exactly the
+ * state `idle.ts` exists to end — so the exclusion is the load-bearing part
  * of this map, not the inclusions. `test` is excluded so a suite cannot signal a
  * tier it did not mean to start.
  */

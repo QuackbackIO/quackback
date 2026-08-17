@@ -8,14 +8,10 @@ vi.mock('@/lib/server/db', () => ({
   getMigrationStatus: (...a: unknown[]) => getMigrationStatus(...a),
 }))
 
-// Background work is two tiers now: jobs and the outbox relay.
+// Background work is the Postgres job tier.
 const getJobTierStatus = vi.fn()
-const getRelayTierStatus = vi.fn()
 vi.mock('@/lib/server/jobs/tier', () => ({
   getJobTierStatus: (...a: unknown[]) => getJobTierStatus(...a),
-}))
-vi.mock('@/lib/server/events/relay-tier', () => ({
-  getRelayTierStatus: (...a: unknown[]) => getRelayTierStatus(...a),
 }))
 
 import { handleLivenessProbe } from '../health.live'
@@ -31,10 +27,6 @@ beforeEach(() => {
     workspaces: [
       { workspaceKey: 't1', inFlight: 0, schemaMissing: false, attached: true, refusedCode: null },
     ],
-  })
-  getRelayTierStatus.mockReturnValue({
-    running: true,
-    workspaces: [{ workspaceKey: 't1', attached: true }],
   })
 })
 
@@ -53,7 +45,6 @@ describe('GET /api/health/live', () => {
     expect(execute).not.toHaveBeenCalled()
     expect(getMigrationStatus).not.toHaveBeenCalled()
     expect(getJobTierStatus).not.toHaveBeenCalled()
-    expect(getRelayTierStatus).not.toHaveBeenCalled()
   })
 })
 
@@ -83,9 +74,6 @@ describe('GET /api/health/ready', () => {
       // a bad registry record is not this replica's fault.
       attached: 1,
       refused: 0,
-      relayRunning: true,
-      relayLoops: 1,
-      relayAttached: 1,
     })
   })
 
@@ -174,18 +162,5 @@ describe('GET /api/health/ready', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.checks.workers).toMatchObject({ loops: 2, inFlight: 3, schemaMissing: 1 })
-  })
-
-  it('returns 503 when the relay tier is stopped under a worker role', async () => {
-    getRelayTierStatus.mockReturnValue({ running: false, workspaces: [] })
-    const res = await handleReadinessProbe()
-    expect(res.status).toBe(503)
-    const body = await res.json()
-    expect(body.checks.workers).toMatchObject({
-      ok: false,
-      expected: true,
-      running: true,
-      relayRunning: false,
-    })
   })
 })

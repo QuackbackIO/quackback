@@ -39,7 +39,7 @@ Dirty tree noise (`loop-evidence/`, `COLDER-FLEET-SPEC.html`, prompts) is someon
 | Service                   | Role today                                                  | Runs                             |
 | ------------------------- | ----------------------------------------------------------- | -------------------------------- |
 | `quackback`               | `QUACKBACK_ROLE=web`, enqueue-only                          | 1                                |
-| `quackback-worker`        | job tier + relay, LISTEN + rescan                           | 1                                |
+| `quackback-worker`        | job tier, LISTEN + rescan                                   | 1                                |
 | `quackback-control-plane` | provisioning, billing, membership sweep                     | 1                                |
 | `quackback-cron-hourly`   | fleet sweeps (live still `hourly`; IaC says `housekeeping`) | 1 (stuck/listening on old image) |
 | `quackback-cron-daily`    | retention + telemetry                                       | 0                                |
@@ -50,11 +50,11 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 
 ## Producers
 
-**Domain events** — only `emit()` / `emitBestEffort()` (`events/emit.ts`). Callers include api-keys, boards (`emitBestEffort`), companies, conversation + ticket webhook helpers, plus `processEvent`’s outbox write path. `emit()` INSERTs `events` + optional `audit_log` on the caller’s tx, then `pg_notify('outbox_wake')` and `nudgeWorker()` (the latter is inside the tx today).
+**Domain events** — only `emit()` / `emitBestEffort()` (`events/emit.ts`). Callers include api-keys, boards (`emitBestEffort`), companies, conversation + ticket webhook helpers, plus `processEvent`’s outbox write path. `emit()` INSERTs `events` + optional `audit_log` + an `event-dispatch` job on the caller’s tx. The job-queue trigger NOTIFYs `quackback_job_wake` on commit.
 
 **Jobs** — `enqueueJob` / `enqueueJobs` (`job-queue.ts`). Domain: import, export, help-center-translate, workflow-dispatch, workflow-wait. Relay: `enqueueHookJobsWithIds`. Cron/schedule ticks enqueue via the job tier. A table trigger NOTIFYs `quackback_job_wake` on commit of a runnable row.
 
-**Scheduled deadlines** — job-tier `cron` + `cronEnabled` (`sla-breach-sweep`, `snooze-sweep`, others in `definitions.ts`); `earliestPendingJobAt` + `earliestWorkspaceDeadline()` providers; relay `earliestUndeliveredOutboxAt`; delayed `events` jobs (`addDelayedJob`).
+**Scheduled deadlines** — job-tier `cron` + `cronEnabled` (`sla-breach-sweep`, `snooze-sweep`, others in `definitions.ts`); `earliestPendingJobAt` + `earliestWorkspaceDeadline()` providers; delayed `events` jobs (`addDelayedJob`).
 
 **Membership changes** — workspace invite/accept/remove/role paths (app). CP still _pulls_ seats every 15 min via `workspace-membership-sweep.ts` (WS-4 skips suspended/provisioning). No durable push job yet.
 
@@ -64,8 +64,6 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 | --------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Request pooled        | `pool-cache.ts`                 | `idle_timeout` 45s + LRU evict                                                                   |
 | Job LISTEN            | `jobs/wake.ts` + `jobs/tier.ts` | session-mode, `idle_timeout: 0`, closed on detach                                                |
-| Relay LISTEN          | `relay-tier.ts`                 | same                                                                                             |
-| Relay direct pool     | `openWorkspaceDirectPool`       | `max:1`, `idle_timeout: 0`, closed on detach                                                     |
 | App control-DB        | `workspaces/registry.ts`        | `idle_timeout` ≈ TTL+15s                                                                         |
 | CP `DATABASE_URL`     | CP `src/db`                     | `idle_timeout` default 10s                                                                       |
 | CP membership clients | `workspace-membership-sweep.ts` | `max:1`, `idle_timeout:5`, `end()` in finally; still fans out to every _active_ tenant each tick |
@@ -83,7 +81,7 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 ## Phase order from here
 
 1. **Landed.** Transactional `enqueueJob` + `event-dispatch` + `dispatch_owner` (relay still drains `relay`-owned rows).
-2. After soak: delete the relay subsystem. Do not delete yet.
+2. **Landed.** Relay subsystem deleted. Job path is the only drain. `dispatch_owner` and `outbox_relay_leader` stay for soak / rollback.
 3. **In progress.** After-commit signals + one process scheduler (`QUACKBACK_WAKE_MODE=listener|both|scheduler`, default `listener`). LISTEN/poll/rescan stay until `scheduler` has soaked.
 4. Run scheduler in `quackback` (`ROLE=all`); prepare IaC to drop the worker (live delete gated).
 5. `membership-sync` job; delete CP tenant fan-out.
@@ -91,11 +89,11 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 
 ### Temporary flags
 
-| Flag                  | Values                                               | Rollback                                                     | Progress metric                                                            | Delete when                  |
-| --------------------- | ---------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------- | ---------------------------- |
-| event ownership       | `dispatch_owner=relay\|job` (row marker, not an env) | new instances keep writing `job`; relay still drains `relay` | unpublished `relay` rows drain to 0                                        | Phase 2, after soak          |
-| `QUACKBACK_WAKE_MODE` | `listener` (default) / `both` / `scheduler`          | set back to `listener`                                       | scheduler-only: no `LISTEN` in `pg_stat_activity`, jobs still meet latency | Phase 3 deletion, after soak |
-| unified runtime       | web `ROLE=web` + worker stays until Phase 4          | keep the worker service                                      | one `quackback` replica runs the scheduler                                 | Phase 4, after approval      |
+| Flag                  | Values                                               | Rollback                               | Progress metric                                                            | Delete when                  |
+| --------------------- | ---------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------- | ---------------------------- |
+| event ownership       | `dispatch_owner=relay\|job` (row marker, not an env) | leftover `relay` rows stay unpublished | unpublished `relay` rows age out                                           | drop column after soak       |
+| `QUACKBACK_WAKE_MODE` | `listener` (default) / `both` / `scheduler`          | set back to `listener`                 | scheduler-only: no `LISTEN` in `pg_stat_activity`, jobs still meet latency | Phase 3 deletion, after soak |
+| unified runtime       | web `ROLE=web` + worker stays until Phase 4          | keep the worker service                | one `quackback` replica runs the scheduler                                 | Phase 4, after approval      |
 
 ## Crash window and fleet size
 

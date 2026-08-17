@@ -24,7 +24,7 @@
  * The 5-minute row is the one that matters: 300 s of fan-out against a 300 s
  * (measured 337 s) suspend timeout means the compute is woken at almost exactly
  * the rate it would otherwise sleep, and the whole idle-cost model is gone with
- * no functional symptom at all. That is the same shape as the outbox relay's
+ * no functional symptom at all. That is the same shape as the job tier's
  * 1-second poll, only slower — and it is why a pooled worker tier runs none of
  * these timers.
  *
@@ -216,11 +216,11 @@ async function runMigratorConvergence(): Promise<void> {
  * is the live hourly service: the six hourly bodies, then the daily set +
  * telemetry once per 23 h window, then migrator convergence.
  *
- * There is no outbox backstop here. The outbox is drained by `events/relay-tier.ts`,
- * which holds one always-attached loop per workspace with a poll fallback under the
- * doorbell — so an event whose NOTIFY was lost is picked up a second later by the
- * same loop, not an hour later by a sweep. A cron pass over every workspace's outbox
- * would be a second drainer racing the leader lease for no reachable failure.
+ * There is no outbox backstop here. `emit()` writes an `event-dispatch` job in
+ * the same transaction as the outbox row, and the job tier drains it — so an
+ * event whose NOTIFY was lost is picked up by the poll floor, not an hour later
+ * by a sweep. A cron pass over every workspace's outbox would be a second
+ * drainer racing the job claim for no reachable failure.
  *
  * Serial rather than concurrent: each of these already fans out across the whole
  * fleet, and running the seven at once would open seven connections to every

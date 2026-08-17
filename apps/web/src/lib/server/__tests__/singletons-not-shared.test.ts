@@ -7,7 +7,7 @@
  * This file asserts the property the reason depends on — so if the reason ever
  * stops being true, something goes red rather than the comment going stale.
  *
- * Four sites, three different arguments:
+ * Three sites, three different arguments:
  *
  * - `domains/ai/config.ts` `openai` — built from env-only values §8 established
  *   are fleet-wide. Evidence: the constructor receives exactly the configured
@@ -18,8 +18,6 @@
  * - `routes/api/health.ready.ts` `migrationsKnownUpToDate` — a memo that would
  *   cache the first workspace it saw forever. Evidence: under pooled workspaces the
  *   check returns before reading it.
- * - `events/relay.ts` leader state — only correct for one database. Evidence:
- *   the relay refuses to start under pooled workspaces.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -28,7 +26,6 @@ const hoisted = vi.hoisted(() => ({
   aiConfig: { openaiApiKey: 'sk-fleet', openaiBaseUrl: 'https://gateway.example.com/v1' },
   workspaces: 'single' as 'single' | 'pooled',
   migrationStatusCalls: 0,
-  relayLogs: [] as string[],
 }))
 
 vi.mock('openai', () => ({
@@ -163,121 +160,5 @@ describe('the readiness memo cannot go blind under pooled workspaces', () => {
     // the fleet during exactly the rolling migration it exists to catch.
     expect(await probe(true)).toEqual({ status: 200, calls: 0 })
     vi.resetModules()
-  })
-})
-
-describe('the relay is per workspace, not one leader for whichever database this process holds', () => {
-  // What this replaces. Piece 4 pinned that `startOutboxRelay()` REFUSED under
-  // pooled workspaces, because its five module-scope variables (`running`,
-  // `leadership`, `pollTimer`, `retryTimer`, `draining`) and its session-level
-  // advisory lock all described exactly ONE database. That refusal was the
-  // correct answer while there was no fan-out. The fan-out now exists, so the
-  // property worth pinning has moved: not "it declines", but "it opens one loop
-  // per workspace and never a single shared one".
-
-  const workspace = (id: string) => ({
-    workspaceKey: id,
-    revision: 1,
-    database: { directUrl: `postgres://direct/${id}`, pooledUrl: `postgres://pooled/${id}` },
-  })
-
-  async function runTier(pooled: boolean) {
-    vi.resetModules()
-    const scopes: string[] = []
-    const listeners: Array<{ url: string; channel: string }> = []
-
-    vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
-    vi.doMock('@/lib/server/workspaces/mode', () => ({
-      isPooledTenancy: () => pooled,
-      POOLED_TENANCY: 'pooled',
-    }))
-    vi.doMock('@/lib/server/config', () => ({
-      config: { isPooledTenancy: pooled, databaseUrl: 'postgres://direct/single' },
-    }))
-    vi.doMock('@/lib/server/workspaces/registry', () => ({
-      listActiveWorkspaces: async () => ({
-        workspaces: [workspace('t-a'), workspace('t-b')],
-        refused: [],
-      }),
-    }))
-    vi.doMock('@/lib/server/workspaces/pool-cache', () => ({
-      resolveWorkspacePassword: async () => 'pw',
-      openWorkspaceDirectPool: async (t: { workspaceKey: string }) => ({
-        sql: {},
-        db: { __workspace: t.workspaceKey },
-        secrets: { secretKey: 'k', storage: null },
-        close: async () => {},
-      }),
-    }))
-    vi.doMock('@/lib/server/workspaces/workspace-context', () => ({
-      // Mirrors the real constructor: secrets go in, no secrets come out, and a
-      // scope with no resolved SECRET_KEY is refused rather than built.
-      createWorkspaceScope: (init: Record<string, unknown>) => {
-        const secrets = init.secrets as { secretKey?: string } | undefined
-        if (!secrets?.secretKey) throw new Error('createWorkspaceScope: no resolved SECRET_KEY')
-        const scope = { ...init }
-        delete scope.secrets
-        return scope
-      },
-      runWithWorkspaceScope: async (
-        scope: { workspace: { workspaceKey: string } },
-        fn: () => unknown
-      ) => {
-        scopes.push(scope.workspace.workspaceKey)
-        return fn()
-      },
-    }))
-    vi.doMock('@/lib/server/jobs/wake', () => ({
-      JOB_WAKE_CHANNEL: 'quackback_job_wake',
-      openWakeListener: async (input: { directUrl: string; channel: string }) => {
-        listeners.push({ url: input.directUrl, channel: input.channel })
-        return { close: async () => {}, verify: async () => true }
-      },
-    }))
-    vi.doMock('../events/relay', () => ({
-      drainOnce: async () => ({
-        drained: 0,
-        enqueued: 0,
-        skipped: 0,
-        failed: 0,
-        lagMsSamples: [],
-      }),
-      earliestUndeliveredOutboxAt: async () => null,
-    }))
-    vi.doMock('../events/relay-leader', () => ({
-      claimRelayLease: async () => null,
-      renewRelayLease: async () => null,
-      releaseRelayLease: async () => true,
-      isMissingRelayLeaderTable: () => false,
-      relayOwnerId: () => 'owner-1',
-    }))
-    vi.doMock('../events/resolvers', () => ({ registerAllResolvers: () => {} }))
-
-    const mod = await import('../events/relay-tier')
-    await mod.startRelayTier()
-    const status = mod.getRelayTierStatus()
-    await mod.stopRelayTier()
-    vi.resetModules()
-    return { status, listeners }
-  }
-
-  it('opens one loop per workspace, each on that workspace own direct DSN', async () => {
-    const { status, listeners } = await runTier(true)
-    expect(status.workspaces.map((t) => t.workspaceKey).sort()).toEqual(['t-a', 't-b'])
-    // Direct, never pooled: through a transaction pooler the LISTEN registers
-    // and nothing is ever delivered.
-    expect(listeners.map((l) => l.url).sort()).toEqual([
-      'postgres://direct/t-a',
-      'postgres://direct/t-b',
-    ])
-    expect(new Set(listeners.map((l) => l.channel))).toEqual(new Set(['outbox_wake']))
-  })
-
-  it('single-workspace runs exactly one loop, so the fan-out above is the pooled branch', async () => {
-    // The control. Without it "two loops" could mean the tier always makes two,
-    // and the assertion above would hold for the wrong reason.
-    const { status, listeners } = await runTier(false)
-    expect(status.workspaces.map((t) => t.workspaceKey)).toEqual(['__single__'])
-    expect(listeners.map((l) => l.url)).toEqual(['postgres://direct/single'])
   })
 })

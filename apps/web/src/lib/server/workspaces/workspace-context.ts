@@ -54,14 +54,7 @@ const WORKSPACE_SCOPE_KEY = Symbol.for('quackback.workspaceScope')
 const SCOPE_SECRETS_KEY = Symbol.for('quackback.workspaceScope.secrets')
 
 /** Why a scope exists. Only for logging and the scope audit; never a policy input. */
-export type WorkspaceScopeOrigin =
-  | 'request'
-  | 'sweep'
-  | 'queue'
-  | 'relay'
-  | 'script'
-  | 'migration'
-  | 'test'
+export type WorkspaceScopeOrigin = 'request' | 'sweep' | 'queue' | 'script' | 'migration' | 'test'
 
 /**
  * The scope every caller sees: which workspace, which database, why.
@@ -180,8 +173,7 @@ export function createWorkspaceScope(init: WorkspaceScopeInit): WorkspaceScope {
 function scopeSecrets(scope: WorkspaceScope | null): ResolvedWorkspaceSecrets | null {
   if (!scope) return null
   const held = (scope as unknown as ScopeCarrier)[SCOPE_SECRETS_KEY] as
-    | ResolvedWorkspaceSecrets
-    | undefined
+    ResolvedWorkspaceSecrets | undefined
   if (!held) throw new WorkspaceScopeSecretsMissingError(scope.workspace.workspaceKey)
   return held
 }
@@ -320,7 +312,8 @@ export function runWithWorkspaceScope<T>(scope: WorkspaceScope, fn: () => T): T 
 
   const child: ScopeCarrier = {
     request_id: (parent?.request_id as string | undefined) ?? crypto.randomUUID(),
-    route: (parent?.route as string | undefined) ?? `${scope.origin}:${scope.workspace.workspaceKey}`,
+    route:
+      (parent?.route as string | undefined) ?? `${scope.origin}:${scope.workspace.workspaceKey}`,
     ...(parent ?? {}),
     workspace_key: scope.workspace.workspaceKey,
   }

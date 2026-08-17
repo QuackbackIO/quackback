@@ -208,9 +208,8 @@ function emptyStats(): LoopStats {
  *
  * The wait is a race between the doorbell and the poll. If the doorbell is lost
  * — a dropped connection, a pooled DSN, a NOTIFY that raced the LISTEN — the
- * poll still fires, so a lost wake costs latency and never correctness. That is
- * the same guarantee the outbox relay ships with, and it is why the poll
- * interval is a floor rather than a fallback nobody exercises.
+ * poll still fires, so a lost wake costs latency and never correctness. That
+ * is why the poll interval is a floor rather than a fallback nobody exercises.
  *
  * **The loop no longer waits for the work it started.** `dispatchPass` hands
  * claimed jobs to a bounded pool and returns, so the next schedule tick happens
@@ -850,7 +849,7 @@ function scheduleWorkspaceRefresh(cfg: RunnerConfig, idle: WorkspaceIdlePolicy):
 
 /**
  * Start the job tier. Worker-role only, so calling it on a web replica is a
- * no-op — the same gate `startOutboxRelay` uses.
+ * no-op.
  */
 export async function startJobTier(): Promise<void> {
   if (running) return

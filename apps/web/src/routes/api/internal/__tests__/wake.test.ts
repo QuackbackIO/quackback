@@ -9,17 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const signalJob = vi.fn()
 const refreshJob = vi.fn()
-const signalRelay = vi.fn()
-const refreshRelay = vi.fn()
 
 vi.mock('@/lib/server/jobs/tier', () => ({
   signalWorkspace: (...a: unknown[]) => signalJob(...a),
   requestWorkspaceLoopRefresh: (...a: unknown[]) => refreshJob(...a),
-}))
-
-vi.mock('@/lib/server/events/relay-tier', () => ({
-  signalWorkspace: (...a: unknown[]) => signalRelay(...a),
-  requestWorkspaceLoopRefresh: (...a: unknown[]) => refreshRelay(...a),
 }))
 
 import { handleInternalWake, __resetInternalWakeForTests } from '../wake'
@@ -46,7 +39,6 @@ beforeEach(() => {
   vi.stubEnv('QUACKBACK_FLEET_INTERNAL_TOKEN', TOKEN)
   vi.stubEnv('QUACKBACK_ROLE', 'worker')
   signalJob.mockReturnValue(true)
-  signalRelay.mockReturnValue(true)
 })
 
 afterEach(() => {
@@ -60,7 +52,6 @@ describe('POST /api/internal/wake auth', () => {
     expect(res.status).toBe(401)
     await expect(res.json()).resolves.toEqual({ error: 'unauthorized' })
     expect(signalJob).not.toHaveBeenCalled()
-    expect(signalRelay).not.toHaveBeenCalled()
   })
 
   it('rejects a wrong token', async () => {
@@ -77,37 +68,31 @@ describe('POST /api/internal/wake auth', () => {
 })
 
 describe('POST /api/internal/wake', () => {
-  it('signals both tiers and returns 204', async () => {
+  it('signals the job tier and returns 204', async () => {
     const res = await handleInternalWake(request({ token: TOKEN }))
     expect(res.status).toBe(204)
     expect(await res.text()).toBe('')
     expect(signalJob).toHaveBeenCalledWith(WORKSPACE_KEY)
-    expect(signalRelay).toHaveBeenCalledWith(WORKSPACE_KEY)
     expect(refreshJob).not.toHaveBeenCalled()
-    expect(refreshRelay).not.toHaveBeenCalled()
   })
 
-  it('returns 204 for an unknown workspace and kicks a loop refresh on both tiers', async () => {
+  it('returns 204 for an unknown workspace and kicks a loop refresh', async () => {
     signalJob.mockReturnValue(false)
-    signalRelay.mockReturnValue(false)
     const res = await handleInternalWake(
       request({ token: TOKEN, body: { workspaceKey: 'ws_unknown' } })
     )
     expect(res.status).toBe(204)
     expect(refreshJob).toHaveBeenCalledTimes(1)
-    expect(refreshRelay).toHaveBeenCalledTimes(1)
   })
 
   it('rate-limits the unknown-workspace refresh to at least 30s', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
     signalJob.mockReturnValue(false)
-    signalRelay.mockReturnValue(false)
 
     expect((await handleInternalWake(request({ token: TOKEN }))).status).toBe(204)
     expect((await handleInternalWake(request({ token: TOKEN }))).status).toBe(204)
     expect(refreshJob).toHaveBeenCalledTimes(1)
-    expect(refreshRelay).toHaveBeenCalledTimes(1)
 
     vi.setSystemTime(new Date('2026-08-17T12:00:29.000Z'))
     expect((await handleInternalWake(request({ token: TOKEN }))).status).toBe(204)
@@ -116,16 +101,6 @@ describe('POST /api/internal/wake', () => {
     vi.setSystemTime(new Date('2026-08-17T12:00:30.000Z'))
     expect((await handleInternalWake(request({ token: TOKEN }))).status).toBe(204)
     expect(refreshJob).toHaveBeenCalledTimes(2)
-    expect(refreshRelay).toHaveBeenCalledTimes(2)
-  })
-
-  it('still 204s and refreshes when only one tier is missing the loop', async () => {
-    signalJob.mockReturnValue(true)
-    signalRelay.mockReturnValue(false)
-    const res = await handleInternalWake(request({ token: TOKEN }))
-    expect(res.status).toBe(204)
-    expect(refreshJob).toHaveBeenCalledTimes(1)
-    expect(refreshRelay).toHaveBeenCalledTimes(1)
   })
 
   it('no-ops with a warn when this process does not run workers', async () => {
@@ -133,7 +108,6 @@ describe('POST /api/internal/wake', () => {
     const res = await handleInternalWake(request({ token: TOKEN }))
     expect(res.status).toBe(204)
     expect(signalJob).not.toHaveBeenCalled()
-    expect(signalRelay).not.toHaveBeenCalled()
     expect(refreshJob).not.toHaveBeenCalled()
   })
 })

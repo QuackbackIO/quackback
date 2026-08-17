@@ -104,10 +104,10 @@ notifies inverts the reason for pooling; that warning is about a process that
 listens for _every_ workspace. The bound here is _workspaces with a live SSE stream on
 this replica_, which is already proportional to a long-lived resource.
 
-**Seam with the relay tier:** `pg-listener.ts` is a deliberate sibling of
+**Seam with the job tier:** `pg-listener.ts` is a deliberate sibling of
 `jobs/wake.ts` rather than an edit to it — that file is load-bearing for the
-queue tier and for the relay piece. If those tiers grow a shared session-connection
-manager, this is the third consumer and should join it.
+queue doorbell. If the job tier grows a shared session-connection manager,
+this is the other consumer and should join it.
 
 ## 6. The two regressions §7.4 names, measured
 

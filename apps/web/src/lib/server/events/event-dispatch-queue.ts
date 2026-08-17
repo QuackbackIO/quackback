@@ -1,18 +1,18 @@
 /**
- * Job-owned outbox drain. Same fan-out as `relay.ts`, but the work is a
- * `job_queue` row written in the same transaction as `emit()`.
+ * Job-owned outbox drain. The work is a `job_queue` row written in the
+ * same transaction as `emit()`.
  *
  * The handler loads the authoritative event by id, skips already-published
- * and relay-owned rows, then resolves destinations and enqueues hook jobs
- * with the same deterministic keys the relay uses. Destination failure
- * throws so the job retries; it cannot roll back the domain mutation
- * (that transaction already committed).
+ * and leftover relay-owned rows, then resolves destinations and enqueues
+ * hook jobs with deterministic keys. Destination failure throws so the
+ * job retries; it cannot roll back the domain mutation (that transaction
+ * already committed).
  */
 import { db, events, eq } from '@/lib/server/db'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import { logger } from '@/lib/server/logger'
 import { enqueueHookJobsWithIds } from './process'
-import { hydrateEvent, MAX_DEPTH, MAX_STRICT_RESOLVE_ATTEMPTS } from './relay'
+import { hydrateEvent, MAX_DEPTH, MAX_STRICT_RESOLVE_ATTEMPTS } from './outbox'
 import { resolveTargets } from './resolvers/registry'
 import { toLegacyEvent } from './to-legacy-event'
 import crypto from 'crypto'
@@ -60,7 +60,7 @@ export async function runEventDispatch(
   if (row.dispatchOwner !== 'job') {
     log.info(
       { event_id: eventId, owner: row.dispatchOwner },
-      'event-dispatch skipped relay-owned row'
+      'event-dispatch skipped leftover relay-owned row'
     )
     return
   }

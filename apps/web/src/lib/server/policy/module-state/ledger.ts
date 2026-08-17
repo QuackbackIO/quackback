@@ -171,15 +171,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'is still one fleet value until per-workspace app-secret resolution lands.',
   },
   {
-    file: 'apps/web/src/lib/server/events/relay.ts',
-    name: 'strictAttempts',
-    category: 'workspace-keyed',
-    reason:
-      'events.id is a per-database bigserial, so two workspaces both have an event 5. Shared, one ' +
-      "workspace's ten failed resolutions spend another's retry budget and drop that event's " +
-      'targets on its first attempt.',
-  },
-  {
     file: 'apps/web/src/lib/server/messages/assistant-principal.ts',
     name: 'cachedAssistantPrincipalId',
     category: 'workspace-keyed',
@@ -707,14 +698,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'fleet stops re-reading a control database that is trying to suspend.',
   },
   {
-    file: 'apps/web/src/lib/server/events/relay-tier.ts',
-    name: 'lastFleetReadAt',
-    category: 'fleet-wide',
-    reason:
-      "When this tier last read the FLEET's workspace list from the control database. Same fact as the " +
-      "job tier's, held separately because the two tiers refresh on their own clocks.",
-  },
-  {
     file: 'apps/web/src/lib/server/jobs/tier.ts',
     name: 'unsubscribeActivity',
     category: 'process-lifetime',
@@ -728,14 +711,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     reason:
       "The job tier's handle for detaching its after-commit listener at shutdown. One closure per " +
-      'process, carrying no workspace.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay-tier.ts',
-    name: 'unsubscribeActivity',
-    category: 'process-lifetime',
-    reason:
-      "The relay tier's handle for detaching its activity listener at shutdown. One closure per " +
       'process, carrying no workspace.',
   },
   {
@@ -915,9 +890,8 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     category: 'process-lifetime',
     owner: 'Piece 6 (saas/queue-lease)',
     reason:
-      'Start-once latch for the job tier, the same shape as the outbox relay s. Holds a boolean ' +
-      'that is a fact about this process, and startJobTier() returns early on it so a second ' +
-      'call cannot double-start the loops.',
+      'Start-once latch for the job tier. Holds a boolean that is a fact about this process, ' +
+      'and startJobTier() returns early on it so a second call cannot double-start the loops.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/tier.ts',
@@ -928,67 +902,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The interval handle that re-reads the active workspace list so loops appear and disappear ' +
       'with the fleet. One timer per process by construction; the workspace dimension lives in the ' +
       'loops it maintains, not in the handle.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay-leader.ts',
-    name: 'ownerMemo',
-    category: 'process-lifetime',
-    owner: 'Piece 9 (saas/relay-tier)',
-    reason:
-      'This process s identity as a relay owner, composed once from hostname, pid and a random ' +
-      'suffix. Identifying the PROCESS is exactly what it is for, and it must NOT carry a ' +
-      'workspace: the lease renewal branch is owner = me, so two workspaces sharing one owner string ' +
-      'is correct and two processes sharing one is what the random suffix prevents. A ' +
-      'per-workspace owner would make the lease unable to answer "which replica leads this workspace".',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay-tier.ts',
-    name: 'loops',
-    category: 'workspace-scoped-key',
-    keyedBy: 'workspace.workspaceKey',
-    owner: 'Piece 9 (saas/relay-tier)',
-    reason:
-      'One outbox-drain loop per workspace, keyed by workspace id. Each loop owns its own direct ' +
-      'session-mode connection, its own LISTEN outbox_wake doorbell and its own leadership ' +
-      'lease in that workspace s own database, all held in the loop s closure rather than here. ' +
-      'The per-workspace partition IS the design: the five module-scope variables this replaced ' +
-      '(running, leadership, pollTimer, retryTimer, draining) each described ONE database, so ' +
-      'in a process serving many they would have elected a leader for whichever database the ' +
-      'process happened to hold and delivered nothing for the rest.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay-tier.ts',
-    name: 'stats',
-    category: 'workspace-scoped-key',
-    keyedBy: 'opts.workspaceKey',
-    owner: 'Piece 9 (saas/relay-tier)',
-    reason:
-      'Per-workspace relay counters (passes, drained, enqueued, wakes, leadership fence, ' +
-      'end-to-end lag samples) keyed by workspace id, for diagnostics and the wake-latency ' +
-      'measurement. Shared, one workspace s throughput and one workspace s leadership state would be ' +
-      'reported as another s, and the lag ring would mix two fleets worth of samples into one ' +
-      'percentile.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay-tier.ts',
-    name: 'running',
-    category: 'process-lifetime',
-    owner: 'Piece 9 (saas/relay-tier)',
-    reason:
-      'Start-once latch for the relay tier, the same shape as the job tier s. Holds a boolean ' +
-      'that is a fact about this process, and startRelayTier() returns early on it so a second ' +
-      'call cannot double-start the loops. It carries no workspace dimension: the workspace dimension ' +
-      'lives in loops, which this only gates.',
-  },
-  {
-    file: 'apps/web/src/lib/server/events/relay-tier.ts',
-    name: 'refreshTimer',
-    category: 'process-lifetime',
-    owner: 'Piece 9 (saas/relay-tier)',
-    reason:
-      'The interval handle that re-reads the active workspace list so relay loops appear and ' +
-      'disappear with the fleet. One timer per process by construction; the workspace dimension ' +
-      'lives in the loops it maintains, not in the handle.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/runner.ts',

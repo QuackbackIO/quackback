@@ -246,11 +246,12 @@ signal at all**. That absence of symptom is why `getPoolCacheStats()` exposes
 rather than debug logs: the counter is the only thing that distinguishes
 "working" from "quietly costing money".
 
-**Eviction is necessary but not sufficient.** Under `QUACKBACK_ROLE=all` the
-outbox relay issues `SELECT … FROM events WHERE published_at IS NULL` every
-second, forever, so the compute never suspends whatever this cache does. Idle
-saving requires `QUACKBACK_ROLE=web`. The role split is not an optimisation for
-the worker tier; it is the precondition for any Neon idle saving whatsoever.
+**Eviction is necessary but not sufficient.** Under `QUACKBACK_ROLE=all` an
+attached job-tier LISTEN holds the compute awake while work is flowing. The
+detach policy in `idle.ts` is what lets a quiet workspace go; a permanently
+attached listener would never suspend. The role split is not an optimisation
+for the worker tier; it is the precondition for any Neon idle saving
+whatsoever.
 
 #### Measured, 2026-08-08
 
@@ -518,7 +519,7 @@ guessing.
 | **Readiness probe**                                                                                                                                                                                             | Probes the control store instead of a workspace database; stops asserting workspace schema state entirely                                                                        | §10.5. The old `migrationsKnownUpToDate` memo is actively misleading under pooling: it caches "migrations OK" forever after the first workspace it saw, going blind during exactly the rolling migration it exists to catch. Probing a workspace would also wake a suspended compute every few seconds           |
 | **Anything holding a workspace id**                                                                                                                                                                             | `withWorkspaceScopeById(workspaceKey, origin, fn)`                                                                                                                               | Throws rather than degrading — a caller that named a workspace and got a different one has no safe fallback                                                                                                                                                                                                      |
 | **The 15 background queues**                                                                                                                                                                                    | `jobs/tier.ts` runs one loop per workspace and opens a real workspace scope around every claim; `claimJobs` then re-asserts the claimed row's `workspace_key` against that scope | Both of these were refusals until the queues moved. The old in-process consumers carried no workspace on a job, so every processor resolved `db` with no scope and threw on its first query. A queue is now a table in the workspace's own database, so there is no shared queue to route out of. `jobs/JOBS.md` |
-| **The outbox relay**                                                                                                                                                                                            | One loop per workspace on that workspace's own **direct**, session-mode endpoint, each with its own doorbell and leadership lease                                                | §5.1, and `events/RELAY.md` for the whole tier                                                                                                                                                                                                                                                                   |
+| **Event dispatch**                                                                                                                                                                                              | `emit()` writes an `event-dispatch` job in the same transaction; `jobs/tier.ts` drains it like any other queue                                                                   | `events/RELAY.md` (the outbox relay is gone) and `jobs/JOBS.md`                                                                                                                                                                                                                                                  |
 
 `runFleetPass` is serial on purpose: running per-workspace sweeps concurrently would
 wake every suspended compute at once. One workspace's failure never ends the pass —
@@ -535,30 +536,24 @@ would turn one bad record into a fleet-wide outage of every sweeper.
 
 ### 5.1 The worker tier
 
-`events/relay-tier.ts`, started by `startup.ts` under `QUACKBACK_ROLE=worker` (or
-`all`). One loop per workspace on that workspace's **direct**, session-mode endpoint,
-each holding a `LISTEN outbox_wake` doorbell, a leadership lease row in the
-workspace's own database and a one-connection pool. `events/RELAY.md` is the whole
-account; what belongs here is the tenancy half.
+`jobs/tier.ts`, started by `startup.ts` under `QUACKBACK_ROLE=worker` (or `all`).
+One loop per workspace on that workspace's **direct**, session-mode endpoint,
+each holding a `LISTEN quackback_job_wake` doorbell. Domain events no longer
+have their own relay loop: `emit()` writes an `event-dispatch` job in the same
+transaction as the outbox row. `events/RELAY.md` records the deletion;
+`jobs/JOBS.md` is the account of the remaining tier.
 
-**`LISTEN` through the pooler is impossible, not merely unreliable.** An earlier
-reading of §7.3 — the one still quoted in the table above until now — said the
-registration is lost _in proportion to contention_, so that a single-client smoke
-test would pass on a pooler. That reading came from `pg_listening_channels()`,
-the catalogue view since proved inverted. Measured by **delivery**: pooled
-**0/1 across 16 runs**, 0/6, 0/10; direct 1/1, 6/6, 10/10. So "the relay must run
-direct" rests on a hard impossibility at one idle client, which is a stronger
-foundation than the probabilistic one this file previously claimed.
+**`LISTEN` through the pooler is impossible, not merely unreliable.** Measured
+by **delivery**: pooled **0/1 across 16 runs**, 0/6, 0/10; direct 1/1, 6/6,
+10/10. So the job doorbell must run on a session-mode connection.
 
-**The corollary is a running cost, and it is why this is a separate service.** A
-loop holds two session-mode sockets with `idle_timeout: 0` and asks for its lease
-at least once per poll interval, and a ~1 Hz query is measured to hold a Neon
-compute awake indefinitely. This tier therefore **keeps every workspace's compute
-awake, deliberately**, and must never share a compute with workspaces you expect to
-suspend. The pool cache's eviction story is for the _web_ tier and does not apply
-here. That is the whole reason `quackback-worker` is its own service rather than
-a role on the pooled tier: the pooled tier's idle-cost model survives only if
-nothing in that process holds a connection open.
+**The corollary is a running cost, and it is why this is a separate service.**
+An attached loop holds a session-mode socket with `idle_timeout: 0`. The detach
+policy in `idle.ts` lets a quiet workspace go; a permanently attached listener
+would keep the compute awake. That is the whole reason `quackback-worker` is
+its own service rather than a role on the pooled tier: the pooled tier's
+idle-cost model survives only if nothing in that process holds a connection
+open while the workspace is idle.
 
 ### 5.2 The scheduled sweeps run on cron services, not on the worker
 
@@ -574,11 +569,10 @@ rate at which every suspended compute is woken:
 | kv sweep, telemetry claim                    | 1 h      | every workspace woken hourly             |
 
 `startBackgroundProcessing()` therefore returns immediately after starting the
-relay when tenancy is pooled, and `cron/fleet-jobs.ts` holds the bodies so the
+job tier when tenancy is pooled, and `cron/fleet-jobs.ts` holds the bodies so the
 `deploy.cronSchedule` services and the single-workspace schedule run the same code.
 The Postgres job tier and the boot-time partition ensure sit **above** that
-return, because both run under either tenancy mode — and so does the relay tier,
-which is the only always-attached thing a pooled worker holds.
+return, because both run under either tenancy mode.
 
 The cost, stated: the reconcilers go from 5-minutely, and the billing reconcile
 from 15-minutely, to hourly on a pooled fleet. They are backstops behind a
@@ -586,10 +580,10 @@ synchronous publish, a delayed job and a provider webhook, so what lengthens is
 the recovery window after a dropped delivery. Nothing changes for a single-workspace
 install.
 
-There is no outbox backstop among the cron jobs. The relay tier holds an
-always-attached loop per workspace with a 1-second poll under the doorbell, so a
-lost NOTIFY costs a second rather than an hour, and a cron pass over every
-workspace's outbox would be a second drainer racing the leader lease.
+There is no outbox backstop among the cron jobs. `event-dispatch` is a job
+queue row, so a lost NOTIFY costs a poll interval rather than an hour, and a
+cron pass over every workspace's outbox would be a second drainer racing the
+job claim.
 
 ### 5.3 `BASE_URL` is the workspace's, not the fleet's
 

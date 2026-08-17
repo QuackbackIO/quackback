@@ -475,7 +475,7 @@ describe('the lease-shape constraint', () => {
 
 describe('what a claimed row carries', () => {
   it('hands the handler its dedupe key', async () => {
-    // Not decoration: for a relay-enqueued hook this key IS the deterministic
+    // Not decoration: for a hook job this key IS the deterministic
     // `<eventId>:<sink>:<target>` id the reference passed into `hook.run` as
     // `job.id`, and handlers dedupe their own side effects on it. A test that
     // builds a ClaimedJob by hand cannot see this mapping break.
@@ -580,7 +580,7 @@ describe('bulk enqueue', () => {
     expect(await rowsFor(q)).toHaveLength(2)
   })
 
-  it('is a no-op on keys that already exist — the relay’s re-drain', async () => {
+  it('is a no-op on keys that already exist — a retried dispatch', async () => {
     const q = queue('bulk-dedupe')
     await enqueueJobs([{ queue: q, dedupeKey: 'k' }])
     const again = await enqueueJobs([

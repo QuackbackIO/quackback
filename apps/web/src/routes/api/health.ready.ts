@@ -5,7 +5,6 @@ import { db, sql, getMigrationStatus } from '@/lib/server/db'
 // that would report the process unhealthy for a reason it is not.
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { getJobTierStatus } from '@/lib/server/jobs/tier'
-import { getRelayTierStatus } from '@/lib/server/events/relay-tier'
 import { getProcessRole, shouldRunWorkers } from '@/lib/server/process-role'
 import { logger } from '@/lib/server/logger'
 
@@ -155,8 +154,7 @@ async function checkMigrations(): Promise<void> {
  *   migrations  single-workspace only: the applied ledger is behind the bundled
  *               one, so this build's queries can hit columns that do not exist
  *               yet ⇒ 503 `behind`. Pooled skips it deliberately (§10.5).
- *   workers     a worker-role process that is not running the job tier
- *               and the relay tier ⇒ 503.
+ *   workers     a worker-role process that is not running the job tier ⇒ 503.
  *
  * A hung dependency still degrades rather than hangs: `runCheck` gives each one
  * `CHECK_TIMEOUT_MS` and reports `timeout`.
@@ -177,10 +175,9 @@ export async function handleReadinessProbe(): Promise<Response> {
   // running the tier is NOT ready, and `loops` says how many workspaces it is
   // actually serving, which zero would have made obvious.
   const tier = getJobTierStatus()
-  const relay = getRelayTierStatus()
   const expected = shouldRunWorkers()
   const workersCheck = {
-    ok: expected ? tier.running && relay.running : true,
+    ok: expected ? tier.running : true,
     expected,
     running: tier.running,
     loops: tier.workspaces.length,
@@ -198,9 +195,6 @@ export async function handleReadinessProbe(): Promise<Response> {
     // — is on the quarantine heartbeat in the logs; this is the number that says
     // to go and read it.
     refused: tier.workspaces.filter((t) => Boolean(t.refusedCode)).length,
-    relayRunning: relay.running,
-    relayLoops: relay.workspaces.length,
-    relayAttached: relay.workspaces.filter((t) => t.attached).length,
   }
 
   const ready = dbCheck.ok && migrationsCheck.ok && workersCheck.ok

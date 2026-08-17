@@ -3,18 +3,18 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
 
 /**
- * The relay is the sole enqueuer onto the `events` queue.
+ * `process.ts` is the sole enqueuer onto the `events` hook queue.
  *
- * That is what makes delivery effectively-once: every job the relay writes
- * carries a deterministic `<eventId>:<sink>:<target>` dedupe key, so re-draining
- * a row after a crash re-enqueues the same keys and the unique index turns the
- * repeat into a no-op. A module that reached the queue directly would supply no
- * such key, and its jobs would be delivered again on every re-drain.
+ * That is what makes delivery effectively-once: every job it writes
+ * carries a deterministic `<eventId>:<sink>:<target>` dedupe key, so a
+ * retried dispatch re-enqueues the same keys and the unique index turns
+ * the repeat into a no-op. A module that reached the queue directly
+ * would supply no such key, and its jobs would be delivered again on
+ * every retry.
  *
- * So `process.ts` owns hook enqueue onto `events`. `emit.ts` writes the
- * `event-dispatch` job in the same transaction as the outbox row — a
- * different queue, same primitive. This gate fails if any other `events/`
- * module imports the job queue's enqueue functions.
+ * `emit.ts` writes the `event-dispatch` job in the same transaction as
+ * the outbox row — a different queue, same primitive. This gate fails
+ * if any other `events/` module imports the job queue's enqueue functions.
  *
  * The construct it names is the one that exists **now**. An earlier version of
  * this gate looked for a BullMQ `Queue` and `addBulk`; the package is banned
@@ -67,7 +67,7 @@ describe('the enqueue gate', () => {
     // walked, and the pattern really matches the import it bans.
     const walked = walk(EVENTS_DIR)
     expect(walked.length).toBeGreaterThan(20)
-    expect(walked.some((f) => basename(f) === 'relay.ts')).toBe(true)
+    expect(walked.some((f) => basename(f) === 'event-dispatch-queue.ts')).toBe(true)
 
     expect(ENQUEUE_IMPORT.test("import { enqueueJob } from '@/lib/server/jobs/job-queue'")).toBe(
       true

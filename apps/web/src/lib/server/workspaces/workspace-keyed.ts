@@ -82,7 +82,7 @@ export class WorkspaceKeyedCache<V> {
    *
    * It was spelled inline in three methods, and two of them said `\u0000` while
    * `workspaceKeys()` said a space -- so `workspaceKeys()` matched nothing, the
-   * relay's retry-ledger prune silently stopped pruning, and the test covering
+   * keyed prune silently stopped pruning, and the test covering
    * it asserted a negative that held either way. A literal three methods must
    * agree on is a drift waiting to happen; there is now one spelling, and
    * `prefix()` is the only thing that builds from it.

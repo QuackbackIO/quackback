@@ -13,15 +13,14 @@
  * Two consequences run through this file:
  *
  * 1. The connection is built from the workspace's **direct** DSN, not from the pool
- *    cache. It is the same shape `events/relay-tier.ts` uses for the outbox
- *    relay's own doorbell, which shares this module.
+ *    cache. A transaction-mode pooler registers LISTEN and delivers nothing.
  * 2. **A listener is only ever verified by round-tripping a real NOTIFY.**
  *    `verifyWake()` below sends one and waits for it. Nothing in this module
  *    asks the catalogue whether it is registered, and nothing should.
  *
  * The poll fallback in `tier.ts` is the correctness floor: if the doorbell is
- * lost, the queue is slower, not broken. That is deliberate — the same shape the
- * outbox relay already ships (`LISTEN outbox_wake` + a 1s poll).
+ * lost, the queue is slower, not broken. That is deliberate — a lost wake
+ * costs latency and never correctness.
  */
 import postgres from 'postgres'
 import { logger } from '@/lib/server/logger'
@@ -49,15 +48,7 @@ export interface WakeListener {
 export interface OpenWakeListenerInput {
   /** Direct (session-mode) DSN. A pooled DSN will register and never deliver. */
   directUrl: string
-  /**
-   * Channel to LISTEN on. Defaults to the job queue's.
-   *
-   * Parameterised because the outbox relay tier needs exactly this doorbell on
-   * `outbox_wake` — same direct-connection requirement, same verify-by-round-trip
-   * rule, same poll floor behind it. One implementation with a channel argument
-   * is a smaller surface than two copies of it, and a copy is where the
-   * `pg_listening_channels()` shortcut would reappear.
-   */
+  /** Channel to LISTEN on. Defaults to the job queue's. */
   channel?: string
   /** Resolved per connection, so a rotated credential is picked up on reconnect. */
   password?: () => Promise<string>

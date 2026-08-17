@@ -40,12 +40,6 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        // Stop the relay before closing the queue so a final poll cannot enqueue
-        // into a queue that is already draining. Each workspace loop releases its
-        // leadership lease on the way out, so a surviving replica takes over
-        // immediately instead of waiting out the TTL.
-        await import('./events/relay-tier').then(({ stopRelayTier }) => stopRelayTier())
-
         // Stop the Postgres job tier's loops and release its LISTEN
         // connections. Jobs already running are awaited within the budget
         // below; anything still in flight when the process dies is NOT
@@ -123,7 +117,7 @@ export function logStartupBanner(): void {
   // `deploy.cronSchedule`: the platform starts the container, waits for it to
   // exit, and reports the exit code. So run the named job and exit — and start
   // none of the long-lived background work below, because a process holding a
-  // relay session or an interval would never exit, and the platform would
+  // job-tier session or an interval would never exit, and the platform would
   // report a cron run that "succeeded" by still running.
   const cronJob = process.env.QUACKBACK_CRON_JOB?.trim()
   if (cronJob) {
@@ -232,14 +226,14 @@ export function logStartupBanner(): void {
   if (shouldRunWorkers()) {
     startBackgroundProcessing()
   } else {
-    // Web replicas write domain events to the durable outbox but do NOT drain it
-    // — the relay runs worker-side only. Since EVENTING-V2's cutover made the
-    // outbox the SOLE delivery path, a deployment that scales web replicas MUST
-    // also run at least one worker-role (or 'all') replica, or every webhook /
-    // notification / workflow will pile up unpublished. Warn (not info) so a
-    // web-only topology is loud in the logs.
+    // Web replicas write domain events and enqueue jobs but do NOT claim them.
+    // Since EVENTING-V2's cutover made the job-owned outbox the SOLE delivery
+    // path, a deployment that scales web replicas MUST also run at least one
+    // worker-role (or 'all') replica, or every webhook / notification /
+    // workflow will pile up unpublished. Warn (not info) so a web-only
+    // topology is loud in the logs.
     log.warn(
-      'QUACKBACK_ROLE=web — queue workers and the outbox relay are worker-side; ' +
+      'QUACKBACK_ROLE=web — queue workers are worker-side; ' +
         'ensure a worker (or role=all) replica is running or events will not be delivered'
     )
   }
@@ -251,9 +245,8 @@ export function logStartupBanner(): void {
  * default ('all'), never on web-role replicas. Every sweeper additionally holds
  * a cross-instance sweep lock, so multiple worker replicas stay safe.
  *
- * Under pooled tenancy this starts the job tier and the relay tier and stops
- * there: the sweeps run on cron services instead, for the reason stated at the
- * branch below.
+ * Under pooled tenancy this starts the job tier and stops there: the sweeps
+ * run on cron services instead, for the reason stated at the branch below.
  */
 function startBackgroundProcessing(): void {
   // The Postgres job tier — every background queue in the process. It runs
@@ -286,17 +279,7 @@ function startBackgroundProcessing(): void {
     )
     .catch((err) => log.error({ err }, 'boot-time partition ensure failed'))
 
-  // Durable event outbox relay (EVENTING-V2 WO-3), on the per-workspace tier
-  // (SAAS-HOSTING-STACK.md §7.3). Runs under BOTH tenancy modes: one loop per
-  // workspace on that workspace's own direct, session-mode connection, elected by a
-  // lease row rather than a session advisory lock. Post-cutover (WO-18) the
-  // outbox is the SOLE delivery path, so the relay always runs here — the only
-  // gate is QUACKBACK_ROLE (worker/all), enforced inside startRelayTier().
-  import('./events/relay-tier')
-    .then(({ startRelayTier }) => startRelayTier())
-    .catch((err) => log.error({ err }, 'failed to start the outbox relay tier'))
-
-  // The two tiers above are everything a pooled worker runs, and the timers
+  // The job tier above is everything a pooled worker runs, and the timers
   // below are the reason there is a branch here at all.
   //
   // Every one of them funnels through `withSweepLock`, which under pooled
@@ -312,7 +295,7 @@ function startBackgroundProcessing(): void {
   // `deploy.cronSchedule` services that run one job and exit
   // (`cron/fleet-jobs.ts`, SAAS-HOSTING-STACK.md §9). The bodies are the same
   // functions this branch calls below — only the trigger differs — which leaves
-  // the always-warm worker holding the job tier and the relay and nothing else.
+  // the always-warm worker holding the job tier and nothing else.
   //
   // There is deliberately no BullMQ branch left. It used to hold a warning and
   // an eager worker boot, refused under pooled tenancy because a Redis job

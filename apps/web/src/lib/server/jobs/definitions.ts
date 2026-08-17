@@ -279,8 +279,8 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/hook-job').then((m) => m.onHookJobFailure(job, error, permanent)),
   },
   {
-    // Drains one job-owned outbox row. Same fan-out as the relay; the
-    // row is written in emit()'s transaction so rollback leaves nothing.
+    // Drains one job-owned outbox row. The row is written in emit()'s
+    // transaction so rollback leaves nothing.
     name: 'event-dispatch',
     concurrency: 5,
     maxAttempts: 10,

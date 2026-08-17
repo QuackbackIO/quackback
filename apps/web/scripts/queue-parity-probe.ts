@@ -75,9 +75,6 @@ async function waitForStatus(
 
 async function main(): Promise<void> {
   const stop = await startConsumer()
-  // The relay is the sole enqueuer for `events`, on both branches.
-  const { startOutboxRelay, stopOutboxRelay } = await import('@/lib/server/events/relay')
-  await startOutboxRelay()
 
   const [{ id: principalId }] = (await raw`
     SELECT id FROM principal WHERE role = 'admin' AND type = 'user' LIMIT 1
@@ -181,7 +178,6 @@ async function main(): Promise<void> {
   say('events: outbox rows still unpublished', unpub)
   say('events: hook deliveries in the last 3m', deliveries)
 
-  await stopOutboxRelay()
   await stop()
   await raw.end()
   process.exit(0)

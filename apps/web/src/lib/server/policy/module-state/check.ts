@@ -28,9 +28,9 @@ import { MODULE_STATE_LEDGER, type LedgerEntry, type StateCategory } from './led
  *
  * What this still does not prove is that the guard covers the SITE. That claim
  * lives where it can actually be observed — `__tests__/singletons-not-shared.ts`
- * asserts the relay does not attempt leadership under pooled tenancy and that
- * the readiness probe never reads the migration status. The scanner's job here
- * is to stop the mechanism disappearing quietly, not to re-derive behaviour.
+ * asserts the readiness probe never reads the migration status under pooled
+ * tenancy. The scanner's job here is to stop the mechanism disappearing
+ * quietly, not to re-derive behaviour.
  */
 export function readsRealTenancyMode(text: string, fileName: string): boolean {
   const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)

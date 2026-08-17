@@ -139,7 +139,7 @@ not on the one that does. (The mechanism is connection multiplexing:
 not share with the query asking the question.) So:
 
 - the listener is built from the workspace's **direct** DSN, never from the pool
-  cache — the same shape `events/relay-tier.ts` uses for the outbox relay;
+  cache;
 - `WakeListener.verify()` sends a real NOTIFY from a _second_ connection and
   waits for it. Nothing here asks the catalogue whether it is registered, and
   nothing should.
@@ -247,7 +247,8 @@ The cost is one session-mode connection per workspace, permanently. That is the 
 §7.3 describes — always warm, direct connections, physically separate from the
 pooled web tier — and it carries §6's corollary: **this tier holds connections
 open by design, so it must never share a compute with workspaces you expect to
-suspend.** Sizing it for a large fleet belongs with the relay-tier work.
+suspend.** Sizing it for a large fleet belongs with the detach policy in
+`workspaces/idle.ts`.
 
 A workspace whose database has not yet run migration `0253` is **skipped with a
 warning**, not crash-looped. §5's ordering rule is that expand lands before the
@@ -267,8 +268,7 @@ has not loaded the full application config.
 | `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
 | `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
 
-`QUACKBACK_ROLE=web` does not start the tier, the same gate `startRelayTier`
-uses.
+`QUACKBACK_ROLE=web` does not start the tier.
 
 ## 9. Workspace scope, and the shape this must not reproduce
 
@@ -508,10 +508,11 @@ scheduling it on every workspace's loop would have each workspace poll the _same
 mailbox and ingest the same message into its own database. Not a regression: the
 BullMQ worker was never started under pooled tenancy either.
 
-**The outbox relay is started under pooled tenancy** by `startRelayTier()`,
-on session-mode connections so `LISTEN` and the leader lease stay honest.
-Its _enqueue_ is this queue's; the relay loop is the matching per-workspace
-drain, the same shape `tier.ts` already runs for jobs.
+**Domain events are dispatched through this queue.** `emit()` writes an
+`event-dispatch` job in the same transaction as the outbox row. The former
+outbox relay (`LISTEN outbox_wake`, `outbox_relay_leader`, `relay-tier.ts`)
+is gone; see `events/RELAY.md`. Leftover `dispatch_owner = relay` rows stay
+unpublished until they age out.
 
 ## 11. Running the evidence
 

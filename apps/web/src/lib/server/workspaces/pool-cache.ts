@@ -22,9 +22,9 @@
  * costing money".
  *
  * Measured caveat, and it is not optional: eviction is **necessary but not
- * sufficient**. Under `QUACKBACK_ROLE=all` the outbox relay polls the workspace
- * database once per second forever, so the compute never suspends whatever this
- * cache does. Idle saving requires `QUACKBACK_ROLE=web`.
+ * sufficient**. Under `QUACKBACK_ROLE=all` the job tier holds a session-mode
+ * LISTEN while attached, so the compute stays awake while work is flowing.
+ * Idle saving still depends on the detach policy in `idle.ts`.
  *
  * ## Credential rotation
  *
@@ -351,9 +351,8 @@ async function enforceCap(keepWorkspaceKey: string): Promise<void> {
 /**
  * A workspace's own **direct** (session-mode) pool, outside this cache.
  *
- * The outbox relay tier needs three things this cache cannot give it: the
- * *direct* endpoint (a transaction pooler accepts a `LISTEN` and delivers
- * nothing, and a session advisory lock is worse than useless through one), a
+ * The job tier needs three things this cache cannot give it: the *direct*
+ * endpoint (a transaction pooler accepts a `LISTEN` and delivers nothing), a
  * connection that is never evicted by request-traffic LRU pressure, and a
  * lifetime it controls. So it opens its own — but through this module, because
  * this is the layer that builds `Database` handles and, more importantly,
@@ -362,13 +361,11 @@ async function enforceCap(keepWorkspaceKey: string): Promise<void> {
  *
  * Deliberately NOT registered in `pools`: this handle is not a request pool, it
  * must not be handed to a request, and it must not be counted in the eviction
- * metric that measures whether idle workspaces can suspend. §6's corollary is that
- * the tier holding it must never share a compute with workspaces you expect to
- * suspend, and keeping it out of that counter is what keeps the counter honest.
+ * metric that measures whether idle workspaces can suspend.
  *
  * Throws on refusal, exactly as `acquireWorkspacePool` does. The caller decides
- * what a refused workspace costs; for the relay tier it costs that workspace its relay
- * and nothing else.
+ * what a refused workspace costs; for the job tier it costs that workspace its
+ * loop and nothing else.
  */
 export interface DirectWorkspacePool {
   sql: postgres.Sql

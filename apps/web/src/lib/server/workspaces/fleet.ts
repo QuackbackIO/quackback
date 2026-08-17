@@ -2,7 +2,7 @@
  * Running background work for every workspace.
  *
  * SAAS-HOSTING-STACK.md §5, caveat 3: roughly 25–35 files across ~15 background
- * subsystems run with no request scope at all — sweeps, queues, the relay,
+ * subsystems run with no request scope at all — sweeps, queues,
  * migrations, CLI backfills, the readiness probe. Each needs a workspace scope, and
  * each needs a per-subsystem answer to one question: *iterate all workspaces per
  * tick, or give each workspace its own schedule?*
@@ -79,7 +79,10 @@ export async function runFleetPass(
       result.succeeded += 1
     } catch (err) {
       result.failed += 1
-      log.error({ err, workspaceKey: workspace.workspaceKey }, 'fleet pass body failed for workspace')
+      log.error(
+        { err, workspaceKey: workspace.workspaceKey },
+        'fleet pass body failed for workspace'
+      )
     }
   }
 

@@ -8,9 +8,9 @@
  * it once none is. `pool-cache.ts` already states that for the request path and
  * names the hazard it could not fix from there:
  *
- * > eviction is **necessary but not sufficient** … the outbox relay polls the
- * > workspace database once per second forever, so the compute never suspends
- * > whatever this cache does.
+ * > eviction is **necessary but not sufficient** … a permanently attached
+ * > LISTEN on the workspace database holds the compute awake whatever this
+ * > cache does.
  *
  * Measured on a four-workspace fleet, that is exactly what happened: two `LISTEN`
  * connections per workspace held for 14h33m, four `postgres.js` connections
@@ -26,8 +26,8 @@
  * listener leaves the tier's own pool holding the compute awake, which is no
  * saving at all.
  *
- * That is safe because the doorbell is not load-bearing. `wake.ts` and
- * `relay-tier.ts` both say so: the poll is the correctness floor and a lost
+ * That is safe because the doorbell is not load-bearing. `jobs/wake.ts` and
+ * `jobs/tier.ts` both say so: the poll is the correctness floor and a lost
  * doorbell costs latency, never correctness. Detaching is the same trade taken
  * deliberately — a detached workspace is one whose doorbell is *known* to be
  * absent, and whose poll has been slowed to a cadence that lets the compute
@@ -119,7 +119,7 @@ export interface WorkspaceIdlePolicy {
 
 /**
  * Read from `process.env` directly rather than through the zod config, matching
- * `relayTierConfig()` and `runnerConfig()`: these must work in any context,
+ * `runnerConfig()`: these must work in any context,
  * including a worker process that has not loaded the full application config.
  */
 function envInt(name: string, fallback: number, min: number): number {
@@ -220,7 +220,7 @@ const subscribers = new Set<Subscriber>()
  * Never called by the tiers for their own traffic. A tier that counted its own
  * polling as activity would never go idle, which is the bug this module exists
  * to remove — so the call site is `acquireWorkspaceScope`, filtered by scope
- * origin, and `queue` and `relay` are excluded there.
+ * origin, and `queue` is excluded there.
  */
 export function noteWorkspaceActivity(workspaceKey: string, source: WorkspaceActivitySource): void {
   if (subscribers.size === 0) return

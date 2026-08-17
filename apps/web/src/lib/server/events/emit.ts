@@ -7,8 +7,8 @@
  * passed transaction (so the event commits atomically with the mutation), writes
  * an `audit_log` row in the same transaction when the definition opts in, and
  * inserts an `event-dispatch` job_queue row in that same transaction. The
- * job_queue trigger NOTIFYs on commit. Legacy unpublished rows stay
- * `dispatch_owner = relay` and are still drained by the outbox relay.
+ * job_queue trigger NOTIFYs on commit. Leftover unpublished rows may still
+ * carry `dispatch_owner = relay`; the job handler leaves those unpublished.
  */
 import { db, events, auditLog, type Database, type Transaction } from '@/lib/server/db'
 import { createId, type EvtId } from '@quackback/ids'
@@ -120,7 +120,7 @@ export async function emitBestEffort<P>(
 /**
  * Build a child context from a triggering event: depth+1, causationId set to the
  * parent's id, correlationId propagated. Used when a reaction (e.g. a workflow
- * action) causes a further mutation, so the relay's depth guard can break loops.
+ * action) causes a further mutation, so the depth guard can break loops.
  */
 export function inherit(parent: DomainEvent, source?: string): Partial<EventContext> {
   return {

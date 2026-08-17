@@ -194,8 +194,8 @@ export interface ClaimedJob {
    * The idempotency handle this row was enqueued under, when it had one.
    *
    * Handlers that dedupe their own side effects need it: the reference passed
-   * BullMQ's `job.id` into `hook.run`, and for relay-enqueued hooks that id was
-   * the deterministic `<eventId>:<sink>:<target>` key. That key is this column.
+   * BullMQ's `job.id` into `hook.run`, and for hook jobs that id is the
+   * deterministic `<eventId>:<sink>:<target>` key. That key is this column.
    */
   dedupeKey: string | null
   payload: Record<string, unknown>
@@ -299,9 +299,9 @@ export interface QueueClaimSpec {
 /**
  * Enqueue many jobs in one statement, deduplicating on `dedupeKey`.
  *
- * This is the outbox relay's shape (`enqueueHookJobsWithIds`): it re-drains a
- * row after a crash and re-enqueues the SAME deterministic keys, and the fact
- * that a second enqueue is a no-op is what makes delivery effectively-once.
+ * This is the event-dispatch shape (`enqueueHookJobsWithIds`): a retried
+ * dispatch re-enqueues the SAME deterministic keys, and the fact that a
+ * second enqueue is a no-op is what makes delivery effectively-once.
  * `ON CONFLICT DO NOTHING` gives that, including for duplicates *within* one
  * call — unlike `DO UPDATE`, which errors when a command touches a row twice.
  *

@@ -181,8 +181,8 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // that must stay silent to let their computes suspend.
   //
   // `shouldRunWorkers()` is the same predicate `startup.ts` gates the sweepers
-  // and the relay behind, so telemetry now lives on the same side of the split
-  // as the rest of the background work.
+  // behind, so telemetry now lives on the same side of the split as the rest
+  // of the background work.
   if (!_initialized && shouldRunWorkers()) {
     _initialized = true
 
