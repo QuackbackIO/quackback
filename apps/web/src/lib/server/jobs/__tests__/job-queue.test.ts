@@ -651,6 +651,18 @@ describe('cancel and lookup', () => {
     expect(await cancelJob(q, 'r')).toBe(0)
     expect((await rowsFor(q))[0].status).toBe('running')
   })
+
+  it('can restrict cancel to terminal rows so an in-flight job is left alone', async () => {
+    const q = queue('cancel-terminal-only')
+    await enqueueJob({ queue: q, dedupeKey: 'k' })
+    expect(await cancelJob(q, 'k', { terminalOnly: true })).toBe(0)
+    expect((await rowsFor(q))[0].status).toBe('pending')
+
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    await completeJob(job)
+    expect(await cancelJob(q, 'k', { terminalOnly: true })).toBe(1)
+    expect(await rowsFor(q)).toHaveLength(0)
+  })
 })
 
 describe('per-queue retention', () => {

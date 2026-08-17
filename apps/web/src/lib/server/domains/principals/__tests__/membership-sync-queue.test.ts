@@ -35,11 +35,11 @@ const JOB = {
   id: '1',
   jobId: 'job_1',
   queue: 'membership-sync',
-  dedupeKey: 'membership-sync:1',
+  dedupeKey: 'membership-sync',
   payload: {},
   workspaceKey: null,
   attempts: 1,
-  maxAttempts: 3,
+  maxAttempts: 10,
   leaseToken: 'tok',
   lockedUntil: new Date(),
 }

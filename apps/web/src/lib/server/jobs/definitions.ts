@@ -393,10 +393,18 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
   {
     // Pushes this workspace's team seats to the control plane. Cloud-only
     // work: the handler is a successful no-op without QUACKBACK_CONTROL_PLANE_URL.
-    // Enqueued on roster changes; the minute-bucket dedupe key coalesces bursts.
+    // Roster writes enqueue under a stable key (in-flight coalesces; a spent
+    // row is cancelled first). The 15-minute cron is the missed-enqueue
+    // backstop and stays inert without a control-plane URL.
     name: 'membership-sync',
+    cron: '*/15 * * * *',
     concurrency: 1,
-    maxAttempts: 3,
+    maxAttempts: 10,
+    retryBackoffMs: 15 * 60_000,
+    cronEnabled: () =>
+      import('@/lib/server/domains/principals/membership-sync-queue').then((m) =>
+        m.isControlPlaneConfigured()
+      ),
     handler: () =>
       import('@/lib/server/domains/principals/membership-sync-queue').then(
         (m) => m.runMembershipSync

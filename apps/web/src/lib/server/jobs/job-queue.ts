@@ -348,6 +348,16 @@ export async function enqueueJobs(
   }
 }
 
+export interface CancelJobOpts {
+  /** Caller's transaction. When set, the DELETE participates in it. */
+  executor?: JobSqlExecutor
+  /**
+   * Only free a spent row (`succeeded` / `failed`). Pending and running stay,
+   * which is what a coalescing enqueue wants: in-flight work is one job.
+   */
+  terminalOnly?: boolean
+}
+
 /**
  * Cancel a job by its dedupe key, so the key is free to be scheduled again.
  *
@@ -360,14 +370,30 @@ export async function enqueueJobs(
  * and a caller that could not re-schedule a key it had already used would be a
  * silent behaviour change.
  *
+ * `terminalOnly` narrows that: only spent rows go, so a later enqueue can
+ * reuse the key after success without cancelling an in-flight job.
+ *
  * Returns how many rows were removed.
  */
-export async function cancelJob(queue: string, dedupeKey: string): Promise<number> {
-  const result = await db.execute(sql`
-    DELETE FROM job_queue
-    WHERE queue = ${queue} AND dedupe_key = ${dedupeKey} AND status <> 'running'
-    RETURNING id
-  `)
+export async function cancelJob(
+  queue: string,
+  dedupeKey: string,
+  opts?: CancelJobOpts
+): Promise<number> {
+  const executor = opts?.executor ?? db
+  const result = opts?.terminalOnly
+    ? await executor.execute(sql`
+        DELETE FROM job_queue
+        WHERE queue = ${queue}
+          AND dedupe_key = ${dedupeKey}
+          AND status IN ('succeeded', 'failed')
+        RETURNING id
+      `)
+    : await executor.execute(sql`
+        DELETE FROM job_queue
+        WHERE queue = ${queue} AND dedupe_key = ${dedupeKey} AND status <> 'running'
+        RETURNING id
+      `)
   return getExecuteRows(result).length
 }
 

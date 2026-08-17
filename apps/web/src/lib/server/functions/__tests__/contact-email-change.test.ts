@@ -45,6 +45,7 @@ const hoisted = vi.hoisted(() => ({
   checkVerificationOTP: vi.fn().mockResolvedValue({ success: true }),
   deleteVerificationByIdentifier: vi.fn().mockResolvedValue(undefined),
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+  enqueueMembershipSync: vi.fn(async () => {}),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -91,6 +92,9 @@ vi.mock('@/lib/server/auth/signin-rate-limit', () => ({
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn() }) },
 }))
+vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
+  enqueueMembershipSync: (...args: unknown[]) => hoisted.enqueueMembershipSync(...args),
+}))
 
 import {
   sendCurrentAddressCodeFn,
@@ -113,7 +117,10 @@ const accountIs = (email: string) => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  hoisted.requireAuth.mockResolvedValue({ user: { id: 'usr_1' } })
+  hoisted.requireAuth.mockResolvedValue({
+    user: { id: 'usr_1' },
+    principal: { type: 'user', role: 'user' },
+  })
   hoisted.checkRateLimit.mockResolvedValue({ allowed: true })
   hoisted.checkVerificationOTP.mockResolvedValue({ success: true })
 })
@@ -251,5 +258,28 @@ describe('confirmEmailChangeFn', () => {
     })
 
     expect(res).toEqual({ ok: false, reason: 'invalid_or_taken' })
+    expect(hoisted.enqueueMembershipSync).not.toHaveBeenCalled()
+  })
+
+  it('enqueues membership-sync when a teammate confirms a new address', async () => {
+    hoisted.requireAuth.mockResolvedValue({
+      user: { id: 'usr_1' },
+      principal: { type: 'user', role: 'member' },
+    })
+    hoisted.findFirst.mockReset()
+    hoisted.findFirst.mockResolvedValueOnce(undefined)
+
+    await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
+
+    expect(hoisted.enqueueMembershipSync).toHaveBeenCalled()
+  })
+
+  it('does not enqueue membership-sync for an end-user address change', async () => {
+    hoisted.findFirst.mockReset()
+    hoisted.findFirst.mockResolvedValueOnce(undefined)
+
+    await call(confirmEmailChangeFn, { email: REAL, code: '123456' })
+
+    expect(hoisted.enqueueMembershipSync).not.toHaveBeenCalled()
   })
 })
