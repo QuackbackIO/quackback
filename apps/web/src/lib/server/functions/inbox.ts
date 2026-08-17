@@ -17,6 +17,7 @@ import { coerceTicketTypeId } from '@/lib/shared/tickets'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
 
 const ticketTypeSchema = z.enum(TICKET_TYPES)
 const ticketStageSchema = z.enum(TICKET_STAGES)
@@ -50,7 +51,7 @@ export const listInboxItemsSchema = z.object({
   sort: inboxSortSchema.optional(),
   limit: z.number().int().min(1).max(100).optional(),
   cursor: z.string().optional(),
-  channel: z.enum(['messenger', 'email']).optional(),
+  channel: inboxChannelFilterSchema.optional(),
 })
 
 /** The unified inbox list (union of conversations + tickets, RBAC-scoped

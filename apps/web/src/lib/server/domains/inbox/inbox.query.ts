@@ -43,6 +43,7 @@ import type {
   CompanyId,
 } from '@quackback/ids'
 import type { ConversationPriority, TicketStage } from '@/lib/shared/db-types'
+import type { Channel } from '@/lib/shared/channels'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
@@ -96,7 +97,7 @@ export interface InboxListFilter {
   sort?: InboxSort
   limit?: number
   cursor?: string
-  channel?: 'messenger' | 'email'
+  channel?: Channel
 }
 
 export interface InboxListPage {

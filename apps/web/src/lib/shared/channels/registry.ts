@@ -31,6 +31,11 @@ export function isChannel(id: string): id is Channel {
   return DESCRIPTORS.has(id as Channel)
 }
 
+/** Inbox `?channel=` and list-filter values: a registered descriptor id, else drop. */
+export function parseChannel(value: unknown): Channel | undefined {
+  return typeof value === 'string' && isChannel(value) ? value : undefined
+}
+
 /** Last visitor transport wins: a registered channel id stays; anything else is messenger. */
 export function channelFromVisitorTransport(source: string | undefined | null): Channel {
   if (source && isChannel(source)) return source

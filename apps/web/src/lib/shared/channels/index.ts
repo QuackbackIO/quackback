@@ -21,6 +21,7 @@ export {
   getChannelDescriptor,
   isChannel,
   listChannelDescriptors,
+  parseChannel,
   registerChannelDescriptor,
   unregisterChannelDescriptor,
   requireChannelDescriptor,

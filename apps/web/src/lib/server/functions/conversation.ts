@@ -35,6 +35,7 @@ import {
 import { officeHoursSnapshot } from '@/lib/shared/office-hours'
 import type { ConversationPresence } from '@/lib/shared/conversation/presence'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
 import {
   CONVERSATION_STATUSES,
   CONVERSATION_END_REASONS,
@@ -153,7 +154,7 @@ const listConversationsSchema = z.object({
   teamId: z.string().optional(),
   // Inbound source discriminator (e.g. 'widget', 'email').
   source: z.string().max(32).optional(),
-  channel: z.enum(['messenger', 'email']).optional(),
+  channel: inboxChannelFilterSchema.optional(),
   // "Waiting" scope: only conversations a customer is currently waiting on.
   waitingOnly: z.boolean().optional(),
   // Inbox ordering; omitted = 'recent'. The canonical list lives in shared

@@ -76,6 +76,7 @@ import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
 import { truncate } from '@/lib/shared/utils/string'
+import type { Channel } from '@/lib/shared/channels'
 import { keywordInContext, type TermSegment } from '@/lib/shared/utils/keyword-context'
 import type { JsonValue } from '@/lib/shared/json'
 import type {
@@ -1064,8 +1065,8 @@ export interface ConversationListFilter {
   /** Inbound source discriminator ('widget' today; email/others join later).
    *  Plumbing for channel/source nav scopes — the column is plain text. */
   source?: string
-  /** Active conversation channel (messenger / email). */
-  channel?: 'messenger' | 'email'
+  /** Active conversation channel (a registered descriptor id). */
+  channel?: Channel
   priority?: 'none' | 'low' | 'medium' | 'high' | 'urgent'
   assignedAgentPrincipalId?: PrincipalId
   /** Unassigned queue: only conversations with no assigned agent. */

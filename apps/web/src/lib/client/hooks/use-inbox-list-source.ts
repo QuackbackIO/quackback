@@ -12,6 +12,7 @@ import { useMemo } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import type { CompanyId } from '@quackback/ids'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import type { Channel } from '@/lib/shared/channels'
 import {
   viewFiltersToListParams,
   type ConversationSort,
@@ -53,8 +54,8 @@ export interface UseInboxListSourceParams {
    *  polling fallback below is unnecessary extra load; it re-arms the moment
    *  the stream drops or hasn't connected yet. */
   streamConnected: boolean
-  /** Conversation channel chip (messenger / email). */
-  channel?: 'messenger' | 'email'
+  /** Conversation channel chip. Options come from the descriptor registry. */
+  channel?: Channel
 }
 
 export interface UseInboxListSourceResult {

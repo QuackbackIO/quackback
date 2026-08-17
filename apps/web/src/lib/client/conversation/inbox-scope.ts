@@ -13,6 +13,7 @@ import type {
   ConversationViewId,
 } from '@quackback/ids'
 import type { ConversationStatus, ConversationPriority } from '@/lib/shared/conversation/types'
+import { parseChannel, type Channel } from '@/lib/shared/channels'
 import type {
   ConversationSort,
   ConversationViewListParams,
@@ -138,8 +139,8 @@ export interface InboxSearch {
    *  `q` is set, 'recent' otherwise). */
   sort?: ConversationSort
   q?: string
-  /** Conversation channel (messenger / email). */
-  channel?: 'messenger' | 'email'
+  /** Conversation channel filter. Values come from the descriptor registry. */
+  channel?: Channel
   /** Company refinement (deep-linked from the conversation CompanyCard): restrict
    *  the list to conversations whose visitor belongs to this company. */
   company?: string
@@ -179,7 +180,7 @@ export function buildListParams(
   sort?: ConversationSort,
   customParams?: ConversationViewListParams,
   aiBucket?: AiBucket,
-  channel?: 'messenger' | 'email'
+  channel?: Channel
 ) {
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const statusParam = status === 'all' ? undefined : status
@@ -274,6 +275,11 @@ export function normalizeTriageFacet(v: unknown): InboxTriageFacet | undefined {
   return undefined
 }
 
+/** Parse `?channel=` from the descriptor registry. Unknown values drop out. */
+export function normalizeInboxChannel(v: unknown): Channel | undefined {
+  return parseChannel(v)
+}
+
 /**
  * Adapt a triage facet to the legacy `StatusFilter` shape `buildListParams`
  * (and the conversation-inbox query factory) expect — the scopes that still
@@ -322,7 +328,7 @@ export interface InboxListParams {
   teamId?: string
   companyId?: string
   sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'relevance'
-  channel?: 'messenger' | 'email'
+  channel?: Channel
 }
 
 /**
@@ -370,7 +376,7 @@ export function buildInboxListParams(
   /** The tickets-branch registry-type dropdown (Phase 4); only meaningful on
    *  the Tickets-section scopes, ignored elsewhere. */
   ticketTypeId?: string,
-  channel?: 'messenger' | 'email'
+  channel?: Channel
 ): InboxListParams {
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const searchParam = search || undefined

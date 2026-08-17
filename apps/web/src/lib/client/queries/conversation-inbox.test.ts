@@ -103,6 +103,28 @@ describe('conversationInboxQueries key parity', () => {
     ).toEqual([...base, 'sort:oldest', 'company_z'])
   })
 
+  it('appends a channel filter to the list key', () => {
+    const base = conversationInboxQueries.conversationList(
+      { kind: 'view', view: 'all' },
+      'open',
+      'all',
+      ''
+    ).queryKey
+    expect(
+      conversationInboxQueries.conversationList(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'email'
+      ).queryKey
+    ).toEqual([...base, 'channel:email'])
+  })
+
   it('keys a custom view by its id under the conversations prefix', () => {
     expect(
       conversationInboxQueries.conversationList(

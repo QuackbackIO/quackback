@@ -85,6 +85,7 @@ import {
   inboxNavKey,
   navFromSearch,
   normalizeTriageFacet,
+  normalizeInboxChannel,
   facetToStatusFilter,
   buildInboxListParams,
   usesUnifiedInboxList,
@@ -93,6 +94,7 @@ import {
   type InboxNavItem,
   type InboxSearch,
 } from '@/lib/client/conversation/inbox-scope'
+import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
 import {
@@ -237,8 +239,7 @@ export const Route = createFileRoute('/admin/inbox')({
           ? search.ai
           : undefined,
       q: typeof search.q === 'string' && search.q ? search.q : undefined,
-      channel:
-        search.channel === 'messenger' || search.channel === 'email' ? search.channel : undefined,
+      channel: normalizeInboxChannel(search.channel),
       // Carries the shared `?post=` modal target (the admin layout mounts the
       // modal) so clicking an embedded post in a conversation opens it without leaving the
       // inbox. Validated to a real post id; a junk value is dropped.
@@ -539,8 +540,7 @@ function InboxPage() {
     [updateSearch]
   )
   const setChannelFilter = useCallback(
-    (channel: 'messenger' | 'email' | undefined) =>
-      updateSearch({ channel, i: undefined, m: undefined }),
+    (channel: Channel | undefined) => updateSearch({ channel, i: undefined, m: undefined }),
     [updateSearch]
   )
   // Search is a live local input mirrored (debounced) into the URL `q`. It sits

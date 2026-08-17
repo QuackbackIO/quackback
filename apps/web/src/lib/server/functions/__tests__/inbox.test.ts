@@ -125,6 +125,14 @@ describe('listInboxItemsSchema', () => {
     expect(() => listInboxItemsSchema.parse({ facet: 'all', limit: 0 })).toThrow()
     expect(() => listInboxItemsSchema.parse({ facet: 'all', limit: 101 })).toThrow()
   })
+
+  it('accepts registered channel ids and rejects unknown ones', () => {
+    expect(listInboxItemsSchema.parse({ facet: 'open', channel: 'email' }).channel).toBe('email')
+    expect(listInboxItemsSchema.parse({ facet: 'open', channel: 'messenger' }).channel).toBe(
+      'messenger'
+    )
+    expect(() => listInboxItemsSchema.parse({ facet: 'open', channel: 'sms' })).toThrow()
+  })
 })
 
 describe('listInboxItemsFn', () => {

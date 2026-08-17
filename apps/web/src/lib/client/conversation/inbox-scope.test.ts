@@ -12,12 +12,18 @@ import {
   buildInboxListParams,
   usesUnifiedInboxList,
   normalizeTriageFacet,
+  normalizeInboxChannel,
   facetToStatusFilter,
   isTicketInboxView,
   ticketTypeForView,
   inboxNavKey,
   type InboxNavItem,
 } from './inbox-scope'
+import { registerChannelDescriptor, unregisterChannelDescriptor } from '@/lib/shared/channels'
+import {
+  TEST_CHANNEL_ID,
+  testChannelDescriptor,
+} from '@/lib/shared/channels/__tests__/test-channel.fixture'
 
 const tagId = 'conversation_tag_x' as ConversationTagId
 const segId = 'segment_y' as SegmentId
@@ -205,6 +211,13 @@ describe('buildListParams', () => {
     expect(buildListParams(view('all'), 'open', 'all', '')).not.toHaveProperty('channel')
   })
 
+  it('validates the inbox channel filter from the descriptor registry', () => {
+    expect(normalizeInboxChannel('email')).toBe('email')
+    expect(normalizeInboxChannel('messenger')).toBe('messenger')
+    expect(normalizeInboxChannel('sms')).toBeUndefined()
+    expect(normalizeInboxChannel(undefined)).toBeUndefined()
+  })
+
   it('maps a team scope to a teamId filter', () => {
     expect(buildListParams({ kind: 'team', teamId }, 'open', 'high', 'bug')).toMatchObject({
       teamId,
@@ -371,6 +384,60 @@ describe('buildInboxListParams', () => {
       companyId: undefined,
       sort: undefined,
     })
+  })
+
+  it('carries an explicit channel filter', () => {
+    expect(
+      buildInboxListParams(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'email'
+      )
+    ).toMatchObject({ facet: 'open', channel: 'email' })
+    expect(
+      buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '')
+    ).not.toHaveProperty('channel')
+  })
+
+  it('accepts a registered fixture channel without a new list-params branch', () => {
+    registerChannelDescriptor(testChannelDescriptor)
+    try {
+      expect(normalizeInboxChannel(TEST_CHANNEL_ID)).toBe(TEST_CHANNEL_ID)
+      expect(
+        buildListParams(
+          { kind: 'view', view: 'all' },
+          'open',
+          'all',
+          '',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          TEST_CHANNEL_ID
+        )
+      ).toMatchObject({ channel: TEST_CHANNEL_ID })
+      expect(
+        buildInboxListParams(
+          { kind: 'view', view: 'all' },
+          'open',
+          'all',
+          '',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          TEST_CHANNEL_ID
+        )
+      ).toMatchObject({ channel: TEST_CHANNEL_ID })
+    } finally {
+      unregisterChannelDescriptor(TEST_CHANNEL_ID)
+    }
   })
 
   it('maps a team scope to conversation-only kinds + teamId', () => {
