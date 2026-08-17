@@ -64,6 +64,8 @@ export type { ApiKey } from './api-keys'
 export type { FeatureFlags, LabSectionRow, ProductId } from './settings'
 export {
   DEFAULT_FEATURE_FLAGS,
+  featureFlagsForUseCase,
+  enableFlagsForUseCase,
   FEATURE_FLAG_REGISTRY,
   LAB_SECTIONS,
   GA_FEATURE_SECTIONS,

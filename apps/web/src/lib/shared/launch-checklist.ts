@@ -152,9 +152,9 @@ export function buildLaunchTasks(
   const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
   const permissions = status.permissions ?? ALLOW_ALL
   const features = status.features ?? {
-    supportInbox: true,
-    helpCenter: true,
-    statusPage: true,
+    supportInbox: false,
+    helpCenter: false,
+    statusPage: false,
     integrations: true,
   }
   const hasGoalBoard =

@@ -6,6 +6,8 @@ import {
   PRODUCT_DEFINITIONS,
   FEATURE_FLAG_REGISTRY,
   LEGACY_FLAG_MAP,
+  enableFlagsForUseCase,
+  featureFlagsForUseCase,
   getFirstEnabledAdminProductPath,
   getProductFlagUpdate,
   isProductEnabled,
@@ -37,9 +39,12 @@ describe('feature flag settings layout', () => {
       'Changelog',
       'Status',
     ])
-    for (const product of PRODUCT_DEFINITIONS) {
-      expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, product.id)).toBe(true)
-    }
+    expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'feedback')).toBe(true)
+    expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'changelog')).toBe(true)
+    expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'support')).toBe(false)
+    expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'helpCenter')).toBe(false)
+    expect(isProductEnabled(DEFAULT_FEATURE_FLAGS, 'status')).toBe(false)
+    expect(LAB_SECTIONS.flatMap((s) => s.flags.map((row) => row.key))).not.toContain('helpCenter')
   })
 
   it('updates both Support capabilities from its single product toggle', () => {
@@ -115,5 +120,43 @@ describe('resolveFeatureFlags', () => {
   it('does not resurrect a disabled inbox from a stored linkPreviews value', () => {
     const flags = resolveFeatureFlags(JSON.stringify({ supportInbox: false, linkPreviews: true }))
     expect(flags.supportInbox).toBe(false)
+  })
+})
+
+describe('featureFlagsForUseCase', () => {
+  it('keeps the core products on and extra modules off for feedback and internal', () => {
+    for (const useCase of ['product_feedback', 'internal'] as const) {
+      const flags = featureFlagsForUseCase(useCase)
+      expect(flags).toEqual(DEFAULT_FEATURE_FLAGS)
+      expect(isProductEnabled(flags, 'feedback')).toBe(true)
+      expect(isProductEnabled(flags, 'changelog')).toBe(true)
+      expect(isProductEnabled(flags, 'support')).toBe(false)
+      expect(isProductEnabled(flags, 'helpCenter')).toBe(false)
+      expect(isProductEnabled(flags, 'status')).toBe(false)
+    }
+  })
+
+  it('turns Support on for a support goal without enabling Help Center or Status', () => {
+    const flags = featureFlagsForUseCase('customer_support')
+    expect(isProductEnabled(flags, 'support')).toBe(true)
+    expect(isProductEnabled(flags, 'helpCenter')).toBe(false)
+    expect(isProductEnabled(flags, 'status')).toBe(false)
+    expect(flags.inboxAi).toBe(false)
+  })
+
+  it('turns Help Center on as a product, not a Labs flag, for a help-center goal', () => {
+    const flags = featureFlagsForUseCase('help_center')
+    expect(isProductEnabled(flags, 'helpCenter')).toBe(true)
+    expect(isProductEnabled(flags, 'support')).toBe(false)
+    expect(LAB_SECTIONS.flatMap((section) => section.flags.map((row) => row.key))).not.toContain(
+      'helpCenter'
+    )
+  })
+
+  it('enables a goal module without turning an already-on product off', () => {
+    const current = featureFlagsForUseCase('help_center')
+    const merged = enableFlagsForUseCase(current, 'customer_support')
+    expect(isProductEnabled(merged, 'helpCenter')).toBe(true)
+    expect(isProductEnabled(merged, 'support')).toBe(true)
   })
 })

@@ -43,6 +43,8 @@ export type {
 // Runtime constants — safe because settings.types has no DB dependencies
 export {
   DEFAULT_FEATURE_FLAGS,
+  featureFlagsForUseCase,
+  enableFlagsForUseCase,
   FEATURE_FLAG_REGISTRY,
   LAB_SECTIONS,
   GA_FEATURE_SECTIONS,

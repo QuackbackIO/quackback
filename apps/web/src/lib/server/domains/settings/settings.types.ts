@@ -1051,7 +1051,9 @@ export interface WorkspaceSettings {
 
 /**
  * Workspace product availability and experimental/in-development features.
- * Product flags default on; optional AI and analytics flags default off.
+ * Core products (Feedback & Roadmaps, Changelog) default on. Support, Help
+ * Center, Status, and Inbox AI default off until an operator or onboarding
+ * goal turns them on.
  */
 export interface FeatureFlags {
   /** Feedback boards, posts, voting, and roadmaps */
@@ -1088,7 +1090,7 @@ export interface FeatureFlags {
  * absorbed it; `resolveFeatureFlags` ORs them in at read time so workspaces
  * who enabled a feature before the consolidation keep it without a
  * migration. `linkPreviews` is absent deliberately: it folded into
- * `supportInbox` (default on), and a stored `linkPreviews: true` must not
+ * `supportInbox` (now default off), and a stored `linkPreviews: true` must not
  * force a disabled inbox back on.
  */
 export const LEGACY_FLAG_MAP: Record<string, keyof FeatureFlags> = {
@@ -1117,30 +1119,61 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
 }
 
 /**
- * Defaults for a multi-product workspace.
+ * Defaults for a new workspace.
  *
- * Product surfaces (Support, Help Center, Status, tickets, link previews)
- * default **on** so nav and admin shells show the full platform without a
- * Labs treasure-hunt. Generally-available AI answers, Inbox AI, and visitor
- * analytics also default **on**. Connectors and Skills stay off until an
- * operator opts in.
+ * Feedback & Roadmaps plus Changelog match the historical core product.
+ * Support, Help Center, Status, and Inbox AI stay off until Settings →
+ * General or an onboarding goal turns them on. Connectors and Skills stay
+ * Labs opt-in.
  *
  * Existing workspaces with an explicit `featureFlags` JSON row keep stored
- * values; only missing keys and null rows pick up these defaults (merged in
- * settings.service).
+ * values. A one-time SQL stamp wrote today's previous all-on object onto
+ * null rows before this default flipped, so already-running installs do
+ * not lose surfaces. Only missing keys and new null rows pick up these
+ * defaults (merged in settings.service).
  */
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
-  // Products — on
   feedback: true,
   changelog: true,
-  helpCenter: true,
-  supportInbox: true,
-  supportTickets: true,
-  statusPage: true,
-  inboxAi: true,
-  // Labs — opt-in
+  helpCenter: false,
+  supportInbox: false,
+  supportTickets: false,
+  statusPage: false,
+  inboxAi: false,
   assistantConnectors: false,
   assistantSkills: false,
+}
+
+/** Onboarding outcomes that may turn extra products on. Kept local so this
+ *  file stays free of the db package. */
+export type FeatureFlagUseCase =
+  'product_feedback' | 'customer_support' | 'help_center' | 'internal'
+
+/** Flags to persist for a new workspace, or to merge on (never off) when
+ *  the operator picks a goal that needs a module. */
+export function featureFlagsForUseCase(useCase?: FeatureFlagUseCase | null): FeatureFlags {
+  const flags = { ...DEFAULT_FEATURE_FLAGS }
+  if (useCase === 'customer_support') {
+    flags.supportInbox = true
+    flags.supportTickets = true
+  } else if (useCase === 'help_center') {
+    flags.helpCenter = true
+  }
+  return flags
+}
+
+/** Turn on the modules a goal needs without turning anything else off. */
+export function enableFlagsForUseCase(
+  current: FeatureFlags,
+  useCase?: FeatureFlagUseCase | null
+): FeatureFlags {
+  const needed = featureFlagsForUseCase(useCase)
+  return {
+    ...current,
+    supportInbox: current.supportInbox || needed.supportInbox,
+    supportTickets: current.supportTickets || needed.supportTickets,
+    helpCenter: current.helpCenter || needed.helpCenter,
+  }
 }
 
 /**
@@ -1206,9 +1239,10 @@ export interface ProductDefinition {
 }
 
 /**
- * Workspace products shown on Settings > General. Support retains its two
- * persisted capability flags for compatibility, but the UI changes them as a
- * single product so workspaces no longer need to coordinate two Labs toggles.
+ * Workspace products shown on Settings > General. These are not Labs
+ * experiments. Support retains two persisted capability keys for
+ * compatibility; the UI changes them as one product. Help Center is the
+ * same kind of product as Changelog — a General toggle, never a Labs row.
  */
 export const PRODUCT_DEFINITIONS = [
   {

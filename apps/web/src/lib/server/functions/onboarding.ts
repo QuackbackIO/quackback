@@ -25,6 +25,11 @@ import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } fro
 import { isOnboardingComplete } from '@/lib/shared/db-types'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
+import {
+  enableFlagsForUseCase,
+  featureFlagsForUseCase,
+  resolveFeatureFlags,
+} from '@/lib/server/domains/settings/settings.types'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
@@ -256,6 +261,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(initialState),
+            featureFlags: JSON.stringify(featureFlagsForUseCase(data.useCase)),
           })
           .returning()
         await invalidateSettingsCache()
@@ -281,6 +287,12 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
             authConfig:
               row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
+            featureFlags: JSON.stringify(
+              enableFlagsForUseCase(
+                resolveFeatureFlags(row.featureFlags),
+                useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
+              )
+            ),
           }
           if (!nameManaged) updatePayload.name = workspaceName
           if (!slugManaged) updatePayload.slug = slug

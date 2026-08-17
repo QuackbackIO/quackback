@@ -1702,6 +1702,13 @@
       "tag": "0267_channel_threads_conversation_fk",
       "breakpoints": true,
       "idx": 242
+    },
+    {
+      "version": "7",
+      "when": 1786880000005,
+      "tag": "0268_core_product_flag_defaults",
+      "breakpoints": true,
+      "idx": 243
     }
   ]
 }
