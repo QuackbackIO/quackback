@@ -9,7 +9,14 @@ export default defineConfig([
       'react/index': 'src/react/index.ts',
     },
     format: ['esm', 'cjs'],
-    dts: true,
+    dts: {
+      // tsup's declaration worker still uses the TypeScript 6 API and injects
+      // a deprecated `baseUrl`. The widget package pins typescript to the 6.x
+      // compatibility package for that worker; tsc for the app stays on 7.
+      compilerOptions: {
+        ignoreDeprecations: '6.0',
+      },
+    },
     sourcemap: true,
     target: 'es2020',
     clean: true,
