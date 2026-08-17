@@ -34,19 +34,18 @@ Do not treat this file as permission to delete live Railway services. IaC may de
 
 Dirty tree noise (`loop-evidence/`, `COLDER-FLEET-SPEC.html`, prompts) is someone else’s. Never stage it.
 
-## Live Railway (Phase 4 IaC; not applied)
+## Live Railway (verified 2026-08-17)
 
-| Service                   | Declared now                                                | Live until apply / later destroy           |
-| ------------------------- | ----------------------------------------------------------- | ------------------------------------------ |
-| `quackback`               | `QUACKBACK_ROLE=all`, `QUACKBACK_WAKE_MODE=scheduler`       | still `ROLE=web` until apply               |
-| `quackback-worker`        | **still declared** so `plan` is not a destroy               | 1; live delete is a later apply after soak |
-| `quackback-control-plane` | provisioning, billing, membership sweep                     | 1                                          |
-| `quackback-cron-hourly`   | fleet sweeps (live still `hourly`; IaC says `housekeeping`) | 1 (stuck/listening on old image)           |
-| `quackback-cron-daily`    | retention + telemetry                                       | 0                                          |
-| `quackback-migrator`      | schema convergence                                          | 0                                          |
-| Redis                     | CP BullMQ + leftover `REDIS_URL`                            | 1                                          |
+| Service                   | Live now                                                                | Runs |
+| ------------------------- | ----------------------------------------------------------------------- | ---- |
+| `quackback`               | `QUACKBACK_ROLE=all` + `QUACKBACK_WAKE_MODE=scheduler`; no LISTEN loops | 1    |
+| `quackback-control-plane` | provisioning, billing; membership sweep is owner-seat only              | 1    |
+| `quackback-cron-hourly`   | `QUACKBACK_CRON_JOB=housekeeping`                                       | cron |
+| `quackback-cron-daily`    | leftover; housekeeping should replace                                   | 0    |
+| `quackback-migrator`      | leftover; housekeeping enrols+runs                                      | 0    |
+| Redis                     | leftover; CP dispatch is in-process                                     | 1    |
 
-All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-plane` only. Do not run `railway config apply` from this phase, and do not delete the live worker.
+`quackback-worker` has been deleted. All remaining services are in `us-east4-eqdc4a`. Cron/migrator/Redis stay until a green housekeeping history plus a later apply.
 
 ## Producers
 
