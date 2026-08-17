@@ -43,6 +43,7 @@ const log = logger.child({ component: 'fleet-cron' })
 
 const TEN_MIN = 10 * 60 * 1000
 const ONE_HOUR = 60 * 60 * 1000
+const TWENTY_THREE_HOURS = 23 * 60 * 60 * 1000
 
 /**
  * Space reclamation for the tables that replaced Redis (`kv_store`,
@@ -172,7 +173,48 @@ export async function runStatusMaintenanceSweep(): Promise<void> {
 }
 
 /**
- * The two cron services, and what each owns.
+ * Migrator convergence for the housekeeping job: enrol, then one reconcile
+ * pass with the CLI defaults (concurrency 4, lease 900_000 ms).
+ *
+ * Concurrent safety with a CP-triggered run is the `cp_workspace_schema_state`
+ * lease — enrol and reconcile claim through that table, so this pass and a
+ * control-plane spawn cannot migrate the same workspace at once.
+ */
+async function runMigratorConvergence(): Promise<void> {
+  const [{ enrolActiveWorkspaces, runReconcilePass }, { hostname }, { randomUUID }] =
+    await Promise.all([
+      import('@/lib/server/fleet/migrator'),
+      import('node:os'),
+      import('node:crypto'),
+    ])
+  const enrolled = await enrolActiveWorkspaces()
+  const result = await runReconcilePass({
+    workerId: `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`,
+    concurrency: 4,
+    leaseMs: 900_000,
+  })
+  log.info(
+    {
+      enrolled,
+      claimed: result.claimed,
+      reconciled: result.reconciled,
+      failed: result.failed,
+      already_current: result.alreadyCurrent,
+      healed: result.healed,
+    },
+    'fleet migrator pass complete'
+  )
+  if (result.failed > 0) {
+    throw new Error(`fleet migrator failed ${result.failed} workspace(s)`)
+  }
+}
+
+/**
+ * The cron jobs a service can name via `QUACKBACK_CRON_JOB`.
+ *
+ * `hourly` and `daily` stay as ad-hoc / rollback entry points. `housekeeping`
+ * is the live hourly service: the six hourly bodies, then the daily set +
+ * telemetry once per 23 h window, then migrator convergence.
  *
  * There is no outbox backstop here. The outbox is drained by `events/relay-tier.ts`,
  * which holds one always-attached loop per workspace with a poll fallback under the
@@ -197,6 +239,16 @@ export const FLEET_CRON_JOBS = {
     await runChangelogNotifyReconcile()
     await runStatusNotifyReconcile()
     await runStatusMaintenanceSweep()
+  },
+  housekeeping: async () => {
+    await FLEET_CRON_JOBS.hourly()
+    const { withSweepLock } = await import('@/lib/server/sweep-lock')
+    // Same bodies as `daily`, claimed once per 23 h so an hourly tick does
+    // not re-run retention + telemetry. Pattern matches `telemetry_ping`.
+    await withSweepLock('daily_cycle', TWENTY_THREE_HOURS, () => FLEET_CRON_JOBS.daily(), {
+      keepUntilExpiry: true,
+    })
+    await runMigratorConvergence()
   },
 } as const
 

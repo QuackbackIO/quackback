@@ -41,13 +41,14 @@ describe('the sweep inventory', () => {
   const jobsSource = read('cron/fleet-jobs.ts')
   const startupSource = read('startup.ts')
 
-  it('is exactly the ten locks the fleet has, all defined in one module', () => {
+  it('is exactly the eleven locks the fleet has, all defined in one module', () => {
     const names = sweepLockNames(jobsSource)
     // Written out rather than derived, so a sweep deleted from the module makes
     // this fail instead of quietly shrinking both sides of a comparison.
     expect([...names].sort()).toEqual([
       'audit_prune',
       'changelog_notify',
+      'daily_cycle',
       'events_prune',
       'invite_sweep',
       'kv_sweep',
@@ -111,11 +112,12 @@ describe('the pooled worker starts no fleet-fanning timers', () => {
 })
 
 describe('the cron entry point', () => {
-  it('knows exactly two jobs and rejects anything else', async () => {
+  it('knows exactly three jobs and rejects anything else', async () => {
     const { FLEET_CRON_JOBS, isFleetCronJobName } = await import('@/lib/server/cron/fleet-jobs')
-    expect(Object.keys(FLEET_CRON_JOBS).sort()).toEqual(['daily', 'hourly'])
+    expect(Object.keys(FLEET_CRON_JOBS).sort()).toEqual(['daily', 'hourly', 'housekeeping'])
     expect(isFleetCronJobName('daily')).toBe(true)
     expect(isFleetCronJobName('hourly')).toBe(true)
+    expect(isFleetCronJobName('housekeeping')).toBe(true)
     expect(isFleetCronJobName('weekly')).toBe(false)
     // Not a prototype walk: `toString` must not read as a job name.
     expect(isFleetCronJobName('toString')).toBe(false)
