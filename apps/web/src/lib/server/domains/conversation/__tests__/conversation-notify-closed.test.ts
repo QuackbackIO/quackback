@@ -105,6 +105,35 @@ describe('notifyConversationClosed', () => {
       to: 'priya@x.com',
       variant: 'closed',
       conversationSubject: 'Billing',
+      conversationId: 'conversation_1',
+    })
+  })
+
+  it('is invoked through the email adapter lifecycle seam', async () => {
+    limitQueue = [
+      [
+        {
+          id: 'conversation_1',
+          channel: 'email',
+          subject: 'Billing',
+          visitorPrincipalId: 'principal_v' as PrincipalId,
+          visitorEmail: 'priya@x.com',
+          endReason: null,
+        },
+      ],
+      [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
+    ]
+
+    const { emailAdapter } = await import('@/lib/server/domains/channels/email')
+    await emailAdapter.deliverLifecycleEvent('auto_closed', {
+      conversationId: 'conversation_1' as ConversationId,
+      closerPrincipalId: 'principal_agent' as PrincipalId,
+    })
+
+    expect(sendConversationClosedEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationClosedEmail.mock.calls[0][0]).toMatchObject({
+      variant: 'auto_closed',
+      conversationId: 'conversation_1',
     })
   })
 

@@ -1,17 +1,28 @@
 /**
- * Design-only dry run: a fixture channel named generically can register a
- * descriptor + adapter and flow through the shared inbound pipeline with no
- * new `channel ===` branches in domain notify/routing code.
+ * Design-only dry run: a fixture channel named `test_channel` (tests only)
+ * registers a descriptor + adapter and flows through inbox filter parsing
+ * and domain notify without a new `channel ===` arm in those modules.
  */
-import { describe, expect, it, afterEach } from 'vitest'
-import type { Channel } from '@/lib/shared/conversation/types'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { ChannelDescriptor } from '@/lib/shared/channels'
 import {
   listChannelDescriptors,
   registerChannelDescriptor,
   unregisterChannelDescriptor,
   getChannelDescriptor,
+  parseChannel,
 } from '@/lib/shared/channels'
+import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
+import {
+  TEST_CHANNEL_ID,
+  testChannelDescriptor,
+} from '@/lib/shared/channels/__tests__/test-channel.fixture'
+import {
+  buildInboxListParams,
+  buildListParams,
+  normalizeInboxChannel,
+} from '@/lib/client/conversation/inbox-scope'
 import {
   listChannelAdapters,
   registerChannelAdapter,
@@ -22,48 +33,102 @@ import {
 import type { ChannelAdapter } from '../types'
 import { resolveInboundConversation } from '@/lib/server/domains/conversation/conversation.inbound-resolve'
 
-const FIXTURE_ID = 'test_channel' as Channel
+const hoisted = vi.hoisted(() => ({
+  deliverAgentMessage: vi.fn(async () => {}),
+  deliverLifecycleEvent: vi.fn(async () => {}),
+  deliverCsatRequest: vi.fn(async () => {}),
+  buildHookContext: vi.fn(async () => ({
+    workspaceName: 'Acme',
+    portalBaseUrl: 'https://acme.example.com',
+    logoUrl: null as string | null,
+  })),
+  mintCsatEmailToken: vi.fn(() => 'csat-token'),
+}))
 
-const fixtureDescriptor: ChannelDescriptor = {
-  id: FIXTURE_ID,
-  label: 'Test channel',
-  icon: 'email',
-  surface: 'theirs',
-  threading: 'per-thread',
-  reopenOnReply: 'always',
-  accountRoles: ['connection'],
-  richText: 'limited',
+function fixtureAdapter(): ChannelAdapter {
+  return {
+    id: TEST_CHANNEL_ID,
+    async resolveDeliveryTarget() {
+      return { kind: 'none' }
+    },
+    deliverAgentMessage: hoisted.deliverAgentMessage,
+    deliverLifecycleEvent: hoisted.deliverLifecycleEvent,
+    deliverCsatRequest: hoisted.deliverCsatRequest,
+  }
 }
 
-const fixtureAdapter: ChannelAdapter = {
-  id: FIXTURE_ID,
-  async resolveDeliveryTarget() {
-    return { kind: 'none' }
-  },
-  async deliverAgentMessage() {},
-  async deliverLifecycleEvent() {},
-  async deliverCsatRequest() {},
-}
+let visitorRows: Array<Record<string, unknown>> = []
+let limitQueue: Array<Record<string, unknown>[]> = []
+
+vi.mock('@/lib/server/realtime/presence', () => ({
+  isAnyAgentOnline: async () => false,
+  isPrincipalOnline: async () => false,
+}))
+
+vi.mock('@/lib/server/events/hook-context', () => ({
+  buildHookContext: () => hoisted.buildHookContext(),
+}))
+
+vi.mock('@/lib/server/domains/conversation/conversation-participant.service', () => ({
+  listParticipantReplyRecipients: async () => [],
+}))
+
+vi.mock('@/lib/server/domains/conversation/csat-email-token', () => ({
+  mintCsatEmailToken: () => hoisted.mintCsatEmailToken(),
+}))
+
+vi.mock('@/lib/server/domains/settings/settings.support', () => ({
+  isPortalSupportEnabled: async () => false,
+}))
+
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  function chain(): Record<string, unknown> {
+    const c: Record<string, unknown> = {}
+    c.from = () => c
+    c.leftJoin = () => c
+    c.where = () => c
+    c.orderBy = () => c
+    c.limit = async () => (limitQueue.length ? limitQueue.shift()! : visitorRows)
+    c.then = (resolve: (v: unknown) => unknown) => resolve([])
+    return c
+  }
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
+    db: { select: () => chain() },
+  }
+})
+
+import {
+  notifyAgentReply,
+  notifyCsatRequestEmail,
+} from '@/lib/server/domains/conversation/conversation.notify'
+
+const conversationId = 'conversation_01kw8qxn1eeh4t2rek7varh032' as ConversationId
+const visitorPrincipalId = 'principal_01kw8qxn1eeh4t2rek7varh033' as PrincipalId
 
 describe('channel extensibility exit test', () => {
+  beforeEach(() => {
+    visitorRows = []
+    limitQueue = []
+    vi.clearAllMocks()
+    registerChannelDescriptor(testChannelDescriptor)
+    registerChannelAdapter(fixtureAdapter())
+  })
+
   afterEach(() => {
-    unregisterChannelDescriptor(FIXTURE_ID)
-    unregisterChannelAdapter(FIXTURE_ID)
+    unregisterChannelDescriptor(TEST_CHANNEL_ID)
+    unregisterChannelAdapter(TEST_CHANNEL_ID)
   })
 
   it('wires a fixture channel through descriptor + adapter with no domain branches', async () => {
-    registerChannelDescriptor(fixtureDescriptor)
-    registerChannelAdapter(fixtureAdapter)
+    expect(getChannelDescriptor(TEST_CHANNEL_ID)?.label).toBe('Test channel')
+    expect(listChannelDescriptors().map((d) => d.id)).toContain(TEST_CHANNEL_ID)
+    expect(getChannelAdapter(TEST_CHANNEL_ID)?.id).toBe(TEST_CHANNEL_ID)
+    expect(listChannelAdapters().map((a) => a.id)).toContain(TEST_CHANNEL_ID)
 
-    expect(getChannelDescriptor(FIXTURE_ID)?.label).toBe('Test channel')
-    expect(listChannelDescriptors().map((d) => d.id)).toContain(FIXTURE_ID)
-    expect(getChannelAdapter(FIXTURE_ID)).toBe(fixtureAdapter)
-    expect(listChannelAdapters().map((a) => a.id)).toContain(FIXTURE_ID)
-
-    const adapter = requireChannelAdapter(FIXTURE_ID)
+    const adapter = requireChannelAdapter(TEST_CHANNEL_ID)
     expect(await adapter.resolveDeliveryTarget({} as never)).toEqual({ kind: 'none' })
 
-    const conversationId = 'conversation_01kw8qxn1eeh4t2rek7varh032' as const
     const resolved = await resolveInboundConversation({
       lookupCorrelation: async () => conversationId,
     })
@@ -74,9 +139,79 @@ describe('channel extensibility exit test', () => {
     })
     expect(created).toBeNull()
 
-    // Notify and routing already go through requireChannelAdapter /
-    // getConversationRouting. A new channel must not require a new
-    // `channel ===` arm there — the fixture reaching those helpers is the proof.
-    expect(() => requireChannelAdapter(FIXTURE_ID)).not.toThrow()
+    expect(() => requireChannelAdapter(TEST_CHANNEL_ID)).not.toThrow()
+  })
+
+  it('inbox filter options and validation accept the fixture without a new branch', () => {
+    expect(parseChannel(TEST_CHANNEL_ID)).toBe(TEST_CHANNEL_ID)
+    expect(normalizeInboxChannel(TEST_CHANNEL_ID)).toBe(TEST_CHANNEL_ID)
+    expect(inboxChannelFilterSchema.parse(TEST_CHANNEL_ID)).toBe(TEST_CHANNEL_ID)
+    expect(listChannelDescriptors().some((d: ChannelDescriptor) => d.id === TEST_CHANNEL_ID)).toBe(
+      true
+    )
+
+    expect(
+      buildListParams(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        TEST_CHANNEL_ID
+      )
+    ).toMatchObject({ channel: TEST_CHANNEL_ID })
+    expect(
+      buildInboxListParams(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        TEST_CHANNEL_ID
+      )
+    ).toMatchObject({ channel: TEST_CHANNEL_ID })
+  })
+
+  it('notify delivers through the fixture adapter without a new channel arm', async () => {
+    visitorRows = [{ type: 'user', email: 'priya@example.com', contactEmail: null }]
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'reply',
+      agentName: 'Alex',
+      channel: TEST_CHANNEL_ID,
+    })
+
+    expect(hoisted.deliverAgentMessage).toHaveBeenCalledTimes(1)
+    expect(hoisted.deliverAgentMessage.mock.calls[0][0]).toMatchObject({
+      conversationId,
+      visitorPrincipalId,
+      recipient: 'priya@example.com',
+      direction: 'agent_reply',
+    })
+
+    limitQueue = [
+      [{ channel: TEST_CHANNEL_ID, visitorPrincipalId }],
+      [{ type: 'user', email: 'priya@example.com', contactEmail: null }],
+    ]
+    await notifyCsatRequestEmail(conversationId, 'How did we do?')
+    expect(hoisted.deliverCsatRequest).toHaveBeenCalledTimes(1)
+    expect(hoisted.deliverCsatRequest.mock.calls[0][0]).toMatchObject({
+      conversationId,
+      visitorPrincipalId,
+      recipient: 'priya@example.com',
+    })
+
+    await requireChannelAdapter(TEST_CHANNEL_ID).deliverLifecycleEvent('closed', {
+      conversationId,
+    })
+    expect(hoisted.deliverLifecycleEvent).toHaveBeenCalledWith('closed', { conversationId })
   })
 })

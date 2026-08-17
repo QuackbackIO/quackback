@@ -249,6 +249,7 @@ describe('notifyVisitorMessage', () => {
       isFirstMessage: false,
       ctaUrl: `https://acme.example.com/admin/inbox?i=${conversationId}`,
       workspaceName: 'Acme',
+      conversationId,
     })
   })
 
@@ -906,6 +907,27 @@ describe('threading headers (P4.6 regression guard)', () => {
       else process.env.EMAIL_INBOUND_DOMAIN = prevDomain
       if (prevSecret === undefined) delete process.env.EMAIL_INBOUND_SIGNING_SECRET
       else process.env.EMAIL_INBOUND_SIGNING_SECRET = prevSecret
+    })
+
+    it('threads a team alert under team.<conversation> and stamps conversationId', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+
+      await notifyVisitorMessage({
+        conversation,
+        content: 'urgent please help',
+        authorName: 'Jane',
+        isFirstMessage: false,
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      const suffix = conversationId.replace(/^conversation_/, '')
+      expect(call.conversationId).toBe(conversationId)
+      expect(call.inReplyTo).toBe(`team.${suffix}@tenaevexeo.resend.app`)
+      expect(call.references).toEqual([`team.${suffix}@tenaevexeo.resend.app`])
+      expect(call.messageId).toMatch(
+        new RegExp(`^team\\.${suffix}\\.[A-Za-z0-9_-]+@tenaevexeo\\.resend\\.app$`)
+      )
     })
 
     it('mints a fresh Message-ID (no parent) and records it against the conversation', async () => {
