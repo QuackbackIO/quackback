@@ -854,8 +854,8 @@ function scheduleWorkspaceRefresh(cfg: RunnerConfig, idle: WorkspaceIdlePolicy):
 }
 
 /**
- * Start the job tier. Worker-role only, so calling it on a web replica is a
- * no-op.
+ * Start the job tier. Runs under `worker` and `all`. A `web` replica is a
+ * no-op so optional HTTP-only scale-out stays producer-only.
  */
 export async function startJobTier(): Promise<void> {
   if (running) return

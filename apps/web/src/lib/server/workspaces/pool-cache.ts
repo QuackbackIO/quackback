@@ -22,9 +22,10 @@
  * costing money".
  *
  * Measured caveat, and it is not optional: eviction is **necessary but not
- * sufficient**. Under `QUACKBACK_ROLE=all` the job tier holds a session-mode
- * LISTEN while attached, so the compute stays awake while work is flowing.
- * Idle saving still depends on the detach policy in `idle.ts`.
+ * sufficient**. A session-mode LISTEN holds the compute awake while attached.
+ * Cloud `quackback` runs the connectionless scheduler instead, so idle saving
+ * no longer depends on a web/worker split. Listener-mode still depends on the
+ * detach policy in `idle.ts`.
  *
  * ## Credential rotation
  *

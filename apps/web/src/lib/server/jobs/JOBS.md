@@ -268,7 +268,9 @@ has not loaded the full application config.
 | `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
 | `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
 
-`QUACKBACK_ROLE=web` does not start the tier.
+`QUACKBACK_ROLE=web` does not start the tier. Cloud `quackback` runs `all`
+with `QUACKBACK_WAKE_MODE=scheduler`; unset still means `all` and defaults
+the wake mode to `listener` (self-host).
 
 ## 9. Workspace scope, and the shape this must not reproduce
 

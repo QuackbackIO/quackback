@@ -7,19 +7,22 @@
  *
  * | Service | Role | Connections | Sleeps |
  * | --- | --- | --- | --- |
- * | `quackback` | `web` | workspace **pooled** endpoints, evicted after 45 s idle | no — the pooled tier is always warm |
- * | `quackback-worker` | `worker` | workspace **direct** endpoints, one always-attached relay loop per workspace | no — and neither do the workspace computes it holds |
+ * | `quackback` | `all` | workspace **pooled** endpoints, evicted after 45 s idle. Job wake is the connectionless scheduler: Node timers only, no LISTEN, no idle tenant sockets. | no — the process is always warm; tenant computes still suspend |
+ * | `quackback-worker` | `worker` | still declared so `plan` is not a destroy. Live delete is a later apply after soak. | — |
  * | `quackback-cron-*` | `worker`, one-shot | whatever the sweep touches, for the length of the run | n/a — it exits |
  * | `quackback-migrator` | `migrator`, one-shot | the **direct** endpoint of each workspace it claims | n/a — it exits |
  *
  * All five run the same image, pinned by digest. See APP_IMAGE.
  *
- * The web/worker split is not an optimisation. `LISTEN` is silently lost
- * through a transaction-mode pooler (§7.3, measured: a NOTIFY is never
- * delivered, at any concurrency), so the relay cannot share the web tier's
- * pooled connections; and a process that polls a workspace database on a timer
- * holds its Neon compute awake forever, so the relay cannot share the web
- * tier's process either.
+ * `LISTEN` is still silently lost through a transaction-mode pooler (§7.3,
+ * measured: a NOTIFY is never delivered, at any concurrency). That used to
+ * force a separate worker process on direct connections. The connectionless
+ * scheduler does not LISTEN and does not hold a tenant connection between
+ * drains, so it can share the HTTP process. Cloud `quackback` is therefore
+ * `QUACKBACK_ROLE=all` + `QUACKBACK_WAKE_MODE=scheduler`.
+ *
+ * `quackback-worker` stays in this file so an apply is variable changes, not
+ * a destroy. Deleting the live worker is a later apply after soak.
  *
  * No database appears here. Workspace databases are Neon, one project each, and
  * the control-plane registry is a Neon project too — see the note in the body
@@ -308,9 +311,10 @@ export default defineRailway(() => {
     deploy: { restartPolicyMaxRetries: 3 },
   }
 
-  // The always-warm pooled tier. Serves every workspace hostname on the wildcard
-  // domain; holds no timers and no session connections, so between requests it
-  // is silent and every workspace compute it touched can suspend.
+  // The always-warm tenant-facing service. Serves every workspace hostname on
+  // the wildcard domain and runs the job scheduler in-process. The scheduler
+  // holds Node timers, not tenant connections, so between requests every
+  // workspace compute it touched can still suspend.
   const web = service('quackback', {
     ...appBuild,
     // Live store is 4, not the shared appBuild 3. Declaring 3 here would
@@ -320,24 +324,22 @@ export default defineRailway(() => {
     healthcheckTimeout: 300,
     env: {
       ...fleetEnv,
-      QUACKBACK_ROLE: 'web',
-      // Live on web + worker only. Do not hoist into fleetEnv: preserve()
+      QUACKBACK_ROLE: 'all',
+      // Scheduler-only on this service. Unset elsewhere (and on self-host)
+      // still defaults to `listener`, which is the soak/rollback path.
+      QUACKBACK_WAKE_MODE: 'scheduler',
+      // Live on quackback + worker only. Do not hoist into fleetEnv: preserve()
       // cannot bootstrap a value onto cron/migrator, which do not hold it.
       QUACKBACK_CONTROL_PLANE_URL: preserve(),
-      // Web-only: the public /api/storage proxy. Worker never serves it.
+      // Public /api/storage proxy. The leftover worker never serves it.
       S3_PROXY: preserve(),
-      // Best-effort doorbell into the worker. Absent on every other role,
-      // including self-host `all`, so the nudge is a no-op there and the
-      // in-process activity signal covers it. The path is the worker's
-      // private HTTP origin plus the wake route.
-      QUACKBACK_WORKER_WAKE_URL:
-        'http://${{quackback-worker.RAILWAY_PRIVATE_DOMAIN}}:3000/api/internal/wake',
     },
   })
 
-  // The conductor (§1.3): one always-warm tier running the relay for every
-  // workspace on **direct, session-mode** connections. No public domain — nothing
-  // routes user traffic here.
+  // Kept declared so `plan` is not a destroy. The tenant-facing service now
+  // runs ROLE=all + scheduler; this replica is leftover soak / rollback
+  // capacity. Live delete is a later apply after soak — do not remove this
+  // `service()` call in the same commit that flips ROLE=all.
   const worker = service('quackback-worker', {
     ...appBuild,
     deploy: { restartPolicyMaxRetries: 7 },

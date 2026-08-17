@@ -3,18 +3,23 @@
  *
  * QUACKBACK_ROLE=web     Serve HTTP only. Queue modules stay producer-only:
  *                        they can enqueue and register schedules, but nothing
- *                        claims a job.
+ *                        claims a job. Optional scale-out, not the cloud
+ *                        default: the connectionless scheduler can share the
+ *                        HTTP process, so a split is no longer required to
+ *                        let tenant computes suspend.
  * QUACKBACK_ROLE=worker  Run the job tier and the periodic sweepers. Still
  *                        serves HTTP (health probes work unchanged); just
  *                        don't route user traffic to it.
- * QUACKBACK_ROLE=all     Both — the default, matching single-container
- *                        self-host deployments.
+ * QUACKBACK_ROLE=all     Both — the default. Unset means `all`, which is the
+ *                        self-host single-container path and the cloud
+ *                        tenant-facing topology (`QUACKBACK_WAKE_MODE=scheduler`
+ *                        on that service only).
  * QUACKBACK_ROLE=migrator Reconcile workspace schemas toward the control plane's
  *                        recorded intent, then exit (SAAS-HOSTING-STACK.md
  *                        §10.3). Serves no traffic and runs no queues: it holds
  *                        a DIRECT session-mode connection per workspace it is
  *                        working, which is the one thing that must never share
- *                        a process with the pooled web tier, because holding a
+ *                        a process with the serving tier, because holding a
  *                        connection open is exactly what stops a Neon compute
  *                        suspending.
  *

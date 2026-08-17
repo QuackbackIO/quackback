@@ -221,8 +221,9 @@ export function logStartupBanner(): void {
       .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
   }
 
-  // Background processing is role-gated: QUACKBACK_ROLE=web replicas serve
-  // HTTP and enqueue only, so scaling them never scales queue consumption.
+  // Background processing is role-gated: optional QUACKBACK_ROLE=web replicas
+  // serve HTTP and enqueue only, so scaling them never scales queue
+  // consumption. Cloud `quackback` is `all` and starts the scheduler here.
   if (shouldRunWorkers()) {
     startBackgroundProcessing()
   } else {

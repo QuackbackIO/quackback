@@ -12,41 +12,41 @@ Do not treat this file as permission to delete live Railway services. IaC may de
 
 ## Colder-fleet workstream map
 
-| WS                                         | Status                                   | Evidence                                                                            | What this programme does with it                                                                                              |
-| ------------------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 0.1 preserve() vars                        | **landed** (not the live hazard anymore) | `2e6624280`; `railway config plan` was clean                                        | Keep                                                                                                                          |
-| 0.2 cron :00 + CP us-east4                 | **landed + deployed/proven**             | live cron `0 * * * *`; CP region us-east4                                           | Keep                                                                                                                          |
-| 0.3 / 0.4 dead fleet                       | **deployed/proven**                      | 9 Neon projects (8 workspaces + control DB)                                         | Keep                                                                                                                          |
-| 0.5 baseline                               | **recorded**                             | ~62–69% lifetime duty before cleanup                                                | Re-measure after this work                                                                                                    |
-| 0.6 docs                                   | **landed**                               | `e7fea3b25`                                                                         | Keep                                                                                                                          |
-| 1 grid-snap + fast-detach                  | **landed, not deployed**                 | `159eae03f`, `7904f57ee`                                                            | **Superseded** by Phase 3 (delete rescan). Leave until scheduler is proven, then delete                                       |
-| 1.4 connection audit / SSE                 | **landed, not deployed**                 | `765431326`, CP `e1e28b7`                                                           | Keep SSE teardown; LISTEN/direct pools go away in Phases 2–3                                                                  |
-| 2 housekeeping job                         | **landed, not deployed**                 | `decab0d0f`, `938e79dbd`. Live image still old digest — do not apply env yet        | Phase 6: keep job body, delete cron services only after replacement + approval                                                |
-| 3 migrator entrypoint                      | **landed, not deployed**                 | `7ac4e4b55`                                                                         | Keep                                                                                                                          |
-| 4 membership skip suspended                | **landed, not deployed**                 | CP `abefa938`                                                                       | Phase 5 replaces the remaining fan-out with `membership-sync`                                                                 |
-| 5.1 PG locks/limits                        | **landed, not deployed**                 | CP `36565cc`                                                                        | Keep. Complements “no Redis”                                                                                                  |
-| 5.2 BullMQ dispatch                        | **landed** (not deployed)                | CP `51594c4`                                                                        | Keep. Redis service still live until stop-and-ask                                                                             |
-| 5.3 delete Redis                           | **not started** (stop-and-ask)           | Redis still live                                                                    | Phase 6 / later, after approval                                                                                               |
-| 6 HTTP nudge                               | **landed, not deployed; critic FAIL**    | wake route not in `FLEET_PATHS` (404 on worker Host); `emit()` nudges inside the tx | **Do not fix-forward as a permanent path.** Phase 3 after-commit + in-process scheduler replace it; Phase 4 deletes the route |
-| 7 4h rescan / membership push / duty stats | **not started**                          | —                                                                                   | **Do not implement.** No blind rescan; membership is Phase 5 jobs                                                             |
-| 8 per-tenant sweeps off cron               | **not started**                          | —                                                                                   | Compatible; can land later without a worker                                                                                   |
-| 9 delete cron / daily stage                | **not started**                          | —                                                                                   | Phase 6, after replacements exist                                                                                             |
+| WS                                         | Status                                   | Evidence                                                                     | What this programme does with it                                                        |
+| ------------------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 0.1 preserve() vars                        | **landed** (not the live hazard anymore) | `2e6624280`; `railway config plan` was clean                                 | Keep                                                                                    |
+| 0.2 cron :00 + CP us-east4                 | **landed + deployed/proven**             | live cron `0 * * * *`; CP region us-east4                                    | Keep                                                                                    |
+| 0.3 / 0.4 dead fleet                       | **deployed/proven**                      | 9 Neon projects (8 workspaces + control DB)                                  | Keep                                                                                    |
+| 0.5 baseline                               | **recorded**                             | ~62–69% lifetime duty before cleanup                                         | Re-measure after this work                                                              |
+| 0.6 docs                                   | **landed**                               | `e7fea3b25`                                                                  | Keep                                                                                    |
+| 1 grid-snap + fast-detach                  | **landed, not deployed**                 | `159eae03f`, `7904f57ee`                                                     | **Superseded** by Phase 3 (delete rescan). Leave until scheduler is proven, then delete |
+| 1.4 connection audit / SSE                 | **landed, not deployed**                 | `765431326`, CP `e1e28b7`                                                    | Keep SSE teardown; LISTEN/direct pools go away in Phases 2–3                            |
+| 2 housekeeping job                         | **landed, not deployed**                 | `decab0d0f`, `938e79dbd`. Live image still old digest — do not apply env yet | Phase 6: keep job body, delete cron services only after replacement + approval          |
+| 3 migrator entrypoint                      | **landed, not deployed**                 | `7ac4e4b55`                                                                  | Keep                                                                                    |
+| 4 membership skip suspended                | **landed, not deployed**                 | CP `abefa938`                                                                | Phase 5 replaces the remaining fan-out with `membership-sync`                           |
+| 5.1 PG locks/limits                        | **landed, not deployed**                 | CP `36565cc`                                                                 | Keep. Complements “no Redis”                                                            |
+| 5.2 BullMQ dispatch                        | **landed** (not deployed)                | CP `51594c4`                                                                 | Keep. Redis service still live until stop-and-ask                                       |
+| 5.3 delete Redis                           | **not started** (stop-and-ask)           | Redis still live                                                             | Phase 6 / later, after approval                                                         |
+| 6 HTTP nudge                               | **deleted**                              | route + `wake-nudge.ts` removed; after-commit sinks only                     | Cloud is `ROLE=all`; no worker to nudge                                                 |
+| 7 4h rescan / membership push / duty stats | **not started**                          | —                                                                            | **Do not implement.** No blind rescan; membership is Phase 5 jobs                       |
+| 8 per-tenant sweeps off cron               | **not started**                          | —                                                                            | Compatible; can land later without a worker                                             |
+| 9 delete cron / daily stage                | **not started**                          | —                                                                            | Phase 6, after replacements exist                                                       |
 
 Dirty tree noise (`loop-evidence/`, `COLDER-FLEET-SPEC.html`, prompts) is someone else’s. Never stage it.
 
-## Live Railway (unchanged this phase)
+## Live Railway (Phase 4 IaC; not applied)
 
-| Service                   | Role today                                                  | Runs                             |
-| ------------------------- | ----------------------------------------------------------- | -------------------------------- |
-| `quackback`               | `QUACKBACK_ROLE=web`, enqueue-only                          | 1                                |
-| `quackback-worker`        | job tier, LISTEN + rescan                                   | 1                                |
-| `quackback-control-plane` | provisioning, billing, membership sweep                     | 1                                |
-| `quackback-cron-hourly`   | fleet sweeps (live still `hourly`; IaC says `housekeeping`) | 1 (stuck/listening on old image) |
-| `quackback-cron-daily`    | retention + telemetry                                       | 0                                |
-| `quackback-migrator`      | schema convergence                                          | 0                                |
-| Redis                     | CP BullMQ + leftover `REDIS_URL`                            | 1                                |
+| Service                   | Declared now                                                | Live until apply / later destroy           |
+| ------------------------- | ----------------------------------------------------------- | ------------------------------------------ |
+| `quackback`               | `QUACKBACK_ROLE=all`, `QUACKBACK_WAKE_MODE=scheduler`       | still `ROLE=web` until apply               |
+| `quackback-worker`        | **still declared** so `plan` is not a destroy               | 1; live delete is a later apply after soak |
+| `quackback-control-plane` | provisioning, billing, membership sweep                     | 1                                          |
+| `quackback-cron-hourly`   | fleet sweeps (live still `hourly`; IaC says `housekeeping`) | 1 (stuck/listening on old image)           |
+| `quackback-cron-daily`    | retention + telemetry                                       | 0                                          |
+| `quackback-migrator`      | schema convergence                                          | 0                                          |
+| Redis                     | CP BullMQ + leftover `REDIS_URL`                            | 1                                          |
 
-All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-plane` only.
+All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-plane` only. Do not run `railway config apply` from this phase, and do not delete the live worker.
 
 ## Producers
 
@@ -63,7 +63,8 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 | Class                 | Where                                              | Idle behaviour                                                                                        |
 | --------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Request pooled        | `pool-cache.ts`                                    | `idle_timeout` 45s + LRU evict                                                                        |
-| Job LISTEN            | `jobs/wake.ts` + `jobs/tier.ts`                    | session-mode, `idle_timeout: 0`, closed on detach                                                     |
+| Job scheduler         | `jobs/scheduler.ts`                                | no tenant connection; Node timers only. Cloud `quackback` uses this (`WAKE_MODE=scheduler`)           |
+| Job LISTEN            | `jobs/wake.ts` + `jobs/tier.ts`                    | session-mode, `idle_timeout: 0`, closed on detach. Default / self-host; not used on cloud `quackback` |
 | App control-DB        | `workspaces/registry.ts`                           | `idle_timeout` ≈ TTL+15s                                                                              |
 | CP `DATABASE_URL`     | CP `src/db`                                        | `idle_timeout` default 10s                                                                            |
 | CP membership clients | ~~`workspace-membership-sweep.ts` tenant fan-out~~ | Removed. The 15-min registrar restamps owner seats from CP columns only and does not open tenant DBs. |
@@ -74,7 +75,7 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 
 - Duplicate WS-5.2 while the other agent is writing the CP.
 - Land WS-7’s 4-hour rescan or Neon activity oracle.
-- “Fix” the WS-6 wake 404 as a permanent architecture (the route is deleted in Phase 4).
+- “Fix” the WS-6 wake 404 as a permanent architecture (the route is deleted).
 - Destroy live Railway services without an explicit yes.
 - Merge CP privileges into the app, or collapse tenant DBs.
 
@@ -82,18 +83,18 @@ All in `us-east4-eqdc4a`. Target end state: `quackback` + `quackback-control-pla
 
 1. **Landed.** Transactional `enqueueJob` + `event-dispatch` + `dispatch_owner` (relay still drains `relay`-owned rows).
 2. **Landed.** Relay subsystem deleted. Job path is the only drain. `dispatch_owner` and `outbox_relay_leader` stay for soak / rollback.
-3. **In progress.** After-commit signals + one process scheduler (`QUACKBACK_WAKE_MODE=listener|both|scheduler`, default `listener`). LISTEN/poll/rescan stay until `scheduler` has soaked.
-4. Run scheduler in `quackback` (`ROLE=all`); prepare IaC to drop the worker (live delete gated).
+3. **Landed.** After-commit signals + one process scheduler (`QUACKBACK_WAKE_MODE=listener|both|scheduler`, default `listener`). LISTEN/poll/rescan stay until `scheduler` has soaked.
+4. **This commit.** Scheduler on tenant-facing `quackback` (`ROLE=all`, `WAKE_MODE=scheduler`). HTTP wake deleted. `quackback-worker` stays declared so `plan` is variable changes, not a destroy. Live delete is a later apply after soak.
 5. **Landed.** `membership-sync` job; CP sweep no longer opens tenant DBs.
 6. Remove cron/migrator resources only after replacements have a green run + approval.
 
 ### Temporary flags
 
-| Flag                  | Values                                               | Rollback                               | Progress metric                                                            | Delete when                  |
-| --------------------- | ---------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------- | ---------------------------- |
-| event ownership       | `dispatch_owner=relay\|job` (row marker, not an env) | leftover `relay` rows stay unpublished | unpublished `relay` rows age out                                           | drop column after soak       |
-| `QUACKBACK_WAKE_MODE` | `listener` (default) / `both` / `scheduler`          | set back to `listener`                 | scheduler-only: no `LISTEN` in `pg_stat_activity`, jobs still meet latency | Phase 3 deletion, after soak |
-| unified runtime       | web `ROLE=web` + worker stays until Phase 4          | keep the worker service                | one `quackback` replica runs the scheduler                                 | Phase 4, after approval      |
+| Flag                  | Values                                               | Rollback                               | Progress metric                                                            | Delete when                                  |
+| --------------------- | ---------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------- |
+| event ownership       | `dispatch_owner=relay\|job` (row marker, not an env) | leftover `relay` rows stay unpublished | unpublished `relay` rows age out                                           | drop column after soak                       |
+| `QUACKBACK_WAKE_MODE` | `listener` (default) / `both` / `scheduler`          | unset / `listener` on `quackback`      | scheduler-only: no `LISTEN` in `pg_stat_activity`, jobs still meet latency | after soak; self-host unset stays `listener` |
+| unified runtime       | `quackback` `ROLE=all` + `WAKE_MODE=scheduler`       | keep the worker service declared       | one `quackback` replica runs the scheduler                                 | live worker delete, after soak + approval    |
 
 ## Crash window and fleet size
 

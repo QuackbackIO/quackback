@@ -1,7 +1,7 @@
 # SaaS Hosting Stack
 
 Status: canonical architecture for the `saas` branches  
-Updated: 2026-08-14
+Updated: 2026-08-17
 
 ## System shape
 
@@ -31,8 +31,11 @@ commercial UI.
 - The fleet uses one object bucket. Five obsolete per-workspace `qb-*` probe
   buckets and the completed `quackback-web-sleeper` experiment were deleted on
   2026-08-14.
-- A real `role=web` service was verified to sleep successfully. Pooled compute
-  remains the default; the experiment carried no customer traffic.
+- A real `role=web` service was verified to sleep successfully. That split is
+  no longer required: the tenant-facing `quackback` service now runs
+  `QUACKBACK_ROLE=all` with the connectionless scheduler, so it can drain jobs
+  without holding a tenant LISTEN. `quackback-worker` stays declared until a
+  later apply after soak; live delete is separately gated.
 - The control-plane purge sweep currently logs `deprovision.failed`; this is an
   operational defect carried into the new loop.
 

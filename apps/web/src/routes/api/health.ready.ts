@@ -154,7 +154,8 @@ async function checkMigrations(): Promise<void> {
  *   migrations  single-workspace only: the applied ledger is behind the bundled
  *               one, so this build's queries can hit columns that do not exist
  *               yet ⇒ 503 `behind`. Pooled skips it deliberately (§10.5).
- *   workers     a worker-role process that is not running the job tier ⇒ 503.
+ *   workers     a process that should run workers (`worker` or `all`) but
+ *               is not running the job tier ⇒ 503. `web` does not expect it.
  *
  * A hung dependency still degrades rather than hangs: `runCheck` gives each one
  * `CHECK_TIMEOUT_MS` and reports `timeout`.

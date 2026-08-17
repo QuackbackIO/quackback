@@ -246,12 +246,13 @@ signal at all**. That absence of symptom is why `getPoolCacheStats()` exposes
 rather than debug logs: the counter is the only thing that distinguishes
 "working" from "quietly costing money".
 
-**Eviction is necessary but not sufficient.** Under `QUACKBACK_ROLE=all` an
-attached job-tier LISTEN holds the compute awake while work is flowing. The
-detach policy in `idle.ts` is what lets a quiet workspace go; a permanently
-attached listener would never suspend. The role split is not an optimisation
-for the worker tier; it is the precondition for any Neon idle saving
-whatsoever.
+**Eviction is necessary but not sufficient.** A permanently attached LISTEN
+holds the compute awake whether or not the request pool evicted. The
+connectionless scheduler (`QUACKBACK_WAKE_MODE=scheduler`) does not LISTEN
+and does not hold a tenant connection between drains, so `ROLE=all` on the
+HTTP process can still let a quiet workspace suspend. The detach policy in
+`idle.ts` is what lets a listener-mode workspace go. The role split is
+optional scale-out, not the precondition for idle saving.
 
 #### Measured, 2026-08-08
 
@@ -276,7 +277,9 @@ causal claim rather than merely the correlation: **the compute suspends because
 the pool let go.**
 
 Open question 2 of `SAAS-HOSTING-STACK.md` ("does pool eviction actually let Neon
-suspend?") is answered yes — under `QUACKBACK_ROLE=web`, and only under it.
+suspend?") is answered yes under a process that holds no idle tenant sockets.
+That is `ROLE=web`, or `ROLE=all` with the connectionless scheduler. It is not
+true of a listener-mode `ROLE=all` that keeps LISTEN attached.
 
 ---
 
