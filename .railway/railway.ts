@@ -331,24 +331,8 @@ export default defineRailway(() => {
       // Live on quackback + worker only. Do not hoist into fleetEnv: preserve()
       // cannot bootstrap a value onto cron/migrator, which do not hold it.
       QUACKBACK_CONTROL_PLANE_URL: preserve(),
-      // Public /api/storage proxy. The leftover worker never serves it.
+      // Public /api/storage proxy.
       S3_PROXY: preserve(),
-    },
-  })
-
-  // Kept declared so `plan` is not a destroy. The tenant-facing service now
-  // runs ROLE=all + scheduler; this replica is leftover soak / rollback
-  // capacity. Live delete is a later apply after soak — do not remove this
-  // `service()` call in the same commit that flips ROLE=all.
-  const worker = service('quackback-worker', {
-    ...appBuild,
-    deploy: { restartPolicyMaxRetries: 7 },
-    healthcheckPath: '/api/health/ready',
-    healthcheckTimeout: 300,
-    env: {
-      ...fleetEnv,
-      QUACKBACK_ROLE: 'worker',
-      QUACKBACK_CONTROL_PLANE_URL: preserve(),
     },
   })
 
@@ -521,6 +505,6 @@ export default defineRailway(() => {
   const cache = redis('Redis')
 
   return project('quackback-pooled-gauntlet', {
-    resources: [web, worker, migrator, cronDaily, cronHourly, controlPlane, cache, uploads],
+    resources: [web, migrator, cronDaily, cronHourly, controlPlane, cache, uploads],
   })
 })
