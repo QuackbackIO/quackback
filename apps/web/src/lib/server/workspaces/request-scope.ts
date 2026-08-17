@@ -64,8 +64,10 @@ function refusal(status: number, body: string, extra?: Record<string, string>): 
  * once per probe, forever, which silently destroys the idle-cost model the
  * pooling exists for. Readiness under pooled tenancy asserts only that the
  * process can reach the control store, so it needs no workspace either.
+ * `/api/internal/wake` is the worker Host doorbell: resolving a workspace
+ * for it 404s because the worker hostname is not a workspace hostname.
  */
-const FLEET_PATHS = ['/api/health', '/api/health/ready']
+const FLEET_PATHS = ['/api/health', '/api/health/ready', '/api/internal/wake']
 
 export { requestWorkspaceHost } from './saas-edge-host'
 
