@@ -4,6 +4,7 @@
 import type { ConversationStatus } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
+import type { Channel } from '@/lib/shared/channels'
 
 /**
  * Timer-driven workflow triggers (support platform §4.6): synthetic events
@@ -282,7 +283,7 @@ export interface StatusComponentChangedPayload {
 export interface EventConversationRef {
   id: string
   status: ConversationStatus
-  channel: 'messenger' | 'email'
+  channel: Channel
   priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'
   /** The assigned team (§4.12), when set. Optional so pre-teams payloads and
    *  refs that don't carry assignment stay unchanged. */

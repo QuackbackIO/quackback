@@ -18,9 +18,11 @@ export function conversationReplySubject(subject: string | null | undefined): st
 /** Human correspondence template: email-channel agent replies and agent-started mail. */
 export function isHumanReplyTemplate(
   channel: string | undefined,
-  direction: ConversationMailDirection
+  direction: ConversationMailDirection,
+  correspondence?: boolean
 ): boolean {
-  return channel === 'email' && (direction === 'agent_reply' || direction === 'agent_started')
+  const theirs = correspondence ?? channel === 'email'
+  return theirs && (direction === 'agent_reply' || direction === 'agent_started')
 }
 
 export function agentReplyDisplayName(agentName: string, workspaceName: string): string {
@@ -34,6 +36,8 @@ export function conversationMessageCopy(opts: {
   conversationSubject?: string | null
   channel?: string
   isFirstMessage?: boolean
+  /** When set, overrides the channel string for the human-template gate. */
+  correspondence?: boolean
 }): {
   subject: string
   heading: string
@@ -43,7 +47,7 @@ export function conversationMessageCopy(opts: {
   useHumanTemplate: boolean
 } {
   const { direction, senderName, workspaceName } = opts
-  const useHumanTemplate = isHumanReplyTemplate(opts.channel, direction)
+  const useHumanTemplate = isHumanReplyTemplate(opts.channel, direction, opts.correspondence)
   const forwarded = conversationReplySubject(opts.conversationSubject)
 
   if (direction === 'visitor_message') {

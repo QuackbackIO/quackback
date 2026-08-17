@@ -782,6 +782,8 @@ interface SendConversationMessageEmailParams {
   conversationSubject?: string | null
   /** Team-alert copy: first visitor message vs a follow-up. */
   isFirstMessage?: boolean
+  /** Their-surface correspondence (email today). Overrides the channel string gate. */
+  correspondence?: boolean
   /** Immediately previous message, quoted one level on the human template. */
   quotedPrevious?: { date: Date | string; name: string; text: string }
   /** Display name for the From header (`Alex (Acme)`). */
@@ -812,6 +814,7 @@ export async function sendConversationMessageEmail(
     channel,
     conversationSubject,
     isFirstMessage,
+    correspondence,
     quotedPrevious,
     fromDisplayName,
   } = params
@@ -823,6 +826,7 @@ export async function sendConversationMessageEmail(
     conversationSubject,
     channel,
     isFirstMessage,
+    correspondence,
   })
 
   const react = copy.useHumanTemplate

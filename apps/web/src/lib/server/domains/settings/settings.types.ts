@@ -553,7 +553,8 @@ export interface MessengerConfig {
    * When true, a visitor cannot reply to a CLOSED conversation from the
    * Messenger — the send is refused instead of reopening the thread (support
    * platform §4.3). Default off (undefined = off), where a reply reopens. Email
-   * replies always reopen regardless; this applies to the Messenger only.
+   * replies always reopen regardless; this applies to the Messenger only
+   * (`reopenOnReply === 'configurable'` on the channel descriptor).
    */
   preventRepliesWhenClosed?: boolean
   /** AI-assistant display identity (client-safe). */

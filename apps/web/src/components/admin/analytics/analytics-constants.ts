@@ -8,6 +8,8 @@
 
 /** Hero activity-chart height. The chart, its empty state, and both loading
  *  skeletons share this so the layout never jumps between states. */
+import { getChannelDescriptor } from '@/lib/shared/channels'
+
 export const CHART_HEIGHT_CLASS = 'h-[clamp(300px,46vh,520px)]'
 
 /** Display labels for the known conversation arrival channels
@@ -20,6 +22,8 @@ export const CHANNEL_LABELS: Record<string, string> = {
 }
 
 export function channelLabel(channel: string): string {
+  const descriptor = getChannelDescriptor(channel)
+  if (descriptor) return descriptor.label
   return (
     CHANNEL_LABELS[channel] ?? channel.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
   )

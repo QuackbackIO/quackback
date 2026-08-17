@@ -34,6 +34,8 @@ import {
   formatNamedSendingAddress,
   resolveConversationFrom,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { getChannelDescriptor } from '@/lib/shared/channels'
+import { requireChannelAdapter } from '@/lib/server/domains/channels'
 import type { Conversation } from '@/lib/server/db'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/core'
@@ -349,7 +351,7 @@ async function sendWithRetry<T>(
  * future email reply routes back and cold inbound resolves the address to the
  * visitor. The two callers differ only in `direction`.
  */
-async function sendVisitorConversationEmail(opts: {
+export async function sendVisitorConversationEmail(opts: {
   conversationId: ConversationId
   visitorPrincipalId: PrincipalId
   recipient: string
@@ -373,17 +375,19 @@ async function sendVisitorConversationEmail(opts: {
   const threading = await outboundThreading(opts.conversationId)
   const mailCtx = await loadConversationMailContext(opts.conversationId)
   const channel = opts.channel ?? mailCtx.channel
-  const quotedPrevious =
-    channel === 'email'
-      ? ((await loadQuotedPreviousMessage(opts.conversationId)) ?? undefined)
-      : undefined
+  const descriptor = channel ? getChannelDescriptor(channel) : undefined
+  const correspondence = descriptor?.surface === 'theirs'
+  const quotedPrevious = correspondence
+    ? ((await loadQuotedPreviousMessage(opts.conversationId)) ?? undefined)
+    : undefined
   // Reply from the address the customer wrote to when this workspace has proved
   // it may send as that domain, else the assigned team's sending address, else
   // the branded workspace default (EMAIL_FROM). A thread that arrived at the
   // customer's own support address should not change identity on the way back.
   const resolvedFrom = (await resolveConversationFrom(opts.conversationId)) ?? undefined
-  const fromDisplayName =
-    channel === 'email' ? `${opts.senderName} (${opts.ctx.workspaceName})` : undefined
+  const fromDisplayName = correspondence
+    ? `${opts.senderName} (${opts.ctx.workspaceName})`
+    : undefined
   const from =
     resolvedFrom && fromDisplayName
       ? formatNamedSendingAddress(resolvedFrom, fromDisplayName)
@@ -406,6 +410,7 @@ async function sendVisitorConversationEmail(opts: {
       fromDisplayName: from ? undefined : fromDisplayName,
       channel,
       conversationSubject: mailCtx.subject,
+      correspondence,
       quotedPrevious,
       ...threading,
     })
@@ -462,7 +467,11 @@ export async function notifyAgentReply(opts: {
     // does not apply. Worst case an online email visitor gets the in-app copy
     // AND the mail, which is the right way round to be wrong: a duplicate beats
     // a silent drop.
-    if (opts.channel !== 'email' && (await isPrincipalOnline(opts.visitorPrincipalId))) return
+    if (
+      getChannelDescriptor(opts.channel)?.surface === 'ours' &&
+      (await isPrincipalOnline(opts.visitorPrincipalId))
+    )
+      return
 
     const [visitor] = await db
       .select({ type: principal.type, email: user.email, contactEmail: principal.contactEmail })
@@ -492,18 +501,25 @@ export async function notifyAgentReply(opts: {
     // the visitor's own session (or a re-identify in the host app), so the URL
     // only navigates — it carries no capability of its own.
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
+    const adapter = requireChannelAdapter(opts.channel)
     if (recipient) {
-      await sendVisitorConversationEmail({
+      await adapter.deliverAgentMessage({
+        conversation: {
+          id: opts.conversationId,
+          channel: opts.channel,
+          visitorPrincipalId: opts.visitorPrincipalId,
+        },
         conversationId: opts.conversationId,
         visitorPrincipalId: opts.visitorPrincipalId,
-        recipient,
-        direction: 'agent_reply',
-        senderName: opts.agentName,
         content: opts.content,
         contentJson: opts.contentJson,
+        agentName: opts.agentName,
+        capturedEmail: opts.capturedEmail,
+        recipient,
         ctaUrl,
-        ctx,
-        channel: opts.channel,
+        workspaceName: ctx.workspaceName,
+        logoUrl: ctx.logoUrl,
+        direction: 'agent_reply',
       })
     }
 
@@ -521,17 +537,22 @@ export async function notifyAgentReply(opts: {
       )
       for (const participant of participants) {
         try {
-          await sendVisitorConversationEmail({
+          await adapter.deliverAgentMessage({
+            conversation: {
+              id: opts.conversationId,
+              channel: opts.channel,
+              visitorPrincipalId: participant.principalId,
+            },
             conversationId: opts.conversationId,
             visitorPrincipalId: participant.principalId,
-            recipient: participant.email,
-            direction: 'agent_reply',
-            senderName: opts.agentName,
             content: opts.content,
             contentJson: opts.contentJson,
+            agentName: opts.agentName,
+            recipient: participant.email,
             ctaUrl,
-            ctx,
-            channel: opts.channel,
+            workspaceName: ctx.workspaceName,
+            logoUrl: ctx.logoUrl,
+            direction: 'agent_reply',
           })
         } catch (err) {
           log.warn(
@@ -583,16 +604,24 @@ export async function notifyConversationStarted(opts: {
     const ctx = await buildHookContext()
     if (!ctx) return
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
-    await sendVisitorConversationEmail({
+    const mailCtx = await loadConversationMailContext(opts.conversationId)
+    const channel = mailCtx.channel ?? 'messenger'
+    await requireChannelAdapter(channel).deliverAgentMessage({
+      conversation: {
+        id: opts.conversationId,
+        channel,
+        visitorPrincipalId: opts.visitorPrincipalId,
+      },
       conversationId: opts.conversationId,
       visitorPrincipalId: opts.visitorPrincipalId,
-      recipient,
-      direction: 'agent_started',
-      senderName: opts.agentName,
       content: opts.content,
       contentJson: opts.contentJson,
+      agentName: opts.agentName,
+      recipient,
       ctaUrl,
-      ctx,
+      workspaceName: ctx.workspaceName,
+      logoUrl: ctx.logoUrl,
+      direction: 'agent_started',
     })
   } catch (err) {
     log.warn({ err }, 'notify conversation started failed')
@@ -637,7 +666,12 @@ export async function notifyCsatRequestEmail(
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .limit(1)
-    if (!conv || conv.channel !== 'email' || !conv.visitorPrincipalId) return
+    if (
+      !conv ||
+      !conv.visitorPrincipalId ||
+      getChannelDescriptor(conv.channel)?.surface !== 'theirs'
+    )
+      return
     const visitorPrincipalId = conv.visitorPrincipalId
 
     const [visitor] = await db
@@ -663,20 +697,14 @@ export async function notifyCsatRequestEmail(
       string,
     ]
 
-    // The same From the thread's replies leave as. A rating prompt that arrived
-    // from the platform address on a conversation answered from the customer's
-    // own support address is a thread that changes identity halfway through,
-    // which is exactly what a customer-owned sending domain is bought to avoid.
-    const from = (await resolveConversationFrom(conversationId)) ?? undefined
-
-    const { sendCsatRequestEmail } = await import('@quackback/email')
-    await sendCsatRequestEmail({
-      to: recipient,
+    await requireChannelAdapter(conv.channel).deliverCsatRequest({
+      conversationId,
+      visitorPrincipalId,
+      recipient,
       promptText,
       ratingUrls,
       workspaceName: ctx.workspaceName,
-      logoUrl: ctx.logoUrl ?? undefined,
-      from,
+      logoUrl: ctx.logoUrl,
     })
   } catch (err) {
     log.warn({ err, conversationId }, 'csat request email failed')

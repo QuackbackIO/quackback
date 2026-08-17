@@ -268,6 +268,11 @@ export async function createEmailConversation(input: {
   // online, so passing false here would leave this defect half-fixed.
   await emitMessageCreated(actor, author, message, conversation, true)
 
+  // Routing is channel-agnostic: a cold-inbound email conversation auto-assigns
+  // the same way a widget conversation does when routing is enabled.
+  const { routeUnassignedConversation } = await import('./conversation.service')
+  await routeUnassignedConversation(conversation)
+
   return conversation.id
 }
 

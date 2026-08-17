@@ -27,6 +27,7 @@ import {
   parseInactivityMinutes,
   parseBreachLeadMinutes,
 } from '@/lib/server/domains/workflows/workflow.schemas'
+import { listChannelDescriptors } from '@/lib/shared/channels'
 import type {
   FrequencyCap,
   ValidatedWorkflowGraph,
@@ -309,11 +310,7 @@ export const CONDITION_FIELD_META: Record<ConditionField, ConditionFieldMeta> = 
   'conversation.channel': {
     label: 'Channel',
     kind: 'choice',
-    // Mirrors CHANNELS in @quackback/db/types.
-    options: [
-      { value: 'messenger', label: 'Messenger' },
-      { value: 'email', label: 'Email' },
-    ],
+    options: listChannelDescriptors().map((d) => ({ value: d.id, label: d.label })),
   },
   'conversation.priority': { label: 'Priority', kind: 'choice', options: PRIORITY_OPTIONS },
   'conversation.waiting_minutes': { label: 'Customer waiting (minutes)', kind: 'number' },
@@ -2289,8 +2286,7 @@ export interface RuleGroupDraft {
 }
 
 export type ConditionGroupsDraft =
-  | { kind: 'groups'; groups: RuleGroupDraft[] }
-  | { kind: 'advanced'; condition: GraphCondition }
+  { kind: 'groups'; groups: RuleGroupDraft[] } | { kind: 'advanced'; condition: GraphCondition }
 
 const isLeafCondition = (c: GraphCondition): c is ConditionLeaf => 'field' in c
 
@@ -2614,8 +2610,7 @@ export function attributeValueText(value: unknown): string {
 // ---------------------------------------------------------------------------
 
 export type GraphDraft =
-  | { mode: 'visual'; tree: WorkflowTree }
-  | { mode: 'json'; text: string; notice?: string }
+  { mode: 'visual'; tree: WorkflowTree } | { mode: 'json'; text: string; notice?: string }
 
 /**
  * Open a stored graph for editing: visual when the graph is tree-shaped,

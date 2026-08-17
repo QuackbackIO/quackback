@@ -41,6 +41,7 @@ import type {
   TeamId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { channelFromVisitorTransport } from '@/lib/shared/channels'
 import {
   canSendVisitorMessage,
   canStartConversation,
@@ -422,7 +423,7 @@ export async function sendVisitorMessage(
         // mailbox as a side channel and silently drops replies. Bidirectional on
         // purpose: moving back into the widget must restore the presence gate,
         // otherwise they would get an in-app message AND a redundant email.
-        channel: messageMetadata?.source === 'email' ? 'email' : 'messenger',
+        channel: channelFromVisitorTransport(messageMetadata?.source),
       })
       .where(eq(conversations.id, conversation.id))
       .returning()
@@ -457,7 +458,7 @@ export async function sendVisitorMessage(
   // effort (never blocks the send), and runs outside the transaction so a Redis
   // hiccup can't roll back the visitor's message.
   if (created && txResult.conversation.assignedAgentPrincipalId === null) {
-    await assignRoutedConversation(txResult.conversation)
+    await routeUnassignedConversation(txResult.conversation)
   }
 
   void notifyVisitorMessage({
@@ -1378,6 +1379,14 @@ async function emitSnoozeSystemMessage(
  * null when routing declines (disabled / nobody active) or the row was claimed
  * concurrently — the caller then leaves it in the unassigned queue.
  */
+/** Best-effort auto-assign for any channel's new-conversation path. */
+export async function routeUnassignedConversation(
+  conversation: Conversation
+): Promise<PrincipalId | null> {
+  if (conversation.assignedAgentPrincipalId) return conversation.assignedAgentPrincipalId
+  return assignRoutedConversation(conversation)
+}
+
 async function assignRoutedConversation(conversation: Conversation): Promise<PrincipalId | null> {
   const { routeConversation } = await import('./routing')
   const { assignedPrincipalId } = await routeConversation(conversation)
