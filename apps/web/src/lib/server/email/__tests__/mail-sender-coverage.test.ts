@@ -56,6 +56,8 @@ const MAIL_FROM_CLASS: Record<string, 'platform' | 'workspace-identity'> = {
   // customer is already having with the workspace, where the platform's address
   // would visibly change who is speaking.
   sendConversationMessageEmail: 'workspace-identity',
+  sendConversationClosedEmail: 'workspace-identity',
+  sendConversationAutoAckEmail: 'workspace-identity',
   sendCsatRequestEmail: 'workspace-identity',
   sendTicketEventEmail: 'workspace-identity',
   sendChangelogPublishedEmail: 'workspace-identity',

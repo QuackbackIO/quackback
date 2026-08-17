@@ -1,5 +1,5 @@
 import { setEmailLogSink, type EmailLogSinkEntry } from '@quackback/email'
-import type { ConversationId, TicketId } from '@quackback/ids'
+import type { ConversationId, PostId, TicketId } from '@quackback/ids'
 import { db, emailLog } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 
@@ -20,6 +20,9 @@ async function writeOutbound(entry: EmailLogSinkEntry): Promise<void> {
       status: entry.status,
       error: entry.error ?? null,
       billable: entry.billable,
+      conversationId: (entry.conversationId as ConversationId | null) ?? null,
+      ticketId: (entry.ticketId as TicketId | null) ?? null,
+      postId: (entry.postId as PostId | null) ?? null,
     })
   } catch (err) {
     log.warn({ err, email_type: entry.emailType, status: entry.status }, 'email log write failed')

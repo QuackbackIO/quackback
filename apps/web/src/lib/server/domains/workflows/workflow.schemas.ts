@@ -124,7 +124,10 @@ export const actionSchema = z.union([
     priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']),
   }),
   snoozeActionSchema,
-  z.object({ type: z.literal('close') }),
+  z.object({
+    type: z.literal('close'),
+    lifecycle: z.literal('auto_closed').optional(),
+  }),
   // (SF4) `close`'s counterpart — see action.executor.ts's WorkflowAction doc
   // for why this is workflows-only, not shared with macro.schemas.ts's
   // separate MacroAction catalogue.

@@ -103,6 +103,7 @@ export async function maybeSendColdInboundAck(opts: {
       messageId: minted,
       inReplyTo: inboundId ?? undefined,
       references: inboundId ? [inboundId] : undefined,
+      conversationId: opts.conversationId,
     })
     const outboundId = result.messageId === undefined ? minted : (result.messageId ?? undefined)
     if (outboundId) await recordOutboundEmail(outboundId, opts.conversationId)

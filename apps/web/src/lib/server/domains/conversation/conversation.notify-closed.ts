@@ -120,6 +120,7 @@ export async function notifyConversationClosed(opts: {
       messageId: messageId ?? undefined,
       inReplyTo: inReplyTo ?? undefined,
       references,
+      conversationId: opts.conversationId,
     })
     const outboundMessageId =
       result?.messageId === undefined ? messageId : (result.messageId ?? undefined)

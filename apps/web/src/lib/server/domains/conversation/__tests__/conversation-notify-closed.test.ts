@@ -152,4 +152,63 @@ describe('notifyConversationClosed', () => {
 
     expect(sendConversationClosedEmail).not.toHaveBeenCalled()
   })
+
+  it('omits CSAT when a request was already sent for the conversation', async () => {
+    limitQueue = [
+      [
+        {
+          id: 'conversation_1',
+          channel: 'email',
+          subject: 'Billing',
+          visitorPrincipalId: 'principal_v' as PrincipalId,
+          visitorEmail: 'priya@x.com',
+          endReason: null,
+        },
+      ],
+      [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
+      [{ id: 'emaillog_prior' }],
+    ]
+    csatRows = [{ id: 'emaillog_prior' }]
+
+    await notifyConversationClosed({
+      conversationId: 'conversation_1' as ConversationId,
+      variant: 'closed',
+      closerPrincipalId: 'principal_agent' as PrincipalId,
+    })
+
+    expect(sendConversationClosedEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationClosedEmail.mock.calls[0][0]).toMatchObject({
+      conversationId: 'conversation_1',
+    })
+    expect(
+      (sendConversationClosedEmail.mock.calls[0][0] as { ratingUrls?: unknown }).ratingUrls
+    ).toBeUndefined()
+  })
+
+  it('skips send when the monthly email budget is exhausted', async () => {
+    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+    enforceEmailBudget.mockRejectedValueOnce(
+      new TierLimitError({ limit: 'emailsPerMonth', message: 'Email budget exhausted' })
+    )
+    limitQueue = [
+      [
+        {
+          id: 'conversation_1',
+          channel: 'email',
+          subject: 'Billing',
+          visitorPrincipalId: 'principal_v' as PrincipalId,
+          visitorEmail: 'priya@x.com',
+          endReason: null,
+        },
+      ],
+      [{ type: 'user', email: 'priya@x.com', contactEmail: null }],
+    ]
+
+    await notifyConversationClosed({
+      conversationId: 'conversation_1' as ConversationId,
+      variant: 'closed',
+    })
+
+    expect(sendConversationClosedEmail).not.toHaveBeenCalled()
+  })
 })

@@ -232,6 +232,9 @@ export interface EmailLogSinkEntry {
   providerMessageId?: string | null
   error?: string
   billable: boolean
+  conversationId?: string | null
+  ticketId?: string | null
+  postId?: string | null
 }
 
 export type EmailLogSink = (entry: EmailLogSinkEntry) => void | Promise<void>
@@ -241,6 +244,18 @@ let emailLogSink: EmailLogSink | null = null
 /** Registered by apps/web. The sink must never throw; dispatch swallows sink errors. */
 export function setEmailLogSink(sink: EmailLogSink | null): void {
   emailLogSink = sink
+}
+
+function entityIds(options: {
+  conversationId?: string | null
+  ticketId?: string | null
+  postId?: string | null
+}): Pick<EmailLogSinkEntry, 'conversationId' | 'ticketId' | 'postId'> {
+  return {
+    conversationId: options.conversationId,
+    ticketId: options.ticketId,
+    postId: options.postId,
+  }
 }
 
 function recordOutboundLog(entry: EmailLogSinkEntry): void {
@@ -311,6 +326,9 @@ async function dispatch(
     preview?: Record<string, unknown>
     /** Display name wrapped around `from` (or EMAIL_FROM) as RFC 5322. */
     fromDisplayName?: string
+    conversationId?: string | null
+    ticketId?: string | null
+    postId?: string | null
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const threadingHeaders = buildThreadingHeaders(options)
@@ -328,6 +346,7 @@ async function dispatch(
       subject: options.subject,
       status: 'skipped',
       billable: false,
+      ...entityIds(options),
     })
     return { sent: false, reason: 'anon_recipient' }
   }
@@ -363,6 +382,7 @@ async function dispatch(
       subject: options.subject,
       status: 'skipped',
       billable: false,
+      ...entityIds(options),
     })
     return { sent: false, reason: 'no_provider' }
   }
@@ -405,6 +425,7 @@ async function dispatch(
       messageId: result.messageId,
       providerMessageId: result.messageId,
       billable,
+      ...entityIds(options),
     })
     return { sent: true, messageId: result.messageId }
   }
@@ -434,6 +455,7 @@ async function dispatch(
       messageId: result.messageId,
       providerMessageId: result.messageId,
       billable,
+      ...entityIds(options),
     })
   } catch (error) {
     // Reset transporter on connection errors so next attempt creates a fresh connection
@@ -454,6 +476,7 @@ async function dispatch(
       status: 'failed',
       error: error instanceof Error ? error.message : 'send failed',
       billable,
+      ...entityIds(options),
     })
     throw error
   }
@@ -478,6 +501,9 @@ async function sendEmail(
     /** Extra identifying fields for the dev preview line (links, codes). */
     preview?: Record<string, unknown>
     fromDisplayName?: string
+    conversationId?: string | null
+    ticketId?: string | null
+    postId?: string | null
   } & ThreadingOptions
 ): Promise<EmailResult> {
   return dispatch(options)
@@ -875,6 +901,7 @@ interface SendConversationMessageEmailParams {
   quotedPrevious?: { date: Date | string; name: string; text: string }
   /** Display name for the From header (`Alex (Acme)`). */
   fromDisplayName?: string
+  conversationId?: string | null
 }
 
 /**
@@ -904,6 +931,7 @@ export async function sendConversationMessageEmail(
     correspondence,
     quotedPrevious,
     fromDisplayName,
+    conversationId,
   } = params
 
   const copy = conversationMessageCopy({
@@ -949,6 +977,7 @@ export async function sendConversationMessageEmail(
     references,
     from,
     fromDisplayName,
+    conversationId,
     emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
     preview: { ctaUrl },
   })
@@ -968,6 +997,7 @@ export async function sendConversationClosedEmail(params: {
   messageId?: string
   inReplyTo?: string
   references?: string[]
+  conversationId?: string | null
 }): Promise<EmailResult> {
   const subject =
     conversationReplySubject(params.conversationSubject) ??
@@ -988,6 +1018,7 @@ export async function sendConversationClosedEmail(params: {
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
+    conversationId: params.conversationId,
     emailType: 'ConversationClosedEmail',
   })
 }
@@ -1001,6 +1032,7 @@ export async function sendConversationAutoAckEmail(params: {
   inReplyTo?: string
   references?: string[]
   from?: SendingIdentity
+  conversationId?: string | null
 }): Promise<EmailResult> {
   const subject =
     conversationReplySubject(params.conversationSubject) ??
@@ -1019,6 +1051,7 @@ export async function sendConversationAutoAckEmail(params: {
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
+    conversationId: params.conversationId,
     extraHeaders: {
       'Auto-Submitted': 'auto-replied',
       Precedence: 'auto_reply',
@@ -1562,6 +1595,7 @@ interface SendCsatRequestEmailParams {
    * being asked and to their mail client's threading.
    */
   from?: SendingIdentity
+  conversationId?: string | null
 }
 
 /** Sent by the workflow engine's send_block csat path (action.executor.ts)
@@ -1571,13 +1605,14 @@ interface SendCsatRequestEmailParams {
 export async function sendCsatRequestEmail(
   params: SendCsatRequestEmailParams
 ): Promise<EmailResult> {
-  const { to, promptText, ratingUrls, workspaceName, logoUrl, from } = params
+  const { to, promptText, ratingUrls, workspaceName, logoUrl, from, conversationId } = params
 
   return sendEmail({
     to,
     subject: 'How did we do?',
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
     from,
+    conversationId,
     emailType: 'CsatRequestEmail',
   })
 }

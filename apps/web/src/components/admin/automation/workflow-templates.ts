@@ -33,11 +33,7 @@ import {
 } from './workflow-graph'
 
 export type WorkflowTemplateCategory =
-  | 'popular'
-  | 'routing'
-  | 'sla'
-  | 'housekeeping'
-  | 'customer_facing'
+  'popular' | 'routing' | 'sla' | 'housekeeping' | 'customer_facing'
 
 export const WORKFLOW_TEMPLATE_CATEGORIES: {
   key: WorkflowTemplateCategory
@@ -697,7 +693,11 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           { id: 'trigger', type: 'trigger' },
           { id: 'nudge_message', type: 'message', body: body('Still stuck? Just reply.') },
           { id: 'wait_2_days', type: 'wait', seconds: 172_800 },
-          { id: 'close_conversation', type: 'action', action: { type: 'close' } },
+          {
+            id: 'close_conversation',
+            type: 'action',
+            action: { type: 'close', lifecycle: 'auto_closed' },
+          },
         ],
         edges: [
           { from: 'trigger', to: 'nudge_message' },

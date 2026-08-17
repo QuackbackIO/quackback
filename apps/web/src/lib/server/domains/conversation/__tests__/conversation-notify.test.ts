@@ -736,6 +736,7 @@ describe('notifyCsatRequestEmail', () => {
       workspaceName: 'Acme',
       logoUrl: undefined,
       from: undefined,
+      conversationId,
     })
   })
 

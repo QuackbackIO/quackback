@@ -227,7 +227,7 @@ export type WorkflowAction =
   // instead of replaying the same, increasingly stale, absolute instant).
   | { type: 'snooze'; untilIso: string | null }
   | { type: 'snooze'; seconds: number }
-  | { type: 'close' }
+  | { type: 'close'; lifecycle?: 'auto_closed' }
   // (SF4) The `close` action's counterpart: reopens a closed conversation via
   // the same setConversationStatus seam. Workflows-only for now — a macro's
   // own action catalogue (MacroAction, packages/db/src/schema/macros.ts) plus
@@ -499,7 +499,13 @@ export async function applyAction(
       return label('snoozed')
     }
     case 'close':
-      await conversationService.setConversationStatus(conversationId, 'closed', actor, attribution)
+      await conversationService.setConversationStatus(
+        conversationId,
+        'closed',
+        actor,
+        attribution,
+        action.lifecycle === 'auto_closed' ? 'auto_closed' : 'closed'
+      )
       return label('closed')
     case 'reopen':
       // Same seam as 'close', target 'open' instead. setConversationStatus is

@@ -1114,6 +1114,16 @@ export async function endConversation(
   publishConversationUpdate(conversationId, dto)
   if (previous !== 'closed') {
     void emitConversationStatusChanged(actor, updated, previous)
+    void import('@/lib/server/domains/channels')
+      .then(({ requireChannelAdapter }) =>
+        requireChannelAdapter(updated.channel).deliverLifecycleEvent('closed', {
+          conversationId,
+          closerPrincipalId: actor.principalId,
+        })
+      )
+      .catch((err) => {
+        log.warn({ err, conversationId }, 'conversation end lifecycle delivery failed')
+      })
   }
   return dto
 }

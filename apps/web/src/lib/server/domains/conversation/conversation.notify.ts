@@ -266,6 +266,7 @@ export async function notifyVisitorMessage(opts: {
               messageId: mintTeamOutboundMessageId(opts.conversation.id) ?? undefined,
               inReplyTo: teamRoot ?? undefined,
               references: teamRoot ? [teamRoot] : undefined,
+              conversationId: opts.conversation.id,
             })
           )
       )
@@ -429,6 +430,7 @@ export async function sendVisitorConversationEmail(opts: {
       conversationSubject: mailCtx.subject,
       correspondence,
       quotedPrevious,
+      conversationId: opts.conversationId,
       ...threading,
     })
   )
