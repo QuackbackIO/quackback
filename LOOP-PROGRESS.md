@@ -65,9 +65,17 @@ Live re-prove: t1a portal **303** `billing.stripe.com`; t1a Change-to-Scale
 **303** confirm; t7 authed `GET /api/export` **402**
 `features.analyticsExports`.
 
-Also cherry-picked onto `saas` (not in `a856b308` yet): SNS signature
-`d7865b4f2`, inbox registry `df95d6249`, send-site tests `35338c068`.
-Docker `32012218387` dispatched for that tip.
+SNS + inbox now live as `sha256:84f4e13d…` web `e48af8e3`.
+
+**Custom domains (treat mortondev.com as a customer zone):** only a
+customer CNAME to `customers.quackback.co.uk`. Do not configure SaaS
+on that zone. Critic **PASS_WITH_GAPS**: add / HTTP-DCV / cert ready /
+t1e **409** reserved / restore all work. Visitor GET **526** because
+Cloudflare origin SNI is the customer hostname and Railway has no
+certificate for it. App `f7770b23d` reads `x-quackback-customer-host`
+only on the fallback origin. CP `22ea280` asks Cloudflare to handshake
+as `saas-origin.quackback.co.uk`. Zone Rulesets token cannot write
+Host-rewrite origin rules (auth 10000).
 
 ---
 
