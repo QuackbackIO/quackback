@@ -67,15 +67,23 @@ Live re-prove: t1a portal **303** `billing.stripe.com`; t1a Change-to-Scale
 
 SNS + inbox now live as `sha256:84f4e13d…` web `e48af8e3`.
 
+**Plan-matrix §H** on live `e48af8e3` / `sha256:84f4e13d…` **FAIL**
+(`plan-matrix-a856b308.md`). Overlay HIGHs from `910244e5` are gone
+(t1a portal 303; t7 export 402). New HIGHs: Free t7 MCP enable and
+New workflow have no plan CTA; `quackback.io/pricing` still disagrees
+with CP enforcement. Instances 20→20.
+
 **Custom domains (treat mortondev.com as a customer zone):** only a
 customer CNAME to `customers.quackback.co.uk`. Do not configure SaaS
 on that zone. Critic **PASS_WITH_GAPS**: add / HTTP-DCV / cert ready /
-t1e **409** reserved / restore all work. Visitor GET **526** because
-Cloudflare origin SNI is the customer hostname and Railway has no
-certificate for it. App `f7770b23d` reads `x-quackback-customer-host`
-only on the fallback origin. CP `22ea280` asks Cloudflare to handshake
-as `saas-origin.quackback.co.uk`. Zone Rulesets token cannot write
-Host-rewrite origin rules (auth 10000).
+t1e **409** reserved / restore all work. Visitor GET **526** is origin
+TLS (Host+SNI stay the customer name on the fallback origin). Zone is
+Free; Origin Rules Host override and `custom_origin_sni` are
+Enterprise. Custom origin pointing at the fallback hostname is treated
+as fallback traffic. CP `da8bc85` creates hostnames on the default
+fallback only (`ssl.method=http`). Documented Free-plan Host rewrite
+is a Worker. App `f7770b23d` (Docker `sha256:3b0a58a2…`) not pinned
+yet. Waiting on Worker Scripts permission / operator go-ahead.
 
 ---
 
