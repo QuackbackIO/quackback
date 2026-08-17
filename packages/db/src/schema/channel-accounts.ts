@@ -122,6 +122,9 @@ export interface ChannelAccountConfig {
   cursor?: { uidValidity: number; lastUid: number }
   // sending role
   smtp?: { host: string; port: number; secure: boolean; user: string }
+  // connection role: reference to an integration-framework credential.
+  // Secrets stay on the integration row, never in this JSONB.
+  integrationId?: string
 }
 
 export const channelAccounts = pgTable(
@@ -130,7 +133,7 @@ export const channelAccounts = pgTable(
     id: typeIdWithDefault('channel_account')('id').primaryKey(),
     owningTeamId: typeIdColumn('team')('owning_team_id').notNull(),
     channel: text('channel').notNull().default('email'),
-    role: text('role', { enum: ['inbound', 'sending'] }).notNull(),
+    role: text('role', { enum: ['inbound', 'sending', 'connection'] }).notNull(),
     address: text('address'),
     module: text('module', { enum: ['support', 'feedback', 'changelog'] }),
     sendingDomainId: typeIdColumnNullable('sending_domain')('sending_domain_id'),
@@ -146,8 +149,7 @@ export const channelAccounts = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    check('channel_accounts_role_check', sql`${table.role} IN ('inbound','sending')`),
-    check('channel_accounts_channel_check', sql`${table.channel} = 'email'`),
+    check('channel_accounts_role_check', sql`${table.role} IN ('inbound','sending','connection')`),
     foreignKey({
       name: 'channel_accounts_owning_team_id_fkey',
       columns: [table.owningTeamId],

@@ -247,6 +247,9 @@ export type TicketSubscriptionId = TypeId<'ticket_sub'>
 /** Channel account ID (§4.8) - e.g., channel_account_01h455vb4pex5vsknk084sn02q */
 export type ChannelAccountId = TypeId<'channel_account'>
 
+/** Channel thread correlation ID - e.g., channel_thread_01h455vb4pex5vsknk084sn02q */
+export type ChannelThreadId = TypeId<'channel_thread'>
+
 /** Sending domain ID (§4.8) - e.g., sending_domain_01h455vb4pex5vsknk084sn02q */
 export type SendingDomainId = TypeId<'sending_domain'>
 
@@ -457,6 +460,7 @@ export interface EntityIdMap {
   ticket_summary: TicketSummaryId
   ticket_sub: TicketSubscriptionId
   channel_account: ChannelAccountId
+  channel_thread: ChannelThreadId
   sending_domain: SendingDomainId
   office_hours: OfficeHoursId
   sla_policy: SlaPolicyId

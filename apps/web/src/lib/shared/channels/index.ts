@@ -22,6 +22,7 @@ export {
   isChannel,
   listChannelDescriptors,
   registerChannelDescriptor,
+  unregisterChannelDescriptor,
   requireChannelDescriptor,
 } from './registry'
 export { emailDescriptor } from './email'

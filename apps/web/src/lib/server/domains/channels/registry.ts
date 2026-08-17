@@ -7,6 +7,10 @@ export function registerChannelAdapter(adapter: ChannelAdapter): void {
   ADAPTERS.set(adapter.id, adapter)
 }
 
+export function unregisterChannelAdapter(id: string): void {
+  ADAPTERS.delete(id as Channel)
+}
+
 export function getChannelAdapter(id: string): ChannelAdapter | undefined {
   return ADAPTERS.get(id as Channel)
 }

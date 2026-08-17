@@ -239,6 +239,7 @@ export {
   DEFAULT_TICKET_STATUSES,
   // Schema tables - email channel (support platform §4.8)
   channelAccounts,
+  channelThreads,
   emailSendingDomains,
   // Schema tables - office hours + SLA (support platform §4.6)
   officeHoursSchedules,

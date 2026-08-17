@@ -17,6 +17,7 @@ export {
   getChannelAdapter,
   listChannelAdapters,
   registerChannelAdapter,
+  unregisterChannelAdapter,
   requireChannelAdapter,
 } from './registry'
 export { emailAdapter } from './email'

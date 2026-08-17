@@ -7,6 +7,10 @@ export function registerChannelDescriptor(descriptor: ChannelDescriptor): void {
   DESCRIPTORS.set(descriptor.id, descriptor)
 }
 
+export function unregisterChannelDescriptor(id: string): void {
+  DESCRIPTORS.delete(id as Channel)
+}
+
 export function getChannelDescriptor(id: string): ChannelDescriptor | undefined {
   return DESCRIPTORS.get(id as Channel)
 }

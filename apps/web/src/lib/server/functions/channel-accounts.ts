@@ -93,7 +93,7 @@ type JsonObject = { [k: string]: JsonValue }
 
 export interface ChannelAccountDTO {
   id: string
-  role: 'inbound' | 'sending'
+  role: 'inbound' | 'sending' | 'connection'
   address: string | null
   module: string | null
   config: JsonObject

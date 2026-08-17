@@ -474,12 +474,18 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
 
   // Route: plus-address first, then the deterministic-Message-ID fallback for
   // replies whose client dropped the plus-address but kept the threading chain.
+  const { resolveInboundConversation } = await import('./conversation.inbound-resolve')
   let conversationId = conversationIdFromRecipients(parsed.toAddresses) as ConversationId | null
   if (!conversationId) {
     const candidates = [parsed.inReplyTo, ...parsed.references].filter(
       (id): id is string => id !== null
     )
-    conversationId = await resolveConversationByMessageIds(candidates)
+    // Email's Message-ID map is still the correlation authority. The shared
+    // pipeline is the shape; step 2 (open-by-sender) is omitted so behavior
+    // does not change.
+    conversationId = await resolveInboundConversation({
+      lookupCorrelation: () => resolveConversationByMessageIds(candidates),
+    })
   }
   // Not a reply to any existing conversation: it may be a fresh email to one of
   // our inbound routes (§4.8 Layer 2 cold inbound), else there's nothing to do.

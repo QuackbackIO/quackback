@@ -1688,6 +1688,13 @@
       "tag": "0265_email_log",
       "breakpoints": true,
       "idx": 240
+    },
+    {
+      "version": "7",
+      "when": 1786880000003,
+      "tag": "0266_channel_threads",
+      "breakpoints": true,
+      "idx": 241
     }
   ]
 }

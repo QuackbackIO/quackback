@@ -478,6 +478,27 @@ export async function createSendingAddress(input: {
   return row
 }
 
+/**
+ * A connection account points at an integration-framework credential.
+ * Secrets stay on the integration; config only stores the id.
+ */
+export async function createConnectionAccount(input: {
+  owningTeamId: TeamId
+  channel: string
+  integrationId: string
+}): Promise<ChannelAccount> {
+  const [row] = await db
+    .insert(channelAccounts)
+    .values({
+      owningTeamId: input.owningTeamId,
+      channel: input.channel,
+      role: 'connection',
+      config: { integrationId: input.integrationId },
+    })
+    .returning()
+  return row
+}
+
 /** Resolve the workspace's inbound route (the inbox a conversation arrived on). */
 export async function getInboundRoute(owningTeamId: TeamId): Promise<ChannelAccount | null> {
   const [row] = await db
