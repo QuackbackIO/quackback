@@ -57,17 +57,23 @@ const LIMIT_KEYS_SET = new Set<string>(PROJECTED_LIMIT_KEYS)
 function parseLimits(value: unknown): ProjectedLimits | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const limits = value as Record<string, unknown>
-  if (
-    Object.keys(limits).length !== PROJECTED_LIMIT_KEYS.length ||
-    Object.keys(limits).some((key) => !LIMIT_KEYS_SET.has(key))
-  ) {
-    return null
-  }
+  if (Object.keys(limits).some((key) => !LIMIT_KEYS_SET.has(key))) return null
+  const parsed = {} as ProjectedLimits
   for (const key of PROJECTED_LIMIT_KEYS) {
+    if (!(key in limits)) {
+      // Older control planes omit emailsPerMonth. Absent means unlimited,
+      // same as every other numeric limit; do not drop the whole projection.
+      if (key === 'emailsPerMonth') {
+        parsed[key] = null
+        continue
+      }
+      return null
+    }
     const limit = limits[key]
     if (limit !== null && (!Number.isSafeInteger(limit) || Number(limit) < 0)) return null
+    parsed[key] = limit as ProjectedLimits[typeof key]
   }
-  return limits as ProjectedLimits
+  return parsed
 }
 
 function parseEntitlements(

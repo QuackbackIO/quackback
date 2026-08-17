@@ -179,6 +179,20 @@ describe('projected numeric limits', () => {
     ).toBeNull()
   })
 
+  it('accepts a nine-key live projection and treats missing emailsPerMonth as unlimited', () => {
+    const { emailsPerMonth: _omitted, ...nineKey } = PROJECTED_LIMITS
+    const parsed = parseBillingProjection({
+      ...PROJECTION,
+      freeLimits: { ...nineKey, maxBoards: 2 },
+      planLimits: nineKey,
+    })
+    expect(parsed).not.toBeNull()
+    expect(parsed?.planLimits.emailsPerMonth).toBeNull()
+    expect(parsed?.freeLimits.emailsPerMonth).toBeNull()
+    expect(parsed?.planLimits.maxBoards).toBe(25)
+    expect(parsed?.canManageBilling).toBe(false)
+  })
+
   it('rejects unrecognised plans, entitlements, and non-canonical dates', () => {
     expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })).toBeNull()
     expect(
