@@ -1,5 +1,21 @@
 # First-customer Loop Progress
 
+## 2026-08-17 — channels + email spec (operator named this unit)
+
+Builder+critic on `saas` (not a piece branch). Commits pushed:
+
+| Unit                      | Sha                             | Critic                    | Live?                                                                                                   |
+| ------------------------- | ------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| M1 thread & humanize      | `ec8421444` + fixer `3fbbb4670` | PASS_WITH_GAPS then fixer | no (batch deploy with later UI; named skip: outbound mail composition, no live mailbox probe this fire) |
+| M2 descriptor + adapter   | `e7c6509c6`                     | in flight                 | no (same skip until M4 settings surfaces)                                                               |
+| M3 close + ledger + meter | `0874a9c9d`                     | in flight                 | no (needs 0265 on enrolled DBs before code that selects email_log is live)                              |
+
+M4 settings IA, M5 polish/ack, M6 channel_threads not started.
+
+---
+
+# First-customer Loop Progress (historical)
+
 Lead: Codex `/root`  
 Taken over: 2026-08-14  
 Workspace branch: `saas`  
