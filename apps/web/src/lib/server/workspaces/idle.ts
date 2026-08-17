@@ -48,22 +48,19 @@
  * 3. **The rescan.** The safety net, `rescanIntervalMs`, for work that arrived
  *    without either of the above.
  *
- * ## The in-process signal cannot cross the web/worker split
+ * ## The in-process signal is enough
  *
  * Under `QUACKBACK_ROLE=all` — one process serving requests and running the
- * tiers — signal (1) covers every enqueue, because every enqueue happens inside
- * a workspace scope this process opened. Under a split `role=web` + `role=worker`
- * deployment it does not: the web replica opens the scope and the worker replica
- * is the one that has detached.
+ * scheduler — signal (1) covers every enqueue, because every enqueue happens
+ * inside a workspace scope this process opened. That is the self-host default
+ * (unset) and the cloud tenant-facing topology. A leftover `role=web` +
+ * `role=worker` split is optional scale-out, not required: the connectionless
+ * scheduler holds no tenant connection between drains, so it can share the
+ * HTTP process. There is no HTTP wake nudge.
  *
  * A control-database `LISTEN` was designed and then withdrawn: a permanent
  * listener is a permanently-connected client, and the control database is now
  * required to suspend when the fleet goes quiet. The two cannot both be had.
- *
- * The replacement is a best-effort HTTP nudge (`workspaces/wake-nudge.ts`) from
- * a web replica to `POST /api/internal/wake` on the worker. It holds no
- * database connection, has no ack and no retry, and a lost call costs only
- * latency — the deadline read and the rescan remain the correctness floor.
  *
  * ## Why these numbers
  *
@@ -87,11 +84,11 @@
  * to suspend after 60s; lowering it is strictly better than lengthening this.
  *
  * Fifteen minutes is what the *other* side of the trade will bear. Two things
- * are bounded by it: a nudge that was lost (the worker unreachable in the
- * seconds after a commit), and the per-minute cron sweeps (`snooze-sweep`,
- * `sla-breach-sweep`), which do not tick while detached. Those sweeps are
- * catch-up sweeps — one run after a gap does everything the skipped runs
- * would have — so the cost is staleness, not lost work.
+ * are bounded by it: work that arrived without a signal or a deadline, and
+ * the per-minute cron sweeps (`snooze-sweep`, `sla-breach-sweep`), which do
+ * not tick while detached. Those sweeps are catch-up sweeps — one run after
+ * a gap does everything the skipped runs would have — so the cost is
+ * staleness, not lost work.
  *
  * The wait is not `detachedAt + rescanIntervalMs`. That precessed: each
  * reconnect added the linger, so the fleet never shared a wake window with

@@ -414,7 +414,7 @@ describe('resolveWorkspaceAndContinue', () => {
     }
   })
 
-  it.each(['/api/health', '/api/health/ready', '/api/internal/wake'])(
+  it.each(['/api/health', '/api/health/ready'])(
     'serves %s without resolving a workspace at all',
     async (path) => {
       // The platform hits these every couple of seconds, and on a wildcard

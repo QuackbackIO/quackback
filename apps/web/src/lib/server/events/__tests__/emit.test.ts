@@ -20,10 +20,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-const nudgeWorker = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/server/workspaces/wake-nudge', () => ({
-  nudgeWorker: (...a: unknown[]) => nudgeWorker(...a),
-}))
 vi.mock('@/lib/server/workspaces/workspace-context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/workspaces/workspace-context')>()),
   getCurrentWorkspace: () => ({ workspaceKey: 'ws_emit' }),
@@ -118,7 +114,6 @@ describe('emit()', () => {
     expect((row.context as { source: string }).source).toBe('api')
     expect(row.publishedAt).toBeNull()
     expect(row.dispatchOwner).toBe('job')
-    expect(nudgeWorker).not.toHaveBeenCalled()
     const jobs = await db.execute(sql`
       SELECT queue FROM job_queue
       WHERE queue = 'event-dispatch' AND payload->>'eventId' = ${eventId}

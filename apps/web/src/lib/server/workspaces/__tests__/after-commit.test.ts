@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   __resetAfterCommitForTests,
   noteDurableWork,
@@ -7,15 +7,9 @@ import {
   wrapDbTransaction,
 } from '../after-commit'
 
-const nudgeWorker = vi.hoisted(() => vi.fn())
-vi.mock('../wake-nudge', () => ({
-  nudgeWorker: (...a: unknown[]) => nudgeWorker(...a),
-}))
-
 describe('after-commit signaling', () => {
   afterEach(() => {
     __resetAfterCommitForTests()
-    nudgeWorker.mockReset()
   })
 
   it('delivers immediately when no transaction is open', () => {
@@ -23,7 +17,6 @@ describe('after-commit signaling', () => {
     onDurableWorkCommitted((key) => seen.push(key))
     noteDurableWork('ws_a')
     expect(seen).toEqual(['ws_a'])
-    expect(nudgeWorker).toHaveBeenCalledWith('ws_a')
   })
 
   it('does not deliver an uncommitted note outside a frame', () => {
@@ -31,7 +24,6 @@ describe('after-commit signaling', () => {
     onDurableWorkCommitted((key) => seen.push(key))
     noteDurableWork('ws_a', { committed: false })
     expect(seen).toEqual([])
-    expect(nudgeWorker).not.toHaveBeenCalled()
   })
 
   it('delivers only after the outer frame resolves', async () => {
@@ -41,11 +33,9 @@ describe('after-commit signaling', () => {
     await runInAfterCommitFrame(async () => {
       noteDurableWork('ws_a')
       expect(seen).toEqual([])
-      expect(nudgeWorker).not.toHaveBeenCalled()
     })
 
     expect(seen).toEqual(['ws_a'])
-    expect(nudgeWorker).toHaveBeenCalledOnce()
   })
 
   it('discards pending keys when the frame throws', async () => {
@@ -60,7 +50,6 @@ describe('after-commit signaling', () => {
     ).rejects.toThrow('rollback')
 
     expect(seen).toEqual([])
-    expect(nudgeWorker).not.toHaveBeenCalled()
   })
 
   it('coalesces the same workspace to one delivery per commit', async () => {
@@ -134,7 +123,7 @@ describe('after-commit signaling', () => {
     expect(seen).toEqual([])
   })
 
-  it('a throwing sink does not prevent the nudge or other sinks', async () => {
+  it('a throwing sink does not prevent other sinks', async () => {
     const seen: string[] = []
     onDurableWorkCommitted(() => {
       throw new Error('sink')
@@ -143,6 +132,5 @@ describe('after-commit signaling', () => {
 
     noteDurableWork('ws_a')
     expect(seen).toEqual(['ws_a'])
-    expect(nudgeWorker).toHaveBeenCalledWith('ws_a')
   })
 })

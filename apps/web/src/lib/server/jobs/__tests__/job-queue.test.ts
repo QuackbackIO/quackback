@@ -9,7 +9,7 @@
  * The suite is scoped to unique queue names because `DATABASE_URL` points every
  * worktree on this machine at one shared `quackback_test`.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   cleanupQueues,
   closeHarness,
@@ -47,10 +47,10 @@ vi.mock('@/lib/server/workspaces/workspace-context', () => ({
     currentWorkspaceKey === null ? null : { workspaceKey: currentWorkspaceKey },
 }))
 
-const nudgeWorker = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/server/workspaces/wake-nudge', () => ({
-  nudgeWorker: (...a: unknown[]) => nudgeWorker(...a),
-}))
+import {
+  __resetAfterCommitForTests,
+  onDurableWorkCommitted,
+} from '@/lib/server/workspaces/after-commit'
 
 import {
   cancelJob,
@@ -74,13 +74,22 @@ function queue(label: string): string {
   return q
 }
 
+const signaled: string[] = []
+let unsubCommit: (() => void) | undefined
+
 beforeAll(async () => {
   await ensureJobQueueSchema()
 })
 
+beforeEach(() => {
+  signaled.length = 0
+  unsubCommit = onDurableWorkCommitted((key) => signaled.push(key))
+})
+
 afterEach(() => {
   currentWorkspaceKey = null
-  nudgeWorker.mockClear()
+  unsubCommit?.()
+  __resetAfterCommitForTests()
 })
 
 afterAll(async () => {
@@ -97,7 +106,7 @@ describe('enqueue', () => {
     const { jobId, inserted } = await enqueueJob({ queue: q, payload: { hello: 'world' } })
     expect(inserted).toBe(true)
     expect(jobId).toMatch(/^job_/)
-    expect(nudgeWorker).toHaveBeenCalledWith('ws_enqueue')
+    expect(signaled).toEqual(['ws_enqueue'])
 
     const rows = await rowsFor(q)
     expect(rows).toHaveLength(1)
@@ -679,10 +688,10 @@ describe('transactional enqueue', () => {
     await transaction(async (tx) => {
       const { inserted } = await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
       expect(inserted).toBe(true)
-      expect(nudgeWorker).not.toHaveBeenCalled()
+      expect(signaled).toEqual([])
     })
     expect((await rowsFor(q)).length).toBe(1)
-    expect(nudgeWorker).toHaveBeenCalledWith('ws-tx')
+    expect(signaled).toEqual(['ws-tx'])
   })
 
   it('leaves no row when the caller transaction rolls back', async () => {
@@ -694,6 +703,6 @@ describe('transactional enqueue', () => {
       })
     ).rejects.toThrow('boom')
     expect((await rowsFor(q)).length).toBe(0)
-    expect(nudgeWorker).not.toHaveBeenCalled()
+    expect(signaled).toEqual([])
   })
 })

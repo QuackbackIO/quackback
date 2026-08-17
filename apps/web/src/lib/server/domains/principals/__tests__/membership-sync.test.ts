@@ -35,10 +35,6 @@ vi.mock('@/lib/server/workspaces/workspace-context', () => ({
   getCurrentWorkspace: () => null,
 }))
 
-vi.mock('@/lib/server/workspaces/wake-nudge', () => ({
-  nudgeWorker: vi.fn(),
-}))
-
 const keys: string[] = []
 
 beforeAll(async () => {

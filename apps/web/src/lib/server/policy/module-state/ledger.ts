@@ -968,23 +968,14 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'custodian cannot serve secrets the previous one resolved.',
   },
   {
-    file: 'apps/web/src/routes/api/internal/wake.ts',
-    name: 'lastRefreshAt',
-    category: 'process-lifetime',
-    reason:
-      'Rate-limit latch for kicking both tiers to re-read the active workspace set. One number ' +
-      'per process, about this replica talking to the control database, not about any workspace. ' +
-      'A per-workspace latch would let an enumeration of unknown keys hammer the registry.',
-  },
-  {
-    file: 'apps/web/src/lib/server/workspaces/wake-nudge.ts',
-    name: 'lastByWorkspace',
+    file: 'apps/web/src/lib/server/events/event-dispatch-queue.ts',
+    name: 'convertedWorkspaces',
     category: 'workspace-scoped-key',
     keyedBy: 'workspaceKey',
     reason:
-      'When this process last POSTed a wake for a workspace. Keyed by workspaceKey so two ' +
-      'workspaces cannot share a throttle window; a hit for the wrong key would only skip a ' +
-      'nudge, which the rescan already bounds.',
+      'Workspaces this process has already converted leftover relay-owned events for. Keyed by ' +
+      'workspaceKey so a hit for the wrong key would only skip a one-shot convert, not mix rows. ' +
+      'A capped batch leaves the key unmarked so the next pass continues.',
   },
   {
     file: 'apps/web/src/lib/server/workspaces/after-commit.ts',

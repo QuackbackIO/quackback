@@ -2,9 +2,9 @@
  * After-commit workspace signaling.
  *
  * A job inserted on the caller's transaction is not visible to another
- * connection until that transaction commits. Signaling the scheduler (or
- * nudging the worker) before commit can inspect an empty queue and go back
- * to sleep — or fire for a row that then rolls back.
+ * connection until that transaction commits. Signaling the scheduler
+ * before commit can inspect an empty queue and go back to sleep — or
+ * fire for a row that then rolls back.
  *
  * `db.transaction` is wrapped so every outer commit flushes the workspace
  * keys recorded during that transaction. Rollback discards them. Nested
@@ -16,7 +16,6 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { logger } from '@/lib/server/logger'
-import { nudgeWorker } from '@/lib/server/workspaces/wake-nudge'
 
 const log = logger.child({ component: 'after-commit' })
 
@@ -43,7 +42,8 @@ export function __resetAfterCommitForTests(): void {
  * Called after a durable job (or equivalent) is visible.
  *
  * The job tier registers here so an after-commit flush rings the in-process
- * scheduler / loop. HTTP nudge still covers the web/worker split.
+ * scheduler. Cloud and self-host `ROLE=all` both use this path; there is no
+ * cross-process HTTP nudge.
  */
 export function onDurableWorkCommitted(sink: DurableWorkSink): () => void {
   sinks.push(sink)
@@ -74,11 +74,6 @@ function deliver(workspaceKey: string): void {
     } catch (err) {
       log.error({ err, workspaceKey }, 'after-commit sink threw')
     }
-  }
-  try {
-    nudgeWorker(workspaceKey)
-  } catch (err) {
-    log.error({ err, workspaceKey }, 'after-commit nudge threw')
   }
 }
 
