@@ -390,6 +390,18 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     handler: () =>
       import('@/lib/server/domains/export/export-queue').then((m) => m.runWorkspaceExport),
   },
+  {
+    // Pushes this workspace's team seats to the control plane. Cloud-only
+    // work: the handler is a successful no-op without QUACKBACK_CONTROL_PLANE_URL.
+    // Enqueued on roster changes; the minute-bucket dedupe key coalesces bursts.
+    name: 'membership-sync',
+    concurrency: 1,
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/principals/membership-sync-queue').then(
+        (m) => m.runMembershipSync
+      ),
+  },
 ]
 
 let overrides: readonly JobDefinition[] | null = null

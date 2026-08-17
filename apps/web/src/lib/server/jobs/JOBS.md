@@ -372,6 +372,7 @@ went stale the moment a queue moved.
 | `workflow-wait`          | —             | 4           | 3           | 60s   |
 | `import`                 | —             | 2           | 1           | 60s   |
 | `export`                 | —             | 1           | 1           | 60s   |
+| `membership-sync`        | —             | 1           | 3           | 60s   |
 
 <!-- QUEUE-TABLE:END -->
 

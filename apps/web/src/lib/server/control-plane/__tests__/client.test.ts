@@ -14,6 +14,7 @@ import {
   fetchBillingCatalogue,
   fetchOwnerWorkspaces,
   leaveCloudWorkspace,
+  pushWorkspaceMembership,
   wipeCloudWorkspace,
   openOwnerWorkspace,
   transferWorkspaceOwnership,
@@ -117,6 +118,18 @@ describe('workspace control-plane credential', () => {
     expect(String(url)).toContain('/api/v1/internal/ownership')
     expect(init.method).toBe('POST')
     expect(JSON.parse(String(init.body))).toEqual({ toEmail: 'mate@example.com' })
+    expect(String(init.body)).not.toContain('workspaceId')
+    expect(String(init.body)).not.toContain('instanceId')
+  })
+
+  it('pushes desired seats without a workspace authority field', async () => {
+    hoisted.fetch.mockResolvedValue(new Response(JSON.stringify({ kept: 2 }), { status: 200 }))
+    await pushWorkspaceMembership(['admin@acme.test', 'mate@acme.test'])
+    const [url, init] = hoisted.fetch.mock.calls[0] as [URL, RequestInit]
+    expect(String(url)).toContain('/api/v1/internal/membership/reconcile')
+    expect(JSON.parse(String(init.body))).toEqual({
+      emails: ['admin@acme.test', 'mate@acme.test'],
+    })
     expect(String(init.body)).not.toContain('workspaceId')
     expect(String(init.body)).not.toContain('instanceId')
   })

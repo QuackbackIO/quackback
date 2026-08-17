@@ -261,6 +261,10 @@ export async function leaveCloudWorkspace(email: string): Promise<void> {
   await callWorkspaceControlPlane('/api/v1/internal/membership/leave', { email })
 }
 
+export async function pushWorkspaceMembership(emails: string[]): Promise<void> {
+  await callWorkspaceControlPlane('/api/v1/internal/membership/reconcile', { emails })
+}
+
 export async function wipeCloudWorkspace(): Promise<void> {
   await callWorkspaceControlPlane('/api/v1/internal/lifecycle/soft-delete', { confirm: 'wipe' })
 }
