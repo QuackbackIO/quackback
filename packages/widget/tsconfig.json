@@ -9,6 +9,7 @@
     "strict": true,
     "declaration": true,
     "declarationMap": true,
+    "emitDeclarationOnly": true,
     "skipLibCheck": true,
     "outDir": "./dist",
     "rootDir": "./src",
