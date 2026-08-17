@@ -8,10 +8,14 @@ friendly hosts; `createAuth` snapshotted `trustedOrigins` on first
 build and only rebuilt on `auth_config_version`. Adding a custom
 domain does not bump that version.
 
-App `6ce2613cf` + follow-up uses Better Auth's per-request
-`trustedOrigins: async (request) => …` from the live registry
-record (no extra fetch). Focused tests 6/6. Not pinned yet.
-Until the new digest is live, sign in on CP or the system host.
+App `0ea01011a` live as web `01ddd842` /
+`sha256:54f4c14152f4b9bae3629de4be1ad330f484888ff4fa6235c579b25c961fcc29`
+(`us-east4-eqdc4a` only). Docker `32027035641` SUCCESS. Worker /
+hourly / daily / migrator matching digest.
+
+Live prove: `POST https://walk-cd.mortondev.com/api/auth/sign-in/email-otp`
+with `Origin: https://walk-cd.mortondev.com` **200** + session cookie
+(no Invalid origin). South 307. Walk-cd still 200 Untitled workspace.
 
 ## 2026-08-17 — CP signup → paid Growth → custom domain
 
