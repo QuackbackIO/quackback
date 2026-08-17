@@ -5,6 +5,16 @@ echo "========================================"
 echo "  Quackback starting..."
 echo "========================================"
 
+# Fleet migrator is a command, not a server. The default path below would
+# otherwise run single-DB migrate.mjs against DATABASE_URL and bind PORT —
+# which is the operator trap for QUACKBACK_ROLE=migrator on this entrypoint.
+# Exact match: process-role trims, but the image contract is the env value.
+if [ "$QUACKBACK_ROLE" = "migrator" ]; then
+  echo ""
+  echo "QUACKBACK_ROLE=migrator — running fleet migrator (no HTTP server, no single-DB migrate)"
+  exec sh -c "bun /app/fleet-migrator.mjs enrol && bun /app/fleet-migrator.mjs run"
+fi
+
 # Migrations: skipped in K8s where a pre-upgrade Helm hook Job runs them
 # before pods roll. Set SKIP_MIGRATIONS=true to opt out of the on-start
 # migration step. Default behavior matches `docker run` ergonomics.

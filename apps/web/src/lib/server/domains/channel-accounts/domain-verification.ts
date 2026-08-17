@@ -24,10 +24,10 @@
  * survives.
  */
 import { resolveTxt } from 'node:dns/promises'
-import { createLogger } from '@quackback/logger'
 import type { SendingDomainOwnershipRecord } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
 
-const log = createLogger({ base: { service_name: 'quackback-web' } }).child({
+const log = logger.child({
   component: 'sending-domain-verification',
 })
 

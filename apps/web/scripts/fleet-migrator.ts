@@ -118,6 +118,9 @@ function workerId(): string {
 
 async function main(): Promise<number> {
   const { command, opts } = parseArgs(process.argv.slice(2))
+  if (!process.env.QUACKBACK_CONTROL_DATABASE_URL) {
+    throw new Error('QUACKBACK_CONTROL_DATABASE_URL is not set (no control database)')
+  }
   const target = latestBundledVersion()
 
   if (command === 'status') {
@@ -324,7 +327,7 @@ main()
     console.error(err instanceof Error ? err.message : String(err))
     if (
       err instanceof Error &&
-      /unknown (argument|command)|needs a value|needs --/.test(err.message)
+      /unknown (argument|command)|needs a value|needs --|no control database/.test(err.message)
     ) {
       console.error(`\n${USAGE}`)
       await closeControlSql()

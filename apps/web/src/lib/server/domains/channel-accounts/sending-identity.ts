@@ -50,8 +50,8 @@ import {
 } from '@quackback/email/ses-identity'
 import type { SesDomainIdentity } from '@quackback/email/ses-identity'
 import { sesRegion } from '@quackback/email/ses'
-import { createLogger } from '@quackback/logger'
 import type { SendingDomainId, TeamId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
 import {
   db,
   eq,
@@ -70,7 +70,7 @@ import { verifySendingDomainDns } from './domain-verification'
 import { MAIL_DOMAIN_RE } from '@/lib/server/utils/mail-domain'
 import { isAtOrUnder, platformSendingDomains, toAsciiDomain } from './outbound-identity'
 
-const log = createLogger({ base: { service_name: 'quackback-web' } }).child({
+const log = logger.child({
   component: 'sending-identity',
 })
 

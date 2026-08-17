@@ -66,7 +66,7 @@
  */
 import { addressDomain, applyDisplayName, parseAddress } from '@quackback/email/ses'
 import type { SendingIdentity } from '@quackback/email/sender'
-import { createLogger } from '@quackback/logger'
+import { logger } from '@/lib/server/logger'
 import { db, eq, emailSendingDomains } from '@/lib/server/db'
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { toAsciiDomain } from '@/lib/server/utils/mail-domain'
@@ -77,7 +77,7 @@ import {
 } from '@/lib/server/domains/conversation/conversation.email-channel'
 import { currentMailSlug } from '@/lib/server/domains/conversation/conversation.mail-slug'
 
-const log = createLogger({ base: { service_name: 'quackback-web' } }).child({
+const log = logger.child({
   component: 'outbound-identity',
 })
 
