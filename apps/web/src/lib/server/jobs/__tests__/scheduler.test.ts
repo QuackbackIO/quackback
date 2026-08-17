@@ -3,6 +3,7 @@ import {
   NODE_MAX_TIMEOUT_MS,
   createWorkspaceScheduler,
   recoverPendingWork,
+  wakeMode,
   type SchedulerClock,
 } from '../scheduler'
 
@@ -216,5 +217,33 @@ describe('workspace scheduler', () => {
     await scheduler.idle()
     expect(ran).toEqual([1_012_000])
     scheduler.stop()
+  })
+
+  it('kicks again if dirty remains after the pass budget and does not arm that pass’s deadline', async () => {
+    const clock = fakeClock()
+    let runs = 0
+    const scheduler = createWorkspaceScheduler({
+      clock,
+      maxPasses: 2,
+      runWorkspace: async () => {
+        runs += 1
+        if (runs <= 2) scheduler.signal('ws_a')
+        return new Date(clock.now() + 60_000)
+      },
+    })
+    scheduler.signal('ws_a')
+    await scheduler.idle()
+    // The first startRun hits maxPasses with dirty still set. Without a
+    // finally re-kick, that work waits on the +60s deadline.
+    expect(runs).toBe(3)
+    expect(clock.now()).toBe(1_000_000)
+    scheduler.stop()
+  })
+
+  it('defaults QUACKBACK_WAKE_MODE to listener', () => {
+    expect(wakeMode({})).toBe('listener')
+    expect(wakeMode({ QUACKBACK_WAKE_MODE: '  ' })).toBe('listener')
+    expect(wakeMode({ QUACKBACK_WAKE_MODE: 'scheduler' })).toBe('scheduler')
+    expect(wakeMode({ QUACKBACK_WAKE_MODE: 'both' })).toBe('both')
   })
 })

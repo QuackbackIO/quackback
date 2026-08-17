@@ -141,6 +141,45 @@ describe('the schedule tick', () => {
     ])
     const tick = await runScheduleTick(state, new Date(2026, 7, 9, 14, 37, 0))
     expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 40, 0))
+    expect(tick.nextEnabledSlotAt).toEqual(new Date(2026, 7, 9, 14, 40, 0))
+  })
+
+  it('does not report a gated-off per-minute cron as the next enabled slot', async () => {
+    const gated = queue('gated-min')
+    const daily = queue('ungated-daily')
+    __setJobDefinitionsForTests([
+      {
+        name: gated,
+        cron: '* * * * *',
+        cronEnabled: async () => false,
+        handler: async () => async () => {},
+      },
+      {
+        name: daily,
+        cron: '0 3 * * *',
+        handler: async () => async () => {},
+      },
+    ])
+    const tick = await runScheduleTick(createScheduleState(), new Date(2026, 7, 9, 14, 37, 0))
+    // The attached listener may still ask the gate next minute.
+    expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 38, 0))
+    // The process scheduler must heap the ungated daily, not the gated minute.
+    expect(tick.nextEnabledSlotAt).toEqual(new Date(2026, 7, 10, 3, 0, 0))
+  })
+
+  it('reports no enabled slot when every cron is gated off', async () => {
+    const gated = queue('gated-only')
+    __setJobDefinitionsForTests([
+      {
+        name: gated,
+        cron: '* * * * *',
+        cronEnabled: async () => false,
+        handler: async () => async () => {},
+      },
+    ])
+    const tick = await runScheduleTick(createScheduleState(), new Date(2026, 7, 9, 14, 37, 0))
+    expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 38, 0))
+    expect(tick.nextEnabledSlotAt).toBeNull()
   })
 
   it('does not backfill missed slots after an outage', async () => {

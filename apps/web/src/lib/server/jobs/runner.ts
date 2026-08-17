@@ -437,8 +437,14 @@ export interface ScheduleTickResult {
    */
   attempted: number
   enqueued: number
-  /** Earliest next slot across all schedules, for setting the next timer. */
+  /** Earliest next slot across all schedules, including gated-off ones. */
   nextSlotAt: Date | null
+  /**
+   * Earliest next slot of schedules that actually ran this tick.
+   * Gated-off `* * * * *` must not appear here — the process scheduler
+   * heaps this, and a snooze/SLA gate that is off must not wake every minute.
+   */
+  nextEnabledSlotAt: Date | null
 }
 
 const cronCache = new Map<string, ParsedCron>()
@@ -510,6 +516,7 @@ export async function runScheduleTick(
   let attempted = 0
   let enqueued = 0
   let nextSlotAt: Date | null = null
+  let nextEnabledSlotAt: Date | null = null
 
   // Every schedule name this tick considered. Anything in the state that is no
   // longer here belonged to a schedule that has gone away — a deleted segment,
@@ -549,6 +556,7 @@ export async function runScheduleTick(
 
     const next = nextSlotAfter(cron, now)
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
+    if (next && (!nextEnabledSlotAt || next < nextEnabledSlotAt)) nextEnabledSlotAt = next
   }
 
   /**
@@ -568,8 +576,9 @@ export async function runScheduleTick(
    * once a gate can stay shut for hours.
    *
    * `live` and `nextSlotAt` are maintained for the same reason: a gated-off
-   * schedule is not one that has gone away, and its next slot is still when the
-   * gate should be asked again.
+   * schedule is not one that has gone away, and the attached listener loop
+   * still asks the gate on that slot. `nextEnabledSlotAt` deliberately omits
+   * this — the process scheduler must not heap a gated-off per-minute cron.
    */
   const adopt = (stateKey: string, pattern: string): void => {
     const cron = cronFor(pattern)
@@ -625,7 +634,7 @@ export async function runScheduleTick(
     if (!live.has(key)) state.seen.delete(key)
   }
 
-  return { attempted, enqueued, nextSlotAt }
+  return { attempted, enqueued, nextSlotAt, nextEnabledSlotAt }
 }
 
 export interface MaintenanceResult extends ReapResult {

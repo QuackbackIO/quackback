@@ -14,6 +14,7 @@ import { isPooledTenancy } from '@/lib/server/workspaces/mode'
 import { listActiveWorkspaces } from '@/lib/server/workspaces/registry'
 import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import { SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
+import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 import { earliestWorkspaceDeadline } from './deadlines'
 import { earliestPendingJobAt, isMissingJobQueue } from './job-queue'
 import {
@@ -83,11 +84,14 @@ export function createWorkspaceScheduler(opts?: {
   clock?: SchedulerClock
   runWorkspace?: WorkspaceRun
   maxFanout?: number
+  /** Drain-loop ceiling. Exposed so the dirty-bit finally path can be tested. */
+  maxPasses?: number
   config?: RunnerConfig
 }): WorkspaceScheduler {
   const clock = opts?.clock ?? systemClock()
   const runWorkspace = opts?.runWorkspace ?? defaultRunWorkspace
   const maxFanout = opts?.maxFanout ?? DEFAULT_FANOUT
+  const maxPasses = opts?.maxPasses ?? MAX_PASSES
   const cfg = opts?.config ?? runnerConfig()
 
   const entries = new Map<string, HeapEntry>()
@@ -173,25 +177,31 @@ export function createWorkspaceScheduler(opts?: {
   function startRun(workspaceKey: string): void {
     running.add(workspaceKey)
     const promise = (async () => {
+      let nextWake: Date | null = null
       try {
         let passes = 0
-        let nextWake: Date | null = null
         do {
           dirty.delete(workspaceKey)
           nextWake = await runPass(workspaceKey)
           passes += 1
-        } while (dirty.has(workspaceKey) && passes < MAX_PASSES)
-
-        if (nextWake) scheduleAt(workspaceKey, nextWake.getTime())
-        else entries.delete(workspaceKey)
+        } while (dirty.has(workspaceKey) && passes < maxPasses)
       } catch (err) {
         log.error({ err, workspace: workspaceKey }, 'scheduler pass failed')
-        scheduleAt(workspaceKey, clock.now() + BAD_WORKSPACE_RETRY_MS)
+        nextWake = new Date(clock.now() + BAD_WORKSPACE_RETRY_MS)
       } finally {
         running.delete(workspaceKey)
-        const next = waitQueue.shift()
-        if (next) kick(next)
-        else rearmTimer()
+        // A signal that landed after the last pass (or after the pass budget)
+        // is still pending. Kick now; never arm a future deadline over it.
+        if (dirty.has(workspaceKey)) {
+          kick(workspaceKey)
+          rearmTimer()
+        } else {
+          if (nextWake) scheduleAt(workspaceKey, nextWake.getTime())
+          else entries.delete(workspaceKey)
+          const next = waitQueue.shift()
+          if (next) kick(next)
+          else rearmTimer()
+        }
       }
     })()
     inflight.add(promise)
@@ -282,15 +292,26 @@ export async function runWorkspaceUntilQuiescent(
   now = new Date()
 ): Promise<Date | null> {
   const pool: JobPool = createJobPool()
-  let nextCron: Date | null = null
+  let nextEnabledCron: Date | null = null
   let passes = 0
 
   try {
+    try {
+      await convertRelayOwnedEvents()
+    } catch (err) {
+      log.warn({ err }, 'relay-owned event convert failed')
+    }
     while (passes < MAX_PASSES) {
       passes += 1
       const scheduled = await runScheduleTick(state, now)
-      if (scheduled.nextSlotAt && (!nextCron || scheduled.nextSlotAt < nextCron)) {
-        nextCron = scheduled.nextSlotAt
+      // Heap only enabled / ungated crons. Gated-off snooze/SLA stay on
+      // `earliestWorkspaceDeadline` — their `* * * * *` next slot must not
+      // wake the compute every minute.
+      if (
+        scheduled.nextEnabledSlotAt &&
+        (!nextEnabledCron || scheduled.nextEnabledSlotAt < nextEnabledCron)
+      ) {
+        nextEnabledCron = scheduled.nextEnabledSlotAt
       }
       await runMaintenanceTick(cfg)
       const dispatched = await dispatchPass({ pool, config: cfg, run: runJob })
@@ -305,7 +326,7 @@ export async function runWorkspaceUntilQuiescent(
     }
     await awaitPool(pool)
   } catch (err) {
-    if (isMissingJobQueue(err)) return nextCron
+    if (isMissingJobQueue(err)) return nextEnabledCron
     throw err
   }
 
@@ -314,7 +335,7 @@ export async function runWorkspaceUntilQuiescent(
     throw err
   })
   const deadline = await earliestWorkspaceDeadline(now.getTime())
-  return minDate(pending, deadline, nextCron)
+  return minDate(pending, deadline, nextEnabledCron)
 }
 
 function minDate(...values: Array<Date | null | undefined>): Date | null {
