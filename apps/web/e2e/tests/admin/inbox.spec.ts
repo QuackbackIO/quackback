@@ -34,13 +34,14 @@ test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
     const row = page.getByText(seeded.messages[1]).first()
     await expect(row).toBeVisible({ timeout: 15000 })
 
-    // Open the thread: the URL carries ?c=<conversationId> and both visitor
-    // messages render as bubbles. The list is server-rendered before React
-    // hydrates (and networkidle is unusable with SSE), so a first click can
-    // land on inert HTML - retry until the selection reaches the URL.
+    // Open the thread: the URL carries ?i=<conversationId> (`?c=` is a
+    // legacy alias that validateSearch rewrites). The list is server-rendered
+    // before React hydrates (and networkidle is unusable with SSE), so a
+    // first click can land on inert HTML — retry until the selection reaches
+    // the URL.
     await expect(async () => {
       await row.click()
-      await expect(page).toHaveURL(new RegExp(`c=${seeded.conversationId}`), { timeout: 2000 })
+      await expect(page).toHaveURL(new RegExp(`i=${seeded.conversationId}`), { timeout: 2000 })
     }).toPass({ timeout: 15000 })
     await expect(page.getByText(seeded.messages[0]).first()).toBeVisible({ timeout: 10000 })
     // The preview text now appears in both the list row and the thread.
@@ -141,9 +142,11 @@ test.describe('Admin Support Inbox bulk actions', { tag: '@smoke' }, () => {
     await expect(row).toBeVisible({ timeout: 15000 })
 
     // The list is server-rendered before React hydrates, so a first click can
-    // land on inert HTML — retry checking the box until the toolbar appears.
+    // land on inert HTML. Per-row checkboxes are opacity-0 until hover, so
+    // hover first or Playwright will not consider them visible.
     const toolbar = page.getByRole('toolbar', { name: 'Bulk actions' })
     await expect(async () => {
+      await row.hover()
       await row.getByRole('checkbox').click()
       await expect(toolbar).toBeVisible({ timeout: 2000 })
     }).toPass({ timeout: 15000 })
