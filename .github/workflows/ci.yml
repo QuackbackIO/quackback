@@ -115,21 +115,21 @@ jobs:
       - run: bun run db:migrate
       - run: bun run db:seed
       # bunx re-resolves playwright from the registry and can hang for the
-      # whole job timeout. Drive the workspace binary and cache browsers.
+      # whole job timeout. Drive the workspace binary. Cache browsers so a
+      # later run skips the CDN fetch. System deps (--with-deps / apt) are
+      # best-effort: a stalled apt mirror must not fail the job.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install Playwright Chromium
-        timeout-minutes: 10
-        run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            ./node_modules/.bin/playwright install-deps chromium
-          else
-            ./node_modules/.bin/playwright install --with-deps chromium
-          fi
+        timeout-minutes: 8
         working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
       # Explicit spec files (not just the tag) so an unrelated spec with a
       # load-time error can't take the smoke gate down; the setup project
       # (admin auth) still runs as a project dependency, unfiltered.
@@ -260,18 +260,16 @@ jobs:
       - run: bun run db:migrate
       - run: bun run db:seed
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install Playwright Chromium
-        timeout-minutes: 10
-        run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            ./node_modules/.bin/playwright install-deps chromium
-          else
-            ./node_modules/.bin/playwright install --with-deps chromium
-          fi
+        timeout-minutes: 8
         working-directory: apps/web
+        run: |
+          ./node_modules/.bin/playwright install chromium
+          if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
+            echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
+          fi
       - run: ./node_modules/.bin/playwright test
         working-directory: apps/web
