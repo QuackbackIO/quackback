@@ -130,18 +130,41 @@ jobs:
           if ! timeout 90 ./node_modules/.bin/playwright install-deps chromium; then
             echo '::warning::playwright install-deps timed out or failed; continuing with browser-only install'
           fi
-      # Explicit spec files (not just the tag) so an unrelated spec with a
-      # load-time error can't take the smoke gate down; the setup project
-      # (admin auth) still runs as a project dependency, unfiltered.
+      # Start the app and run specs in one step. A separate step's shell
+      # exit SIGHUPs `vite dev` on GHA (same lesson as live-api). Waiting
+      # on /api/health/ready first avoids Playwright racing a Nitro 503.
       - name: Run @smoke e2e specs
-        run: >
-          ./node_modules/.bin/playwright test
-          tests/admin/inbox.spec.ts
-          tests/admin/workflows.spec.ts
-          tests/public/portal-support.spec.ts
-          tests/widget/messenger.spec.ts
-          --grep "@smoke"
-        working-directory: apps/web
+        env:
+          PLAYWRIGHT_REUSE_SERVER: '1'
+        run: |
+          bun --env-file=.env --cwd apps/web vite dev --host 0.0.0.0 --port 3000 \
+            > /tmp/quackback-e2e.log 2>&1 &
+          ready=0
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent "$BASE_URL/api/health/ready" > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo '===== server log (never became ready) ====='
+            cat /tmp/quackback-e2e.log
+            exit 1
+          fi
+          # Explicit spec files (not just the tag) so an unrelated spec with a
+          # load-time error can't take the smoke gate down; the setup project
+          # (admin auth) still runs as a project dependency, unfiltered.
+          if ! (cd apps/web && ./node_modules/.bin/playwright test \
+            tests/admin/inbox.spec.ts \
+            tests/admin/workflows.spec.ts \
+            tests/public/portal-support.spec.ts \
+            tests/widget/messenger.spec.ts \
+            --grep "@smoke"); then
+            echo '===== server log (playwright failed) ====='
+            cat /tmp/quackback-e2e.log
+            exit 1
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
