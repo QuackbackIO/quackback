@@ -394,11 +394,22 @@ export async function listPublicPosts(
 }
 
 export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<Set<PostId>> {
+  // Include both the post the vote was cast on and, when that post has been
+  // merged away, the canonical — so the survivor highlights as voted.
   const result = await db
-    .select({ postId: postVotes.postId })
+    .select({
+      postId: postVotes.postId,
+      canonicalPostId: posts.canonicalPostId,
+    })
     .from(postVotes)
-    .where(eq(postVotes.principalId, principalId))
-  return new Set(result.map((r) => r.postId))
+    .innerJoin(posts, eq(posts.id, postVotes.postId))
+    .where(and(eq(postVotes.principalId, principalId), isNull(posts.deletedAt)))
+  const ids = new Set<PostId>()
+  for (const row of result) {
+    ids.add(row.postId)
+    if (row.canonicalPostId) ids.add(row.canonicalPostId)
+  }
+  return ids
 }
 
 export async function getVotedPostIdsByUserId(

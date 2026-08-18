@@ -14,10 +14,9 @@ import {
   user,
   sql,
   eq,
-  and,
-  desc,
 } from '@/lib/server/db'
-import { createId, toUuid, type PostId, type PostVoteId, type PrincipalId } from '@quackback/ids'
+import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import { relatedPostIdsSql } from './post.merge-ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -26,23 +25,6 @@ import { dispatchPostVoted } from '@/lib/server/events/dispatch'
 import type { VoteResult } from './post.types'
 
 const log = logger.child({ component: 'post-voting' })
-import {
-  levelFromFlags,
-  type SubscriptionLevel,
-} from '@/lib/server/domains/subscriptions/subscription.types'
-
-export interface VoterInfo {
-  principalId: string
-  displayName: string | null
-  email: string | null
-  avatarUrl: string | null
-  isAnonymous: boolean
-  sourceType: string | null
-  sourceExternalUrl: string | null
-  addedByName: string | null
-  createdAt: Date | string
-  subscriptionLevel: SubscriptionLevel
-}
 
 /**
  * Emit the post.voted event for a freshly cast vote: one indexed lookup for
@@ -137,7 +119,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     ),
     existing AS (
       SELECT id FROM ${postVotes}
-      WHERE post_id = ${postUuid}::uuid AND principal_id = ${principalUuid}::uuid
+      WHERE principal_id = ${principalUuid}::uuid
+        AND post_id IN ${relatedPostIdsSql(postUuid)}
     ),
     deleted AS (
       DELETE FROM ${postVotes}
@@ -267,6 +250,11 @@ export async function addVoteOnBehalf(
       SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
+        AND NOT EXISTS (
+          SELECT 1 FROM ${postVotes}
+          WHERE principal_id = ${principalUuid}::uuid
+            AND post_id IN ${relatedPostIdsSql(postUuid)}
+        )
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING id
     ),
@@ -345,8 +333,8 @@ export async function removeVote(
     ),
     deleted AS (
       DELETE FROM ${postVotes}
-      WHERE post_id = ${postUuid}::uuid
-        AND principal_id = ${principalUuid}::uuid
+      WHERE principal_id = ${principalUuid}::uuid
+        AND post_id IN ${relatedPostIdsSql(postUuid)}
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
       RETURNING id
@@ -385,121 +373,9 @@ export async function removeVote(
   return { removed: row.deleted, voteCount: row.vote_count ?? 0 }
 }
 
-export interface ListPostVotersResult {
-  items: VoterInfo[]
-  nextCursor: PostVoteId | null
-  hasMore: boolean
-}
-
-/**
- * List the voters on a post, newest votes first, with optional keyset
- * pagination. The cursor is a vote ID; the page continues strictly after that
- * vote in (createdAt, id) order. A cursor that no longer resolves is ignored
- * rather than erroring, matching the inbox listing. When no limit is given
- * the full list is returned and hasMore is always false.
- */
-export async function listPostVoters(
-  postId: PostId,
-  options: { limit?: number; cursor?: PostVoteId } = {}
-): Promise<ListPostVotersResult> {
-  const { limit, cursor } = options
-
-  const conditions = [eq(postVotes.postId, postId)]
-  if (cursor) {
-    const cursorVote = await db.query.postVotes.findFirst({
-      where: eq(postVotes.id, cursor),
-      columns: { id: true, createdAt: true },
-    })
-    if (cursorVote) {
-      conditions.push(
-        sql`(${postVotes.createdAt}, ${postVotes.id}) < (${cursorVote.createdAt.toISOString()}, ${toUuid(cursorVote.id)}::uuid)`
-      )
-    }
-  }
-
-  const query = db
-    .select({
-      voteId: postVotes.id,
-      principalId: principal.id,
-      displayName: principal.displayName,
-      email: user.email,
-      avatarUrl: principal.avatarUrl,
-      principalType: principal.type,
-      sourceType: postVotes.sourceType,
-      sourceExternalUrl: postVotes.sourceExternalUrl,
-      addedByName: sql<string | null>`(
-        SELECT p2.display_name FROM ${principal} p2
-        WHERE p2.id = ${postVotes.addedByPrincipalId}
-      )`.as('added_by_name'),
-      createdAt: postVotes.createdAt,
-      notifyComments: postSubscriptions.notifyComments,
-      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
-    })
-    .from(postVotes)
-    .innerJoin(principal, eq(principal.id, postVotes.principalId))
-    .leftJoin(user, eq(user.id, principal.userId))
-    .leftJoin(
-      postSubscriptions,
-      and(
-        eq(postSubscriptions.postId, postVotes.postId),
-        eq(postSubscriptions.principalId, postVotes.principalId)
-      )
-    )
-    .where(and(...conditions))
-    // Secondary id key keeps the order total so pages never overlap on ties.
-    .orderBy(desc(postVotes.createdAt), desc(postVotes.id))
-    .$dynamic()
-
-  const rows = limit !== undefined ? await query.limit(limit + 1) : await query
-
-  const hasMore = limit !== undefined && rows.length > limit
-  const pageRows = hasMore ? rows.slice(0, limit) : rows
-
-  return {
-    items: pageRows.map(mapVoterRow),
-    nextCursor: hasMore ? pageRows[pageRows.length - 1].voteId : null,
-    hasMore,
-  }
-}
-
-type VoterRow = {
-  principalId: PrincipalId
-  displayName: string | null
-  email: string | null
-  avatarUrl: string | null
-  principalType: string
-  sourceType: string | null
-  sourceExternalUrl: string | null
-  addedByName: string | null
-  createdAt: Date
-  notifyComments: boolean | null
-  notifyStatusChanges: boolean | null
-}
-
-function mapVoterRow(row: VoterRow): VoterInfo {
-  const isAnonymous = row.principalType === 'anonymous'
-  return {
-    principalId: row.principalId,
-    displayName: isAnonymous ? null : row.displayName,
-    // Anonymous voters carry the synthetic placeholder email — never expose it.
-    email: realEmail(row.email),
-    avatarUrl: isAnonymous ? null : row.avatarUrl,
-    isAnonymous,
-    sourceType: row.sourceType,
-    sourceExternalUrl: row.sourceExternalUrl,
-    addedByName: row.addedByName,
-    createdAt: row.createdAt,
-    subscriptionLevel: isAnonymous
-      ? ('none' as const)
-      : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
-  }
-}
-
-/**
- * Get all voters for a post with their identity and source attribution.
- * Returns newest votes first.
- */
-export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
-  const { items } = await listPostVoters(postId)
-  return items
-}
+export {
+  getPostVoters,
+  listPostVoters,
+  type VoterInfo,
+  type ListPostVotersResult,
+} from './post.voters'

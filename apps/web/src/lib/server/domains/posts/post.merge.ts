@@ -28,11 +28,7 @@ import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { ANONYMOUS_ACTOR, canViewPost, type Actor } from '@/lib/server/policy'
-
-// Drizzle's PgTransaction is structurally compatible with `db` for the
-// subset of operations recalculateCanonicalVoteCount uses (execute +
-// update). Type as a permissive shape so callers can pass either.
-type TransactionalDb = Pick<typeof db, 'execute' | 'update'>
+import { recalculateCanonicalVoteCount } from './post.merge-ids'
 import {
   dispatchPostMerged,
   dispatchPostUnmerged,
@@ -520,52 +516,4 @@ export async function previewMergedPost(
     duplicateComments,
     duplicatePostTitle: duplicateDetails.title,
   }
-}
-
-/**
- * Recalculate the vote count for a canonical post.
- * Counts unique voters across the canonical post and all its merged duplicates.
- *
- * @param canonicalPostId - The canonical post to recalculate
- * @returns The new vote count
- */
-async function recalculateCanonicalVoteCount(
-  canonicalPostId: PostId,
-  options?: { resetMergeCheck?: boolean },
-  tx?: TransactionalDb
-): Promise<number> {
-  // Run via the transaction handle when called from inside mergePost /
-  // unmergePost so the recalc commits atomically with the merge link.
-  // Outside-of-tx callers (the BullMQ merge-recheck handler) fall back
-  // to the global db connection.
-  const conn = tx ?? db
-  // Count unique member votes across canonical + all merged duplicates
-  // Note: must convert TypeID to raw UUID for use in raw SQL
-  const canonicalUuid = toUuid(canonicalPostId)
-  const result = await conn.execute<{ unique_voters: number }>(sql`
-    WITH related_post_ids AS (
-      SELECT ${canonicalUuid}::uuid AS post_id
-      UNION ALL
-      SELECT id FROM ${posts}
-      WHERE canonical_post_id = ${canonicalUuid}::uuid
-        AND deleted_at IS NULL
-    )
-    SELECT COUNT(DISTINCT v.principal_id)::int AS unique_voters
-    FROM ${postVotes} v
-    WHERE v.post_id IN (SELECT post_id FROM related_post_ids)
-  `)
-
-  const rows = getExecuteRows<{ unique_voters: number }>(result)
-  const newCount = rows[0]?.unique_voters ?? 0
-
-  // Update the canonical post's vote count (and optionally reset mergeCheckedAt)
-  await conn
-    .update(posts)
-    .set({
-      voteCount: newCount,
-      ...(options?.resetMergeCheck && { mergeCheckedAt: null }),
-    })
-    .where(eq(posts.id, canonicalPostId))
-
-  return newCount
 }
