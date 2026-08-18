@@ -1201,6 +1201,7 @@ const LOCALE_LABEL: Record<string, string> = {
   de: 'German',
   fr: 'French',
   es: 'Spanish',
+  sv: 'Swedish',
   ar: 'Arabic',
   ru: 'Russian',
   'pt-br': 'Portuguese (Brazil)',
