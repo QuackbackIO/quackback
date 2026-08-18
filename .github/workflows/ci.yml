@@ -182,11 +182,12 @@ jobs:
           echo "API_KEY=$api_key" >> "$GITHUB_ENV"
       - name: Start application and run live API assertions
         run: |
-          # Keep the server in this step. A separate step's shell exit
-          # SIGHUPs `bun run dev` even with nohup/disown on GHA runners.
-          bun run dev > /tmp/quackback-live-api.log 2>&1 &
+          # Bind every interface. Vite's default localhost is sometimes
+          # IPv6-only while Node fetch of *.localhost uses 127.0.0.1.
+          bun --env-file=.env --cwd apps/web vite dev --host 0.0.0.0 --port 3000 \
+            > /tmp/quackback-live-api.log 2>&1 &
           ready=0
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 90); do
             if curl --fail --silent "$BASE_URL/api/health/ready" > /dev/null; then
               ready=1
               break
@@ -194,11 +195,17 @@ jobs:
             sleep 1
           done
           if [ "$ready" -ne 1 ]; then
+            echo '===== server log (never became ready) ====='
             cat /tmp/quackback-live-api.log
             exit 1
           fi
-          (cd apps/web && bunx vitest run --config vitest.config.ts \
-            src/lib/server/domains/api/__tests__/api-integration.test.ts)
+          if ! (cd apps/web && bunx vitest run --config vitest.config.ts \
+            src/lib/server/domains/api/__tests__/api-integration.test.ts); then
+            echo '===== server log (vitest failed) ====='
+            cat /tmp/quackback-live-api.log
+            ss -lntp || true
+            exit 1
+          fi
 
   e2e-full:
     if: github.event_name == 'schedule'
