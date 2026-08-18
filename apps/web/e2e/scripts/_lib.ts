@@ -1,6 +1,6 @@
 /**
  * Shared helpers for the e2e CLI scripts. Each script runs as a standalone
- * dotenv-wrapped bun process (see e2e/utils/db-helpers.ts), so these own the
+ * `bun --env-file` process (see e2e/utils/db-helpers.ts), so these own the
  * env guards and connection lifecycles the scripts would otherwise repeat.
  */
 import postgres from 'postgres'
