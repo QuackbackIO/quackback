@@ -114,14 +114,28 @@ jobs:
       - run: bun run --filter @quackback/widget build
       - run: bun run db:migrate
       - run: bun run db:seed
-      - run: bunx playwright install --with-deps chromium
+      # bunx re-resolves playwright from the registry and can hang for the
+      # whole job timeout. Drive the workspace binary and cache browsers.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 10
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            ./node_modules/.bin/playwright install-deps chromium
+          else
+            ./node_modules/.bin/playwright install --with-deps chromium
+          fi
         working-directory: apps/web
       # Explicit spec files (not just the tag) so an unrelated spec with a
       # load-time error can't take the smoke gate down; the setup project
       # (admin auth) still runs as a project dependency, unfiltered.
       - name: Run @smoke e2e specs
         run: >
-          bunx playwright test
+          ./node_modules/.bin/playwright test
           tests/admin/inbox.spec.ts
           tests/admin/workflows.spec.ts
           tests/public/portal-support.spec.ts
@@ -245,7 +259,19 @@ jobs:
       - run: bun run --filter @quackback/widget build
       - run: bun run db:migrate
       - run: bun run db:seed
-      - run: bunx playwright install --with-deps chromium
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Playwright Chromium
+        timeout-minutes: 10
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            ./node_modules/.bin/playwright install-deps chromium
+          else
+            ./node_modules/.bin/playwright install --with-deps chromium
+          fi
         working-directory: apps/web
-      - run: bunx playwright test
+      - run: ./node_modules/.bin/playwright test
         working-directory: apps/web
