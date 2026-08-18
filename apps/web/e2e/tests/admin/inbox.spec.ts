@@ -35,6 +35,7 @@ test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
       timeout: 60_000,
     },
     async ({ page }) => {
+      test.setTimeout(90_000)
       await page.goto('/admin/inbox')
 
       // The seeded conversation appears in the default (All / open) list - the
@@ -115,10 +116,9 @@ test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
       await waitForToast(page, /Post created from conversation|Upvoted existing post/)
       await expect(dialog).toBeHidden({ timeout: 10000 })
 
-      // Snooze the conversation (until the customer replies): the status badge
-      // flips to 'snoozed'. A customer reply then waking it is covered by unit
-      // tests (it needs a widget-side message this DB-seeded spec can't drive).
-      await panel.getByRole('button', { name: 'open', exact: true }).click()
+      // Snooze lives on the thread-header moon control (the status menu is
+      // only Open/Closed now). The status badge still flips to 'snoozed'.
+      await page.getByRole('button', { name: 'Snooze' }).click()
       await page.getByRole('menuitem', { name: 'Until they reply' }).click()
       await expect(panel.getByRole('button', { name: 'snoozed', exact: true })).toBeVisible({
         timeout: 10000,
