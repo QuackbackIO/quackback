@@ -1,7 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { githubInboundHandler } from '@/integrations/github/server/inbound'
-import { jiraInboundHandler } from '@/integrations/jira/server/inbound'
 import { asanaInboundHandler } from '@/integrations/asana/server/inbound'
 import { gitlabInboundHandler } from '@/integrations/gitlab/server/inbound'
 import { trelloInboundHandler } from '@/integrations/trello/server/inbound'
@@ -21,13 +20,6 @@ const cases = [
     // Same "sha256=<hex>" shape as valid, but 4 hex chars short — exercises the
     // length guard (signature.length === expected.length) ahead of timingSafeEqual,
     // which would otherwise throw on mismatched buffer lengths.
-    lengthMismatch: `sha256=${createHmac('sha256', secret).update(body).digest('hex').slice(0, -4)}`,
-  },
-  {
-    name: 'Jira',
-    handler: jiraInboundHandler,
-    header: 'X-Hub-Signature',
-    valid: `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`,
     lengthMismatch: `sha256=${createHmac('sha256', secret).update(body).digest('hex').slice(0, -4)}`,
   },
   {

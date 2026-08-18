@@ -675,7 +675,7 @@ describe('<ProviderDetailPage> request options', () => {
 
   it('auto-expands Advanced when a non-default prompt is set', () => {
     // A non-default configuration must never sit hidden behind a closed panel.
-    renderPage(makeProvider({ prompt: 'login' }))
+    renderPage(makeProvider({ prompt: 'omit' }))
     expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
       'aria-expanded',
       'true'
