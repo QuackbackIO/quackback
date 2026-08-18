@@ -17,6 +17,9 @@ import { waitForToast } from '../../utils/helpers'
  * on the widget.
  */
 test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
+  // The Properties aside is `hidden xl:flex` (1280px). CI's default 1280
+  // viewport can land just under that with chrome, so pin a desktop size.
+  test.use({ viewport: { width: 1920, height: 1080 } })
   let seeded: SeededConversation
 
   test.beforeAll(() => {
@@ -49,7 +52,7 @@ test.describe('Admin Support Inbox', { tag: '@smoke' }, () => {
 
     // Triage controls live in the right-hand detail panel at this viewport
     // (1920px, xl+). The header carries hidden duplicates, so scope to the panel.
-    const panel = page.getByRole('complementary').filter({ hasText: 'Manage' })
+    const panel = page.getByRole('complementary', { name: 'Item details' })
     await expect(panel).toBeVisible()
 
     // A freshly seeded conversation is unassigned.
@@ -156,7 +159,7 @@ test.describe('Admin Support Inbox bulk actions', { tag: '@smoke' }, () => {
     await toolbar.getByRole('button', { name: 'Close', exact: true }).click()
 
     // The summary toast confirms the bulk apply; the row leaves the open list.
-    await waitForToast(page, /Closed 1 conversation/)
+    await waitForToast(page, /Closed 1 item/)
     await expect(row).toBeHidden({ timeout: 10000 })
   })
 })

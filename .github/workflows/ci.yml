@@ -180,13 +180,11 @@ jobs:
           api_key=$(bun apps/web/scripts/create-ci-api-key.ts)
           echo "::add-mask::$api_key"
           echo "API_KEY=$api_key" >> "$GITHUB_ENV"
-      - name: Start application and require readiness
+      - name: Start application and run live API assertions
         run: |
-          # nohup + disown so the step's shell exit does not SIGHUP the
-          # dev server before the next step can hit it.
-          nohup bun run dev > /tmp/quackback-live-api.log 2>&1 &
-          echo $! > /tmp/quackback-live-api.pid
-          disown || true
+          # Keep the server in this step. A separate step's shell exit
+          # SIGHUPs `bun run dev` even with nohup/disown on GHA runners.
+          bun run dev > /tmp/quackback-live-api.log 2>&1 &
           ready=0
           for attempt in $(seq 1 60); do
             if curl --fail --silent "$BASE_URL/api/health/ready" > /dev/null; then
@@ -199,9 +197,8 @@ jobs:
             cat /tmp/quackback-live-api.log
             exit 1
           fi
-      - name: Run live API assertions
-        run: bunx vitest run --config vitest.config.ts src/lib/server/domains/api/__tests__/api-integration.test.ts
-        working-directory: apps/web
+          (cd apps/web && bunx vitest run --config vitest.config.ts \
+            src/lib/server/domains/api/__tests__/api-integration.test.ts)
 
   e2e-full:
     if: github.event_name == 'schedule'
