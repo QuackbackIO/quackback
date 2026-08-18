@@ -146,7 +146,7 @@ describe('mergePost', () => {
     mockPrincipalFindFirst.mockResolvedValue({ displayName: 'Author' })
     mockBoardsFindFirst.mockResolvedValue({ id: 'board_mock', slug: 'feedback' })
     // Default: vote count recalculation returns 5
-    mockDbExecute.mockResolvedValue([{ unique_voters: 5 }])
+    mockDbExecute.mockResolvedValue([{ unique_voters: 5, visible_comments: 2 }])
     // Default in-transaction re-check sequence: no existing child on the
     // duplicate, canonical not merged elsewhere — i.e. the happy path.
     // `clearAllMocks` clears call history but not a queued `Once` chain
@@ -241,7 +241,7 @@ describe('mergePost', () => {
     mockPostsFindFirst
       .mockResolvedValueOnce(mockPost({ id: POST_A }))
       .mockResolvedValueOnce(mockPost({ id: POST_B }))
-    mockDbExecute.mockResolvedValue([{ unique_voters: 8 }])
+    mockDbExecute.mockResolvedValue([{ unique_voters: 8, visible_comments: 3 }])
 
     const result = await mergePost(POST_A, POST_B, ACTOR)
 
@@ -341,7 +341,7 @@ describe('unmergePost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockBoardsFindFirst.mockResolvedValue({ id: 'board_mock', slug: 'feedback' })
-    mockDbExecute.mockResolvedValue([{ unique_voters: 3 }])
+    mockDbExecute.mockResolvedValue([{ unique_voters: 3, visible_comments: 1 }])
   })
 
   it('throws NotFoundError when post not found', async () => {
