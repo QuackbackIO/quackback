@@ -403,7 +403,10 @@ export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<
     })
     .from(postVotes)
     .innerJoin(posts, eq(posts.id, postVotes.postId))
-    .where(and(eq(postVotes.principalId, principalId), isNull(posts.deletedAt)))
+    .innerJoin(boards, eq(boards.id, posts.boardId))
+    .where(
+      and(eq(postVotes.principalId, principalId), isNull(posts.deletedAt), isNull(boards.deletedAt))
+    )
   const ids = new Set<PostId>()
   for (const row of result) {
     ids.add(row.postId)
@@ -425,7 +428,10 @@ export async function getVotedPostIdsByUserId(
     .from(postVotes)
     .innerJoin(principalTable, eq(postVotes.principalId, principalTable.id))
     .innerJoin(posts, eq(posts.id, postVotes.postId))
-    .where(and(eq(principalTable.userId, userId), isNull(posts.deletedAt)))
+    .innerJoin(boards, eq(boards.id, posts.boardId))
+    .where(
+      and(eq(principalTable.userId, userId), isNull(posts.deletedAt), isNull(boards.deletedAt))
+    )
   const ids = new Set<PostId>()
   for (const row of result) {
     ids.add(row.postId)

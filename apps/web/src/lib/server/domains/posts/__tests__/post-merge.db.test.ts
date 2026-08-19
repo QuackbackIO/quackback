@@ -453,7 +453,7 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
         postId: canonical,
         principalId: voter,
         reason: 'manual',
-        notifyComments: true,
+        notifyComments: false,
         notifyStatusChanges: true,
       },
       {
@@ -470,6 +470,10 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     expect(subscribers.map((s) => s.principalId)).toEqual([voter])
     expect(subscribers[0]?.notifyComments).toBe(true)
     expect(subscribers[0]?.notifyStatusChanges).toBe(true)
+
+    const status = await getSubscriptionStatus(voter, canonical)
+    expect(status.subscribed).toBe(true)
+    expect(status.level).toBe('all')
   })
 
   it('reads and unsubscribes a source-only subscription via the canonical', async () => {

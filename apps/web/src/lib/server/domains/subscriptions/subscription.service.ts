@@ -170,9 +170,7 @@ export async function getSubscriptionStatus(
         sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`
       )
     )
-  const subscription = rows.find((row) => row.postId === postId) ?? rows[0]
-
-  if (!subscription) {
+  if (rows.length === 0) {
     return {
       subscribed: false,
       notifyComments: false,
@@ -182,12 +180,16 @@ export async function getSubscriptionStatus(
     }
   }
 
+  const notifyComments = rows.some((row) => row.notifyComments)
+  const notifyStatusChanges = rows.some((row) => row.notifyStatusChanges)
+  const preferred = rows.find((row) => row.postId === postId) ?? rows[0]
+
   return {
     subscribed: true,
-    notifyComments: subscription.notifyComments,
-    notifyStatusChanges: subscription.notifyStatusChanges,
-    reason: subscription.reason as SubscriptionReason,
-    level: levelFromFlags(subscription.notifyComments, subscription.notifyStatusChanges),
+    notifyComments,
+    notifyStatusChanges,
+    reason: preferred.reason as SubscriptionReason,
+    level: levelFromFlags(notifyComments, notifyStatusChanges),
   }
 }
 
@@ -206,11 +208,6 @@ export async function getSubscribersForEvent(
 ): Promise<Subscriber[]> {
   log.debug({ post_id: postId, event_type: eventType }, 'get subscribers for event')
   // Determine which column to filter by
-  const notifyColumn =
-    eventType === 'comment'
-      ? postSubscriptions.notifyComments
-      : postSubscriptions.notifyStatusChanges
-
   const rows = await db
     .select({
       principalId: postSubscriptions.principalId,
@@ -231,7 +228,6 @@ export async function getSubscribersForEvent(
     .where(
       and(
         sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`,
-        eq(notifyColumn, true),
         isNotNull(user.email) // Only subscribers with real email addresses
       )
     )
@@ -258,7 +254,11 @@ export async function getSubscribersForEvent(
     existing.notifyComments = existing.notifyComments || row.notifyComments
     existing.notifyStatusChanges = existing.notifyStatusChanges || row.notifyStatusChanges
   }
-  return [...unique.values()]
+  const wantsEvent =
+    eventType === 'comment'
+      ? (subscriber: Subscriber) => subscriber.notifyComments
+      : (subscriber: Subscriber) => subscriber.notifyStatusChanges
+  return [...unique.values()].filter(wantsEvent)
 }
 
 /**

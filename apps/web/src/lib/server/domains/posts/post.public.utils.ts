@@ -125,18 +125,19 @@ export async function getVoteAndSubscriptionStatus(
         WHERE ${postVotes.principalId} = ${principalUuid}::uuid
           AND ${postVotes.postId} IN ${relatedPostIdsSql(postUuid)}
       ) as has_voted,
-      ps.post_id IS NOT NULL as subscribed,
+      ps.notify_comments IS NOT NULL as subscribed,
       ps.notify_comments,
       ps.notify_status_changes,
       ps.reason
     FROM (SELECT 1) AS dummy
     LEFT JOIN LATERAL (
-      SELECT ps.post_id, ps.notify_comments, ps.notify_status_changes, ps.reason
+      SELECT
+        bool_or(ps.notify_comments) as notify_comments,
+        bool_or(ps.notify_status_changes) as notify_status_changes,
+        (array_agg(ps.reason ORDER BY (ps.post_id = ${postUuid}::uuid) DESC))[1] as reason
       FROM ${postSubscriptions} ps
       WHERE ps.principal_id = ${principalUuid}::uuid
         AND ps.post_id IN ${relatedPostIdsSql(postUuid)}
-      ORDER BY (ps.post_id = ${postUuid}::uuid) DESC
-      LIMIT 1
     ) ps ON true
   `)
 

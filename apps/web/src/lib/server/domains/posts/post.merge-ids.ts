@@ -66,7 +66,13 @@ export async function adjustCanonicalCommentCount(
     UPDATE ${posts}
     SET comment_count = GREATEST(0, comment_count + ${delta})
     WHERE id = (
-      SELECT p.canonical_post_id FROM ${posts} p WHERE p.id = ${postUuid}::uuid
+      SELECT p.canonical_post_id
+      FROM ${posts} p
+      INNER JOIN ${boards} b ON b.id = p.board_id
+      WHERE p.id = ${postUuid}::uuid
+        AND p.canonical_post_id IS NOT NULL
+        AND p.deleted_at IS NULL
+        AND b.deleted_at IS NULL
     )
   `)
 }
