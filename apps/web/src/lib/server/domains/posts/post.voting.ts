@@ -109,8 +109,12 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     vote_count: number
   }>(sql`
     WITH post_check AS (
-      SELECT id, board_id, vote_count FROM ${posts}
-      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+      SELECT c.id, c.board_id, c.vote_count
+      FROM ${posts} p
+      INNER JOIN ${posts} c ON c.id = COALESCE(p.canonical_post_id, p.id)
+      WHERE p.id = ${postUuid}::uuid
+        AND p.deleted_at IS NULL
+        AND c.deleted_at IS NULL
     ),
     board_check AS (
       SELECT 1 FROM ${boards}
@@ -131,7 +135,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     ),
     inserted AS (
       INSERT INTO ${postVotes} (id, post_id, principal_id, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, NOW()
+      SELECT ${voteId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
@@ -147,7 +151,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
           ELSE 0
         END
       )
-      WHERE id = ${postUuid}::uuid
+      WHERE id = (SELECT id FROM post_check)
       RETURNING vote_count
     ),
     anon_check AS (
@@ -156,7 +160,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
-      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
+      SELECT ${subscriptionId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
         AND NOT EXISTS (SELECT 1 FROM anon_check)
       ON CONFLICT (post_id, principal_id) DO NOTHING
@@ -237,8 +241,12 @@ export async function addVoteOnBehalf(
     vote_count: number
   }>(sql`
     WITH post_check AS (
-      SELECT id, board_id, vote_count FROM ${posts}
-      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+      SELECT c.id, c.board_id, c.vote_count
+      FROM ${posts} p
+      INNER JOIN ${posts} c ON c.id = COALESCE(p.canonical_post_id, p.id)
+      WHERE p.id = ${postUuid}::uuid
+        AND p.deleted_at IS NULL
+        AND c.deleted_at IS NULL
     ),
     board_check AS (
       SELECT 1 FROM ${boards}
@@ -247,7 +255,7 @@ export async function addVoteOnBehalf(
     ),
     inserted AS (
       INSERT INTO ${postVotes} (id, post_id, principal_id, source_type, source_external_url, added_by_principal_id, created_at, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
+      SELECT ${voteId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
         AND NOT EXISTS (
@@ -261,13 +269,13 @@ export async function addVoteOnBehalf(
     updated_post AS (
       UPDATE ${posts}
       SET vote_count = GREATEST(0, vote_count + 1)
-      WHERE id = ${postUuid}::uuid
+      WHERE id = (SELECT id FROM post_check)
         AND EXISTS (SELECT 1 FROM inserted)
       RETURNING vote_count
     ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
-      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
+      SELECT ${subscriptionId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING 1
@@ -323,8 +331,12 @@ export async function removeVote(
     vote_count: number
   }>(sql`
     WITH post_check AS (
-      SELECT id, board_id, vote_count FROM ${posts}
-      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+      SELECT c.id, c.board_id, c.vote_count
+      FROM ${posts} p
+      INNER JOIN ${posts} c ON c.id = COALESCE(p.canonical_post_id, p.id)
+      WHERE p.id = ${postUuid}::uuid
+        AND p.deleted_at IS NULL
+        AND c.deleted_at IS NULL
     ),
     board_check AS (
       SELECT 1 FROM ${boards}
@@ -342,7 +354,7 @@ export async function removeVote(
     updated_post AS (
       UPDATE ${posts}
       SET vote_count = GREATEST(0, vote_count - 1)
-      WHERE id = ${postUuid}::uuid
+      WHERE id = (SELECT id FROM post_check)
         AND EXISTS (SELECT 1 FROM deleted)
       RETURNING vote_count
     )

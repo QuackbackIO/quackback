@@ -415,12 +415,23 @@ export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<
 export async function getVotedPostIdsByUserId(
   userId: import('@quackback/ids').UserId
 ): Promise<Set<PostId>> {
+  // Same source-to-canonical mapping as getAllUserVotedPostIds: a vote on a
+  // merged source should highlight the surviving post in the portal list.
   const result = await db
-    .select({ postId: postVotes.postId })
+    .select({
+      postId: postVotes.postId,
+      canonicalPostId: posts.canonicalPostId,
+    })
     .from(postVotes)
     .innerJoin(principalTable, eq(postVotes.principalId, principalTable.id))
-    .where(eq(principalTable.userId, userId))
-  return new Set(result.map((r) => r.postId))
+    .innerJoin(posts, eq(posts.id, postVotes.postId))
+    .where(and(eq(principalTable.userId, userId), isNull(posts.deletedAt)))
+  const ids = new Set<PostId>()
+  for (const row of result) {
+    ids.add(row.postId)
+    if (row.canonicalPostId) ids.add(row.canonicalPostId)
+  }
+  return ids
 }
 
 export async function getBoardByPostId(

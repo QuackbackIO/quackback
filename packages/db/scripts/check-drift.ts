@@ -235,14 +235,14 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     reason:
       'drizzle-kit composite UNIQUE column-order rewrite (PG 17 creation order vs alphabetical TS)',
     pattern:
-      /^ALTER TABLE "(?:post_external_links|ticket_external_links|integration_event_mappings)" (?:DROP|ADD) CONSTRAINT "/,
+      /^ALTER TABLE "(?:post_external_links|ticket_external_links|integration_event_mappings)" (?:DROP|ADD) CONSTRAINT "(?:post_external_links_type_external_post_unique|ticket_external_links_type_external_ticket_unique|mapping_unique)"/,
     optional: true,
   },
   {
     reason:
       'drizzle-kit composite PK column-order rewrite (PG 17 creation order vs alphabetical TS)',
     pattern:
-      /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories)" DROP CONSTRAINT "/,
+      /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories)" DROP CONSTRAINT "(?:status_incident_components_incident_id_component_id_pk|ticket_links_pkey|visitor_top_stats_pkey|ticket_conversations_pkey|changelog_entry_categories_pk)"/,
     optional: true,
   },
 ]

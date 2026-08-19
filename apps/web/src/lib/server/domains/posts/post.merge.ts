@@ -287,7 +287,12 @@ export async function unmergePost(
       })
       .where(eq(posts.id, postId))
 
-    return recalculateCanonicalVoteCount(canonicalPostId, undefined, tx)
+    const canonicalCount = await recalculateCanonicalVoteCount(canonicalPostId, undefined, tx)
+    // Source counters were not maintained while merged (vote/unvote on the
+    // thread updates the canonical). Recalc the restored post so it
+    // reappears with the votes and comments that still belong to it.
+    await recalculateCanonicalVoteCount(postId, undefined, tx)
+    return canonicalCount
   })
 
   // Look up the canonical post title and board for the activity metadata and event

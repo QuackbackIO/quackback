@@ -10,11 +10,10 @@ import {
   sql,
   eq,
   and,
-  inArray,
   desc,
 } from '@/lib/server/db'
 import { toUuid, type PostId, type PostVoteId, type PrincipalId } from '@quackback/ids'
-import { relatedPostIdsSubquery } from './post.merge-ids'
+import { relatedPostIdsSql } from './post.merge-ids'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   levelFromFlags,
@@ -50,7 +49,17 @@ export async function listPostVoters(
 ): Promise<ListPostVotersResult> {
   const { limit, cursor } = options
 
-  const conditions = [inArray(postVotes.postId, relatedPostIdsSubquery(postId))]
+  // One row per principal (newest vote wins) before keyset pagination, so a
+  // person who voted on both the canonical and a source does not consume two
+  // page slots or reappear on the next cursor page.
+  const conditions = [
+    sql`${postVotes.id} IN (
+      SELECT DISTINCT ON (v.principal_id) v.id
+      FROM ${postVotes} v
+      WHERE v.post_id IN ${relatedPostIdsSql(toUuid(postId))}
+      ORDER BY v.principal_id, v.created_at DESC, v.id DESC
+    )`,
+  ]
   if (cursor) {
     const cursorVote = await db.query.postVotes.findFirst({
       where: eq(postVotes.id, cursor),
@@ -58,7 +67,7 @@ export async function listPostVoters(
     })
     if (cursorVote) {
       conditions.push(
-        sql`(${postVotes.createdAt}, ${postVotes.id}) < (${cursorVote.createdAt.toISOString()}, ${toUuid(cursorVote.id)}::uuid)`
+        sql`(${postVotes.createdAt}, ${postVotes.id}) < (${cursorVote.createdAt.toISOString()}::timestamptz, ${toUuid(cursorVote.id)}::uuid)`
       )
     }
   }
@@ -100,14 +109,7 @@ export async function listPostVoters(
   const hasMore = limit !== undefined && rows.length > limit
   const pageRows = hasMore ? rows.slice(0, limit) : rows
 
-  // Same principal can have a vote on the canonical and on a source. The
-  // stored voteCount is unique people; the list should match.
-  const seen = new Set<string>()
-  const items = pageRows.map(mapVoterRow).filter((voter) => {
-    if (seen.has(voter.principalId)) return false
-    seen.add(voter.principalId)
-    return true
-  })
+  const items = pageRows.map(mapVoterRow)
 
   return {
     items,

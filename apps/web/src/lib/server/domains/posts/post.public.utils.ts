@@ -130,9 +130,14 @@ export async function getVoteAndSubscriptionStatus(
       ps.notify_status_changes,
       ps.reason
     FROM (SELECT 1) AS dummy
-    LEFT JOIN ${postSubscriptions} ps
-      ON ps.post_id = ${postUuid}::uuid
-      AND ps.principal_id = ${principalUuid}::uuid
+    LEFT JOIN LATERAL (
+      SELECT ps.post_id, ps.notify_comments, ps.notify_status_changes, ps.reason
+      FROM ${postSubscriptions} ps
+      WHERE ps.principal_id = ${principalUuid}::uuid
+        AND ps.post_id IN ${relatedPostIdsSql(postUuid)}
+      ORDER BY (ps.post_id = ${postUuid}::uuid) DESC
+      LIMIT 1
+    ) ps ON true
   `)
 
   type ResultRow = {

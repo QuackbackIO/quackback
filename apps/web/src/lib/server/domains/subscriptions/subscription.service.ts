@@ -23,6 +23,7 @@ import {
   inArray,
   isNull,
   isNotNull,
+  sql,
   postSubscriptions,
   notificationPreferences,
   unsubscribeTokens,
@@ -31,7 +32,8 @@ import {
   user,
   type Transaction,
 } from '@/lib/server/db'
-import type { PrincipalId, PostId } from '@quackback/ids'
+import { toUuid, type PrincipalId, type PostId } from '@quackback/ids'
+import { relatedPostIdsSql } from '@/lib/server/domains/posts/post.merge-ids'
 import { randomUUID } from 'crypto'
 import { logger } from '@/lib/server/logger'
 
@@ -214,7 +216,7 @@ export async function getSubscribersForEvent(
     .innerJoin(user, eq(principal.userId, user.id))
     .where(
       and(
-        eq(postSubscriptions.postId, postId),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`,
         eq(notifyColumn, true),
         isNotNull(user.email) // Only subscribers with real email addresses
       )

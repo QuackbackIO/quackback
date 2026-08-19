@@ -9,7 +9,16 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type BoardId, type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { boards, eq, postComments, postVotes, posts, principal, user } from '@/lib/server/db'
+import {
+  boards,
+  eq,
+  postComments,
+  postSubscriptions,
+  postVotes,
+  posts,
+  principal,
+  user,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -32,8 +41,10 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 
 import { mergePost, unmergePost, getMergedPosts } from '../post.merge'
 import { getCommentsWithReplies } from '../post.query'
-import { hasUserVoted } from '../post.public.utils'
-import { getPostVoters } from '../post.voters'
+import { hasUserVoted, getVoteAndSubscriptionStatus } from '../post.public.utils'
+import { getPostVoters, listPostVoters } from '../post.voters'
+import { voteOnPost } from '../post.voting'
+import { getVotedPostIdsByUserId } from '../post.public'
 import { DEFAULT_BOARD_ACCESS } from '@/lib/shared/db-types'
 
 const fixture = await createDbTestFixture({
@@ -92,8 +103,8 @@ async function seedPost(opts: {
   return post.id
 }
 
-async function seedVote(postId: PostId, principalId: PrincipalId): Promise<void> {
-  await testDb.insert(postVotes).values({ postId, principalId })
+async function seedVote(postId: PostId, principalId: PrincipalId, createdAt?: Date): Promise<void> {
+  await testDb.insert(postVotes).values({ postId, principalId, ...(createdAt && { createdAt }) })
 }
 
 async function seedComment(
@@ -210,5 +221,177 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     expect(afterUnmerge.commentCount).toBe(1)
     expect(await hasUserVoted(canonical, voterA)).toBe(true)
     expect(await getMergedPosts(canonical)).toEqual([])
+
+    const [sourceAfter] = await testDb.select().from(posts).where(eq(posts.id, source))
+    expect(sourceAfter.voteCount).toBe(1)
+    expect(sourceAfter.commentCount).toBe(0)
+  })
+
+  it('restores the source voteCount on unmerge after the vote was removed via the canonical', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 1,
+      commentCount: 0,
+    })
+    await seedVote(source, voter)
+    await mergePost(source, canonical, actor)
+
+    const unvote = await voteOnPost(canonical, voter)
+    expect(unvote.voted).toBe(false)
+    expect(unvote.voteCount).toBe(0)
+
+    await unmergePost(source, actor)
+
+    const [sourceAfter] = await testDb.select().from(posts).where(eq(posts.id, source))
+    expect(sourceAfter.voteCount).toBe(0)
+  })
+
+  it('applies a vote on a merged source id to the canonical', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    await mergePost(source, canonical, actor)
+
+    const result = await voteOnPost(source, voter)
+    expect(result.voted).toBe(true)
+    expect(result.voteCount).toBe(1)
+
+    const [canonicalRow] = await testDb.select().from(posts).where(eq(posts.id, canonical))
+    expect(canonicalRow.voteCount).toBe(1)
+    expect(await hasUserVoted(canonical, voter)).toBe(true)
+  })
+
+  it('pages unique overlapping voters without a short first page', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voterA = await seedPrincipal('Voter A')
+    const voterB = await seedPrincipal('Voter B')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 2,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 1,
+      commentCount: 0,
+    })
+    const t1 = new Date('2026-01-01T00:00:00.000Z')
+    const t2 = new Date('2026-01-02T00:00:00.000Z')
+    const t3 = new Date('2026-01-03T00:00:00.000Z')
+    await seedVote(canonical, voterA, t1)
+    await seedVote(source, voterA, t2)
+    await seedVote(canonical, voterB, t3)
+    await mergePost(source, canonical, actor)
+
+    // Two unique people, three vote rows. Dedup must happen before the
+    // limit so a page of 2 is full and not marked as having more.
+    const both = await listPostVoters(canonical, { limit: 2 })
+    expect(both.items).toHaveLength(2)
+    expect(both.hasMore).toBe(false)
+
+    const page = await listPostVoters(canonical, { limit: 1 })
+    expect(page.items).toHaveLength(1)
+    expect(page.items[0].principalId).toBe(voterB)
+    expect(page.hasMore).toBe(true)
+    expect(page.nextCursor).toBeTruthy()
+
+    const rest = await listPostVoters(canonical, { limit: 1, cursor: page.nextCursor! })
+    expect(rest.items).toHaveLength(1)
+    expect(rest.items[0].principalId).toBe(voterA)
+  })
+
+  it('reads a source-post subscription on the canonical thread', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 1,
+      commentCount: 0,
+    })
+    await seedVote(source, voter)
+    await testDb.insert(postSubscriptions).values({
+      postId: source,
+      principalId: voter,
+      reason: 'vote',
+      notifyComments: true,
+      notifyStatusChanges: true,
+    })
+    await mergePost(source, canonical, actor)
+
+    const status = await getVoteAndSubscriptionStatus(canonical, voter)
+    expect(status.hasVoted).toBe(true)
+    expect(status.subscription.subscribed).toBe(true)
+    expect(status.subscription.level).toBe('all')
+  })
+
+  it('maps a source vote to the canonical in getVotedPostIdsByUserId', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter')
+    const [voterRow] = await testDb
+      .select({ userId: principal.userId })
+      .from(principal)
+      .where(eq(principal.id, voter))
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 1,
+      commentCount: 0,
+    })
+    await seedVote(source, voter)
+    await mergePost(source, canonical, actor)
+
+    const ids = await getVotedPostIdsByUserId(voterRow.userId!)
+    expect(ids.has(canonical)).toBe(true)
+    expect(ids.has(source)).toBe(true)
   })
 })

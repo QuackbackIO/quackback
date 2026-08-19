@@ -4,44 +4,76 @@
  * Merge links the source (`canonical_post_id`) rather than moving votes or
  * comments. Every read/write that should treat a canonical and its sources as
  * one thread (vote identity, voter list, comment/vote recounts) uses this set.
+ *
+ * Passing a merged source id resolves up to the canonical first, so a stale
+ * client holding the source still mutates the surviving thread.
  */
-import { db, posts, postVotes, postComments, and, or, eq, isNull, sql } from '@/lib/server/db'
+import { db, posts, postVotes, postComments, boards, eq, sql } from '@/lib/server/db'
 import { toUuid, type PostId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 
 type TransactionalDb = Pick<typeof db, 'execute' | 'update'>
 
 /**
- * Drizzle subquery of post ids in a merge thread: the given post plus every
- * non-deleted source merged into it. Safe to pass to `inArray`.
- */
-export function relatedPostIdsSubquery(postId: PostId) {
-  return db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(
-      and(isNull(posts.deletedAt), or(eq(posts.id, postId), eq(posts.canonicalPostId, postId)))
-    )
-}
-
-/**
- * Raw-SQL id list for `IN (...)` clauses that already speak UUIDs (the
- * vote/comment recount CTEs, hasVoted EXISTS, etc.).
+ * Merge-thread ids for `IN (...)`: the canonical (resolved from the given
+ * post, which may itself be a source) plus every live source whose board
+ * has not been soft-deleted.
  */
 export function relatedPostIdsSql(postUuid: string) {
   return sql`(
-    SELECT ${postUuid}::uuid
+    SELECT COALESCE(p.canonical_post_id, p.id)
+    FROM ${posts} p
+    WHERE p.id = ${postUuid}::uuid
     UNION ALL
-    SELECT id FROM ${posts}
-    WHERE canonical_post_id = ${postUuid}::uuid
-      AND deleted_at IS NULL
+    SELECT s.id
+    FROM ${posts} s
+    INNER JOIN ${boards} b ON b.id = s.board_id
+    WHERE s.canonical_post_id = (
+      SELECT COALESCE(p.canonical_post_id, p.id)
+      FROM ${posts} p
+      WHERE p.id = ${postUuid}::uuid
+    )
+      AND s.deleted_at IS NULL
+      AND b.deleted_at IS NULL
   )`
+}
+
+/**
+ * Drizzle-friendly form of {@link relatedPostIdsSql}. Safe to pass to
+ * `inArray` or interpolate into `IN (...)`.
+ */
+export function relatedPostIdsSubquery(postId: PostId) {
+  return relatedPostIdsSql(toUuid(postId))
+}
+
+/**
+ * Bump `commentCount` on the canonical when the given post is a merged
+ * source. No-op when the post is itself the canonical (the caller's own
+ * update already covered it).
+ */
+export async function adjustCanonicalCommentCount(
+  postId: PostId,
+  delta: number,
+  conn: TransactionalDb = db
+): Promise<void> {
+  if (delta === 0) return
+  const postUuid = toUuid(postId)
+  await conn.execute(sql`
+    UPDATE ${posts}
+    SET comment_count = GREATEST(0, comment_count + ${delta})
+    WHERE id = (
+      SELECT p.canonical_post_id FROM ${posts} p WHERE p.id = ${postUuid}::uuid
+    )
+  `)
 }
 
 /**
  * Recount unique voters and public comments across a canonical + its sources.
  * Runs via the transaction handle when called from merge/unmerge so the
  * recount commits atomically with the link change.
+ *
+ * Also correct for a standalone (unmerged) post: the related set is just
+ * that post, so unmerge can restore the source's stored counts this way.
  */
 export async function recalculateCanonicalVoteCount(
   canonicalPostId: PostId,
@@ -54,9 +86,12 @@ export async function recalculateCanonicalVoteCount(
     WITH related_post_ids AS (
       SELECT ${canonicalUuid}::uuid AS post_id
       UNION ALL
-      SELECT id FROM ${posts}
-      WHERE canonical_post_id = ${canonicalUuid}::uuid
-        AND deleted_at IS NULL
+      SELECT s.id
+      FROM ${posts} s
+      INNER JOIN ${boards} b ON b.id = s.board_id
+      WHERE s.canonical_post_id = ${canonicalUuid}::uuid
+        AND s.deleted_at IS NULL
+        AND b.deleted_at IS NULL
     )
     SELECT
       (
