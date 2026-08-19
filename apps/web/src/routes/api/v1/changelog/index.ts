@@ -10,10 +10,10 @@ import {
 import { createChangelog } from '@/lib/server/domains/changelog/changelog.service'
 import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
 import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
-import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { db, principal, eq } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostId } from '@quackback/ids'
+import { formatChangelogResponse } from './-serialize'
 
 // Input validation schema
 const createChangelogSchema = z.object({
@@ -51,15 +51,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
           const result = await listChangelogs({ status, cursor, limit })
 
           return successResponse(
-            result.items.map((entry) => ({
-              id: entry.id,
-              title: entry.title,
-              content: contentJsonToMarkdown(entry.contentJson, entry.content),
-              publishedAt: entry.publishedAt?.toISOString() || null,
-              displayDate: entry.displayDate?.toISOString() || null,
-              createdAt: entry.createdAt.toISOString(),
-              updatedAt: entry.updatedAt.toISOString(),
-            })),
+            result.items.map((entry) => formatChangelogResponse(entry)),
             {
               pagination: {
                 cursor: result.nextCursor,
@@ -114,15 +106,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             }
           )
 
-          return createdResponse({
-            id: entry.id,
-            title: entry.title,
-            content: contentJsonToMarkdown(entry.contentJson, entry.content),
-            publishedAt: entry.publishedAt?.toISOString() || null,
-            displayDate: entry.displayDate?.toISOString() || null,
-            createdAt: entry.createdAt.toISOString(),
-            updatedAt: entry.updatedAt.toISOString(),
-          })
+          return createdResponse(formatChangelogResponse(entry))
         } catch (error) {
           return handleDomainError(error)
         }
