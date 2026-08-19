@@ -58,7 +58,7 @@ const { discoveryScopesSpy } = vi.hoisted(() => ({
 
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | { registrationId: string; allClaims: Record<string, unknown> },
+    current: null as null | { registrationId: string; claims: Record<string, unknown> },
   },
 }))
 
@@ -185,10 +185,12 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     showButton: false,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
+    lastTestCapture: null,
     createdAt: '2026-05-01T00:00:00.000Z',
     domains: [],
     visibility: 'button',
     ...over,
+    lastTestCapture: over.lastTestCapture ?? null,
   }
 }
 
@@ -485,7 +487,7 @@ describe('<ProviderDetailPage> claim-mapping autocomplete', () => {
   it('names the observed claims inline and drops the old assist block', () => {
     ssoTestRef.current = {
       registrationId: 'oidc_x', // matches makeProvider().registrationId
-      allClaims: { groups: ['11111111-2222'], roles: ['admin'] },
+      claims: { groups: ['11111111-2222'], roles: ['admin'] },
     }
     renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     // Inline hint names the observed claims (disclosure auto-opens on suggestions).
@@ -497,13 +499,13 @@ describe('<ProviderDetailPage> claim-mapping autocomplete', () => {
   })
 
   it('auto-fills the claim path when the test returned exactly one array claim', () => {
-    ssoTestRef.current = { registrationId: 'oidc_x', allClaims: { roles: ['admin'] } }
+    ssoTestRef.current = { registrationId: 'oidc_x', claims: { roles: ['admin'] } }
     renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
   })
 
   it('shows no inline suggestions for a test of a different provider', () => {
-    ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { roles: ['admin'] } }
+    ssoTestRef.current = { registrationId: 'oidc_other', claims: { roles: ['admin'] } }
     renderPage(
       makeProvider({
         autoCreateUsers: true,

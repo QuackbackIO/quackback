@@ -6,6 +6,8 @@
 
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Badge } from '@/components/ui/badge'
+import { MENU_LABEL } from '@/components/ui/menu'
+import { cn } from '@/lib/shared/utils'
 import { getClaimByPath } from '@/lib/shared/oidc-claim-mapping'
 import { planClaimAttributeWrites } from '@/lib/shared/plan-claim-attribute-writes'
 import { resolveSsoRoleMatch } from '@/lib/shared/resolve-sso-role'
@@ -85,9 +87,7 @@ export function OutcomePreviewRail({
   return (
     <aside className="flex flex-col gap-4 border-t border-border/40 bg-muted/20 px-4 py-5 text-[12.5px] lg:border-t-0 lg:border-l">
       <div>
-        <h3 className="font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Outcome preview
-        </h3>
+        <h3 className={cn(MENU_LABEL, 'font-mono')}>Outcome preview</h3>
         <div className="mt-2 font-medium">Last test sign-in</div>
         <div className="mt-0.5 text-muted-foreground">
           {capture.identity.email ?? capture.identity.id} · <TimeAgo date={capture.capturedAt} /> ·{' '}
@@ -103,9 +103,7 @@ export function OutcomePreviewRail({
       </div>
 
       <div className="border-t border-border/40 pt-3">
-        <h3 className="mb-2 font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Identity
-        </h3>
+        <h3 className={cn(MENU_LABEL, 'mb-2 font-mono')}>Identity</h3>
         <dl className="grid grid-cols-[4.4em_1fr] gap-x-2.5 gap-y-1 font-mono text-[11.5px]">
           <dt className="font-sans text-muted-foreground">id</dt>
           <dd className="break-all">
@@ -124,9 +122,7 @@ export function OutcomePreviewRail({
       </div>
 
       <div className="border-t border-border/40 pt-3">
-        <h3 className="mb-2 font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Role
-        </h3>
+        <h3 className={cn(MENU_LABEL, 'mb-2 font-mono')}>Role</h3>
         {match && matchedRule ? (
           <div>
             <Badge variant="secondary" className="font-mono">
@@ -148,9 +144,7 @@ export function OutcomePreviewRail({
       </div>
 
       <div className="border-t border-border/40 pt-3">
-        <h3 className="mb-2 font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Attribute writes
-        </h3>
+        <h3 className={cn(MENU_LABEL, 'mb-2 font-mono')}>Attribute writes</h3>
         {plan && (Object.keys(plan.valid).length > 0 || (plan.skips?.length ?? 0) > 0) ? (
           <dl className="grid grid-cols-[6.6em_1fr] gap-x-2.5 gap-y-1 text-[12px]">
             {defs

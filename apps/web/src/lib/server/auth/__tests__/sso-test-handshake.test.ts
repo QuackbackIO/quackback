@@ -213,48 +213,6 @@ describe('runHandshake', () => {
   })
 })
 
-async function runWorldCHandshake(opts: { allowMissingEmail: boolean }) {
-  const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
-  const publicJwk = await exportJWK(publicKey)
-  publicJwk.kid = 'test-key'
-  publicJwk.alg = 'RS256'
-
-  const issuer = 'https://idp.example'
-  const idToken = await new SignJWT({ nonce: 'nonce789' })
-    .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
-    .setIssuer(issuer)
-    .setAudience('cid')
-    .setSubject('user-sub-123')
-    .setIssuedAt()
-    .setExpirationTime('5m')
-    .sign(privateKey)
-
-  safeFetchMock.mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({
-        issuer,
-        token_endpoint: `${issuer}/token`,
-        jwks_uri: `${issuer}/jwks`,
-        userinfo_endpoint: `${issuer}/userinfo`,
-      }),
-      { status: 200 }
-    )
-  )
-  safeFetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }), {
-      status: 200,
-    })
-  )
-  safeFetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
-  )
-  safeFetchMock.mockResolvedValue(
-    new Response(JSON.stringify({ sub: 'user-sub-123' }), { status: 200 })
-  )
-
-  return runHandshake({ ...baseInput, allowMissingEmail: opts.allowMissingEmail })
-}
-
 describe('runHandshake — provider that releases no email', () => {
   it('fails when the placeholder option is off, naming both remedies', async () => {
     const result = await runWorldCHandshake({ allowMissingEmail: false })
@@ -388,32 +346,5 @@ describe('runHandshake — access-token-only IdP', () => {
     if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
     expect(safeFetchMock.mock.calls.some((c) => String(c[0]).includes('/jwks'))).toBe(true)
     expect(result.tokenInfo.idTokenAlg).toBe('RS256')
-  })
-})
-
-/**
- * The connection test is the precondition that unlocks SSO enforcement, so a
- * provider whose sign-in works must be able to pass it. A provider that
- * releases no email signs in fine once the placeholder option is on — the
- * resolver mints one — and the test has to agree, or the two paths disagree
- * about the same configuration, which is the failure this whole area exists to
- * remove.
- */
-describe('runHandshake — provider that releases no email', () => {
-  it('fails when the placeholder option is off, naming both remedies', async () => {
-    const result = await runWorldCHandshake({ allowMissingEmail: false })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.stage).toBe('claim-check')
-    expect(result.hint).toMatch(/no email address was released/i)
-  })
-
-  it('passes when the placeholder option is on, because sign-in would succeed', async () => {
-    const result = await runWorldCHandshake({ allowMissingEmail: true })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.claims.email).toBeUndefined()
-    // The admin has to be told an account was not what it appears to be.
-    expect(result.steps.some((s) => /placeholder/i.test(s.label ?? ''))).toBe(true)
   })
 })

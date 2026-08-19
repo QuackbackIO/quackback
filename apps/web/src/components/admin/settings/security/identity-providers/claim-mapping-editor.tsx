@@ -47,7 +47,7 @@ export function ClaimMappingEditor({
   const { lastSuccess } = useSsoTestSignIn()
   const suggestions =
     lastSuccess && lastSuccess.registrationId === registrationId
-      ? deriveClaimSuggestions(lastSuccess.allClaims)
+      ? deriveClaimSuggestions(lastSuccess.claims)
       : null
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
   const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))

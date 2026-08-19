@@ -491,6 +491,8 @@ export type IdentityProviderClaimMapping = {
   attributes?: {
     map?: Array<{ claimPath: string; attributeKey: string }>
     overrideExisting?: boolean
+    /** When true, a disappeared claim clears the stored attribute. */
+    syncOnSignIn?: boolean
   }
 }
 

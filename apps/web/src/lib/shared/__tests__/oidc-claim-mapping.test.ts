@@ -5,6 +5,7 @@ import {
   profileClaimFor,
   roleMappingFor,
   allowsMissingEmail,
+  getClaimByPath,
   type IdentityProviderClaimMapping,
 } from '../oidc-claim-mapping'
 
@@ -117,5 +118,28 @@ describe('roleMappingFor', () => {
       },
     })
     expect(role?.rules).toEqual([{ whenContains: 'a', role: 'admin' }])
+  })
+})
+
+describe('getClaimByPath', () => {
+  it('prefers an exact key match before treating dots as a path', () => {
+    const claims = { 'https://acme.com/email': 'ns@x.com', contact: { email: 'nested@x.com' } }
+    expect(getClaimByPath(claims, 'https://acme.com/email')).toBe('ns@x.com')
+    expect(getClaimByPath(claims, 'contact.email')).toBe('nested@x.com')
+  })
+})
+
+describe('attributes section', () => {
+  it('reads the map, override, and sync-on-sign-in flags', () => {
+    const m = claimMappingFor({
+      attributes: {
+        map: [{ claimPath: 'department', attributeKey: 'dept' }],
+        overrideExisting: true,
+        syncOnSignIn: true,
+      },
+    })
+    expect(m.attributes?.map).toEqual([{ claimPath: 'department', attributeKey: 'dept' }])
+    expect(m.attributes?.overrideExisting).toBe(true)
+    expect(m.attributes?.syncOnSignIn).toBe(true)
   })
 })

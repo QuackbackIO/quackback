@@ -177,10 +177,21 @@ type ConnectionField = (typeof CONNECTION_FIELDS)[number]
  * Pure and exported so the rule is unit-testable without a transaction.
  */
 export function connectionAffectingChange(
-  input: Partial<Pick<UpsertIdentityProviderInput, ConnectionField>>,
-  existing: Pick<IdentityProvider, ConnectionField>
+  input: Partial<Pick<UpsertIdentityProviderInput, ConnectionField | 'claimMapping'>>,
+  existing: Pick<IdentityProvider, ConnectionField> & {
+    claimMapping?: IdentityProvider['claimMapping']
+  }
 ): boolean {
-  return CONNECTION_FIELDS.some((f) => input[f] !== undefined && input[f] !== existing[f])
+  if (CONNECTION_FIELDS.some((f) => input[f] !== undefined && input[f] !== existing[f])) {
+    return true
+  }
+  // Role and attribute mapping edits must not invalidate a passing test — they
+  // do not change the request the IdP sees. Profile (sources, claim paths,
+  // missing-email) does, so a prior stamp cannot vouch for it.
+  if (input.claimMapping === undefined) return false
+  return (
+    JSON.stringify(input.claimMapping?.profile) !== JSON.stringify(existing.claimMapping?.profile)
+  )
 }
 
 // ============================================================================
@@ -588,7 +599,7 @@ export async function stampDetailsChanged(id: IdentityProviderId): Promise<void>
 /** Stamp `last_successful_test_at = now()` and persist the test fixture. */
 export async function markTestSucceeded(
   id: IdentityProviderId,
-  capture?: SsoTestCapture,
+  capture?: SsoTestCapture
 ): Promise<void> {
   log.info({ id }, 'mark identity provider test succeeded')
   try {
