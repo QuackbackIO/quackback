@@ -36,6 +36,7 @@ import { recordAuditEvent } from '@/lib/server/audit/log'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
+import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 
 const log = logger.child({ component: 'comments' })
 
@@ -217,6 +218,10 @@ export async function createComment(
         })
         .where(eq(posts.id, input.postId))
 
+      if (!isPrivate && initialModerationState !== 'pending') {
+        await adjustCanonicalCommentCount(input.postId, 1, tx)
+      }
+
       return insertedComment
     })
 
@@ -268,6 +273,7 @@ export async function createComment(
           .update(posts)
           .set({ commentCount: sql`${posts.commentCount} + 1` })
           .where(eq(posts.id, input.postId))
+        await adjustCanonicalCommentCount(input.postId, 1, tx)
       }
 
       return insertedComment
@@ -486,6 +492,7 @@ export async function deleteComment(
         .update(posts)
         .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - ${decrement})` })
         .where(eq(posts.id, existingComment.postId))
+      await adjustCanonicalCommentCount(existingComment.postId, -decrement, tx)
     }
   })
 

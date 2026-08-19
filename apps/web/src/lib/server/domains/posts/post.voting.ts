@@ -14,10 +14,9 @@ import {
   user,
   sql,
   eq,
-  and,
-  desc,
 } from '@/lib/server/db'
-import { createId, toUuid, type PostId, type PostVoteId, type PrincipalId } from '@quackback/ids'
+import { createId, fromUuid, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import { relatedPostIdsSql } from './post.merge-ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -26,22 +25,14 @@ import { dispatchPostVoted } from '@/lib/server/events/dispatch'
 import type { VoteResult } from './post.types'
 
 const log = logger.child({ component: 'post-voting' })
-import {
-  levelFromFlags,
-  type SubscriptionLevel,
-} from '@/lib/server/domains/subscriptions/subscription.types'
 
-export interface VoterInfo {
-  principalId: string
-  displayName: string | null
-  email: string | null
-  avatarUrl: string | null
-  isAnonymous: boolean
-  sourceType: string | null
-  sourceExternalUrl: string | null
-  addedByName: string | null
-  createdAt: Date | string
-  subscriptionLevel: SubscriptionLevel
+function resolveVotedPostId(resolvedUuid: string | null | undefined, fallback: PostId): PostId {
+  if (!resolvedUuid) return fallback
+  try {
+    return fromUuid('post', resolvedUuid)
+  } catch {
+    return fallback
+  }
 }
 
 /**
@@ -127,8 +118,12 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     vote_count: number
   }>(sql`
     WITH post_check AS (
-      SELECT id, board_id, vote_count FROM ${posts}
-      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+      SELECT c.id, c.board_id, c.vote_count
+      FROM ${posts} p
+      INNER JOIN ${posts} c ON c.id = COALESCE(p.canonical_post_id, p.id)
+      WHERE p.id = ${postUuid}::uuid
+        AND p.deleted_at IS NULL
+        AND c.deleted_at IS NULL
     ),
     board_check AS (
       SELECT 1 FROM ${boards}
@@ -137,7 +132,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     ),
     existing AS (
       SELECT id FROM ${postVotes}
-      WHERE post_id = ${postUuid}::uuid AND principal_id = ${principalUuid}::uuid
+      WHERE principal_id = ${principalUuid}::uuid
+        AND post_id IN ${relatedPostIdsSql(postUuid)}
     ),
     deleted AS (
       DELETE FROM ${postVotes}
@@ -148,7 +144,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     ),
     inserted AS (
       INSERT INTO ${postVotes} (id, post_id, principal_id, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, NOW()
+      SELECT ${voteId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
@@ -164,7 +160,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
           ELSE 0
         END
       )
-      WHERE id = ${postUuid}::uuid
+      WHERE id = (SELECT id FROM post_check)
       RETURNING vote_count
     ),
     anon_check AS (
@@ -173,7 +169,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
-      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
+      SELECT ${subscriptionId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
         AND NOT EXISTS (SELECT 1 FROM anon_check)
       ON CONFLICT (post_id, principal_id) DO NOTHING
@@ -183,7 +179,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       EXISTS(SELECT 1 FROM post_check) as post_exists,
       EXISTS(SELECT 1 FROM board_check) as board_exists,
       EXISTS(SELECT 1 FROM inserted) as newly_voted,
-      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count
+      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count,
+      (SELECT id FROM post_check) as resolved_post_id
   `)
 
   type VoteResultRow = {
@@ -191,6 +188,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     board_exists: boolean
     newly_voted: boolean
     vote_count: number
+    resolved_post_id: string | null
   }
   const rows = getExecuteRows<VoteResultRow>(result)
   const row = rows[0]
@@ -207,11 +205,12 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
   // newly_voted = false means we deleted a vote (user no longer has vote)
   const voted = row.newly_voted
   const voteCount = row.vote_count ?? 0
+  const eventPostId = resolveVotedPostId(row.resolved_post_id, postId)
 
   // post.voted fires only on the insert half of the toggle — an unvote is
   // not a "vote cast" and must not notify subscribed endpoints.
   if (voted) {
-    await emitPostVotedEvent(postId, principalId, voteCount)
+    await emitPostVotedEvent(eventPostId, principalId, voteCount)
   }
 
   return { voted, voteCount }
@@ -254,8 +253,12 @@ export async function addVoteOnBehalf(
     vote_count: number
   }>(sql`
     WITH post_check AS (
-      SELECT id, board_id, vote_count FROM ${posts}
-      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+      SELECT c.id, c.board_id, c.vote_count
+      FROM ${posts} p
+      INNER JOIN ${posts} c ON c.id = COALESCE(p.canonical_post_id, p.id)
+      WHERE p.id = ${postUuid}::uuid
+        AND p.deleted_at IS NULL
+        AND c.deleted_at IS NULL
     ),
     board_check AS (
       SELECT 1 FROM ${boards}
@@ -264,22 +267,27 @@ export async function addVoteOnBehalf(
     ),
     inserted AS (
       INSERT INTO ${postVotes} (id, post_id, principal_id, source_type, source_external_url, added_by_principal_id, created_at, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
+      SELECT ${voteId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
+        AND NOT EXISTS (
+          SELECT 1 FROM ${postVotes}
+          WHERE principal_id = ${principalUuid}::uuid
+            AND post_id IN ${relatedPostIdsSql(postUuid)}
+        )
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING id
     ),
     updated_post AS (
       UPDATE ${posts}
       SET vote_count = GREATEST(0, vote_count + 1)
-      WHERE id = ${postUuid}::uuid
+      WHERE id = (SELECT id FROM post_check)
         AND EXISTS (SELECT 1 FROM inserted)
       RETURNING vote_count
     ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
-      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
+      SELECT ${subscriptionId}::uuid, (SELECT id FROM post_check), ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING 1
@@ -335,8 +343,12 @@ export async function removeVote(
     vote_count: number
   }>(sql`
     WITH post_check AS (
-      SELECT id, board_id, vote_count FROM ${posts}
-      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+      SELECT c.id, c.board_id, c.vote_count
+      FROM ${posts} p
+      INNER JOIN ${posts} c ON c.id = COALESCE(p.canonical_post_id, p.id)
+      WHERE p.id = ${postUuid}::uuid
+        AND p.deleted_at IS NULL
+        AND c.deleted_at IS NULL
     ),
     board_check AS (
       SELECT 1 FROM ${boards}
@@ -345,8 +357,8 @@ export async function removeVote(
     ),
     deleted AS (
       DELETE FROM ${postVotes}
-      WHERE post_id = ${postUuid}::uuid
-        AND principal_id = ${principalUuid}::uuid
+      WHERE principal_id = ${principalUuid}::uuid
+        AND post_id IN ${relatedPostIdsSql(postUuid)}
         AND EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
       RETURNING id
@@ -354,7 +366,7 @@ export async function removeVote(
     updated_post AS (
       UPDATE ${posts}
       SET vote_count = GREATEST(0, vote_count - 1)
-      WHERE id = ${postUuid}::uuid
+      WHERE id = (SELECT id FROM post_check)
         AND EXISTS (SELECT 1 FROM deleted)
       RETURNING vote_count
     )
@@ -385,121 +397,9 @@ export async function removeVote(
   return { removed: row.deleted, voteCount: row.vote_count ?? 0 }
 }
 
-export interface ListPostVotersResult {
-  items: VoterInfo[]
-  nextCursor: PostVoteId | null
-  hasMore: boolean
-}
-
-/**
- * List the voters on a post, newest votes first, with optional keyset
- * pagination. The cursor is a vote ID; the page continues strictly after that
- * vote in (createdAt, id) order. A cursor that no longer resolves is ignored
- * rather than erroring, matching the inbox listing. When no limit is given
- * the full list is returned and hasMore is always false.
- */
-export async function listPostVoters(
-  postId: PostId,
-  options: { limit?: number; cursor?: PostVoteId } = {}
-): Promise<ListPostVotersResult> {
-  const { limit, cursor } = options
-
-  const conditions = [eq(postVotes.postId, postId)]
-  if (cursor) {
-    const cursorVote = await db.query.postVotes.findFirst({
-      where: eq(postVotes.id, cursor),
-      columns: { id: true, createdAt: true },
-    })
-    if (cursorVote) {
-      conditions.push(
-        sql`(${postVotes.createdAt}, ${postVotes.id}) < (${cursorVote.createdAt.toISOString()}, ${toUuid(cursorVote.id)}::uuid)`
-      )
-    }
-  }
-
-  const query = db
-    .select({
-      voteId: postVotes.id,
-      principalId: principal.id,
-      displayName: principal.displayName,
-      email: user.email,
-      avatarUrl: principal.avatarUrl,
-      principalType: principal.type,
-      sourceType: postVotes.sourceType,
-      sourceExternalUrl: postVotes.sourceExternalUrl,
-      addedByName: sql<string | null>`(
-        SELECT p2.display_name FROM ${principal} p2
-        WHERE p2.id = ${postVotes.addedByPrincipalId}
-      )`.as('added_by_name'),
-      createdAt: postVotes.createdAt,
-      notifyComments: postSubscriptions.notifyComments,
-      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
-    })
-    .from(postVotes)
-    .innerJoin(principal, eq(principal.id, postVotes.principalId))
-    .leftJoin(user, eq(user.id, principal.userId))
-    .leftJoin(
-      postSubscriptions,
-      and(
-        eq(postSubscriptions.postId, postVotes.postId),
-        eq(postSubscriptions.principalId, postVotes.principalId)
-      )
-    )
-    .where(and(...conditions))
-    // Secondary id key keeps the order total so pages never overlap on ties.
-    .orderBy(desc(postVotes.createdAt), desc(postVotes.id))
-    .$dynamic()
-
-  const rows = limit !== undefined ? await query.limit(limit + 1) : await query
-
-  const hasMore = limit !== undefined && rows.length > limit
-  const pageRows = hasMore ? rows.slice(0, limit) : rows
-
-  return {
-    items: pageRows.map(mapVoterRow),
-    nextCursor: hasMore ? pageRows[pageRows.length - 1].voteId : null,
-    hasMore,
-  }
-}
-
-type VoterRow = {
-  principalId: PrincipalId
-  displayName: string | null
-  email: string | null
-  avatarUrl: string | null
-  principalType: string
-  sourceType: string | null
-  sourceExternalUrl: string | null
-  addedByName: string | null
-  createdAt: Date
-  notifyComments: boolean | null
-  notifyStatusChanges: boolean | null
-}
-
-function mapVoterRow(row: VoterRow): VoterInfo {
-  const isAnonymous = row.principalType === 'anonymous'
-  return {
-    principalId: row.principalId,
-    displayName: isAnonymous ? null : row.displayName,
-    // Anonymous voters carry the synthetic placeholder email — never expose it.
-    email: realEmail(row.email),
-    avatarUrl: isAnonymous ? null : row.avatarUrl,
-    isAnonymous,
-    sourceType: row.sourceType,
-    sourceExternalUrl: row.sourceExternalUrl,
-    addedByName: row.addedByName,
-    createdAt: row.createdAt,
-    subscriptionLevel: isAnonymous
-      ? ('none' as const)
-      : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
-  }
-}
-
-/**
- * Get all voters for a post with their identity and source attribution.
- * Returns newest votes first.
- */
-export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
-  const { items } = await listPostVoters(postId)
-  return items
-}
+export {
+  getPostVoters,
+  listPostVoters,
+  type VoterInfo,
+  type ListPostVotersResult,
+} from './post.voters'

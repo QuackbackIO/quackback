@@ -107,7 +107,7 @@
     "@tiptap/suggestion": "^3.30.1",
     "@xyflow/react": "^12.11.2",
     "bcryptjs": "^3.0.3",
-    "better-auth": "^1.6.29",
+    "better-auth": "1.6.30",
     "bowser": "2.14.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

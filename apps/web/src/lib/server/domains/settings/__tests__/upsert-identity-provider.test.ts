@@ -114,7 +114,7 @@ vi.mock('@/lib/server/db', () => ({
                   authorizationUrl: null,
                   tokenUrl: null,
                   userInfoUrl: null,
-                  attributeMapping: null,
+                  claimMapping: null,
                 },
               ]),
           }),
@@ -156,10 +156,12 @@ const EXISTING_ROW = {
   userInfoUrl: null,
   clientId: 'client-abc',
   scopes: null,
+  prompt: null,
+  tokenEndpointAuthMethod: null,
   enabled: false,
   autoCreateUsers: true,
   autoProvisionRole: null,
-  attributeMapping: null,
+  claimMapping: null,
   showButton: false,
   detailsChangedAt: null,
   lastSuccessfulTestAt: null,
@@ -292,6 +294,54 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     })
 
     expect(hoisted.capturedSetPatch).not.toBeNull()
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
+  })
+
+  it('restamps detailsChangedAt when prompt changes', async () => {
+    const before = Date.now()
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      prompt: 'omit',
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
+  it('restamps detailsChangedAt when claimMapping.profile changes', async () => {
+    const before = Date.now()
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      claimMapping: { profile: { allowMissingEmail: true } },
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
+  it('does NOT restamp detailsChangedAt when only claimMapping.role changes', async () => {
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      claimMapping: {
+        role: { claimPath: 'groups', rules: [{ whenContains: 'admins', role: 'admin' }] },
+      },
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
+  })
+
+  it('does NOT restamp detailsChangedAt when only claimMapping.attributes change', async () => {
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      claimMapping: {
+        attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+      },
+    })
     expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
   })
 

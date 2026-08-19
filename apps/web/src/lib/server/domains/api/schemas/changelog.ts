@@ -7,11 +7,33 @@ import { registerPath, TypeIdSchema, createItemResponseSchema, asSchema } from '
 import {
   TimestampSchema,
   NullableTimestampSchema,
+  HexColorSchema,
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
   ValidationErrorSchema,
   PaginationMetaSchema,
 } from './common'
+
+const LinkedPostSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'post_01h455vb4pex5vsknk084sn02q' }),
+  title: z.string().meta({ example: 'Add dark mode support' }),
+  voteCount: z.number().meta({ example: 42 }),
+  status: z
+    .object({
+      name: z.string().meta({ example: 'Shipped' }),
+      color: HexColorSchema,
+    })
+    .nullable(),
+})
+
+const LinkedPostIdsSchema = z
+  .array(TypeIdSchema)
+  .optional()
+  .meta({
+    description:
+      'Post IDs to link to this entry. On update, replaces the existing set; an empty array unlinks all.',
+    example: ['post_01h455vb4pex5vsknk084sn02q'],
+  })
 
 // Changelog entry schema (API response)
 const ChangelogEntrySchema = z.object({
@@ -26,6 +48,9 @@ const ChangelogEntrySchema = z.object({
   }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  linkedPosts: z.array(LinkedPostSchema).meta({
+    description: 'Posts linked to this changelog entry',
+  }),
 })
 
 // Request body schemas
@@ -42,6 +67,7 @@ const CreateChangelogEntrySchema = z
       .datetime()
       .optional()
       .meta({ description: 'Publish date (omit to save as draft)' }),
+    linkedPostIds: LinkedPostIdsSchema,
   })
   .meta({ description: 'Create changelog entry request body' })
 
@@ -59,6 +85,7 @@ const UpdateChangelogEntrySchema = z
       description:
         'Portal display override for published entries. Null clears override. Must not be in the future.',
     }),
+    linkedPostIds: LinkedPostIdsSchema,
   })
   .meta({ description: 'Update changelog entry request body' })
 

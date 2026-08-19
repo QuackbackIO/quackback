@@ -23,6 +23,7 @@ import {
   inArray,
   isNull,
   isNotNull,
+  sql,
   postSubscriptions,
   notificationPreferences,
   unsubscribeTokens,
@@ -31,7 +32,8 @@ import {
   user,
   type Transaction,
 } from '@/lib/server/db'
-import type { PrincipalId, PostId } from '@quackback/ids'
+import { toUuid, type PrincipalId, type PostId } from '@quackback/ids'
+import { relatedPostIdsSql } from '@/lib/server/domains/posts/post.merge-ids'
 import { randomUUID } from 'crypto'
 import { logger } from '@/lib/server/logger'
 
@@ -102,7 +104,10 @@ export async function unsubscribeFromPost(principalId: PrincipalId, postId: Post
   await db
     .delete(postSubscriptions)
     .where(
-      and(eq(postSubscriptions.principalId, principalId), eq(postSubscriptions.postId, postId))
+      and(
+        eq(postSubscriptions.principalId, principalId),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`
+      )
     )
 }
 
@@ -123,7 +128,7 @@ export async function updateSubscriptionLevel(
   const notifyComments = level === 'all'
   const notifyStatusChanges = true // Both 'all' and 'status_only' get status changes
 
-  await db
+  const updated = await db
     .update(postSubscriptions)
     .set({
       notifyComments,
@@ -131,8 +136,15 @@ export async function updateSubscriptionLevel(
       updatedAt: new Date(),
     })
     .where(
-      and(eq(postSubscriptions.principalId, principalId), eq(postSubscriptions.postId, postId))
+      and(
+        eq(postSubscriptions.principalId, principalId),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`
+      )
     )
+    .returning({ id: postSubscriptions.id })
+  if (updated.length === 0) {
+    await subscribeToPost(principalId, postId, 'manual', { level })
+  }
 }
 
 /**
@@ -149,14 +161,16 @@ export async function getSubscriptionStatus(
   level: SubscriptionLevel
 }> {
   log.debug({ post_id: postId, principal_id: principalId }, 'get subscription status')
-  const subscription = await db.query.postSubscriptions.findFirst({
-    where: and(
-      eq(postSubscriptions.principalId, principalId),
-      eq(postSubscriptions.postId, postId)
-    ),
-  })
-
-  if (!subscription) {
+  const rows = await db
+    .select()
+    .from(postSubscriptions)
+    .where(
+      and(
+        eq(postSubscriptions.principalId, principalId),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`
+      )
+    )
+  if (rows.length === 0) {
     return {
       subscribed: false,
       notifyComments: false,
@@ -166,12 +180,16 @@ export async function getSubscriptionStatus(
     }
   }
 
+  const notifyComments = rows.some((row) => row.notifyComments)
+  const notifyStatusChanges = rows.some((row) => row.notifyStatusChanges)
+  const preferred = rows.find((row) => row.postId === postId) ?? rows[0]
+
   return {
     subscribed: true,
-    notifyComments: subscription.notifyComments,
-    notifyStatusChanges: subscription.notifyStatusChanges,
-    reason: subscription.reason as SubscriptionReason,
-    level: levelFromFlags(subscription.notifyComments, subscription.notifyStatusChanges),
+    notifyComments,
+    notifyStatusChanges,
+    reason: preferred.reason as SubscriptionReason,
+    level: levelFromFlags(notifyComments, notifyStatusChanges),
   }
 }
 
@@ -190,11 +208,6 @@ export async function getSubscribersForEvent(
 ): Promise<Subscriber[]> {
   log.debug({ post_id: postId, event_type: eventType }, 'get subscribers for event')
   // Determine which column to filter by
-  const notifyColumn =
-    eventType === 'comment'
-      ? postSubscriptions.notifyComments
-      : postSubscriptions.notifyStatusChanges
-
   const rows = await db
     .select({
       principalId: postSubscriptions.principalId,
@@ -214,24 +227,38 @@ export async function getSubscribersForEvent(
     .innerJoin(user, eq(principal.userId, user.id))
     .where(
       and(
-        eq(postSubscriptions.postId, postId),
-        eq(notifyColumn, true),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`,
         isNotNull(user.email) // Only subscribers with real email addresses
       )
     )
 
-  return rows
-    .filter((row): row is typeof row & { email: string } => row.email !== null)
-    .map((row) => ({
-      principalId: row.principalId,
-      userId: row.userId!, // INNER JOIN on user guarantees non-null
-      email: row.email,
-      contactEmail: row.contactEmail,
-      name: row.name,
-      reason: row.reason as SubscriptionReason,
-      notifyComments: row.notifyComments,
-      notifyStatusChanges: row.notifyStatusChanges,
-    }))
+  // Same principal can have a row on the canonical and a merged source.
+  // Fan-out is per principal, so collapse before returning.
+  const unique = new Map<string, Subscriber>()
+  for (const row of rows) {
+    if (!row.email) continue
+    const existing = unique.get(row.principalId)
+    if (!existing) {
+      unique.set(row.principalId, {
+        principalId: row.principalId,
+        userId: row.userId!, // INNER JOIN on user guarantees non-null
+        email: row.email,
+        contactEmail: row.contactEmail,
+        name: row.name,
+        reason: row.reason as SubscriptionReason,
+        notifyComments: row.notifyComments,
+        notifyStatusChanges: row.notifyStatusChanges,
+      })
+      continue
+    }
+    existing.notifyComments = existing.notifyComments || row.notifyComments
+    existing.notifyStatusChanges = existing.notifyStatusChanges || row.notifyStatusChanges
+  }
+  const wantsEvent =
+    eventType === 'comment'
+      ? (subscriber: Subscriber) => subscriber.notifyComments
+      : (subscriber: Subscriber) => subscriber.notifyStatusChanges
+  return [...unique.values()].filter(wantsEvent)
 }
 
 /**

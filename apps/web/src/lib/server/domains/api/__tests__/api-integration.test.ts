@@ -1,4 +1,6 @@
 /**
+ * @vitest-environment node
+ *
  * API Integration Tests
  *
  * These tests run against a live server and require:

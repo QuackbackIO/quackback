@@ -96,7 +96,7 @@ const SCRATCH_DB = 'quackback_drift_check'
  * declare. Every entry needs a reason; an entry that stops matching anything
  * is reported so the list cannot rot.
  */
-const EXEMPTIONS: { reason: string; pattern: RegExp }[] = [
+const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
   {
     // page_views is declaratively day-partitioned (0137); drizzle-kit's
     // introspection does not see partitioned parents (relkind 'p'), so the
@@ -227,6 +227,24 @@ const EXEMPTIONS: { reason: string; pattern: RegExp }[] = [
     pattern:
       /^ALTER TABLE "settings" ALTER COLUMN "assistant_config" SET DEFAULT '\{"version":3,.*\}'::jsonb;?$/,
   },
+  {
+    // drizzle-kit on PG 17 reports composite UNIQUE/PK columns in creation
+    // order; on PG 18 it reports them alphabetically (matching the TS
+    // declarations). The resulting DROP+ADD pair is a column-order rewrite
+    // of the same key, not real drift. Optional because PG 18 emits nothing.
+    reason:
+      'drizzle-kit composite UNIQUE column-order rewrite (PG 17 creation order vs alphabetical TS)',
+    pattern:
+      /^ALTER TABLE "(?:post_external_links|ticket_external_links|integration_event_mappings)" (?:DROP|ADD) CONSTRAINT "(?:post_external_links_type_external_post_unique|ticket_external_links_type_external_ticket_unique|mapping_unique)"/,
+    optional: true,
+  },
+  {
+    reason:
+      'drizzle-kit composite PK column-order rewrite (PG 17 creation order vs alphabetical TS)',
+    pattern:
+      /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories)" DROP CONSTRAINT "(?:status_incident_components_incident_id_component_id_pk|ticket_links_pkey|visitor_top_stats_pkey|ticket_conversations_pkey|changelog_entry_categories_pk)"/,
+    optional: true,
+  },
 ]
 
 function scratchUrl(): string {
@@ -328,7 +346,7 @@ async function main(): Promise<number> {
 
     // A stale exemption is a failure, not a warning: nobody reads warnings
     // on green builds, and the list is meant not to rot.
-    const stale = EXEMPTIONS.filter((_, i) => !used.has(i))
+    const stale = EXEMPTIONS.filter((e, i) => !used.has(i) && !e.optional)
     for (const exemption of stale) {
       console.error(
         `STALE EXEMPTION (matched nothing, remove it): ${exemption.pattern} (${exemption.reason})`

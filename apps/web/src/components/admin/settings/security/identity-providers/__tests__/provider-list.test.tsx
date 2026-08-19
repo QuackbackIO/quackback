@@ -120,6 +120,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     domains: [],
     visibility: 'button',
     ...over,
+    lastTestCapture: over.lastTestCapture ?? null,
   }
 }
 

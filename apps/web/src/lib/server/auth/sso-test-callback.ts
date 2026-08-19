@@ -83,6 +83,7 @@ export async function handleSsoTestCallback(
     tokenAuth: session.tokenAuth,
     requestedPrompt: session.requestedPrompt,
     allowMissingEmail: session.allowMissingEmail,
+    identityMapping: session.identityMapping,
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,
@@ -126,7 +127,18 @@ export async function handleSsoTestCallback(
     const unchanged = !!provider && provider.detailsChangedAt === session.detailsChangedAt
 
     if (provider && unchanged) {
-      await markTestSucceeded(provider.id)
+      const capture = {
+        registrationId: session.registrationId,
+        capturedAt: new Date().toISOString(),
+        identity: result.identity ?? {
+          id: result.claims.sub,
+          email: result.claims.email,
+          name: result.claims.name,
+          sources: {},
+        },
+        claims: result.allClaims ?? {},
+      }
+      await markTestSucceeded(provider.id, capture)
 
       // For the legacy `sso` provider also stamp the JSON blob that the
       // old single-provider gate still reads, keeping both paths in sync.

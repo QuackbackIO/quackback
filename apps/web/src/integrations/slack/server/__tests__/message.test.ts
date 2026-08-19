@@ -60,7 +60,7 @@ function messageCreatedEvent(
         createdAt: '2026-07-21T12:00:00.000Z',
       },
       conversation: conversationRef,
-      isFirstMessage: false,
+      isFirstMessage: senderType === 'visitor',
     },
   } as EventData
 }

@@ -33,6 +33,7 @@ import { NotFoundError, ConflictError } from '@/lib/shared/errors'
 import { announcePublishedPost } from '@/lib/server/domains/posts/post.announce'
 import { announcePublishedComment } from '@/lib/server/domains/comments/comment.announce'
 import { logger } from '@/lib/server/logger'
+import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 
 const log = logger.child({ component: 'moderation' })
 
@@ -276,6 +277,7 @@ export async function approveComment(
         .update(posts)
         .set({ commentCount: sql`${posts.commentCount} + 1` })
         .where(eq(posts.id, row.postId))
+      await adjustCanonicalCommentCount(row.postId, 1, tx)
     }
     return row
   })

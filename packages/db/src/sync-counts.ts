@@ -23,20 +23,44 @@ async function syncCommentCounts() {
   try {
     console.log('Synchronising comment counts...\n')
 
-    // Single UPDATE that recalculates from source of truth
+    // Same predicate as recalculateCanonicalVoteCount: a canonical's public
+    // count is its own visible comments plus those on live, non-deleted-board
+    // sources merged into it. A source (or standalone post) counts only itself.
     const result = await sql`
       UPDATE posts
       SET comment_count = (
         SELECT COUNT(*)::int
-        FROM post_comments
-        WHERE post_comments.post_id = posts.id
-          AND post_comments.deleted_at IS NULL
+        FROM post_comments c
+        WHERE c.deleted_at IS NULL
+          AND c.is_private = false
+          AND c.moderation_state <> 'pending'
+          AND c.post_id IN (
+            SELECT posts.id
+            UNION ALL
+            SELECT s.id
+            FROM posts s
+            INNER JOIN boards b ON b.id = s.board_id
+            WHERE s.canonical_post_id = posts.id
+              AND s.deleted_at IS NULL
+              AND b.deleted_at IS NULL
+          )
       )
       WHERE comment_count != (
         SELECT COUNT(*)::int
-        FROM post_comments
-        WHERE post_comments.post_id = posts.id
-          AND post_comments.deleted_at IS NULL
+        FROM post_comments c
+        WHERE c.deleted_at IS NULL
+          AND c.is_private = false
+          AND c.moderation_state <> 'pending'
+          AND c.post_id IN (
+            SELECT posts.id
+            UNION ALL
+            SELECT s.id
+            FROM posts s
+            INNER JOIN boards b ON b.id = s.board_id
+            WHERE s.canonical_post_id = posts.id
+              AND s.deleted_at IS NULL
+              AND b.deleted_at IS NULL
+          )
       )
     `
 

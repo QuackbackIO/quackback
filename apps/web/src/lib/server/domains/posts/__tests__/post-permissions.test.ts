@@ -54,6 +54,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         },
       },
       update: vi.fn(() => createChainMock()),
+      execute: vi.fn().mockResolvedValue([{ unique_voters: 0, visible_comments: 0 }]),
       select: vi.fn(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([{ count: 0 }]),

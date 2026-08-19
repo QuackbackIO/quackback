@@ -15,6 +15,7 @@ import {
   eq,
   and,
   isNull,
+  isNotNull,
   posts,
   boards,
   webhooks,
@@ -287,6 +288,21 @@ export async function deleteBoard(id: BoardId): Promise<void> {
     .catch((error) => {
       log.error({ err: error }, 'failed to clean up webhook board_ids')
     })
+
+  // Merged sources on this board drop out of the canonical thread once the
+  // board is gone. Recount those canonicals so stored comment/vote totals
+  // match what listViewableMergedSourceIds will render.
+  const mergedSources = await db
+    .selectDistinct({ canonicalPostId: posts.canonicalPostId })
+    .from(posts)
+    .where(and(eq(posts.boardId, id), isNotNull(posts.canonicalPostId)))
+  const { recalculateCanonicalVoteCount } =
+    await import('@/lib/server/domains/posts/post.merge-ids')
+  for (const row of mergedSources) {
+    if (row.canonicalPostId) {
+      await recalculateCanonicalVoteCount(row.canonicalPostId as PostId)
+    }
+  }
 }
 
 /**

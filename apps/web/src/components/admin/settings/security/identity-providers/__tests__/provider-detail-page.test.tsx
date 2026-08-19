@@ -58,7 +58,7 @@ const { discoveryScopesSpy } = vi.hoisted(() => ({
 
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
-    current: null as null | { registrationId: string; allClaims: Record<string, unknown> },
+    current: null as null | { registrationId: string; claims: Record<string, unknown> },
   },
 }))
 
@@ -189,6 +189,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     domains: [],
     visibility: 'button',
     ...over,
+    lastTestCapture: over.lastTestCapture ?? null,
   }
 }
 
@@ -485,7 +486,7 @@ describe('<ProviderDetailPage> claim-mapping autocomplete', () => {
   it('names the observed claims inline and drops the old assist block', () => {
     ssoTestRef.current = {
       registrationId: 'oidc_x', // matches makeProvider().registrationId
-      allClaims: { groups: ['11111111-2222'], roles: ['admin'] },
+      claims: { groups: ['11111111-2222'], roles: ['admin'] },
     }
     renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     // Inline hint names the observed claims (disclosure auto-opens on suggestions).
@@ -497,13 +498,13 @@ describe('<ProviderDetailPage> claim-mapping autocomplete', () => {
   })
 
   it('auto-fills the claim path when the test returned exactly one array claim', () => {
-    ssoTestRef.current = { registrationId: 'oidc_x', allClaims: { roles: ['admin'] } }
+    ssoTestRef.current = { registrationId: 'oidc_x', claims: { roles: ['admin'] } }
     renderPage(makeProvider({ autoCreateUsers: true, claimMapping: null }))
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
   })
 
   it('shows no inline suggestions for a test of a different provider', () => {
-    ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { roles: ['admin'] } }
+    ssoTestRef.current = { registrationId: 'oidc_other', claims: { roles: ['admin'] } }
     renderPage(
       makeProvider({
         autoCreateUsers: true,
@@ -675,7 +676,7 @@ describe('<ProviderDetailPage> request options', () => {
 
   it('auto-expands Advanced when a non-default prompt is set', () => {
     // A non-default configuration must never sit hidden behind a closed panel.
-    renderPage(makeProvider({ prompt: 'login' }))
+    renderPage(makeProvider({ prompt: 'omit' }))
     expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
       'aria-expanded',
       'true'

@@ -57,6 +57,8 @@ export interface IdentityProviderClaimMapping {
     map?: Array<{ claimPath: string; attributeKey: string }>
     /** Off: a claim only fills an attribute that is empty. */
     overrideExisting?: boolean
+    /** When true, a disappeared claim clears the stored attribute. */
+    syncOnSignIn?: boolean
   }
 }
 
@@ -130,6 +132,7 @@ function readAttributes(value: unknown): IdentityProviderClaimMapping['attribute
   const attributes: NonNullable<IdentityProviderClaimMapping['attributes']> = {}
   if (map.length > 0) attributes.map = map
   if (value.overrideExisting === true) attributes.overrideExisting = true
+  if (value.syncOnSignIn === true) attributes.syncOnSignIn = true
   return Object.keys(attributes).length > 0 ? attributes : undefined
 }
 
@@ -164,6 +167,20 @@ export function allowsMissingEmail(stored: unknown): boolean {
 /** The sources to try, in order, for this provider. */
 export function identitySourcesFor(stored: unknown): IdentitySource[] {
   return claimMappingFor(stored).profile?.sources ?? DEFAULT_IDENTITY_SOURCES
+}
+
+/**
+ * Resolve a claim path. An exact key match is tried first so namespaced claims
+ * like `https://acme.com/email`, whose dots are not separators, still work.
+ */
+export function getClaimByPath(claims: Record<string, unknown>, path: string): unknown {
+  if (path in claims) return claims[path]
+  let current: unknown = claims
+  for (const segment of path.split('.')) {
+    if (current === null || typeof current !== 'object') return undefined
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return current
 }
 
 /**

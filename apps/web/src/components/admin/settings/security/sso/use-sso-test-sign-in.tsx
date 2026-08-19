@@ -49,7 +49,9 @@ import {
   type WireResult,
   type SsoTestState,
 } from './sso-test-state'
-import type { JsonValue } from '@/lib/shared/json'
+import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
+
+export type { SsoTestCapture }
 
 const POLL_INTERVAL_MS = 2000
 // 150 polls * 2s = 5 minutes. Redis test-session TTL is 10 minutes;
@@ -79,7 +81,7 @@ interface SsoTestSignInContextValue {
   open: (opts?: OpenOptions) => void
   /** The most recent successful test sign-in, tagged with the provider it ran
    *  against so a consumer only uses claims from a test of THAT provider. */
-  lastSuccess: { registrationId: string; allClaims: Record<string, JsonValue> } | null
+  lastSuccess: SsoTestCapture | null
 }
 
 const SsoTestSignInContext = createContext<SsoTestSignInContextValue | null>(null)
@@ -98,10 +100,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const pollResult = useServerFn(getSsoTestResultFn)
   const [state, dispatch] = useReducer(ssoTestReducer, initialSsoTestState)
   const [applying, setApplying] = useState(false)
-  const [lastSuccess, setLastSuccess] = useState<{
-    registrationId: string
-    allClaims: Record<string, JsonValue>
-  } | null>(null)
+  const [lastSuccess, setLastSuccess] = useState<SsoTestCapture | null>(null)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onSuccessRef = useRef<OnSuccess | null>(null)
@@ -171,7 +170,14 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
       if (result.ok) {
         setLastSuccess({
           registrationId: registrationIdRef.current,
-          allClaims: result.allClaims ?? {},
+          capturedAt: new Date().toISOString(),
+          identity: result.identity ?? {
+            id: result.claims.sub,
+            email: result.claims.email,
+            name: result.claims.name,
+            sources: {},
+          },
+          claims: result.allClaims ?? {},
         })
         void runAutoApply()
       }

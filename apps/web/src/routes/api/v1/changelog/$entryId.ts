@@ -7,17 +7,16 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { parseTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId, parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import {
   getChangelogById,
   updateChangelog,
   deleteChangelog,
 } from '@/lib/server/domains/changelog/changelog.service'
-import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { TiptapContent } from '@/lib/server/db'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { ChangelogId } from '@quackback/ids'
+import type { ChangelogId, PostId } from '@quackback/ids'
+import { formatChangelogResponse } from './-serialize'
 
 // Input validation schema
 const updateChangelogSchema = z.object({
@@ -25,28 +24,8 @@ const updateChangelogSchema = z.object({
   content: z.string().min(1).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
   displayDate: z.string().datetime().nullable().optional(),
+  linkedPostIds: z.array(z.string()).optional(),
 })
-
-function formatChangelogResponse(entry: {
-  id: string
-  title: string
-  content: string
-  contentJson: TiptapContent | null
-  publishedAt: Date | null
-  displayDate: Date | null
-  createdAt: Date
-  updatedAt: Date
-}) {
-  return {
-    id: entry.id,
-    title: entry.title,
-    content: contentJsonToMarkdown(entry.contentJson, entry.content),
-    publishedAt: entry.publishedAt?.toISOString() || null,
-    displayDate: entry.displayDate?.toISOString() || null,
-    createdAt: entry.createdAt.toISOString(),
-    updatedAt: entry.updatedAt.toISOString(),
-  }
-}
 
 export const Route = createFileRoute('/api/v1/changelog/$entryId')({
   server: {
@@ -109,6 +88,12 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
             }
           }
 
+          const linkedPostIds = parseTypeIdArray<PostId>(
+            parsed.data.linkedPostIds,
+            'post',
+            'linked post IDs'
+          )
+
           const updated = await updateChangelog(entryId, {
             title: parsed.data.title,
             content: parsed.data.content,
@@ -117,6 +102,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
               displayDate:
                 parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
             }),
+            ...(linkedPostIds !== undefined && { linkedPostIds }),
           })
 
           return successResponse(formatChangelogResponse(updated))

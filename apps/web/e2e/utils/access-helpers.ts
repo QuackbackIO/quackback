@@ -20,8 +20,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 function runScript(scriptRelPath: string, args: string[]): string {
   const scriptPath = resolve(__dirname, scriptRelPath)
-  // execFileSync (no shell) so test args can't be interpreted as shell syntax.
-  return execFileSync('dotenv', ['-e', '../../.env', '--', 'bun', scriptPath, ...args], {
+  // bun --env-file, not the dotenv CLI: GitHub runners ship a Ruby dotenv
+  // first on PATH that rejects -e. execFileSync so args stay uninterpreted.
+  return execFileSync('bun', ['--env-file=../../.env', scriptPath, ...args], {
     encoding: 'utf-8',
     cwd: resolve(__dirname, '../..'), // apps/web
   }).trim()

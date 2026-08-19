@@ -43,23 +43,19 @@ export interface HandshakeInput {
   redirectUri: string
   /** PKCE verifier minted at authorize time (S256 challenge). */
   codeVerifier: string
-  /** The scopes this attempt actually requested, so an invalid_scope hint can
-   *  name them instead of asserting a default set. */
+  /** The scopes this attempt actually requested. */
   requestedScopes?: readonly string[]
-  /** How to authenticate at the token endpoint. Mirrors production, which is
-   *  the point: a test using the other method proves nothing about sign-in. */
+  /** How to authenticate at the token endpoint. Mirrors production. */
   tokenAuth?: 'basic' | 'post'
   /** The `prompt` this attempt sent, so a configuration error can name it. */
   requestedPrompt?: string
   /**
    * Whether this provider is configured to mint a placeholder address when the
-   * IdP releases none. The test has to know, because sign-in does: with it on,
-   * a provider that releases no email signs people in perfectly well, and a
-   * test that failed anyway would report a broken connection for a working
-   * configuration — and block enforcement, which a passing test is what
-   * unlocks.
+   * IdP releases none. The test has to know, because sign-in does.
    */
   allowMissingEmail?: boolean
+  /** Identity sources and claim paths — the same mapping production uses. */
+  identityMapping?: import('./resolve-identity').IdentityMapping
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -91,11 +87,19 @@ export type HandshakeResult =
         hasRefreshToken: boolean
         expiresIn?: number
       }
-      /** Full decoded ID-token payload, exactly as the IdP returned it. Lets
-       *  admins see non-standard claims (groups, roles, ...) when debugging
+      /** Merged claims the resolver saw (earlier source wins). Lets admins
+       *  see non-standard claims (groups, roles, ...) when debugging
        *  claim-to-role mapping. The curated `claims` above is for the friendly
        *  display + identity match; this is the complete set. */
       allClaims?: Record<string, JsonValue>
+      /** Resolved identity + per-field provenance. Feeds the editor's
+       *  session-scoped outcome preview. */
+      identity?: {
+        id: string
+        email?: string
+        name?: string
+        sources: Partial<Record<'id' | 'email' | 'name', string>>
+      }
     }
   | {
       ok: false
@@ -196,11 +200,13 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       }
     }
     steps.push({ ok: true, stage: 'discovery-fetch', label: 'Discovery doc fetched' })
-  } else if (input.tokenEndpoint && input.jwksUri && input.issuer) {
+  } else if (input.tokenEndpoint) {
     discovery = {
-      issuer: input.issuer,
+      issuer: input.issuer ?? '',
       token_endpoint: input.tokenEndpoint,
-      jwks_uri: input.jwksUri,
+      jwks_uri: input.jwksUri ?? '',
+      // Row userInfoUrl wins over discovery; callers already apply that
+      // precedence when they populate userinfoEndpoint.
       userinfo_endpoint: input.userinfoEndpoint,
     }
     steps.push({ ok: true, stage: 'discovery-fetch', label: 'Using configured endpoints' })
@@ -208,18 +214,21 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     return {
       ok: false,
       stage: 'discovery-fetch',
-      hint: 'Provider has no discovery URL and is missing one or more manual endpoints (token, JWKS, issuer).',
+      hint: 'Provider has no discovery URL and is missing a token endpoint.',
       steps,
     }
+  }
+
+  // Row userInfoUrl takes precedence over the discovery document, matching
+  // production registration.
+  if (input.userinfoEndpoint) {
+    discovery.userinfo_endpoint = input.userinfoEndpoint
   }
 
   // Mirror production: Better-Auth's genericOAuth plugin runs with
   // pkce: true in our config, so the test flow sends code_verifier
   // too. Diverging here would test a slightly-different protocol and
   // produce false positives.
-  // Basic sends the credentials in the Authorization header rather than the
-  // body. Some providers accept only one of the two, so this follows whatever
-  // production is configured to send.
   const useBasic = input.tokenAuth === 'basic'
   const tokenBody = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -294,103 +303,106 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       steps,
     }
   }
-  if (!tokens.id_token) {
+  steps.push({ ok: true, stage: 'token-exchange', label: 'Token exchange succeeded' })
+
+  const sources = input.identityMapping?.sources
+  const accessTokenOnly =
+    Array.isArray(sources) && sources.includes('accessTokenJwt') && !sources.includes('idToken')
+  const hasIdToken = typeof tokens.id_token === 'string' && tokens.id_token.length > 0
+
+  if (!hasIdToken && !accessTokenOnly) {
     return {
       ok: false,
       stage: 'token-exchange',
-      hint: "No id_token returned. Make sure 'openid' is in the requested scopes and your IdP is configured to issue ID tokens for authorization-code grants.",
+      hint: "No id_token returned. Make sure 'openid' is in the requested scopes and your IdP is configured to issue ID tokens, or set identity sources to access-token JWT only.",
       steps,
     }
   }
-  steps.push({ ok: true, stage: 'token-exchange', label: 'Token exchange succeeded' })
 
-  let header: ReturnType<typeof decodeProtectedHeader>
-  try {
-    header = decodeProtectedHeader(tokens.id_token)
-  } catch (err) {
-    return {
-      ok: false,
+  let header: ReturnType<typeof decodeProtectedHeader> | undefined
+  let verifiedPayload: ReturnType<typeof decodeJwt> | undefined
+
+  if (hasIdToken) {
+    try {
+      header = decodeProtectedHeader(tokens.id_token!)
+    } catch (err) {
+      return {
+        ok: false,
+        stage: 'id-token-decode',
+        hint: `ID token is not a well-formed JWT (cannot decode header): ${err instanceof Error ? err.message : 'decode error'}. The IdP returned an id_token that is not a valid compact JWS.`,
+        steps,
+      }
+    }
+    steps.push({
+      ok: true,
       stage: 'id-token-decode',
-      hint: `ID token is not a well-formed JWT (cannot decode header): ${err instanceof Error ? err.message : 'decode error'}. The IdP returned an id_token that is not a valid compact JWS.`,
-      steps,
-    }
-  }
-  steps.push({
-    ok: true,
-    stage: 'id-token-decode',
-    label: 'ID token decoded',
-    detail: `alg=${header.alg ?? '?'} kid=${header.kid ?? '?'}`,
-  })
-
-  let verifiedPayload: ReturnType<typeof decodeJwt>
-  try {
-    // Fetch the JWKS through the pinned fetch rather than letting jose's
-    // createRemoteJWKSet do its own unpinned (DNS-rebind-able) fetch,
-    // then verify against the resulting local key set.
-    const jwksRes = await safeFetch(discovery.jwks_uri, {
-      timeoutMs: 5000,
-      maxResponseBytes: 256 * 1024,
+      label: 'ID token decoded',
+      detail: `alg=${header.alg ?? '?'} kid=${header.kid ?? '?'}`,
     })
-    if (!jwksRes.ok) {
+
+    if (!discovery.jwks_uri || !discovery.issuer) {
       return {
         ok: false,
         stage: 'signature-verify',
-        hint: `JWKS endpoint returned ${jwksRes.status}. The IdP's jwks_uri must serve the signing key set.`,
+        hint: 'An ID token was returned but this provider has no JWKS URI / issuer to verify it against.',
         steps,
       }
     }
-    const jwks = createLocalJWKSet(
-      (await jwksRes.json()) as Parameters<typeof createLocalJWKSet>[0]
-    )
-    const { payload } = await jwtVerify(tokens.id_token, jwks, {
-      issuer: discovery.issuer,
-      audience: input.clientId,
-    })
-    verifiedPayload = payload
-  } catch (err) {
-    if (err instanceof SsrfError) {
+
+    try {
+      const jwksRes = await safeFetch(discovery.jwks_uri, {
+        timeoutMs: 5000,
+        maxResponseBytes: 256 * 1024,
+      })
+      if (!jwksRes.ok) {
+        return {
+          ok: false,
+          stage: 'signature-verify',
+          hint: `JWKS endpoint returned ${jwksRes.status}. The IdP's jwks_uri must serve the signing key set.`,
+          steps,
+        }
+      }
+      const jwks = createLocalJWKSet(
+        (await jwksRes.json()) as Parameters<typeof createLocalJWKSet>[0]
+      )
+      const { payload } = await jwtVerify(tokens.id_token!, jwks, {
+        issuer: discovery.issuer,
+        audience: input.clientId,
+      })
+      verifiedPayload = payload
+    } catch (err) {
+      if (err instanceof SsrfError) {
+        return {
+          ok: false,
+          stage: 'signature-verify',
+          hint: `The IdP's JWKS URI (${discovery.jwks_uri}) is not safe to fetch (${err.reason}). The discovery document may be misconfigured or hostile.`,
+          steps,
+        }
+      }
       return {
         ok: false,
         stage: 'signature-verify',
-        hint: `The IdP's JWKS URI (${discovery.jwks_uri}) is not safe to fetch (${err.reason}). The discovery document may be misconfigured or hostile.`,
+        hint: `ID token signature verification failed: ${err instanceof Error ? err.message : 'unknown error'}. Likely causes: JWKS rotation, wrong issuer, or 'aud' claim does not include your client_id.`,
         steps,
       }
     }
-    return {
-      ok: false,
-      stage: 'signature-verify',
-      hint: `ID token signature verification failed: ${err instanceof Error ? err.message : 'unknown error'}. Likely causes: JWKS rotation, wrong issuer, or 'aud' claim does not include your client_id.`,
-      steps,
-    }
-  }
-  steps.push({ ok: true, stage: 'signature-verify', label: 'Signature verified against JWKS' })
+    steps.push({ ok: true, stage: 'signature-verify', label: 'Signature verified against JWKS' })
 
-  if (verifiedPayload.nonce !== input.expectedNonce) {
-    return {
-      ok: false,
-      stage: 'claim-check',
-      hint: 'Nonce mismatch in ID token. Possible replay attack or IdP not honoring nonce.',
-      steps,
+    if (verifiedPayload.nonce !== input.expectedNonce) {
+      return {
+        ok: false,
+        stage: 'claim-check',
+        hint: 'Nonce mismatch in ID token. Possible replay attack or IdP not honoring nonce.',
+        steps,
+      }
     }
-  }
-  steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
-
-  if (!verifiedPayload.sub) {
-    return {
-      ok: false,
-      stage: 'claim-check',
-      hint: "ID token missing required 'sub' claim. The IdP must include a stable subject identifier on every ID token (OIDC core requirement).",
-      steps,
-    }
+    steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
   }
 
-  // Identity comes from THE resolver — the same one production sign-in uses.
-  // Demanding an email inside the ID token here is what made a provider that
-  // releases the address at userinfo sign users in successfully while failing
-  // the very test that gates enforcement.
   const { resolveIdentity } = await import('./resolve-identity')
   const resolution = await resolveIdentity({
     tokens: { idToken: tokens.id_token, accessToken: tokens.access_token },
+    mapping: input.identityMapping,
     fetchUserInfo: async () => {
       if (!discovery.userinfo_endpoint || !tokens.access_token) return null
       try {
@@ -426,15 +438,13 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       stage: 'claim-check',
       hint:
         resolution.reason === 'subject_mismatch'
-          ? "Your IdP's userinfo endpoint reported a different 'sub' than its ID token. OIDC requires these to match, and mixing them could attach the wrong account, so sign-in is refused. This usually means a token or session mix-up at the IdP."
-          : "Couldn't resolve an account identifier. The IdP must return a stable 'sub' in the ID token or from its userinfo endpoint.",
+          ? "Your IdP's userinfo endpoint reported a different 'sub' than its ID token. OIDC requires these to match, and mixing them could attach the wrong account, so sign-in is refused."
+          : "Couldn't resolve an account identifier. The IdP must return a stable subject in the ID token, userinfo, or (when configured) the access token.",
       steps,
     }
   }
 
   const { identity } = resolution
-  // Per-field provenance: this is what makes a userinfo-sourced address legible
-  // instead of looking like a failure.
   for (const field of ['id', 'email', 'name'] as const) {
     const source = identity.sources[field]
     if (!source) continue
@@ -464,13 +474,10 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       return {
         ok: false,
         stage: 'claim-check',
-        hint: "No email address was released, in the ID token or from the userinfo endpoint. Quackback needs one to create the account. Either configure your IdP's claim mapper to release it, or — if this provider has no email addresses to give — enable the placeholder-address option on the provider.",
+        hint: "No email address was released, in the ID token or from the userinfo endpoint. Either configure your IdP's claim mapper to release it, or — if this provider has no email addresses to give — enable the placeholder-address option on the provider.",
         steps,
       }
     }
-    // Configured for exactly this, so the connection is sound. Say plainly what
-    // signing in will produce rather than reporting a bare success: these
-    // accounts cannot receive email until the person supplies an address.
     steps.push({
       ok: true,
       stage: 'claim-check',
@@ -478,24 +485,48 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     })
   }
 
+  const accessPayload =
+    !verifiedPayload && tokens.access_token ? decodeJwtSafe(tokens.access_token) : null
+
   return {
     ok: true,
     steps,
     claims: {
-      iss: verifiedPayload.iss as string,
-      sub: verifiedPayload.sub as string,
-      aud: verifiedPayload.aud as string | string[],
+      iss:
+        (verifiedPayload?.iss as string | undefined) ??
+        (accessPayload?.iss as string | undefined) ??
+        '',
+      sub: identity.id,
+      aud:
+        (verifiedPayload?.aud as string | string[] | undefined) ??
+        (accessPayload?.aud as string | string[] | undefined) ??
+        input.clientId,
       email: identity.email,
       email_verified: identity.emailVerified,
       name: identity.name,
-      preferred_username: verifiedPayload.preferred_username as string | undefined,
+      preferred_username: verifiedPayload?.preferred_username as string | undefined,
     },
     tokenInfo: {
-      idTokenAlg: (header.alg ?? 'unknown') as string,
+      idTokenAlg: (header?.alg ?? (hasIdToken ? 'unknown' : 'none')) as string,
       hasAccessToken: !!tokens.access_token,
       hasRefreshToken: !!tokens.refresh_token,
       expiresIn: tokens.expires_in,
     },
-    allClaims: verifiedPayload as unknown as Record<string, JsonValue>,
+    allClaims: identity.claims as unknown as Record<string, JsonValue>,
+    identity: {
+      id: identity.id,
+      email: identity.email,
+      name: identity.name,
+      sources: identity.sources,
+    },
+  }
+}
+
+function decodeJwtSafe(token: string): Record<string, unknown> | null {
+  try {
+    const payload = decodeJwt(token)
+    return payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null
+  } catch {
+    return null
   }
 }

@@ -427,6 +427,7 @@ function PostModalContent({
               postId={postId}
               postTitle={post.title}
               canonicalPostId={post.canonicalPostId as PostId | undefined}
+              mergedPosts={post.mergedPosts}
               showDialog={showMergeDialog}
               onShowDialogChange={setShowMergeDialog}
             />

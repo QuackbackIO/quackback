@@ -20,6 +20,7 @@ import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/err
 import { Role } from '@/lib/shared/roles'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
+import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 
 /**
  * Minimal actor shape the comment policy consumes. `permissions` is the
@@ -336,6 +337,9 @@ export async function softDeleteComment(
           ...(shouldUnpin ? { pinnedCommentId: null } : {}),
         })
         .where(eq(posts.id, comment.postId))
+    }
+    if (shouldDecrementCount) {
+      await adjustCanonicalCommentCount(comment.postId, -1, tx)
     }
 
     return true

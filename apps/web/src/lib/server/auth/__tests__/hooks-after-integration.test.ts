@@ -175,7 +175,7 @@ const mockListIdentityProviders = vi.fn(async () => {
       enabled: sso?.enabled !== false,
       autoCreateUsers: sso?.autoCreateUsers ?? true,
       autoProvisionRole: sso?.autoProvisionRole ?? null,
-      attributeMapping: sso?.attributeMapping ?? null,
+      claimMapping: sso?.attributeMapping ? { role: sso.attributeMapping } : null,
       domains: workspace?.verifiedDomains ?? [],
     },
   ]

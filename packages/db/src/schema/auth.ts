@@ -568,6 +568,8 @@ export type IdentityProviderClaimMapping = {
   attributes?: {
     map?: Array<{ claimPath: string; attributeKey: string }>
     overrideExisting?: boolean
+    /** When true, a disappeared claim clears the stored attribute. */
+    syncOnSignIn?: boolean
   }
 }
 
@@ -582,6 +584,18 @@ export type IdentityProviderClaimMapping = {
  * migration. Discovery-doc installs leave the manual endpoint columns
  * null; manual installs leave `discoveryUrl` null.
  */
+export type IdentityProviderTestCapture = {
+  registrationId: string
+  capturedAt: string
+  identity: {
+    id: string
+    email?: string
+    name?: string
+    sources: Partial<Record<'id' | 'email' | 'name', string>>
+  }
+  claims: Record<string, unknown>
+}
+
 export const identityProvider = pgTable(
   'identity_provider',
   {
@@ -629,6 +643,7 @@ export const identityProvider = pgTable(
     /** Bumped when redirect-affecting details change; freshness baseline. */
     detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),
     lastSuccessfulTestAt: timestamp('last_successful_test_at', { withTimezone: true }),
+    lastTestCapture: jsonb('last_test_capture').$type<IdentityProviderTestCapture>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
