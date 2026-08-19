@@ -1,56 +1,82 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { hybridSearch } from '@/lib/server/domains/help-center/help-center-search.service'
+import {
+  isFeatureEnabled,
+  getHelpCenterConfig,
+} from '@/lib/server/domains/settings/settings.service'
+import {
+  hybridSearchForLocale,
+  resolveSearchLocale,
+} from '@/lib/server/domains/help-center/help-center-search.service'
+import {
+  enforcePerIpLimit,
+  widgetCorsHeaders,
+  widgetJsonError,
+} from '@/lib/server/widget/public-endpoint'
+import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'widget-kb-search' })
 
+/** Generous per-IP allowance: typing in the search box fires many requests. */
+export const KB_SEARCH_RATE_LIMIT = 60
+const RATE_WINDOW_SECONDS = 60
+
+export async function handleKbSearch({ request }: { request: Request }): Promise<Response> {
+  if (!(await isFeatureEnabled('helpCenter'))) {
+    return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
+  }
+
+  const url = new URL(request.url)
+  const q = url.searchParams.get('q')?.trim()
+  const limit = Math.min(Number(url.searchParams.get('limit')) || 10, 20)
+
+  if (!q) {
+    return Response.json({ data: { articles: [] } }, { headers: widgetCorsHeaders() })
+  }
+
+  const limited = await enforcePerIpLimit(request, {
+    keyPrefix: 'kbsearch',
+    limit: KB_SEARCH_RATE_LIMIT,
+    windowSeconds: RATE_WINDOW_SECONDS,
+    message: 'Too many searches, slow down',
+  })
+  if (limited) return limited
+
+  try {
+    // The widget passes its own UI locale through (domains/languages §2); an
+    // unrecognized or not-enabled locale silently falls back to default
+    // rather than searching an empty translation table.
+    const requestedLocale = url.searchParams.get('locale') ?? undefined
+    const config = await getHelpCenterConfig()
+    const locale = resolveSearchLocale(
+      requestedLocale,
+      config.locales.additional,
+      config.locales.default
+    )
+    // Identified widget users see segment-gated categories they belong to;
+    // unidentified callers stay anonymous (only ungated content).
+    const viewer = await resolveWidgetViewer()
+    const results = await hybridSearchForLocale(q, locale, limit, viewer)
+
+    const articles = results.map((a) => ({
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      content: a.content?.slice(0, 200) ?? '',
+      category: { id: a.categoryId, slug: a.categorySlug, name: a.categoryName },
+    }))
+
+    return Response.json({ data: { articles } }, { headers: widgetCorsHeaders() })
+  } catch (error) {
+    log.error({ err: error }, 'kb search failed')
+    return widgetJsonError(500, 'SERVER_ERROR', 'Search failed')
+  }
+}
+
 export const Route = createFileRoute('/api/widget/kb-search')({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        if (!(await isFeatureEnabled('helpCenter'))) {
-          return Response.json(
-            { error: { code: 'NOT_FOUND', message: 'Knowledge base not found' } },
-            { status: 404, headers: corsHeaders() }
-          )
-        }
-
-        const url = new URL(request.url)
-        const q = url.searchParams.get('q')?.trim()
-        const limit = Math.min(Number(url.searchParams.get('limit')) || 10, 20)
-
-        if (!q) {
-          return Response.json({ data: { articles: [] } }, { headers: corsHeaders() })
-        }
-
-        try {
-          const results = await hybridSearch(q, limit)
-
-          const articles = results.map((a) => ({
-            id: a.id,
-            slug: a.slug,
-            title: a.title,
-            content: a.content?.slice(0, 200) ?? '',
-            category: { id: a.categoryId, slug: a.categorySlug, name: a.categoryName },
-          }))
-
-          return Response.json({ data: { articles } }, { headers: corsHeaders() })
-        } catch (error) {
-          log.error({ err: error }, 'kb search failed')
-          return Response.json(
-            { error: { code: 'SERVER_ERROR', message: 'Search failed' } },
-            { status: 500, headers: corsHeaders() }
-          )
-        }
-      },
+      GET: handleKbSearch,
     },
   },
 })
-
-function corsHeaders(): HeadersInit {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Cache-Control': 'no-store',
-  }
-}

@@ -5,7 +5,7 @@
  * TipTap doc instead of parsing markdown on every render.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CommentId, PostId, PrincipalId, SegmentId } from '@quackback/ids'
+import type { PostCommentId, PostId, PrincipalId, SegmentId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const insertedComments: Record<string, unknown>[] = []
@@ -19,7 +19,7 @@ vi.mock('@/lib/server/db', async () => {
     const c: Record<string, unknown> = {}
     c.values = vi.fn((row: Record<string, unknown>) => {
       if (label === 'comments') insertedComments.push(row)
-      if (label === 'commentEditHistory') insertedEditHistory.push(row)
+      if (label === 'postCommentEditHistory') insertedEditHistory.push(row)
       return c
     })
     c.set = vi.fn((row: Record<string, unknown>) => {
@@ -32,7 +32,7 @@ vi.mock('@/lib/server/db', async () => {
         const last = updatedComments.at(-1) ?? insertedComments.at(-1) ?? {}
         return [
           {
-            id: 'comment_existing' as unknown as CommentId,
+            id: 'comment_existing' as unknown as PostCommentId,
             postId: 'post_p' as unknown as PostId,
             content: last.content ?? 'Hi',
             contentJson: last.contentJson ?? null,
@@ -66,7 +66,7 @@ vi.mock('@/lib/server/db', async () => {
             id: 'post_p',
             title: 'P',
             boardId: 'board_b',
-            statusId: 'status_open',
+            statusId: 'post_status_open',
             isCommentsLocked: false,
             moderationState: 'published',
             principalId: null,
@@ -84,7 +84,7 @@ vi.mock('@/lib/server/db', async () => {
             },
           }),
         },
-        comments: {
+        postComments: {
           findFirst: vi.fn().mockResolvedValue({
             id: 'comment_existing',
             postId: 'post_p',
@@ -99,7 +99,7 @@ vi.mock('@/lib/server/db', async () => {
           findMany: vi.fn().mockResolvedValue([]),
         },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(tx)),
@@ -111,13 +111,13 @@ vi.mock('@/lib/server/db', async () => {
     isNull: vi.fn(),
     asc: vi.fn(),
     sql: realSql,
-    comments: { __name: 'comments', id: 'id', postId: 'postId', parentId: 'parentId' },
+    postComments: { __name: 'comments', id: 'id', postId: 'postId', parentId: 'parentId' },
     posts: { __name: 'posts', id: 'id', commentCount: 'comment_count' },
     boards: { id: 'id' },
     postStatuses: { id: 'id' },
     postActivity: {},
-    commentReactions: {},
-    commentEditHistory: { __name: 'commentEditHistory' },
+    postCommentReactions: {},
+    postCommentEditHistory: { __name: 'postCommentEditHistory' },
   }
 })
 
@@ -198,7 +198,7 @@ describe('userEditComment contentJson dual-write', () => {
 
   it('updates contentJson alongside content and stores previousContentJson in history', async () => {
     const { userEditComment } = await import('../comment.permissions')
-    await userEditComment('comment_existing' as unknown as CommentId, '*italic* edited', {
+    await userEditComment('comment_existing' as unknown as PostCommentId, '*italic* edited', {
       principalId: 'principal_author' as unknown as PrincipalId,
       role: 'user',
     })

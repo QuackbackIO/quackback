@@ -40,6 +40,10 @@ const TeamMemberListItemSchema = z.object({
 const UpdateMemberRoleSchema = z
   .object({
     role: z.enum(['admin', 'member']).meta({ description: 'New role for the member' }),
+    roleId: TypeIdSchema.optional().meta({
+      description:
+        "Custom role to grant (from the roles table). Requires role='member'; the Owner preset is rejected.",
+    }),
   })
   .meta({ description: 'Update member role request body' })
 

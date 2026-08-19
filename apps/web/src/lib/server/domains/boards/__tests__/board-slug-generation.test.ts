@@ -15,9 +15,11 @@ const hoisted = vi.hoisted(() => ({
   mockedUpdate: vi.fn(),
 }))
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const drizzle = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         boards: { findFirst: (...a: unknown[]) => hoisted.mockedFindFirst(...a) },
@@ -26,9 +28,6 @@ vi.mock('@/lib/server/db', async () => {
       insert: hoisted.mockedInsert,
       update: hoisted.mockedUpdate,
     },
-    boards: { id: 'id', slug: 'slug', deletedAt: 'deletedAt' },
-    posts: { boardId: 'boardId', deletedAt: 'deletedAt' },
-    webhooks: { boardIds: 'boardIds' },
     eq: drizzle.eq,
     and: drizzle.and,
     isNull: drizzle.isNull,

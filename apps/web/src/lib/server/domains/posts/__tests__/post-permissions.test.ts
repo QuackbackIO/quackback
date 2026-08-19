@@ -35,23 +35,26 @@ function createChainMock() {
 // Track what findFirst returns per call
 const mockFindFirst = vi.fn()
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         posts: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_mock', isDefault: true }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_mock', isDefault: true }),
         },
-        comments: { findFirst: vi.fn().mockResolvedValue(null) },
+        postComments: { findFirst: vi.fn().mockResolvedValue(null) },
         settings: { findFirst: vi.fn().mockResolvedValue(null) },
         boards: {
           findFirst: vi.fn().mockResolvedValue({ id: 'board_mock', slug: 'feedback' }),
         },
       },
       update: vi.fn(() => createChainMock()),
+      execute: vi.fn().mockResolvedValue([{ unique_voters: 0, visible_comments: 0 }]),
       select: vi.fn(() => ({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([{ count: 0 }]),
@@ -62,19 +65,6 @@ vi.mock('@/lib/server/db', async () => {
     and: vi.fn(),
     isNull: vi.fn(),
     sql: realSql,
-    posts: {
-      id: 'id',
-      deletedAt: 'deleted_at',
-      deletedByPrincipalId: 'deleted_by_principal_id',
-      principalId: 'principal_id',
-      boardId: 'board_id',
-      statusId: 'status_id',
-    },
-    boards: { id: 'board_id', slug: 'board_slug' },
-    comments: { postId: 'post_id', principalId: 'principal_id', deletedAt: 'deleted_at' },
-    postEditHistory: {},
-    postStatuses: { id: 'id', isDefault: 'is_default' },
-    postActivity: {},
   }
 })
 

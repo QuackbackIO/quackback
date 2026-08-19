@@ -82,7 +82,7 @@ export function SimilarPostsCard({
                   </div>
                   <div className="flex-1 min-w-0">
                     {post.status && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <span
                           className="size-1.5 rounded-full shrink-0"
                           style={{ backgroundColor: post.status.color }}

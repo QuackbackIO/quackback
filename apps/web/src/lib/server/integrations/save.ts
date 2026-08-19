@@ -10,8 +10,10 @@ import { createServicePrincipal } from '@/lib/server/domains/principals/principa
 
 export interface SaveIntegrationParams {
   principalId: PrincipalId
-  accessToken: string
+  accessToken?: string
   refreshToken?: string
+  /** Additional provider secrets, encrypted in the same integration blob. */
+  secrets?: Record<string, unknown>
   expiresIn?: number
   config?: Record<string, unknown>
 }
@@ -26,7 +28,8 @@ export async function saveIntegration(
 ): Promise<IntegrationId> {
   const { principalId, accessToken, refreshToken, expiresIn, config: oauthConfig } = params
 
-  const secrets: Record<string, unknown> = { accessToken }
+  const secrets: Record<string, unknown> = { ...(params.secrets ?? {}) }
+  if (accessToken) secrets.accessToken = accessToken
   if (refreshToken) secrets.refreshToken = refreshToken
 
   const encryptedSecrets = encryptSecrets(secrets)

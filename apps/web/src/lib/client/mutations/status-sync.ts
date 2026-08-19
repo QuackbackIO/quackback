@@ -9,6 +9,7 @@ import {
   enableStatusSyncFn,
   disableStatusSyncFn,
   updateStatusMappingsFn,
+  updateTicketStatusMappingsFn,
 } from '@/lib/server/functions/status-sync'
 
 export function useEnableStatusSync() {
@@ -38,6 +39,19 @@ export function useUpdateStatusMappings() {
   return useMutation({
     mutationFn: (input: { integrationId: string; statusMappings: Record<string, string | null> }) =>
       updateStatusMappingsFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+export function useUpdateTicketStatusMappings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      integrationId: string
+      ticketStatusMappings: Record<string, string | null>
+    }) => updateTicketStatusMappingsFn({ data: input }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
     },

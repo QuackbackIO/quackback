@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearch } from '@tanstack/react-router'
+import { toast } from 'sonner'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -52,6 +53,7 @@ export function OAuthConnectionActions({
       window.location.href = url
     } catch (err) {
       console.error('Failed to get connect URL:', err)
+      toast.error(err instanceof Error ? err.message : "Couldn't start connection. Try again.")
       setConnecting(false)
     }
   }

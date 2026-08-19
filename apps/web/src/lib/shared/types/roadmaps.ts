@@ -5,7 +5,7 @@
  * imports are erased at compile time and never affect the bundle.
  */
 
-export type { RoadmapPostEntry, RoadmapPostsListResult } from '@/lib/server/domains/roadmaps'
+export type { RoadmapViewPost, RoadmapPostsListResult } from '@/lib/server/domains/roadmaps'
 
 // RoadmapPost and RoadmapPostListResult live in the posts domain
 export type { RoadmapPost, RoadmapPostListResult } from '@/lib/server/domains/posts'

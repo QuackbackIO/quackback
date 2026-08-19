@@ -5,9 +5,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { SecretRevealDialog } from '@/components/shared/secret-reveal-dialog'
 import { Button } from '@/components/ui/button'
+import { CheckboxGroup } from '@/components/ui/checkbox-group'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -136,26 +136,18 @@ export function CreateWebhookDialog({ open, onOpenChange }: CreateWebhookDialogP
 
             <div className="space-y-2">
               <Label>Events</Label>
-              <div className="space-y-2">
-                {WEBHOOK_EVENT_CONFIG.map((event) => (
-                  <label
-                    key={event.id}
-                    className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedEvents.includes(event.id)}
-                      onCheckedChange={() => toggleEvent(event.id)}
-                      disabled={isPending}
-                      className="mt-0.5"
-                      aria-label={`Subscribe to ${event.label} events`}
-                    />
-                    <div>
-                      <p className="text-sm font-medium">{event.label}</p>
-                      <p className="text-xs text-muted-foreground">{event.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              <CheckboxGroup
+                className="space-y-2"
+                items={WEBHOOK_EVENT_CONFIG.map((event) => ({
+                  value: event.id,
+                  label: event.label,
+                  description: event.description,
+                  ariaLabel: `Subscribe to ${event.label} events`,
+                }))}
+                selected={selectedEvents}
+                onToggle={toggleEvent}
+                disabled={isPending}
+              />
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

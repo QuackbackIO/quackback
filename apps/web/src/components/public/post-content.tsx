@@ -1,4 +1,4 @@
-import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { MentionHoverCardOverlay } from '@/components/ui/mention-hover-card-overlay'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import type { JSONContent } from '@tiptap/react'

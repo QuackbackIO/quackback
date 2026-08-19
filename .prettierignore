@@ -1,0 +1,6 @@
+# Generated authorization matrix — its exact bytes are a vitest file snapshot
+# (renderMatrixDoc output), so prettier must not reformat it.
+apps/web/src/lib/server/policy/authz-matrix/MATRIX.md
+
+# Generated dependency-graph snapshot — same file-snapshot contract as MATRIX.md.
+apps/web/src/lib/server/policy/dep-graph/GRAPH.md

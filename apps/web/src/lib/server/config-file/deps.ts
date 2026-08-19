@@ -5,6 +5,8 @@ import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { generateId } from '@quackback/ids'
 import type { ReconcileDeps, SettingsInsert, SettingsRow, SettingsUpdate } from './reconciler'
 import { makeReportStatus } from './report-status'
+import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
+import { mergeSetupState } from './reconciler'
 
 /** Production wiring of `ReconcileDeps`. The reconciler is db-agnostic
  *  to keep its tests fast; this is the only place that touches Drizzle
@@ -24,16 +26,25 @@ export function makeReconcileDeps(): ReconcileDeps {
       } satisfies SettingsRow
     },
     updateSettings: async (update: SettingsUpdate) => {
+      const { setupWorkspace, ...columnUpdate } = update
       const row = await db.query.settings.findFirst({ columns: { id: true } })
       if (!row) return
       // Bump auth_config_version atomically with the settings write so
       // other pods drop their stale Better-Auth instance on next
       // request. invalidateSettingsCache (called by the reconciler
       // after this returns) handles the Redis cross-pod broadcast.
-      await db.transaction(async (tx) => {
-        await tx.update(settings).set(update).where(eq(settings.id, row.id))
-        await bumpAuthConfigVersionInTx(tx)
-      })
+      if (setupWorkspace) {
+        await mutateSetupStateAtomic(async (current, lockedRow, tx) => {
+          await tx.update(settings).set(columnUpdate).where(eq(settings.id, lockedRow.id))
+          await bumpAuthConfigVersionInTx(tx)
+          return { state: mergeSetupState(current, setupWorkspace), value: undefined }
+        })
+      } else {
+        await db.transaction(async (tx) => {
+          await tx.update(settings).set(columnUpdate).where(eq(settings.id, row.id))
+          await bumpAuthConfigVersionInTx(tx)
+        })
+      }
     },
     createSettings: async (insert: SettingsInsert) => {
       // Pass a TypeID string for the id; the typeIdColumn driver
@@ -41,7 +52,7 @@ export function makeReconcileDeps(): ReconcileDeps {
       // default at the column level, so we set it here.
       //
       // onConflictDoNothing on slug guards the narrow race between this
-      // path and onboarding's saveUseCaseFn — both can attempt the
+      // path and onboarding's combined workspace-and-goal step — both can attempt the
       // first INSERT on a fresh install. If we lose the race, the next
       // watcher tick reads the now-existing row and updates it via the
       // normal reconcile path.

@@ -15,6 +15,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { InviteId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { db, invitation, principal, user, eq, and, gt, or, sql } from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { requireAuth } from './auth-helpers'
 import { appendInviteMagicLinkToken, removeInviteMagicLinkToken } from './invitation-magic-link'
 import { actorFromAuth, recordAuditEvent } from '@/lib/server/audit/log'
@@ -69,7 +70,7 @@ async function mintPortalInviteMagicLink(
   // Copy-link passes the invite's *remaining* lifetime so a re-minted token
   // can't outlive the invite row it belongs to.
   expiresInSeconds: number = PORTAL_INVITE_MAGIC_LINK_TTL_SECONDS
-): Promise<{ url: string; token: string }> {
+): Promise<{ url: string; token: string; sealedAddress: string }> {
   const { mintMagicLinkUrl } = await import('@/lib/server/auth/magic-link-mint')
   return mintMagicLinkUrl({
     email,
@@ -142,11 +143,8 @@ async function sendOnePortalInvite({
   // (cancel revokes every token in the set). inviteId is fixed above, so the
   // callback path is known.
   const portalUrl = getBaseUrl()
-  const { url: inviteLink, token: magicLinkToken } = await mintPortalInviteMagicLink(
-    email,
-    inviteId,
-    portalUrl
-  )
+  const minted = await mintPortalInviteMagicLink(email, inviteId, portalUrl)
+  const { url: inviteLink, token: magicLinkToken } = minted
 
   await db.insert(invitation).values({
     id: inviteId,
@@ -164,8 +162,10 @@ async function sendOnePortalInvite({
 
   const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
   const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
+  // Sealed class: no account exists for the invitee.
+  const { sealedRecipient } = await import('@/lib/server/email/recipient')
   await sendPortalInviteEmail({
-    to: email,
+    to: sealedRecipient(minted),
     workspaceName: auth.settings.name,
     inviteLink,
     logoUrl,
@@ -211,7 +211,7 @@ type SendPortalInviteResult = {
 export const sendPortalInviteFn = createServerFn({ method: 'POST' })
   .validator(sendPortalInviteSchema)
   .handler(async ({ data }): Promise<SendPortalInviteResult> => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const headers = getRequestHeaders()
     const actor = actorFromAuth(auth)
     const message = data.message?.trim() || undefined
@@ -257,7 +257,7 @@ export const sendPortalInviteFn = createServerFn({ method: 'POST' })
 export const cancelPortalInviteFn = createServerFn({ method: 'POST' })
   .validator(portalInviteByIdSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const inviteId = data.inviteId as InviteId
     const headers = getRequestHeaders()
     const actor = actorFromAuth(auth)
@@ -330,7 +330,7 @@ export const cancelPortalInviteFn = createServerFn({ method: 'POST' })
 export const resendPortalInviteFn = createServerFn({ method: 'POST' })
   .validator(portalInviteByIdSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const inviteId = data.inviteId as InviteId
     const headers = getRequestHeaders()
     const actor = actorFromAuth(auth)
@@ -390,11 +390,8 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     }
 
     const portalUrl = getBaseUrl()
-    const { url: inviteLink, token: magicLinkToken } = await mintPortalInviteMagicLink(
-      inv.email,
-      inviteId,
-      portalUrl
-    )
+    const minted = await mintPortalInviteMagicLink(inv.email, inviteId, portalUrl)
+    const { url: inviteLink, token: magicLinkToken } = minted
 
     // Add the new token to the invite's set (resend is additive — prior links
     // keep working until accept/cancel/expiry). Recorded the moment it's minted,
@@ -409,8 +406,9 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
     let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
     try {
+      const { sealedRecipient } = await import('@/lib/server/email/recipient')
       result = await sendPortalInviteEmail({
-        to: inv.email,
+        to: sealedRecipient(minted),
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,
@@ -448,7 +446,7 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
  * then recently-accepted/revoked — capped at 100 rows.
  */
 export const fetchPortalInvitesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ roles: ['admin'] })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
   log.debug('fetching portal invites')
 
@@ -496,7 +494,7 @@ export const fetchPortalInvitesFn = createServerFn({ method: 'GET' }).handler(as
 export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
   .validator(portalInviteByIdSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const headers = getRequestHeaders()
     const actor = actorFromAuth(auth)
 

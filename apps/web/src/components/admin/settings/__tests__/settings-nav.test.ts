@@ -1,203 +1,237 @@
 import { describe, it, expect } from 'vitest'
-import { buildNavSections } from '../settings-nav'
+import { buildNavSections, isNavGroup } from '../settings-nav'
+
+/** Flatten a section's entries to labels, expanding product accordions. */
+function itemLabels(sections: ReturnType<typeof buildNavSections>, section: string): string[] {
+  const s = sections.find((x) => x.label === section)!
+  return s.items.map((i) => i.label)
+}
+
+function groupKids(
+  sections: ReturnType<typeof buildNavSections>,
+  section: string,
+  group: string
+): { label: string; to: string }[] {
+  const s = sections.find((x) => x.label === section)!
+  const g = s.items.find((i) => i.label === group)
+  if (!g || !isNavGroup(g)) return []
+  return g.kids.map((k) => ({ label: k.label, to: k.to }))
+}
+
+function allLabels(sections: ReturnType<typeof buildNavSections>): string[] {
+  return sections.flatMap((s) =>
+    s.items.flatMap((i) => (isNavGroup(i) ? [i.label, ...i.kids.map((k) => k.label)] : [i.label]))
+  )
+}
 
 describe('buildNavSections', () => {
-  it('has no Support section when no flags provided', () => {
+  it('always renders the three sections in order, regardless of flags', () => {
+    for (const flags of [
+      undefined,
+      {},
+      { helpCenter: true, supportInbox: true, supportTickets: true },
+      { supportInbox: true },
+    ]) {
+      const sections = buildNavSections(flags)
+      expect(sections.map((s) => s.label)).toEqual(['Products', 'Workspace', 'Data'])
+    }
+  })
+
+  it('has no AI & Automation section (elevated to its own main-nav area)', () => {
+    const sections = buildNavSections({
+      helpCenter: true,
+      supportInbox: true,
+      supportTickets: true,
+    })
+    expect(sections.map((s) => s.label)).not.toContain('AI & Automation')
+    expect(allLabels(sections)).not.toContain('Assistant')
+    expect(allLabels(sections)).not.toContain('Workflows')
+    expect(allLabels(sections)).not.toContain('Sandbox')
+  })
+
+  it('Products contains the Feedback & Roadmaps accordion with its four pages when enabled', () => {
     const sections = buildNavSections()
-    const labels = sections.map((s) => s.label)
-    expect(labels).not.toContain('Support')
-  })
-
-  it('has no Support section when both helpCenter and chat are false', () => {
-    const sections = buildNavSections({ helpCenter: false, supportInbox: false })
-    const labels = sections.map((s) => s.label)
-    expect(labels).not.toContain('Support')
-  })
-
-  it('includes a Support section when helpCenter flag is true', () => {
-    const sections = buildNavSections({ helpCenter: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).toContain('Support')
-  })
-
-  it('includes a Support section when chat flag is true', () => {
-    const sections = buildNavSections({ supportInbox: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).toContain('Support')
-  })
-
-  it('places Support between Feedback and Customers', () => {
-    const sections = buildNavSections({ helpCenter: true, supportInbox: true })
-    const labels = sections.map((s) => s.label)
-    const feedbackIdx = labels.indexOf('Feedback')
-    const supportIdx = labels.indexOf('Support')
-    const customersIdx = labels.indexOf('Customers')
-    expect(supportIdx).toBeGreaterThan(feedbackIdx)
-    expect(supportIdx).toBeLessThan(customersIdx)
-  })
-
-  it('Support bundles Conversations then Help Center in that order', () => {
-    const sections = buildNavSections({ helpCenter: true, supportInbox: true })
-    const support = sections.find((s) => s.label === 'Support')!
-    expect(support.items.map((i) => i.label)).toEqual(['Conversations', 'Help Center'])
-    expect(support.items.find((i) => i.label === 'Conversations')!.to).toBe(
-      '/admin/settings/conversations'
-    )
-    expect(support.items.find((i) => i.label === 'Help Center')!.to).toBe(
-      '/admin/settings/help-center'
+    expect(itemLabels(sections, 'Products')).toContain('Feedback & Roadmaps')
+    expect(groupKids(sections, 'Products', 'Feedback & Roadmaps').map((k) => k.label)).toEqual([
+      'Boards',
+      'Statuses',
+      'Tags',
+      'Moderation',
+    ])
+    expect(itemLabels(buildNavSections({ feedback: false }), 'Products')).not.toContain(
+      'Feedback & Roadmaps'
     )
   })
 
-  it('Support contains only Help Center when chat is off', () => {
+  it('has no Support accordion when both support flags are off', () => {
     const sections = buildNavSections({ helpCenter: true })
-    const support = sections.find((s) => s.label === 'Support')!
-    expect(support.items.map((i) => i.label)).toEqual(['Help Center'])
+    expect(itemLabels(sections, 'Products')).not.toContain('Support')
   })
 
-  it('Support contains only Conversations when helpCenter is off', () => {
+  it('Support shows Messenger, Macros, Office Hours and SLA policies under supportInbox', () => {
     const sections = buildNavSections({ supportInbox: true })
-    const support = sections.find((s) => s.label === 'Support')!
-    expect(support.items.map((i) => i.label)).toEqual(['Conversations'])
+    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
+      'Messenger',
+      'Macros',
+      'Office Hours',
+      'SLA policies',
+    ])
   })
 
-  it('does not place Conversations under Customization', () => {
+  it('Support shows ticket pages under supportTickets, after the inbox pages', () => {
+    const sections = buildNavSections({ supportInbox: true, supportTickets: true })
+    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
+      'Messenger',
+      'Macros',
+      'Office Hours',
+      'SLA policies',
+      'Ticket types',
+      'Ticket statuses & stages',
+    ])
+  })
+
+  it('Support shows only ticket pages when just supportTickets is on', () => {
+    const sections = buildNavSections({ supportTickets: true })
+    expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
+      'Ticket types',
+      'Ticket statuses & stages',
+    ])
+  })
+
+  it('Messenger points at the conversations URL (relabel, URL kept)', () => {
     const sections = buildNavSections({ supportInbox: true })
-    const customization = sections.find((s) => s.label === 'Customization')!
-    const chat = customization.items.find((i) => i.label === 'Conversations')
-    expect(chat).toBeUndefined()
+    const messenger = groupKids(sections, 'Products', 'Support').find(
+      (k) => k.label === 'Messenger'
+    )!
+    expect(messenger.to).toBe('/admin/settings/conversations')
   })
 
-  it('places Widget and Branding under Customization', () => {
-    const sections = buildNavSections()
-    const customization = sections.find((s) => s.label === 'Customization')!
-    const branding = customization.items.find((i) => i.label === 'Branding')
-    const widget = customization.items.find((i) => i.label === 'Widget')
-    expect(branding).toBeDefined()
-    expect(branding!.to).toBe('/admin/settings/branding')
-    expect(widget).toBeDefined()
-    expect(widget!.to).toBe('/admin/settings/widget')
-  })
-
-  it('does not place Widget under Feedback', () => {
-    const sections = buildNavSections()
-    const feedback = sections.find((s) => s.label === 'Feedback')!
-    const widgetItem = feedback.items.find((i) => i.label === 'Widget')
-    expect(widgetItem).toBeUndefined()
-  })
-
-  it('has no Portal section (merged into other groups)', () => {
+  it('Help Center accordion appears only with the helpCenter flag', () => {
+    expect(itemLabels(buildNavSections({ helpCenter: false }), 'Products')).not.toContain(
+      'Help Center'
+    )
     const sections = buildNavSections({ helpCenter: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).not.toContain('Portal')
+    expect(groupKids(sections, 'Products', 'Help Center')).toEqual([
+      { label: 'Settings', to: '/admin/settings/help-center' },
+    ])
   })
 
-  it('has no separate Security section (rolled into Administration)', () => {
-    const sections = buildNavSections({ helpCenter: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).not.toContain('Security')
+  it('Changelog accordion appears only when the product is enabled', () => {
+    expect(itemLabels(buildNavSections({ changelog: false }), 'Products')).not.toContain(
+      'Changelog'
+    )
+    expect(groupKids(buildNavSections(), 'Products', 'Changelog')).toEqual([
+      { label: 'Settings', to: '/admin/settings/changelog' },
+    ])
   })
 
-  it('has no separate General section (replaced by Administration)', () => {
-    const sections = buildNavSections({ helpCenter: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).not.toContain('General')
+  it('SLA policies points at the sla URL', () => {
+    const sections = buildNavSections({ supportInbox: true })
+    const sla = groupKids(sections, 'Products', 'Support').find((k) => k.label === 'SLA policies')!
+    expect(sla.to).toBe('/admin/settings/sla')
   })
 
-  it('has no separate Developers section (folded into Administration)', () => {
-    const sections = buildNavSections({ helpCenter: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).not.toContain('Developers')
-  })
-
-  it('has the expected section order with helpCenter and chat on', () => {
-    const sections = buildNavSections({ helpCenter: true, supportInbox: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Support', 'Customers'])
-  })
-
-  it('has the expected section order without helpCenter', () => {
+  it('Workspace contains the administration pages in order (flags off)', () => {
     const sections = buildNavSections()
-    const labels = sections.map((s) => s.label)
-    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Customers'])
-  })
-
-  it('Administration contains Members, Integrations, Security, Audit log, Developers, Labs in that order', () => {
-    const sections = buildNavSections()
-    const administration = sections.find((s) => s.label === 'Administration')!
-    expect(administration.items.map((i) => i.label)).toEqual([
-      'Members',
-      'Integrations',
-      'Security',
-      'Audit log',
+    expect(itemLabels(sections, 'Workspace')).toEqual([
+      'General',
+      'Notifications',
+      'Branding',
+      'Widget',
+      'Members & Teams',
+      'Access & Security',
       'Developers',
+      'Integrations',
       'Labs',
     ])
   })
 
-  it('Audit log points at the audit-log URL', () => {
+  it('General points at the new general URL', () => {
     const sections = buildNavSections()
-    const administration = sections.find((s) => s.label === 'Administration')!
-    const auditLog = administration.items.find((i) => i.label === 'Audit log')!
-    expect(auditLog.to).toBe('/admin/settings/security/audit-log')
+    const s = sections.find((x) => x.label === 'Workspace')!
+    const general = s.items.find((i) => i.label === 'General')!
+    expect(!isNavGroup(general) && general.to).toBe('/admin/settings/general')
   })
 
-  it('Members points at the existing team URL', () => {
-    const sections = buildNavSections()
-    const administration = sections.find((s) => s.label === 'Administration')!
-    const members = administration.items.find((i) => i.label === 'Members')!
-    expect(members.to).toBe('/admin/settings/team')
+  it('has no standalone Audit log item (merged into Access & Security)', () => {
+    const sections = buildNavSections({ helpCenter: true, supportInbox: true })
+    expect(allLabels(sections)).not.toContain('Audit log')
   })
 
-  it('Security points at the authentication URL', () => {
-    const sections = buildNavSections()
-    const administration = sections.find((s) => s.label === 'Administration')!
-    const security = administration.items.find((i) => i.label === 'Security')!
-    expect(security.to).toBe('/admin/settings/security/authentication')
+  it('Workspace gains Emails (the email channel page) under supportInbox', () => {
+    const sections = buildNavSections({ supportInbox: true })
+    const workspace = itemLabels(sections, 'Workspace')
+    expect(workspace).toContain('Emails')
+    // Emails sits between Access & Security and Developers.
+    expect(workspace.indexOf('Emails')).toBe(workspace.indexOf('Access & Security') + 1)
+    const s = sections.find((x) => x.label === 'Workspace')!
+    const emails = s.items.find((i) => i.label === 'Emails')!
+    expect(!isNavGroup(emails) && emails.to).toBe('/admin/settings/channels')
   })
 
-  it('Integrations points at the integrations URL', () => {
+  it('Members & Teams points at the merged members URL', () => {
     const sections = buildNavSections()
-    const administration = sections.find((s) => s.label === 'Administration')!
-    const integrations = administration.items.find((i) => i.label === 'Integrations')!
-    expect(integrations.to).toBe('/admin/settings/integrations')
+    const s = sections.find((x) => x.label === 'Workspace')!
+    const members = s.items.find((i) => i.label === 'Members & Teams')!
+    expect(!isNavGroup(members) && members.to).toBe('/admin/settings/members')
   })
 
-  it('Developers points at the developers URL', () => {
+  it('Access & Security points at the authentication URL', () => {
     const sections = buildNavSections()
-    const administration = sections.find((s) => s.label === 'Administration')!
-    const developers = administration.items.find((i) => i.label === 'Developers')!
-    expect(developers.to).toBe('/admin/settings/developers')
+    const s = sections.find((x) => x.label === 'Workspace')!
+    const security = s.items.find((i) => i.label === 'Access & Security')!
+    expect(!isNavGroup(security) && security.to).toBe('/admin/settings/security/authentication')
   })
 
-  it('Labs points at the labs URL', () => {
-    const sections = buildNavSections()
-    const administration = sections.find((s) => s.label === 'Administration')!
-    const labs = administration.items.find((i) => i.label === 'Labs')!
-    expect(labs.to).toBe('/admin/settings/labs')
+  it('Data contains People and Imports & exports (always), Conversations under supportInbox', () => {
+    expect(itemLabels(buildNavSections(), 'Data')).toEqual([
+      'People',
+      'Companies',
+      'Imports & exports',
+    ])
+    const sections = buildNavSections({ supportInbox: true })
+    expect(itemLabels(sections, 'Data')).toEqual([
+      'People',
+      'Companies',
+      'Conversations',
+      'Imports & exports',
+    ])
+    const s = sections.find((x) => x.label === 'Data')!
+    const conv = s.items.find((i) => i.label === 'Conversations')!
+    expect(!isNavGroup(conv) && conv.to).toBe('/admin/settings/conversation-data')
+    const imports = s.items.find((i) => i.label === 'Imports & exports')!
+    expect(!isNavGroup(imports) && imports.to).toBe('/admin/settings/imports')
   })
 
-  it('does not have a standalone Access item in the Feedback section', () => {
-    const sections = buildNavSections()
-    const feedback = sections.find((s) => s.label === 'Feedback')!
-    const accessItem = feedback.items.find((i) => i.label === 'Access')
-    expect(accessItem).toBeUndefined()
+  it('never lists Teams as a nav item (teams live inside Members & Teams)', () => {
+    const sections = buildNavSections({
+      helpCenter: true,
+      supportInbox: true,
+      supportTickets: true,
+    })
+    expect(allLabels(sections)).not.toContain('Teams')
   })
 
   it('does NOT list standalone API Keys, Webhooks, or MCP entries anywhere', () => {
-    const sections = buildNavSections({ helpCenter: true })
-    const allItems = sections.flatMap((s) => s.items.map((i) => i.label))
-    expect(allItems).not.toContain('API Keys')
-    expect(allItems).not.toContain('Webhooks')
-    expect(allItems).not.toContain('MCP Server')
+    const sections = buildNavSections({ helpCenter: true, supportInbox: true })
+    const labels = allLabels(sections)
+    expect(labels).not.toContain('API Keys')
+    expect(labels).not.toContain('Webhooks')
+    expect(labels).not.toContain('MCP Server')
   })
 
-  it('does NOT duplicate Security/Authentication under Customers', () => {
-    const sections = buildNavSections()
-    const customers = sections.find((s) => s.label === 'Customers')!
-    const dupes = customers.items.filter(
-      (i) => i.label === 'Authentication' || i.label === 'Security'
-    )
-    expect(dupes).toHaveLength(0)
-    expect(customers.items.map((i) => i.label)).toEqual(['People'])
+  it('retired section names are gone (Administration, Customization, Customers, Support section)', () => {
+    const sections = buildNavSections({ helpCenter: true, supportInbox: true })
+    const sectionLabels = sections.map((s) => s.label)
+    for (const retired of [
+      'Administration',
+      'Customization',
+      'Customers',
+      'Support',
+      'General',
+      'AI & Automation',
+    ]) {
+      expect(sectionLabels).not.toContain(retired)
+    }
   })
 })

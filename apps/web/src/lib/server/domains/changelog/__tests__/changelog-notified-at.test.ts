@@ -16,13 +16,16 @@ const mockChangelogEntryPostsFindMany = vi.fn()
 let mockClaimResult: unknown[] = []
 let mockDueRows: unknown[] = []
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       changelogEntries: { findFirst: (...args: unknown[]) => mockEntryFindFirst(...args) },
       changelogEntryPosts: {
         findMany: (...args: unknown[]) => mockChangelogEntryPostsFindMany(...args),
       },
+      changelogEntryCategories: { findMany: vi.fn().mockResolvedValue([]) },
       principal: { findFirst: vi.fn().mockResolvedValue(null) },
       postStatuses: { findFirst: vi.fn().mockResolvedValue(null) },
     },
@@ -53,17 +56,6 @@ vi.mock('@/lib/server/db', () => ({
     }),
     delete: () => ({ where: vi.fn().mockResolvedValue(undefined) }),
   },
-  changelogEntries: {
-    id: 'id',
-    publishedAt: 'published_at',
-    notifiedAt: 'notified_at',
-    deletedAt: 'deleted_at',
-    principalId: 'principal_id',
-  },
-  changelogEntryPosts: { changelogEntryId: 'changelog_entry_id', postId: 'post_id' },
-  posts: { id: 'posts.id' },
-  principal: { id: 'principal.id' },
-  postStatuses: { id: 'postStatuses.id' },
   eq: vi.fn(),
   and: vi.fn(),
   asc: vi.fn(),
@@ -83,6 +75,10 @@ vi.mock('@/lib/server/events/dispatch', () => ({
 vi.mock('@/lib/server/events/scheduler', () => ({
   scheduleDispatch: vi.fn().mockResolvedValue(undefined),
   cancelScheduledDispatch: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/lib/server/config', () => ({
+  config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
+  getBaseUrl: () => 'http://localhost:3000',
 }))
 
 function baseEntry(overrides: Record<string, unknown> = {}) {
@@ -139,6 +135,66 @@ describe('notifyChangelogPublished (atomic claim)', () => {
     )
   })
 
+  it('dispatches the full body as rendered HTML with the image email-proxy hint', async () => {
+    mockClaimResult = [
+      baseEntry({
+        content: 'See ![Shot](/api/storage/changelog-images/a.png)',
+        contentJson: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'See ' },
+                { type: 'text', text: 'bold', marks: [{ type: 'bold' }] },
+              ],
+            },
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'image',
+                  attrs: { src: '/api/storage/changelog-images/a.png', alt: 'Shot' },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ]
+    const { notifyChangelogPublished } = await import('../changelog.service')
+    const { dispatchChangelogPublished } = await import('@/lib/server/events/dispatch')
+
+    await notifyChangelogPublished(ENTRY_ID, ACTOR)
+
+    const payload = vi.mocked(dispatchChangelogPublished).mock.calls[0][1] as {
+      contentHtml: string
+    }
+    expect(payload.contentHtml).toContain('<strong>bold</strong>')
+    expect(payload.contentHtml).toContain(
+      'http://localhost:3000/api/storage/changelog-images/a.png?email=1'
+    )
+  })
+
+  it('renders the markdown content column when no contentJson is stored', async () => {
+    mockClaimResult = [
+      baseEntry({
+        content: 'Intro\n\n![Shot](https://cdn.example.com/b.png)',
+        contentJson: null,
+      }),
+    ]
+    const { notifyChangelogPublished } = await import('../changelog.service')
+    const { dispatchChangelogPublished } = await import('@/lib/server/events/dispatch')
+
+    await notifyChangelogPublished(ENTRY_ID, ACTOR)
+
+    const payload = vi.mocked(dispatchChangelogPublished).mock.calls[0][1] as {
+      contentHtml: string
+    }
+    expect(payload.contentHtml).toContain('<p>Intro</p>')
+    expect(payload.contentHtml).toContain('https://cdn.example.com/b.png')
+  })
+
   it('does not dispatch and returns false when the claim matches nothing', async () => {
     mockClaimResult = [] // already notified / not live
     const { notifyChangelogPublished } = await import('../changelog.service')
@@ -148,6 +204,20 @@ describe('notifyChangelogPublished (atomic claim)', () => {
 
     expect(result).toBe(false)
     expect(dispatchChangelogPublished).not.toHaveBeenCalled()
+  })
+
+  it('claims the entry but skips dispatch when notify=false', async () => {
+    mockClaimResult = [baseEntry()]
+    const { notifyChangelogPublished } = await import('../changelog.service')
+    const { dispatchChangelogPublished } = await import('@/lib/server/events/dispatch')
+
+    const result = await notifyChangelogPublished(ENTRY_ID, ACTOR, false)
+
+    expect(result).toBe(true)
+    expect(dispatchChangelogPublished).not.toHaveBeenCalled()
+    // Exactly one write: the claim. No release/no second write.
+    expect(mockUpdateSet).toHaveBeenCalledTimes(1)
+    expect(mockUpdateSet).toHaveBeenCalledWith({ notifiedAt: expect.any(Date) })
   })
 
   it('releases the claim (notifiedAt back to null) when dispatch fails', async () => {
@@ -278,6 +348,18 @@ describe('updateChangelog wiring', () => {
     const { dispatchChangelogPublished } = await import('@/lib/server/events/dispatch')
 
     await updateChangelog(ENTRY_ID, { publishState: { type: 'published' } })
+    await flush()
+
+    expect(dispatchChangelogPublished).not.toHaveBeenCalled()
+  })
+
+  it('claims without dispatching when notify=false (publish checkbox unchecked)', async () => {
+    mockEntryFindFirst.mockResolvedValue(baseEntry({ publishedAt: null, notifiedAt: null }))
+    mockClaimResult = [baseEntry()]
+    const { updateChangelog } = await import('../changelog.service')
+    const { dispatchChangelogPublished } = await import('@/lib/server/events/dispatch')
+
+    await updateChangelog(ENTRY_ID, { publishState: { type: 'published' }, notify: false })
     await flush()
 
     expect(dispatchChangelogPublished).not.toHaveBeenCalled()

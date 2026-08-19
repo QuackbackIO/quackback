@@ -1,0 +1,15 @@
+{
+  "//": "Type-checks the eval harness without polluting the app build (the app tsconfig only includes src/**). Run: tsc -p apps/web/evals/tsconfig.json --noEmit",
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true,
+    "types": ["bun", "node"],
+    "paths": {
+      "@/*": ["../src/*"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", ".results", "dist"]
+}

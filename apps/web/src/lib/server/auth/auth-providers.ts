@@ -181,6 +181,7 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
         label: 'Discovery URL',
         placeholder: 'https://example.com/.well-known/openid-configuration',
         sensitive: false,
+        url: true,
         helpText: 'If provided, authorization and token URLs are auto-discovered',
       },
       {
@@ -188,6 +189,7 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
         label: 'Authorization URL',
         placeholder: 'https://example.com/oauth/authorize',
         sensitive: false,
+        url: true,
         helpText: 'Required if Discovery URL is not provided',
       },
       {
@@ -195,6 +197,7 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
         label: 'Token URL',
         placeholder: 'https://example.com/oauth/token',
         sensitive: false,
+        url: true,
         helpText: 'Required if Discovery URL is not provided',
       },
       {

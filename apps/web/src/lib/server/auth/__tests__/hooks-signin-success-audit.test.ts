@@ -20,13 +20,14 @@ const mockPrincipalFindFirst = vi.fn()
 const mockRecordAuditEvent = vi.fn()
 const mockGetRequestHeaders = vi.fn(() => new Headers())
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       principal: { findFirst: (...a: unknown[]) => mockPrincipalFindFirst(...a) },
     },
   },
-  principal: { userId: 'principal_userId' },
   eq: vi.fn(),
 }))
 

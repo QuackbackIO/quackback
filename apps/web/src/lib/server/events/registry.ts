@@ -16,22 +16,26 @@ import { emailHook } from './handlers/email'
 import { notificationHook } from './handlers/notification'
 import { aiHook } from './handlers/ai'
 import { webhookHook } from './handlers/webhook'
+import { appWebhookHook } from './handlers/app-webhook'
 
 const builtinHooks = new Map<string, HookHandler>([
   ['email', emailHook],
   ['notification', notificationHook],
   ['ai', aiHook],
   ['webhook', webhookHook],
+  ['app_webhook', appWebhookHook],
 ])
 
 /**
  * Lazy-loaded hooks resolved via dynamic import to avoid circular dependencies.
- * (feedback-pipeline → db → ... → events → registry)
  */
 const lazyHooks: Record<string, () => Promise<HookHandler>> = {
-  feedback_pipeline: () =>
-    import('./handlers/feedback-pipeline').then((m) => m.feedbackPipelineHook),
   summary: () => import('./handlers/summary').then((m) => m.summaryHook),
+  // IF WO-15: outbound two-way status sync. Enqueued by remote-status-push.resolver.
+  remote_status_push: () =>
+    import('./handlers/remote-status-push').then((m) => m.remoteStatusPushHook),
+  // EVENTING-V2 WO-8e: workflow triggers ride the outbox → relay → this hook.
+  workflow: () => import('./handlers/workflow').then((m) => m.workflowHook),
 }
 
 /**

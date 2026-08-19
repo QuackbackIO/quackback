@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { authClient } from '@/lib/client/auth-client'
 
 interface UseEmailSigninOptions {
@@ -13,14 +13,20 @@ interface UseEmailSigninResult {
   error: string
   code: string
   setCode: (code: string) => void
-  /** Trigger the sign-in email send (POST /api/auth/portal-signin). */
-  requestEmail: (email: string) => Promise<{ ok: boolean; error?: string }>
+  /** Trigger the sign-in email send (POST /api/auth/portal-signin).
+   *  `callbackUrlOverride` redirects THIS email's magic link somewhere
+   *  other than the hook default (link-conflict recovery lands on
+   *  /auth/link-sso); the override sticks for subsequent resends. */
+  requestEmail: (
+    email: string,
+    callbackUrlOverride?: string
+  ) => Promise<{ ok: boolean; error?: string }>
   /** Verify a 6-digit code; calls onSuccess on success. Idempotent if already loading. */
   verify: (email: string, otp: string) => Promise<void>
   /** Re-send the email; share the request flow. */
   resend: (email: string) => Promise<void>
   resendCooldown: number
-  /** Reset error + code state — call when leaving the code step. */
+  /** Reset error + code state (and any callback override) — call when leaving the code step. */
   reset: () => void
 }
 
@@ -37,6 +43,9 @@ export function useEmailSignin({
   const [error, setError] = useState('')
   const [code, setCode] = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
+  // Sticky per-flow override so `resend` re-sends the same kind of email
+  // (e.g. a link-conflict recovery link keeps pointing at /auth/link-sso).
+  const callbackOverrideRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -44,14 +53,18 @@ export function useEmailSignin({
     return () => clearTimeout(t)
   }, [resendCooldown])
 
-  const requestEmail = async (email: string): Promise<{ ok: boolean; error?: string }> => {
+  const requestEmail = async (
+    email: string,
+    callbackUrlOverride?: string
+  ): Promise<{ ok: boolean; error?: string }> => {
     setError('')
     setLoading(true)
+    if (callbackUrlOverride !== undefined) callbackOverrideRef.current = callbackUrlOverride
     try {
       const res = await fetch('/api/auth/portal-signin', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, callbackURL: callbackUrl }),
+        body: JSON.stringify({ email, callbackURL: callbackOverrideRef.current ?? callbackUrl }),
       })
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string }
@@ -94,6 +107,7 @@ export function useEmailSignin({
   const reset = () => {
     setError('')
     setCode('')
+    callbackOverrideRef.current = null
   }
 
   return {

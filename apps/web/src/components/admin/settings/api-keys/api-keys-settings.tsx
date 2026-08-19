@@ -16,7 +16,16 @@ import { ApiKeyRevealDialog } from './api-key-reveal-dialog'
 import { RevokeApiKeyDialog } from './revoke-api-key-dialog'
 import { RotateApiKeyDialog } from './rotate-api-key-dialog'
 import type { ApiKey } from '@/lib/shared/types'
+import { API_KEY_SCOPES, API_KEY_SCOPE_LABELS } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { formatDistanceToNow } from 'date-fns'
+
+/** One-line scope summary for a key row. Null scopes = pre-scope-selection key. */
+function scopeSummary(scopes: ApiKey['scopes']): string {
+  if (scopes === null) return 'Full access (legacy)'
+  if (scopes.length === API_KEY_SCOPES.length) return 'All scopes'
+  if (scopes.length === 0) return 'No API scopes'
+  return scopes.map((s) => API_KEY_SCOPE_LABELS[s]).join(', ')
+}
 
 interface ApiKeysSettingsProps {
   apiKeys: ApiKey[]
@@ -120,6 +129,7 @@ export function ApiKeysSettings({ apiKeys }: ApiKeysSettingsProps) {
                       </>
                     )}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{scopeSummary(key.scopes)}</p>
                 </div>
               </div>
 

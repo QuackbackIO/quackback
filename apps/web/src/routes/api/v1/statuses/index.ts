@@ -7,6 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 // Input validation schema
 const createStatusSchema = z.object({
@@ -32,7 +33,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
           // Import service function
           const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')
@@ -63,7 +64,7 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        */
       POST: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_MANAGE })
 
           // Parse and validate body
           const body = await request.json()

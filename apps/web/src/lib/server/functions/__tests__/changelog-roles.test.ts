@@ -22,51 +22,43 @@ const restEntrySource = readFileSync(
   'utf-8'
 )
 
-function fnRoleList(fnName: string): string[] | null {
+function fnPermissionFor(fnName: string): string | null {
   const re = new RegExp(
-    `export const ${fnName}\\s*=\\s*createServerFn[\\s\\S]*?requireAuth\\(\\{\\s*roles:\\s*\\[([^\\]]+)\\]`
+    `export const ${fnName}\\s*=\\s*createServerFn[\\s\\S]*?requireAuth\\(\\{\\s*permission:\\s*PERMISSIONS\\.(\\w+)`
   )
-  const m = fnSource.match(re)
-  if (!m) return null
-  return m[1]
-    .split(',')
-    .map((s) => s.trim().replace(/['"]/g, ''))
-    .filter(Boolean)
+  return fnSource.match(re)?.[1] ?? null
 }
 
-/** Match the FIRST withApiKeyAuth role string within the given method handler. */
-function restRoleFor(source: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE'): string | null {
+/** Match the FIRST withApiKeyAuth PERMISSIONS key within the given method handler. */
+function restPermissionFor(
+  source: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+): string | null {
   const re = new RegExp(
-    `${method}:\\s*async\\s*\\([^)]*\\)\\s*=>\\s*\\{[\\s\\S]*?withApiKeyAuth\\([^,]+,\\s*\\{\\s*role:\\s*['"]([^'"]+)['"]`
+    `${method}:\\s*async\\s*\\([^)]*\\)\\s*=>\\s*\\{[\\s\\S]*?withApiKeyAuth\\([^,]+,\\s*\\{\\s*permission:\\s*PERMISSIONS\\.(\\w+)`
   )
-  const m = source.match(re)
-  return m ? m[1] : null
+  return source.match(re)?.[1] ?? null
 }
 
-describe('changelog server-fn roles', () => {
-  it('createChangelogFn allows admin + member', () => {
-    expect(fnRoleList('createChangelogFn')).toEqual(expect.arrayContaining(['admin', 'member']))
-  })
-
-  it('updateChangelogFn allows admin + member', () => {
-    expect(fnRoleList('updateChangelogFn')).toEqual(expect.arrayContaining(['admin', 'member']))
-  })
-
-  it('deleteChangelogFn allows admin + member (soft-delete)', () => {
-    expect(fnRoleList('deleteChangelogFn')).toEqual(expect.arrayContaining(['admin', 'member']))
-  })
+describe('changelog server-fn permissions', () => {
+  it.each([['createChangelogFn'], ['updateChangelogFn'], ['deleteChangelogFn']])(
+    '%s gates on changelog.manage',
+    (fnName) => {
+      expect(fnPermissionFor(fnName)).toBe('CHANGELOG_MANAGE')
+    }
+  )
 })
 
-describe('changelog REST roles', () => {
-  it('POST /api/v1/changelog (create) allows team', () => {
-    expect(restRoleFor(restIndexSource, 'POST')).toBe('team')
+describe('changelog REST permissions', () => {
+  it('POST /api/v1/changelog (create) requires changelog.manage', () => {
+    expect(restPermissionFor(restIndexSource, 'POST')).toBe('CHANGELOG_MANAGE')
   })
 
-  it('PATCH /api/v1/changelog/$entryId (update) allows team', () => {
-    expect(restRoleFor(restEntrySource, 'PATCH')).toBe('team')
+  it('PATCH /api/v1/changelog/$entryId (update) requires changelog.manage', () => {
+    expect(restPermissionFor(restEntrySource, 'PATCH')).toBe('CHANGELOG_MANAGE')
   })
 
-  it('DELETE /api/v1/changelog/$entryId allows team (soft-delete)', () => {
-    expect(restRoleFor(restEntrySource, 'DELETE')).toBe('team')
+  it('DELETE /api/v1/changelog/$entryId requires changelog.manage', () => {
+    expect(restPermissionFor(restEntrySource, 'DELETE')).toBe('CHANGELOG_MANAGE')
   })
 })

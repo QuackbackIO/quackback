@@ -23,16 +23,25 @@ import {
   changelogEntries,
   conversations,
   boards,
+  assistantInvolvements,
+  type AssistantInvolvementStatus,
 } from '@/lib/server/db'
+import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
+import { buildConversationVolume } from '@/lib/server/domains/analytics/conversation-volume'
+import { buildFirstResponseTimes } from '@/lib/server/domains/analytics/first-response'
+import { buildResponseDistribution } from '@/lib/server/domains/analytics/response-distribution'
+import { buildTeammatePerformance } from '@/lib/server/domains/analytics/teammate-performance'
+import { buildTimeToClose } from '@/lib/server/domains/analytics/time-to-close'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 export const getAnalyticsData = createServerFn({ method: 'GET' })
   .validator(z.object({ period: z.enum(['7d', '30d', '90d', '12m']) }))
   .handler(async ({ data: { period } }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
 
     // -- Date ranges --
     const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 365
@@ -44,6 +53,26 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     const previousStartStr = toIsoDateOnly(previousStart)
     // Full-precision period start for timestamptz comparisons in raw SQL.
     const sinceIso = start.toISOString()
+
+    // Quinn AI metrics run concurrently with the main batch below (both started
+    // before either is awaited) — one grouped scan + one rating aggregate over
+    // involvements in the window (low volume, like CSAT, so no rollup table).
+    const aiMetricsPromise = Promise.all([
+      db
+        .select({ status: assistantInvolvements.status, n: sql<number>`count(*)::int` })
+        .from(assistantInvolvements)
+        .where(gte(assistantInvolvements.createdAt, start))
+        .groupBy(assistantInvolvements.status),
+      db
+        .select({
+          avg: sql<number | null>`avg(${assistantInvolvements.rating})::float`,
+          count: sql<number>`count(${assistantInvolvements.rating})::int`,
+        })
+        .from(assistantInvolvements)
+        .where(
+          and(gte(assistantInvolvements.createdAt, start), isNotNull(assistantInvolvements.rating))
+        ),
+    ])
 
     // -- Every query below depends only on the pure date/period values above,
     // never on another query's result, so they all run concurrently. The whole
@@ -63,6 +92,11 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       [changelogResult, topChangelogEntries],
       csatRows,
       closedRows,
+      newLeadsRows,
+      conversationCreatedRows,
+      firstResponseRows,
+      timeToCloseRows,
+      teammateRows,
     ] = await Promise.all([
       // Daily stats for current + previous periods (one scan, split in memory).
       db
@@ -111,7 +145,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
           WHERE pa.type = 'status.changed' AND ps.category IN ('complete', 'closed')
           UNION ALL
           SELECT c.post_id, c.created_at
-          FROM comments c
+          FROM post_comments c
           JOIN post_statuses ps ON ps.id = c.status_change_to_id
           WHERE c.deleted_at IS NULL AND ps.category IN ('complete', 'closed')
         ),
@@ -163,12 +197,12 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         ) post_counts ON post_counts.pid = p.id
         LEFT JOIN (
           SELECT principal_id as pid, COUNT(*)::int as cnt
-          FROM votes WHERE created_at >= ${sinceIso}::timestamptz
+          FROM post_votes WHERE created_at >= ${sinceIso}::timestamptz
           GROUP BY principal_id
         ) vote_counts ON vote_counts.pid = p.id
         LEFT JOIN (
           SELECT principal_id as pid, COUNT(*)::int as cnt
-          FROM comments WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
+          FROM post_comments WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
           GROUP BY principal_id
         ) comment_counts ON comment_counts.pid = p.id
         WHERE p.type != 'anonymous' AND p.role = 'user'
@@ -283,6 +317,85 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         .select({ closedCount: sql<number>`count(*)::int` })
         .from(conversations)
         .where(and(isNotNull(conversations.resolvedAt), gte(conversations.resolvedAt, start))),
+
+      // New leads: engaged-but-unauthenticated principals minted in the
+      // current and previous windows (the lifecycle stage before signup).
+      db.execute<{ current: number; previous: number }>(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE created_at >= ${sinceIso})::int AS current,
+          COUNT(*) FILTER (WHERE created_at < ${sinceIso})::int AS previous
+        FROM principal
+        WHERE role = 'user' AND type = 'anonymous'
+          AND created_at >= ${previousStart.toISOString()}
+      `),
+
+      // New conversations by arrival channel (live query; chat volume is low,
+      // like CSAT, so no rollup table). Pulls current + previous windows in one
+      // scan; the split into the per-day series and the period-over-period
+      // delta happens in memory below.
+      db
+        .select({ createdAt: conversations.createdAt, source: conversations.source })
+        .from(conversations)
+        .where(gte(conversations.createdAt, previousStart)),
+
+      // First response per conversation (live query; chat volume is low, like
+      // CSAT, so no rollup table). One row per conversation that received at
+      // least one non-internal agent reply — human or assistant, both post as
+      // sender_type 'agent'. Unanswered conversations drop out of the JOIN and
+      // are reflected as a gap day, not a zero.
+      db.execute<{ createdAt: Date; firstResponseAt: Date }>(sql`
+        SELECT c.created_at AS "createdAt", MIN(m.created_at) AS "firstResponseAt"
+        FROM conversations c
+        JOIN conversation_messages m ON m.conversation_id = c.id
+        WHERE c.created_at >= ${sinceIso}::timestamptz
+          AND m.sender_type = 'agent'
+          AND m.is_internal = false
+          AND m.deleted_at IS NULL
+        GROUP BY c.id, c.created_at
+      `),
+
+      // Time-to-close per conversation (live query; chat volume is low, like
+      // CSAT, so no rollup table). One row per conversation that reached a
+      // terminal status in the window — resolved_at is the close moment.
+      // Still-open conversations never reach the chart.
+      db
+        .select({ createdAt: conversations.createdAt, closedAt: conversations.resolvedAt })
+        .from(conversations)
+        .where(and(isNotNull(conversations.resolvedAt), gte(conversations.resolvedAt, start))),
+
+      // Per-teammate workload (live query; chat volume is low, like CSAT, so
+      // no rollup table). One row per agent-assigned conversation that arrived
+      // in the window, carrying its first agent reply (lateral MIN, null while
+      // unanswered) and its close timestamp (null while open); the grouping and
+      // medians happen in memory in buildTeammatePerformance.
+      db.execute<{
+        agentId: string
+        displayName: string | null
+        avatarUrl: string | null
+        createdAt: Date
+        firstResponseAt: Date | null
+        closedAt: Date | null
+      }>(sql`
+        SELECT
+          c.assigned_agent_principal_id AS "agentId",
+          p.display_name AS "displayName",
+          p.avatar_url AS "avatarUrl",
+          c.created_at AS "createdAt",
+          fr.first_response_at AS "firstResponseAt",
+          c.resolved_at AS "closedAt"
+        FROM conversations c
+        JOIN principal p ON p.id = c.assigned_agent_principal_id
+        LEFT JOIN LATERAL (
+          SELECT MIN(m.created_at) AS first_response_at
+          FROM conversation_messages m
+          WHERE m.conversation_id = c.id
+            AND m.sender_type = 'agent'
+            AND m.is_internal = false
+            AND m.deleted_at IS NULL
+        ) fr ON true
+        WHERE c.created_at >= ${sinceIso}::timestamptz
+          AND c.assigned_agent_principal_id IS NOT NULL
+      `),
     ])
 
     // -- Period split for the daily-stats rollup --
@@ -313,7 +426,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     const summary = {
       posts: { total: currentPosts, delta: delta(currentPosts, prevPosts) },
       votes: { total: currentVotes, delta: delta(currentVotes, prevVotes) },
-      comments: { total: currentComments, delta: delta(currentComments, prevComments) },
+      postComments: { total: currentComments, delta: delta(currentComments, prevComments) },
       users: { total: currentUsers, delta: delta(currentUsers, prevUsers) },
     }
 
@@ -367,6 +480,12 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       .sort((a, b) => b.count - a.count)
 
     const { followers } = followersRows[0] ?? { followers: 0 }
+
+    const leadRow = Array.from(newLeadsRows as Iterable<{ current: number; previous: number }>)[0]
+    const newLeads = {
+      total: leadRow?.current ?? 0,
+      delta: delta(leadRow?.current ?? 0, leadRow?.previous ?? 0),
+    }
 
     const medianResolutionDays = ttrRows[0]?.medianDays ?? null
 
@@ -426,6 +545,72 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         ? Math.min(100, Math.round((csatSummary.responseCount / closedCount) * 100))
         : 0
 
+    // -- New-conversation volume by arrival channel: current-window rows feed
+    // the per-day series; the previous window only supplies the delta. --
+    const nowStr = toIsoDateOnly(now)
+    const conversationVolume = buildConversationVolume(
+      conversationCreatedRows.filter((r) => r.createdAt >= start),
+      startStr,
+      nowStr
+    )
+    const prevConversationCount = conversationCreatedRows.filter(
+      (r) => r.createdAt >= previousStart && r.createdAt < start
+    ).length
+
+    // -- First-response time: per-day median series over the current window.
+    // No period-over-period delta: the shared trend badge reads up as good,
+    // which is the wrong polarity for a wait time (same reason the median
+    // resolve-time stat carries none). --
+    const firstResponse = buildFirstResponseTimes(
+      Array.from(firstResponseRows as Iterable<{ createdAt: Date; firstResponseAt: Date }>),
+      startStr,
+      nowStr
+    )
+
+    // -- Wait-time distribution: the same first-response rows grouped into
+    // fixed ranges (<5m … >3d) for the histogram beneath the trend. --
+    const responseDistribution = buildResponseDistribution(
+      Array.from(firstResponseRows as Iterable<{ createdAt: Date; firstResponseAt: Date }>),
+      startStr,
+      nowStr
+    )
+
+    // -- Time-to-close: per-day median series over the current window, bucketed
+    // on the close day. Same no-delta polarity reasoning as first response. --
+    const timeToClose = buildTimeToClose(
+      timeToCloseRows as Array<{ createdAt: Date; closedAt: Date }>,
+      startStr,
+      nowStr
+    )
+
+    // -- Per-teammate performance: handled count + median first response and
+    // median time to close, sorted by workload for the support table. --
+    const teammatePerformance = buildTeammatePerformance(
+      Array.from(
+        teammateRows as Iterable<{
+          agentId: string
+          displayName: string | null
+          avatarUrl: string | null
+          createdAt: Date
+          firstResponseAt: Date | null
+          closedAt: Date | null
+        }>
+      )
+    )
+
+    // -- Quinn AI metrics (queries started above) folded into the shared
+    // Resolved/Escalated/Pending buckets via AI_INBOX_BUCKETS, so the bucket
+    // vocabulary lives in one place (also used by the inbox filter + counts). --
+    const [aiRows, aiRatingRows] = await aiMetricsPromise
+    const aiByStatus = new Map(aiRows.map((r) => [r.status, r.n]))
+    const aiBucket = (statuses: readonly AssistantInvolvementStatus[]) =>
+      statuses.reduce((total, s) => total + (aiByStatus.get(s) ?? 0), 0)
+    const aiInvolved = aiRows.reduce((total, r) => total + r.n, 0)
+    const aiResolved = aiBucket(AI_INBOX_BUCKETS.resolved)
+    const aiEscalated = aiBucket(AI_INBOX_BUCKETS.escalated)
+    const aiPending = aiBucket(AI_INBOX_BUCKETS.pending)
+    const pct = (n: number) => (aiInvolved > 0 ? Math.round((n / aiInvolved) * 100) : 0)
+
     // -- Computed at timestamp --
     const computedAt = latestRow?.computedAt?.toISOString() ?? null
 
@@ -436,6 +621,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       resolutionRate,
       medianResolutionDays,
       followers,
+      newLeads,
       boardBreakdown,
       topPosts,
       topContributors,
@@ -450,6 +636,14 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         responseRate,
         distribution: csatSummary.distribution,
       },
+      conversationVolume: {
+        ...conversationVolume,
+        delta: delta(conversationVolume.total, prevConversationCount),
+      },
+      firstResponse,
+      responseDistribution,
+      timeToClose,
+      teammatePerformance,
       changelog: {
         totalViews,
         publishedCount: changelogPublishedCount,
@@ -459,6 +653,16 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
           title: e.title,
           viewCount: e.viewCount,
         })),
+      },
+      ai: {
+        involved: aiInvolved,
+        resolved: aiResolved,
+        escalated: aiEscalated,
+        pending: aiPending,
+        resolutionRate: pct(aiResolved),
+        escalationRate: pct(aiEscalated),
+        avgRating: aiRatingRows[0]?.avg ?? null,
+        ratingCount: aiRatingRows[0]?.count ?? 0,
       },
       computedAt,
     }

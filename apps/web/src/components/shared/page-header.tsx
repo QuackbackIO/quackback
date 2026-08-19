@@ -24,7 +24,7 @@ export function PageHeader({
     <div
       className={cn(
         'flex items-start justify-between gap-4',
-        animate && 'animate-in fade-in duration-200 fill-mode-backwards',
+        animate && 'animate-in fade-in duration-200 fill-mode-backwards motion-reduce:animate-none',
         className
       )}
     >

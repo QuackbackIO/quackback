@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQueryClient, useQuery } from '@tanstack/react-query'
+import { useQueryClient, useQueries } from '@tanstack/react-query'
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { Route } from '@/routes/admin/feedback'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
@@ -8,27 +8,26 @@ import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
 import { FeedbackTableView } from '@/components/admin/feedback/table'
 import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog'
 import { ModerationPendingBanner } from '@/components/admin/feedback/moderation-pending-banner'
-import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import { useInboxFilters, type InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import { SavedViewsMenu } from '@/components/admin/feedback/saved-views-menu'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import type { CurrentUser } from '@/lib/shared/types'
-import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
+import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
 import type { PostId } from '@quackback/ids'
 import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 
 interface InboxContainerProps {
-  initialPosts: InboxPostListResult
   boards: Board[]
-  tags: Tag[]
+  tags: PostTag[]
   statuses: PostStatusEntity[]
   members: TeamMember[]
   currentUser: CurrentUser
 }
 
 export function InboxContainer({
-  initialPosts,
   boards,
   tags,
   statuses,
@@ -53,44 +52,46 @@ export function InboxContainer({
   // Segments data for filter UI
   const { data: segments } = useSegments()
 
-  // Track whether we're on the initial render (for using server-prefetched data)
-  const isInitialRender = useRef(true)
-
-  // Mark as no longer initial after first render
-  useEffect(() => {
-    isInitialRender.current = false
-  }, [])
-
-  // Only use initialData on first render before any filter changes
-  const shouldUseInitialData = isInitialRender.current && !filters.search && !filters.owner
-
-  // Server state - Posts list (with infinite query for pagination)
+  // Server state - Posts list (with infinite query for pagination). The route
+  // loader prefetches the default/unfiltered dataset into this same infinite
+  // cache (QC-1: one shared query definition), so the unfiltered first paint
+  // reads warm data; filtered views fetch on the client with keepPreviousData.
   const {
     data: postsData,
     isLoading,
     isFetchingNextPage: isLoadingMore,
     hasNextPage: hasMore,
     fetchNextPage,
-  } = useInboxPosts({
-    filters,
-    initialData: shouldUseInitialData ? initialPosts : undefined,
-  })
+  } = useInboxPosts({ filters })
 
   const posts = useMemo(() => flattenInboxPosts(postsData), [postsData])
 
-  // Fetch duplicate counts for visible posts
-  const postIds = useMemo(() => posts.map((p) => p.id) as PostId[], [posts])
-  const { data: duplicateCounts } = useQuery(mergeSuggestionQueries.countsForPosts(postIds))
+  // Fetch duplicate counts PER PAGE of the infinite query rather than keying one
+  // query on the ever-growing flattened id array (QC-5): each page's id set is
+  // stable once loaded, so its counts cache under a stable per-page key and only
+  // a freshly-loaded page fires a new request — previously every "load more"
+  // re-keyed and refetched counts for the entire accumulated list.
+  const pageIdLists = useMemo(
+    () => (postsData?.pages ?? []).map((page) => page.items.map((p) => p.id) as PostId[]),
+    [postsData]
+  )
+  const countsQueries = useQueries({
+    queries: pageIdLists.map((ids) => mergeSuggestionQueries.countsForPosts(ids)),
+  })
 
-  // Build a Map<postId, count> for efficient lookup
+  // Build a Map<postId, count> for efficient lookup, merging every page's counts.
   const duplicateCountByPostId = useMemo(() => {
-    if (!duplicateCounts || duplicateCounts.length === 0) return undefined
     const map = new Map<PostId, number>()
-    for (const item of duplicateCounts) {
-      map.set(item.postId, item.count)
+    for (const query of countsQueries) {
+      for (const item of query.data ?? []) {
+        map.set(item.postId, item.count)
+      }
     }
-    return map
-  }, [duplicateCounts])
+    return map.size > 0 ? map : undefined
+    // Keyed on a fingerprint of each page-query's last-updated stamp so the memo
+    // recomputes only when counts actually change (countsQueries is a fresh
+    // array each render).
+  }, [countsQueries.map((q) => q.dataUpdatedAt).join(',')])
 
   // Handlers
   const handleLoadMore = useCallback(() => {
@@ -125,6 +126,33 @@ export function InboxContainer({
       queryKey: inboxKeys.list(filters),
     })
   }, [queryClient, filters])
+
+  // Applying a saved view REPLACES the filter set: every key the view omits is
+  // explicitly cleared (setFilters clears keys present-with-undefined), so a
+  // previously active filter can't leak into the view. The search term rides
+  // alongside — a view saves a filter set, not a query.
+  const applyView = useCallback(
+    (viewFilters: InboxFilters) => {
+      setFilters({
+        status: undefined,
+        board: undefined,
+        tags: undefined,
+        segmentIds: undefined,
+        owner: undefined,
+        dateFrom: undefined,
+        dateTo: undefined,
+        minVotes: undefined,
+        minComments: undefined,
+        responded: undefined,
+        updatedBefore: undefined,
+        hasDuplicates: undefined,
+        sort: undefined,
+        showDeleted: undefined,
+        ...viewFilters,
+      })
+    },
+    [setFilters]
+  )
 
   return (
     <InboxLayout
@@ -164,13 +192,20 @@ export function InboxContainer({
         onToggleSegment={toggleSegment}
         duplicateCountByPostId={duplicateCountByPostId}
         headerAction={
-          <CreatePostDialog
-            boards={boards}
-            tags={tags}
-            statuses={statuses}
-            currentUser={currentUser}
-            onPostCreated={refetchPosts}
-          />
+          <div className="flex items-center gap-2">
+            <SavedViewsMenu
+              filters={filters}
+              hasActiveFilters={hasActiveFilters}
+              onApply={applyView}
+            />
+            <CreatePostDialog
+              boards={boards}
+              tags={tags}
+              statuses={statuses}
+              currentUser={currentUser}
+              onPostCreated={refetchPosts}
+            />
+          </div>
         }
       />
     </InboxLayout>

@@ -1,9 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { z } from 'zod'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 import { portalQueries } from '@/lib/client/queries/portal'
+import { isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
   roadmap: z.string().optional(),
@@ -18,6 +19,7 @@ export const Route = createFileRoute('/_portal/roadmap/')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     const { queryClient, settings, baseUrl, userRole } = context
+    if (!isProductEnabled(settings?.featureFlags, 'feedback')) throw notFound()
 
     const [roadmaps] = await Promise.all([
       queryClient.ensureQueryData(portalQueries.roadmaps()),
@@ -60,9 +62,6 @@ function RoadmapPage() {
   const { roadmap: selectedRoadmapFromUrl } = Route.useSearch()
 
   const { data: roadmaps } = useSuspenseQuery(portalQueries.roadmaps())
-  const { data: statuses } = useSuspenseQuery(portalQueries.statuses())
-
-  const roadmapStatuses = statuses.filter((s) => s.showOnRoadmap)
 
   // Use URL param if present, otherwise fall back to first roadmap
   const initialSelectedId = selectedRoadmapFromUrl ?? firstRoadmapId
@@ -90,7 +89,6 @@ function RoadmapPage() {
         style={{ animationDelay: '100ms' }}
       >
         <RoadmapBoard
-          statuses={roadmapStatuses}
           initialRoadmaps={roadmaps}
           initialSelectedRoadmapId={initialSelectedId}
           isTeamMember={isTeamMember}

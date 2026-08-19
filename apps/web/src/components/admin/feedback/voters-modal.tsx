@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
 import { adminQueries } from '@/lib/client/queries/admin'
+import type { VotersQuerySource } from '@/components/admin/feedback/voters-avatar-stack'
 import { fetchPostVotersFn } from '@/lib/server/functions/posts'
 import { useUpdateVoterSubscription } from '@/lib/client/mutations/admin-subscriptions'
 import { useRemoveVote } from '@/lib/client/mutations/posts'
@@ -31,6 +32,17 @@ interface VotersModalProps {
   additionalPostIds?: PostId[]
   /** Hide subscription controls (e.g. for readonly previews) */
   readonly?: boolean
+  /**
+   * Where the voters list is read from. Defaults to the admin (post.view_private)
+   * query; the portal passes its post.vote_on_behalf-gated source.
+   */
+  votersQuery?: VotersQuerySource
+  /**
+   * Extra invalidation to run after a remove-vote or subscription change lands,
+   * so a source other than the admin cache (which the mutations already
+   * refresh) can refetch — e.g. the portal voters query + portal detail.
+   */
+  onVotersInvalidate?: () => void
 }
 
 const SUBSCRIPTION_LABELS: Record<SubscriptionLevel, string> = {
@@ -46,9 +58,11 @@ export function VotersModal({
   onOpenChange,
   additionalPostIds = [],
   readonly = false,
+  votersQuery,
+  onVotersInvalidate,
 }: VotersModalProps) {
   const { data: primaryVoters, isLoading: primaryLoading } = useQuery({
-    ...adminQueries.postVoters(postId),
+    ...(votersQuery ?? adminQueries.postVoters(postId)),
     enabled: open,
   })
 
@@ -132,7 +146,11 @@ export function VotersModal({
                         {additionalPostIds.length === 0 && (
                           <button
                             className="hidden group-hover:flex items-center justify-center h-5 w-5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            onClick={() => removeVote.mutate(voter.principalId as PrincipalId)}
+                            onClick={() =>
+                              removeVote.mutate(voter.principalId as PrincipalId, {
+                                onSuccess: () => onVotersInvalidate?.(),
+                              })
+                            }
                             disabled={
                               removeVote.isPending && removeVote.variables === voter.principalId
                             }
@@ -147,10 +165,13 @@ export function VotersModal({
                           <SubscriptionBadge
                             level={voter.subscriptionLevel}
                             onChangeLevel={(level) =>
-                              updateSubscription.mutate({
-                                principalId: voter.principalId as PrincipalId,
-                                level,
-                              })
+                              updateSubscription.mutate(
+                                {
+                                  principalId: voter.principalId as PrincipalId,
+                                  level,
+                                },
+                                { onSuccess: () => onVotersInvalidate?.() }
+                              )
                             }
                           />
                         )}

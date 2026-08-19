@@ -144,6 +144,69 @@ describe('redactSettingsForClient — allowedSegmentIds redaction', () => {
   })
 })
 
+describe('redactSettingsForClient — server-only settings columns', () => {
+  const RAW_ROW = {
+    name: 'Acme',
+    widgetSecret: 'wgt_' + 'a'.repeat(64),
+    metadata: JSON.stringify({ officeHours: {} }),
+    tierLimits: JSON.stringify({ maxBoards: 3 }),
+    setupState: JSON.stringify({ step: 'done' }),
+    portalConfig: JSON.stringify(FULL_PORTAL_CONFIG),
+  }
+
+  it('strips widgetSecret, metadata, tierLimits, and setupState from a raw row', () => {
+    const result = redactSettingsForClient(RAW_ROW)
+
+    expect(result).not.toHaveProperty('widgetSecret')
+    expect(result).not.toHaveProperty('metadata')
+    expect(result).not.toHaveProperty('tierLimits')
+    expect(result).not.toHaveProperty('setupState')
+    expect(result.name).toBe('Acme')
+  })
+
+  it('redacts the raw row riding on a TenantSettings-shaped `.settings` property', () => {
+    const tenantShaped = {
+      name: 'Acme',
+      portalConfig: FULL_PORTAL_CONFIG,
+      settings: { ...RAW_ROW },
+    }
+    const result = redactSettingsForClient(tenantShaped)
+
+    expect(result.settings).not.toHaveProperty('widgetSecret')
+    expect(result.portalConfig.access).toEqual({ visibility: 'private' })
+    const nestedPortalConfig = JSON.parse(
+      (result.settings as { portalConfig: string }).portalConfig
+    ) as PortalConfig
+    expect(nestedPortalConfig.access).toEqual({ visibility: 'private' })
+  })
+
+  it('never leaks a wgt_ secret into the serialized payload', () => {
+    const tenantShaped = {
+      name: 'Acme',
+      portalConfig: FULL_PORTAL_CONFIG,
+      settings: { ...RAW_ROW },
+    }
+    const payload = JSON.stringify(redactSettingsForClient(tenantShaped))
+
+    expect(payload).not.toContain('wgt_')
+    expect(payload).not.toContain('widgetSecret')
+    expect(payload).not.toContain('tierLimits')
+  })
+
+  it('does not mutate the input row', () => {
+    const input = { ...RAW_ROW }
+    redactSettingsForClient(input)
+
+    expect(input.widgetSecret).toBe(RAW_ROW.widgetSecret)
+    expect(input.metadata).toBe(RAW_ROW.metadata)
+  })
+
+  it('still returns clean rows by reference', () => {
+    const row = { name: 'Acme', portalConfig: null }
+    expect(redactSettingsForClient(row)).toBe(row)
+  })
+})
+
 describe('redactSettingsForClient — SSR payload invariants', () => {
   it('the SSR payload string does not contain allowedDomains after redaction (object form)', () => {
     const row = { portalConfig: FULL_PORTAL_CONFIG, name: 'Acme' }

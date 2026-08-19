@@ -6,11 +6,19 @@ import {
   CalendarIcon,
   ArrowTrendingUpIcon,
   ChatBubbleLeftRightIcon,
+  UserIcon,
+  UserGroupIcon,
   PlusIcon,
   ChevronRightIcon,
   FunnelIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import type { TeamMember } from '@/lib/shared/types'
+import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -23,7 +31,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
-import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
+import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { CircleIcon } from '@/components/shared/filter-menu'
 import {
@@ -42,8 +50,16 @@ interface FilterBarBoard {
   name: string
 }
 
-type FilterCategory = 'board' | 'status' | 'tag' | 'votes' | 'date' | 'response'
-type ChipType = 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response'
+type FilterCategory =
+  | 'board'
+  | 'status'
+  | 'tag'
+  | 'votes'
+  | 'date'
+  | 'response'
+  | 'owner'
+  | 'segment'
+type ChipType = 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response' | 'owner' | 'segment'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
@@ -54,6 +70,32 @@ const CHIP_ICON_BY_TYPE: Record<ChipType, IconComponent> = {
   votes: ArrowTrendingUpIcon,
   date: CalendarIcon,
   response: ChatBubbleLeftRightIcon,
+  owner: UserIcon,
+  segment: UserGroupIcon,
+}
+
+/**
+ * Team-only filters (owner, segment) are rendered only for holders of
+ * post.view_private and always styled amber to signal they are internal.
+ * `useTeamOnlyFilterOptions` centralizes the permission gate + option loading
+ * so the chip row and the add-filter menu stay in sync; the queries are only
+ * enabled for privileged callers, and an empty/failed option list simply hides
+ * the corresponding filter rather than erroring.
+ */
+function useTeamOnlyFilterOptions(): {
+  canViewPrivate: boolean
+  members: TeamMember[]
+  segments: SegmentListItem[]
+} {
+  const { can } = usePortalPermissions()
+  const canViewPrivate = can(PERMISSIONS.POST_VIEW_PRIVATE)
+  const { data: members } = useTeamMembers({ enabled: canViewPrivate })
+  const { data: segments } = useSegments({ enabled: canViewPrivate })
+  return {
+    canViewPrivate,
+    members: canViewPrivate ? (members ?? []) : [],
+    segments: canViewPrivate ? (segments ?? []) : [],
+  }
 }
 
 interface PublicFiltersBarProps {
@@ -61,7 +103,7 @@ interface PublicFiltersBarProps {
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   clearFilters: () => void
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   boards: FilterBarBoard[]
 }
 
@@ -74,10 +116,12 @@ export function PublicFiltersBar({
   boards,
 }: PublicFiltersBarProps) {
   const intl = useIntl()
+  const { members, segments } = useTeamOnlyFilterOptions()
 
   const activeChips = useMemo(
-    () => buildActiveChips({ filters, setFilters, statuses, tags, boards, intl }),
-    [filters, setFilters, statuses, tags, boards, intl]
+    () =>
+      buildActiveChips({ filters, setFilters, statuses, tags, boards, members, segments, intl }),
+    [filters, setFilters, statuses, tags, boards, members, segments, intl]
   )
 
   if (activeChips.length === 0) return null
@@ -123,7 +167,7 @@ interface AddFilterButtonProps {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   boards: FilterBarBoard[]
   /**
    * Trigger style:
@@ -162,6 +206,7 @@ function AddFilterButton({
   const intl = useIntl()
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<FilterCategory | null>(null)
+  const { members, segments } = useTeamOnlyFilterOptions()
 
   const closePopover = () => {
     setOpen(false)
@@ -169,6 +214,10 @@ function AddFilterButton({
   }
 
   const showBoardCategory = boards.length > 1
+  // Team-only categories are hidden entirely for non-privileged callers (empty
+  // option lists) and also hide individually when their option query is empty.
+  const showOwnerCategory = members.length > 0
+  const showSegmentCategory = segments.length > 0
 
   const categories = useMemo<{ key: FilterCategory; label: string; icon: IconComponent }[]>(() => {
     const list: { key: FilterCategory; label: string; icon: IconComponent }[] = []
@@ -224,8 +273,31 @@ function AddFilterButton({
         icon: ChatBubbleLeftRightIcon,
       }
     )
+    // Team-only categories, appended last and amber-tinted in the menu so they
+    // read as internal. Only rendered for post.view_private holders (the option
+    // lists are empty otherwise).
+    if (showOwnerCategory) {
+      list.push({
+        key: 'owner',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.owner',
+          defaultMessage: 'Owner',
+        }),
+        icon: UserIcon,
+      })
+    }
+    if (showSegmentCategory) {
+      list.push({
+        key: 'segment',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.segment',
+          defaultMessage: 'Segment',
+        }),
+        icon: UserGroupIcon,
+      })
+    }
     return list
-  }, [intl, showBoardCategory])
+  }, [intl, showBoardCategory, showOwnerCategory, showSegmentCategory])
 
   const groupedStatuses = useMemo(() => {
     const groups: Record<string, PostStatusEntity[]> = {}
@@ -276,6 +348,7 @@ function AddFilterButton({
           <div className="py-1">
             {categories.map((category) => {
               const Icon = category.icon
+              const isInternal = category.key === 'owner' || category.key === 'segment'
               return (
                 <button
                   key={category.key}
@@ -284,12 +357,18 @@ function AddFilterButton({
                   className={cn(
                     'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
                     'text-xs text-left',
-                    'hover:bg-muted/50 transition-colors'
+                    'hover:bg-muted/50 transition-colors',
+                    isInternal && 'text-amber-700 dark:text-amber-500'
                   )}
                   aria-label={category.label}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Icon
+                      className={cn(
+                        'h-3.5 w-3.5',
+                        isInternal ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground'
+                      )}
+                    />
                     {category.label}
                   </span>
                   <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
@@ -312,7 +391,9 @@ function AddFilterButton({
                   filtering adds no value (votes / date / response). */}
               {(activeCategory === 'board' ||
                 activeCategory === 'status' ||
-                activeCategory === 'tag') && (
+                activeCategory === 'tag' ||
+                activeCategory === 'owner' ||
+                activeCategory === 'segment') && (
                 <CommandInput
                   placeholder={intl.formatMessage({
                     id: 'portal.feedback.filter.search',
@@ -444,6 +525,61 @@ function AddFilterButton({
                     ))}
                   </CommandGroup>
                 )}
+
+                {activeCategory === 'owner' && (
+                  <CommandGroup>
+                    <CommandItem
+                      value={intl.formatMessage({
+                        id: 'portal.feedback.filter.owner.unassigned',
+                        defaultMessage: 'Unassigned',
+                      })}
+                      onSelect={() => {
+                        setFilters({ owner: 'unassigned' })
+                        closePopover()
+                      }}
+                    >
+                      <span className="text-muted-foreground">
+                        <FormattedMessage
+                          id="portal.feedback.filter.owner.unassigned"
+                          defaultMessage="Unassigned"
+                        />
+                      </span>
+                    </CommandItem>
+                    {members.map((member) => (
+                      <CommandItem
+                        key={member.id}
+                        value={member.name || member.email || member.id}
+                        onSelect={() => {
+                          setFilters({ owner: member.id })
+                          closePopover()
+                        }}
+                      >
+                        {member.name || member.email}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+
+                {activeCategory === 'segment' && (
+                  <CommandGroup>
+                    {segments.map((segment) => (
+                      <CommandItem
+                        key={segment.id}
+                        value={segment.name}
+                        onSelect={() => {
+                          setFilters({ segmentIds: toggleItem(filters.segmentIds, segment.id) })
+                          closePopover()
+                        }}
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{ backgroundColor: segment.color }}
+                        />
+                        {segment.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
               </CommandList>
             </Command>
           </div>
@@ -463,17 +599,23 @@ interface ActiveChipDescriptor {
   options?: FilterOption[]
   onChange?: (newId: string) => void
   onRemove: () => void
+  /** Team-only chip: amber styling. */
+  internal?: boolean
+  /** Localized "only your team sees this" tooltip for internal chips. */
+  tooltip?: string
 }
 
 function buildActiveChips(args: {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   boards: FilterBarBoard[]
+  members: TeamMember[]
+  segments: SegmentListItem[]
   intl: ReturnType<typeof useIntl>
 }): ActiveChipDescriptor[] {
-  const { filters, setFilters, statuses, tags, boards, intl } = args
+  const { filters, setFilters, statuses, tags, boards, members, segments, intl } = args
   const chips: ActiveChipDescriptor[] = []
 
   // Board chip — only shown when a specific board is selected (omit for
@@ -638,6 +780,83 @@ function buildActiveChips(args: {
       onChange: (id) => setFilters({ responded: id as RespondedValue }),
       onRemove: () => setFilters({ responded: undefined }),
     })
+  }
+
+  // Team-only chips. The server ignores these params without post.view_private,
+  // but they are also only *rendered* when the option lists are non-empty (which
+  // requires the privileged queries to have resolved), so a customer never sees
+  // them even if an owner/segment value somehow lands in the URL.
+  const internalTooltip = intl.formatMessage({
+    id: 'portal.feedback.filter.internal.tooltip',
+    defaultMessage: 'Only your team sees this',
+  })
+
+  // Owner — single-select; 'unassigned' is a first-class value.
+  if (filters.owner && (members.length > 0 || filters.owner === 'unassigned')) {
+    const unassignedLabel = intl.formatMessage({
+      id: 'portal.feedback.filter.owner.unassigned',
+      defaultMessage: 'Unassigned',
+    })
+    const ownerOptions: FilterOption[] = [
+      { id: 'unassigned', label: unassignedLabel },
+      ...members.map((m) => ({ id: m.id, label: m.name || m.email || m.id })),
+    ]
+    const ownerValue =
+      filters.owner === 'unassigned'
+        ? unassignedLabel
+        : (members.find((m) => m.id === filters.owner)?.name ??
+          members.find((m) => m.id === filters.owner)?.email ??
+          filters.owner)
+    chips.push({
+      key: 'owner',
+      type: 'owner',
+      label: intl.formatMessage({
+        id: 'portal.feedback.filter.chip.owner',
+        defaultMessage: 'Owner:',
+      }),
+      value: ownerValue,
+      valueId: filters.owner,
+      options: ownerOptions,
+      internal: true,
+      tooltip: internalTooltip,
+      onChange: (newId) => setFilters({ owner: newId }),
+      onRemove: () => setFilters({ owner: undefined }),
+    })
+  }
+
+  // Segments — one chip per selected id (multi-select), matching tag anatomy.
+  if (filters.segmentIds?.length && segments.length > 0) {
+    const segmentOptions: FilterOption[] = segments.map((s) => ({
+      id: s.id,
+      label: s.name,
+      color: s.color,
+    }))
+    for (const id of filters.segmentIds) {
+      const segment = segments.find((s) => s.id === id)
+      if (!segment) continue
+      chips.push({
+        key: `segment-${id}`,
+        type: 'segment',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.chip.segment',
+          defaultMessage: 'Segment:',
+        }),
+        value: segment.name,
+        valueId: id,
+        color: segment.color,
+        options: segmentOptions,
+        internal: true,
+        tooltip: internalTooltip,
+        onChange: (newId) => {
+          const others = filters.segmentIds?.filter((s) => s !== id) ?? []
+          setFilters({ segmentIds: [...others, newId] })
+        },
+        onRemove: () => {
+          const next = filters.segmentIds?.filter((s) => s !== id)
+          setFilters({ segmentIds: next?.length ? next : undefined })
+        },
+      })
+    }
   }
 
   return chips

@@ -22,6 +22,9 @@ export function SidebarSearch({
   const [results, setResults] = useState<PostRowData[]>([])
   const [loading, setLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Per-effect sequence number — late-arriving responses for queries
+  // the user has already typed past (or cleared) must not overwrite fresh state.
+  const fetchSeq = useRef(0)
 
   const isActive = query.length > 0
 
@@ -31,23 +34,29 @@ export function SidebarSearch({
 
   useEffect(() => {
     if (!query.trim()) {
+      // Bump the sequence so any in-flight fetch is invalidated, then
+      // clear results synchronously so a clear can't be repopulated later.
+      fetchSeq.current++
       setResults([])
       return
     }
 
     if (debounceRef.current !== undefined) clearTimeout(debounceRef.current)
+    const seq = ++fetchSeq.current
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
       try {
         const res = await appFetch(`/api/v1/apps/search?q=${encodeURIComponent(query)}&limit=10`)
+        if (seq !== fetchSeq.current) return
         if (res.ok) {
           const data = await res.json()
           setResults(data.data?.posts ?? [])
         }
       } catch {
         // Silently fail search
+        if (seq !== fetchSeq.current) return
       } finally {
-        setLoading(false)
+        if (seq === fetchSeq.current) setLoading(false)
       }
     }, 300)
 
@@ -57,6 +66,7 @@ export function SidebarSearch({
   }, [query, appFetch])
 
   function clearSearch() {
+    fetchSeq.current++
     setQuery('')
     setResults([])
   }

@@ -71,9 +71,10 @@ test.describe('Admin Roadmap - Sidebar', () => {
       await expect(dialog).toBeVisible({ timeout: 5000 })
       await expect(dialog.getByText('Create Roadmap')).toBeVisible()
 
-      // Dialog should contain Name field and Public toggle
-      await expect(dialog.getByLabel('Name')).toBeVisible()
-      await expect(dialog.getByRole('switch')).toBeVisible()
+      // Dialog should expose the saved-view layout and visibility controls.
+      await expect(dialog.getByLabel('Name', { exact: true })).toBeVisible()
+      await expect(dialog.getByLabel('Layout')).toBeVisible()
+      await expect(dialog.getByLabel('Visibility')).toBeVisible()
 
       // Cancel/Create buttons
       await expect(dialog.getByRole('button', { name: /cancel/i })).toBeVisible()
@@ -163,7 +164,7 @@ test.describe('Admin Roadmap - CRUD', () => {
       await expect(dialog).toBeVisible({ timeout: 5000 })
 
       const roadmapName = `E2E Roadmap ${Date.now()}`
-      await dialog.getByLabel('Name').fill(roadmapName)
+      await dialog.getByLabel('Name', { exact: true }).fill(roadmapName)
 
       // Submit
       await dialog.getByRole('button', { name: /create/i }).click()
@@ -187,14 +188,9 @@ test.describe('Admin Roadmap - CRUD', () => {
       await expect(dialog).toBeVisible({ timeout: 5000 })
 
       const roadmapName = `Private Roadmap ${Date.now()}`
-      await dialog.getByLabel('Name').fill(roadmapName)
+      await dialog.getByLabel('Name', { exact: true }).fill(roadmapName)
 
-      // Turn off the Public toggle (it defaults to on)
-      const publicSwitch = dialog.getByRole('switch')
-      const isOn = (await publicSwitch.getAttribute('data-state')) === 'checked'
-      if (isOn) {
-        await publicSwitch.click()
-      }
+      await dialog.getByLabel('Visibility').selectOption('team')
 
       await dialog.getByRole('button', { name: /create/i }).click()
       await expect(dialog).toBeHidden({ timeout: 10000 })
@@ -610,9 +606,12 @@ test.describe('Admin Roadmap - Cross-View Verification', () => {
       return
     }
 
-    const statusPicker = detailModal
-      .locator('[data-testid="status-selector"]')
-      .or(detailModal.locator('button').filter({ hasText: /open|under review|planned|in progress|complete|closed/i }).first())
+    const statusPicker = detailModal.locator('[data-testid="status-selector"]').or(
+      detailModal
+        .locator('button')
+        .filter({ hasText: /open|under review|planned|in progress|complete|closed/i })
+        .first()
+    )
 
     if ((await statusPicker.count()) === 0) {
       test.skip()
@@ -622,7 +621,8 @@ test.describe('Admin Roadmap - Cross-View Verification', () => {
     await statusPicker.first().click()
 
     // Select "Planned" (showOnRoadmap = true in seed defaults)
-    const plannedOption = page.getByRole('option', { name: /^planned$/i })
+    const plannedOption = page
+      .getByRole('option', { name: /^planned$/i })
       .or(page.locator('[role="menuitem"]').filter({ hasText: /^planned$/i }))
       .or(page.getByText(/^planned$/i).first())
 
@@ -795,12 +795,12 @@ test.describe('Admin Roadmap - Filters bar', () => {
       if ((await addFilterBtn.count()) > 0) {
         await addFilterBtn.click()
 
-        // Popover should open with Board / Tag categories
+        // Popover should open with Board / PostTag categories
         const popover = page.locator('[data-slot="popover-content"]')
         await expect(popover).toBeVisible({ timeout: 5000 })
 
         await expect(popover.getByText('Board')).toBeVisible()
-        await expect(popover.getByText('Tag')).toBeVisible()
+        await expect(popover.getByText('PostTag')).toBeVisible()
 
         // Close popover
         await page.keyboard.press('Escape')

@@ -2,9 +2,15 @@
  * OIDC scope parsing shared by the auth runtime, the connection test, and the
  * admin editor.
  *
- * One resolver: a blank column means the defaults everywhere. Registration and
- * the connection test previously disagreed on that, so a stored blank made the
- * test exercise a different scope set from production.
+ * Lives in `shared` because all three need it and the editor is a client
+ * component — the registration builder re-exports these so server callers keep
+ * their existing import path.
+ *
+ * One resolver, deliberately. The two consumers previously disagreed on a blank
+ * column: registration branched on truthiness (blank meant "use the defaults")
+ * while the connection test used `??` (blank meant "request nothing"), so a
+ * stored blank made the test exercise a different scope set from production and
+ * could unlock enforcement on a pass that proved nothing.
  */
 
 /** Requested when a provider has no explicit `scopes`. */
@@ -12,7 +18,8 @@ export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile'] as const
 
 /**
  * The one scope that cannot be dropped. Without it the request is not an OIDC
- * request: the IdP owes no ID token, and userinfo has no openid-scoped token.
+ * request: the IdP owes no ID token, and the userinfo endpoint has no
+ * openid-scoped access token to accept, which removes both identity sources.
  */
 export const REQUIRED_OIDC_SCOPE = 'openid'
 
@@ -29,7 +36,7 @@ export function parseScopes(raw: string | null | undefined): string[] {
 }
 
 /** The scopes a provider actually requests. Blank or null means the defaults. */
-export function effectiveScopes(provider: { scopes: string | null | undefined }): string[] {
+export function effectiveScopes(provider: { scopes: string | null }): string[] {
   const parsed = parseScopes(provider.scopes)
   return parsed.length > 0 ? parsed : [...DEFAULT_OIDC_SCOPES]
 }
@@ -37,7 +44,9 @@ export function effectiveScopes(provider: { scopes: string | null | undefined })
 /**
  * Which requested scopes the IdP does not advertise in `scopes_supported`.
  *
- * An empty or absent list means unknown, not "none supported".
+ * An empty or absent list means unknown, not "none supported": the field is
+ * RECOMMENDED rather than required by OIDC Discovery, and flagging every scope
+ * on a provider that simply omits it would be noise an admin learns to ignore.
  */
 export function unsupportedScopes(
   requested: readonly string[],
@@ -50,7 +59,11 @@ export function unsupportedScopes(
 
 /**
  * The requested set reduced to what the IdP advertises — the one-click fix.
- * `openid` survives regardless.
+ *
+ * `openid` survives regardless. Dropping it would stop the request being an
+ * OIDC request at all, leaving no ID token owed and no openid-scoped token for
+ * the userinfo endpoint, so a "fix" that removed it would break more than it
+ * repaired.
  */
 export function supportedSubset(
   requested: readonly string[],
@@ -66,7 +79,7 @@ export function supportedSubset(
  *
  * Returns null — never a blank string — when the set is empty or matches the
  * defaults, so "null means defaults" survives the editor prefilling the
- * effective value.
+ * effective value, and an untouched provider is not rewritten to a literal.
  */
 export function normalizeScopesInput(tokens: readonly string[]): string | null {
   const cleaned = parseScopes(tokens.join(' '))

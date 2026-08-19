@@ -31,13 +31,14 @@ vi.mock('@/lib/server/auth/sso-test-handshake', () => ({
   runHandshake: hoisted.runHandshake,
 }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       user: { findFirst: (...args: unknown[]) => hoisted.userFindFirst(...args) },
     },
   },
-  user: { id: 'user_id_col', email: 'user_email_col' },
   eq: (col: unknown, val: unknown) => ({ __eq: [col, val] }),
 }))
 

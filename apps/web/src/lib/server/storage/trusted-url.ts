@@ -5,7 +5,7 @@ import { config } from '@/lib/server/config'
  * Parse the URL and match scheme + host + path STRUCTURALLY — a substring check
  * is bypassable (e.g. `javascript:'/api/storage/'` or `https://evil/api/storage/`)
  * and would become a stored XSS / tracking-pixel vector when rendered into an
- * href/src. Used by both the chat attachment validator and the TipTap content
+ * href/src. Used by both the conversation attachment validator and the TipTap content
  * sanitizer (inline `chatImage` nodes), so a visitor can never point an inline
  * image at a third-party host that would fire against an agent's browser.
  */

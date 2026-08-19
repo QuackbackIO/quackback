@@ -1,7 +1,7 @@
 /**
  * Shared recursive helpers for optimistic comment tree updates.
  */
-import type { CommentId } from '@quackback/ids'
+import type { PostCommentId } from '@quackback/ids'
 
 /** Minimal comment shape that both admin and portal comment types satisfy */
 interface CommentNode {
@@ -38,7 +38,7 @@ export function replaceOptimisticInTree<T extends CommentNode>(
   optimisticPrefix: string,
   parentId: string | null,
   content: string,
-  serverData: { id: CommentId; createdAt: Date | string }
+  serverData: { id: PostCommentId; createdAt: Date | string }
 ): T[] {
   return comments.map((comment) => {
     if (comment.id.startsWith(optimisticPrefix)) {

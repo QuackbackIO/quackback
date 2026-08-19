@@ -40,6 +40,27 @@ describe('explainAuthorizeError', () => {
     expect(hint).toContain(description)
   })
 
+  it('names the scopes actually requested on invalid_scope', () => {
+    // The hint used to hardcode "(openid email profile)" whatever was sent,
+    // which is actively misleading once a provider has a custom scope set —
+    // and this is the exact error a mismatched scope set produces.
+    const hint = explainAuthorizeError('invalid_scope', null, ['openid', 'public'])
+    expect(hint).toContain('openid public')
+    expect(hint).not.toContain('openid email profile')
+  })
+
+  it('falls back to naming no specific scopes when none were supplied', () => {
+    const hint = explainAuthorizeError('invalid_scope')
+    expect(hint).toMatch(/scope/i)
+    // Must not assert a scope set it does not actually know.
+    expect(hint).not.toContain('openid email profile')
+  })
+
+  it('points at the field an admin would change', () => {
+    const hint = explainAuthorizeError('invalid_scope', null, ['openid', 'email'])
+    expect(hint).toMatch(/scopes/i)
+  })
+
   it('returns a default hint mentioning the code for unknown errors', () => {
     const hint = explainAuthorizeError('totally_made_up_code')
     expect(hint).toEqual(expect.any(String))
@@ -106,5 +127,28 @@ describe('explainTokenError', () => {
     expect(hint).toContain('mystery_code')
     expect(hint).toContain('teapot-said-no')
     expect(hint).toMatch(/HTTP 418/)
+  })
+})
+
+describe('explainAuthorizeError — prompt rejection', () => {
+  it('names the prompt actually sent on invalid_configuration', () => {
+    // The observed shape: a provider answering invalid_configuration with the
+    // generic server_error description because it does not implement the
+    // prompt we asked for. Nothing in the response says "prompt", so the hint
+    // is the only thing that connects the error to its cause.
+    const hint = explainAuthorizeError('invalid_configuration', null, undefined, 'select_account')
+    expect(hint).toContain('select_account')
+    expect(hint).toMatch(/prompt/i)
+  })
+
+  it('mentions the prompt on a generic server_error too', () => {
+    const hint = explainAuthorizeError('server_error', null, undefined, 'select_account')
+    expect(hint).toMatch(/prompt/i)
+  })
+
+  it('says nothing about the prompt when none was sent', () => {
+    // Blaming a parameter we did not send would send an admin the wrong way.
+    const hint = explainAuthorizeError('server_error', null, undefined, undefined)
+    expect(hint).not.toMatch(/prompt/i)
   })
 })

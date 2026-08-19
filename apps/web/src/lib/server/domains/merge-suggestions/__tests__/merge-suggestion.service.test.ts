@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PostId, PrincipalId, MergeSuggestionId } from '@quackback/ids'
+import type { PostId, PrincipalId, PostMergeSuggestionId } from '@quackback/ids'
 
 // --- Mock tracking ---
 const insertValuesCalls: unknown[][] = []
@@ -46,7 +46,9 @@ function createSelectChain() {
   return chain
 }
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       mergeSuggestions: {
@@ -66,36 +68,6 @@ vi.mock('@/lib/server/db', () => ({
     strings,
     values,
   })),
-  mergeSuggestions: {
-    id: 'id',
-    sourcePostId: 'source_post_id',
-    targetPostId: 'target_post_id',
-    status: 'status',
-    hybridScore: 'hybrid_score',
-    llmConfidence: 'llm_confidence',
-    llmReasoning: 'llm_reasoning',
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-  },
-  posts: {
-    id: 'id',
-    title: 'title',
-    content: 'content',
-    voteCount: 'vote_count',
-    commentCount: 'comment_count',
-    createdAt: 'created_at',
-    boardId: 'board_id',
-    statusId: 'status_id',
-  },
-  boards: {
-    id: 'id',
-    name: 'name',
-  },
-  postStatuses: {
-    id: 'id',
-    name: 'name',
-    color: 'color',
-  },
 }))
 
 vi.mock('@/lib/server/domains/posts/post.merge', () => ({
@@ -117,7 +89,7 @@ describe('merge-suggestion.service', () => {
   const sourcePostId = 'post_source1' as PostId
   const targetPostId = 'post_target1' as PostId
   const principalId = 'principal_admin1' as PrincipalId
-  const suggestionId = 'merge_sug_test1' as MergeSuggestionId
+  const suggestionId = 'post_merge_sug_test1' as PostMergeSuggestionId
 
   describe('createMergeSuggestion', () => {
     it('should insert a merge suggestion with onConflictDoNothing', async () => {

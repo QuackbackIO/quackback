@@ -42,7 +42,7 @@ function prefixFilter(expr: ReturnType<typeof sql>, query: string): ReturnType<t
 /**
  * Per-attribute SQL templates. Each returns rows shaped {value, count},
  * scoped to portal-user principals to match the segment evaluator's
- * audience (role='user' AND user_id IS NOT NULL). Counts therefore
+ * audience (identified end-users: role='user' AND type='user'). Counts therefore
  * reflect what segments will actually match — not the count of all
  * rows in the user table including team members.
  */
@@ -51,7 +51,9 @@ function queryForAttribute(
   query: string,
   limit: number
 ): ReturnType<typeof sql> {
-  const baseJoin = sql`FROM "user" u INNER JOIN principal p ON p.user_id = u.id WHERE p.role = 'user'`
+  // Identified end-users only (type='user'); excludes anonymous visitors so the
+  // value counts match what segments actually evaluate.
+  const baseJoin = sql`FROM "user" u INNER JOIN principal p ON p.user_id = u.id WHERE p.role = 'user' AND p.type = 'user'`
   switch (attribute) {
     case 'country': {
       const upperQuery = query.toUpperCase()

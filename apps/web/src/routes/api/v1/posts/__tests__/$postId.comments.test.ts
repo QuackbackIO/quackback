@@ -14,13 +14,14 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
 vi.mock('@/lib/server/domains/comments/comment.service', () => ({
   createComment: (...args: unknown[]) => mockCreateComment(...args),
 }))
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       principal: { findFirst: (...args: unknown[]) => mockPrincipalFindFirst(...args) },
     },
   },
-  principal: { id: 'id' },
   eq: vi.fn(),
 }))
 

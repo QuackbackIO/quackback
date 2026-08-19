@@ -1,13 +1,10 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { BoardId, TagId, PrincipalId, PostId, RoadmapId } from '@quackback/ids'
+import type { PostId, RoadmapId } from '@quackback/ids'
 import {
-  fetchInboxPosts,
-  fetchBoardsList,
-  fetchBoardsForSettings,
   fetchTagsList,
   fetchStatusesList,
   fetchTeamMembers,
-  searchMembersFn,
+  searchPeopleFn,
   fetchOnboardingStatus,
   fetchIntegrationsList,
   fetchIntegrationCatalog,
@@ -16,99 +13,66 @@ import {
   listSegmentsFn,
   listUserAttributesFn,
 } from '@/lib/server/functions/admin'
+import { fetchBoardsFn } from '@/lib/server/functions/boards'
 import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
 import {
   fetchAuthProviderStatusFn,
   fetchAuthProviderCredentialsMaskedFn,
 } from '@/lib/server/functions/auth-provider-credentials'
 import { listAuditEventsFn } from '@/lib/server/functions/audit-log'
+import { listCompanyAttributesFn } from '@/lib/server/functions/companies'
 import { listRecoveryCodesFn } from '@/lib/server/functions/recovery-codes'
 import { getModerationStatus } from '@/lib/server/functions/moderation'
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
-import {
-  fetchPostWithDetails,
-  fetchPostVotersFn,
-  fetchPostFeedbackSourceFn,
-} from '@/lib/server/functions/posts'
+import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
 import { fetchMergePreviewFn } from '@/lib/server/functions/post-merge'
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/shared/types'
 
 /**
- * Inbox/Feedback filter params
- */
-export interface InboxPostListParams {
-  boardIds?: BoardId[]
-  statusSlugs?: string[]
-  tagIds?: TagId[]
-  ownerId?: PrincipalId | null | undefined
-  search?: string
-  dateFrom?: string
-  dateTo?: string
-  minVotes?: number
-  minComments?: number
-  responded?: 'all' | 'responded' | 'unresponded'
-  updatedBefore?: string
-  sort?: 'newest' | 'oldest' | 'votes'
-  showDeleted?: boolean
-  cursor?: string
-  limit?: number
-}
-
-/**
  * Query options factory for admin routes.
  * Uses server functions (createServerFn) to keep database code server-only.
  * These are used with ensureQueryData() in loaders and useSuspenseQuery() in components.
+ *
+ * NOTE (QC-1): the inbox posts list is no longer defined here. Its loader
+ * prefetch and its renderer now share ONE infinite-query definition —
+ * `inboxPostsInfiniteOptions` in lib/client/hooks/use-inbox-query.ts — so post
+ * mutations that invalidate `inboxKeys.lists()` reach the cache the UI renders.
  */
 export const adminQueries = {
-  /**
-   * List inbox posts with filtering
-   */
-  inboxPosts: (filters: InboxPostListParams) =>
-    queryOptions({
-      queryKey: ['admin', 'inbox', 'posts', filters],
-      queryFn: async () => {
-        const data = await fetchInboxPosts({ data: filters })
-        // Deserialize date strings from server response
-        return {
-          ...data,
-          items: (data?.items ?? []).map((p) => ({
-            ...p,
-            createdAt: new Date(p.createdAt),
-            updatedAt: new Date(p.updatedAt),
-            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-          })),
-        }
-      },
-      staleTime: 30 * 1000, // 30s - frequently updated
-    }),
-
   /**
    * List all boards
    */
   boards: () =>
     queryOptions({
       queryKey: ['admin', 'boards'],
-      queryFn: async () => {
-        const data = await fetchBoardsList()
-        return data.map((b) => ({
+      queryFn: () => fetchBoardsFn(),
+      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
+      // Date coercion happens per observer, so the cache holds one raw copy
+      // shared with boardsForSettings below.
+      select: (data) =>
+        data.map((b) => ({
           ...b,
           createdAt: new Date(b.createdAt),
           updatedAt: new Date(b.updatedAt),
-        }))
-      },
-      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
+        })),
     }),
 
   /**
-   * List boards for settings page (includes additional metadata)
+   * The same board list as `boards`, without the Date coercion.
+   *
+   * Shares `boards`' query key deliberately: both now resolve to the identical
+   * zero-argument `fetchBoardsFn`, so a separate key meant fetching the same
+   * payload twice and holding two copies whenever a screen mounted both (the
+   * post modal lives in the admin root layout, so `?post=` on a settings screen
+   * did exactly that). Invalidating either name refreshes both.
    */
   boardsForSettings: () =>
     queryOptions({
-      queryKey: ['admin', 'settings', 'boards'],
-      queryFn: () => fetchBoardsForSettings(),
+      queryKey: ['admin', 'boards'],
+      queryFn: () => fetchBoardsFn(),
       staleTime: 5 * 60 * 1000, // 5min - reference data
     }),
 
@@ -161,12 +125,13 @@ export const adminQueries = {
     }),
 
   /**
-   * Search members (typeahead for author selector)
+   * Search people (portal users included) for on-behalf typeaheads:
+   * the author selector and the proxy-vote picker.
    */
-  searchMembers: (params: { search?: string; limit?: number }) =>
+  searchPeople: (params: { search?: string; limit?: number }) =>
     queryOptions({
-      queryKey: ['admin', 'members', 'search', params],
-      queryFn: () => searchMembersFn({ data: params }),
+      queryKey: ['admin', 'people', 'search', params],
+      queryFn: () => searchPeopleFn({ data: params }),
       staleTime: 30 * 1000,
     }),
 
@@ -187,6 +152,7 @@ export const adminQueries = {
             page: filters.page,
             limit: filters.limit,
             segmentIds: filters.segmentIds,
+            lifecycle: filters.lifecycle,
           },
         }),
       staleTime: 30 * 1000,
@@ -209,7 +175,8 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'onboarding'],
       queryFn: () => fetchOnboardingStatus(),
-      staleTime: 0, // Always fresh during onboarding
+      staleTime: 0,
+      refetchOnWindowFocus: true,
     }),
 
   /**
@@ -290,6 +257,7 @@ export const adminQueries = {
           createdAt: new Date(data.createdAt),
           updatedAt: new Date(data.updatedAt),
           deletedAt: data.deletedAt ? new Date(data.deletedAt) : null,
+          eta: data.eta ? new Date(data.eta) : null,
           summaryUpdatedAt: data.summaryUpdatedAt ? new Date(data.summaryUpdatedAt) : null,
           comments: data.comments.map(deserializeComment),
           pinnedComment: data.pinnedComment
@@ -308,14 +276,6 @@ export const adminQueries = {
       queryKey: ['inbox', 'voters', postId],
       queryFn: () => fetchPostVotersFn({ data: { id: postId } }),
       staleTime: 30 * 1000,
-    }),
-
-  /** Feedback source for a post (if created from the feedback pipeline) */
-  postFeedbackSource: (postId: PostId) =>
-    queryOptions({
-      queryKey: ['inbox', 'feedback-source', postId],
-      queryFn: () => fetchPostFeedbackSourceFn({ data: { id: postId } }),
-      staleTime: 60 * 1000,
     }),
 
   /**
@@ -427,6 +387,16 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'userAttributes'],
       queryFn: () => listUserAttributesFn(),
+      staleTime: 60 * 1000,
+    }),
+
+  /**
+   * List all company attribute definitions
+   */
+  companyAttributes: () =>
+    queryOptions({
+      queryKey: ['admin', 'companyAttributes'],
+      queryFn: () => listCompanyAttributesFn(),
       staleTime: 60 * 1000,
     }),
 

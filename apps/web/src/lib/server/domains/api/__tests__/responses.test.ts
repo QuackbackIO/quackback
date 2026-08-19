@@ -268,10 +268,6 @@ describe('API Responses', () => {
       expect(handleDomainError({ code: 'PRINCIPAL_NOT_FOUND', message: 'x' }).status).toBe(404)
     })
 
-    it('should handle POST_NOT_IN_ROADMAP as 404', () => {
-      expect(handleDomainError({ code: 'POST_NOT_IN_ROADMAP', message: 'x' }).status).toBe(404)
-    })
-
     // Missing conflict case
     it('should handle DUPLICATE_NAME as 409', () => {
       expect(handleDomainError({ code: 'DUPLICATE_NAME', message: 'x' }).status).toBe(409)
@@ -289,7 +285,7 @@ describe('API Responses', () => {
     })
 
     it('should use statusCode fallback for ConflictError with custom code', () => {
-      const err = new ConflictError('DUPLICATE_NAME', 'Tag name already exists')
+      const err = new ConflictError('DUPLICATE_NAME', 'PostTag name already exists')
       expect(handleDomainError(err).status).toBe(409)
     })
 

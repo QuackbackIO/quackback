@@ -36,12 +36,15 @@ test.describe.configure({ mode: 'serial' })
 
 test.beforeAll(() => {
   // Button-only: enabled + creds, no verified domain → public button.
+  // `showButton` is the sole source of truth for rendering one, so both
+  // providers state it outright rather than leaning on a seed default.
   seedIdentityProvider({
     registrationId: BUTTON_RID,
     label: BUTTON_LABEL,
     clientId: 'e2e-button-client',
     discoveryUrl: DISCOVERY_URL,
     enabled: true,
+    showButton: true,
   })
   // Domain-bound + enforced: enabled + creds + verified enforced domain →
   // routed-only (hidden from buttons), hard-binds its domain to SSO.
@@ -51,6 +54,7 @@ test.beforeAll(() => {
     clientId: 'e2e-enforced-client',
     discoveryUrl: DISCOVERY_URL,
     enabled: true,
+    showButton: false,
     domain: { name: ENFORCED_DOMAIN, verified: true, enforced: true },
   })
 })
@@ -70,15 +74,16 @@ test('(1) button-only provider surfaces in the portal OIDC button list', async (
   await page.goto('/auth/login')
   await page.waitForLoadState('networkidle')
 
-  // The button-only provider renders its "Continue with <label>" button.
+  // The button-only provider renders its "Sign in with <label>" button
+  // (`portal.auth.oauth.signInWith`).
   await expect(
-    page.getByRole('button', { name: new RegExp(`Continue with ${BUTTON_LABEL}`, 'i') })
+    page.getByRole('button', { name: new RegExp(`Sign in with ${BUTTON_LABEL}`, 'i') })
   ).toBeVisible({ timeout: 15000 })
 
   // The enforced provider is routed-only (verified domain + showButton:false),
   // so it must NOT appear as a public button.
   await expect(
-    page.getByRole('button', { name: new RegExp(`Continue with ${ENFORCED_LABEL}`, 'i') })
+    page.getByRole('button', { name: new RegExp(`Sign in with ${ENFORCED_LABEL}`, 'i') })
   ).toHaveCount(0)
 })
 

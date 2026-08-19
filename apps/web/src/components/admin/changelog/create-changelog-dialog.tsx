@@ -15,7 +15,7 @@ import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { JSONContent } from '@tiptap/react'
-import type { PostId } from '@quackback/ids'
+import type { PostId, ChangelogCategoryId, SegmentId } from '@quackback/ids'
 
 // Mobile-only version of the sidebar content for the sheet
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
@@ -28,8 +28,12 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
+  const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
+  const [notify, setNotify] = useState(true)
+  const [segmentIds, setSegmentIds] = useState<SegmentId[]>([])
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
 
@@ -72,8 +76,12 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     form.reset()
     setContentJson(null)
     setLinkedPostIds([])
+    setCategoryIds([])
+    setNotify(true)
+    setSegmentIds([])
     setPublishState({ type: 'draft' })
     setDisplayDateOverride(undefined)
+    setFeaturedImageUrl(null)
     createChangelogMutation.reset()
   }
 
@@ -84,9 +92,13 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
+        categoryIds,
         publishState,
+        notify,
+        segmentIds,
         ...(publishState.type === 'published' &&
           displayDateOverride !== undefined && { displayDate: displayDateOverride }),
+        ...(featuredImageUrl !== null && { featuredImageUrl }),
       },
       {
         onSuccess: () => {
@@ -160,9 +172,17 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                 onPublishStateChange={handlePublishStateChange}
                 linkedPostIds={linkedPostIds}
                 onLinkedPostsChange={setLinkedPostIds}
+                categoryIds={categoryIds}
+                onCategoriesChange={setCategoryIds}
+                notify={notify}
+                onNotifyChange={setNotify}
+                segmentIds={segmentIds}
+                onSegmentIdsChange={setSegmentIds}
                 displayDateValue={displayDateOverride}
                 onDisplayDateChange={handleDisplayDateChange}
                 onDisplayDateClear={handleDisplayDateClear}
+                featuredImageUrl={featuredImageUrl}
+                onFeaturedImageChange={setFeaturedImageUrl}
               />
             </div>
 
@@ -190,9 +210,17 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                       onPublishStateChange={handlePublishStateChange}
                       linkedPostIds={linkedPostIds}
                       onLinkedPostsChange={setLinkedPostIds}
+                      categoryIds={categoryIds}
+                      onCategoriesChange={setCategoryIds}
+                      notify={notify}
+                      onNotifyChange={setNotify}
+                      segmentIds={segmentIds}
+                      onSegmentIdsChange={setSegmentIds}
                       displayDateValue={displayDateOverride}
                       onDisplayDateChange={handleDisplayDateChange}
                       onDisplayDateClear={handleDisplayDateClear}
+                      featuredImageUrl={featuredImageUrl}
+                      onFeaturedImageChange={setFeaturedImageUrl}
                     />
                   </div>
                 </SheetContent>

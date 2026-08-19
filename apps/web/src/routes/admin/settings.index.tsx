@@ -15,10 +15,10 @@ function SettingsIndexPage() {
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 1024px)')
 
-  // On desktop, redirect to team settings since the sidebar handles navigation
+  // On desktop, redirect to General since the sidebar handles navigation
   useEffect(() => {
     if (isDesktop) {
-      navigate({ to: '/admin/settings/team', replace: true })
+      navigate({ to: '/admin/settings/general', replace: true })
     }
   }, [isDesktop, navigate])
 

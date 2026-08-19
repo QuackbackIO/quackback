@@ -7,6 +7,24 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import {
+  roadmapBaseFilterSchema,
+  roadmapFrequencySchema,
+  roadmapTypeSchema,
+  roadmapVisibilitySchema,
+  segmentIdInputSchema,
+} from '@/lib/shared/roadmap-config'
+import { postStatusIdSchema, roadmapColumnIdSchema } from '@quackback/ids/zod'
+
+const roadmapColumnSchema = z.object({
+  id: roadmapColumnIdSchema.optional(),
+  statusId: postStatusIdSchema,
+  name: z.string().min(1).max(100),
+  icon: z.string().max(50).nullable().optional(),
+  color: z.string().min(1).max(50),
+  position: z.number().int().min(0),
+})
 
 // Input validation schema
 const createRoadmapSchema = z.object({
@@ -17,8 +35,36 @@ const createRoadmapSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens'),
   description: z.string().max(500).optional(),
-  isPublic: z.boolean().optional().default(true),
+  type: roadmapTypeSchema.optional(),
+  baseFilter: roadmapBaseFilterSchema.optional(),
+  dateSource: z.literal('eta').nullable().optional(),
+  frequency: roadmapFrequencySchema.nullable().optional(),
+  visibility: roadmapVisibilitySchema.optional(),
+  visibleSegmentIds: z.array(segmentIdInputSchema).nullable().optional(),
+  columns: z.array(roadmapColumnSchema).optional(),
 })
+
+function serializeRoadmap(
+  roadmap: Awaited<
+    ReturnType<(typeof import('@/lib/server/domains/roadmaps/roadmap.service'))['getRoadmap']>
+  >
+) {
+  return {
+    id: roadmap.id,
+    name: roadmap.name,
+    slug: roadmap.slug,
+    description: roadmap.description,
+    type: roadmap.type,
+    baseFilter: roadmap.baseFilter,
+    dateSource: roadmap.dateSource,
+    frequency: roadmap.frequency,
+    visibility: roadmap.visibility,
+    visibleSegmentIds: roadmap.visibleSegmentIds,
+    position: roadmap.position,
+    columns: roadmap.columns,
+    createdAt: roadmap.createdAt.toISOString(),
+  }
+}
 
 export const Route = createFileRoute('/api/v1/roadmaps/')({
   server: {
@@ -29,24 +75,14 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
           // Import service function
           const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           const roadmaps = await listRoadmaps()
 
-          return successResponse(
-            roadmaps.map((roadmap) => ({
-              id: roadmap.id,
-              name: roadmap.name,
-              slug: roadmap.slug,
-              description: roadmap.description,
-              isPublic: roadmap.isPublic,
-              position: roadmap.position,
-              createdAt: roadmap.createdAt.toISOString(),
-            }))
-          )
+          return successResponse(roadmaps.map(serializeRoadmap))
         } catch (error) {
           return handleDomainError(error)
         }
@@ -58,7 +94,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
        */
       POST: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.ROADMAP_MANAGE })
 
           // Parse and validate body
           const body = await request.json()
@@ -73,22 +109,9 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
           // Import service function
           const { createRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
-          const roadmap = await createRoadmap({
-            name: parsed.data.name,
-            slug: parsed.data.slug,
-            description: parsed.data.description,
-            isPublic: parsed.data.isPublic,
-          })
+          const roadmap = await createRoadmap(parsed.data as Parameters<typeof createRoadmap>[0])
 
-          return createdResponse({
-            id: roadmap.id,
-            name: roadmap.name,
-            slug: roadmap.slug,
-            description: roadmap.description,
-            isPublic: roadmap.isPublic,
-            position: roadmap.position,
-            createdAt: roadmap.createdAt.toISOString(),
-          })
+          return createdResponse(serializeRoadmap(roadmap))
         } catch (error) {
           return handleDomainError(error)
         }

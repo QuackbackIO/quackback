@@ -16,6 +16,7 @@ import {
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { ChangelogId } from '@quackback/ids'
 
 // Input validation schema
@@ -56,7 +57,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.CHANGELOG_VIEW_DRAFT })
 
           const entryId = parseTypeId<ChangelogId>(
             params.entryId,
@@ -77,7 +78,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.CHANGELOG_MANAGE })
 
           const entryId = parseTypeId<ChangelogId>(
             params.entryId,
@@ -131,7 +132,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
       DELETE: async ({ request, params }) => {
         try {
           // Soft delete (deleteChangelog sets deletedAt) — team OK.
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.CHANGELOG_MANAGE })
 
           const entryId = parseTypeId<ChangelogId>(
             params.entryId,

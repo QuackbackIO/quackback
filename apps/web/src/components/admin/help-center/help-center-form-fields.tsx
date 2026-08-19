@@ -40,6 +40,7 @@ export function HelpCenterFormFields({
                 placeholder="Write your help article..."
                 minHeight="100%"
                 borderless
+                toolbarPosition="bottom"
                 features={{
                   headings: true,
                   images: true,

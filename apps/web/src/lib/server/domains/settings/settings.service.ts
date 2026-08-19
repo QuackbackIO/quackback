@@ -1,8 +1,20 @@
-import { db, eq, settings, ssoVerifiedDomain } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  settings,
+  ssoVerifiedDomain,
+  type Database,
+  type Transaction,
+} from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
-import { ValidationError } from '@/lib/shared/errors'
+import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
+import {
+  assistantConfigSchema,
+  DEFAULT_ASSISTANT_CONFIG,
+  type AssistantCopilotCapabilities,
+} from '@/lib/shared/assistant/config'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
@@ -20,6 +32,8 @@ import type {
   TenantSettings,
   SettingsBrandingData,
   HelpCenterConfig,
+  HelpCenterLocalesConfig,
+  HelpCenterLocaleChromeStrings,
   VerifiedDomain,
 } from './settings.types'
 import {
@@ -27,11 +41,14 @@ import {
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
-  DEFAULT_LIVE_CHAT_CONFIG,
+  DEFAULT_MESSENGER_CONFIG,
   DEFAULT_FEATURE_FLAGS,
   DEFAULT_HELP_CENTER_CONFIG,
+  resolveFeatureFlags,
 } from './settings.types'
-import { publicLiveChatConfig } from './settings.widget'
+import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
+import { resolveChangelogSettings } from './settings.changelog'
+import { resolveStatusSettings } from './settings.status'
 import {
   parseJsonConfig,
   parseJsonOrNull,
@@ -145,32 +162,20 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     // Tier gate: refuse non-standard OAuth providers when
     // customOidcProvider is off. No-op when the feature is unlimited.
     if (input.oauth) {
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-      const limits = await getTierLimits()
       const enablingNonStandard = Object.entries(input.oauth).some(
         ([id, enabled]) => enabled && !STANDARD_OAUTH_PROVIDERS.has(id)
       )
       if (enablingNonStandard) {
-        enforceFeatureGate({
-          enabled: limits.features.customOidcProvider,
-          feature: 'customOidcProvider',
-          friendly: 'Custom OIDC providers',
-        })
+        const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+        await assertTierFeature('customOidcProvider', 'Custom OIDC providers')
       }
     }
 
     // Tier gate: ssoOidc itself requires customOidcProvider. Reject
     // attempts to enable or configure SSO when the tier is off.
     if (input.ssoOidc?.enabled === true) {
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-      const limits = await getTierLimits()
-      enforceFeatureGate({
-        enabled: limits.features.customOidcProvider,
-        feature: 'customOidcProvider',
-        friendly: 'Single sign-on (OIDC)',
-      })
+      const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+      await assertTierFeature('customOidcProvider', 'Single sign-on (OIDC)')
 
       // Secret-presence gate: enabling SSO without a saved client
       // secret would register a Better-Auth provider that 4xxs on
@@ -641,10 +646,31 @@ export async function updateDeveloperConfig(
     const org = await requireSettings()
     const existing = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
     const updated = deepMerge(existing, input as Partial<DeveloperConfig>)
-    await db
-      .update(settings)
-      .set({ developerConfig: JSON.stringify(updated) })
-      .where(eq(settings.id, org.id))
+
+    const writeConfig = (executor: Database | Transaction) =>
+      executor
+        .update(settings)
+        .set({ developerConfig: JSON.stringify(updated) })
+        .where(eq(settings.id, org.id))
+
+    // The oauthProvider plugin reads the dynamic-client-registration toggle
+    // at auth-instance build time, so a change must bump auth_config_version
+    // in the same transaction to rebuild cached Better-Auth instances on
+    // every pod (same pattern as updateAuthConfig).
+    if (
+      updated.oauthDynamicClientRegistrationEnabled !==
+      existing.oauthDynamicClientRegistrationEnabled
+    ) {
+      const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+      const { resetAuth } = await import('@/lib/server/auth')
+      await db.transaction(async (tx) => {
+        await writeConfig(tx)
+        await bumpAuthConfigVersionInTx(tx)
+      })
+      resetAuth()
+    } else {
+      await writeConfig(db)
+    }
     await invalidateSettingsCache()
     return updated
   } catch (error) {
@@ -683,6 +709,76 @@ export async function updateHelpCenterConfig(
   }
 }
 
+/**
+ * Enable an additional help-center locale (domains/languages §2). Requires a
+ * non-empty homepage title: a locale with no
+ * chrome strings has nothing to show on its own homepage. Idempotent --
+ * re-enabling an already-enabled locale just replaces its chrome.
+ */
+export async function enableHelpCenterLocale(input: {
+  locale: string
+  chrome: HelpCenterLocaleChromeStrings
+}): Promise<HelpCenterLocalesConfig> {
+  if (!input.chrome.homepageTitle.trim()) {
+    throw new ValidationError(
+      'HC_LOCALE_TITLE_REQUIRED',
+      'Enabling a locale requires a homepage title'
+    )
+  }
+  const current = await getHelpCenterConfig()
+  if (input.locale === current.locales.default) {
+    throw new ValidationError('HC_LOCALE_IS_DEFAULT', 'The default locale is always enabled')
+  }
+  const additional = current.locales.additional.includes(input.locale)
+    ? current.locales.additional
+    : [...current.locales.additional, input.locale]
+  const updated = await updateHelpCenterConfig({
+    locales: {
+      ...current.locales,
+      additional,
+      chrome: { ...current.locales.chrome, [input.locale]: input.chrome },
+    },
+  })
+  return updated.locales
+}
+
+/** Disabling a locale keeps its translation rows (re-enabling picks them back up). */
+export async function disableHelpCenterLocale(locale: string): Promise<HelpCenterLocalesConfig> {
+  const current = await getHelpCenterConfig()
+  const updated = await updateHelpCenterConfig({
+    locales: {
+      ...current.locales,
+      additional: current.locales.additional.filter((l) => l !== locale),
+    },
+  })
+  return updated.locales
+}
+
+export async function updateHelpCenterLocaleChrome(input: {
+  locale: string
+  chrome: Partial<HelpCenterLocaleChromeStrings>
+}): Promise<HelpCenterLocalesConfig> {
+  const current = await getHelpCenterConfig()
+  if (!current.locales.additional.includes(input.locale)) {
+    throw new NotFoundError('HC_LOCALE_NOT_ENABLED', 'That locale is not enabled')
+  }
+  const existingChrome = current.locales.chrome[input.locale] ?? {
+    homepageTitle: '',
+    homepageDescription: '',
+    searchPlaceholder: '',
+  }
+  const updated = await updateHelpCenterConfig({
+    locales: {
+      ...current.locales,
+      chrome: {
+        ...current.locales.chrome,
+        [input.locale]: { ...existingChrome, ...input.chrome },
+      },
+    },
+  })
+  return updated.locales
+}
+
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
     const org = await requireSettings()
@@ -716,7 +812,12 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     return {
-      features: portalConfig.features,
+      features: {
+        allowAnonymous: portalConfig.features.allowAnonymous,
+        allowEditAfterEngagement: portalConfig.features.allowEditAfterEngagement,
+        allowDeleteAfterEngagement: portalConfig.features.allowDeleteAfterEngagement,
+        showPublicEditHistory: portalConfig.features.showPublicEditHistory,
+      },
       ...(oidcProviders.length > 0 && { oidcProviders }),
       ...(welcome && { welcomeCard: welcome }),
       portalAccess: {
@@ -750,12 +851,15 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     const developerConfig = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
 
     const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const assistantConfig = assistantConfigSchema.safeParse(org.assistantConfig)
+    const assistantIdentity = assistantConfig.success
+      ? assistantConfig.data.identity
+      : DEFAULT_ASSISTANT_CONFIG.identity
     const helpCenterConfig = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+    const changelogConfig = resolveChangelogSettings(org.metadata)
+    const statusConfig = resolveStatusSettings(org.metadata)
 
-    const featureFlags: FeatureFlags = {
-      ...DEFAULT_FEATURE_FLAGS,
-      ...(org.featureFlags ? JSON.parse(org.featureFlags) : {}),
-    }
+    const featureFlags = resolveFeatureFlags(org.featureFlags)
 
     const [configuredTypes, passthroughKeys, verifiedDomains] = await Promise.all([
       getConfiguredAuthTypes(),
@@ -776,6 +880,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       logoUrl: getPublicUrlOrNull(org.logoKey),
       faviconUrl: getPublicUrlOrNull(org.faviconKey),
       headerLogoUrl: getPublicUrlOrNull(org.headerLogoKey),
+      ogImageUrl: getPublicUrlOrNull(org.portalOgImageKey),
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,
     }
@@ -789,6 +894,8 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       brandingConfig,
       developerConfig,
       helpCenterConfig,
+      changelogConfig,
+      statusConfig,
       customCss: org.customCss ?? '',
       publicAuthConfig: {
         oauth: filteredAuthOAuth,
@@ -811,11 +918,29 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         enabled: widgetConfig.enabled,
         defaultBoard: widgetConfig.defaultBoard,
         position: widgetConfig.position,
-        tabs: widgetConfig.tabs,
-        hmacRequired: widgetConfig.identifyVerification ?? false,
-        // Client-safe chat config — the widget gates its chat tab on chat.enabled,
-        // so this must be projected here (cannedReplies stay agent-only).
-        chat: publicLiveChatConfig(widgetConfig.chat ?? DEFAULT_LIVE_CHAT_CONFIG),
+        tabs: {
+          ...widgetConfig.tabs,
+          feedback: (widgetConfig.tabs?.feedback ?? true) && featureFlags.feedback,
+          changelog: (widgetConfig.tabs?.changelog ?? false) && featureFlags.changelog,
+          help: (widgetConfig.tabs?.help ?? false) && featureFlags.helpCenter,
+          messenger: (widgetConfig.tabs?.messenger ?? false) && featureFlags.supportInbox,
+          // Fail-closed like its siblings: the Tickets tab is only ever exposed
+          // publicly when the experimental supportTickets flag is on (gate (a) of
+          // the triple gate), so no consumer can surface it with the flag off.
+          tickets: (widgetConfig.tabs?.tickets ?? false) && featureFlags.supportTickets,
+        },
+        // Identify is verified-only (backend-signed ssoToken; GH issue #300).
+        hmacRequired: true,
+        // Home customisation is client-safe (greeting, hero style, quick links);
+        // the stored hero-image key is resolved to a public URL.
+        home: publicHomeConfig(widgetConfig.home),
+        // Client-safe messenger config — the widget gates its messenger tab on
+        // messenger.enabled, so this must be projected here (routing stays
+        // agent-only).
+        messenger: publicMessengerConfig(
+          widgetConfig.messenger ?? DEFAULT_MESSENGER_CONFIG,
+          assistantIdentity
+        ),
       },
       featureFlags,
       brandingData,
@@ -857,20 +982,33 @@ export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolea
 }
 
 /**
+ * Whether the Copilot Q&A capability is enabled in the v3 assistant config.
+ * Reads the cached tenant settings (`getTenantSettings`) — the same
+ * single-Redis-GET path `isFeatureEnabled` uses — so gating the copilot route
+ * on its hot path costs no extra DB round-trip; every config mutation calls
+ * `invalidateSettingsCache()`. Fails OPEN to the v3 default (on): a
+ * missing/invalid/unreadable config must not silently disable a working
+ * default, mirroring how the route already degrades.
+ */
+export async function isCopilotCapabilityEnabled(
+  capability: keyof AssistantCopilotCapabilities
+): Promise<boolean> {
+  const tenant = await getTenantSettings()
+  const parsed = assistantConfigSchema.safeParse(tenant?.settings.assistantConfig)
+  const capabilities = parsed.success
+    ? parsed.data.agents.copilot.capabilities
+    : DEFAULT_ASSISTANT_CONFIG.agents.copilot.capabilities
+  return capabilities[capability]
+}
+
+/**
  * Update feature flags (partial update, merges with existing)
  */
 export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
-  // Tier gate: enabling AI feedback extraction is plan-entitled (Scale on
-  // cloud). Checked only on enable so a downgrade can still switch it off.
-  if (input.aiFeedbackExtraction === true) {
-    const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
-    await assertTierFeature('aiFeedbackExtraction', 'AI feedback extraction')
-  }
   const org = await requireSettings()
-  const current: FeatureFlags = {
-    ...DEFAULT_FEATURE_FLAGS,
-    ...(org.featureFlags ? JSON.parse(org.featureFlags) : {}),
-  }
+  // resolveFeatureFlags drops legacy pre-consolidation keys (after coalescing
+  // them into their umbrella flag), so this write persists a clean shape.
+  const current = resolveFeatureFlags(org.featureFlags)
   const updated = { ...current, ...input }
   await db
     .update(settings)

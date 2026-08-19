@@ -1,14 +1,14 @@
 /**
  * Regression: `updateFeatureFlagsFn` shipped with zero auth check —
- * any unauthenticated RPC call could flip `helpCenter` and
- * `aiFeedbackExtraction`. Flipping `helpCenter` exposes a public
- * subdomain; flipping `aiFeedbackExtraction` routes customer feedback
- * through an LLM. Both must be admin-only.
+ * any unauthenticated RPC call could flip `helpCenter` and `inboxAi`.
+ * Flipping `helpCenter` exposes a public subdomain; flipping `inboxAi`
+ * routes customer text through an LLM. Both must be admin-only.
  *
  * This pins the contract at the handler boundary: requireAuth({roles:
  * ['admin']}) is invoked before any write.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const hoisted = vi.hoisted(() => ({
   mockRequireAuth: vi.fn(),
@@ -45,7 +45,7 @@ let updateFeatureFlagsHandler: AnyHandler
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  hoisted.mockUpdateFeatureFlags.mockResolvedValue({ aiFeedbackExtraction: true })
+  hoisted.mockUpdateFeatureFlags.mockResolvedValue({ inboxAi: true })
   if (handlers.length === 0) await import('../feature-flags')
   updateFeatureFlagsHandler = handlers[0]
 })
@@ -54,12 +54,10 @@ describe('updateFeatureFlagsFn — admin gate', () => {
   it('requires admin auth (G12)', async () => {
     hoisted.mockRequireAuth.mockRejectedValueOnce(new Error('Authentication required'))
 
-    await expect(
-      updateFeatureFlagsHandler({ data: { aiFeedbackExtraction: true } })
-    ).rejects.toThrow(/auth/i)
+    await expect(updateFeatureFlagsHandler({ data: { inboxAi: true } })).rejects.toThrow(/auth/i)
 
     expect(hoisted.mockRequireAuth).toHaveBeenCalledWith(
-      expect.objectContaining({ roles: expect.arrayContaining(['admin']) })
+      expect.objectContaining({ permission: PERMISSIONS.SETTINGS_MANAGE })
     )
     expect(hoisted.mockUpdateFeatureFlags).not.toHaveBeenCalled()
   })
@@ -78,8 +76,8 @@ describe('updateFeatureFlagsFn — admin gate', () => {
       principal: { id: 'prn_admin', role: 'admin' },
     })
 
-    await updateFeatureFlagsHandler({ data: { aiFeedbackExtraction: true } })
+    await updateFeatureFlagsHandler({ data: { inboxAi: true } })
 
-    expect(hoisted.mockUpdateFeatureFlags).toHaveBeenCalledWith({ aiFeedbackExtraction: true })
+    expect(hoisted.mockUpdateFeatureFlags).toHaveBeenCalledWith({ inboxAi: true })
   })
 })

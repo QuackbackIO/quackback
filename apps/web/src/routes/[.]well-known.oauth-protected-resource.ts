@@ -10,6 +10,8 @@
  */
 
 import { createFileRoute } from '@tanstack/react-router'
+// Pure vocabulary module (no server-side imports), safe in a route file.
+import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 
 export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
   server: {
@@ -23,19 +25,8 @@ export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
             resource: `${baseUrl}/api/mcp`,
             authorization_servers: [baseUrl],
             bearer_methods_supported: ['header'],
-            scopes_supported: [
-              'openid',
-              'profile',
-              'email',
-              'offline_access',
-              'read:feedback',
-              'write:feedback',
-              'write:changelog',
-              'read:article',
-              'write:article',
-              'read:chat',
-              'write:chat',
-            ],
+            // Identity scopes + the shared capability vocabulary
+            scopes_supported: ['openid', 'profile', 'email', 'offline_access', ...API_KEY_SCOPES],
           }),
           {
             headers: {

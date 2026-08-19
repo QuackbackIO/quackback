@@ -29,7 +29,7 @@ export function AnalyticsTopContributors({ contributors }: TopContributorsProps)
           <Avatar
             src={c.avatarUrl}
             name={c.displayName}
-            className="relative size-5 shrink-0 text-[10px]"
+            className="relative size-5 shrink-0 text-xs"
           />
         ),
         label: c.displayName ?? 'Anonymous',

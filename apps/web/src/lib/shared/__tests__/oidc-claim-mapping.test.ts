@@ -5,10 +5,15 @@ import {
   profileClaimFor,
   roleMappingFor,
   allowsMissingEmail,
-  getClaimByPath,
   type IdentityProviderClaimMapping,
 } from '../oidc-claim-mapping'
 
+/**
+ * The sectioned `claim_mapping` column, read the same way by sign-in and by the
+ * connection test. `attribute_mapping` was the role mapping under a misleading
+ * name; it is now the `role` section here, so there is one place a claim is
+ * turned into meaning rather than three.
+ */
 describe('claimMappingFor', () => {
   it('treats an absent column as "no configuration", not as an error', () => {
     const m = claimMappingFor(null)
@@ -18,6 +23,8 @@ describe('claimMappingFor', () => {
   })
 
   it('ignores a malformed value rather than letting it reach sign-in', () => {
+    // A hand-edited row, or a shape from a future version. Sign-in must not
+    // throw on it; the standard claims are a working fallback.
     expect(claimMappingFor('not an object' as unknown)).toEqual({})
     expect(claimMappingFor(42 as unknown)).toEqual({})
     expect(claimMappingFor([] as unknown)).toEqual({})
@@ -40,6 +47,8 @@ describe('profileClaimFor', () => {
   })
 
   it('treats an empty or whitespace path as unset', () => {
+    // The editor sends '' for a cleared input; that must not become a lookup
+    // for a claim literally named ''.
     const m: IdentityProviderClaimMapping = { profile: { claims: { email: '   ', name: '' } } }
     expect(profileClaimFor(m, 'email')).toBeUndefined()
     expect(profileClaimFor(m, 'name')).toBeUndefined()
@@ -62,6 +71,7 @@ describe('identity sources', () => {
 
 describe('allowsMissingEmail', () => {
   it('is off unless the admin turned it on', () => {
+    // Minting a placeholder is one-way, so it is never the default.
     expect(allowsMissingEmail(null)).toBe(false)
     expect(allowsMissingEmail({})).toBe(false)
     expect(allowsMissingEmail({ profile: {} })).toBe(false)
@@ -91,6 +101,8 @@ describe('roleMappingFor', () => {
   })
 
   it('drops a role section with no usable claim path', () => {
+    // Rules cannot be evaluated without a path, and a half-configured mapping
+    // silently matching nothing is worse than no mapping at all.
     expect(roleMappingFor({ role: { claimPath: '', rules: [] } })).toBeUndefined()
   })
 
@@ -105,28 +117,5 @@ describe('roleMappingFor', () => {
       },
     })
     expect(role?.rules).toEqual([{ whenContains: 'a', role: 'admin' }])
-  })
-})
-
-describe('getClaimByPath', () => {
-  it('prefers an exact key match before treating dots as a path', () => {
-    const claims = { 'https://acme.com/email': 'ns@x.com', contact: { email: 'nested@x.com' } }
-    expect(getClaimByPath(claims, 'https://acme.com/email')).toBe('ns@x.com')
-    expect(getClaimByPath(claims, 'contact.email')).toBe('nested@x.com')
-  })
-})
-
-describe('attributes section', () => {
-  it('reads the map, override, and sync-on-sign-in flags', () => {
-    const m = claimMappingFor({
-      attributes: {
-        map: [{ claimPath: 'department', attributeKey: 'dept' }],
-        overrideExisting: true,
-        syncOnSignIn: true,
-      },
-    })
-    expect(m.attributes?.map).toEqual([{ claimPath: 'department', attributeKey: 'dept' }])
-    expect(m.attributes?.overrideExisting).toBe(true)
-    expect(m.attributes?.syncOnSignIn).toBe(true)
   })
 })

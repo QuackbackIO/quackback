@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 // The sanitizer now resolves `chatImage` src against the app base (trusted-upload
 // check), which reads `config` — provide a valid base (the full env isn't loaded
-// in unit tests). Mirrors the chat-send-service test's config mock.
+// in unit tests). Mirrors the conversation-send-service test's config mock.
 vi.mock('@/lib/server/config', () => ({
   config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
 }))
@@ -569,6 +569,7 @@ describe('sanitizeTiptapContent', () => {
   // Real, round-trip-valid TypeIDs (same fixtures as the parse-embed-url test).
   const EMBED_POST_ID = 'post_01ktjwt5tyf6br9mw521h13n6n'
   const EMBED_CHANGELOG_ID = 'changelog_01ktjwt5tyf6br9mwcz1vskk44'
+  const EMBED_TICKET_ID = 'ticket_01ktjwt5tyf6br9mw521h13n6n'
 
   it('preserves a valid post embed node with kind/id attrs', () => {
     const input = {
@@ -590,6 +591,27 @@ describe('sanitizeTiptapContent', () => {
     const node = result.content!.find((n) => n.type === 'quackbackEmbed')
     expect(node).toBeDefined()
     expect(node!.attrs).toEqual({ kind: 'changelog', id: EMBED_CHANGELOG_ID })
+  })
+
+  it('preserves a valid ticket embed node with kind/id attrs', () => {
+    const input = {
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'ticket', id: EMBED_TICKET_ID } }],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content!.find((n) => n.type === 'quackbackEmbed')
+    expect(node).toBeDefined()
+    expect(node!.attrs).toEqual({ kind: 'ticket', id: EMBED_TICKET_ID })
+  })
+
+  it('neutralizes a ticket embed whose id is not a valid TypeID', () => {
+    const input = {
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'ticket', id: 'not-a-ticket' } }],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content?.find((n) => n.type === 'quackbackEmbed')
+    expect(node?.attrs).toBeUndefined()
   })
 
   it('drops unknown attrs from a valid embed node', () => {
@@ -679,7 +701,7 @@ describe('sanitizeTiptapContent', () => {
   })
 
   // ============================================
-  // Inline chat image sanitization
+  // Inline conversation image sanitization
   // ============================================
 
   it('preserves a chatImage with a same-origin upload src', () => {
@@ -719,6 +741,90 @@ describe('sanitizeTiptapContent', () => {
     const result = sanitizeTiptapContent(input)
     const node = result.content!.find((n) => n.type === 'chatImage')
     expect(node!.attrs!.src).toBe('')
+  })
+
+  // ============================================
+  // restrictImagesToTrustedOrigins — the chatImage guard, opted into for
+  // image/resizableImage on visitor-authored content
+  // ============================================
+
+  it('keeps an external resizableImage src by default (agent-authored content)', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/shot.png', alt: 'x' } },
+      ],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content!.find((n) => n.type === 'resizableImage')
+    expect(node!.attrs!.src).toBe('https://cdn.example.com/shot.png')
+  })
+
+  it('strips an external resizableImage src under restrictImagesToTrustedOrigins', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        { type: 'resizableImage', attrs: { src: 'https://evil.example.com/track.gif', alt: 'x' } },
+        { type: 'image', attrs: { src: 'https://evil.example.com/pixel.png', alt: 'y' } },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, { restrictImagesToTrustedOrigins: true })
+    const resizable = result.content!.find((n) => n.type === 'resizableImage')
+    const image = result.content!.find((n) => n.type === 'image')
+    expect(resizable!.attrs!.src).toBe('')
+    expect(image!.attrs!.src).toBe('')
+  })
+
+  it('keeps a same-origin upload resizableImage src under restrictImagesToTrustedOrigins', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'resizableImage',
+          attrs: {
+            src: '/api/storage/chat-images/photo.png',
+            alt: 'ok',
+            width: 320,
+            'data-keep-ratio': true,
+          },
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, { restrictImagesToTrustedOrigins: true })
+    const node = result.content!.find((n) => n.type === 'resizableImage')
+    expect(node!.attrs!.src).toBe('/api/storage/chat-images/photo.png')
+    expect(node!.attrs!.width).toBe(320)
+    expect(node!.attrs!['data-keep-ratio']).toBe(true)
+  })
+
+  it('restricts images inside nested structures too (list item)', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: 'see:' }],
+                },
+                {
+                  type: 'resizableImage',
+                  attrs: { src: 'https://evil.example.com/deep.gif', alt: 'x' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, { restrictImagesToTrustedOrigins: true })
+    const list = result.content!.find((n) => n.type === 'bulletList')
+    const img = list!.content![0].content!.find((n) => n.type === 'resizableImage')
+    expect(img!.attrs!.src).toBe('')
   })
 
   it('strips a data:image/svg+xml src on a chatImage', () => {
@@ -769,6 +875,125 @@ describe('sanitizeTiptapContent', () => {
     expect((node!.attrs!.alt as string).length).toBe(500)
     expect(node!.attrs!.onerror).toBeUndefined()
     expect(node!.attrs!.class).toBeUndefined()
+  })
+
+  // ============================================
+  // Support-grade preset round-trip (P0.2)
+  // ============================================
+  // The upgraded ticket/conversation composers emit this full node set. Each
+  // case is a true round-trip (sanitize(doc) deep-equals doc) so a future
+  // gap in the allowlist regresses loudly instead of silently dropping content.
+
+  it('round-trips a codeBlock with its language attr and text content', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'codeBlock',
+          attrs: { language: 'bash' },
+          content: [{ type: 'text', text: 'curl https://example.com' }],
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
+  })
+
+  it('round-trips a resizableImage with src/width/height/data-keep-ratio', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'resizableImage',
+          attrs: {
+            src: 'https://example.com/photo.png',
+            alt: 'A photo',
+            width: 400,
+            height: 300,
+            'data-keep-ratio': true,
+          },
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
+  })
+
+  it('round-trips a mention with its id/label attrs', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Hey ' },
+            {
+              type: 'mention',
+              attrs: { id: 'user_01ktjwt5tyf6br9mw521h13n6n', label: 'Jane Doe' },
+            },
+          ],
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
+  })
+
+  it('round-trips the full support-grade node set unchanged', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Hey ' },
+            {
+              type: 'mention',
+              attrs: { id: 'user_01ktjwt5tyf6br9mw521h13n6n', label: 'Jane Doe' },
+            },
+            { type: 'text', text: ', see ' },
+            {
+              type: 'text',
+              text: 'this',
+              marks: [
+                {
+                  type: 'link',
+                  attrs: {
+                    href: 'https://example.com/path',
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                  },
+                },
+              ],
+            },
+            { type: 'text', text: ' ' },
+            { type: 'emoji', attrs: { name: 'smile', emoji: '😄' } },
+          ],
+        },
+        {
+          type: 'codeBlock',
+          attrs: { language: 'bash' },
+          content: [{ type: 'text', text: 'curl https://example.com' }],
+        },
+        {
+          type: 'resizableImage',
+          attrs: {
+            src: 'https://example.com/photo.png',
+            alt: 'A photo',
+            width: 400,
+            height: 300,
+            'data-keep-ratio': true,
+          },
+        },
+        {
+          type: 'chatImage',
+          attrs: { src: '/api/storage/chat-images/photo.png', alt: 'A screenshot' },
+        },
+        { type: 'quackbackEmbed', attrs: { kind: 'post', id: EMBED_POST_ID } },
+        {
+          type: 'blockquote',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A quote' }] }],
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
   })
 
   it('caps total node count (doc-bomb protection)', () => {

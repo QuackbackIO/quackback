@@ -29,18 +29,26 @@ import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn, getInitials } from '@/lib/shared/utils'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
-import type { PostId, StatusId } from '@quackback/ids'
+import { AuthorHoverCard } from '@/components/public/author-hover-card'
+import type { PostId, PostStatusId, PrincipalId } from '@quackback/ids'
 
 interface PostCardProps {
   id: PostId
   title: string
   content: string | null
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   statuses: PostStatusEntity[]
   voteCount: number
   commentCount: number
   authorName: string | null
   authorAvatarUrl?: string | null
+  /**
+   * Author's principal id. When present in portal (Link) mode, the author
+   * name/avatar link to the public profile with a lazy hover card. Omit (or
+   * null) for anonymous authors without a resolvable profile. Ignored in admin
+   * (onClick) mode — admin rendering is unchanged.
+   */
+  authorPrincipalId?: PrincipalId | null
   createdAt: Date | string
   boardSlug: string
   tags: { id: string; name: string; color?: string }[]
@@ -70,10 +78,15 @@ interface PostCardProps {
   onDelete?: () => void
 
   // Admin mode props
-  /** Enable admin mode with editable status */
+  /**
+   * Render the status badge as an editable dropdown. Independent of admin
+   * mode (which is driven by `onClick`): the portal passes this to let team
+   * members with `post.set_status` change status inline while keeping Link
+   * navigation and the author quick-actions.
+   */
   canChangeStatus?: boolean
   /** Callback when status changes (required if canChangeStatus) */
-  onStatusChange?: (statusId: StatusId) => void
+  onStatusChange?: (statusId: PostStatusId) => void
   /** Whether status update is in progress */
   isUpdatingStatus?: boolean
   /** Use onClick instead of Link navigation */
@@ -97,6 +110,7 @@ export function PostCard({
   commentCount,
   authorName,
   authorAvatarUrl,
+  authorPrincipalId,
   createdAt,
   boardSlug,
   tags,
@@ -121,7 +135,12 @@ export function PostCard({
   // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
   const intl = useIntl()
   const authPopover = useAuthPopoverSafe()
-  const isAdminMode = canChangeStatus || !!onClick
+  // "Admin mode" here means the inbox list rendering: modal-style navigation
+  // (onClick instead of a Link) plus the admin quick-actions overlay. It is
+  // deliberately NOT tied to canChangeStatus: the public portal grants status
+  // editing to team members via canChangeStatus while keeping Link navigation
+  // and the author quick-actions (edit/delete), so the two concerns are split.
+  const isAdminMode = !!onClick
   const currentStatus = statuses.find((s) => s.id === statusId)
   const createdAtDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
 
@@ -291,7 +310,15 @@ export function PostCard({
       {/* More actions */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 hover:bg-muted/50"
+            aria-label={intl.formatMessage({
+              id: 'portal.postCard.quickActions.open',
+              defaultMessage: 'Open post actions',
+            })}
+          >
             <EllipsisHorizontalIcon className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -411,6 +438,39 @@ export function PostCard({
     </div>
   )
 
+  // Author meta (avatar + name). In portal (Link) mode with a resolvable
+  // principal, it links to the public profile behind a lazy hover card; in
+  // admin (onClick) mode it stays inert so admin rendering is unchanged.
+  const authorFallback = intl.formatMessage({
+    id: 'portal.postCard.authorFallback',
+    defaultMessage: 'Anonymous',
+  })
+  const authorInner = (
+    <>
+      {showAvatar && (
+        <Avatar className="h-5 w-5">
+          {authorAvatarUrl && (
+            <AvatarImage src={authorAvatarUrl} alt={authorName || authorFallback} />
+          )}
+          <AvatarFallback className="bg-muted text-xs">{getInitials(authorName)}</AvatarFallback>
+        </Avatar>
+      )}
+      <span className={showAvatar ? '' : 'text-foreground/80'}>{authorName || authorFallback}</span>
+    </>
+  )
+  const authorMeta =
+    !isAdminMode && authorPrincipalId ? (
+      <AuthorHoverCard
+        principalId={authorPrincipalId}
+        displayName={authorName}
+        className="inline-flex items-center gap-2 text-muted-foreground"
+      >
+        {authorInner}
+      </AuthorHoverCard>
+    ) : (
+      authorInner
+    )
+
   // Main content
   const cardContent = (
     <div className="flex items-start p-4 gap-4">
@@ -437,7 +497,7 @@ export function PostCard({
             {tags.slice(0, 3).map((tag) => (
               <span
                 key={tag.id}
-                className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium"
+                className="inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium"
                 style={{
                   backgroundColor: tag.color + '20',
                   color: tag.color,
@@ -447,39 +507,14 @@ export function PostCard({
               </span>
             ))}
             {tags.length > 3 && (
-              <span className="text-[10px] text-muted-foreground/60">+{tags.length - 3}</span>
+              <span className="text-xs text-muted-foreground/60">+{tags.length - 3}</span>
             )}
           </div>
         )}
 
         {/* Meta row */}
         <div className="flex items-center text-muted-foreground gap-2 text-xs mt-2.5">
-          {showAvatar && (
-            <Avatar className="h-5 w-5">
-              {authorAvatarUrl && (
-                <AvatarImage
-                  src={authorAvatarUrl}
-                  alt={
-                    authorName ||
-                    intl.formatMessage({
-                      id: 'portal.postCard.authorFallback',
-                      defaultMessage: 'Anonymous',
-                    })
-                  }
-                />
-              )}
-              <AvatarFallback className="bg-muted text-[10px]">
-                {getInitials(authorName)}
-              </AvatarFallback>
-            </Avatar>
-          )}
-          <span className={showAvatar ? '' : 'text-foreground/80'}>
-            {authorName ||
-              intl.formatMessage({
-                id: 'portal.postCard.authorFallback',
-                defaultMessage: 'Anonymous',
-              })}
-          </span>
+          {authorMeta}
           <span className="text-muted-foreground/40">·</span>
           <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
           {commentCount > 0 && (

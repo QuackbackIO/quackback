@@ -1,80 +1,37 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PrincipalId, UserId } from '@quackback/ids'
+import { createId, type UserId } from '@quackback/ids'
+import {
+  operations,
+  mockTransaction,
+  opsFor,
+  resetDbMockState,
+} from '@/lib/server/__tests__/principal-merge-db-mock'
 
-// ── Mock DB ────────────────────────────────────────────────────────────
-// Track all operations in order so we can verify the merge sequence
-const operations: string[] = []
+// Pure-orchestration pins that a rolled-back real-DB run cannot observe:
+// transaction wrapping, teardown ordering masked by CASCADE, and option
+// branches. Row movement, SQL validity, and constraint semantics live in
+// merge-anonymous.db.test.ts (real DB); per-step registry behavior lives in
+// principals/__tests__/principal-repoint.test.ts.
+vi.mock('@/lib/server/db', async () =>
+  (await import('@/lib/server/__tests__/principal-merge-db-mock')).mockDbModule()
+)
 
-const mockSelectWhere = vi.fn()
-const mockSelectFrom = vi.fn(() => ({ where: mockSelectWhere }))
-const mockSelect = vi.fn(() => ({ from: mockSelectFrom }))
-
-const mockDeleteWhere = vi.fn()
-const mockDelete = vi.fn((_table?: unknown) => ({ where: mockDeleteWhere }))
-
-const mockUpdateWhere = vi.fn()
-const mockUpdateSet = vi.fn((_values?: unknown) => ({ where: mockUpdateWhere }))
-const mockUpdate = vi.fn((_table?: unknown) => ({ set: mockUpdateSet }))
-
-// The transaction function just calls the callback with itself (same API)
-const mockTx = {
-  select: (..._args: unknown[]) => {
-    mockSelect()
-    return { from: mockSelectFrom }
-  },
-  delete: (table: { __name?: string }) => {
-    operations.push(`delete:${table.__name || 'unknown'}`)
-    mockDelete(table)
-    return { where: mockDeleteWhere }
-  },
-  update: (table: { __name?: string }) => {
-    operations.push(`update:${table.__name || 'unknown'}`)
-    mockUpdate(table)
-    return { set: mockUpdateSet }
-  },
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockTransaction = vi.fn(async (fn: any) => fn(mockTx))
-
-vi.mock('@/lib/server/db', () => ({
-  db: {
-    transaction: (fn: unknown) => mockTransaction(fn),
-  },
-  votes: { principalId: 'principalId', postId: 'postId', __name: 'votes' },
-  comments: { principalId: 'principalId', id: 'id', __name: 'comments' },
-  posts: { principalId: 'principalId', __name: 'posts' },
-  conversations: {
-    visitorPrincipalId: 'visitorPrincipalId',
-    __name: 'conversations',
-  },
-  chatMessages: { principalId: 'principalId', __name: 'chatMessages' },
-  postSubscriptions: { principalId: 'principalId', postId: 'postId', __name: 'postSubscriptions' },
-  inAppNotifications: {
-    principalId: 'principalId',
-    commentId: 'commentId',
-    title: 'title',
-    __name: 'inAppNotifications',
-  },
-  principal: { id: 'id', userId: 'userId', __name: 'principal' },
-  session: { userId: 'userId', __name: 'session' },
-  user: { id: 'id', __name: 'user' },
-  eq: vi.fn((...args: unknown[]) => ({ _type: 'eq', args })),
-  and: vi.fn((...args: unknown[]) => ({ _type: 'and', args })),
-  inArray: vi.fn((...args: unknown[]) => ({ _type: 'inArray', args })),
-  sql: Object.assign(
-    (strings: TemplateStringsArray, ...values: unknown[]) => ({ _type: 'sql', strings, values }),
-    { raw: (s: string) => ({ _type: 'sql_raw', value: s }) }
-  ),
+vi.mock('@/lib/server/redis', () => ({
+  cacheDel: vi.fn(),
+  CACHE_KEYS: { PRINCIPAL_BY_USER: (id: string) => `principal:user:${id}` },
 }))
 
-import { mergeAnonymousToIdentified } from '../merge-anonymous'
+import { mergeAnonymousToIdentified, absorbSignupIntoAnonymous } from '../merge-anonymous'
+
+const ANON_PRINCIPAL_ID = createId('principal')
+const TARGET_PRINCIPAL_ID = createId('principal')
+const ANON_USER_ID = 'user_anon' as UserId
+
+beforeEach(() => {
+  resetDbMockState()
+})
 
 describe('mergeAnonymousToIdentified', () => {
-  const ANON_PRINCIPAL_ID = 'principal_anon' as PrincipalId
-  const TARGET_PRINCIPAL_ID = 'principal_target' as PrincipalId
-  const ANON_USER_ID = 'user_anon' as UserId
-
   const defaultParams = {
     anonPrincipalId: ANON_PRINCIPAL_ID,
     targetPrincipalId: TARGET_PRINCIPAL_ID,
@@ -83,137 +40,64 @@ describe('mergeAnonymousToIdentified', () => {
     targetDisplayName: 'Jane Doe',
   }
 
-  beforeEach(() => {
-    vi.clearAllMocks()
-    operations.length = 0
-    // Default: no existing votes, no comments, no subscriptions
-    mockSelectWhere.mockResolvedValue([])
-    mockDeleteWhere.mockResolvedValue(undefined)
-    mockUpdateWhere.mockResolvedValue(undefined)
-  })
-
-  it('runs the merge inside a database transaction', async () => {
+  it('runs the merge inside a single database transaction', async () => {
     await mergeAnonymousToIdentified(defaultParams)
     expect(mockTransaction).toHaveBeenCalledTimes(1)
   })
 
-  it('transfers votes from anonymous to target principal', async () => {
+  it('passes display names through so the notification title fixup runs', async () => {
     await mergeAnonymousToIdentified(defaultParams)
 
-    // Should update votes table
-    expect(operations).toContain('update:votes')
-  })
-
-  it('deletes conflicting votes before transfer', async () => {
-    // Target user already voted on post_1
-    mockSelectWhere.mockResolvedValueOnce([{ postId: 'post_1' }])
-
-    await mergeAnonymousToIdentified(defaultParams)
-
-    // Should delete conflicting anon votes before updating
-    const voteOps = operations.filter((op) => op.includes('votes'))
-    expect(voteOps).toEqual(['delete:votes', 'update:votes'])
-  })
-
-  it('skips conflict deletion when target has no existing votes', async () => {
-    // No existing votes for target
-    mockSelectWhere.mockResolvedValueOnce([])
-
-    await mergeAnonymousToIdentified(defaultParams)
-
-    // The first votes operation should be update (no delete needed)
-    const firstVoteOp = operations.find((op) => op.includes('votes'))
-    expect(firstVoteOp).toBe('update:votes')
-  })
-
-  it('transfers comments from anonymous to target principal', async () => {
-    await mergeAnonymousToIdentified(defaultParams)
-    expect(operations).toContain('update:comments')
-  })
-
-  it('transfers posts from anonymous to target principal', async () => {
-    await mergeAnonymousToIdentified(defaultParams)
-    expect(operations).toContain('update:posts')
-  })
-
-  it('re-points chat conversations + messages before deleting the principal', async () => {
-    // conversations.visitor_principal_id and chat_messages.principal_id are
-    // ON DELETE RESTRICT, so the anon-principal delete would throw if the chat
-    // rows were not transferred first. This pins that ordering.
-    await mergeAnonymousToIdentified(defaultParams)
-
-    expect(operations).toContain('update:conversations')
-    expect(operations).toContain('update:chatMessages')
-
-    const principalIdx = operations.indexOf('delete:principal')
-    expect(operations.indexOf('update:conversations')).toBeLessThan(principalIdx)
-    expect(operations.indexOf('update:chatMessages')).toBeLessThan(principalIdx)
-  })
-
-  it('transfers post subscriptions with conflict handling', async () => {
-    // Target already subscribed to post_2
-    mockSelectWhere
-      .mockResolvedValueOnce([]) // votes query
-      .mockResolvedValueOnce([]) // comments query
-      .mockResolvedValueOnce([{ postId: 'post_2' }]) // subscriptions query
-
-    await mergeAnonymousToIdentified(defaultParams)
-
-    const subOps = operations.filter((op) => op.includes('postSubscriptions'))
-    // Should delete conflicting subs, then update remaining
-    expect(subOps).toEqual(['delete:postSubscriptions', 'update:postSubscriptions'])
-  })
-
-  it('transfers in-app notifications', async () => {
-    await mergeAnonymousToIdentified(defaultParams)
-    expect(operations).toContain('update:inAppNotifications')
-  })
-
-  it('deletes self-notifications for transferred comments', async () => {
-    // Anonymous user has comments
-    mockSelectWhere
-      .mockResolvedValueOnce([]) // votes query
-      .mockResolvedValueOnce([{ id: 'comment_1' }, { id: 'comment_2' }]) // comments query
-
-    await mergeAnonymousToIdentified(defaultParams)
-
-    // Should delete self-notifications (where recipient = target principal + commentId in anon comments)
-    const notifOps = operations.filter((op) => op.includes('inAppNotifications'))
-    // delete self-notifs, update titles, update principalId
-    expect(
-      notifOps.filter((op) => op === 'delete:inAppNotifications').length
-    ).toBeGreaterThanOrEqual(1)
-  })
-
-  it('cleans up anonymous principal, sessions, and user', async () => {
-    await mergeAnonymousToIdentified(defaultParams)
-
-    expect(operations).toContain('delete:principal')
-    expect(operations).toContain('delete:session')
-    expect(operations).toContain('delete:user')
+    // Three ops = self-notification delete, title rewrite, re-point. The
+    // rewrite only runs when the orchestrator forwards displayNames; the
+    // registry-level branches are pinned in principal-repoint.test.ts.
+    expect(opsFor('in_app_notifications')).toEqual([
+      'delete:in_app_notifications',
+      'update:in_app_notifications',
+      'update:in_app_notifications',
+    ])
   })
 
   it('deletes principal before sessions and user', async () => {
+    // Not observable on a real DB: deleting the user first would CASCADE the
+    // principal away and leave the same end state, so the ordering (principal
+    // references userId) is pinned here on the ops log.
     await mergeAnonymousToIdentified(defaultParams)
 
     const principalIdx = operations.indexOf('delete:principal')
     const sessionIdx = operations.indexOf('delete:session')
     const userIdx = operations.indexOf('delete:user')
 
-    // Principal must be deleted first (it references userId)
     expect(principalIdx).toBeLessThan(sessionIdx)
     expect(principalIdx).toBeLessThan(userIdx)
   })
+})
 
-  it('handles anonymous user with no activity gracefully', async () => {
-    // All queries return empty
-    mockSelectWhere.mockResolvedValue([])
+describe('absorbSignupIntoAnonymous', () => {
+  const NEW_USER_ID = 'user_new' as UserId
+  const NEW_PRINCIPAL_ID = createId('principal')
 
-    await mergeAnonymousToIdentified(defaultParams)
+  const defaultParams = {
+    anonUserId: ANON_USER_ID,
+    anonPrincipalId: ANON_PRINCIPAL_ID,
+    newUserId: NEW_USER_ID,
+    newUserPrincipalId: NEW_PRINCIPAL_ID,
+    name: 'Jane Doe',
+    email: 'jane@example.com',
+    image: null,
+    displayName: 'Jane Doe',
+  }
 
-    // Should still clean up the anonymous records
-    expect(operations).toContain('delete:principal')
-    expect(operations).toContain('delete:session')
+  it('runs inside a single transaction', async () => {
+    await absorbSignupIntoAnonymous(defaultParams)
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the registry when the new user never got a principal', async () => {
+    await absorbSignupIntoAnonymous({ ...defaultParams, newUserPrincipalId: null })
+
+    expect(operations).not.toContain('update:post_votes')
+    expect(operations).not.toContain('delete:principal')
     expect(operations).toContain('delete:user')
   })
 })

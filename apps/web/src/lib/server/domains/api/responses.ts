@@ -157,7 +157,7 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   BOARD_NOT_FOUND: 'Board',
   POST_NOT_FOUND: 'Post',
   COMMENT_NOT_FOUND: 'Comment',
-  TAG_NOT_FOUND: 'Tag',
+  TAG_NOT_FOUND: 'PostTag',
   STATUS_NOT_FOUND: 'Status',
   MEMBER_NOT_FOUND: 'Member',
   USER_NOT_FOUND: 'User',
@@ -169,7 +169,10 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   SEGMENT_NOT_FOUND: 'Segment',
   WEBHOOK_NOT_FOUND: 'Webhook',
   PRINCIPAL_NOT_FOUND: 'User',
-  POST_NOT_IN_ROADMAP: 'Post in roadmap',
+  STATUS_COMPONENT_NOT_FOUND: 'Status component',
+  STATUS_GROUP_NOT_FOUND: 'Status component group',
+  STATUS_INCIDENT_NOT_FOUND: 'Status incident',
+  STATUS_TEMPLATE_NOT_FOUND: 'Status incident template',
 }
 
 /**

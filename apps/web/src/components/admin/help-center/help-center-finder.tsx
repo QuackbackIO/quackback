@@ -22,6 +22,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { HelpCenterListItem } from './help-center-list-item'
+import { ArticlePerformanceTable } from './article-performance-table'
+import { SearchTermsTable } from './search-terms-table'
 import { CreateArticleDialog } from './create-article-dialog'
 import type { CategoryActions } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
@@ -34,7 +36,7 @@ import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { TimeAgo } from '@/components/ui/time-ago'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { KbArticleId } from '@quackback/ids'
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
@@ -60,8 +62,8 @@ function HelpCenterListSkeleton() {
 }
 
 interface HelpCenterFinderProps {
-  onEditArticle: (id: HelpCenterArticleId) => void
-  onDeleteArticle: (id: HelpCenterArticleId) => void
+  onEditArticle: (id: KbArticleId) => void
+  onDeleteArticle: (id: KbArticleId) => void
   categoryActions: CategoryActions
 }
 
@@ -70,6 +72,17 @@ export function HelpCenterFinder(props: HelpCenterFinderProps) {
 
   if (search.deleted) {
     return <DeletedItemsView />
+  }
+
+  if (search.performance) {
+    return (
+      <div className="max-w-5xl w-full mx-auto">
+        <ArticlePerformanceTable />
+        <div className="px-3 pb-4 -mt-2">
+          <SearchTermsTable />
+        </div>
+      </div>
+    )
   }
 
   return <LiveHelpCenterFinder {...props} />
@@ -150,7 +163,7 @@ function LiveHelpCenterFinder({
     : 'Recent articles'
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       <AdminListHeader
         searchValue={searchValue}
         onSearchChange={setSearchValue}
@@ -180,7 +193,7 @@ function LiveHelpCenterFinder({
       <div className="px-3 pb-4 space-y-3">
         <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {articleListTitle}
             </span>
             {!isLoading && articles.length > 0 && (
@@ -206,7 +219,12 @@ function LiveHelpCenterFinder({
                       ? 'No articles match your filters'
                       : currentCategory
                         ? 'No articles in this category yet'
-                        : 'No articles yet'
+                        : 'Write your first article'
+                }
+                description={
+                  !filters.search && !hasActiveFilters && !currentCategory
+                    ? 'Answers customers can find without opening a ticket.'
+                    : undefined
                 }
                 action={
                   hasActiveFilters ? (
@@ -232,7 +250,7 @@ function LiveHelpCenterFinder({
                   style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
                 >
                   <HelpCenterListItem
-                    id={article.id as HelpCenterArticleId}
+                    id={article.id as KbArticleId}
                     title={article.title}
                     description={article.description}
                     content={article.content}
@@ -289,7 +307,7 @@ function DeletedItemsView() {
   const restoreArticleMutation = useRestoreArticle()
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       <AdminListHeader searchValue="" onSearchChange={() => {}} searchPlaceholder="Deleted items" />
 
       <div className="px-3 pb-3 flex items-center justify-between">
@@ -298,7 +316,7 @@ function DeletedItemsView() {
 
       {/* Deleted categories */}
       <section className="px-3 pb-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           Deleted categories
         </h2>
         {categoriesLoading ? (
@@ -341,7 +359,7 @@ function DeletedItemsView() {
 
       {/* Deleted articles */}
       <section className="px-3 pb-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           Deleted articles
         </h2>
         {articlesLoading ? (
@@ -368,7 +386,7 @@ function DeletedItemsView() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => restoreArticleMutation.mutate(article.id as HelpCenterArticleId)}
+                  onClick={() => restoreArticleMutation.mutate(article.id as KbArticleId)}
                   disabled={restoreArticleMutation.isPending}
                 >
                   <ArrowUturnLeftIcon className="h-3.5 w-3.5 mr-1" />

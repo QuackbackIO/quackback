@@ -5,7 +5,7 @@ const log = logger.child({ component: 'settings-utils' })
 import {
   getSettingsLogoData,
   getSettingsHeaderLogoData,
-  getSettingsBrandingData,
+  getSettingsPortalOgImageData,
   getSettingsFaviconData,
 } from '@/lib/server/settings-utils'
 
@@ -35,14 +35,16 @@ export const fetchSettingsHeaderLogoData = createServerFn({ method: 'GET' }).han
 })
 
 /**
- * Fetch branding data for settings (logo, favicon, header logo, etc.)
+ * Fetch portal OG image data for settings
  */
-export const fetchSettingsBrandingData = createServerFn({ method: 'GET' }).handler(async () => {
-  log.debug('fetching settings branding data')
-  const data = await getSettingsBrandingData()
-  log.debug('settings branding data fetched')
-  return data
-})
+export const fetchSettingsPortalOgImageData = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    log.debug('fetching settings portal og image data')
+    const data = await getSettingsPortalOgImageData()
+    log.debug({ has_og_image: !!data }, 'settings portal og image data fetched')
+    return data
+  }
+)
 
 /**
  * Fetch favicon data for settings

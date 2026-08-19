@@ -55,7 +55,7 @@ const feedbackTitles = [
   'Bulk import from spreadsheet',
   'Export data to JSON',
   'Import from Trello',
-  'Import from Canny',
+  'Import from our old feedback tool',
   'Weekly digest email export',
   'Automated backups',
 

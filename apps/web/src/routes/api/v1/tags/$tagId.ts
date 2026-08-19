@@ -8,7 +8,8 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
-import type { TagId } from '@quackback/ids'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { PostTagId } from '@quackback/ids'
 
 // Input validation schema
 const updateTagSchema = z.object({
@@ -29,11 +30,11 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
-          const tagId = parseTypeId<TagId>(params.tagId, 'tag', 'tag ID')
+          const tagId = parseTypeId<PostTagId>(params.tagId, 'post_tag', 'tag ID')
 
-          const { getTagById } = await import('@/lib/server/domains/tags/tag.service')
+          const { getTagById } = await import('@/lib/server/domains/post-tags/post-tag.service')
 
           const tag = await getTagById(tagId)
 
@@ -55,9 +56,9 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.TAG_MANAGE })
 
-          const tagId = parseTypeId<TagId>(params.tagId, 'tag', 'tag ID')
+          const tagId = parseTypeId<PostTagId>(params.tagId, 'post_tag', 'tag ID')
 
           const body = await request.json()
           const parsed = updateTagSchema.safeParse(body)
@@ -68,9 +69,9 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
             })
           }
 
-          const { updateTag } = await import('@/lib/server/domains/tags/tag.service')
+          const { updatePostTag } = await import('@/lib/server/domains/post-tags/post-tag.service')
 
-          const tag = await updateTag(tagId, {
+          const tag = await updatePostTag(tagId, {
             name: parsed.data.name,
             color: parsed.data.color,
             description: parsed.data.description,
@@ -94,13 +95,13 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.TAG_MANAGE })
 
-          const tagId = parseTypeId<TagId>(params.tagId, 'tag', 'tag ID')
+          const tagId = parseTypeId<PostTagId>(params.tagId, 'post_tag', 'tag ID')
 
-          const { deleteTag } = await import('@/lib/server/domains/tags/tag.service')
+          const { deletePostTag } = await import('@/lib/server/domains/post-tags/post-tag.service')
 
-          await deleteTag(tagId)
+          await deletePostTag(tagId)
 
           return noContentResponse()
         } catch (error) {

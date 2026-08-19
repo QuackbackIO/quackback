@@ -14,6 +14,8 @@ import {
 } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { allowDecision, denyDecision, isTeamActor, type Actor, type Decision } from './types'
+import { can } from './authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { canViewBoard, boardViewFilter } from './boards'
 import { tierAllows } from './access'
 import { resolveWorkspaceModeration, type ModerationAxis } from '@/lib/shared/moderation-policy'
@@ -67,7 +69,8 @@ export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): D
   const boardDecision = canViewBoard(actor, board)
   if (!boardDecision.allowed) return boardDecision
 
-  if (isTeam(actor)) {
+  // Seeing unpublished / private posts is the post.view_private capability.
+  if (can(actor, PERMISSIONS.POST_VIEW_PRIVATE)) {
     return post.moderationState === 'deleted' ? denyDecision('Post was removed') : allowDecision()
   }
 
@@ -88,7 +91,7 @@ export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): D
  * `isNull(posts.deletedAt)` from existing list queries — never replaces it.
  */
 export function postViewFilter(actor: Actor): SQL {
-  if (isTeam(actor)) {
+  if (can(actor, PERMISSIONS.POST_VIEW_PRIVATE)) {
     return sql`${posts.moderationState} <> 'deleted'`
   }
   const principalIdParam: string | null = actor.principalId ?? null

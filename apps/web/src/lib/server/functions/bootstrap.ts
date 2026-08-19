@@ -1,5 +1,7 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
+import type { Role } from '@/lib/shared/roles'
 import { getThemeCookie, parsePrefersColorScheme, type Theme } from '@/lib/shared/theme'
+import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
@@ -12,7 +14,7 @@ export interface BootstrapData {
   baseUrl: string
   session: Session | null
   settings: TenantSettings | null
-  userRole: 'admin' | 'member' | 'user' | null
+  userRole: Role | null
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
    *  hint, used by the root document to resolve a `system` theme during SSR so
@@ -33,6 +35,11 @@ export interface BootstrapData {
    *  root document to set `<html lang>`/`dir` during SSR. Resolved here so it
    *  rides the bootstrap request without a separate round-trip. */
   acceptLanguageLocale: SupportedLocale
+  /** Version string the admin update banner was dismissed for, read from the
+   *  `update_banner_dismissed_version` cookie, or null if never dismissed.
+   *  Threaded into the admin route the same way `themeCookie` is, so the
+   *  banner renders in its final expanded/collapsed state on first paint. */
+  updateBannerDismissedVersion: string | null
 }
 
 // Returns both the session (with principalType) AND the user role in
@@ -41,7 +48,7 @@ export interface BootstrapData {
 // page render for authenticated users.
 async function getSessionAndRole(): Promise<{
   session: Session | null
-  role: 'admin' | 'member' | 'user' | null
+  role: Role | null
 }> {
   // Fast-path for unauthenticated requests: if there's no Cookie header at
   // all the request can't possibly carry a session token, so we can skip
@@ -90,7 +97,6 @@ async function getSessionAndRole(): Promise<{
         session: {
           id: session.session.id as SessionId,
           expiresAt: session.session.expiresAt.toISOString(),
-          token: session.session.token,
           createdAt: session.session.createdAt.toISOString(),
           updatedAt: session.session.updatedAt.toISOString(),
           userId,
@@ -106,7 +112,7 @@ async function getSessionAndRole(): Promise<{
           updatedAt: session.user.updatedAt.toISOString(),
         },
       },
-      role: (principalRecord?.role as 'admin' | 'member' | 'user' | null) ?? null,
+      role: (principalRecord?.role as Role | null) ?? null,
     }
   } catch (error) {
     // During SSR, auth might fail due to env var issues
@@ -124,11 +130,13 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     { getRegisteredAuthProviders },
     { config },
     { getRequestHeaders, setResponseHeader },
+    { resolveHelpCenterBaseUrl },
   ] = await Promise.all([
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/auth/registered-providers'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
+    import('@/lib/server/domains/help-center/help-center-domain.service'),
   ])
 
   // Single principal read returns both session.principalType + userRole;
@@ -156,6 +164,9 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   const headers = getRequestHeaders()
   const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
+  const updateBannerDismissedVersion = getUpdateBannerDismissedVersionCookie(
+    headers.get('cookie') ?? null
+  )
   const acceptLanguageLocale = resolveLocale(headers.get('accept-language'))
 
   // Advertise the prefers-color-scheme client hint so the browser tells us the
@@ -168,14 +179,25 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   setResponseHeader('Critical-CH', 'Sec-CH-Prefers-Color-Scheme')
   // This document is keyed on every input we render into it: the `theme` cookie
   // (and the session/role embedded in the dehydrated context), Accept-Language
-  // for `<html lang>`/`dir`, and the color-scheme hint. List them all so a
-  // shared cache can never serve e.g. a dark-cookie document to a no-cookie
-  // visitor that happens to share the same hint.
-  setResponseHeader('Vary', 'Cookie, Accept-Language, Sec-CH-Prefers-Color-Scheme')
+  // for `<html lang>`/`dir`, the color-scheme hint, and now Host (below,
+  // baseUrl switches to the help center's verified custom domain when the
+  // request arrives on it). List them all so a shared cache can never serve
+  // e.g. a dark-cookie document to a no-cookie visitor that happens to share
+  // the same hint.
+  setResponseHeader('Vary', 'Cookie, Accept-Language, Sec-CH-Prefers-Color-Scheme, Host')
   const prefersColorScheme = parsePrefersColorScheme(headers.get('sec-ch-prefers-color-scheme'))
 
+  // Canonical URLs switch to the help center's custom domain when the
+  // request actually arrived on it (domains/languages §1) -- everywhere else
+  // (boards, changelog, etc.) this is a no-op and baseUrl is just BASE_URL.
+  const baseUrl = resolveHelpCenterBaseUrl({
+    domainConfig: settings?.helpCenterConfig?.domain,
+    currentHost: headers.get('host'),
+    fallback: config.baseUrl,
+  })
+
   return {
-    baseUrl: config.baseUrl,
+    baseUrl,
     session,
     settings,
     userRole,
@@ -184,17 +206,13 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     managedFieldPaths: settings?.managedFieldPaths ?? [],
     registeredAuthProviders,
     acceptLanguageLocale,
+    updateBannerDismissedVersion,
   }
 })
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BootstrapData> => {
     log.debug('get bootstrap data')
-    try {
-      return await getBootstrapDataInternal()
-    } catch (error) {
-      log.error({ err: error }, 'get bootstrap data failed')
-      throw error
-    }
+    return await getBootstrapDataInternal()
   }
 )

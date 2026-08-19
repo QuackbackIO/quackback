@@ -5,8 +5,16 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Roadmap } from '@/lib/shared/db-types'
-import type { RoadmapId } from '@quackback/ids'
+import type {
+  BoardId,
+  PostStatusId,
+  PostTagId,
+  RoadmapColumnId,
+  RoadmapId,
+  SegmentId,
+} from '@quackback/ids'
+import type { RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
+import type { RoadmapFrequency, RoadmapType, RoadmapVisibility } from '@/lib/shared/roadmap-config'
 import {
   createRoadmapFn,
   updateRoadmapFn,
@@ -23,13 +31,37 @@ interface CreateRoadmapInput {
   name: string
   slug: string
   description?: string
-  isPublic?: boolean
+  type: RoadmapType
+  baseFilter: {
+    statusIds?: PostStatusId[]
+    boardIds?: BoardId[]
+    tagIds?: PostTagId[]
+    segmentIds?: SegmentId[]
+  }
+  frequency: RoadmapFrequency | null
+  visibility: RoadmapVisibility
+  visibleSegmentIds: SegmentId[] | null
+  columns: RoadmapColumnMutationInput[]
+}
+
+interface RoadmapColumnMutationInput {
+  id?: RoadmapColumnId
+  statusId: PostStatusId
+  name: string
+  icon?: string | null
+  color: string
+  position: number
 }
 
 interface UpdateRoadmapInput {
   name?: string
   description?: string
-  isPublic?: boolean
+  type?: RoadmapType
+  baseFilter?: CreateRoadmapInput['baseFilter']
+  frequency?: RoadmapFrequency | null
+  visibility?: RoadmapVisibility
+  visibleSegmentIds?: SegmentId[] | null
+  columns?: RoadmapColumnMutationInput[]
 }
 
 // ============================================================================
@@ -49,9 +81,15 @@ export function useCreateRoadmap() {
           name: input.name,
           slug: input.slug,
           description: input.description,
-          isPublic: input.isPublic,
+          type: input.type,
+          baseFilter: input.baseFilter,
+          dateSource: input.type === 'date' ? 'eta' : null,
+          frequency: input.type === 'date' ? input.frequency : null,
+          visibility: input.visibility,
+          visibleSegmentIds: input.visibleSegmentIds,
+          columns: input.type === 'column' ? input.columns : [],
         },
-      }) as unknown as Promise<Roadmap>,
+      }) as unknown as Promise<RoadmapView>,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },
@@ -71,9 +109,15 @@ export function useUpdateRoadmap() {
           id: roadmapId,
           name: input.name,
           description: input.description,
-          isPublic: input.isPublic,
+          type: input.type,
+          baseFilter: input.baseFilter,
+          dateSource: input.type === undefined ? undefined : input.type === 'date' ? 'eta' : null,
+          frequency: input.frequency,
+          visibility: input.visibility,
+          visibleSegmentIds: input.visibleSegmentIds,
+          columns: input.columns,
         },
-      }) as unknown as Promise<Roadmap>,
+      }) as unknown as Promise<RoadmapView>,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roadmapsKeys.list() })
     },

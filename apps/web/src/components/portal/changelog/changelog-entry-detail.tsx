@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { BackLink } from '@/components/ui/back-link'
@@ -19,13 +19,21 @@ interface LinkedPost {
   } | null
 }
 
+interface CategoryBadge {
+  id: string
+  name: string
+  color: string
+}
+
 interface ChangelogEntryDetailProps {
   id: ChangelogId
   title: string
   content: string
   contentJson: TiptapContent | null
   publishedAt: string
+  featuredImageUrl: string | null
   linkedPosts: LinkedPost[]
+  categories?: CategoryBadge[]
 }
 
 function formatDate(iso: string) {
@@ -41,7 +49,9 @@ export function ChangelogEntryDetail({
   content,
   contentJson,
   publishedAt,
+  featuredImageUrl,
   linkedPosts,
+  categories = [],
 }: ChangelogEntryDetailProps) {
   return (
     <article>
@@ -68,8 +78,32 @@ export function ChangelogEntryDetail({
             {formatDate(publishedAt)}
           </time>
 
+          {/* Category labels */}
+          {categories.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {categories.map((category) => (
+                <span
+                  key={category.id}
+                  className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                  style={{ backgroundColor: category.color + '1a', color: category.color }}
+                >
+                  {category.name}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Title */}
           <h1 className="text-3xl font-bold leading-tight">{title}</h1>
+
+          {/* Featured hero image */}
+          {featuredImageUrl && (
+            <img
+              src={featuredImageUrl}
+              alt={title}
+              className="mt-6 w-full rounded-xl border border-border/40 object-cover aspect-[2/1]"
+            />
+          )}
 
           {/* Rich content body */}
           <div className="mt-6">

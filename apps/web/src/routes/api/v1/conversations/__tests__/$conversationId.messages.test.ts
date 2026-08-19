@@ -10,10 +10,10 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/lib/server/domains/api/auth', () => ({
   withApiKeyAuth: (...a: unknown[]) => mockAuth(...a),
 }))
-vi.mock('@/lib/server/domains/chat/chat.service', () => ({
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   assertConversationViewable: (...a: unknown[]) => mockAssert(...a),
 }))
-vi.mock('@/lib/server/domains/chat/chat.query', () => ({
+vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   listMessages: (...a: unknown[]) => mockListMessages(...a),
 }))
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
@@ -32,7 +32,7 @@ const GET = (Route as unknown as { options: RouteOpts }).options.server.handlers
 
 const CONV_ID = 'conversation_01h455vb4pex5vsknk084sn02q'
 const msg = {
-  id: 'chat_msg_1',
+  id: 'conversation_msg_1',
   conversationId: CONV_ID,
   senderType: 'visitor',
   content: 'hi',
@@ -63,7 +63,7 @@ describe('GET /api/v1/conversations/:id/messages', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data[0]).toMatchObject({
-      id: 'chat_msg_1',
+      id: 'conversation_msg_1',
       senderType: 'visitor',
       isInternal: false,
     })

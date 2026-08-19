@@ -26,7 +26,7 @@ vi.mock('@tanstack/react-start', () => ({
       },
       handler(fn: AnyHandler) {
         hoisted.handlers.push(fn)
-        return chain
+        return fn
       },
     }
     return chain
@@ -56,17 +56,14 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
 }))
 
 // --- DB mock: db.update must NOT be called by updateBoardFn ---
-vi.mock('@/lib/server/db', () => ({
+// Spread the real db module so tables/operators stay current; override only what this suite drives.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     update: (...args: unknown[]) => hoisted.mockDbUpdate(...args),
     query: {
       boards: { findFirst: vi.fn() },
     },
-  },
-  settings: {},
-  boards: {
-    id: { __col: 'id' },
-    deletedAt: { __col: 'deletedAt' },
   },
   eq: vi.fn((col: { __col: string }, val: unknown) => ({ kind: 'eq', col: col.__col, val })),
   and: vi.fn((...conds: unknown[]) => ({ kind: 'and', conds })),
@@ -85,15 +82,13 @@ vi.mock('@/lib/server/audit/log', () => ({
   actorFromAuth: vi.fn(),
 }))
 
-// Import after mocks — updateBoardFn is handler #6 (0-indexed) in boards.ts
-// (workspace.ts adds handlers 0-2 before boards.ts adds its own:
-//  3=fetchBoardsFn, 4=fetchBoardFn, 5=createBoardFn, 6=updateBoardFn,
-//  7=deleteBoardFn, 8=createBoardsBatchFn, 9=updateBoardAccessFn)
+// Import after mocks. The mock returns each captured handler directly so this
+// contract does not depend on unrelated server-function registration order.
 import * as boardsModule from '../boards'
 
 function getUpdateBoardFn(): AnyHandler {
   expect(boardsModule).toHaveProperty('updateBoardFn')
-  return hoisted.handlers[6]
+  return boardsModule.updateBoardFn as unknown as AnyHandler
 }
 
 const BOARD_ID = 'board_test_1'

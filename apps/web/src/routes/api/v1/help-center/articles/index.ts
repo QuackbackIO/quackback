@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
   createdResponse,
@@ -68,7 +69,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
           const url = new URL(request.url)
           const { cursor, limit } = parsePaginationParams(url)
@@ -93,7 +94,9 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.HELP_CENTER_MANAGE,
+          })
 
           const body = await request.json()
           const parsed = createArticleBody.safeParse(body)

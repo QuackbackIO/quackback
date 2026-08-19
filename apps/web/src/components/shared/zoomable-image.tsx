@@ -15,7 +15,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * An image thumbnail that opens a zoom/pan lightbox on click. The modal shows
  * just the image (corner X to close) with zoom controls below it; double-click
  * toggles zoom and dragging pans when zoomed in. Shared by the composer
- * attachment tray and sent-message attachments so chat images behave the same
+ * attachment tray and sent-message attachments so conversation images behave the same
  * everywhere.
  */
 export function ZoomableImage({

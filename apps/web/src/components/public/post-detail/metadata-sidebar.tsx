@@ -3,12 +3,9 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
-  ArrowPathIcon,
   CalendarIcon,
   ChevronUpIcon,
   FolderIcon,
-  LinkIcon,
-  MapIcon,
   PlusIcon,
   TagIcon,
   UserIcon,
@@ -23,7 +20,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import { StatusDropdown } from '@/components/shared/status-dropdown'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -33,12 +29,16 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
+import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
-import { VotersAvatarStack } from '@/components/admin/feedback/voters-avatar-stack'
-import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
-import { cn, getInitials } from '@/lib/shared/utils'
+import {
+  VotersAvatarStack,
+  type VotersQuerySource,
+} from '@/components/admin/feedback/voters-avatar-stack'
+import { cn, getInitials, formatMonthYear } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
-import type { PostId, StatusId, TagId, RoadmapId, BoardId } from '@quackback/ids'
+import type { OwnerRef } from '@/lib/server/functions/post-owner-context'
+import type { PostId, PostStatusId, PostTagId, BoardId, PrincipalId } from '@quackback/ids'
 
 export function MetadataSidebarSkeleton({
   variant = 'column',
@@ -81,18 +81,23 @@ function NoneLabel() {
   return <span className="text-sm italic text-muted-foreground">None</span>
 }
 
+/**
+ * Manage-row actions. Every group is optional: a group's controls render only
+ * when its callbacks are provided, so callers can expose exactly the actions
+ * the actor is permitted to perform (the admin modal passes everything).
+ */
 export interface MetadataSidebarManageActions {
-  onMergeOthers: () => void
-  onMergeInto: () => void
-  onToggleLock: () => void
-  isCommentsLocked: boolean
-  isLockPending: boolean
-  onDelete: () => void
-  onRestore: () => void
-  isDeleted: boolean
-  isRestorePending: boolean
-  isMerged: boolean
-  hasDuplicateSignals: boolean
+  onMergeOthers?: () => void
+  onMergeInto?: () => void
+  onToggleLock?: () => void
+  isCommentsLocked?: boolean
+  isLockPending?: boolean
+  onDelete?: () => void
+  onRestore?: () => void
+  isDeleted?: boolean
+  isRestorePending?: boolean
+  isMerged?: boolean
+  hasDuplicateSignals?: boolean
 }
 
 interface ManagePostActionsProps {
@@ -124,7 +129,7 @@ export function ManagePostActions({
       )}
       <TooltipProvider delayDuration={300}>
         <div className="flex items-center gap-0.5">
-          {!actions.isMerged && (
+          {!actions.isMerged && actions.onMergeOthers && actions.onMergeInto && (
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -164,35 +169,37 @@ export function ManagePostActions({
             </DropdownMenu>
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={actions.onToggleLock}
-                disabled={actions.isLockPending}
-                className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
-              >
-                {actions.isCommentsLocked ? (
-                  <IconLock className="h-5 w-5" strokeWidth={1.5} />
-                ) : (
-                  <IconLockOpen className="h-5 w-5" strokeWidth={1.5} />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {actions.isCommentsLocked
-                ? intl.formatMessage({
-                    id: 'portal.postDetail.metadata.unlockComments',
-                    defaultMessage: 'Unlock comments',
-                  })
-                : intl.formatMessage({
-                    id: 'portal.postDetail.metadata.lockComments',
-                    defaultMessage: 'Lock comments',
-                  })}
-            </TooltipContent>
-          </Tooltip>
+          {actions.onToggleLock && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={actions.onToggleLock}
+                  disabled={actions.isLockPending}
+                  className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+                >
+                  {actions.isCommentsLocked ? (
+                    <IconLock className="h-5 w-5" strokeWidth={1.5} />
+                  ) : (
+                    <IconLockOpen className="h-5 w-5" strokeWidth={1.5} />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {actions.isCommentsLocked
+                  ? intl.formatMessage({
+                      id: 'portal.postDetail.metadata.unlockComments',
+                      defaultMessage: 'Unlock comments',
+                    })
+                  : intl.formatMessage({
+                      id: 'portal.postDetail.metadata.lockComments',
+                      defaultMessage: 'Lock comments',
+                    })}
+              </TooltipContent>
+            </Tooltip>
+          )}
 
-          {actions.isDeleted ? (
+          {actions.isDeleted && actions.onRestore ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -211,7 +218,7 @@ export function ManagePostActions({
                 })}
               </TooltipContent>
             </Tooltip>
-          ) : (
+          ) : !actions.isDeleted && actions.onDelete ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -229,7 +236,7 @@ export function ManagePostActions({
                 })}
               </TooltipContent>
             </Tooltip>
-          )}
+          ) : null}
         </div>
       </TooltipProvider>
     </div>
@@ -246,30 +253,35 @@ interface MetadataSidebarProps {
   /** Principal ID of the author (used to link to admin user detail) */
   authorPrincipalId?: string | null
   createdAt: Date
+  /** Target ship date (time-based roadmap); rendered as a "Mar 2027" chip. */
+  eta?: Date | string | null
   tags?: Array<{ id: string; name: string; color: string }>
-  roadmaps?: Array<{ id: string; name: string; slug: string }>
 
-  // Admin mode props (all optional)
-  /** Enable admin mode with editable metadata */
+  // Team/admin mode props (all optional). Each metadata editor renders iff its
+  // callback (and any option list it needs) is provided, so callers can enable
+  // exactly the editors the actor is permitted to use.
+  /** Enable admin-only ambient sections (voters stack, author link to admin) */
   canEdit?: boolean
   /** All available statuses for dropdown */
   allStatuses?: PostStatusEntity[]
   /** All available tags for selection */
   allTags?: Array<{ id: string; name: string; color: string }>
-  /** All available roadmaps for selection */
-  allRoadmaps?: Array<{ id: string; name: string; slug: string }>
   /** Callback when status changes */
-  onStatusChange?: (statusId: StatusId) => Promise<void>
+  onStatusChange?: (statusId: PostStatusId) => Promise<void>
+  /** Callback when the ETA is set (ISO string) or cleared (null) */
+  onEtaChange?: (eta: string | null) => Promise<void>
   /** Callback when tags change */
-  onTagsChange?: (tagIds: TagId[]) => Promise<void>
-  /** Callback when roadmap added */
-  onRoadmapAdd?: (roadmapId: RoadmapId) => Promise<void>
-  /** Callback when roadmap removed */
-  onRoadmapRemove?: (roadmapId: RoadmapId) => Promise<void>
+  onTagsChange?: (tagIds: PostTagId[]) => Promise<void>
   /** All available boards for selection */
   allBoards?: Array<{ id: string; name: string; slug: string }>
   /** Callback when board changes */
   onBoardChange?: (boardId: BoardId) => Promise<void>
+  /** Current post owner (assignee); null when unassigned */
+  owner?: OwnerRef | null
+  /** Team members assignable as owner (for the picker) */
+  ownerCandidates?: OwnerRef[]
+  /** Callback when the owner is set (principal id) or cleared (null) */
+  onOwnerChange?: (ownerId: PrincipalId | null) => Promise<void>
   /** Whether metadata update is in progress */
   isUpdating?: boolean
   /** Hide subscribe section (for admin context) */
@@ -282,16 +294,26 @@ interface MetadataSidebarProps {
   votersAdditionalPostIds?: PostId[]
   /** Hide subscription controls in voters modal */
   votersReadonly?: boolean
+  /**
+   * Render the voters avatar stack + modal (the vote-management tools). The
+   * admin modal passes this in its canEdit context; the portal passes it for
+   * holders of post.vote_on_behalf. Independent of `canEdit` so the tools can
+   * appear on the portal without the admin ambient sections.
+   */
+  showVoters?: boolean
+  /**
+   * Where the voters list is read from (defaults to the admin query inside the
+   * stack). The portal passes its post.vote_on_behalf-gated source.
+   */
+  votersQuery?: VotersQuerySource
+  /** Gate the add-voter member search (people.view). Defaults true. */
+  votersCanAddVoter?: boolean
+  /** Gate the create-new-user add-voter branch (people.manage). Defaults true. */
+  votersCanCreateUser?: boolean
+  /** Extra invalidation after a vote-management mutation (portal query + detail). */
+  onVotersInvalidate?: () => void
   /** Admin manage actions (renders icon row at top of sidebar) */
   manageActions?: MetadataSidebarManageActions
-  /** Feedback source info (if post was created from the feedback pipeline) */
-  feedbackSource?: {
-    sourceType: string
-    authorName: string | null
-    quote: string
-    externalUrl: string | null
-    createdAt: string
-  } | null
 }
 
 export function MetadataSidebar({
@@ -303,33 +325,51 @@ export function MetadataSidebar({
   authorAvatarUrl,
   authorPrincipalId,
   createdAt,
+  eta,
   tags = [],
-  roadmaps = [],
   canEdit = false,
   allStatuses = [],
   allTags = [],
-  allRoadmaps = [],
   onStatusChange,
+  onEtaChange,
   onTagsChange,
-  onRoadmapAdd,
-  onRoadmapRemove,
   allBoards,
   onBoardChange,
+  owner = null,
+  ownerCandidates = [],
+  onOwnerChange,
   isUpdating = false,
   hideSubscribe = false,
   hideVote = false,
   variant = 'column',
   votersAdditionalPostIds,
   votersReadonly = false,
+  showVoters = false,
+  votersQuery,
+  votersCanAddVoter,
+  votersCanCreateUser,
+  onVotersInvalidate,
   manageActions,
-  feedbackSource,
 }: MetadataSidebarProps) {
   const intl = useIntl()
   const [tagOpen, setTagOpen] = useState(false)
-  const [roadmapOpen, setRoadmapOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
-  const [sourceQuoteOpen, setSourceQuoteOpen] = useState(false)
-  const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
+  const [ownerOpen, setOwnerOpen] = useState(false)
+  const [etaOpen, setEtaOpen] = useState(false)
+
+  const etaLabel = formatMonthYear(eta)
+  // Month input value ("YYYY-MM"), derived in UTC to match the stored ETA.
+  const etaMonthValue = eta ? new Date(eta).toISOString().slice(0, 7) : ''
+  const handleEtaChange = async (value: string) => {
+    if (!onEtaChange || !value) return
+    await onEtaChange(new Date(`${value}-01T00:00:00.000Z`).toISOString())
+    setEtaOpen(false)
+  }
+  const handleEtaClear = async () => {
+    if (!onEtaChange) return
+    await onEtaChange(null)
+    setEtaOpen(false)
+  }
 
   // Fetch subscription status for the bell (only in portal mode)
   const { data: sidebarData } = useQuery({
@@ -346,41 +386,28 @@ export function MetadataSidebar({
     reason: null,
   }
 
-  // Computed values for admin mode
+  // Computed values for team/admin mode
   const currentStatus =
-    canEdit && allStatuses.length > 0 ? allStatuses.find((s) => s.id === status?.id) : undefined
+    allStatuses.length > 0 ? allStatuses.find((s) => s.id === status?.id) : undefined
   const availableTags = allTags.filter((t) => !tags.some((pt) => pt.id === t.id))
-  const currentRoadmapIds = roadmaps.map((r) => r.id)
-  const availableRoadmaps = allRoadmaps.filter((r) => !currentRoadmapIds.includes(r.id))
 
   // Handlers for admin mode
-  async function handleTagToggle(tagId: TagId) {
+  async function handleTagToggle(tagId: PostTagId) {
     if (!onTagsChange) return
-    const currentTagIds = tags.map((t) => t.id as TagId)
+    const currentTagIds = tags.map((t) => t.id as PostTagId)
     const newTagIds = currentTagIds.includes(tagId)
       ? currentTagIds.filter((id) => id !== tagId)
       : [...currentTagIds, tagId]
     await onTagsChange(newTagIds)
   }
 
-  async function handleAddTag(tagId: TagId) {
+  async function handleAddTag(tagId: PostTagId) {
     if (!onTagsChange) return
-    const currentTagIds = tags.map((t) => t.id as TagId)
+    const currentTagIds = tags.map((t) => t.id as PostTagId)
     if (!currentTagIds.includes(tagId)) {
       await onTagsChange([...currentTagIds, tagId])
     }
     setTagOpen(false)
-  }
-
-  async function handleAddToRoadmap(roadmapId: RoadmapId) {
-    if (!onRoadmapAdd) return
-    setPendingRoadmapId(roadmapId)
-    try {
-      await onRoadmapAdd(roadmapId)
-    } finally {
-      setPendingRoadmapId(null)
-      setRoadmapOpen(false)
-    }
   }
 
   async function handleBoardChange(boardId: BoardId) {
@@ -395,14 +422,10 @@ export function MetadataSidebar({
     }
   }
 
-  async function handleRemoveFromRoadmap(roadmapId: RoadmapId) {
-    if (!onRoadmapRemove) return
-    setPendingRoadmapId(roadmapId)
-    try {
-      await onRoadmapRemove(roadmapId)
-    } finally {
-      setPendingRoadmapId(null)
-    }
+  async function handleOwnerSelect(ownerId: PrincipalId | null) {
+    setOwnerOpen(false)
+    if (!onOwnerChange || ownerId === (owner?.principalId ?? null)) return
+    await onOwnerChange(ownerId)
   }
 
   const isCard = variant === 'card'
@@ -426,7 +449,9 @@ export function MetadataSidebar({
 
         {manageActions && <div className="border-t border-border/30" />}
 
-        {/* Upvotes */}
+        {/* Upvotes. The voters avatar stack renders under either header when
+            showVoters is set — the admin modal always passes it; the portal
+            passes it for holders of post.vote_on_behalf. */}
         {!hideVote &&
           (canEdit ? (
             <div className="space-y-2">
@@ -444,34 +469,54 @@ export function MetadataSidebar({
                   {voteCount}
                 </span>
               </div>
-              <VotersAvatarStack
-                postId={postId}
-                voteCount={voteCount}
-                votersAdditionalPostIds={votersAdditionalPostIds}
-                votersReadonly={votersReadonly}
-              />
+              {showVoters && (
+                <VotersAvatarStack
+                  postId={postId}
+                  voteCount={voteCount}
+                  votersAdditionalPostIds={votersAdditionalPostIds}
+                  votersReadonly={votersReadonly}
+                  votersQuery={votersQuery}
+                  canAddVoter={votersCanAddVoter}
+                  canCreateUser={votersCanCreateUser}
+                  onVotersInvalidate={onVotersInvalidate}
+                />
+              )}
             </div>
           ) : (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <ChevronUpIcon className="h-4 w-4" />
-                <span>
-                  <FormattedMessage
-                    id="portal.postDetail.metadata.upvotes"
-                    defaultMessage="Upvotes"
-                  />
-                </span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <ChevronUpIcon className="h-4 w-4" />
+                  <span>
+                    <FormattedMessage
+                      id="portal.postDetail.metadata.upvotes"
+                      defaultMessage="Upvotes"
+                    />
+                  </span>
+                </div>
+                {/* Portal mode: interactive vote button with auth + authz.
+                    Don't structurally disable on !canVote — AuthVoteButton renders
+                    the denied state (sign-in prompt or "no access" tooltip). */}
+                <AuthVoteButton
+                  postId={postId}
+                  voteCount={voteCount}
+                  canVote={canVote}
+                  isAuthenticated={isMember}
+                  compact
+                />
               </div>
-              {/* Portal mode: interactive vote button with auth + authz.
-                  Don't structurally disable on !canVote — AuthVoteButton renders
-                  the denied state (sign-in prompt or "no access" tooltip). */}
-              <AuthVoteButton
-                postId={postId}
-                voteCount={voteCount}
-                canVote={canVote}
-                isAuthenticated={isMember}
-                compact
-              />
+              {showVoters && (
+                <VotersAvatarStack
+                  postId={postId}
+                  voteCount={voteCount}
+                  votersAdditionalPostIds={votersAdditionalPostIds}
+                  votersReadonly={votersReadonly}
+                  votersQuery={votersQuery}
+                  canAddVoter={votersCanAddVoter}
+                  canCreateUser={votersCanCreateUser}
+                  onVotersInvalidate={onVotersInvalidate}
+                />
+              )}
             </div>
           ))}
 
@@ -480,7 +525,7 @@ export function MetadataSidebar({
           <span className="text-sm text-muted-foreground">
             <FormattedMessage id="portal.postDetail.metadata.status" defaultMessage="Status" />
           </span>
-          {canEdit && onStatusChange && allStatuses.length > 0 ? (
+          {onStatusChange && allStatuses.length > 0 ? (
             <StatusDropdown
               currentStatus={currentStatus}
               statuses={allStatuses}
@@ -495,6 +540,67 @@ export function MetadataSidebar({
           )}
         </div>
 
+        {/* ETA (time-based roadmap). Read: a "Mar 2027" chip; editor: month picker. */}
+        {(onEtaChange || etaLabel) && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CalendarIcon className="h-4 w-4" />
+              <span>
+                <FormattedMessage id="portal.postDetail.metadata.eta" defaultMessage="ETA" />
+              </span>
+            </div>
+            {onEtaChange ? (
+              <Popover open={etaOpen} onOpenChange={setEtaOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    className={cn(
+                      'text-sm font-medium text-end',
+                      etaLabel ? 'text-foreground' : 'text-muted-foreground/70',
+                      'hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    {etaLabel ??
+                      intl.formatMessage({
+                        id: 'portal.postDetail.metadata.setEta',
+                        defaultMessage: 'Set ETA',
+                      })}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-2 space-y-2" align="end" sideOffset={4}>
+                  <input
+                    type="month"
+                    value={etaMonthValue}
+                    disabled={isUpdating}
+                    onChange={(e) => handleEtaChange(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+                    aria-label={intl.formatMessage({
+                      id: 'portal.postDetail.metadata.eta',
+                      defaultMessage: 'ETA',
+                    })}
+                  />
+                  {etaLabel && (
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={handleEtaClear}
+                      className="w-full text-start text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    >
+                      <FormattedMessage
+                        id="portal.postDetail.metadata.clearEta"
+                        defaultMessage="Clear ETA"
+                      />
+                    </button>
+                  )}
+                </PopoverContent>
+              </Popover>
+            ) : etaLabel ? (
+              <span className="text-sm font-medium text-foreground text-end">{etaLabel}</span>
+            ) : null}
+          </div>
+        )}
+
         {/* Board */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -503,7 +609,7 @@ export function MetadataSidebar({
               <FormattedMessage id="portal.postDetail.metadata.board" defaultMessage="Board" />
             </span>
           </div>
-          {canEdit && onBoardChange && allBoards && allBoards.length > 0 ? (
+          {onBoardChange && allBoards && allBoards.length > 0 ? (
             <Popover open={boardOpen} onOpenChange={setBoardOpen}>
               <PopoverTrigger asChild>
                 <button
@@ -548,6 +654,98 @@ export function MetadataSidebar({
           )}
         </div>
 
+        {/* Owner (assignee) — renders only when the actor can set the owner. */}
+        {onOwnerChange && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <UserIcon className="h-4 w-4" />
+              <span>
+                <FormattedMessage id="portal.postDetail.metadata.owner" defaultMessage="Owner" />
+              </span>
+            </div>
+            <Popover open={ownerOpen} onOpenChange={setOwnerOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  className={cn(
+                    'flex items-center gap-1.5 text-sm font-medium text-end max-w-[60%]',
+                    'hover:opacity-80 transition-opacity',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                >
+                  {owner ? (
+                    <>
+                      <Avatar className="h-5 w-5">
+                        {owner.avatarUrl && <AvatarImage src={owner.avatarUrl} alt={owner.name} />}
+                        <AvatarFallback className="text-xs">
+                          {getInitials(owner.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate text-foreground">{owner.name}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground/70">
+                      <FormattedMessage
+                        id="portal.postDetail.metadata.ownerUnassigned"
+                        defaultMessage="Unassigned"
+                      />
+                    </span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-1" align="end" sideOffset={4}>
+                <ScrollArea
+                  className="[&_[data-slot=scroll-area-viewport]]:max-h-56"
+                  scrollBarClassName="w-1.5"
+                >
+                  <div className="space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOwnerSelect(null)}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
+                        'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                        'transition-all duration-100 text-start font-medium'
+                      )}
+                    >
+                      <UserIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="flex-1 truncate">
+                        <FormattedMessage
+                          id="portal.postDetail.metadata.ownerUnassigned"
+                          defaultMessage="Unassigned"
+                        />
+                      </span>
+                      {!owner && <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />}
+                    </button>
+                    {ownerCandidates.map((m) => (
+                      <button
+                        key={m.principalId}
+                        type="button"
+                        onClick={() => handleOwnerSelect(m.principalId as PrincipalId)}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
+                          'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                          'transition-all duration-100 text-start font-medium'
+                        )}
+                      >
+                        <Avatar className="h-5 w-5 shrink-0">
+                          {m.avatarUrl && <AvatarImage src={m.avatarUrl} alt={m.name} />}
+                          <AvatarFallback className="text-xs">{getInitials(m.name)}</AvatarFallback>
+                        </Avatar>
+                        <span className="flex-1 truncate">{m.name}</span>
+                        {owner?.principalId === m.principalId && (
+                          <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
+
         {/* Tags */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -556,13 +754,13 @@ export function MetadataSidebar({
               <FormattedMessage id="portal.postDetail.metadata.tags" defaultMessage="Tags" />
             </span>
           </div>
-          {canEdit && onTagsChange ? (
+          {onTagsChange ? (
             <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
               {tags.map((tag) => (
                 <button
                   key={tag.id}
                   type="button"
-                  onClick={() => handleTagToggle(tag.id as TagId)}
+                  onClick={() => handleTagToggle(tag.id as PostTagId)}
                   disabled={isUpdating}
                   className={cn(
                     'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
@@ -614,7 +812,7 @@ export function MetadataSidebar({
                           <button
                             key={tag.id}
                             type="button"
-                            onClick={() => handleAddTag(tag.id as TagId)}
+                            onClick={() => handleAddTag(tag.id as PostTagId)}
                             className={cn(
                               'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
                               'text-foreground/80 hover:text-foreground hover:bg-muted/60',
@@ -657,116 +855,6 @@ export function MetadataSidebar({
           )}
         </div>
 
-        {/* Roadmaps */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <MapIcon className="h-4 w-4" />
-            <span>
-              <FormattedMessage id="portal.postDetail.metadata.roadmap" defaultMessage="Roadmap" />
-            </span>
-          </div>
-          {canEdit && onRoadmapAdd && onRoadmapRemove ? (
-            <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
-              {roadmaps.map((roadmap) => {
-                const isPending = pendingRoadmapId === roadmap.id
-                return (
-                  <button
-                    key={roadmap.id}
-                    type="button"
-                    onClick={() => handleRemoveFromRoadmap(roadmap.id as RoadmapId)}
-                    disabled={isPending}
-                    className={cn(
-                      'group inline-flex items-center gap-1 ps-1.5 pe-1 py-0.5',
-                      'rounded-md text-[11px] font-medium',
-                      'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
-                      'hover:bg-blue-500/15 hover:border-blue-500/30',
-                      'transition-all duration-150',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
-                    )}
-                  >
-                    <MapIcon className="h-3 w-3 opacity-70" />
-                    <span className="truncate max-w-[100px]">{roadmap.name}</span>
-                    {isPending ? (
-                      <ArrowPathIcon className="h-2.5 w-2.5 animate-spin" />
-                    ) : (
-                      <XMarkIcon className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100 transition-opacity" />
-                    )}
-                  </button>
-                )
-              })}
-              {availableRoadmaps.length > 0 && (
-                <Popover open={roadmapOpen} onOpenChange={setRoadmapOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      disabled={!!pendingRoadmapId}
-                      className={cn(
-                        'inline-flex items-center gap-0.5 px-1.5 py-0.5',
-                        'rounded-md text-[11px] font-medium',
-                        'text-muted-foreground/70 hover:text-muted-foreground',
-                        'border border-dashed border-border/60 hover:border-border',
-                        'hover:bg-muted/40',
-                        'transition-all duration-150',
-                        'disabled:opacity-50'
-                      )}
-                    >
-                      <PlusIcon className="h-2.5 w-2.5" />
-                      <FormattedMessage
-                        id="portal.postDetail.metadata.roadmapAdd"
-                        defaultMessage="Add"
-                      />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-48 p-1" align="end" sideOffset={4}>
-                    <div className="max-h-48 overflow-y-auto space-y-0.5">
-                      {availableRoadmaps.map((roadmap) => {
-                        const isPending = pendingRoadmapId === roadmap.id
-                        return (
-                          <button
-                            key={roadmap.id}
-                            type="button"
-                            onClick={() => handleAddToRoadmap(roadmap.id as RoadmapId)}
-                            disabled={isPending}
-                            className={cn(
-                              'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
-                              'text-foreground/80 hover:text-foreground hover:bg-muted/60',
-                              'transition-all duration-100 text-start font-medium',
-                              'disabled:opacity-50'
-                            )}
-                          >
-                            <MapIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="truncate">{roadmap.name}</span>
-                            {isPending && (
-                              <ArrowPathIcon className="h-3 w-3 animate-spin ms-auto" />
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-              {roadmaps.length === 0 && availableRoadmaps.length === 0 && !roadmapOpen && (
-                <span className="text-xs text-muted-foreground/60">-</span>
-              )}
-            </div>
-          ) : roadmaps.length > 0 ? (
-            <div className="flex flex-col items-end gap-1">
-              {roadmaps.map((roadmap) => (
-                <Link
-                  key={roadmap.id}
-                  to="/roadmap"
-                  className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-                >
-                  {roadmap.name}
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground/60">-</span>
-          )}
-        </div>
-
         {/* Date */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -777,85 +865,6 @@ export function MetadataSidebar({
           </div>
           <TimeAgo date={createdAt} className="text-sm text-foreground" />
         </div>
-
-        {/* Source (only for posts created from the feedback pipeline) */}
-        {feedbackSource && (
-          <>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <LinkIcon className="h-4 w-4" />
-                <span>
-                  <FormattedMessage
-                    id="portal.postDetail.metadata.source"
-                    defaultMessage="Source"
-                  />
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSourceQuoteOpen(true)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors"
-              >
-                <SourceTypeIcon sourceType={feedbackSource.sourceType} size="xs" />
-                <span>
-                  {SOURCE_TYPE_LABELS[feedbackSource.sourceType] ?? feedbackSource.sourceType}
-                </span>
-              </button>
-            </div>
-            <Dialog open={sourceQuoteOpen} onOpenChange={setSourceQuoteOpen}>
-              <DialogContent className="sm:max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <SourceTypeIcon sourceType={feedbackSource.sourceType} size="sm" />
-                    <FormattedMessage
-                      id="portal.postDetail.metadata.sourceOriginalFeedback"
-                      defaultMessage="Original feedback"
-                    />
-                  </DialogTitle>
-                </DialogHeader>
-                <ScrollArea className="max-h-[50vh] -mx-6 px-6">
-                  <blockquote className="border-s-2 border-muted-foreground/20 ps-3 text-sm text-muted-foreground/70 italic leading-relaxed whitespace-pre-wrap">
-                    {feedbackSource.quote}
-                  </blockquote>
-                </ScrollArea>
-                <div className="space-y-2 pt-3 border-t border-border/30">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {feedbackSource.authorName ??
-                        intl.formatMessage({
-                          id: 'portal.postDetail.metadata.sourceUnknownAuthor',
-                          defaultMessage: 'Unknown author',
-                        })}
-                    </span>
-                    <TimeAgo date={feedbackSource.createdAt} />
-                  </div>
-                  {feedbackSource.externalUrl && (
-                    <a
-                      href={feedbackSource.externalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <SourceTypeIcon sourceType={feedbackSource.sourceType} size="xs" />
-                      {intl.formatMessage(
-                        {
-                          id: 'portal.postDetail.metadata.sourceOpenIn',
-                          defaultMessage: 'Open in {name}',
-                        },
-                        {
-                          name:
-                            SOURCE_TYPE_LABELS[feedbackSource.sourceType] ??
-                            feedbackSource.sourceType,
-                        }
-                      )}
-                      <span aria-hidden>&rarr;</span>
-                    </a>
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-          </>
-        )}
 
         {/* Author */}
         <div className="flex items-center justify-between">
@@ -884,7 +893,7 @@ export function MetadataSidebar({
                     }
                   />
                 )}
-                <AvatarFallback className="text-[9px]">{getInitials(authorName)}</AvatarFallback>
+                <AvatarFallback className="text-xs">{getInitials(authorName)}</AvatarFallback>
               </Avatar>
               <span className="text-sm font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2">
                 {authorName ||
@@ -895,30 +904,41 @@ export function MetadataSidebar({
               </span>
             </Link>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <Avatar className="h-5 w-5">
-                {authorAvatarUrl && (
-                  <AvatarImage
-                    src={authorAvatarUrl}
-                    alt={
-                      authorName ||
+            (() => {
+              const authorRow = (
+                <div className="flex items-center gap-1.5">
+                  <Avatar className="h-5 w-5">
+                    {authorAvatarUrl && (
+                      <AvatarImage
+                        src={authorAvatarUrl}
+                        alt={
+                          authorName ||
+                          intl.formatMessage({
+                            id: 'portal.postDetail.metadata.authorFallback',
+                            defaultMessage: 'Anonymous',
+                          })
+                        }
+                      />
+                    )}
+                    <AvatarFallback className="text-xs">{getInitials(authorName)}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-foreground">
+                    {authorName ||
                       intl.formatMessage({
                         id: 'portal.postDetail.metadata.authorFallback',
                         defaultMessage: 'Anonymous',
-                      })
-                    }
-                  />
-                )}
-                <AvatarFallback className="text-[9px]">{getInitials(authorName)}</AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium text-foreground">
-                {authorName ||
-                  intl.formatMessage({
-                    id: 'portal.postDetail.metadata.authorFallback',
-                    defaultMessage: 'Anonymous',
-                  })}
-              </span>
-            </div>
+                      })}
+                  </span>
+                </div>
+              )
+              return authorPrincipalId ? (
+                <AuthorHoverCard principalId={authorPrincipalId} displayName={authorName}>
+                  {authorRow}
+                </AuthorHoverCard>
+              ) : (
+                authorRow
+              )
+            })()
           )}
         </div>
 

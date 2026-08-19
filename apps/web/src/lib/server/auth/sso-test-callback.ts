@@ -83,7 +83,6 @@ export async function handleSsoTestCallback(
     tokenAuth: session.tokenAuth,
     requestedPrompt: session.requestedPrompt,
     allowMissingEmail: session.allowMissingEmail,
-    identityMapping: session.identityMapping,
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,

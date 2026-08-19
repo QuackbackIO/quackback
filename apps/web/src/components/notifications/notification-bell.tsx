@@ -52,7 +52,7 @@ export function NotificationBell({ className, popoverSide = 'right' }: Notificat
                   className={cn(
                     'absolute -top-0.5 -right-0.5 flex items-center justify-center',
                     'min-w-[18px] h-[18px] px-1 rounded-full',
-                    'bg-primary text-primary-foreground text-[10px] font-semibold',
+                    'bg-primary text-primary-foreground text-[11px] font-semibold',
                     'border-2 border-card',
                     shouldPulse && 'animate-pulse'
                   )}
@@ -71,7 +71,7 @@ export function NotificationBell({ className, popoverSide = 'right' }: Notificat
         align={isBottomAligned ? 'end' : 'start'}
         side={popoverSide}
         sideOffset={8}
-        className="w-80 p-0"
+        className="w-76 p-0"
       >
         <NotificationDropdown onClose={() => setOpen(false)} />
       </PopoverContent>

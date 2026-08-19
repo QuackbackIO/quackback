@@ -8,6 +8,8 @@
  * existence.
  */
 
+import type { ConversationPriority } from '@/lib/shared/conversation/types'
+
 /** A tag chip on a post embed. */
 export interface EmbedTag {
   id: string
@@ -61,6 +63,32 @@ export interface EmbedArticlePreview {
   url: string
 }
 
+/** A resolved support-ticket embed — a viewer-safe slice for a live ticket card. */
+export interface EmbedTicketPreview {
+  kind: 'ticket'
+  ticketId: string
+  /** The pair's conversation id — a customer ticket's destination on the
+   *  converged Messages surface. Null for internal ticket types (never
+   *  conversation-linked; their `url` targets the admin inbox). */
+  conversationId: string | null
+  /** Formatted sequential reference, e.g. "#142". */
+  reference: string
+  title: string
+  /**
+   * Customer-facing stage label (Received / In progress / Awaiting your reply /
+   * Resolved) — the same public projection the portal ticket page shows, never
+   * the internal status name. Null when the status maps to no public stage.
+   */
+  statusLabel: string | null
+  /** Status color for the badge dot (the workspace-assigned status color). */
+  statusColor: string
+  /** Triage priority (reuses the conversation priority scale; 'none' = unset). */
+  priority: ConversationPriority
+  createdAt: string | null
+  /** Absolute portal URL for the ticket — see {@link EmbedPostPreview.url}. */
+  url: string
+}
+
 /** A broken, deleted, or unauthorized embed — renders as a muted placeholder. */
 export interface EmbedUnavailable {
   unavailable: true
@@ -70,4 +98,5 @@ export type EmbedPreview =
   | EmbedPostPreview
   | EmbedChangelogPreview
   | EmbedArticlePreview
+  | EmbedTicketPreview
   | EmbedUnavailable

@@ -12,7 +12,8 @@ import {
 } from 'better-auth/plugins'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
-import { generateId } from '@quackback/ids'
+import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
+import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import type { GenericOAuthConfig } from './build-oauth-configs'
@@ -51,8 +52,25 @@ const otpStash = makeStash<string>()
 
 export const storeMagicLinkToken = (email: string, token: string) =>
   magicLinkStash.set(email, token)
-export const storeOTP = (email: string, otp: string) => otpStash.set(email, otp)
-export const getOTP = (email: string) => otpStash.take(email)
+/**
+ * OTP purposes the plugin issues.
+ *
+ * Only sign-in codes are stashed: they are the one purpose whose code has to
+ * survive the callback, because `requestEmailSignin` combines it with a magic
+ * link in a single email. Everything else is sent from the callback itself.
+ *
+ * The key still carries the purpose. Two purposes can be live for one address
+ * at the same moment, so an address-only key would let the second overwrite the
+ * first and hand whoever drained the stash the wrong code — a footgun waiting
+ * for the next purpose that needs stashing rather than a live bug today.
+ */
+export type OtpPurpose = 'sign-in' | 'email-verification' | 'forget-password' | 'change-email'
+
+const otpKey = (purpose: OtpPurpose, email: string) => `${purpose}:${email}`
+
+export const storeOTP = (purpose: OtpPurpose, email: string, otp: string) =>
+  otpStash.set(otpKey(purpose, email), otp)
+export const getOTP = (purpose: OtpPurpose, email: string) => otpStash.take(otpKey(purpose, email))
 
 // Lazy-initialized auth instance
 // This prevents client bundling of database code
@@ -83,7 +101,6 @@ async function createAuth() {
     oauthConsent: oauthConsentTable,
     twoFactor: twoFactorTable,
     eq,
-    and,
   } = await import('@/lib/server/db')
   const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
   const { getPlatformCredentials } =
@@ -94,18 +111,8 @@ async function createAuth() {
   const { listIdentityProviders, getIdentityProviderCredentials } =
     await import('@/lib/server/domains/settings/identity-providers.service')
   const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
-
-  // OIDC `locale` claim: shipped by Google, Microsoft, and most generic
-  // OIDC IdPs. Pass it through so `user.locale` populates from sign-in
-  // and the segment evaluator can target on language. Wrapped as a
-  // permissive shape because each provider returns a slightly
-  // different profile envelope.
-  const mapProfileLocale = (profile: unknown): { locale: string | null } => {
-    const p = profile as { locale?: unknown } | null | undefined
-    return {
-      locale: typeof p?.locale === 'string' && p.locale.length > 0 ? p.locale : null,
-    }
-  }
+  const { ensurePrincipalForUser } =
+    await import('@/lib/server/domains/principals/principal.factory')
 
   // login_hint pre-selects the typed email in the IdP picker. Read from
   // the `additionalData.loginHint` body field that the team-login /
@@ -141,8 +148,14 @@ async function createAuth() {
   // buildGenericOAuthConfigs: a downgraded workspace stops registering
   // OIDC even though the rows remain. The login_hint params are carried
   // to every provider since any may be domain-routed.
+  // Discovery and userinfo are fetched through the SSRF-guarded helper, and
+  // resolved HERE rather than inside the resolver: the plugin's getUserInfo
+  // seam receives only the token set, so without closing the endpoint over at
+  // build time every sign-in would re-fetch discovery. Rebuilt whenever
+  // auth_config_version changes, which is the same cadence the rest of this
+  // config already refreshes on. A discovery outage returns null and the
+  // provider still registers — a complete ID token needs no userinfo.
   const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
-  const { stashResolvedClaims } = await import('./resolved-claims-stash')
   const fetchJson = async (url: string, headers?: Record<string, string>) => {
     try {
       const res = await safeFetch(url, { ...(headers ? { headers } : {}), timeoutMs: 5000 })
@@ -154,20 +167,27 @@ async function createAuth() {
     }
   }
 
+  /**
+   * The address to use for a provider that released none: the one already on
+   * file for this identity, or a freshly minted one if this is a first sign-in.
+   *
+   * Read-or-mint, because `getUserInfo` runs on every sign-in. Minting each
+   * time would churn the person's address on every visit and break anything
+   * holding the old one. Only reached when the provider opted in AND no real
+   * address came through, so the lookup costs nothing for everyone else.
+   */
   const resolvePlaceholderEmail = async (
     registrationId: string,
     accountId: string
   ): Promise<string> => {
+    const { db, account, user, and, eq } = await import('@/lib/server/db')
     const existing = await db.query.account.findFirst({
-      where: and(
-        eq(accountTable.providerId, registrationId),
-        eq(accountTable.accountId, accountId)
-      ),
+      where: and(eq(account.providerId, registrationId), eq(account.accountId, accountId)),
       columns: { userId: true },
     })
     if (existing?.userId) {
       const owner = await db.query.user.findFirst({
-        where: eq(userTable.id, existing.userId),
+        where: eq(user.id, existing.userId),
         columns: { email: true },
       })
       if (owner?.email) return owner.email
@@ -178,21 +198,61 @@ async function createAuth() {
     return minted
   }
 
+  const providerRows = await listIdentityProviders()
   const oidcConfigs = await buildGenericOAuthConfigs({
-    providers: await listIdentityProviders(),
+    providers: providerRows,
     creds: getIdentityProviderCredentials,
     tierAllowsOidc: tierLimits.features.customOidcProvider,
     discovery: (discoveryUrl) => fetchJson(discoveryUrl),
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
+    // Observe-then-enforce: log the discrepancy so its real rate is known
+    // before any release starts refusing sign-ins over it.
     onResolved: (registrationId, accountId, claims) => {
       stashResolvedClaims(registrationId, accountId, claims)
     },
+    onResolutionWarning: (registrationId, warnings) => {
+      log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
+    },
     placeholderEmailFor: resolvePlaceholderEmail,
-    mapProfileToUser: mapProfileLocale,
+    mapProfileToUser: mapProfileClaims,
     buildLoginHintParams,
   })
   genericOAuthConfigs.push(...oidcConfigs)
-  for (const c of oidcConfigs) trustedProviders.push(c.providerId)
+
+  // Auto-linking attaches an incoming identity to an existing local account on
+  // address match alone. Every OIDC provider is trusted for that today, which
+  // is defensible for a corporate IdP the workspace controls and much weaker
+  // for a public one where anyone can register the address of somebody who
+  // already has an account here.
+  //
+  // Observed, not enforced. Withdrawing it outright would stop existing
+  // password users linking on their first SSO sign-in and start returning
+  // "account not linked" — a regression for providers that are behaving
+  // perfectly well. So log which providers would lose it, size the blast radius
+  // from real installations, and flip afterwards. Two of the predicate's inputs
+  // (whether the provider asserts a verified address, and an admin override)
+  // also need a column that has not landed yet.
+  const { allowsAutoLinking } = await import('./provider-trust')
+  for (const c of oidcConfigs) {
+    trustedProviders.push(c.providerId)
+    const row = providerRows.find((p) => p.registrationId === c.providerId)
+    if (
+      row &&
+      !allowsAutoLinking({
+        lastSuccessfulTestAt: row.lastSuccessfulTestAt,
+        detailsChangedAt: row.detailsChangedAt,
+        // Not yet persisted; assumed true so the observation isolates the
+        // connection-test signal rather than flagging every provider.
+        assertsVerifiedEmail: true,
+        trustOverride: null,
+      })
+    ) {
+      log.warn(
+        { registrationId: c.providerId },
+        'provider would lose auto-linking under derived trust (no fresh connection test)'
+      )
+    }
+  }
 
   // Layer A registration filter: an OAuth provider is registered on
   // the Better-Auth instance only if creds exist AND `authConfig.oauth`
@@ -222,7 +282,7 @@ async function createAuth() {
     const providerConfig: Record<string, unknown> = {
       clientId: creds.clientId,
       clientSecret: creds.clientSecret,
-      mapProfileToUser: mapProfileLocale,
+      mapProfileToUser: mapProfileClaims,
     }
     // Add provider-specific fields (e.g., tenantId for Microsoft, issuer for GitLab)
     for (const field of provider.platformCredentials) {
@@ -246,6 +306,11 @@ async function createAuth() {
       before: hooksBefore,
       after: hooksAfter,
     },
+    // Route the library's internal logging through pino, redacted. Without it
+    // those lines bypass the app logger entirely — unstructured, uncorrelated,
+    // and on a resolution failure carrying the whole user-info payload
+    // including the email address.
+    logger: createAuthLogger(log),
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
     secret: config.secretKey,
 
@@ -320,12 +385,36 @@ async function createAuth() {
           )
           return
         }
+        // Account class: the reset link is a capability over THIS account, so
+        // the recipient is looked up by id and can never be a contact address
+        // somebody else supplied.
+        const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
+        const to = await resolveAccountRecipient(user.id as UserId)
+        if (!to) {
+          log.warn(
+            { user_id: user.id },
+            'password reset requested but the account has no deliverable address'
+          )
+          return
+        }
         const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
         const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
         const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-        await sendPasswordResetEmail({ to: user.email, resetLink: url, logoUrl })
+        await sendPasswordResetEmail({ to, resetLink: url, logoUrl })
       },
       resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
+      // Completing a reset proves inbox ownership (the user received and
+      // used the emailed token), so mark the email verified. Password
+      // signup never verifies otherwise, and an unverified local user is
+      // blocked from linking OAuth/OIDC providers into their account.
+      async onPasswordReset({ user }) {
+        if (!user.emailVerified) {
+          await db
+            .update(userTable)
+            .set({ emailVerified: true, updatedAt: new Date() })
+            .where(eq(userTable.id, user.id as UserId))
+        }
+      },
     },
 
     // Account linking - allow users to link multiple OAuth providers to their account
@@ -334,6 +423,17 @@ async function createAuth() {
       accountLinking: {
         enabled: true,
         trustedProviders,
+        // Let someone already signed in attach a provider whose address differs
+        // from their account's. Without it a provider that releases no email —
+        // and therefore signs people in under a placeholder address — can never
+        // be linked to a real account at all, which is the population this work
+        // adds.
+        //
+        // Safe because this gates the DELIBERATE flows only: the explicit link
+        // endpoint and the account-linking API, both authorised by an existing
+        // session rather than by the address. Auto-linking is untouched, since
+        // it finds the user BY email and so is an address match by definition.
+        allowDifferentEmails: true,
       },
     },
 
@@ -373,34 +473,42 @@ async function createAuth() {
             // Cast user.id to the branded TypeID type for database operations
             const userId = user.id as ReturnType<typeof generateId<'user'>>
 
-            // Check if member already exists (in case of race conditions)
-            const existingPrincipal = await db.query.principal.findFirst({
-              where: eq(principalTable.userId, userId),
+            const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
+            const displayName = isAnonymous
+              ? await (async () => {
+                  const { generateAnonymousName } = await import('@/lib/shared/anonymous-names')
+                  return generateAnonymousName(user.id)
+                })()
+              : user.name
+            // Race-safe lazy create (the factory's onConflictDoNothing subsumes
+            // the prior explicit findFirst guard). Always 'user' — team access is
+            // via invitations only.
+            const { principal: createdPrincipal, created } = await ensurePrincipalForUser({
+              userId,
+              role: 'user',
+              type: isAnonymous ? 'anonymous' : 'user',
+              displayName,
+              avatarUrl: isAnonymous ? null : (user.image ?? null),
+              avatarKey: isAnonymous
+                ? null
+                : ((user as Record<string, unknown>).imageKey as string | null),
             })
-
-            if (!existingPrincipal) {
-              const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
-              await db.insert(principalTable).values({
-                id: generateId('principal'),
-                userId,
-                role: 'user', // Always 'user' - team access via invitations only
-                type: isAnonymous ? 'anonymous' : 'user',
-                displayName: isAnonymous
-                  ? await (async () => {
-                      const { generateAnonymousName } = await import('@/lib/shared/anonymous-names')
-                      return generateAnonymousName(user.id)
-                    })()
-                  : user.name,
-                avatarUrl: isAnonymous ? null : (user.image ?? null),
-                avatarKey: isAnonymous
-                  ? null
-                  : ((user as Record<string, unknown>).imageKey as string | null),
-                createdAt: new Date(),
-              })
+            if (created) {
               log.info(
                 { user_id: user.id, role: 'user', type: isAnonymous ? 'anonymous' : 'user' },
                 'created principal record'
               )
+              // Changelog auto-subscribe touchpoint (Changelog Settings §2):
+              // "first portal interaction" — a brand-new portal account,
+              // covering password/magic-link/OAuth/OTP signup in one place.
+              // Anonymous placeholder accounts are skipped (no real email yet).
+              if (!isAnonymous) {
+                const { ensureAutoSubscribed } =
+                  await import('@/lib/server/domains/changelog/changelog-subscription.service')
+                ensureAutoSubscribed(createdPrincipal.id as PrincipalId).catch((err) =>
+                  log.error({ err }, 'failed to auto-subscribe to changelog on signup')
+                )
+              }
             }
           },
         },
@@ -424,11 +532,50 @@ async function createAuth() {
       }),
 
       emailOTP({
-        async sendVerificationOTP({ email, otp }) {
-          storeOTP(email, otp)
+        async sendVerificationOTP({ email, otp, type }) {
+          // Sign-in codes are stashed and drained by `requestEmailSignin`,
+          // which combines them with a magic link in one email. Every other
+          // purpose has no such caller, so it is sent from here.
+          if (type === 'sign-in') {
+            storeOTP('sign-in', email, otp)
+            return
+          }
+
+          // A password-reset code is a capability: it is redeemable for a new
+          // password, so it must not go out under "Confirm your email" copy,
+          // and it must not reach an address this flow did not verify. Nothing
+          // wires it here today (the app uses core `requestPasswordReset`), and
+          // this refuses loudly rather than mailing the wrong thing if
+          // something ever does.
+          if (type === 'forget-password') {
+            throw new Error(
+              'forget-password OTP is not wired through emailOTP; use requestPasswordReset'
+            )
+          }
+
+          // `email-verification` (adding a first address) and `change-email`
+          // (moving to a new one) both mean the same thing to the recipient:
+          // prove you hold this address.
+          const { sendVerifyAddressEmail } = await import('@quackback/email')
+          const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+          const settings = await db.query.settings.findFirst({
+            columns: { name: true, logoKey: true },
+          })
+          await sendVerifyAddressEmail({
+            to: email,
+            code: otp,
+            workspaceName: settings?.name ?? undefined,
+            logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
+          })
         },
         otpLength: 6,
         expiresIn: 600,
+        // Changing an address is a two-step proof, but `verifyCurrentEmail` is a
+        // static boolean and turning it on would demand a code at an address
+        // that cannot receive one — locking out exactly the people whose
+        // provider releases no email. The current-address step is therefore
+        // enforced conditionally in the server function instead.
+        changeEmail: { enabled: true, verifyCurrentEmail: false },
       }),
 
       // One-time token plugin for cross-domain session transfer.
@@ -452,37 +599,43 @@ async function createAuth() {
         consentPage: '/oauth/consent',
 
         // Allow Claude Code (and other MCP clients) to self-register
-        allowDynamicClientRegistration: true,
+        // (RFC 7591). Admin-toggleable via Settings > Developers; the
+        // service bumps auth_config_version on change, so the toggle takes
+        // effect without a restart via the normal instance rebuild.
+        // `?? true` also covers cached settings serialized before the key
+        // existed.
+        allowDynamicClientRegistration:
+          tenantSettings?.developerConfig?.oauthDynamicClientRegistrationEnabled ?? true,
         allowUnauthenticatedClientRegistration: true,
 
-        // Quackback-specific scopes
-        scopes: [
-          'openid',
-          'profile',
-          'email',
-          'offline_access',
-          'read:feedback',
-          'write:feedback',
-          'write:changelog',
-          'read:article',
-          'write:article',
-          'read:chat',
-          'write:chat',
-        ],
+        // Identity scopes plus the shared capability vocabulary (the same
+        // list API keys store and the MCP tools enforce).
+        scopes: ['openid', 'profile', 'email', 'offline_access', ...API_KEY_SCOPES],
 
-        // Default scopes for dynamically registered clients
+        // Default scopes when a registering client omits `scope` (RFC 7591).
+        // Real MCP clients (Claude Code, MCP SDK per SEP-835) resolve their
+        // scope list from the protected-resource metadata's scopes_supported
+        // and send it explicitly at registration, so these defaults only
+        // apply to clients that ask for nothing. Keep that fallback
+        // read-only with no offline_access: an unknown silent client gets
+        // no write access and no refresh token unless it asks.
         clientRegistrationDefaultScopes: [
           'openid',
           'profile',
           'email',
-          'read:feedback',
+          ...API_KEY_SCOPES.filter((s) => s.startsWith('read:')),
+        ],
+
+        // Setting clientRegistrationDefaultScopes alone would also narrow
+        // the set a registering client may REQUEST to those defaults and
+        // reject MCP clients' explicit write/offline_access registrations,
+        // so allow the full catalogue for explicit requests.
+        clientRegistrationAllowedScopes: [
+          'openid',
+          'profile',
+          'email',
           'offline_access',
-          'write:feedback',
-          'write:changelog',
-          'read:article',
-          'write:article',
-          'read:chat',
-          'write:chat',
+          ...API_KEY_SCOPES,
         ],
 
         // MCP endpoint is a valid token audience
@@ -517,8 +670,8 @@ async function createAuth() {
         emailDomainName: ANON_EMAIL_DOMAIN,
         disableDeleteAnonymousUser: true, // we handle cleanup ourselves to avoid cascade-deleting sessions
         async onLinkAccount({ anonymousUser, newUser }) {
-          const anonUserId = anonymousUser.user.id as ReturnType<typeof generateId<'user'>>
-          const newUserId = newUser.user.id as ReturnType<typeof generateId<'user'>>
+          const anonUserId = anonymousUser.user.id as UserId
+          const newUserId = newUser.user.id as UserId
 
           // Check if the new user is a freshly created account or an existing one
           const [existingPrincipal, anonPrincipal] = await Promise.all([
@@ -533,10 +686,8 @@ async function createAuth() {
             if (anonPrincipal) {
               const { mergeAnonymousToIdentified } = await import('./merge-anonymous')
               await mergeAnonymousToIdentified({
-                anonPrincipalId: anonPrincipal.id as ReturnType<typeof generateId<'principal'>>,
-                targetPrincipalId: existingPrincipal.id as ReturnType<
-                  typeof generateId<'principal'>
-                >,
+                anonPrincipalId: anonPrincipal.id as PrincipalId,
+                targetPrincipalId: existingPrincipal.id as PrincipalId,
                 anonUserId,
                 anonDisplayName: anonPrincipal.displayName || 'Anonymous',
                 targetDisplayName: newUser.user.name || 'User',
@@ -548,55 +699,28 @@ async function createAuth() {
               'linked anonymous user to existing account'
             )
           } else {
-            // SIGN-UP (new account): keep the anonymous user, absorb the new user into it.
-            // This preserves sessions, principal, votes, comments on the same userId.
+            // SIGN-UP (new account): keep the anonymous user, absorb the new
+            // user into it. The absorb shares the principal re-point registry
+            // and factory teardown with the sign-in merge above.
             const newImage =
               ((newUser.user as Record<string, unknown>).image as string | null) ?? null
 
-            await db.transaction(async (tx) => {
-              // Move account+session refs to anon user (before deleting new user)
-              await Promise.all([
-                tx
-                  .update(accountTable)
-                  .set({ userId: anonUserId })
-                  .where(eq(accountTable.userId, newUserId)),
-                tx
-                  .update(sessionTable)
-                  .set({ userId: anonUserId })
-                  .where(eq(sessionTable.userId, newUserId)),
-              ])
-              // Delete the new user (frees the email for the anon user update)
-              if (existingPrincipal) {
-                await tx.delete(principalTable).where(eq(principalTable.id, existingPrincipal.id))
-              }
-              await tx.delete(userTable).where(eq(userTable.id, newUserId))
-              // Update the anon user with real identity + upgrade principal
-              await Promise.all([
-                tx
-                  .update(userTable)
-                  .set({
-                    name: newUser.user.name,
-                    email: newUser.user.email,
-                    emailVerified: true,
-                    isAnonymous: false,
-                    image: newImage,
-                  })
-                  .where(eq(userTable.id, anonUserId)),
-                tx
-                  .update(principalTable)
-                  .set({
-                    type: 'user',
-                    displayName: newUser.user.name || anonymousUser.user.name,
-                    avatarUrl: newImage,
-                  })
-                  .where(eq(principalTable.userId, anonUserId)),
-              ])
+            const { absorbSignupIntoAnonymous } = await import('./merge-anonymous')
+            const { cacheKeysToBust } = await absorbSignupIntoAnonymous({
+              anonUserId,
+              anonPrincipalId: anonPrincipal ? (anonPrincipal.id as PrincipalId) : null,
+              newUserId,
+              newUserPrincipalId: existingPrincipal ? (existingPrincipal.id as PrincipalId) : null,
+              name: newUser.user.name,
+              email: newUser.user.email,
+              image: newImage,
+              displayName: newUser.user.name || anonymousUser.user.name,
             })
 
             // The principal's `type` flipped from 'anonymous' → 'user'; drop
             // any cached entry so the next SSR render reads the new value.
-            const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
-            await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(anonUserId))
+            const { cacheDel } = await import('@/lib/server/redis')
+            await cacheDel(...cacheKeysToBust)
 
             log.info(
               { anon_user_id: anonUserId, deleted_user_id: newUserId },
@@ -707,6 +831,9 @@ export { type Role, isTeamMember, isAdmin } from '@/lib/shared/roles'
 
 import type { Role } from '@/lib/shared/roles'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
+import { mapProfileClaims } from '@/lib/server/auth/map-profile-claims'
+import { createAuthLogger } from '@/lib/server/auth/auth-logger-adapter'
+import { stashResolvedClaims } from '@/lib/server/auth/resolved-claims-stash'
 
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {

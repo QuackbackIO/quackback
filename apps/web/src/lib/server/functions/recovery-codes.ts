@@ -19,6 +19,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { UserId } from '@quackback/ids'
 import { and, db, eq, isNull, ssoRecoveryCode } from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { actorFromAuth, recordAuditEvent } from '@/lib/server/audit/log'
 import { generateRecoveryCode, hashRecoveryCode } from '@/lib/server/auth/recovery-codes'
 import { requireAuth } from './auth-helpers'
@@ -28,7 +29,7 @@ const RECOVERY_CODE_BATCH_SIZE = 10
 export const generateRecoveryCodesFn = createServerFn({ method: 'POST' })
   .validator(z.object({}).default({}))
   .handler(async () => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const userId = auth.user.id as UserId
 
     // Drop the prior active batch. Soft-invalidating (setting used_at)
@@ -62,7 +63,7 @@ export const generateRecoveryCodesFn = createServerFn({ method: 'POST' })
 export const listRecoveryCodesFn = createServerFn({ method: 'GET' })
   .validator(z.object({}).default({}))
   .handler(async () => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const userId = auth.user.id as UserId
 
     const rows = await db.query.ssoRecoveryCode.findMany({

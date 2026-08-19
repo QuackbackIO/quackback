@@ -4,7 +4,10 @@
 
 import { Queue, Worker } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { logger } from '@/lib/server/logger'
+import { db, refreshVisitorAnalytics } from '@/lib/server/db'
+import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { refreshAnalytics } from './analytics.service'
 
 const log = logger.child({ component: 'analytics-queue' })
@@ -24,7 +27,10 @@ interface AnalyticsJob {
   type: 'refresh-analytics'
 }
 
-let initPromise: Promise<{ queue: Queue<AnalyticsJob>; worker: Worker<AnalyticsJob> }> | null = null
+let initPromise: Promise<{
+  queue: Queue<AnalyticsJob>
+  worker: Worker<AnalyticsJob> | null
+}> | null = null
 
 async function initializeQueue() {
   const connection = getQueueRedis()
@@ -34,15 +40,22 @@ async function initializeQueue() {
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<AnalyticsJob>(
-    QUEUE_NAME,
-    async (job) => {
-      if (job.data.type === 'refresh-analytics') {
-        await refreshAnalytics()
-      }
-    },
-    { connection, concurrency: CONCURRENCY }
-  )
+  // Consumer side is role-gated: web-role replicas enqueue and register
+  // schedules but never construct a Worker (see queue/role.ts).
+  const worker = shouldRunWorkers()
+    ? new Worker<AnalyticsJob>(
+        QUEUE_NAME,
+        async (job) => {
+          if (job.data.type === 'refresh-analytics') {
+            await refreshAnalytics()
+            if (await isFeatureEnabled('visitorAnalytics')) {
+              await refreshVisitorAnalytics(db)
+            }
+          }
+        },
+        { connection, concurrency: CONCURRENCY }
+      )
+    : null
 
   // Register hourly refresh as a repeatable job. Stable jobId so
   // worker reboots dedupe on the same key instead of scheduling
@@ -67,11 +80,11 @@ async function initializeQueue() {
     ])
   } catch (error) {
     await queue.close().catch(() => {})
-    await worker.close().catch(() => {})
+    await worker?.close().catch(() => {})
     throw error
   }
 
-  worker.on('failed', (job, error) => {
+  worker?.on('failed', (job, error) => {
     if (!job) return
     const isPermanent =
       job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
@@ -92,4 +105,12 @@ export async function initAnalyticsWorker(): Promise<void> {
   }
   await initPromise
   log.info('analytics worker initialized')
+}
+
+export async function closeAnalyticsQueue(): Promise<void> {
+  if (!initPromise) return
+  const { worker, queue } = await initPromise
+  initPromise = null
+  await worker?.close().catch(() => {})
+  await queue.close().catch(() => {})
 }

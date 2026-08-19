@@ -11,8 +11,10 @@
  */
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import type { Role } from '@/lib/shared/roles'
 import { verifyAccessToken } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { API_KEY_SCOPES, effectiveScopes } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { DomainException, RateLimitError } from '@/lib/shared/errors'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
 import { db, principal, eq } from '@/lib/server/db'
@@ -33,15 +35,7 @@ function jsonRpcError(status: number, message: string): Response {
   )
 }
 
-export const ALL_SCOPES: McpScope[] = [
-  'read:feedback',
-  'write:feedback',
-  'write:changelog',
-  'read:article',
-  'write:article',
-  'read:chat',
-  'write:chat',
-]
+export const ALL_SCOPES: McpScope[] = [...API_KEY_SCOPES]
 
 const API_KEY_PREFIX = 'qb_'
 
@@ -97,7 +91,7 @@ async function resolveOAuthContext(token: string): Promise<McpAuthContext | null
       userId: sub as McpAuthContext['userId'],
       name: (payload.name as string) ?? 'Unknown',
       email: payload.email as string | undefined,
-      role: role as 'admin' | 'member' | 'user',
+      role: role as Role,
       authMethod: 'oauth',
       scopes,
     }
@@ -123,7 +117,9 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
   if (token?.startsWith(API_KEY_PREFIX)) {
     let authResult
     try {
-      authResult = await withApiKeyAuth(request, { role: 'team' })
+      // A valid key authenticates the MCP request; per-tool MCP scopes provide
+      // authorization, resolved below from the key's stored scopes.
+      authResult = await withApiKeyAuth(request)
     } catch (err) {
       if (!(err instanceof DomainException)) throw err
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -138,10 +134,9 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       })
     }
 
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.id, authResult.principalId),
-      with: { user: true },
-    })
+    // withApiKeyAuth already read the principal (with its linked user) in its
+    // single per-request query; reuse that row instead of a second round-trip.
+    const principalRecord = authResult.principal
 
     if (!principalRecord) {
       return new Response(JSON.stringify({ error: 'Principal not found' }), {
@@ -150,14 +145,19 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       })
     }
 
+    // A key's MCP scopes are its stored scopes; keys created before scope
+    // selection existed store NULL and keep full authority (deliberate
+    // back-compat — the same rule the REST permission gates apply).
+    const keyScopes = effectiveScopes(authResult.apiKey.scopes)
+
     // Service principals (API keys) use displayName; human principals use user.name
     if (principalRecord.type === 'service') {
       return {
         principalId: authResult.principalId,
         name: principalRecord.displayName ?? authResult.apiKey.name,
-        role: authResult.role as 'admin' | 'member' | 'user',
+        role: authResult.role as Role,
         authMethod: 'api-key',
-        scopes: ALL_SCOPES,
+        scopes: keyScopes,
       }
     }
 
@@ -167,9 +167,9 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       userId: principalRecord.user?.id,
       name: principalRecord.displayName ?? principalRecord.user?.name ?? 'Unknown',
       email: principalRecord.user?.email ?? undefined,
-      role: authResult.role as 'admin' | 'member' | 'user',
+      role: authResult.role as Role,
       authMethod: 'api-key',
-      scopes: ALL_SCOPES,
+      scopes: keyScopes,
     }
   }
 

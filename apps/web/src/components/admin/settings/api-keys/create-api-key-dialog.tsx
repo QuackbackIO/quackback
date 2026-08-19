@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { CheckboxGroup } from '@/components/ui/checkbox-group'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -15,6 +16,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { createApiKeyFn } from '@/lib/server/functions/api-keys'
+import {
+  API_KEY_SCOPES,
+  API_KEY_SCOPE_LABELS,
+  type ApiKeyScope,
+} from '@/lib/server/domains/api-keys/api-key-scopes'
 import type { ApiKey } from '@/lib/shared/types'
 
 interface CreateApiKeyDialogProps {
@@ -28,7 +34,17 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
   const queryClient = useQueryClient()
   const [isPending, startTransition] = useTransition()
   const [name, setName] = useState('')
+  // Default = every scope checked, matching what a key could do before scopes existed.
+  const [scopes, setScopes] = useState<ApiKeyScope[]>([...API_KEY_SCOPES])
   const [error, setError] = useState<string | null>(null)
+
+  const toggleScope = (scope: string) => {
+    setScopes((prev) =>
+      prev.includes(scope as ApiKeyScope)
+        ? prev.filter((s) => s !== scope)
+        : [...prev, scope as ApiKeyScope]
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,9 +54,13 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
       setError('Please enter a name for the API key')
       return
     }
+    if (scopes.length === 0) {
+      setError('Select at least one scope')
+      return
+    }
 
     try {
-      const result = await createApiKeyFn({ data: { name: name.trim() } })
+      const result = await createApiKeyFn({ data: { name: name.trim(), scopes } })
 
       // Invalidate queries to refresh the list
       startTransition(() => {
@@ -50,6 +70,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
 
       // Reset form and notify parent
       setName('')
+      setScopes([...API_KEY_SCOPES])
       onKeyCreated(result.apiKey, result.plainTextKey)
     } catch (err) {
       console.error('Failed to create API key:', err)
@@ -60,6 +81,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       setName('')
+      setScopes([...API_KEY_SCOPES])
       setError(null)
     }
     onOpenChange(newOpen)
@@ -90,6 +112,28 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
                 Give your key a descriptive name so you can identify it later.
               </p>
             </div>
+            <div className="space-y-2">
+              <Label>Scopes</Label>
+              <CheckboxGroup
+                className="grid grid-cols-2 gap-x-4 gap-y-2"
+                items={API_KEY_SCOPES.map((scope) => ({
+                  value: scope,
+                  label: (
+                    <>
+                      {API_KEY_SCOPE_LABELS[scope]}{' '}
+                      <code className="text-xs text-muted-foreground">{scope}</code>
+                    </>
+                  ),
+                }))}
+                selected={scopes}
+                onToggle={toggleScope}
+                disabled={isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                The key can only perform operations covered by its scopes. All scopes are selected
+                by default.
+              </p>
+            </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
@@ -101,7 +145,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onKeyCreated }: CreateA
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending || !name.trim()}>
+            <Button type="submit" disabled={isPending || !name.trim() || scopes.length === 0}>
               {isPending ? 'Creating...' : 'Create Key'}
             </Button>
           </DialogFooter>

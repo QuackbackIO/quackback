@@ -5,7 +5,7 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { HelpCenterCategoryId, HelpCenterArticleId } from '@quackback/ids'
+import type { KbCategoryId, KbArticleId } from '@quackback/ids'
 import {
   createCategoryFn,
   updateCategoryFn,
@@ -55,7 +55,7 @@ export function useUpdateCategory() {
 export function useDeleteCategory() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: HelpCenterCategoryId) => deleteCategoryFn({ data: { id } }),
+    mutationFn: (id: KbCategoryId) => deleteCategoryFn({ data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.publicCategories() })
@@ -66,7 +66,7 @@ export function useDeleteCategory() {
 export function useRestoreCategory() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: HelpCenterCategoryId) => restoreCategoryFn({ data: { id } }),
+    mutationFn: (id: KbCategoryId) => restoreCategoryFn({ data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
@@ -96,7 +96,7 @@ export function useUpdateArticle() {
   return useMutation({
     mutationFn: (input: UpdateArticlePayload) => updateArticleFn({ data: input }),
     onSuccess: (data) => {
-      const id = data.id as HelpCenterArticleId
+      const id = data.id as KbArticleId
       queryClient.setQueryData(helpCenterKeys.articleDetail(id), data)
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.public() })
@@ -107,9 +107,9 @@ export function useUpdateArticle() {
 export function usePublishArticle() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: HelpCenterArticleId) => publishArticleFn({ data: { id } }),
+    mutationFn: (id: KbArticleId) => publishArticleFn({ data: { id } }),
     onSuccess: (data) => {
-      queryClient.setQueryData(helpCenterKeys.articleDetail(data.id as HelpCenterArticleId), data)
+      queryClient.setQueryData(helpCenterKeys.articleDetail(data.id as KbArticleId), data)
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.public() })
@@ -120,9 +120,9 @@ export function usePublishArticle() {
 export function useUnpublishArticle() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: HelpCenterArticleId) => unpublishArticleFn({ data: { id } }),
+    mutationFn: (id: KbArticleId) => unpublishArticleFn({ data: { id } }),
     onSuccess: (data) => {
-      queryClient.setQueryData(helpCenterKeys.articleDetail(data.id as HelpCenterArticleId), data)
+      queryClient.setQueryData(helpCenterKeys.articleDetail(data.id as KbArticleId), data)
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.public() })
@@ -133,7 +133,7 @@ export function useUnpublishArticle() {
 export function useDeleteArticle() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: HelpCenterArticleId) => deleteArticleFn({ data: { id } }),
+    mutationFn: (id: KbArticleId) => deleteArticleFn({ data: { id } }),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: helpCenterKeys.articleDetail(id) })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
@@ -146,7 +146,7 @@ export function useDeleteArticle() {
 export function useRestoreArticle() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: HelpCenterArticleId) => restoreArticleFn({ data: { id } }),
+    mutationFn: (id: KbArticleId) => restoreArticleFn({ data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })

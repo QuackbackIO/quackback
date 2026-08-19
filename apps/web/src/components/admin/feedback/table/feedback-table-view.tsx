@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useBulkChangePostStatus } from '@/lib/client/mutations/posts'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -8,17 +10,18 @@ import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
 import { FeedbackRow } from './feedback-row'
-import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
+import { FeedbackBulkActionBar } from './feedback-bulk-action-bar'
+import type { PostListItem, PostStatusEntity, Board, PostTag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { PostId } from '@quackback/ids'
+import type { PostId, PostStatusId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
   posts: PostListItem[]
   statuses: PostStatusEntity[]
   boards: Board[]
-  tags: Tag[]
+  tags: PostTag[]
   members: TeamMember[]
   segments?: SegmentListItem[]
   filters: InboxFilters
@@ -102,6 +105,43 @@ export function FeedbackTableView({
     onChange: (search) => onFiltersChange({ search }),
   })
 
+  // Multi-selection behind the bulk-action toolbar. Ids (not rows) so the
+  // selection survives pagination and filter changes; the toolbar clears it.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<PostId>>(new Set())
+  const bulkChangeStatus = useBulkChangePostStatus()
+
+  const toggleSelected = (postId: PostId, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (selected) {
+        next.add(postId)
+      } else {
+        next.delete(postId)
+      }
+      return next
+    })
+  }
+
+  const handleBulkStatus = (statusId: string) => {
+    const postIds = [...selectedIds]
+    bulkChangeStatus.mutate(
+      { postIds, statusId: statusId as PostStatusId },
+      {
+        onSuccess: (summary) => {
+          const ok = summary.succeeded.length
+          const fail = summary.failed.length
+          if (fail === 0) {
+            toast.success(`Status updated on ${ok} ${ok === 1 ? 'post' : 'posts'}`)
+          } else {
+            toast.warning(`${ok} updated, ${fail} failed`)
+          }
+          setSelectedIds(new Set())
+        },
+        onError: () => toast.error('Bulk status change failed'),
+      }
+    )
+  }
+
   const loadMoreRef = useInfiniteScroll({
     hasMore,
     isFetching: isLoading || isLoadingMore,
@@ -142,6 +182,7 @@ export function FeedbackTableView({
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
     { value: 'votes', label: 'Top Votes' },
+    { value: 'priority', label: 'Priority' },
   ]
 
   const headerContent = (
@@ -188,7 +229,7 @@ export function FeedbackTableView({
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <TableSkeleton />
       </div>
@@ -197,7 +238,7 @@ export function FeedbackTableView({
 
   if (filteredPosts.length === 0 && !isSearchingForDuplicateMatches) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <InboxEmptyState
           type={hasActiveFilters ? 'no-results' : 'no-posts'}
@@ -209,7 +250,7 @@ export function FeedbackTableView({
 
   if (isSearchingForDuplicateMatches) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <div className="px-3 py-12 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
           <Spinner />
@@ -220,7 +261,7 @@ export function FeedbackTableView({
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       {headerContent}
 
       {/* Post List */}
@@ -237,6 +278,9 @@ export function FeedbackTableView({
                 statuses={statuses}
                 duplicateCount={duplicateCountByPostId?.get(post.id)}
                 onClick={() => onNavigateToPost(post.id)}
+                selected={selectedIds.has(post.id)}
+                selectionActive={selectedIds.size > 0}
+                onSelectChange={(selected) => toggleSelected(post.id, selected)}
               />
             </div>
           ))}
@@ -259,6 +303,17 @@ export function FeedbackTableView({
             </Button>
           )}
         </div>
+      )}
+
+      {/* Bulk-action toolbar: floats above the list while a selection is active */}
+      {selectedIds.size > 0 && (
+        <FeedbackBulkActionBar
+          count={selectedIds.size}
+          statuses={statuses}
+          pending={bulkChangeStatus.isPending}
+          onClear={() => setSelectedIds(new Set())}
+          onChangeStatus={handleBulkStatus}
+        />
       )}
     </div>
   )

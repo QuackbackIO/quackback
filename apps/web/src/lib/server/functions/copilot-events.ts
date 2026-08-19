@@ -1,0 +1,129 @@
+/**
+ * Copilot usage events (outcome loop): the panel's fire-and-forget writer for
+ * "an answer was actually used" and per-answer thumbs feedback — the outcomes
+ * half of the Copilot usage report (analytics/copilot-usage.ts), which until
+ * this fn only had the adoption half (questions/transforms/summaries run).
+ *
+ * One append-only `assistant_events` row per call. Deliberately NOT
+ * idempotent: the client fires this after a UI gesture and never awaits or
+ * retries it, so a double-click double-counts — acceptable for a trend report,
+ * and cheaper than threading an idempotency key through every insert
+ * affordance. Shape rules live in the schema, not the handler: a `feedback`
+ * event requires a rating and nothing else may carry one; every `*_inserted`
+ * event (matched by name suffix, never hand-listed, so a future `*_inserted`
+ * kind is covered automatically) requires a `destination` ('reply' | 'note' —
+ * where the text landed) and every OTHER kind (`feedback`) may not carry one.
+ * An insert event's other qualifiers are `answerType`/`internalSourced`, both
+ * optional (an aborted turn reports neither) and stored only when present.
+ *
+ * Gated through `gateCopilotFn` (copilot-gate.ts). The item ref is the
+ * same union the copilot SSE route
+ * parses (item-ref.schema.ts's `withAssistantItemRef`), nested under `item`
+ * since this fn has its own top-level fields alongside it.
+ */
+import { z } from 'zod'
+import { createServerFn } from '@tanstack/react-start'
+import { db, assistantEvents } from '@/lib/server/db'
+import { gateCopilotFn } from '@/lib/server/domains/assistant/copilot-gate'
+import { withAssistantItemRef } from '@/lib/server/domains/assistant/item-ref.schema'
+import {
+  COPILOT_EVENT_TYPES,
+  COPILOT_INSERT_DESTINATIONS,
+} from '@/lib/shared/assistant/copilot-contract'
+
+const recordCopilotEventSchema = z
+  .object({
+    /** Exactly one of `{ conversationId }` or `{ ticketId }` — the same union
+     *  the copilot route parses, see item-ref.schema.ts. */
+    item: withAssistantItemRef({}),
+    eventType: z.enum(COPILOT_EVENT_TYPES),
+    /** Where an inserted event landed (reply composer vs internal note) —
+     *  required on every `*_inserted` kind, rejected on `feedback`; the
+     *  superRefine below enforces both halves. */
+    destination: z.enum(COPILOT_INSERT_DESTINATIONS).optional(),
+    rating: z.enum(['up', 'down']).optional(),
+    reason: z.string().max(500).optional(),
+    answerType: z.enum(['draft_reply', 'analysis']).optional(),
+    /** Optional even on an inserted event: an unfinalized (aborted) turn has
+     *  no server-derived leak-gate signal to report, and the handler stores
+     *  the field only when present — never coerced to false. */
+    internalSourced: z.boolean().optional(),
+    /** Article ids the finalized turn's own `citations` cited (the panel's
+     *  `turnMeta` derives this from `CopilotTurn.citations`, never a
+     *  server-side re-lookup), so the Copilot usage report can compute each
+     *  cited source's own insert rate (analytics/copilot-usage.ts). Optional
+     *  and possibly absent on a turn that cited nothing; capped well above
+     *  any real answer's citation count, the same defensive ceiling a
+     *  fire-and-forget client write gets even though the caller is gated. */
+    citedSourceIds: z.array(z.string()).max(50).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.eventType === 'feedback' && !value.rating) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['rating'],
+        message: 'A feedback event requires a rating',
+      })
+    }
+    if (value.eventType !== 'feedback' && value.rating) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['rating'],
+        message: 'Only a feedback event may carry a rating',
+      })
+    }
+    // Destination is the `*_inserted` kinds' own axis (answer/transform/
+    // summary): matched by name suffix, not a hand-listed set, so a future
+    // `*_inserted` kind is covered without touching this schema. Every other
+    // kind — `feedback` — carries neither a destination nor a rating (rating is
+    // feedback-only, checked above).
+    const isInsertKind = value.eventType.endsWith('_inserted')
+    if (isInsertKind && !value.destination) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['destination'],
+        message: 'An inserted event requires a destination',
+      })
+    }
+    if (!isInsertKind && value.destination) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['destination'],
+        message: 'Only an *_inserted event may carry a destination',
+      })
+    }
+  })
+
+/** The fn's request contract, for the client seam to build calls against
+ *  (lib/client/copilot-events.ts) without hand-mirroring the schema. */
+export type CopilotEventInput = z.input<typeof recordCopilotEventSchema>
+
+export const recordCopilotEventFn = createServerFn({ method: 'POST' })
+  .validator(recordCopilotEventSchema)
+  .handler(async ({ data }) => {
+    // An expected denial here (no copilot.use, flag off / unconfigured, item
+    // not viewable) is the gate doing its job on a fire-and-forget telemetry
+    // write. The server-fn log middleware already classifies all three as warn
+    // rather than error — auth denials, CopilotUnavailableError via its
+    // statusCode, and NotFoundError as a DomainException — so this handler no
+    // longer sorts them itself.
+    const { auth, conversationId, ticketId } = await gateCopilotFn(data.item)
+
+    await db.insert(assistantEvents).values({
+      eventType: data.eventType,
+      principalId: auth.principal.id,
+      conversationId,
+      ticketId,
+      metadata: {
+        ...(data.destination !== undefined && { destination: data.destination }),
+        ...(data.rating !== undefined && { rating: data.rating }),
+        ...(data.reason !== undefined && { reason: data.reason }),
+        ...(data.answerType !== undefined && { answerType: data.answerType }),
+        ...(data.internalSourced !== undefined && { internalSourced: data.internalSourced }),
+        ...(data.citedSourceIds !== undefined &&
+          data.citedSourceIds.length > 0 && { citedSourceIds: data.citedSourceIds }),
+      },
+    })
+
+    return { ok: true as const }
+  })

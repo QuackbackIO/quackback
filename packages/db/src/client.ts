@@ -9,6 +9,8 @@ export interface CreateDbOptions {
   max?: number
   /** Disable prepared statements (required for some connection poolers) */
   prepare?: boolean
+  /** Close idle connections after this many seconds (default: 20). */
+  idleTimeout?: number
 }
 
 /**
@@ -19,6 +21,7 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
   const sql = postgres(connectionString, {
     max: options?.max ?? 10,
     prepare: options?.prepare ?? true,
+    idle_timeout: options?.idleTimeout ?? 20,
   })
   return drizzle(sql, { schema })
 }

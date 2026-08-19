@@ -9,9 +9,10 @@
  * always carries a machine-readable reason for logging and UI hints.
  */
 import type { PrincipalId, SegmentId } from '@quackback/ids'
+import type { Role, PrincipalType } from '@/lib/shared/roles'
+import type { PermissionKey } from '@/lib/shared/permissions'
 
-export type Role = 'admin' | 'member' | 'user'
-export type PrincipalType = 'user' | 'anonymous' | 'service'
+export type { Role, PrincipalType }
 
 export interface Actor {
   principalId: PrincipalId | null
@@ -20,6 +21,16 @@ export interface Actor {
   principalType: PrincipalType
   /** Segment memberships resolved once per request and threaded through policy. */
   segmentIds: ReadonlySet<SegmentId>
+  /**
+   * Resolved permission set (the role's preset bundle in v1; assignment-derived
+   * later), consumed via `can(actor, permission)` in policy/authorize.ts.
+   *
+   * Optional: real request actors set it (policyActorFromAuth), while the policy
+   * layer's inline Actor fixtures may omit it. `can` falls back to resolving from
+   * the actor's role when it is absent, which in v1 (permissions are a pure
+   * function of role) is equivalent.
+   */
+  permissions?: ReadonlySet<PermissionKey>
 }
 
 export type Decision = { allowed: true } | { allowed: false; reason: string }
@@ -30,10 +41,6 @@ export function allowDecision(): Decision {
 
 export function denyDecision(reason: string): Decision {
   return { allowed: false, reason }
-}
-
-export function isAllowed(decision: Decision): boolean {
-  return decision.allowed
 }
 
 /**
@@ -55,4 +62,5 @@ export const ANONYMOUS_ACTOR: Actor = {
   role: null,
   principalType: 'anonymous',
   segmentIds: new Set(),
+  permissions: new Set(),
 }

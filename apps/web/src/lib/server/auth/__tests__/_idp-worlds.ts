@@ -1,9 +1,16 @@
 /**
  * Mock IdP shapes for every identity-resolution outcome.
  *
- * A provider's "world" is decided by two independent settings: which scope
- * gates each claim, and whether the claim rides in the ID token or only at
- * userinfo. Every shape here was observed on a real OpenID Connect provider.
+ * There is no executable coverage of the identity path in this repo: the
+ * registration suite tests only the pure config builder, with no token
+ * exchange, no token decode and no userinfo fetch. That is the gap this
+ * fixture closes, and it exists BEFORE the resolver so the resolver has
+ * something to be verified against rather than the other way round.
+ *
+ * A provider's "world" is decided by two independent settings on its side:
+ * which scope gates each claim, and whether the claim rides in the ID token or
+ * only at the userinfo endpoint. Every shape here was observed on a real
+ * OpenID Connect provider; none of them is hypothetical.
  */
 
 /** Unsigned JWT. Nothing in the resolution path verifies signatures. */
@@ -14,13 +21,18 @@ export function fakeJwt(payload: Record<string, unknown>): string {
 
 export interface IdpWorld {
   name: string
+  /** What the token endpoint returned. */
   tokens: { idToken?: string; accessToken?: string }
+  /** What the userinfo endpoint returns, or null when it is unreachable. */
   userinfo: Record<string, unknown> | null
+  /** What a correct resolver should produce. */
   expect: {
     id: string | null
     email: string | null
     name: string | null
+    /** Which source each resolved field came from. */
     sources?: Partial<Record<'id' | 'email' | 'name', string>>
+    /** Set when resolution must fail outright. */
     failure?: 'subject_mismatch' | 'no_identity'
   }
 }
@@ -28,7 +40,7 @@ export interface IdpWorld {
 const SUB = 'idp-subject-123'
 const EXP = Math.floor(Date.now() / 1000) + 3600
 
-/** Everything in the ID token. The compliant case. */
+/** Everything in the ID token. The compliant case: Okta, Entra, Google. */
 export const WORLD_A: IdpWorld = {
   name: 'World A — complete ID token',
   tokens: {
@@ -44,7 +56,11 @@ export const WORLD_A: IdpWorld = {
   },
 }
 
-/** Subject in the ID token, everything else only at userinfo. */
+/**
+ * Subject in the ID token, everything else only at userinfo. The Doorkeeper
+ * default, and the population the cascade exists to rescue: sign-in works today
+ * by discarding the ID token wholesale, while the connection test fails.
+ */
 export const WORLD_B: IdpWorld = {
   name: 'World B — claims at userinfo only',
   tokens: {
@@ -77,11 +93,12 @@ export const WORLD_C: IdpWorld = {
 }
 
 /**
- * Access-token-only IdP: no ID token; identity lives in a JWT access token
- * under PascalCase claim names, with no email anywhere.
+ * No ID token at all; identity lives in a JWT access token, under non-standard
+ * claim names, with no email anywhere. A structured, non-UUID subject exercises
+ * the case where the account identifier is not a plain opaque string.
  */
 export const WORLD_NO_ID_TOKEN: IdpWorld = {
-  name: 'Access-token-only IdP — identity in the access token',
+  name: 'No ID token — identity in the access token',
   tokens: {
     accessToken: fakeJwt({
       sub: 'ACCOUNT:REGION:2119123456',
@@ -99,7 +116,12 @@ export const WORLD_NO_ID_TOKEN: IdpWorld = {
   },
 }
 
-/** Userinfo reports a DIFFERENT subject from the ID token. */
+/**
+ * Userinfo reports a DIFFERENT subject from the ID token. OIDC Core 5.3.2
+ * requires discarding it; because trusted-provider linking matches on address,
+ * quietly preferring one source could bind an attacker's email to the wrong
+ * account. Must fail, never merge.
+ */
 export const WORLD_SUBJECT_MISMATCH: IdpWorld = {
   name: 'Subject mismatch between ID token and userinfo',
   tokens: {
@@ -127,6 +149,7 @@ export const ALL_WORLDS: IdpWorld[] = [
   WORLD_UNRESOLVABLE,
 ]
 
+/** A userinfo fetcher backed by a world, for injecting into the resolver. */
 export function userinfoFetcherFor(world: IdpWorld) {
   return async () => world.userinfo
 }

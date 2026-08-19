@@ -8,6 +8,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { db, segments, principal, eq, and, isNull, inArray } from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { addMember, removeMember } from '@/lib/server/domains/segments/segment-membership.service'
 import type { PrincipalId } from '@quackback/ids'
 
@@ -66,7 +67,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
        */
       POST: async ({ request, params }) => {
         try {
-          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.SEGMENT_MANAGE })
           const body = MutateBody.parse(await request.json())
 
           const segment = await db.query.segments.findFirst({
@@ -119,7 +120,7 @@ export const Route = createFileRoute('/api/v1/segments/$slug/members')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.SEGMENT_MANAGE })
           const body = MutateBody.parse(await request.json())
 
           const segment = await db.query.segments.findFirst({

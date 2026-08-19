@@ -13,7 +13,7 @@ export function KeyboardHint({ keys, action, className }: KeyboardHintProps) {
       {keys.map((key, idx) => (
         <Fragment key={idx}>
           {idx > 0 && <span className="mx-1">+</span>}
-          <kbd className="px-1.5 py-0.5 text-[10px] bg-muted rounded border">{key}</kbd>
+          <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">{key}</kbd>
         </Fragment>
       ))}
       <span className="ml-2">{action}</span>

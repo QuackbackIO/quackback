@@ -1,0 +1,616 @@
+{
+  "workspaceVersion": "0.13.2",
+  "ai": {
+    "keys": [
+      {
+        "key": "OPENAI_API_KEY",
+        "kind": "secret",
+        "group": "connection",
+        "sensitive": true
+      },
+      {
+        "key": "OPENAI_BASE_URL",
+        "kind": "url",
+        "group": "connection",
+        "sensitive": false
+      },
+      {
+        "key": "AI_CHAT_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_EMBEDDING_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_SUMMARY_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_SENTIMENT_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_EXTRACTION_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_QUALITY_GATE_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_INTERPRETATION_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_MERGE_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_HELP_CENTER_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_HELP_CENTER_TRANSLATE_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_ASSISTANT_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_ASSISTANT_VISION",
+        "kind": "text",
+        "group": "connection",
+        "sensitive": false
+      },
+      {
+        "key": "AI_INBOX_TRANSLATION_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_CLASSIFICATION_MODEL",
+        "kind": "model",
+        "group": "models",
+        "sensitive": false
+      },
+      {
+        "key": "AI_REQUIRE_PARAMETERS",
+        "kind": "tristate",
+        "group": "advanced",
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": [
+    {
+      "id": "asana",
+      "name": "Asana",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#F06A6A]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/asana",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_ASANA_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_ASANA_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://developers.asana.com/docs/oauth"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_ASANA_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://developers.asana.com/docs/oauth"
+        }
+      ]
+    },
+    {
+      "id": "azure_devops",
+      "name": "Azure DevOps",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#0078D4]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/azure-devops",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_AZURE_DEVOPS_",
+      "fields": []
+    },
+    {
+      "id": "clickup",
+      "name": "ClickUp",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#7B68EE]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/clickup",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_CLICKUP_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_CLICKUP_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://clickup.com/integrations"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_CLICKUP_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://clickup.com/integrations"
+        }
+      ]
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "category": "notifications",
+      "iconBg": "bg-[#5865F2]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/discord",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_DISCORD_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_DISCORD_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://discord.com/developers/applications"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_DISCORD_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://discord.com/developers/applications"
+        },
+        {
+          "key": "botToken",
+          "envKey": "INTEGRATION_DISCORD_BOT_TOKEN",
+          "label": "Bot Token",
+          "sensitive": true,
+          "helpUrl": "https://discord.com/developers/applications"
+        }
+      ]
+    },
+    {
+      "id": "freshdesk",
+      "name": "Freshdesk",
+      "category": "support_crm",
+      "iconBg": "bg-[#25C16F]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/freshdesk",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_FRESHDESK_",
+      "fields": []
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#24292F]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/github",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_GITHUB_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_GITHUB_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://github.com/settings/developers"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_GITHUB_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://github.com/settings/developers"
+        }
+      ]
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#FC6D26]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/gitlab",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_GITLAB_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_GITLAB_CLIENT_ID",
+          "label": "Application ID",
+          "sensitive": false,
+          "helpUrl": "https://gitlab.com/-/user_settings/applications"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_GITLAB_CLIENT_SECRET",
+          "label": "Secret",
+          "sensitive": true,
+          "helpUrl": "https://gitlab.com/-/user_settings/applications"
+        }
+      ]
+    },
+    {
+      "id": "hubspot",
+      "name": "HubSpot",
+      "category": "support_crm",
+      "iconBg": "bg-[#FF7A59]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/hubspot",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_HUBSPOT_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_HUBSPOT_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://developers.hubspot.com/"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_HUBSPOT_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://developers.hubspot.com/"
+        }
+      ]
+    },
+    {
+      "id": "intercom",
+      "name": "Intercom",
+      "category": "support_crm",
+      "iconBg": "bg-[#1F8DED]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/intercom",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_INTERCOM_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_INTERCOM_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://developers.intercom.com/"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_INTERCOM_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://developers.intercom.com/"
+        }
+      ]
+    },
+    {
+      "id": "jira",
+      "name": "Jira",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#0052CC]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/jira",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_JIRA_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_JIRA_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://developer.atlassian.com/console/myapps/"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_JIRA_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://developer.atlassian.com/console/myapps/"
+        }
+      ]
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#5E6AD2]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/linear",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_LINEAR_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_LINEAR_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://linear.app/settings/api"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_LINEAR_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://linear.app/settings/api"
+        }
+      ]
+    },
+    {
+      "id": "make",
+      "name": "Make",
+      "category": "automation",
+      "iconBg": "bg-[#6D00CC]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/make",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_MAKE_",
+      "fields": []
+    },
+    {
+      "id": "monday",
+      "name": "Monday.com",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#FF3D57]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/monday",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_MONDAY_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_MONDAY_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://developer.monday.com/apps/manage"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_MONDAY_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://developer.monday.com/apps/manage"
+        }
+      ]
+    },
+    {
+      "id": "n8n",
+      "name": "n8n",
+      "category": "automation",
+      "iconBg": "bg-[#EA4B71]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/n8n",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_N8N_",
+      "fields": []
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#000000]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/notion",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_NOTION_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_NOTION_CLIENT_ID",
+          "label": "OAuth Client ID",
+          "sensitive": false,
+          "helpUrl": "https://developers.notion.com/docs/create-a-notion-integration"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_NOTION_CLIENT_SECRET",
+          "label": "OAuth Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://developers.notion.com/docs/create-a-notion-integration"
+        }
+      ]
+    },
+    {
+      "id": "ntfy",
+      "name": "ntfy",
+      "category": "notifications",
+      "iconBg": "bg-[#317f6f]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/ntfy",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_NTFY_",
+      "fields": []
+    },
+    {
+      "id": "salesforce",
+      "name": "Salesforce",
+      "category": "support_crm",
+      "iconBg": "bg-[#00A1E0]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/salesforce",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_SALESFORCE_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_SALESFORCE_CLIENT_ID",
+          "label": "Consumer Key",
+          "sensitive": false,
+          "helpUrl": "https://help.salesforce.com/s/articleView?id=sf.connected_app_create.htm"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_SALESFORCE_CLIENT_SECRET",
+          "label": "Consumer Secret",
+          "sensitive": true,
+          "helpUrl": "https://help.salesforce.com/s/articleView?id=sf.connected_app_create.htm"
+        }
+      ]
+    },
+    {
+      "id": "segment",
+      "name": "Segment",
+      "category": "user_data",
+      "iconBg": "bg-[#52BD94]",
+      "docsUrl": "https://segment.com/docs/connections/sources/catalog/libraries/server/http-api/",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_SEGMENT_",
+      "fields": []
+    },
+    {
+      "id": "shortcut",
+      "name": "Shortcut",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#58B1E4]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/shortcut",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_SHORTCUT_",
+      "fields": []
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "category": "notifications",
+      "iconBg": "bg-[#4A154B]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/slack",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_SLACK_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_SLACK_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://api.slack.com/apps"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_SLACK_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://api.slack.com/apps"
+        },
+        {
+          "key": "signingSecret",
+          "envKey": "INTEGRATION_SLACK_SIGNING_SECRET",
+          "label": "Signing Secret",
+          "sensitive": true,
+          "helpText": "Found under Basic Information > App Credentials",
+          "helpUrl": "https://api.slack.com/apps"
+        }
+      ]
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "category": "support_crm",
+      "iconBg": "bg-[#635BFF]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/stripe",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_STRIPE_",
+      "fields": []
+    },
+    {
+      "id": "teams",
+      "name": "Microsoft Teams",
+      "category": "notifications",
+      "iconBg": "bg-[#6264A7]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/teams",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_TEAMS_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_TEAMS_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_TEAMS_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps"
+        }
+      ]
+    },
+    {
+      "id": "trello",
+      "name": "Trello",
+      "category": "issue_tracking",
+      "iconBg": "bg-[#0052CC]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/trello",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_TRELLO_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_TRELLO_CLIENT_ID",
+          "label": "API Key",
+          "sensitive": false,
+          "helpUrl": "https://trello.com/power-ups/admin"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_TRELLO_CLIENT_SECRET",
+          "label": "API Secret",
+          "sensitive": true,
+          "helpUrl": "https://trello.com/power-ups/admin"
+        }
+      ]
+    },
+    {
+      "id": "zapier",
+      "name": "Zapier",
+      "category": "automation",
+      "iconBg": "bg-[#FF4A00]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/zapier",
+      "configurable": false,
+      "envPrefix": "INTEGRATION_ZAPIER_",
+      "fields": []
+    },
+    {
+      "id": "zendesk",
+      "name": "Zendesk",
+      "category": "support_crm",
+      "iconBg": "bg-[#03363D]",
+      "docsUrl": "https://www.quackback.io/docs/integrations/zendesk",
+      "configurable": true,
+      "envPrefix": "INTEGRATION_ZENDESK_",
+      "fields": [
+        {
+          "key": "clientId",
+          "envKey": "INTEGRATION_ZENDESK_CLIENT_ID",
+          "label": "Client ID",
+          "sensitive": false,
+          "helpUrl": "https://developer.zendesk.com/"
+        },
+        {
+          "key": "clientSecret",
+          "envKey": "INTEGRATION_ZENDESK_CLIENT_SECRET",
+          "label": "Client Secret",
+          "sensitive": true,
+          "helpUrl": "https://developer.zendesk.com/"
+        }
+      ]
+    }
+  ]
+}

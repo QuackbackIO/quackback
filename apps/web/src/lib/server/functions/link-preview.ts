@@ -4,7 +4,7 @@
  * Security layers (in order):
  * 1. Auth required (admin | member | user)
  * 2. Non-team callers must hold portal access
- * 3. `linkPreviews` feature flag must be on
+ * 3. `supportInbox` feature flag must be on (link previews ride the conversations product)
  * 4. Internal Quackback URLs are excluded (handled by quackbackEmbed)
  * 5. Per-principal rate limit: 30 requests / 60 s
  * 6. Redis cache (24h positives, 10min negatives)
@@ -48,7 +48,7 @@ export const unfurlLinkFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<LinkPreview | null> => {
     try {
       // 1. Auth
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
 
       // 2. Portal access gate for non-team callers
       if (!isTeamMember(ctx.principal.role)) {
@@ -62,7 +62,7 @@ export const unfurlLinkFn = createServerFn({ method: 'GET' })
       //    holds the unparsed JSON string, so reading the flag off it directly
       //    always fails.
       const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
-      if (!(await isFeatureEnabled('linkPreviews'))) return null
+      if (!(await isFeatureEnabled('supportInbox'))) return null
 
       // 4. Exclude internal Quackback URLs
       if (parseEmbedUrl(data.url) !== null) return null

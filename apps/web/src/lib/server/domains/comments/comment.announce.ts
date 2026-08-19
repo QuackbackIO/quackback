@@ -9,10 +9,10 @@
  * original author, not the moderator. Mirrors announcePublishedPost.
  */
 
-import { db, boards, comments, posts, principal as principalTable, eq } from '@/lib/server/db'
+import { db, boards, postComments, posts, principal as principalTable, eq } from '@/lib/server/db'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
-  type CommentId,
+  type PostCommentId,
   type PostId,
   type BoardId,
   type PrincipalId,
@@ -38,7 +38,7 @@ export interface PublishedCommentAuthor {
  */
 export async function dispatchCommentCreatedEvent(
   author: PublishedCommentAuthor,
-  comment: { id: CommentId; content: string; isPrivate: boolean },
+  comment: { id: PostCommentId; content: string; isPrivate: boolean },
   post: { id: PostId; title: string; boardId: BoardId; boardSlug: string }
 ): Promise<void> {
   await dispatchCommentCreated(
@@ -64,8 +64,10 @@ export async function dispatchCommentCreatedEvent(
  * visible after moderator approval. Loads the comment, parent post, board,
  * and author from the database so the approve call site stays simple.
  */
-export async function announcePublishedComment(commentId: CommentId): Promise<void> {
-  const commentRow = await db.query.comments.findFirst({ where: eq(comments.id, commentId) })
+export async function announcePublishedComment(commentId: PostCommentId): Promise<void> {
+  const commentRow = await db.query.postComments.findFirst({
+    where: eq(postComments.id, commentId),
+  })
   if (!commentRow) return
   const postRow = await db.query.posts.findFirst({ where: eq(posts.id, commentRow.postId) })
   if (!postRow) return

@@ -16,14 +16,15 @@ const hoisted = vi.hoisted(() => ({
   mockDbSelect: vi.fn(),
 }))
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       update: hoisted.mockDbUpdate,
       insert: hoisted.mockDbInsert,
       select: hoisted.mockDbSelect,
     },
-    settings: { id: 'id', slug: 'slug' },
     eq: vi.fn(),
   }
 })

@@ -1,7 +1,7 @@
 import { cn } from '@/lib/shared/utils'
 
 interface SettingsCardProps {
-  title: string
+  title?: string
   description?: string
   action?: React.ReactNode
   variant?: 'default' | 'danger'
@@ -24,15 +24,24 @@ export function SettingsCard({
         variant === 'danger' ? 'border-destructive/20' : 'border-border/50'
       )}
     >
-      <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50 flex items-center justify-between">
-        <div>
-          <h2 className={cn('text-base font-semibold', variant === 'danger' && 'text-destructive')}>
-            {title}
-          </h2>
-          {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+      {(title || description || action) && (
+        <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50 flex items-center justify-between">
+          <div>
+            {title && (
+              <h2
+                className={cn(
+                  'text-base font-semibold',
+                  variant === 'danger' && 'text-destructive'
+                )}
+              >
+                {title}
+              </h2>
+            )}
+            {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+          </div>
+          {action}
         </div>
-        {action}
-      </div>
+      )}
       <div className={cn('p-4 sm:p-6', contentClassName)}>{children}</div>
     </section>
   )

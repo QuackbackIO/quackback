@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { AuthContext } from '../auth-helpers'
 import type { PrincipalId, SegmentId, UserId, WorkspaceId } from '@quackback/ids'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: vi.fn(async (principalId: string | null) =>
@@ -18,6 +19,7 @@ function buildAuth(overrides: {
   principalRole?: 'admin' | 'member' | 'user'
   principalType?: string
   userEmail?: string
+  permissions?: PermissionKey[]
 }): AuthContext {
   return {
     settings: {
@@ -37,6 +39,7 @@ function buildAuth(overrides: {
       role: overrides.principalRole ?? 'user',
       type: overrides.principalType ?? 'user',
     },
+    permissions: overrides.permissions ?? [],
   }
 }
 
@@ -100,6 +103,21 @@ describe('policyActorFromAuth', () => {
     expect(actor.principalId).toBe('principal_specific')
     // The segment lookup ran for this specific id (mocked to return 2 segments).
     expect(actor.segmentIds.size).toBe(2)
+  })
+
+  it('preserves custom permissions supplied by auth instead of expanding the legacy role', async () => {
+    const actor = await policyActorFromAuth(
+      buildAuth({ principalRole: 'member', permissions: [PERMISSIONS.BILLING_MANAGE] })
+    )
+
+    expect(actor.permissions).toEqual(new Set([PERMISSIONS.BILLING_MANAGE]))
+    expect(actor.permissions?.has(PERMISSIONS.CONVERSATION_VIEW)).toBe(false)
+  })
+
+  it('preserves an explicitly empty assigned-role permission set', async () => {
+    const actor = await policyActorFromAuth(buildAuth({ principalRole: 'admin', permissions: [] }))
+
+    expect(actor.permissions).toEqual(new Set())
   })
 
   it('returns an immutable Set (callers cannot mutate)', async () => {

@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "import": "bun cli.ts",
-    "import:uservoice": "bun cli.ts uservoice"
+    "import": "bun cli.ts"
   },
   "dependencies": {
     "dotenv": "^16.5.0",

@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
+import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -15,7 +16,10 @@ import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { postOwnerQueries } from '@/lib/client/queries/post-owner'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import {
   MetadataSidebar,
@@ -45,6 +49,7 @@ import {
   useDeletePost,
   useRestorePost,
   useChangePostBoard,
+  useUpdatePostOwner,
 } from '@/lib/client/mutations'
 import {
   DeletePostDialog,
@@ -52,17 +57,18 @@ import {
 } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
-import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
+import { setPostEtaFn } from '@/lib/server/functions/posts'
 import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
-  type StatusId,
-  type TagId,
-  type RoadmapId,
-  type CommentId,
+  type PostStatusId,
+  type PostTagId,
+  type PostCommentId,
   type BoardId,
+  type PrincipalId,
 } from '@quackback/ids'
 import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
+import { useLoadMoreAdminComments } from '@/lib/client/mutations/load-more-comments'
 import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import {
   toPortalComments,
@@ -93,11 +99,26 @@ function PostModalContent({
   const postQuery = useSuspenseQuery(adminQueries.postDetail(postId))
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
-  const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
   const { data: boards = [] } = useQuery(adminQueries.boards())
-  const { data: feedbackSource } = useQuery(adminQueries.postFeedbackSource(postId))
+
+  // Owner (assignee) control — gated on post.set_owner. The roster is fetched
+  // via the same post.set_owner-gated fn the portal uses; the current owner is
+  // resolved from it against the post's ownerPrincipalId (already in payload).
+  const canSetOwner = usePermission(PERMISSIONS.POST_SET_OWNER)
+  const { data: ownerCandidates } = useQuery({
+    ...postOwnerQueries.candidates(),
+    enabled: canSetOwner,
+  })
 
   const post = postQuery.data as PostDetails
+
+  // "Show more comments" — appends the next keyset page into the same
+  // ['inbox','detail',postId] cache the admin comment mutations patch.
+  const {
+    loadMore: loadMoreComments,
+    isLoading: isLoadingMoreComments,
+    hasMore: hasMoreComments,
+  } = useLoadMoreAdminComments(postId, inboxKeys.detail(postId))
 
   // Image upload
   const { upload: uploadImage } = usePostImageUpload()
@@ -110,7 +131,6 @@ function PostModalContent({
 
   // UI state
   const [isUpdating, setIsUpdating] = useState(false)
-  const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
   const [showMergeDialog, setShowMergeDialog] = useState(false)
   const [showMergeOthersDialog, setShowMergeOthersDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -141,6 +161,7 @@ function PostModalContent({
   const deletePost = useDeletePost()
   const restorePostMutation = useRestorePost()
   const changePostBoard = useChangePostBoard()
+  const updateOwner = useUpdatePostOwner()
 
   // External links for cascade delete
   const externalLinksQuery = usePostExternalLinks(post.id as PostId, showDeleteDialog)
@@ -179,7 +200,7 @@ function PostModalContent({
   })
 
   // Handlers
-  const handleStatusChange = async (statusId: StatusId) => {
+  const handleStatusChange = async (statusId: PostStatusId) => {
     setIsUpdating(true)
     try {
       await updateStatus.mutateAsync({ postId: post.id as PostId, statusId })
@@ -188,7 +209,7 @@ function PostModalContent({
     }
   }
 
-  const handleTagsChange = async (tagIds: TagId[]) => {
+  const handleTagsChange = async (tagIds: PostTagId[]) => {
     setIsUpdating(true)
     try {
       await updateTags.mutateAsync({ postId: post.id as PostId, tagIds, allTags: tags })
@@ -209,23 +230,27 @@ function PostModalContent({
     }
   }
 
-  const handleRoadmapAdd = async (roadmapId: RoadmapId) => {
-    setPendingRoadmapId(roadmapId)
+  const handleOwnerChange = async (ownerId: PrincipalId | null) => {
     try {
-      await addPostToRoadmapFn({ data: { roadmapId, postId: post.id } })
-      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(post.id as PostId) })
-    } finally {
-      setPendingRoadmapId(null)
+      // The mutation applies the change optimistically and invalidates the
+      // inbox detail/list caches, matching the other sidebar callbacks here.
+      await updateOwner.mutateAsync({ postId: post.id as PostId, ownerId })
+      toast.success(ownerId ? 'Owner assigned' : 'Owner unassigned')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update owner')
     }
   }
 
-  const handleRoadmapRemove = async (roadmapId: RoadmapId) => {
-    setPendingRoadmapId(roadmapId)
+  const handleEtaChange = async (eta: string | null) => {
+    setIsUpdating(true)
     try {
-      await removePostFromRoadmapFn({ data: { roadmapId, postId: post.id } })
+      await setPostEtaFn({ data: { id: post.id, eta } })
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(post.id as PostId) })
+      toast.success(eta ? 'ETA updated' : 'ETA cleared')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update ETA')
     } finally {
-      setPendingRoadmapId(null)
+      setIsUpdating(false)
     }
   }
 
@@ -260,9 +285,10 @@ function PostModalContent({
   const handleKeyDown = useKeyboardSubmit(hasChanges ? handleSubmit : () => {})
 
   const currentStatus = statuses.find((s) => s.id === post.statusId)
-  const postRoadmaps = (post.roadmapIds || [])
-    .map((id) => roadmaps.find((r) => r.id === id))
-    .filter(Boolean) as Array<{ id: string; name: string; slug: string }>
+  const currentOwner =
+    (post.ownerPrincipalId &&
+      (ownerCandidates ?? []).find((m) => m.principalId === post.ownerPrincipalId)) ||
+    null
   const manageActions = {
     onMergeOthers: () => setShowMergeOthersDialog(true),
     onMergeInto: () => setShowMergeDialog(true),
@@ -367,6 +393,7 @@ function PostModalContent({
                 minHeight="200px"
                 disabled={updatePost.isPending}
                 borderless
+                toolbarPosition="bottom"
                 features={{
                   headings: true,
                   codeBlocks: true,
@@ -400,6 +427,7 @@ function PostModalContent({
               postId={postId}
               postTitle={post.title}
               canonicalPostId={post.canonicalPostId as PostId | undefined}
+              mergedPosts={post.mergedPosts}
               showDialog={showMergeDialog}
               onShowDialogChange={setShowMergeDialog}
             />
@@ -445,21 +473,29 @@ function PostModalContent({
                     statuses={statuses}
                     currentStatusId={post.statusId}
                     isTeamMember
-                    onDeleteComment={(commentId: CommentId) =>
+                    onDeleteComment={(commentId: PostCommentId) =>
                       deleteCommentMutation.mutate(commentId)
                     }
                     deletingCommentId={
                       deleteCommentMutation.isPending
-                        ? (deleteCommentMutation.variables as CommentId)
+                        ? (deleteCommentMutation.variables as PostCommentId)
                         : null
                     }
-                    onRestoreComment={(commentId: CommentId) =>
+                    onRestoreComment={(commentId: PostCommentId) =>
                       restoreCommentMutation.mutate(commentId)
                     }
                     restoringCommentId={
                       restoreCommentMutation.isPending
-                        ? (restoreCommentMutation.variables as CommentId)
+                        ? (restoreCommentMutation.variables as PostCommentId)
                         : null
+                    }
+                    hasMoreComments={hasMoreComments}
+                    onLoadMoreComments={loadMoreComments}
+                    isLoadingMoreComments={isLoadingMoreComments}
+                    remainingCommentCount={
+                      post.commentsTotalRootCount != null
+                        ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
+                        : undefined
                     }
                   />
                 </Suspense>
@@ -480,25 +516,29 @@ function PostModalContent({
               authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
               authorPrincipalId={post.principalId}
               createdAt={new Date(post.createdAt)}
+              eta={post.eta ?? null}
               tags={post.tags}
-              roadmaps={postRoadmaps}
               canEdit
+              showVoters
               allStatuses={statuses}
               allTags={tags}
-              allRoadmaps={roadmaps}
               allBoards={boards}
               onStatusChange={handleStatusChange}
+              onEtaChange={handleEtaChange}
               onTagsChange={handleTagsChange}
-              onRoadmapAdd={handleRoadmapAdd}
-              onRoadmapRemove={handleRoadmapRemove}
               onBoardChange={handleBoardChange}
-              isUpdating={isUpdating || !!pendingRoadmapId}
+              owner={currentOwner}
+              ownerCandidates={canSetOwner ? ownerCandidates : undefined}
+              onOwnerChange={canSetOwner ? handleOwnerChange : undefined}
+              isUpdating={isUpdating}
               hideSubscribe
               variant="card"
               manageActions={manageActions}
-              feedbackSource={feedbackSource}
             />
           </Suspense>
+
+          {/* Customer context from connected CRM integrations (WO-9), on demand. */}
+          <CustomerContextPanel email={post.authorEmail} />
         </div>
       </ScrollArea>
 

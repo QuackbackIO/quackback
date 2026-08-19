@@ -6,11 +6,25 @@
  */
 
 import { db, apiKeys, principal, eq, and, isNull } from '@/lib/server/db'
+import { emit } from '@/lib/server/events/emit'
+import { apiKeyCreated, apiKeyDeleted } from '@/lib/server/events/catalogue'
 import type { PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isAdmin } from '@/lib/shared/roles'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
+import {
+  setPrincipalRole,
+  updatePrincipalFields,
+  syncPrincipalProfileById,
+} from '@/lib/server/domains/principals/principal.factory'
+import {
+  API_KEY_SCOPES,
+  EMPTY_SCOPES_MESSAGE,
+  orderScopes,
+  parseApiKeyScopes,
+  parseScopesJson,
+} from './api-key-scopes'
 import type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult } from './api-key.types'
 export type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult }
 
@@ -20,8 +34,10 @@ const API_KEY_PREFIX = 'qb_'
 /** Length of the random part of the key (in bytes, will be hex encoded) */
 const KEY_RANDOM_BYTES = 24 // 48 hex chars
 
-/** Map a database row to the public ApiKey shape (strips keyHash). */
-function toApiKey(row: ApiKey & Record<string, unknown>): ApiKey {
+type ApiKeyRow = typeof apiKeys.$inferSelect
+
+/** Map a database row to the public ApiKey shape (strips keyHash, parses scopes). */
+function toApiKey(row: ApiKeyRow): ApiKey {
   return {
     id: row.id,
     name: row.name,
@@ -32,7 +48,26 @@ function toApiKey(row: ApiKey & Record<string, unknown>): ApiKey {
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     revokedAt: row.revokedAt,
+    scopes: parseApiKeyScopes(row.scopes),
   }
+}
+
+/**
+ * Validate + normalize the scopes for a new key. Undefined/null means a legacy
+ * full-authority key (stored NULL). A provided list must be non-empty and drawn
+ * from the vocabulary; it is deduped and stored in vocabulary order.
+ */
+function normalizeScopesInput(scopes: CreateApiKeyInput['scopes']): string | null {
+  if (scopes === undefined || scopes === null) return null
+  const unknown = scopes.filter((s) => !API_KEY_SCOPES.includes(s))
+  if (unknown.length > 0) {
+    throw new ValidationError('VALIDATION_ERROR', `Unknown API key scope(s): ${unknown.join(', ')}`)
+  }
+  const ordered = orderScopes(scopes)
+  if (ordered.length === 0) {
+    throw new ValidationError('VALIDATION_ERROR', EMPTY_SCOPES_MESSAGE)
+  }
+  return JSON.stringify(ordered)
 }
 
 /**
@@ -79,6 +114,8 @@ export async function createApiKey(
     throw new ValidationError('VALIDATION_ERROR', 'API key name must be 255 characters or less')
   }
 
+  const storedScopes = normalizeScopesInput(input.scopes)
+
   // Generate the key
   const plainTextKey = generateApiKey()
   const keyHash = hashApiKey(plainTextKey)
@@ -108,14 +145,31 @@ export async function createApiKey(
       createdById,
       principalId: servicePrincipal.id,
       expiresAt: input.expiresAt ?? null,
+      scopes: storedScopes,
     })
     .returning()
 
   // Update service principal with the actual apiKeyId
-  await db
-    .update(principal)
-    .set({ serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } })
-    .where(eq(principal.id, servicePrincipal.id))
+  await updatePrincipalFields(
+    { principalId: servicePrincipal.id },
+    { serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } }
+  )
+
+  // EVENTING-V2 WO-6a: emit the audit-relevant creation event. A short tx since
+  // this service has no surrounding one; exposure.audit writes the audit_log row
+  // in the same tx (best-effort — a failure must not fail key creation).
+  try {
+    await db.transaction((tx) =>
+      emit(tx, apiKeyCreated, {
+        payload: { apiKeyId: apiKey.id, name: apiKey.name, scopes: storedScopes },
+        actor: { type: 'user', id: createdById },
+        entityId: apiKey.id,
+        context: { source: 'admin' },
+      })
+    )
+  } catch {
+    /* best-effort emission; never blocks key creation */
+  }
 
   return { apiKey: toApiKey(apiKey), plainTextKey }
 }
@@ -162,14 +216,15 @@ export async function verifyApiKey(key: string, scope?: string): Promise<ApiKey 
   return toApiKey(apiKey)
 }
 
+/**
+ * Whether the raw stored scopes hold `scope`. Unlike the vocabulary-filtered
+ * parseApiKeyScopes, this matches ANY stored entry (internal capability
+ * scopes such as `internal:tier-limits`) and fails closed: no stored scopes
+ * means no internal capability.
+ */
 function hasScope(scopesRaw: string | null, scope: string): boolean {
   if (!scopesRaw) return false
-  try {
-    const parsed = JSON.parse(scopesRaw)
-    return Array.isArray(parsed) && parsed.includes(scope)
-  } catch {
-    return false
-  }
+  return parseScopesJson(scopesRaw)?.includes(scope) ?? false
 }
 
 /**
@@ -219,17 +274,25 @@ export async function revokeApiKey(id: ApiKeyId): Promise<void> {
   // Downgrade the service principal so it no longer counts as admin/member
   const revokedKey = result[0]
   if (revokedKey.principalId) {
-    await db.update(principal).set({ role: 'user' }).where(eq(principal.id, revokedKey.principalId))
-    // Service principals don't typically render SSR pages, but keep the
-    // PRINCIPAL_BY_USER cache consistent in case one ever does.
-    const p = await db.query.principal.findFirst({
-      where: eq(principal.id, revokedKey.principalId),
-      columns: { userId: true },
-    })
-    if (p?.userId) {
-      const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
-      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(p.userId))
-    }
+    // The factory resolves the row's userId and busts PRINCIPAL_BY_USER if set.
+    // A service principal has no userId, so this stays a no-op cache-wise, as before.
+    await setPrincipalRole({ principalId: revokedKey.principalId }, 'user')
+  }
+
+  // EVENTING-V2 WO-6a: audit-relevant deletion event. The actor isn't threaded
+  // into this signature yet (WO-6 refinement), so it is attributed to the
+  // service plane for now. Best-effort, same as create.
+  try {
+    await db.transaction((tx) =>
+      emit(tx, apiKeyDeleted, {
+        payload: { apiKeyId: id },
+        actor: { type: 'service' },
+        entityId: id,
+        context: { source: 'admin' },
+      })
+    )
+  } catch {
+    /* best-effort emission; never blocks revocation */
   }
 }
 
@@ -282,10 +345,7 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
   }
 
   // Sync name to the service principal
-  await db
-    .update(principal)
-    .set({ displayName: name.trim() })
-    .where(eq(principal.id, updated.principalId))
+  await syncPrincipalProfileById(updated.principalId, { displayName: name.trim() })
 
   return toApiKey(updated)
 }

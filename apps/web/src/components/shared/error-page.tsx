@@ -39,18 +39,35 @@ export function isAuthorizationError(error: Error): boolean {
 }
 
 export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
+  // Teammates who bounce off an admin-only page get a path back to their work
+  // surfaces; portal visitors get the public exit (for them "Back to Feedback"
+  // would just be denied again). Error boundaries can render outside router
+  // context, so read the path from the window rather than a router hook.
+  const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">You don't have access to this page.</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">You don&apos;t have access</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        This area is limited to workspace admins. If you think that's a mistake, ask an admin on
-        your team for access.
+        Only people with the right permissions can open this page. Ask a workspace admin if you need
+        access.
       </p>
 
-      <div className="mt-6">
-        <Button variant="outline" asChild>
-          <a href="/">Go home</a>
-        </Button>
+      <div className="mt-6 flex items-center justify-center gap-3">
+        {isAdminArea ? (
+          <>
+            <Button asChild>
+              <a href="/admin/feedback">Back to Feedback</a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/">View public board</a>
+            </Button>
+          </>
+        ) : (
+          <Button variant="outline" asChild>
+            <a href="/">Go home</a>
+          </Button>
+        )}
       </div>
     </FriendlyShell>
   )
@@ -63,7 +80,7 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong.</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         An unexpected error occurred. Try again, or return to the home page.
       </p>
@@ -94,10 +111,10 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
 export function NotFoundPage() {
   return (
     <FriendlyShell>
-      <h1 className="text-2xl font-semibold tracking-tight">That page has flown the pond.</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        We couldn't find what you were looking for. It may have been moved, or the link might be
-        wrong.
+        The page you're looking for doesn't exist. It may have been moved or deleted, or the link
+        may be incorrect.
       </p>
 
       <div className="mt-6">

@@ -14,6 +14,7 @@ import { ChangelogFiltersPanel } from './changelog-filters'
 import { useChangelogFilters } from './use-changelog-filters'
 import { CreateChangelogDialog } from './create-changelog-dialog'
 import { ChangelogListItem } from './changelog-list-item'
+import { ChangelogTopViewed } from './changelog-top-viewed'
 import { changelogQueries } from '@/lib/client/queries/changelog'
 import { useDeleteChangelog } from '@/lib/client/mutations/changelog'
 import { Route } from '@/routes/admin/changelog'
@@ -145,13 +146,20 @@ export function ChangelogList() {
         }
         hasActiveFilters={hasActiveFilters}
       >
-        <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0">
+        <div className="max-w-5xl w-full flex flex-col flex-1 min-h-0">
           {/* Header */}
           <AdminListHeader
             searchValue={searchValue}
             onSearchChange={setSearchValue}
             action={<CreateChangelogDialog />}
           />
+
+          {/* Top viewed */}
+          {!hasActiveFilters && !filters.search && (
+            <div className="px-3 pt-3">
+              <ChangelogTopViewed onSelect={handleEdit} />
+            </div>
+          )}
 
           {/* List */}
           {isLoading ? (

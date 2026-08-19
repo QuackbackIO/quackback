@@ -1,0 +1,273 @@
+/**
+ * Inbound email channel config + plus-address routing, kept pure so it's
+ * unit-tested directly. The widget's outbound agent-reply emails set a
+ * conversation-specific Reply-To (`reply+<id-suffix>.<sig>@<inbound-domain>`);
+ * the inbound webhook reads that plus-address back to route a reply into the
+ * right conversation. The `<sig>` is an HMAC of the conversation id under the
+ * workspace's inbound signing secret, so a third party who receives one of our
+ * reply emails cannot forge a reply-to for an ARBITRARY conversation and inject
+ * messages as another visitor — the webhook signature only proves the provider
+ * forwarded the mail, not the SMTP sender's identity. Both are gated on inbound
+ * being configured.
+ *
+ * Only the TypeID suffix is embedded, not the full `conversation_<suffix>` id:
+ * the prefix is constant across every conversation, so carrying it would just
+ * burn 13 characters of the RFC 5321 64-char local-part budget for no routing
+ * value. The parser re-attaches it. The HMAC is still taken over the full id.
+ */
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
+import { ID_PREFIXES, type ConversationId, type TicketId } from '@quackback/ids'
+import { extractEmailAddress } from './conversation.email-inbound'
+
+type EnvLike = Record<string, string | undefined>
+
+const INBOUND_DOMAIN_ENV = 'EMAIL_INBOUND_DOMAIN'
+const INBOUND_SECRET_ENV = 'EMAIL_INBOUND_SIGNING_SECRET'
+const EMAIL_FROM_ENV = 'EMAIL_FROM'
+
+// `conversation_` — the constant TypeID prefix stripped from the local part on
+// the way out and re-attached on the way in.
+const CONVERSATION_PREFIX = `${ID_PREFIXES.conversation}_`
+
+// base64url chars of the HMAC-SHA256 tag embedded in the plus-address. The
+// local part is `reply+` + a 26-char TypeID suffix + `.` + the tag, so the RFC
+// 5321 64-char limit leaves room for 31; 22 (~132 bits) is far beyond what's
+// needed to make the id unforgeable while staying well clear of the limit (#293).
+const SIG_LEN = 22
+
+/** Decode the `whsec_<base64>` signing secret to raw key bytes, or null. */
+function signingKey(env: EnvLike): Buffer | null {
+  const secret = env[INBOUND_SECRET_ENV]
+  if (!secret) return null
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64')
+  return key.byteLength > 0 ? key : null
+}
+
+/** Inbound email is usable only when both the receiving domain and the webhook
+ *  signing secret are configured. When false, the inbound route 404s and no
+ *  routable Reply-To is emitted. */
+export function isEmailInboundConfigured(env: EnvLike = process.env): boolean {
+  return Boolean(env[INBOUND_DOMAIN_ENV] && env[INBOUND_SECRET_ENV])
+}
+
+/** HMAC tag binding an inbound id (conversation or ticket) to this workspace's
+ *  inbound secret, or null when no secret is configured. Taken over the full
+ *  prefixed id, so a conversation id and a ticket id never produce a colliding
+ *  tag — the sole reason the two address families route unambiguously. */
+function signInboundId(id: string, env: EnvLike): string | null {
+  const key = signingKey(env)
+  if (!key) return null
+  return createHmac('sha256', key).update(id).digest('base64url').slice(0, SIG_LEN)
+}
+
+/** HMAC tag binding a conversation id to this workspace's inbound secret, or
+ *  null when no secret is configured. */
+export function signConversationId(
+  conversationId: string,
+  env: EnvLike = process.env
+): string | null {
+  return signInboundId(conversationId, env)
+}
+
+/** `reply+<id-suffix>.<sig>@<inbound-domain>`, or null when the inbound domain
+ *  or signing secret is missing. The `conversation_` prefix is dropped to keep
+ *  the local part under the RFC 5321 64-char limit (#293). */
+export function inboundReplyToAddress(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = env[INBOUND_DOMAIN_ENV]
+  const sig = signConversationId(conversationId, env)
+  if (!domain || !sig) return null
+  // The `ConversationId` type guarantees the prefix; embed only the bare suffix.
+  const suffix = conversationId.slice(CONVERSATION_PREFIX.length)
+  return `reply+${suffix}.${sig}@${domain}`
+}
+
+/** Extract + verify the conversation id from a `reply+<id-suffix>.<sig>@domain`
+ *  recipient. Returns the id only when the signature matches (constant-time);
+ *  an unsigned, tampered, or wrong-secret address yields null so a forged
+ *  reply-to can't route into someone else's conversation. */
+export function conversationIdFromInboundAddress(
+  address: string,
+  env: EnvLike = process.env
+): string | null {
+  const match = /reply\+([^@>\s]+)@/i.exec(address)
+  if (!match) return null
+  const local = match[1]
+  // suffix and sig are both dot-free (TypeID base32 + base64url), so the last
+  // dot is an unambiguous separator.
+  const dot = local.lastIndexOf('.')
+  if (dot === -1) return null
+  const embedded = local.slice(0, dot)
+  const provided = local.slice(dot + 1)
+  // Re-attach the prefix. base32 suffixes never contain `_`, so an embedded
+  // value that already starts with `conversation_` is a pre-#293 full id.
+  const id = embedded.startsWith(CONVERSATION_PREFIX)
+    ? embedded
+    : `${CONVERSATION_PREFIX}${embedded}`
+  const expected = signConversationId(id, env)
+  if (!expected) return null
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  if (a.byteLength !== b.byteLength || !timingSafeEqual(a, b)) return null
+  return id
+}
+
+// ============================================================================
+// Outbound Message-ID threading. Every notification email carries a
+// deterministic Message-ID whose host is one of our own sending domains and
+// whose local part embeds the conversation suffix (for debuggability) plus a
+// nonce (uniqueness across a thread). Routing back is by exact match against
+// the stored ids (see conversation.email-store.ts), not by parsing this — the
+// store is the authority, so no signature is needed on the id itself.
+// ============================================================================
+
+/** The domain part of an `addr` or `Name <addr>` value, lower-cased. Reuses the
+ *  inbound address parser (a single plausible addr-spec) and takes its host. */
+function domainOf(address: string | undefined): string | null {
+  const email = extractEmailAddress(address ?? null)
+  return email ? email.slice(email.lastIndexOf('@') + 1) : null
+}
+
+/** The host used for outbound Message-IDs: the sending identity's domain, else
+ *  the inbound domain. Null when neither is configured (no threading). */
+export function outboundMessageIdDomain(env: EnvLike = process.env): string | null {
+  return domainOf(env[EMAIL_FROM_ENV]) ?? env[INBOUND_DOMAIN_ENV] ?? null
+}
+
+/** Domains we send from — an inbound message whose Message-ID sits on one of
+ *  these is our own mail looping back, so the ingest core drops it. */
+export function ownEmailDomains(env: EnvLike = process.env): Set<string> {
+  const domains = new Set<string>()
+  const from = domainOf(env[EMAIL_FROM_ENV])
+  if (from) domains.add(from)
+  const inbound = env[INBOUND_DOMAIN_ENV]?.toLowerCase()
+  if (inbound) domains.add(inbound)
+  return domains
+}
+
+/** Mint a fresh outbound Message-ID for a conversation, bare (no angle
+ *  brackets — the send layer wraps it). Null when no sending domain is known. */
+export function mintOutboundMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  const suffix = conversationId.slice(CONVERSATION_PREFIX.length)
+  const nonce = randomBytes(9).toString('base64url')
+  return `c.${suffix}.${nonce}@${domain}`
+}
+
+// ============================================================================
+// Internal-note threading. An @-mention alert is agent-facing mail about a
+// conversation, so it threads on its own `note.` namespace rather than the
+// customer-facing `c.` ids above. The two namespaces are disjoint by
+// construction, which is what keeps an internal note out of the thread the
+// customer sees — and keeps a note alert unroutable by the inbound map, whose
+// authority is the recorded `c.` ids alone.
+// ============================================================================
+
+/** Deterministic Message-ID for a conversation's internal-note email thread
+ *  root: every note alert References this id, so repeated mentions on one
+ *  conversation collapse into a single thread in the teammate's client.
+ *  Stateless (derived from the conversation id). Null when no sending domain is
+ *  known, in which case the alert threads on nothing. */
+export function noteThreadRootMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  return `note.${conversationId.slice(CONVERSATION_PREFIX.length)}@${domain}`
+}
+
+/** Fresh per-send Message-ID for an internal-note alert, bare (no angle
+ *  brackets — the send layer wraps it). Unique per recipient and per send, so
+ *  no two alerts claim the same id. */
+export function mintNoteOutboundMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  const suffix = conversationId.slice(CONVERSATION_PREFIX.length)
+  const nonce = randomBytes(6).toString('base64url')
+  return `note.${suffix}.${nonce}@${domain}`
+}
+
+// ============================================================================
+// Ticket reply-to addressing. Same grammar and signing secret as the
+// conversation addresses above, with a `tkt-` marker so the two route
+// unambiguously: `reply+tkt-<id-suffix>.<sig>@<inbound-domain>`. A ticket
+// address fed to the conversation parser re-attaches the wrong prefix and
+// fails the HMAC, and vice versa, so misrouting is structurally impossible.
+// This module stays the single owner of the plus-address grammar.
+// ============================================================================
+
+const TICKET_PREFIX = `${ID_PREFIXES.ticket}_`
+const TICKET_MARKER = 'tkt-'
+
+/** HMAC tag binding a ticket id to this workspace's inbound secret. */
+export function signTicketId(ticketId: string, env: EnvLike = process.env): string | null {
+  return signInboundId(ticketId, env)
+}
+
+/** `reply+tkt-<id-suffix>.<sig>@<inbound-domain>`, or null when inbound email
+ *  is not configured — the caller then sends without a Reply-To and the email
+ *  footer points at the portal thread instead. */
+export function inboundTicketReplyToAddress(
+  ticketId: TicketId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = env[INBOUND_DOMAIN_ENV]
+  const sig = signTicketId(ticketId, env)
+  if (!domain || !sig) return null
+  const suffix = ticketId.slice(TICKET_PREFIX.length)
+  return `reply+${TICKET_MARKER}${suffix}.${sig}@${domain}`
+}
+
+/** Extract + verify the ticket id from a `reply+tkt-<id-suffix>.<sig>@domain`
+ *  recipient. Constant-time signature check; a tampered or wrong-secret
+ *  address yields null so a forged reply-to can't inject into a ticket. */
+export function ticketIdFromInboundAddress(
+  address: string,
+  env: EnvLike = process.env
+): string | null {
+  const match = /reply\+tkt-([^@>\s]+)@/i.exec(address)
+  if (!match) return null
+  const local = match[1]
+  const dot = local.lastIndexOf('.')
+  if (dot === -1) return null
+  const id = `${TICKET_PREFIX}${local.slice(0, dot)}`
+  const provided = local.slice(dot + 1)
+  const expected = signTicketId(id, env)
+  if (!expected) return null
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  if (a.byteLength !== b.byteLength || !timingSafeEqual(a, b)) return null
+  return id
+}
+
+/** Deterministic Message-ID for a ticket's email-thread ROOT: every ticket
+ *  email References this id, so a ticket's notifications collapse into one
+ *  client conversation. Stateless (derived from the ticket id); the received
+ *  confirmation carries it as its own Message-ID, later sends mint fresh ids
+ *  via mintTicketOutboundMessageId and Reference this. */
+export function ticketRootMessageId(ticketId: TicketId, env: EnvLike = process.env): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  return `ticket-${ticketId.slice(TICKET_PREFIX.length)}@${domain}`
+}
+
+/** Fresh per-send Message-ID for a ticket email (non-root sends). */
+export function mintTicketOutboundMessageId(
+  ticketId: TicketId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  const nonce = randomBytes(6).toString('base64url')
+  return `ticket-${ticketId.slice(TICKET_PREFIX.length)}.${nonce}@${domain}`
+}

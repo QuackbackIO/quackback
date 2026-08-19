@@ -54,7 +54,9 @@ vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers(),
 }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     insert: (...a: unknown[]) => hoisted.insertFn(...a),
     delete: (...a: unknown[]) => hoisted.deleteFn(...a),
@@ -63,13 +65,6 @@ vi.mock('@/lib/server/db', () => ({
         findMany: (...a: unknown[]) => hoisted.findMany(...a),
       },
     },
-  },
-  ssoRecoveryCode: {
-    id: 'ssoRecoveryCode.id',
-    userId: 'ssoRecoveryCode.userId',
-    codeHash: 'ssoRecoveryCode.codeHash',
-    usedAt: 'ssoRecoveryCode.usedAt',
-    createdAt: 'ssoRecoveryCode.createdAt',
   },
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
   eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),

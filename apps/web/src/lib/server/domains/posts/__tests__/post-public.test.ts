@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 
 const mockEq = vi.fn((col, val) => ({ _tag: 'eq', col, val }))
 const mockOr = vi.fn((...args) => ({ _tag: 'or', args }))
@@ -7,7 +7,7 @@ const mockIsNull = vi.fn((col) => ({ _tag: 'isNull', col }))
 const mockInArray = vi.fn((col, arr) => ({ _tag: 'inArray', col, arr }))
 const mockAnd = vi.fn((...args) => ({ _tag: 'and', args }))
 const mockDesc = vi.fn((col) => ({ _tag: 'desc', col }))
-const mockSql = vi.fn(() => ({ as: vi.fn(() => ({ _tag: 'sql_as' })) }))
+const mockSql = vi.fn(() => ({ _tag: 'sql', as: vi.fn(() => ({ _tag: 'sql_as' })) }))
 const mockGte = vi.fn((col, val) => ({ _tag: 'gte', col, val }))
 
 const mockPosts = {
@@ -22,6 +22,7 @@ const mockPosts = {
   title: Symbol('posts.title'),
   content: Symbol('posts.content'),
   createdAt: Symbol('posts.createdAt'),
+  pinnedAt: Symbol('posts.pinnedAt'),
   searchVector: Symbol('posts.searchVector'),
 }
 
@@ -70,9 +71,16 @@ vi.mock('@/lib/server/db', () => ({
   posts: mockPosts,
   boards: mockBoards,
   postStatuses: mockPostStatuses,
-  postTags: { postId: Symbol('postTags.postId'), tagId: Symbol('postTags.tagId') },
-  tags: { id: Symbol('tags.id'), name: Symbol('tags.name'), color: Symbol('tags.color') },
-  votes: { postId: Symbol('votes.postId'), principalId: Symbol('votes.principalId') },
+  postTagAssignments: {
+    postId: Symbol('postTagAssignments.postId'),
+    tagId: Symbol('postTagAssignments.tagId'),
+  },
+  postTags: {
+    id: Symbol('postTags.id'),
+    name: Symbol('postTags.name'),
+    color: Symbol('postTags.color'),
+  },
+  postVotes: { postId: Symbol('postVotes.postId'), principalId: Symbol('postVotes.principalId') },
   principal: { id: Symbol('principal.id') },
 }))
 
@@ -113,14 +121,14 @@ describe('listPublicPostsWithVotesAndAvatars — default status filtering', () =
   it('does not apply the default category filter when statusIds are provided', async () => {
     const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
 
-    await listPublicPostsWithVotesAndAvatars({ statusIds: ['status_1' as StatusId] })
+    await listPublicPostsWithVotesAndAvatars({ statusIds: ['post_status_1' as PostStatusId] })
 
     const activeFilterApplied = mockEq.mock.calls.some(
       ([col, val]) => col === mockPostStatuses.category && val === 'active'
     )
     expect(activeFilterApplied).toBe(false)
     expect(mockOr).not.toHaveBeenCalled()
-    expect(mockInArray).toHaveBeenCalledWith(mockPosts.statusId, ['status_1'])
+    expect(mockInArray).toHaveBeenCalledWith(mockPosts.statusId, ['post_status_1'])
   })
 })
 
@@ -205,5 +213,52 @@ describe('listPublicPostsWithVotesAndAvatars — additional filters', () => {
 
     expect(mockEq).toHaveBeenCalledWith(mockPostStatuses.category, 'active')
     expect(mockGte).toHaveBeenCalledWith(mockPosts.voteCount, 5)
+  })
+})
+
+describe('listPublicPostsWithVotesAndAvatars — pinned posts lead every sort', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSubWhere.mockReturnValue(SUBQUERY_MARKER)
+    mockMainOffset.mockResolvedValue([])
+    mockMainLimit.mockReturnValue({ offset: mockMainOffset })
+    mockMainOrderBy.mockReturnValue({ limit: mockMainLimit })
+    mockMainWhere.mockReturnValue({ orderBy: mockMainOrderBy })
+    mockMainInnerJoin.mockReturnValue({ where: mockMainWhere })
+  })
+
+  /** Locate the sql fragment that orders pinned posts first. */
+  function pinnedFragment() {
+    const idx = mockSql.mock.calls.findIndex((call) => {
+      const [fragments, ...values] = call as unknown as [TemplateStringsArray, ...unknown[]]
+      return values.includes(mockPosts.pinnedAt) && fragments.join('?').includes('NULLS LAST')
+    })
+    if (idx === -1) return undefined
+    return (mockSql.mock.results[idx] as { value: unknown }).value
+  }
+
+  it.each(['top', 'new', 'trending'] as const)(
+    'orders pinned posts ahead of the active sort (%s)',
+    async (sort) => {
+      const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+      await listPublicPostsWithVotesAndAvatars({ sort })
+
+      const pinned = pinnedFragment()
+      expect(pinned).toBeDefined()
+      expect(mockMainOrderBy).toHaveBeenCalledTimes(1)
+      const args = mockMainOrderBy.mock.calls[0]
+      expect(args).toHaveLength(2)
+      expect(args[0]).toBe(pinned)
+    }
+  )
+
+  it('keeps the active sort as the tie-breaker after pinned posts', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ sort: 'new' })
+
+    const args = mockMainOrderBy.mock.calls[0]
+    expect(args[1]).toEqual({ _tag: 'desc', col: mockPosts.createdAt })
   })
 })

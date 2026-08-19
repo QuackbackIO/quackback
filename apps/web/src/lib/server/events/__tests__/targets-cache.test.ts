@@ -34,7 +34,9 @@ const mockInnerJoin = vi.fn()
 const mockDbWhere = vi.fn()
 const mockFindMany = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: (...args: unknown[]) => mockSelect(...args),
     query: {
@@ -43,30 +45,10 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
   },
-  integrations: {
-    id: 'id',
-    integrationType: 'integrationType',
-    secrets: 'secrets',
-    config: 'config',
-    status: 'status',
-  },
-  integrationEventMappings: {
-    integrationId: 'integrationId',
-    eventType: 'eventType',
-    actionConfig: 'actionConfig',
-    filters: 'filters',
-    enabled: 'enabled',
-  },
-  webhooks: {
-    status: 'status',
-    deletedAt: 'deletedAt',
-    $inferSelect: {},
-  },
   eq: vi.fn(),
   and: vi.fn(),
   isNull: vi.fn(),
   inArray: vi.fn(),
-  principal: {},
 }))
 
 // --- Other mocks ---
@@ -116,6 +98,21 @@ beforeEach(() => {
   mockCacheSet.mockResolvedValue(undefined)
 })
 
+// Key-based cacheGet mock. The resolver registry runs sinks CONCURRENTLY, so
+// call-order (mockResolvedValueOnce) mocks are non-deterministic; match on the
+// cache key instead. `undefined` for a response means "cache miss" (null).
+function cacheByKey(opts: { mappings?: unknown; webhooks?: unknown }) {
+  mockCacheGet.mockImplementation((key: string) =>
+    Promise.resolve(
+      key === 'hooks:integration-mappings'
+        ? (opts.mappings ?? null)
+        : key === 'hooks:webhooks-active'
+          ? (opts.webhooks ?? null)
+          : null
+    )
+  )
+}
+
 // Helper: set up the DB chain for integration mappings
 function setupIntegrationDbChain(rows: unknown[]) {
   mockDbWhere.mockResolvedValue(rows)
@@ -161,16 +158,20 @@ describe('integration mapping caching', () => {
     ]
 
     // First call returns null (integration mappings), second returns null (webhooks)
-    mockCacheGet
-      .mockResolvedValueOnce(cachedMappings) // INTEGRATION_MAPPINGS
-      .mockResolvedValueOnce([]) // ACTIVE_WEBHOOKS
+    cacheByKey({ mappings: cachedMappings, webhooks: [] })
 
     const targets = await getHookTargets(makePostCreatedEvent())
 
     // Should have called cacheGet for integration mappings
     expect(mockCacheGet).toHaveBeenCalledWith('hooks:integration-mappings')
-    // DB select should NOT have been called (cache hit)
-    expect(mockSelect).not.toHaveBeenCalled()
+    // Cache hit → the integration mappings were NOT re-queried + re-cached.
+    // (Assert on the mappings cache-refresh rather than the generic db.select,
+    // which the app-webhook resolver also uses now.)
+    expect(mockCacheSet).not.toHaveBeenCalledWith(
+      'hooks:integration-mappings',
+      expect.anything(),
+      expect.anything()
+    )
     // Should have a slack target
     const slackTargets = targets.filter((t) => t.type === 'slack')
     expect(slackTargets).toHaveLength(1)
@@ -197,9 +198,7 @@ describe('integration mapping caching', () => {
       },
     ]
 
-    mockCacheGet
-      .mockResolvedValueOnce(cachedMappings) // INTEGRATION_MAPPINGS
-      .mockResolvedValueOnce([]) // ACTIVE_WEBHOOKS
+    cacheByKey({ mappings: cachedMappings, webhooks: [] })
 
     const targets = await getHookTargets(makePostCreatedEvent())
 
@@ -221,9 +220,7 @@ describe('integration mapping caching', () => {
       },
     ]
 
-    mockCacheGet
-      .mockResolvedValueOnce(null) // INTEGRATION_MAPPINGS cache miss
-      .mockResolvedValueOnce([]) // ACTIVE_WEBHOOKS
+    cacheByKey({ webhooks: [] })
 
     setupIntegrationDbChain(dbRows)
 
@@ -251,7 +248,8 @@ describe('integration hook config', () => {
   }
 
   async function targetsFor(row: Record<string, unknown>) {
-    mockCacheGet.mockResolvedValueOnce([row]).mockResolvedValueOnce([])
+    // Key-based mock — sinks resolve concurrently, so Once-order is a race.
+    cacheByKey({ mappings: [row], webhooks: [] })
     return getHookTargets(makePostCreatedEvent())
   }
 
@@ -280,8 +278,8 @@ describe('integration hook config', () => {
   })
 
   it('forwards organizationName, apiKey, and teamId from stored config', async () => {
-    mockCacheGet
-      .mockResolvedValueOnce([
+    cacheByKey({
+      mappings: [
         mapping({
           integrationType: 'azure_devops',
           integrationConfig: { organizationName: 'acme' },
@@ -297,8 +295,9 @@ describe('integration hook config', () => {
           integrationConfig: { teamId: 'team-1' },
           actionConfig: { channelId: 'ch-1' },
         }),
-      ])
-      .mockResolvedValueOnce([])
+      ],
+      webhooks: [],
+    })
 
     const targets = await getHookTargets(makePostCreatedEvent())
     expect(targets.find((t) => t.type === 'azure_devops')?.config).toMatchObject({
@@ -351,9 +350,7 @@ describe('webhook caching', () => {
       },
     ]
 
-    mockCacheGet
-      .mockResolvedValueOnce([]) // INTEGRATION_MAPPINGS (empty)
-      .mockResolvedValueOnce(cachedWebhooks) // ACTIVE_WEBHOOKS
+    cacheByKey({ mappings: [], webhooks: cachedWebhooks })
 
     // No DB setup needed for integration mappings since we return empty cache
     setupIntegrationDbChain([])
@@ -380,9 +377,7 @@ describe('webhook caching', () => {
       },
     ]
 
-    mockCacheGet
-      .mockResolvedValueOnce([]) // INTEGRATION_MAPPINGS (empty)
-      .mockResolvedValueOnce(null) // ACTIVE_WEBHOOKS cache miss
+    cacheByKey({ mappings: [] })
 
     setupIntegrationDbChain([])
     mockFindMany.mockResolvedValue(dbWebhooks)
@@ -417,9 +412,7 @@ describe('webhook caching', () => {
       },
     ]
 
-    mockCacheGet
-      .mockResolvedValueOnce([]) // INTEGRATION_MAPPINGS
-      .mockResolvedValueOnce(cachedWebhooks) // ACTIVE_WEBHOOKS
+    cacheByKey({ mappings: [], webhooks: cachedWebhooks })
 
     setupIntegrationDbChain([])
 
@@ -451,9 +444,7 @@ describe('webhook caching', () => {
       },
     ]
 
-    mockCacheGet
-      .mockResolvedValueOnce([]) // INTEGRATION_MAPPINGS
-      .mockResolvedValueOnce(cachedWebhooks) // ACTIVE_WEBHOOKS
+    cacheByKey({ mappings: [], webhooks: cachedWebhooks })
 
     setupIntegrationDbChain([])
 

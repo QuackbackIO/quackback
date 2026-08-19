@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CommentId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 // ── Mock state ────────────────────────────────────────────────────────────────
@@ -11,10 +11,12 @@ const mockDispatchCommentUpdated = vi.fn()
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
-      comments: {
+      postComments: {
         findFirst: (...args: unknown[]) => mockFindFirst(...args),
         findMany: (...args: unknown[]) => mockFindMany(...args),
       },
@@ -25,9 +27,6 @@ vi.mock('@/lib/server/db', () => ({
   and: vi.fn(),
   isNull: vi.fn(),
   sql: vi.fn(),
-  comments: { id: 'id', parentId: 'parent_id' },
-  commentEditHistory: {},
-  posts: {},
 }))
 
 vi.mock('@/lib/server/events/dispatch', () => ({
@@ -41,7 +40,7 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const COMMENT_ID = 'comment_test123' as unknown as CommentId
+const COMMENT_ID = 'comment_test123' as unknown as PostCommentId
 const AUTHOR_ID = 'principal_author' as unknown as PrincipalId
 const OTHER_ID = 'principal_other' as unknown as PrincipalId
 

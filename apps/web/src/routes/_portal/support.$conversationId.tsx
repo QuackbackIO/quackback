@@ -7,13 +7,16 @@ import type { ConversationId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { BackLink } from '@/components/ui/back-link'
 import { EmptyState } from '@/components/shared/empty-state'
-import { VisitorChatThread } from '@/components/shared/chat/visitor-chat-thread'
+import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
-import { getChatPresenceFn } from '@/lib/server/functions/chat'
-import { CHAT_PRESENCE_POLL_MS, type ChatPresence } from '@/lib/shared/chat/presence'
+import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
 import {
-  PORTAL_CHAT_PRESENCE_QUERY_KEY,
+  CONVERSATION_PRESENCE_POLL_MS,
+  type ConversationPresence,
+} from '@/lib/shared/conversation/presence'
+import {
+  PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
 
@@ -21,7 +24,11 @@ export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
 })
 
-const OFFLINE: ChatPresence = { agentsOnline: false, withinOfficeHours: null, nextOpenAt: null }
+const OFFLINE: ConversationPresence = {
+  agentsOnline: false,
+  withinOfficeHours: null,
+  nextOpenAt: null,
+}
 
 function SupportThreadPage() {
   const intl = useIntl()
@@ -32,8 +39,12 @@ function SupportThreadPage() {
   const authPopover = useAuthPopoverSafe()
   const { upload } = usePortalImageUpload()
 
-  const supportEnabled =
+  // Converged Messages: ticket pairs open here too, so a tickets-enabled
+  // workspace keeps this route alive even with the messenger/portal-support
+  // toggle off (email-first workspaces reply to their ticket threads here).
+  const messengerEnabled =
     !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+  const supportEnabled = messengerEnabled || !!settings?.featureFlags?.supportTickets
 
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'
@@ -41,11 +52,11 @@ function SupportThreadPage() {
   // Team availability for the presence strip — portal twin of the widget's
   // shared presence query (cookie-authed, so no headers needed).
   const presenceQuery = useQuery({
-    queryKey: PORTAL_CHAT_PRESENCE_QUERY_KEY,
-    queryFn: () => getChatPresenceFn(),
+    queryKey: PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
+    queryFn: () => getConversationPresenceFn(),
     enabled: supportEnabled && isLoggedIn,
-    refetchInterval: CHAT_PRESENCE_POLL_MS,
-    staleTime: CHAT_PRESENCE_POLL_MS,
+    refetchInterval: CONVERSATION_PRESENCE_POLL_MS,
+    staleTime: CONVERSATION_PRESENCE_POLL_MS,
   })
 
   // The first send creates the thread: move /support/new → /support/<id> so a
@@ -97,13 +108,13 @@ function SupportThreadPage() {
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
-          <VisitorChatThread
+          <VisitorConversationThread
             // Remount when switching threads so per-thread state never bleeds.
             key={conversationId}
             conversationTarget={
               conversationId === 'new' ? 'new' : (conversationId as ConversationId)
             }
-            linkPreviews={!!settings?.featureFlags?.linkPreviews}
+            linkPreviews={!!settings?.featureFlags?.supportInbox}
             currentUser={user ? { name: user.name, avatarUrl: user.image } : null}
             uploadImage={upload}
             presence={presenceQuery.data ?? OFFLINE}

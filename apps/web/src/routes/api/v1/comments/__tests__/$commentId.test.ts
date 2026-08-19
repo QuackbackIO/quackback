@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CommentId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PrincipalId } from '@quackback/ids'
 import {
   ForbiddenError,
   NotFoundError,
@@ -39,7 +39,9 @@ vi.mock('@/lib/server/domains/comments/comment.query', () => ({
   getCommentById: (...args: unknown[]) => mockGetCommentById(...args),
 }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       principal: {
@@ -47,7 +49,6 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
   },
-  principal: { id: 'id', userId: 'user_id' },
   eq: vi.fn(),
 }))
 
@@ -68,7 +69,7 @@ const COMMENT_ID_STR = 'comment_test123'
 const PRINCIPAL_ID = 'principal_1' as PrincipalId
 
 const mockComment = {
-  id: COMMENT_ID_STR as unknown as CommentId,
+  id: COMMENT_ID_STR as unknown as PostCommentId,
   postId: 'post_test',
   parentId: null,
   content: 'Original comment',

@@ -7,19 +7,67 @@ import { updateDeveloperConfigFn } from '@/lib/server/functions/settings'
 
 interface McpServerSettingsProps {
   initialEnabled: boolean
+  initialDynamicRegistrationEnabled: boolean
 }
 
-export function McpServerSettings({ initialEnabled }: McpServerSettingsProps) {
+interface ToggleRowProps {
+  id: string
+  label: string
+  description: string
+  checked: boolean
+  disabled: boolean
+  busy: boolean
+  onCheckedChange: (checked: boolean) => void
+}
+
+function ToggleRow({
+  id,
+  label,
+  description,
+  checked,
+  disabled,
+  busy,
+  onCheckedChange,
+}: ToggleRowProps) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
+      <div>
+        <Label htmlFor={id} className="text-sm font-medium cursor-pointer">
+          {label}
+        </Label>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {busy && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+          disabled={disabled}
+          aria-label={label}
+        />
+      </div>
+    </div>
+  )
+}
+
+export function McpServerSettings({
+  initialEnabled,
+  initialDynamicRegistrationEnabled,
+}: McpServerSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [enabled, setEnabled] = useState(initialEnabled)
+  const [dynamicRegistration, setDynamicRegistration] = useState(initialDynamicRegistrationEnabled)
 
-  const handleToggle = async (checked: boolean) => {
-    setEnabled(checked)
+  const save = async (data: {
+    mcpEnabled?: boolean
+    oauthDynamicClientRegistrationEnabled?: boolean
+  }) => {
     setSaving(true)
     try {
-      await updateDeveloperConfigFn({ data: { mcpEnabled: checked } })
+      await updateDeveloperConfigFn({ data })
       startTransition(() => {
         router.invalidate()
       })
@@ -32,26 +80,30 @@ export function McpServerSettings({ initialEnabled }: McpServerSettingsProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
-        <div>
-          <Label htmlFor="mcp-toggle" className="text-sm font-medium cursor-pointer">
-            Enable MCP Server
-          </Label>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Allow AI tools like Claude Code to interact with your feedback data via the MCP protocol
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isBusy && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-          <Switch
-            id="mcp-toggle"
-            checked={enabled}
-            onCheckedChange={handleToggle}
-            disabled={isBusy}
-            aria-label="MCP Server"
-          />
-        </div>
-      </div>
+      <ToggleRow
+        id="mcp-toggle"
+        label="Enable MCP Server"
+        description="Allow AI tools like Claude Code to interact with your feedback data via the MCP protocol"
+        checked={enabled}
+        disabled={isBusy}
+        busy={isBusy}
+        onCheckedChange={(c) => {
+          setEnabled(c)
+          void save({ mcpEnabled: c })
+        }}
+      />
+      <ToggleRow
+        id="dynamic-registration-toggle"
+        label="Dynamic client registration"
+        description="Let new OAuth apps (like MCP clients) register themselves. Turning this off blocks new apps; already-connected apps keep working"
+        checked={dynamicRegistration}
+        disabled={isBusy}
+        busy={isBusy}
+        onCheckedChange={(c) => {
+          setDynamicRegistration(c)
+          void save({ oauthDynamicClientRegistrationEnabled: c })
+        }}
+      />
     </div>
   )
 }

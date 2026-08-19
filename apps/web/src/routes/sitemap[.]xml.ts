@@ -52,26 +52,33 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
     { db, changelogEntries, and, desc, eq, sql },
     { publicChangelogConditions },
     { toIsoDateOnly },
+    { getFeatureFlags },
   ] = await Promise.all([
     import('@/lib/server/db'),
     import('@/lib/server/domains/changelog/changelog.public'),
     import('@/lib/shared/utils/date'),
+    import('@/lib/server/domains/settings/settings.service'),
   ])
 
   const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
   const urls: SitemapUrl[] = []
+  const flags = await getFeatureFlags()
 
   // Static pages
-  urls.push({ loc: baseUrl })
-  urls.push({ loc: `${baseUrl}/roadmap` })
-  urls.push({ loc: `${baseUrl}/changelog` })
+  if (flags.feedback) {
+    urls.push({ loc: baseUrl })
+    urls.push({ loc: `${baseUrl}/roadmap` })
+  }
+  if (flags.changelog) urls.push({ loc: `${baseUrl}/changelog` })
 
-  const entries = await db
-    .select({ id: changelogEntries.id, updatedAt: changelogEntries.updatedAt })
-    .from(changelogEntries)
-    .where(and(...publicChangelogConditions(new Date())))
-    .orderBy(desc(effectiveDisplayDate))
+  const entries = flags.changelog
+    ? await db
+        .select({ id: changelogEntries.id, updatedAt: changelogEntries.updatedAt })
+        .from(changelogEntries)
+        .where(and(...publicChangelogConditions(new Date())))
+        .orderBy(desc(effectiveDisplayDate))
+    : []
 
   for (const entry of entries) {
     urls.push({
@@ -84,20 +91,22 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
   // Sitemap is anonymous-public by definition — only boards whose view
   // tier is 'anonymous' belong here. Stricter tiers require auth and
   // should not be discoverable via Google.
-  const publicPosts = await db.query.posts.findMany({
-    where: (table, { and, isNull }) =>
-      and(
-        isNull(table.deletedAt),
-        eq(table.moderationState, 'published'),
-        isNull(table.canonicalPostId)
-      ),
-    columns: { id: true, updatedAt: true },
-    with: {
-      board: {
-        columns: { slug: true, access: true, deletedAt: true },
-      },
-    },
-  })
+  const publicPosts = flags.feedback
+    ? await db.query.posts.findMany({
+        where: (table, { and, isNull }) =>
+          and(
+            isNull(table.deletedAt),
+            eq(table.moderationState, 'published'),
+            isNull(table.canonicalPostId)
+          ),
+        columns: { id: true, updatedAt: true },
+        with: {
+          board: {
+            columns: { slug: true, access: true, deletedAt: true },
+          },
+        },
+      })
+    : []
 
   for (const post of publicPosts) {
     if (post.board?.slug && post.board.access?.view === 'anonymous' && !post.board.deletedAt) {

@@ -1,44 +1,68 @@
 'use client'
 
 import {
-  ComputerDesktopIcon,
-  DevicePhoneMobileIcon,
-  BuildingStorefrontIcon,
+  LightBulbIcon,
+  ChatBubbleLeftRightIcon,
+  BookOpenIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import type { UseCaseType } from '@/lib/shared/db-types'
+import {
+  normalizeOnboardingOutcome,
+  type UseCaseType,
+  type OnboardingOutcome,
+} from '@/lib/shared/db-types'
+import { Badge } from '@/components/ui/badge'
 import type { ComponentType } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
 
-interface UseCaseOption {
-  id: UseCaseType
+interface OutcomeOption {
+  id: OnboardingOutcome
   label: string
   description: string
+  /** Who this is for — ICP cue, not jargon */
+  forWhom: string
   icon: ComponentType<{ className?: string }>
 }
 
-const USE_CASE_OPTIONS: UseCaseOption[] = [
+/**
+ * Outcome-first picker, modeled on how feedback/support-tool ICPs actually
+ * buy:
+ *
+ *  - Product feedback  → PM & founder ICP
+ *  - Customer support  → support / CX ICP
+ *  - Help center       → Self-serve / deflect volume
+ *  - Internal          → Employee voice / ops feedback
+ *
+ * Stored as setupState.useCase. Legacy saas|consumer|marketplace map in
+ * display via normalizeOnboardingOutcome.
+ */
+const OUTCOME_OPTIONS: OutcomeOption[] = [
   {
-    id: 'saas',
-    label: 'SaaS product',
-    description: 'Feature requests from business customers',
-    icon: ComputerDesktopIcon,
+    id: 'product_feedback',
+    label: 'Product feedback',
+    description: 'Collect ideas, prioritize requests, and share what’s coming next',
+    forWhom: 'Product teams',
+    icon: LightBulbIcon,
   },
   {
-    id: 'consumer',
-    label: 'Consumer app',
-    description: 'Feedback from your users',
-    icon: DevicePhoneMobileIcon,
+    id: 'customer_support',
+    label: 'Customer support',
+    description: 'Talk with customers and manage conversations in a shared inbox',
+    forWhom: 'Support teams',
+    icon: ChatBubbleLeftRightIcon,
   },
   {
-    id: 'marketplace',
-    label: 'Marketplace',
-    description: 'Feedback from buyers and sellers',
-    icon: BuildingStorefrontIcon,
+    id: 'help_center',
+    label: 'Help Center',
+    description: 'Publish answers customers can find whenever they need them',
+    forWhom: 'Support & content',
+    icon: BookOpenIcon,
   },
   {
     id: 'internal',
-    label: 'Internal team',
-    description: 'Ideas and improvements',
+    label: 'Internal feedback',
+    description: 'Give teammates a private place to share ideas and improvements',
+    forWhom: 'Your team',
     icon: UserGroupIcon,
   },
 ]
@@ -50,21 +74,29 @@ interface UseCaseSelectorProps {
 }
 
 export function UseCaseSelector({ value, onChange, disabled }: UseCaseSelectorProps) {
+  const intl = useIntl()
+  const displayValue = normalizeOnboardingOutcome(value)
+
   return (
-    <div className="space-y-2 max-w-sm mx-auto">
-      {USE_CASE_OPTIONS.map((option) => {
-        const isSelected = value === option.id
+    <div
+      className="mx-auto max-w-md space-y-2"
+      role="radiogroup"
+      aria-label={intl.formatMessage({
+        id: 'onboarding.goal.groupLabel',
+        defaultMessage: 'Workspace goal',
+      })}
+    >
+      {OUTCOME_OPTIONS.map((option) => {
+        const isSelected = displayValue === option.id
         const Icon = option.icon
         return (
-          <button
+          <label
             key={option.id}
-            type="button"
-            onClick={() => onChange(option.id)}
-            disabled={disabled}
             className={`
-              w-full flex items-center gap-4 p-4
-              rounded-xl border transition-all duration-200
-              disabled:cursor-not-allowed disabled:opacity-50
+              relative w-full flex min-h-11 items-center gap-4 p-4
+              rounded-xl border transition-all duration-200 motion-reduce:transition-none
+              focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2
+              ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
               ${
                 isSelected
                   ? 'border-primary bg-primary/5 shadow-sm'
@@ -72,10 +104,18 @@ export function UseCaseSelector({ value, onChange, disabled }: UseCaseSelectorPr
               }
             `}
           >
-            {/* Icon */}
+            <input
+              type="radio"
+              name="workspace-goal"
+              value={option.id}
+              checked={isSelected}
+              onChange={() => onChange(option.id)}
+              disabled={disabled}
+              className="sr-only"
+            />
             <div
               className={`
-              shrink-0 p-2.5 rounded-lg transition-colors
+              shrink-0 p-2.5 rounded-lg transition-colors motion-reduce:transition-none
               ${isSelected ? 'bg-primary/10' : 'bg-muted/50'}
             `}
             >
@@ -84,16 +124,31 @@ export function UseCaseSelector({ value, onChange, disabled }: UseCaseSelectorPr
               />
             </div>
 
-            {/* Text */}
-            <div className="text-left min-w-0">
-              <div
-                className={`font-medium text-sm ${isSelected ? 'text-foreground' : 'text-foreground/90'}`}
-              >
-                {option.label}
+            <div className="text-left min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div
+                  className={`font-medium text-sm ${isSelected ? 'text-foreground' : 'text-foreground/90'}`}
+                >
+                  <FormattedMessage
+                    id={`onboarding.goal.${option.id}.label`}
+                    defaultMessage={option.label}
+                  />
+                </div>
+                <Badge size="sm" shape="pill" variant="secondary">
+                  <FormattedMessage
+                    id={`onboarding.goal.${option.id}.audience`}
+                    defaultMessage={option.forWhom}
+                  />
+                </Badge>
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">{option.description}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                <FormattedMessage
+                  id={`onboarding.goal.${option.id}.description`}
+                  defaultMessage={option.description}
+                />
+              </div>
             </div>
-          </button>
+          </label>
         )
       })}
     </div>

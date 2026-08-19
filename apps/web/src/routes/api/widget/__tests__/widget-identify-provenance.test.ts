@@ -19,18 +19,15 @@ const mockInsert = vi.fn()
 const mockValues = vi.fn()
 const mockOnConflictDoUpdate = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+// identify.ts's module graph reaches many tables (merge registry etc.), so
+// spread the REAL module (the db client is a lazy proxy; importing is safe)
+// and override only the db object. This mock never needs re-teaching when the
+// import graph grows.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     insert: (...args: unknown[]) => mockInsert(...args),
   },
-  widgetIdentifiedSession: {
-    sessionId: 'widget_identified_session.session_id',
-    hmacVerified: 'widget_identified_session.hmac_verified',
-  },
-  sql: vi.fn((strings: TemplateStringsArray, ..._values: unknown[]) => ({
-    kind: 'sql',
-    template: strings.join('?'),
-  })),
 }))
 
 beforeEach(() => {

@@ -21,7 +21,9 @@ vi.mock('@/lib/server/redis', () => ({
 const mockUpdate = vi.fn()
 const mockFindFirst = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     update: (...a: unknown[]) => mockUpdate(...a),
     query: { principal: { findFirst: (...a: unknown[]) => mockFindFirst(...a) } },
@@ -29,8 +31,6 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn(),
   and: vi.fn(),
   isNull: vi.fn(),
-  apiKeys: { id: 'id', revokedAt: 'revokedAt' },
-  principal: { id: 'id' },
 }))
 
 const { revokeApiKey } = await import('../api-key.service')

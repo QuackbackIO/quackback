@@ -7,15 +7,19 @@ import { RoadmapCard } from './roadmap-card'
 import { cn } from '@/lib/shared/utils'
 import {
   useRoadmapPostsByRoadmap,
-  flattenRoadmapPostEntries,
+  flattenRoadmapViewPosts,
 } from '@/lib/client/hooks/use-roadmap-posts-query'
-import type { RoadmapId, StatusId } from '@quackback/ids'
+import type { RoadmapId, PostStatusId } from '@quackback/ids'
 import type { RoadmapFilters } from '@/lib/shared/types'
 
 interface RoadmapColumnProps {
   roadmapId: RoadmapId
-  statusId: StatusId
+  columnId: string
+  statusId?: PostStatusId
+  bucketId?: string
   title: string
+  icon?: string | null
+  subtitle?: string
   color: string
   filters?: RoadmapFilters
   onCardClick?: (postId: string) => void
@@ -23,21 +27,25 @@ interface RoadmapColumnProps {
 
 export const RoadmapColumn = memo(function RoadmapColumn({
   roadmapId,
+  columnId,
   statusId,
+  bucketId,
   title,
+  icon,
+  subtitle,
   color,
   filters,
   onCardClick,
 }: RoadmapColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
-    id: statusId,
-    data: { type: 'Column', statusId },
+    id: columnId,
+    data: { type: 'Column', statusId, bucketId },
   })
 
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } =
-    useRoadmapPostsByRoadmap({ roadmapId, statusId, filters })
+    useRoadmapPostsByRoadmap({ roadmapId, statusId, bucketId, filters })
 
-  const posts = flattenRoadmapPostEntries(data)
+  const posts = flattenRoadmapViewPosts(data)
   const total = data?.pages[0]?.total ?? 0
 
   const sentinelRef = useInfiniteScroll({
@@ -57,7 +65,17 @@ export const RoadmapColumn = memo(function RoadmapColumn({
       <div className="flex items-center justify-between py-2 px-1 mb-2">
         <div className="flex items-center gap-2">
           <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-          <span className="text-sm font-medium text-muted-foreground">{title}</span>
+          <div>
+            <span className="text-sm font-medium text-muted-foreground">
+              {icon && (
+                <span className="me-1.5" aria-hidden>
+                  {icon}
+                </span>
+              )}
+              {title}
+            </span>
+            {subtitle && <p className="text-xs text-muted-foreground/70">{subtitle}</p>}
+          </div>
         </div>
         <span className="text-xs text-muted-foreground">{total}</span>
       </div>
@@ -80,7 +98,7 @@ export const RoadmapColumn = memo(function RoadmapColumn({
               <RoadmapCard
                 key={post.id}
                 post={post}
-                statusId={statusId}
+                placementId={columnId}
                 onClick={onCardClick ? () => onCardClick(post.id) : undefined}
               />
             ))}

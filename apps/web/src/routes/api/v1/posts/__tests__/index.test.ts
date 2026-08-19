@@ -14,13 +14,14 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
 vi.mock('@/lib/server/domains/posts/post.service', () => ({
   createPost: (...args: unknown[]) => mockCreatePost(...args),
 }))
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       principal: { findFirst: (...args: unknown[]) => mockPrincipalFindFirst(...args) },
     },
   },
-  principal: { id: 'id', userId: 'user_id' },
   eq: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
@@ -81,7 +82,7 @@ describe('POST /api/v1/posts authorPrincipalId override', () => {
       content: 'C',
       voteCount: 1,
       boardId: BOARD_ID,
-      statusId: 'status_open',
+      statusId: 'post_status_open',
       createdAt: new Date(),
       updatedAt: new Date(),
     })

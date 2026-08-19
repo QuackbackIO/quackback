@@ -1,54 +1,82 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'storage' })
 
-// In-memory cache for proxied assets (e.g. email logos) to avoid S3 round-trips.
-// Entries expire after 1 hour. Logo images are typically < 50 KB so memory is negligible.
-const proxyCache = new Map<string, { data: ArrayBuffer; contentType: string; cachedAt: number }>()
-const PROXY_CACHE_TTL = 60 * 60 * 1000 // 1 hour
+export interface ProxyCacheOptions {
+  ttlMs: number
+  /** Objects larger than this are served but never cached. */
+  maxEntryBytes: number
+  /** Total budget across all entries; exceeding it evicts least-recently-used entries. */
+  maxTotalBytes: number
+}
+
+export interface ProxyCacheEntry {
+  data: ArrayBuffer
+  contentType: string
+}
+
+/**
+ * Bounded in-memory cache for proxied assets (e.g. email logos).
+ * Each entry buffers a full S3 object, so entries are TTL-expired,
+ * size-capped per entry, and LRU-evicted against a total byte budget.
+ */
+export function createProxyCache(opts: ProxyCacheOptions) {
+  // Map iteration order is insertion order; get() re-inserts on hit, so the
+  // first keys are always the least recently used.
+  const entries = new Map<string, ProxyCacheEntry & { cachedAt: number }>()
+  let totalBytes = 0
+
+  const remove = (key: string): void => {
+    const entry = entries.get(key)
+    if (!entry) return
+    entries.delete(key)
+    totalBytes -= entry.data.byteLength
+  }
+
+  return {
+    get(key: string): ProxyCacheEntry | undefined {
+      const entry = entries.get(key)
+      if (!entry) return undefined
+      if (Date.now() - entry.cachedAt >= opts.ttlMs) {
+        remove(key)
+        return undefined
+      }
+      entries.delete(key)
+      entries.set(key, entry)
+      return entry
+    },
+    set(key: string, data: ArrayBuffer, contentType: string): void {
+      if (data.byteLength > opts.maxEntryBytes) return
+      remove(key)
+      entries.set(key, { data, contentType, cachedAt: Date.now() })
+      totalBytes += data.byteLength
+      for (const oldestKey of entries.keys()) {
+        if (totalBytes <= opts.maxTotalBytes) break
+        remove(oldestKey)
+      }
+    },
+    delete(key: string): void {
+      remove(key)
+    },
+    get totalBytes(): number {
+      return totalBytes
+    },
+  }
+}
+
+const proxyCache = createProxyCache({
+  ttlMs: 60 * 60 * 1000, // 1 hour
+  maxEntryBytes: 1 * 1024 * 1024, // logos are typically < 50 KB; skip outliers
+  maxTotalBytes: 32 * 1024 * 1024,
+})
 
 const KEY_PREFIX = '/api/storage/'
 
 function extractKey(url: URL): string | null {
   const key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
   return key && !key.includes('..') ? key : null
-}
-
-// Reads up to maxBytes from the request body stream, cancelling early if exceeded.
-// Returns null when the body exceeds the limit, avoiding full buffering of oversized payloads.
-export async function readBodyWithLimit(
-  request: Request,
-  maxBytes: number
-): Promise<Uint8Array | null> {
-  const reader = request.body?.getReader()
-  if (!reader) return new Uint8Array(0)
-
-  const chunks: Uint8Array[] = []
-  let total = 0
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      total += value.byteLength
-      if (total > maxBytes) {
-        await reader.cancel()
-        return null
-      }
-      chunks.push(value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-
-  const body = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    body.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return body
 }
 
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
@@ -110,8 +138,14 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
  * directly from S3 — no bytes are proxied through the server.
  */
 export async function handleStorageGet({ request }: { request: Request }): Promise<Response> {
-  const { isS3Configured, generatePresignedGetUrl, getS3Object } =
-    await import('@/lib/server/storage/s3')
+  const {
+    isS3Configured,
+    generatePresignedGetUrl,
+    getS3Object,
+    getS3Config,
+    isPublicStorageKey,
+    verifyStorageReadToken,
+  } = await import('@/lib/server/storage/s3')
   const { config } = await import('@/lib/server/config')
 
   if (!isS3Configured()) {
@@ -125,6 +159,13 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     return Response.json({ error: 'Invalid storage key' }, { status: 400 })
   }
 
+  if (
+    !isPublicStorageKey(key) &&
+    !verifyStorageReadToken(getS3Config().secretAccessKey, key, url.searchParams.get('read'))
+  ) {
+    return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
+  }
+
   // Force proxy for email embeds (?email=1) since email clients don't follow redirects
   const forceProxy = url.searchParams.has('email')
 
@@ -132,31 +173,32 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     if (config.s3Proxy || forceProxy) {
       const cached = proxyCache.get(key)
       if (cached) {
-        if (Date.now() - cached.cachedAt < PROXY_CACHE_TTL) {
-          return new Response(cached.data, {
-            status: 200,
-            headers: {
-              'Content-Type': cached.contentType,
-              'Cache-Control': 'public, max-age=31536000, immutable',
-              // Stored Content-Types originate from upload requests — never
-              // let a browser second-guess them on a same-origin response.
-              'X-Content-Type-Options': 'nosniff',
-            },
-          })
-        }
-        proxyCache.delete(key)
+        return new Response(cached.data, {
+          status: 200,
+          headers: {
+            'Content-Type': cached.contentType,
+            'Cache-Control': isPublicStorageKey(key)
+              ? 'public, max-age=31536000, immutable'
+              : 'private, max-age=3600, immutable',
+            // Stored Content-Types originate from upload requests — never
+            // let a browser second-guess them on a same-origin response.
+            'X-Content-Type-Options': 'nosniff',
+          },
+        })
       }
 
       const { body, contentType } = await getS3Object(key)
       const data = await new Response(body).arrayBuffer()
 
-      proxyCache.set(key, { data, contentType, cachedAt: Date.now() })
+      proxyCache.set(key, data, contentType)
 
       return new Response(data, {
         status: 200,
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Cache-Control': isPublicStorageKey(key)
+            ? 'public, max-age=31536000, immutable'
+            : 'private, max-age=3600, immutable',
           'X-Content-Type-Options': 'nosniff',
         },
       })
@@ -168,7 +210,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       status: 302,
       headers: {
         Location: presignedUrl,
-        'Cache-Control': 'public, max-age=86400',
+        'Cache-Control': isPublicStorageKey(key) ? 'public, max-age=86400' : 'private, no-store',
       },
     })
   } catch (error) {

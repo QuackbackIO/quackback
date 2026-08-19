@@ -30,7 +30,9 @@ const mockPostFindFirst = vi.fn()
 const mockUpdateSet = vi.fn()
 const mockUpdateWhere = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       posts: {
@@ -57,14 +59,6 @@ vi.mock('@/lib/server/db', () => ({
         }
       },
     })),
-  },
-  posts: {
-    id: 'id',
-    deletedAt: 'deleted_at',
-    canonicalPostId: 'canonical_post_id',
-    embedding: 'embedding',
-    mergeCheckedAt: 'merge_checked_at',
-    updatedAt: 'updated_at',
   },
   and: vi.fn(),
   or: vi.fn(),

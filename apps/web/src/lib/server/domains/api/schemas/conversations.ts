@@ -1,5 +1,8 @@
 /**
  * Conversations API Schema Registrations
+ *
+ * Read routes (GET) live here. Write routes (POST/DELETE) live in
+ * ./conversations-write.ts, which imports the shared schemas exported below.
  */
 import 'zod-openapi'
 import { z } from 'zod'
@@ -15,15 +18,16 @@ import {
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
 } from './common'
+import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 
 // Conversation schema (GET /conversations, GET /conversations/:id)
-const ConversationSchema = z.object({
+export const ConversationSchema = z.object({
   id: TypeIdSchema.meta({ example: 'conversation_01h455vb4pex5vsknk084sn02q' }),
-  status: z.enum(['open', 'pending', 'closed']).meta({
+  status: z.enum(CONVERSATION_STATUSES).meta({
     description: 'Current conversation status',
     example: 'open',
   }),
-  channel: z.enum(['messenger', 'email', 'web_form']).meta({
+  channel: z.enum(['messenger', 'email']).meta({
     description: 'Channel the conversation arrived on',
     example: 'messenger',
   }),
@@ -32,7 +36,7 @@ const ConversationSchema = z.object({
     example: 'none',
   }),
   subject: z.string().nullable().meta({
-    description: 'Conversation subject line, null for live-chat threads',
+    description: 'Conversation subject line, null for messenger threads',
     example: null,
   }),
   visitorPrincipalId: TypeIdSchema.meta({
@@ -55,8 +59,8 @@ const ConversationSchema = z.object({
 })
 
 // Message schema (GET /conversations/:id/messages)
-const MessageSchema = z.object({
-  id: TypeIdSchema.meta({ example: 'chat_msg_01h455vb4pex5vsknk084sn02q' }),
+export const MessageSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'conversation_msg_01h455vb4pex5vsknk084sn02q' }),
   conversationId: TypeIdSchema.meta({ example: 'conversation_01h455vb4pex5vsknk084sn02q' }),
   senderType: z.enum(['visitor', 'agent', 'system']).meta({
     description: 'Who sent the message',
@@ -78,6 +82,13 @@ const MessageSchema = z.object({
   createdAt: TimestampSchema,
 })
 
+// A conversation tag (POST/DELETE /conversations/:id/tags response).
+export const ConversationTagSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'conversation_tag_01h455vb4pex5vsknk084sn02q' }),
+  name: z.string().meta({ example: 'billing' }),
+  color: z.string().meta({ example: '#6b7280' }),
+})
+
 // Register GET /conversations
 registerPath('/conversations', {
   get: {
@@ -88,7 +99,7 @@ registerPath('/conversations', {
       {
         name: 'status',
         in: 'query',
-        schema: { type: 'string', enum: ['open', 'pending', 'closed'] },
+        schema: { type: 'string', enum: [...CONVERSATION_STATUSES] },
         description: 'Filter by conversation status',
       },
       {

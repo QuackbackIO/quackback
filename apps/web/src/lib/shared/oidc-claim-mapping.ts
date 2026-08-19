@@ -2,13 +2,20 @@
  * THE claim-mapping reader. One provider row in, the meaning of its claims out,
  * read by production sign-in and by the admin connection test alike.
  *
- * One column with named sections:
+ * It replaces `attribute_mapping`, which despite its name only ever mapped a
+ * claim to a ROLE. Adding a second column for profile fields and a third for
+ * user attributes would have left three overlapping mapping concepts on one
+ * table, two of them misleadingly named — the same drift this area keeps
+ * producing. So there is one column with named sections instead:
  *
  *   profile     which claim holds the account id, the email, the display name
  *   role        the former attribute_mapping, unchanged in behaviour
  *   attributes  claim to user-attribute copying
  *
  * Every accessor here tolerates a null, malformed, or partially-filled column.
+ * A hand-edited row or a shape written by a newer version must degrade to "not
+ * configured" and let the standard OIDC claims carry the sign-in, because the
+ * alternative is throwing inside the auth callback.
  */
 
 import type { Role } from './roles'
@@ -50,8 +57,6 @@ export interface IdentityProviderClaimMapping {
     map?: Array<{ claimPath: string; attributeKey: string }>
     /** Off: a claim only fills an attribute that is empty. */
     overrideExisting?: boolean
-    /** When true, a disappeared claim clears the stored attribute. */
-    syncOnSignIn?: boolean
   }
 }
 
@@ -95,6 +100,9 @@ function readProfile(value: unknown): IdentityProviderClaimMapping['profile'] {
 function readRole(value: unknown): ClaimRoleMapping | undefined {
   if (!isRecord(value)) return undefined
   const claimPath = usablePath(value.claimPath)
+  // Rules cannot be evaluated without a path. A half-configured mapping that
+  // silently matches nothing is worse than no mapping, because the admin sees
+  // configuration and gets default-role behaviour.
   if (!claimPath) return undefined
   const rules = Array.isArray(value.rules)
     ? value.rules.filter(
@@ -122,7 +130,6 @@ function readAttributes(value: unknown): IdentityProviderClaimMapping['attribute
   const attributes: NonNullable<IdentityProviderClaimMapping['attributes']> = {}
   if (map.length > 0) attributes.map = map
   if (value.overrideExisting === true) attributes.overrideExisting = true
-  if (value.syncOnSignIn === true) attributes.syncOnSignIn = true
   return Object.keys(attributes).length > 0 ? attributes : undefined
 }
 
@@ -160,24 +167,17 @@ export function identitySourcesFor(stored: unknown): IdentitySource[] {
 }
 
 /**
- * Resolve a claim path. An exact key match is tried first so namespaced claims
- * like `https://acme.com/email`, whose dots are not separators, still work.
- */
-export function getClaimByPath(claims: Record<string, unknown>, path: string): unknown {
-  if (path in claims) return claims[path]
-  let current: unknown = claims
-  for (const segment of path.split('.')) {
-    if (current === null || typeof current !== 'object') return undefined
-    current = (current as Record<string, unknown>)[segment]
-  }
-  return current
-}
-
-/**
  * Whether a boolean-ish claim says yes.
  *
  * Affirmative is literal `true` or the exact (case-insensitive) string
- * `"true"`, and nothing else.
+ * `"true"`, and nothing else. Accepting `"true"` keeps the SAML-to-OIDC bridges
+ * that stringify their booleans working; refusing `1`, `"yes"` and friends
+ * stops this drifting back into plain truthiness, where the string `"false"`
+ * once marked an unverified address as verified.
+ *
+ * One implementation, because both readers of `email_verified` have to agree:
+ * identity resolution decides whether an address can be trusted, and profile
+ * mapping decides what gets written to the account.
  */
 export function isAffirmativeClaim(value: unknown): boolean {
   return value === true || (typeof value === 'string' && value.toLowerCase() === 'true')

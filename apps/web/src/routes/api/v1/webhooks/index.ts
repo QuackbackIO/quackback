@@ -10,6 +10,7 @@ import {
 import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
 import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { toWebhookListResponse } from '@/lib/server/domains/api/webhooks'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId } from '@quackback/ids'
 
 // Input validation schema
@@ -28,7 +29,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.WEBHOOK_VIEW })
 
           const { listWebhooks } = await import('@/lib/server/domains/webhooks/webhook.service')
           const allWebhooks = await listWebhooks()
@@ -45,7 +46,9 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        */
       POST: async ({ request }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, { role: 'admin' })
+          const { principalId } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.WEBHOOK_MANAGE,
+          })
 
           const body = await request.json()
           const parsed = createWebhookSchema.safeParse(body)

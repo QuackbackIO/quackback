@@ -3,6 +3,7 @@ import { useRouteContext } from '@tanstack/react-router'
 import { PortalBrandMark } from './portal-brand-mark'
 import { generateThemeCSS } from '@/lib/shared/theme'
 import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
+import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 
 interface PortalAuthShellProps {
   heading: React.ReactNode
@@ -41,8 +42,10 @@ export function PortalAuthShell({ heading, subheading, children, footer }: Porta
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 py-12 overflow-hidden">
-      {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+      {themeStyles && (
+        <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
+      )}
+      {customCss && <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[40vh] bg-[radial-gradient(ellipse_at_top,_var(--primary)/0.08,_transparent_60%)]"

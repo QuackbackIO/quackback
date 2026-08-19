@@ -6,11 +6,11 @@
  * live in post.user-actions.ts.
  */
 
-import { db, posts, comments, eq, and, sql, isNull } from '@/lib/server/db'
-import { toUuid, type PostId, type PrincipalId, type StatusId } from '@quackback/ids'
+import { db, posts, postComments, eq, and, sql, isNull } from '@/lib/server/db'
+import { toUuid, type PostId, type PrincipalId, type PostStatusId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult } from './post.types'
 import { logger } from '@/lib/server/logger'
@@ -31,7 +31,7 @@ const log = logger.child({ component: 'post-permissions' })
  */
 export async function canEditPost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
+  actor: { principalId: PrincipalId; role: Role },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   log.debug(
@@ -99,7 +99,7 @@ export async function canEditPost(
  */
 export async function canDeletePost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
+  actor: { principalId: PrincipalId; role: Role },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   log.debug(
@@ -169,7 +169,7 @@ export async function canDeletePost(
  */
 export async function getPostPermissions(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<{
   canEdit: PermissionCheckResult
   canDelete: PermissionCheckResult
@@ -278,7 +278,7 @@ export async function getPostPermissions(
 /**
  * Check if a status is the default "open" status
  */
-async function isDefaultStatus(statusId: StatusId | null): Promise<boolean> {
+async function isDefaultStatus(statusId: PostStatusId | null): Promise<boolean> {
   if (!statusId) return true // No status = treat as default
 
   const { postStatuses, eq, and } = await import('@/lib/server/db')
@@ -300,11 +300,11 @@ async function hasCommentsFromOthers(
   if (!authorPrincipalId) return false // Anonymous author can't have "other" comments
 
   // Find any comment not from the author and not deleted (LIMIT 1 is faster than COUNT)
-  const otherComment = await db.query.comments.findFirst({
+  const otherComment = await db.query.postComments.findFirst({
     where: and(
-      eq(comments.postId, postId),
-      sql`${comments.principalId} != ${authorPrincipalId}`,
-      isNull(comments.deletedAt)
+      eq(postComments.postId, postId),
+      sql`${postComments.principalId} != ${authorPrincipalId}`,
+      isNull(postComments.deletedAt)
     ),
   })
 
@@ -317,8 +317,8 @@ async function hasCommentsFromOthers(
 async function getCommentCount(postId: PostId): Promise<number> {
   const result = await db
     .select({ count: sql<number>`count(*)` })
-    .from(comments)
-    .where(and(eq(comments.postId, postId), isNull(comments.deletedAt)))
+    .from(postComments)
+    .where(and(eq(postComments.postId, postId), isNull(postComments.deletedAt)))
 
   return result[0]?.count ?? 0
 }
@@ -339,10 +339,10 @@ async function getCommentStatsForPermissions(
   const result = await db.execute(sql`
     SELECT
       COUNT(*) as total_count,
-      COUNT(*) FILTER (WHERE ${comments.principalId} IS NOT NULL AND ${comments.principalId} != ${principalUuid}::uuid) as other_count
-    FROM ${comments}
-    WHERE ${comments.postId} = ${postUuid}::uuid
-      AND ${comments.deletedAt} IS NULL
+      COUNT(*) FILTER (WHERE ${postComments.principalId} IS NOT NULL AND ${postComments.principalId} != ${principalUuid}::uuid) as other_count
+    FROM ${postComments}
+    WHERE ${postComments.postId} = ${postUuid}::uuid
+      AND ${postComments.deletedAt} IS NULL
   `)
 
   type ResultRow = { total_count: number; other_count: number }

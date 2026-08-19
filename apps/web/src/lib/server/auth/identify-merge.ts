@@ -10,6 +10,7 @@ import type { PrincipalId, UserId } from '@quackback/ids'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { mergeAnonymousToIdentified } from './merge-anonymous'
+import { rawSessionToken } from './session-token'
 
 const log = logger.child({ component: 'identify-merge' })
 
@@ -32,9 +33,13 @@ export async function resolveAndMergeAnonymousToken(params: ResolveAndMergeParam
   if (!previousToken) return
 
   try {
-    // Look up the session for the previous token
+    // Look up the session for the previous token. The widget persists the
+    // signed set-auth-token form, so normalize to the raw token the DB stores.
     const prevSession = await db.query.session.findFirst({
-      where: and(eq(session.token, previousToken), gt(session.expiresAt, new Date())),
+      where: and(
+        eq(session.token, rawSessionToken(previousToken)),
+        gt(session.expiresAt, new Date())
+      ),
       with: { user: true },
     })
     if (!prevSession) return

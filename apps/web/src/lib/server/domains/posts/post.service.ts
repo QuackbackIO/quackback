@@ -24,9 +24,9 @@ import {
   inArray,
   postStatuses,
   posts,
+  postTagAssignments,
   postTags,
-  tags,
-  votes,
+  postVotes,
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
@@ -34,24 +34,28 @@ import { sql, isNull } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
-import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
+import { type PostId, type PrincipalId, type UserId, type PostTagId } from '@quackback/ids'
 import {
   dispatchPostStatusChanged,
   dispatchPostUpdated,
+  dispatchPostOwnerAssigned,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { recordAuditEvent } from '@/lib/server/audit/log'
-import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { canCreatePost, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
+import { startOfUtcMonth } from '@/lib/shared/utils/date'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
+import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
+import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
@@ -141,6 +145,19 @@ export async function createPost(
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
   }
 
+  // Validate submitted custom-field answers against the board's declared
+  // fields. Unknown keys are dropped by the validator; a missing required
+  // field rejects the submission before any row is written.
+  const boardCustomFields = board.settings?.customFields ?? []
+  let customFieldValues: CustomFieldValues | null = null
+  if (boardCustomFields.length > 0) {
+    const parsed = validatePostCustomFieldValues(boardCustomFields, input.customFields ?? {})
+    if (!parsed.ok) {
+      throw new ValidationError('VALIDATION_ERROR', parsed.errors[0].message)
+    }
+    customFieldValues = parsed.values
+  }
+
   // Workspace moderation gate. Submissions matching the configured
   // requireApproval category land in 'pending' instead of 'published'.
   // Team always bypasses.
@@ -218,11 +235,12 @@ export async function createPost(
         title,
         // Store the markdown projection of the canonical contentJson so every
         // consumer of the `content` column (webhooks, notifications) sees images.
-        content: contentJsonToMarkdown(contentJson, content),
+        content: projectContentJsonToMarkdown(contentJson, content),
         contentJson,
         statusId,
         principalId: author.principalId,
         widgetMetadata: input.widgetMetadata ?? null,
+        customFieldValues,
         trackedByPrincipalId: input.trackedByPrincipalId ?? null,
         voteCount: 1,
         moderationState,
@@ -232,12 +250,14 @@ export async function createPost(
 
     // Add tags if provided
     if (input.tagIds && input.tagIds.length > 0) {
-      await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: newPost.id, tagId })))
+      await tx
+        .insert(postTagAssignments)
+        .values(input.tagIds.map((tagId) => ({ postId: newPost.id, tagId })))
     }
 
     // Auto-upvote by the author
-    await tx.insert(votes).values({
-      id: createId('vote'),
+    await tx.insert(postVotes).values({
+      id: createId('post_vote'),
       postId: newPost.id,
       principalId: author.principalId,
     })
@@ -260,6 +280,13 @@ export async function createPost(
       metadata: { principalType: author.actor?.principalType ?? 'anonymous' },
     })
   }
+
+  // AI auto-tagging: evaluate the post against every tag carrying an AI
+  // prompt. Fire-and-forget like the embedding regen in updatePost — the
+  // service degrades to a no-op on any AI failure and never blocks creation.
+  import('./post.autotag')
+    .then(({ autoTagPost }) => autoTagPost(post.id, post.title, post.content ?? ''))
+    .catch((err) => log.error({ err, post_id: post.id }, 'ai auto-tag failed'))
 
   if (!options?.skipDispatch) {
     // Auto-subscribe the author to their own post. Runs even when held for
@@ -368,9 +395,9 @@ export async function updatePost(
   let currentTagIds: string[] = []
   if (input.tagIds !== undefined) {
     const currentTags = await db
-      .select({ tagId: postTags.tagId })
-      .from(postTags)
-      .where(eq(postTags.postId, id))
+      .select({ tagId: postTagAssignments.tagId })
+      .from(postTagAssignments)
+      .where(eq(postTagAssignments.postId, id))
     currentTagIds = currentTags.map((t) => t.tagId)
   }
 
@@ -384,17 +411,21 @@ export async function updatePost(
       principalId: existingPost.principalId,
     })
     updateData.contentJson = contentJson
-    // Every content edit carries `input.content` (the API accepts only markdown;
-    // the editor emits markdown alongside contentJson), so the fallback reflects
-    // the new doc. `existingPost.content` is only a defensive default for a
-    // contentJson-only edit, which no caller makes.
-    updateData.content = contentJsonToMarkdown(
+    updateData.content = projectContentJsonToMarkdown(
       contentJson,
       (input.content ?? existingPost.content).trim()
     )
   }
   if (input.statusId !== undefined) updateData.statusId = input.statusId
   if (input.ownerPrincipalId !== undefined) updateData.ownerPrincipalId = input.ownerPrincipalId
+  if (input.eta !== undefined) {
+    // ETAs are month-granular; truncate to the first of the UTC month here so
+    // the invariant holds no matter which caller supplies the timestamp.
+    updateData.eta = input.eta ? startOfUtcMonth(input.eta) : null
+  }
+  if (input.pinned !== undefined) {
+    updateData.pinnedAt = input.pinned ? new Date() : null
+  }
 
   // Update the post only if there's data to update
   let updatedPost: Post
@@ -409,7 +440,7 @@ export async function updatePost(
   }
 
   // Regenerate embedding (and cascade to merge check) if title or content changed
-  if (input.title !== undefined || input.content !== undefined) {
+  if (input.title !== undefined || input.content !== undefined || input.contentJson !== undefined) {
     import('@/lib/server/domains/embeddings/embedding.service')
       .then(({ generatePostEmbedding }) =>
         generatePostEmbedding(id, updatedPost.title, updatedPost.content)
@@ -420,9 +451,11 @@ export async function updatePost(
   // Update tags if provided
   if (input.tagIds !== undefined) {
     // Remove all existing tags then add new ones if any
-    await db.delete(postTags).where(eq(postTags.postId, id))
+    await db.delete(postTagAssignments).where(eq(postTagAssignments.postId, id))
     if (input.tagIds.length > 0) {
-      await db.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
+      await db
+        .insert(postTagAssignments)
+        .values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
     }
   }
 
@@ -481,6 +514,17 @@ export async function updatePost(
             ...(oldOwner ? { previousOwnerName: prevOwnerRow?.displayName ?? null } : {}),
           },
         })
+        // Never notify a teammate who assigned the post to themselves.
+        if (newOwner !== actor.principalId) {
+          dispatchPostOwnerAssigned(buildEventActor(actor), {
+            postId: updatedPost.id,
+            postTitle: updatedPost.title,
+            boardSlug: board.slug,
+            postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+            ownerPrincipalId: newOwner,
+            previousOwnerPrincipalId: oldOwner ?? null,
+          })
+        }
       } else {
         const prevOwnerRow = oldOwner ? await resolveName(oldOwner) : null
         createActivity({
@@ -501,13 +545,13 @@ export async function updatePost(
 
     if (added.length > 0 || removed.length > 0) {
       // Resolve all tag names in one query
-      const allChangedIds = [...added, ...removed] as TagId[]
+      const allChangedIds = [...added, ...removed] as PostTagId[]
       const tagRows =
         allChangedIds.length > 0
           ? await db
-              .select({ id: tags.id, name: tags.name })
-              .from(tags)
-              .where(inArray(tags.id, allChangedIds))
+              .select({ id: postTags.id, name: postTags.name })
+              .from(postTags)
+              .where(inArray(postTags.id, allChangedIds))
           : []
       const tagNameMap = new Map(tagRows.map((t) => [String(t.id), t.name]))
 
@@ -534,7 +578,10 @@ export async function updatePost(
   const changedFields: string[] = []
   if (input.title !== undefined && input.title.trim() !== existingPost.title)
     changedFields.push('title')
-  if (input.content !== undefined && input.content.trim() !== existingPost.content)
+  if (
+    (input.content !== undefined && input.content.trim() !== existingPost.content) ||
+    input.contentJson !== undefined
+  )
     changedFields.push('content')
   if (input.tagIds !== undefined) changedFields.push('tags')
   if (

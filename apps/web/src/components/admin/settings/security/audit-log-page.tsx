@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { ASSISTANT_CONFIG_EVENT_LABELS } from '@/lib/shared/assistant/config-audit-events'
 import type { AuditEventRow } from '@/lib/server/functions/audit-log'
 
 /**
@@ -60,6 +61,7 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { label: 'Email sign-in enabled', value: 'auth.magic_link.enabled' },
   { label: 'Email sign-in disabled', value: 'auth.magic_link.disabled' },
   { label: 'Two-factor reset by admin', value: 'two_factor.reset_by_admin' },
+  { label: 'Restore: external side effects settled', value: 'restore.side_effects_settled' },
   // Portal events
   {
     group: 'Portal',
@@ -94,6 +96,13 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
     label: 'Handshake invalid',
     value: 'portal.widget_handshake.invalid',
   },
+  // AI config changelog events. The assistant admin page reads the same set
+  // from the shared label map so the two can never list a different set.
+  ...Object.entries(ASSISTANT_CONFIG_EVENT_LABELS).map(([value, label]) => ({
+    group: 'AI config',
+    label,
+    value,
+  })),
 ]
 
 const TIME_RANGES = [
@@ -207,9 +216,7 @@ function ActorCell({ row }: { row: AuditEventRow }) {
     <div className="flex flex-col">
       <span className="truncate">{primary}</span>
       {subtitle ? (
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-          {subtitle}
-        </span>
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">{subtitle}</span>
       ) : null}
     </div>
   )
@@ -226,7 +233,7 @@ function TargetCell({ row }: { row: AuditEventRow }) {
   if (!row.targetType) return <span className="text-muted-foreground">—</span>
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
         {row.targetType}
       </span>
       {row.targetId ? (
@@ -301,13 +308,13 @@ export function AuditLogPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Select value={eventType} onValueChange={setEventType}>
-            <SelectTrigger className="h-9 w-full sm:w-64 text-xs">
+            <SelectTrigger size="sm" className="w-full sm:w-64">
               <SelectValue placeholder="Event type" />
             </SelectTrigger>
             <SelectContent>
               {/* Ungrouped items first */}
               {FILTER_EVENT_TYPES.filter((o) => !o.group).map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
               ))}
@@ -320,12 +327,12 @@ export function AuditLogPage() {
                     {group}
                   </SelectLabel>
                   {group === WIDGET_ACTIVITY_GROUP && (
-                    <p className="px-2 pb-1 text-[10px] text-muted-foreground leading-snug">
+                    <p className="px-2 pb-1 text-xs text-muted-foreground leading-snug">
                       High-volume on active workspaces. Pick a specific event to view it.
                     </p>
                   )}
                   {FILTER_EVENT_TYPES.filter((o) => o.group === group).map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
                   ))}
@@ -334,12 +341,12 @@ export function AuditLogPage() {
             </SelectContent>
           </Select>
           <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-            <SelectTrigger className="h-9 w-full sm:w-36 text-xs">
+            <SelectTrigger size="sm" className="w-full sm:w-36">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {TIME_RANGES.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
               ))}
@@ -399,7 +406,7 @@ export function AuditLogPage() {
                     >
                       <div className="flex flex-col leading-tight">
                         <span>{stamp.date}</span>
-                        <span className="text-[10px]">{stamp.time}</span>
+                        <span className="text-xs">{stamp.time}</span>
                       </div>
                     </TableCell>
                     <TableCell className="truncate font-mono" title={row.eventType}>
@@ -461,9 +468,7 @@ export function AuditLogPage() {
                     <div className="flex gap-2">
                       <span className="w-12 shrink-0 font-medium text-foreground/60">Target</span>
                       <div className="min-w-0">
-                        <span className="uppercase tracking-wide text-[10px]">
-                          {row.targetType}
-                        </span>
+                        <span className="uppercase tracking-wide text-xs">{row.targetType}</span>
                         {row.targetId && (
                           <p className="font-mono text-[11px] truncate" title={row.targetId}>
                             {row.targetId}

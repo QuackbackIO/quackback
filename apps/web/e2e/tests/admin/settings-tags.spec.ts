@@ -89,7 +89,7 @@ test.describe('Admin Tags Settings', () => {
   })
 
   test('can create a new tag', async ({ page }) => {
-    const tagName = `E2E Tag ${Date.now()}`
+    const tagName = `E2E PostTag ${Date.now()}`
 
     await page.getByText('Add new tag').click()
 
@@ -173,7 +173,7 @@ test.describe('Admin Tags Settings', () => {
       // Confirm deletion
       await confirmDialog.getByRole('button', { name: /^delete$/i }).click()
 
-      // Tag should no longer appear
+      // PostTag should no longer appear
       await expect(page.getByText(tagName)).toBeHidden({ timeout: 10000 })
     }
   })

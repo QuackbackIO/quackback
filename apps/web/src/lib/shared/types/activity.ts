@@ -21,8 +21,6 @@ export type ActivityType =
   | 'owner.unassigned'
   | 'tags.added'
   | 'tags.removed'
-  | 'roadmap.added'
-  | 'roadmap.removed'
   | 'comments.locked'
   | 'comments.unlocked'
   | 'comment.pinned'
@@ -30,3 +28,4 @@ export type ActivityType =
   | 'comment.deleted'
   | 'comment.removed'
   | 'comment.restored'
+  | 'external.status_changed'

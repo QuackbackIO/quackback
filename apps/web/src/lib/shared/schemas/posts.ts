@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { boardIdSchema, statusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
+import { boardIdSchema, postStatusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
 import type { TiptapContent as DbTiptapContent } from '@/lib/shared/db-types'
 
 /**
@@ -85,7 +85,7 @@ export const createPostSchema = z.object({
   content: z.string().max(10000),
   contentJson: tiptapContentSchema.optional(),
   boardId: boardIdSchema,
-  statusId: statusIdSchema.optional(),
+  statusId: postStatusIdSchema.optional(),
   tagIds: tagIdsSchema,
 })
 
@@ -96,7 +96,7 @@ export const editPostSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().max(10000),
   boardId: boardIdSchema,
-  statusId: statusIdSchema.optional(),
+  statusId: postStatusIdSchema.optional(),
   tagIds: tagIdsSchema,
 })
 

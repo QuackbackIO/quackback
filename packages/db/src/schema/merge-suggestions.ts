@@ -5,9 +5,9 @@ import { posts } from './posts'
 import { principal } from './auth'
 
 export const mergeSuggestions = pgTable(
-  'merge_suggestions',
+  'post_merge_suggestions',
   {
-    id: typeIdWithDefault('merge_sug')('id').primaryKey(),
+    id: typeIdWithDefault('post_merge_sug')('id').primaryKey(),
     // The smaller post (to be merged away)
     sourcePostId: typeIdColumn('post')('source_post_id')
       .notNull()
@@ -37,12 +37,12 @@ export const mergeSuggestions = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('merge_suggestions_source_post_idx').on(t.sourcePostId),
-    index('merge_suggestions_target_post_idx').on(t.targetPostId),
-    index('merge_suggestions_status_idx').on(t.status),
-    index('merge_suggestions_created_idx').on(t.createdAt),
+    index('post_merge_suggestions_source_post_idx').on(t.sourcePostId),
+    index('post_merge_suggestions_target_post_idx').on(t.targetPostId),
+    index('post_merge_suggestions_status_idx').on(t.status),
+    index('post_merge_suggestions_created_idx').on(t.createdAt),
     // Only one pending suggestion per source+target pair
-    uniqueIndex('merge_suggestions_pending_unique_idx')
+    uniqueIndex('post_merge_suggestions_pending_unique_idx')
       .on(t.sourcePostId, t.targetPostId)
       .where(sql`${t.status} = 'pending'`),
   ]

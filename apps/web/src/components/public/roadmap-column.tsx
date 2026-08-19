@@ -7,30 +7,41 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import {
   usePublicRoadmapPosts,
-  flattenRoadmapPostEntries,
+  flattenRoadmapViewPosts,
 } from '@/lib/client/hooks/use-roadmap-posts-query'
-import type { RoadmapId, StatusId } from '@quackback/ids'
+import type { RoadmapId, PostStatusId } from '@quackback/ids'
 import type { RoadmapFilters } from '@/lib/shared/types'
 
 interface RoadmapColumnProps {
   roadmapId: RoadmapId
-  statusId: StatusId
+  statusId?: PostStatusId
+  bucketId?: string
   title: string
+  icon?: string | null
   color: string
   filters?: RoadmapFilters
 }
 
-export function RoadmapColumn({ roadmapId, statusId, title, color, filters }: RoadmapColumnProps) {
+export function RoadmapColumn({
+  roadmapId,
+  statusId,
+  bucketId,
+  title,
+  icon,
+  color,
+  filters,
+}: RoadmapColumnProps) {
   const intl = useIntl()
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
       roadmapId,
       statusId,
+      bucketId,
       filters,
     }
   )
 
-  const posts = flattenRoadmapPostEntries(data)
+  const posts = flattenRoadmapViewPosts(data)
   const total = data?.pages[0]?.total ?? 0
 
   const sentinelRef = useInfiniteScroll({
@@ -45,7 +56,14 @@ export function RoadmapColumn({ roadmapId, statusId, title, color, filters }: Ro
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-            <CardTitle className="text-base font-semibold">{title}</CardTitle>
+            <CardTitle className="text-base font-semibold">
+              {icon && (
+                <span className="me-1.5" aria-hidden>
+                  {icon}
+                </span>
+              )}
+              {title}
+            </CardTitle>
           </div>
           <Badge variant="secondary" className="text-xs">
             {total}
@@ -79,7 +97,9 @@ export function RoadmapColumn({ roadmapId, statusId, title, color, filters }: Ro
                     id={post.id}
                     title={post.title}
                     voteCount={post.voteCount}
+                    commentCount={post.commentCount}
                     board={{ slug: post.board.slug, name: post.board.name }}
+                    eta={post.eta}
                   />
                 </div>
               ))}

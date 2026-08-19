@@ -9,11 +9,19 @@ import { verifyApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
 import { checkRateLimit, getClientIp } from './rate-limit'
 import { UnauthorizedError, ForbiddenError, RateLimitError } from '@/lib/shared/errors'
-import { db, principal, eq } from '@/lib/server/db'
+import { db, principal, user, eq } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
-import { isAdmin, isTeamMember } from '@/lib/shared/roles'
+import { isAdmin, type Role } from '@/lib/shared/roles'
+import { resolveActorPermissions } from '@/lib/server/policy/permissions'
+import { hasApiScope, scopeForPermission } from '@/lib/server/domains/api-keys/api-key-scopes'
+import type { PermissionKey } from '@/lib/shared/permissions'
 
-export type MemberRole = 'admin' | 'member' | 'user'
+export type MemberRole = Role
+
+/** The key's principal row (with any linked user) as read by the auth query. */
+export type ApiKeyPrincipal = typeof principal.$inferSelect & {
+  user: typeof user.$inferSelect | null
+}
 
 export interface ApiAuthContext {
   /** The validated API key */
@@ -22,6 +30,12 @@ export interface ApiAuthContext {
   principalId: PrincipalId
   /** The role of the member who created the key */
   role: MemberRole
+  /**
+   * The key's principal row read during auth, or null when the principal is
+   * missing. Exposed so downstream consumers (the MCP handler) reuse the
+   * single per-request lookup instead of re-querying.
+   */
+  principal: ApiKeyPrincipal | null
   /** Whether the request is in import mode (suppresses side effects, raises rate limit) */
   importMode: boolean
 }
@@ -60,10 +74,12 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
     return null
   }
 
-  // Use the API key's service principal for role and identity
+  // Use the API key's service principal for role and identity. The linked
+  // user rides along in the same query for consumers that need the human
+  // identity (legacy human-backed keys via MCP); service principals have none.
   const principalRecord = await db.query.principal.findFirst({
     where: eq(principal.id, apiKey.principalId),
-    columns: { role: true },
+    with: { user: true },
   })
 
   // Default to most restrictive role if principal not found
@@ -73,25 +89,25 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
     apiKey,
     principalId: apiKey.principalId,
     role,
+    principal: principalRecord ?? null,
     importMode: false,
   }
 }
 
-export type AuthLevel = 'team' | 'admin'
-
 /**
- * Require API key authentication with role-based authorization.
+ * Require API key authentication, optionally gated on a permission.
  * Includes rate limiting to prevent brute-force attacks.
  *
- * @param request - The incoming request
- * @param options.role - Required role level: 'team' (admin or member) or 'admin' (admin only)
+ * A key's authority is its owner's permission set (the service principal's role
+ * preset). Bare `withApiKeyAuth(request)` requires only a valid key. The legacy
+ * `{ role }` form was retired at the Phase C completion gate.
  *
  * @example
- * const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+ * const { principalId } = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_CREATE })
  */
 export async function withApiKeyAuth(
   request: Request,
-  options: { role: AuthLevel }
+  options?: { permission: PermissionKey }
 ): Promise<ApiAuthContext> {
   const clientIp = getClientIp(request)
   const wantsImportMode = request.headers.get('x-import-mode') === 'true'
@@ -109,12 +125,16 @@ export async function withApiKeyAuth(
     )
   }
 
-  if (options.role === 'admin' && !isAdmin(auth.role)) {
-    throw new ForbiddenError('FORBIDDEN', 'Admin access required for this operation')
-  }
-
-  if (options.role === 'team' && !isTeamMember(auth.role)) {
-    throw new ForbiddenError('FORBIDDEN', 'Team member access required for this operation')
+  // A key's authority is its owner's permission set (the service principal's
+  // role preset) INTERSECTED with the key's stored scopes — the personal-access-
+  // token model. Keys with a NULL scopes column predate scope selection and keep
+  // full owner authority. No options means a valid key is required but no
+  // authorization gate — for reads whose data is public.
+  if (options) {
+    if (!resolveActorPermissions(auth.role).has(options.permission)) {
+      throw new ForbiddenError('FORBIDDEN', `Requires the '${options.permission}' permission`)
+    }
+    assertKeyScopeFor(auth, options.permission)
   }
 
   if (wantsImportMode && isAdmin(auth.role)) {
@@ -122,4 +142,40 @@ export async function withApiKeyAuth(
   }
 
   return auth
+}
+
+/**
+ * Assert an API key's authority holds every permission in the list — the
+ * owner's role preset must grant each permission AND, for a scoped key, the
+ * key must hold each permission's mapped scope. For routes whose required
+ * permissions depend on the request body (e.g. a multi-field PATCH), gate with
+ * a bare `withApiKeyAuth(request)` then call this with the body-derived key set.
+ */
+export function assertApiPermissions(
+  auth: ApiAuthContext,
+  permissions: readonly PermissionKey[]
+): void {
+  const held = resolveActorPermissions(auth.role)
+  for (const permission of permissions) {
+    if (!held.has(permission)) {
+      throw new ForbiddenError('FORBIDDEN', `Requires the '${permission}' permission`)
+    }
+    assertKeyScopeFor(auth, permission)
+  }
+}
+
+/**
+ * Enforce the key-scope half of the authority intersection: a scoped key must
+ * hold the scope its permission maps to (see `scopeForPermission` for the
+ * shared permission-to-scope table). Legacy keys (NULL scopes) pass everything
+ * their owner's permissions allow.
+ */
+function assertKeyScopeFor(auth: ApiAuthContext, permission: PermissionKey): void {
+  const required = scopeForPermission(permission)
+  if (!hasApiScope(auth.apiKey.scopes, required)) {
+    throw new ForbiddenError(
+      'FORBIDDEN',
+      `This API key is missing the '${required}' scope required by '${permission}'`
+    )
+  }
 }

@@ -1,0 +1,52 @@
+import { describe, it, expect } from 'vitest'
+import { can, authorize } from '../authorize'
+import { resolveActorPermissions } from '../permissions'
+import { ANONYMOUS_ACTOR, type Actor } from '../types'
+import { PERMISSIONS, type PermissionKey } from '@/lib/server/db'
+
+function actorWith(perms: PermissionKey[]): Actor {
+  return {
+    principalId: null,
+    role: 'member',
+    principalType: 'user',
+    segmentIds: new Set(),
+    permissions: new Set(perms),
+  }
+}
+
+describe('policy authorize', () => {
+  it('can() reads the resolved permission set', () => {
+    const a = actorWith([PERMISSIONS.POST_EDIT])
+    expect(can(a, PERMISSIONS.POST_EDIT)).toBe(true)
+    expect(can(a, PERMISSIONS.SETTINGS_MANAGE)).toBe(false)
+  })
+
+  it('can() falls back to the role bundle when the permission set is absent', () => {
+    // No explicit permissions -> resolve from role. admin -> Owner (all perms).
+    const roleOnly: Actor = {
+      principalId: null,
+      role: 'admin',
+      principalType: 'user',
+      segmentIds: new Set(),
+    }
+    expect(can(roleOnly, PERMISSIONS.SETTINGS_MANAGE)).toBe(true)
+    // A null role (anonymous) resolves to no permissions.
+    expect(can(ANONYMOUS_ACTOR, PERMISSIONS.POST_CREATE)).toBe(false)
+  })
+
+  it('authorize() returns a reasoned decision', () => {
+    const a = actorWith([PERMISSIONS.POST_EDIT])
+    expect(authorize(a, PERMISSIONS.POST_EDIT)).toEqual({ allowed: true })
+    const denied = authorize(a, PERMISSIONS.SETTINGS_MANAGE)
+    expect(denied.allowed).toBe(false)
+    if (!denied.allowed) expect(denied.reason).toContain('insufficient_permission')
+  })
+
+  it('resolveActorPermissions expands the role (null/anonymous -> empty)', () => {
+    expect(resolveActorPermissions('admin').has(PERMISSIONS.BILLING_MANAGE)).toBe(true)
+    expect(resolveActorPermissions('member').has(PERMISSIONS.SETTINGS_MANAGE)).toBe(false)
+    expect(resolveActorPermissions('member').has(PERMISSIONS.POST_EDIT)).toBe(true)
+    expect(resolveActorPermissions('user').size).toBe(0)
+    expect(resolveActorPermissions(null).size).toBe(0)
+  })
+})

@@ -1,5 +1,7 @@
 import { useState, useTransition } from 'react'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdatePortalConfig, useUpdateModerationDefault } from '@/lib/client/mutations/settings'
@@ -13,11 +15,16 @@ import {
   togglesToRequireApproval,
   type ApprovalToggles,
 } from '@/lib/shared/moderation-policy'
+import { isProductEnabled } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/moderation')({
+  beforeLoad: ({ context }) => {
+    if (!isProductEnabled(context.settings?.featureFlags, 'feedback')) {
+      throw redirect({ to: '/admin/settings/general' })
+    }
+  },
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MODERATION)
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.portalConfig())

@@ -40,6 +40,7 @@ import { fetchSegmentAttributeValuesFn } from '@/lib/server/functions/admin'
 const SEARCHABLE_VALUE_ATTRIBUTES = new Set(['country', 'locale', 'name', 'email', 'signup_source'])
 
 export const CUSTOM_ATTR_PREFIX = '__custom__'
+export const COMPANY_ATTR_PREFIX = '__company_attr__'
 
 type RuleOperator = FieldOperator
 
@@ -95,12 +96,24 @@ function getCustomAttrKey(attribute: string): string | null {
     : null
 }
 
+function getCompanyAttrKey(attribute: string): string | null {
+  return attribute.startsWith(COMPANY_ATTR_PREFIX)
+    ? attribute.slice(COMPANY_ATTR_PREFIX.length)
+    : null
+}
+
 /** Resolve operator list for any attribute string (built-in, custom, or metadata_key) */
 function getOperatorsForAttribute(
   attribute: string,
-  customAttributes?: CustomAttrDef[]
+  customAttributes?: CustomAttrDef[],
+  companyAttributes?: CustomAttrDef[]
 ): { value: RuleOperator; label: string }[] {
   if (attribute === 'metadata_key') return METADATA_KEY_OPERATORS
+  const companyKey = getCompanyAttrKey(attribute)
+  if (companyKey !== null) {
+    const def = companyAttributes?.find((a) => a.key === companyKey)
+    return def ? CUSTOM_ATTR_OPERATORS[def.type] : CUSTOM_ATTR_OPERATORS.string
+  }
   const customKey = getCustomAttrKey(attribute)
   if (customKey !== null) {
     const def = customAttributes?.find((a) => a.key === customKey)
@@ -123,19 +136,28 @@ function RuleConditionRow({
   onChange,
   onRemove,
   customAttributes,
+  companyAttributes,
 }: {
   condition: RuleCondition
   onChange: (updated: RuleCondition) => void
   onRemove: () => void
   customAttributes?: CustomAttrDef[]
+  companyAttributes?: CustomAttrDef[]
 }) {
   const customAttrKey = getCustomAttrKey(condition.attribute)
+  const companyAttrKey = getCompanyAttrKey(condition.attribute)
   const customAttrDef = customAttrKey
     ? (customAttributes?.find((a) => a.key === customAttrKey) ?? null)
-    : null
+    : companyAttrKey
+      ? (companyAttributes?.find((a) => a.key === companyAttrKey) ?? null)
+      : null
   const builtinField = BUILTIN_FIELD_MAP.get(condition.attribute)
 
-  const operators = getOperatorsForAttribute(condition.attribute, customAttributes)
+  const operators = getOperatorsForAttribute(
+    condition.attribute,
+    customAttributes,
+    companyAttributes
+  )
 
   // Value input type classification
   const isNumericBuiltIn = builtinField?.type === 'number'
@@ -162,7 +184,8 @@ function RuleConditionRow({
   const isPresenceOp = condition.operator === 'is_set' || condition.operator === 'is_not_set'
 
   const getFirstOperator = (attr: string): RuleOperator => {
-    return (getOperatorsForAttribute(attr, customAttributes)[0]?.value ?? 'eq') as RuleOperator
+    return (getOperatorsForAttribute(attr, customAttributes, companyAttributes)[0]?.value ??
+      'eq') as RuleOperator
   }
 
   return (
@@ -176,11 +199,11 @@ function RuleConditionRow({
             attribute: val,
             operator: getFirstOperator(val),
             value: '',
-            metadataKey: getCustomAttrKey(val) ?? undefined,
+            metadataKey: getCustomAttrKey(val) ?? getCompanyAttrKey(val) ?? undefined,
           })
         }
       >
-        <SelectTrigger className="h-8 text-xs w-[160px] shrink-0">
+        <SelectTrigger size="sm" className="w-[160px] shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -189,6 +212,7 @@ function RuleConditionRow({
               { group: 'attribute', label: 'Built-in fields' },
               { group: 'account', label: 'Account' },
               { group: 'activity', label: 'Activity' },
+              { group: 'company', label: 'Company' },
             ] as const
           ).map(({ group, label }, i) => {
             const fields = BUILTIN_FIELDS.filter((f) => f.group === group)
@@ -196,18 +220,16 @@ function RuleConditionRow({
               <React.Fragment key={group}>
                 {i > 0 && <SelectSeparator />}
                 <SelectGroup>
-                  <SelectLabel className="text-[10px] uppercase tracking-wider px-2 py-1.5">
+                  <SelectLabel className="text-xs uppercase tracking-wider px-2 py-1.5">
                     {label}
                   </SelectLabel>
                   {fields.map((field) => (
-                    <SelectItem key={field.key} value={field.key} className="text-xs">
+                    <SelectItem key={field.key} value={field.key}>
                       {field.label}
                     </SelectItem>
                   ))}
                   {group === 'attribute' && (
-                    <SelectItem value="metadata_key" className="text-xs">
-                      Custom Metadata Key
-                    </SelectItem>
+                    <SelectItem value="metadata_key">Custom Metadata Key</SelectItem>
                   )}
                 </SelectGroup>
               </React.Fragment>
@@ -217,14 +239,31 @@ function RuleConditionRow({
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel className="text-[10px] uppercase tracking-wider px-2 py-1.5">
+                <SelectLabel className="text-xs uppercase tracking-wider px-2 py-1.5">
                   Custom attributes
                 </SelectLabel>
                 {customAttributes.map((attr) => (
                   <SelectItem
                     key={`${CUSTOM_ATTR_PREFIX}${attr.key}`}
                     value={`${CUSTOM_ATTR_PREFIX}${attr.key}`}
-                    className="text-xs"
+                  >
+                    {attr.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </>
+          )}
+          {companyAttributes && companyAttributes.length > 0 && (
+            <>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel className="text-xs uppercase tracking-wider px-2 py-1.5">
+                  Company attributes
+                </SelectLabel>
+                {companyAttributes.map((attr) => (
+                  <SelectItem
+                    key={`${COMPANY_ATTR_PREFIX}${attr.key}`}
+                    value={`${COMPANY_ATTR_PREFIX}${attr.key}`}
                   >
                     {attr.label}
                   </SelectItem>
@@ -240,12 +279,12 @@ function RuleConditionRow({
         value={condition.operator}
         onValueChange={(val) => onChange({ ...condition, operator: val as RuleOperator })}
       >
-        <SelectTrigger className="h-8 text-xs w-[130px] shrink-0">
+        <SelectTrigger size="sm" className="w-[130px] shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {operators.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+            <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>
           ))}
@@ -266,12 +305,12 @@ function RuleConditionRow({
           value={condition.value || String(allowedValues[0])}
           onValueChange={(val) => onChange({ ...condition, value: val })}
         >
-          <SelectTrigger className="h-8 text-xs flex-1">
+          <SelectTrigger size="sm" className="flex-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {allowedValues.map((v) => (
-              <SelectItem key={v} value={v} className="text-xs">
+              <SelectItem key={v} value={v}>
                 {v}
               </SelectItem>
             ))}
@@ -283,16 +322,12 @@ function RuleConditionRow({
           value={condition.value || 'true'}
           onValueChange={(val) => onChange({ ...condition, value: val })}
         >
-          <SelectTrigger className="h-8 text-xs flex-1">
+          <SelectTrigger size="sm" className="flex-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="true" className="text-xs">
-              True
-            </SelectItem>
-            <SelectItem value="false" className="text-xs">
-              False
-            </SelectItem>
+            <SelectItem value="true">True</SelectItem>
+            <SelectItem value="false">False</SelectItem>
           </SelectContent>
         </Select>
       )}
@@ -353,12 +388,14 @@ function RuleBuilder({
   onMatchChange,
   onConditionsChange,
   customAttributes,
+  companyAttributes,
 }: {
   match: 'all' | 'any'
   conditions: RuleCondition[]
   onMatchChange: (v: 'all' | 'any') => void
   onConditionsChange: (v: RuleCondition[]) => void
   customAttributes?: CustomAttrDef[]
+  companyAttributes?: CustomAttrDef[]
 }) {
   const handleAdd = () => {
     const firstField = BUILTIN_FIELDS[0]
@@ -382,16 +419,12 @@ function RuleBuilder({
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Users must match</span>
         <Select value={match} onValueChange={(v) => onMatchChange(v as 'all' | 'any')}>
-          <SelectTrigger className="h-7 w-20 text-xs">
+          <SelectTrigger size="sm" className="w-20">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all" className="text-xs">
-              ALL
-            </SelectItem>
-            <SelectItem value="any" className="text-xs">
-              ANY
-            </SelectItem>
+            <SelectItem value="all">ALL</SelectItem>
+            <SelectItem value="any">ANY</SelectItem>
           </SelectContent>
         </Select>
         <span>of these conditions:</span>
@@ -406,6 +439,7 @@ function RuleBuilder({
             onChange={(updated) => handleChange(idx, updated)}
             onRemove={() => handleRemove(idx)}
             customAttributes={customAttributes}
+            companyAttributes={companyAttributes}
           />
         ))}
       </div>
@@ -435,6 +469,7 @@ interface SegmentFormDialogProps {
   onSubmit: (values: SegmentFormValues) => Promise<void>
   isPending?: boolean
   customAttributes?: CustomAttrDef[]
+  companyAttributes?: CustomAttrDef[]
 }
 
 export function SegmentFormDialog({
@@ -444,6 +479,7 @@ export function SegmentFormDialog({
   onSubmit,
   isPending,
   customAttributes,
+  companyAttributes,
 }: SegmentFormDialogProps) {
   const isEditing = !!initialValues?.id
 
@@ -558,6 +594,7 @@ export function SegmentFormDialog({
                 onMatchChange={setRuleMatch}
                 onConditionsChange={setConditions}
                 customAttributes={customAttributes}
+                companyAttributes={companyAttributes}
               />
             </div>
           )}

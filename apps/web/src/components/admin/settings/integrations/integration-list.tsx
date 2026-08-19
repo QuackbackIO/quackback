@@ -75,7 +75,7 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
             )}
           >
             All
-            <span className="text-[10px] text-muted-foreground">{catalog.length}</span>
+            <span className="text-xs text-muted-foreground">{catalog.length}</span>
           </button>
           {populatedCategories.map((cat) => (
             <button
@@ -90,7 +90,7 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
               )}
             >
               {INTEGRATION_CATEGORIES[cat].label}
-              <span className="text-[10px] text-muted-foreground">{categoryCounts.get(cat)}</span>
+              <span className="text-xs text-muted-foreground">{categoryCounts.get(cat)}</span>
             </button>
           ))}
         </nav>
@@ -126,28 +126,28 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
           const statusBadge = isConnected ? (
             <Badge
               variant="outline"
-              className="border-green-500/30 text-green-600 text-[10px] px-1.5 py-0"
+              className="border-green-500/30 text-green-600 text-[11px] px-1.5 py-0"
             >
               Enabled
             </Badge>
           ) : isPaused ? (
             <Badge
               variant="outline"
-              className="border-yellow-500/30 text-yellow-600 text-[10px] px-1.5 py-0"
+              className="border-yellow-500/30 text-yellow-600 text-[11px] px-1.5 py-0"
             >
               Paused
             </Badge>
           ) : !entry.available && !entry.configurable ? (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+              className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
             >
               Coming soon
             </Badge>
           ) : !entry.available && entry.configurable ? (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+              className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
             >
               Not configured
             </Badge>

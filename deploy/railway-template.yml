@@ -36,7 +36,7 @@ services:
   quackback:
     image: ghcr.io/quackbackio/quackback:latest
     healthcheck:
-      path: /api/health
+      path: /api/health/ready
       timeout: 300
     restart:
       policy: ON_FAILURE

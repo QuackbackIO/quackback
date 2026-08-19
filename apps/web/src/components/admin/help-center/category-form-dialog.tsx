@@ -20,8 +20,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { CategoryIcon, ICON_LOOKUP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
+import { CategoryIcon, ICON_MAP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
+import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
 import { cn } from '@/lib/shared/utils'
+import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { useCreateCategory, useUpdateCategory } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import {
@@ -30,7 +32,141 @@ import {
   getCategoryDepth,
   getSubtreeMaxDepth,
 } from '@/lib/shared/help-center-tree'
-import type { HelpCenterCategoryId } from '@quackback/ids'
+import { settingsQueries } from '@/lib/client/queries/settings'
+import {
+  getCategoryTranslationStatusesFn,
+  listCategoryTranslationsFn,
+  upsertCategoryTranslationFn,
+  deleteCategoryTranslationFn,
+} from '@/lib/server/functions/help-center-translations'
+import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
+import type { KbCategoryId } from '@quackback/ids'
+import type { SupportedLocale } from '@/lib/shared/i18n'
+
+const LOCALE_LABELS: Record<string, string> = {
+  de: 'Deutsch',
+  fr: 'Français',
+  es: 'Español',
+  ar: 'العربية',
+  ru: 'Русский',
+  'pt-br': 'Português (Brasil)',
+  'zh-cn': '简体中文',
+  'zh-tw': '繁體中文',
+}
+
+/** Compact per-locale name/description editor (domains/languages §2). No
+ *  draft/published status for categories -- a non-empty name IS translated. */
+function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId }) {
+  const configQuery = useQuery(settingsQueries.helpCenterConfig())
+  const additionalLocales = configQuery.data?.locales?.additional ?? []
+  const [locale, setLocale] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [translated, setTranslated] = useState(false)
+
+  const statusesQuery = useQuery({
+    queryKey: ['help-center', 'category-translation-statuses', categoryId],
+    queryFn: () => getCategoryTranslationStatusesFn({ data: { categoryId } }),
+  })
+
+  useEffect(() => {
+    if (!locale && additionalLocales.length > 0) setLocale(additionalLocales[0])
+  }, [locale, additionalLocales])
+
+  useEffect(() => {
+    if (!locale) return
+    let cancelled = false
+    async function load() {
+      const translations = await listCategoryTranslationsFn({ data: { categoryId } })
+      if (cancelled) return
+      const existing = translations.find((t) => t.locale === locale)
+      setName(existing?.name ?? '')
+      setDescription(existing?.description ?? '')
+      setTranslated(!!existing?.name?.trim())
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [categoryId, locale])
+
+  if (additionalLocales.length === 0) return null
+
+  async function handleSave() {
+    if (!locale) return
+    setSaving(true)
+    try {
+      await upsertCategoryTranslationFn({
+        data: {
+          categoryId,
+          locale: locale as SupportedLocale,
+          name,
+          description: description || undefined,
+        },
+      })
+      setTranslated(!!name.trim())
+      void statusesQuery.refetch()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!locale) return
+    setSaving(true)
+    try {
+      await deleteCategoryTranslationFn({ data: { categoryId, locale: locale as SupportedLocale } })
+      setName('')
+      setDescription('')
+      setTranslated(false)
+      void statusesQuery.refetch()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border/50 p-3">
+      <div className="flex items-center justify-between">
+        <Label>Translations</Label>
+        <Select value={locale ?? undefined} onValueChange={setLocale}>
+          <SelectTrigger size="sm" className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {additionalLocales.map((l) => (
+              <SelectItem key={l} value={l}>
+                {LOCALE_LABELS[l] ?? l}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Translated name" />
+      <Input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Translated description (optional)"
+      />
+      <div className="flex justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={saving || !translated}
+          onClick={handleDelete}
+        >
+          Clear
+        </Button>
+        <Button type="button" size="sm" disabled={saving || !name.trim()} onClick={handleSave}>
+          <InlineSpinner visible={saving} />
+          Save translation
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 const DEFAULT_ICON = 'FolderIcon'
 
@@ -46,15 +182,16 @@ interface CategoryFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   initialValues?: {
-    id: HelpCenterCategoryId
+    id: KbCategoryId
     name: string
     description: string | null
     icon: string | null
     isPublic: boolean
-    parentId: HelpCenterCategoryId | null
+    segmentIds: string[]
+    parentId: KbCategoryId | null
   }
   /** Pre-selected parent when creating a new category (ignored if initialValues is set). */
-  defaultParentId?: HelpCenterCategoryId | null
+  defaultParentId?: KbCategoryId | null
   onCreated?: (categoryId: string) => void
 }
 
@@ -73,7 +210,8 @@ export function CategoryFormDialog({
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [isPublic, setIsPublic] = useState(true)
-  const [parentId, setParentId] = useState<HelpCenterCategoryId | null>(null)
+  const [segmentIds, setSegmentIds] = useState<string[]>([])
+  const [parentId, setParentId] = useState<KbCategoryId | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const [iconSearch, setIconSearch] = useState('')
 
@@ -83,9 +221,18 @@ export function CategoryFormDialog({
       setName(initialValues?.name || '')
       setDescription(initialValues?.description || '')
       setIsPublic(initialValues?.isPublic ?? true)
+      setSegmentIds(initialValues?.segmentIds ?? [])
       setParentId(initialValues?.parentId ?? defaultParentId ?? null)
     }
   }, [open, initialValues, defaultParentId])
+
+  const segmentsQuery = useQuery({
+    queryKey: ['admin', 'segments'] as const,
+    queryFn: () => listSegmentsFn(),
+    staleTime: 60_000,
+    enabled: open,
+  })
+  const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   const { data: allCategories = [] } = useQuery({
     ...helpCenterQueries.categories(),
@@ -138,6 +285,7 @@ export function CategoryFormDialog({
         description: trimmedDesc || null,
         icon,
         isPublic,
+        segmentIds: isPublic ? segmentIds : [],
         parentId,
       })
     } else {
@@ -146,6 +294,7 @@ export function CategoryFormDialog({
         description: trimmedDesc || undefined,
         icon,
         isPublic,
+        segmentIds: isPublic ? segmentIds : [],
         parentId,
       })
       onCreated?.(result.id)
@@ -191,7 +340,7 @@ export function CategoryFormDialog({
                   />
                   <div className="grid grid-cols-8 gap-1 max-h-[288px] overflow-y-auto">
                     {filteredIcons.map((key) => {
-                      const Icon = ICON_LOOKUP[key]
+                      const Icon = ICON_MAP[key]
                       return (
                         <button
                           key={key}
@@ -240,7 +389,7 @@ export function CategoryFormDialog({
             <Select
               value={parentId ?? '__none__'}
               onValueChange={(value) =>
-                setParentId(value === '__none__' ? null : (value as HelpCenterCategoryId))
+                setParentId(value === '__none__' ? null : (value as KbCategoryId))
               }
             >
               <SelectTrigger id="category-parent">
@@ -270,6 +419,27 @@ export function CategoryFormDialog({
             </div>
             <Switch checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
+
+          {isPublic && segments.length > 0 && (
+            <div className="space-y-2">
+              <Label>
+                Restrict to segments{' '}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Leave empty to show this category and its articles to everyone. Selecting segments
+                limits them to signed-in members of those segments.
+              </p>
+              <SegmentMultiSelect
+                segments={segments}
+                value={segmentIds}
+                onChange={setSegmentIds}
+                ariaLabel="Category segment gate"
+              />
+            </div>
+          )}
+
+          {isEdit && <CategoryTranslationsSection categoryId={initialValues.id} />}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

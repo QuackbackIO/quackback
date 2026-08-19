@@ -1,0 +1,76 @@
+/**
+ * Notion page content building utilities.
+ * Creates rich block content for Notion database pages.
+ */
+
+import type { EventData } from '@/lib/server/events/types'
+import { stripHtml, truncate } from '@/lib/server/events/hook-utils'
+import { buildPostUrl, getAuthorName } from '@/lib/server/integrations/message-utils'
+
+interface NotionBlock {
+  object: 'block'
+  type: string
+  [key: string]: unknown
+}
+
+/**
+ * Build page properties and content blocks for a Notion database item.
+ */
+export function buildNotionPage(
+  event: EventData,
+  rootUrl: string
+): {
+  title: string
+  description: string
+  blocks: NotionBlock[]
+} {
+  if (event.type !== 'post.created') {
+    return { title: '', description: '', blocks: [] }
+  }
+
+  const { post } = event.data
+  const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
+  const content = truncate(stripHtml(post.content), 2000)
+  const author = getAuthorName(post)
+
+  const blocks: NotionBlock[] = [
+    {
+      object: 'block',
+      type: 'callout',
+      callout: {
+        icon: { type: 'emoji', emoji: '📬' },
+        rich_text: [
+          {
+            type: 'text',
+            text: { content: `Submitted by ${author}` },
+          },
+        ],
+      },
+    },
+  ]
+
+  if (content) {
+    blocks.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [{ type: 'text', text: { content } }],
+      },
+    })
+  }
+
+  blocks.push(
+    {
+      object: 'block',
+      type: 'divider',
+      divider: {},
+    },
+    {
+      object: 'block',
+      type: 'bookmark',
+      bookmark: { url: postUrl },
+    }
+  )
+
+  return { title: post.title, description: content, blocks }
+}

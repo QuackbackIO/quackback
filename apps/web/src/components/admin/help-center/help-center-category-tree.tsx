@@ -4,23 +4,24 @@ import { CategoryIcon } from '@/components/help-center/category-icon'
 import { PlusIcon, PencilIcon, TrashIcon, FolderPlusIcon } from '@heroicons/react/16/solid'
 import { cn } from '@/lib/shared/utils'
 import { buildAncestorChain, MAX_CATEGORY_DEPTH } from '@/lib/shared/help-center-tree'
-import type { HelpCenterCategoryId } from '@quackback/ids'
+import type { KbCategoryId } from '@quackback/ids'
 import { formatCategoryCount } from './category-count'
 
 export interface TreeCategory {
-  id: HelpCenterCategoryId
-  parentId: HelpCenterCategoryId | null
+  id: KbCategoryId
+  parentId: KbCategoryId | null
   name: string
   description: string | null
   icon: string | null
   isPublic: boolean
+  segmentIds: string[]
   articleCount: number
   recursiveArticleCount: number
 }
 
 /** Handlers for category CRUD, shared between the sidebar tree and the main finder. */
 export interface CategoryActions {
-  onNew: (parentId: HelpCenterCategoryId | null) => void
+  onNew: (parentId: KbCategoryId | null) => void
   onEdit: (category: TreeCategory) => void
   onDelete: (category: TreeCategory) => void
 }
@@ -28,7 +29,7 @@ export interface CategoryActions {
 interface HelpCenterCategoryTreeProps {
   categories: TreeCategory[]
   selectedId: string | undefined
-  onNavigate: (id: HelpCenterCategoryId | null) => void
+  onNavigate: (id: KbCategoryId | null) => void
   actions: CategoryActions
 }
 
@@ -202,7 +203,7 @@ function TreeRow({
         <span className="truncate">{category.name}</span>
       </button>
       <span
-        className="shrink-0 tabular-nums text-[10px] text-muted-foreground pr-2 group-hover:opacity-0 transition-opacity"
+        className="shrink-0 tabular-nums text-xs text-muted-foreground pr-2 group-hover:opacity-0 transition-opacity"
         title={
           category.articleCount === category.recursiveArticleCount
             ? `${category.articleCount} article${category.articleCount === 1 ? '' : 's'}`

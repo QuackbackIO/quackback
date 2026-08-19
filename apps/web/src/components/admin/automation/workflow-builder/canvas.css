@@ -1,0 +1,57 @@
+/* React Flow chrome restyled to Quackback tokens: RF's own stylesheet
+ * (imported alongside this one) ships default control/minimap styling that
+ * doesn't know about our theme, so it's overridden here rather than via
+ * Tailwind utility classes (RF renders these elements itself, outside our
+ * component tree). Scoped to .qbwf-canvas so it never leaks to other pages. */
+
+.qbwf-canvas {
+  /* Dots background + edge stroke: distinct from --border (which is a touch
+     lighter/darker) to match the approved design's canvas tokens exactly. */
+  --wf-dot: oklch(0.87 0 0);
+  --wf-wire: color-mix(in oklab, var(--foreground) 25%, transparent);
+}
+
+.dark .qbwf-canvas {
+  --wf-dot: oklch(0.32 0 0);
+  --wf-wire: color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+
+.qbwf-canvas .react-flow__controls {
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.25);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.qbwf-canvas .react-flow__controls-button {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  width: 30px;
+  height: 28px;
+}
+
+.qbwf-canvas .react-flow__controls-button:hover {
+  background: var(--secondary);
+}
+
+.qbwf-canvas .react-flow__controls-button svg {
+  fill: var(--muted-foreground);
+}
+
+.qbwf-canvas .react-flow__minimap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.qbwf-canvas .react-flow__node {
+  cursor: pointer;
+}
+
+.qbwf-canvas .react-flow__attribution {
+  display: none;
+}
+
+.qbwf-canvas .qbwf-edge-plus:hover {
+  border-color: var(--primary) !important;
+  color: var(--foreground) !important;
+}

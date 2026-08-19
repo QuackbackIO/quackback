@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Reads the widget source off disk via import.meta.url + node:fs; the
+// config-default happy-dom env gives a non-file import.meta.url, so
+// fileURLToPath rejects it. This is a node-only test with no DOM.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

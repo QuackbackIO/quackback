@@ -14,7 +14,6 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
-import { boards } from './boards'
 import { postExternalLinks } from './external-links'
 import type { IntegrationConfig, EventMappingActionConfig, EventMappingFilters } from '../types'
 
@@ -50,12 +49,17 @@ export const integrations = pgTable(
     lastErrorAt: timestamp('last_error_at', { withTimezone: true }),
     errorCount: integer('error_count').notNull().default(0),
 
+    // Health telemetry (WO-14) — feeds the settings-page health panel, since
+    // hook_deliveries carries no integration attribution. (Error state reuses
+    // the existing lastError/lastErrorAt columns above.)
+    lastOutboundAt: timestamp('last_outbound_at', { withTimezone: true }),
+    lastInboundAt: timestamp('last_inbound_at', { withTimezone: true }),
+
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     unique('integration_type_unique').on(table.integrationType),
-    index('idx_integrations_type_status').on(table.integrationType, table.status),
     // CHECK constraint to ensure error count is never negative
     check('error_count_non_negative', sql`error_count >= 0`),
   ]
@@ -72,13 +76,19 @@ export const integrationPlatformCredentials = pgTable(
     id: typeIdWithDefault('platform_cred')('id').primaryKey(),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     secrets: text('secrets').notNull(),
-    configuredByPrincipalId: typeIdColumnNullable('principal')(
-      'configured_by_principal_id'
-    ).references(() => principal.id, { onDelete: 'set null' }),
+    configuredByPrincipalId: typeIdColumnNullable('principal')('configured_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [unique('platform_cred_type_unique').on(table.integrationType)]
+  (table) => [
+    // Named to match the migration's constraint (63-char pg truncation).
+    foreignKey({
+      name: 'integration_platform_credentials_configured_by_principal_id_pri',
+      columns: [table.configuredByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
+    unique('platform_cred_type_unique').on(table.integrationType),
+  ]
 )
 
 export const integrationPlatformCredentialsRelations = relations(
@@ -116,42 +126,16 @@ export const integrationEventMappings = pgTable(
       columns: [table.integrationId],
       foreignColumns: [integrations.id],
     }).onDelete('cascade'),
+    // Columns listed alphabetically: drizzle-kit introspects multi-column
+    // UNIQUE constraints in alphabetical order, and the drift check compares
+    // that order. The live constraint's real order comes from the migration.
     unique('mapping_unique').on(
-      table.integrationId,
-      table.eventType,
       table.actionType,
+      table.eventType,
+      table.integrationId,
       table.targetKey
     ),
     index('idx_event_mappings_lookup').on(table.integrationId, table.eventType, table.enabled),
-  ]
-)
-
-/**
- * Slack channel monitors.
- * Each row represents a Slack channel that Quackback monitors for automatic feedback ingestion.
- */
-export const slackChannelMonitors = pgTable(
-  'slack_channel_monitors',
-  {
-    id: typeIdWithDefault('slack_monitor')('id').primaryKey(),
-    integrationId: typeIdColumn('integration')('integration_id').notNull(),
-    channelId: varchar('channel_id', { length: 20 }).notNull(),
-    channelName: text('channel_name').notNull(),
-    boardId: typeIdColumnNullable('board')('board_id').references(() => boards.id, {
-      onDelete: 'set null',
-    }),
-    enabled: boolean('enabled').notNull().default(true),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    foreignKey({
-      name: 'slack_monitors_integration_fk',
-      columns: [table.integrationId],
-      foreignColumns: [integrations.id],
-    }).onDelete('cascade'),
-    unique('slack_monitor_channel_unique').on(table.integrationId, table.channelId),
-    index('idx_slack_monitors_lookup').on(table.integrationId, table.channelId, table.enabled),
   ]
 )
 
@@ -169,23 +153,11 @@ export const integrationsRelations = relations(integrations, ({ one, many }) => 
   }),
   eventMappings: many(integrationEventMappings),
   externalLinks: many(postExternalLinks),
-  slackChannelMonitors: many(slackChannelMonitors),
 }))
 
 export const integrationEventMappingsRelations = relations(integrationEventMappings, ({ one }) => ({
   integration: one(integrations, {
     fields: [integrationEventMappings.integrationId],
     references: [integrations.id],
-  }),
-}))
-
-export const slackChannelMonitorsRelations = relations(slackChannelMonitors, ({ one }) => ({
-  integration: one(integrations, {
-    fields: [slackChannelMonitors.integrationId],
-    references: [integrations.id],
-  }),
-  board: one(boards, {
-    fields: [slackChannelMonitors.boardId],
-    references: [boards.id],
   }),
 }))

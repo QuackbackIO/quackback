@@ -21,7 +21,11 @@ interface VersionCache {
 }
 
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+const FETCH_TIMEOUT_MS = 1500
+const FAILURE_RETRY_MS = 5 * 60 * 1000 // 5 minutes
+
 let versionCache: VersionCache | null = null
+let lastFailureAt: number | null = null
 
 // --- Types ---
 
@@ -39,17 +43,26 @@ export const getLatestVersion = createServerFn({ method: 'GET' }).handler(
       return versionCache.data
     }
 
+    // If we recently failed to reach GitHub, don't retry yet — serve
+    // whatever we have (stale success value, or null) instead of hanging
+    // on a dead network for every render.
+    if (lastFailureAt && Date.now() - lastFailureAt < FAILURE_RETRY_MS) {
+      return versionCache?.data ?? null
+    }
+
     try {
       const res = await fetch(
         'https://api.github.com/repos/QuackbackIO/quackback/releases/latest',
         {
           headers: { Accept: 'application/vnd.github.v3+json' },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         }
       )
 
       if (!res.ok) {
         log.warn({ status: res.status }, 'github api returned non-ok status')
-        return null
+        lastFailureAt = Date.now()
+        return versionCache?.data ?? null
       }
 
       const release = (await res.json()) as { tag_name: string; html_url: string }
@@ -61,10 +74,12 @@ export const getLatestVersion = createServerFn({ method: 'GET' }).handler(
       }
 
       versionCache = { data, expiresAt: Date.now() + CACHE_TTL_MS }
+      lastFailureAt = null
       return data
     } catch (err) {
       log.warn({ err }, 'failed to fetch latest release')
-      return null
+      lastFailureAt = Date.now()
+      return versionCache?.data ?? null
     }
   }
 )

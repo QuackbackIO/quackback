@@ -2,8 +2,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { fromUuid, type SegmentId } from '@quackback/ids'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { db, posts, boards } from '@/lib/server/db'
-import { and, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 import type { Actor } from '@/lib/server/policy'
 
@@ -14,7 +15,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
 
       GET: async ({ request }) => {
         try {
-          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
           const url = new URL(request.url)
           const text = url.searchParams.get('text')?.trim()
           const limit = Math.min(Number(url.searchParams.get('limit')) || 5, 20)
@@ -82,7 +83,10 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
                 sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${minSimilarity}`
               )
             )
-            .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
+            // Order by the bare distance operator (ascending, nearest first) so
+            // the HNSW index on posts.embedding can be used for the sort.
+            // `ORDER BY 1 - distance DESC` cannot use the index.
+            .orderBy(asc(sql`${posts.embedding} <=> ${vectorStr}::vector`))
             .limit(limit)
 
           const resultPosts = similar.map((p) => ({

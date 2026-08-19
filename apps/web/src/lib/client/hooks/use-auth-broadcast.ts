@@ -6,13 +6,14 @@ const CHANNEL_NAME = 'quackback-auth'
 // Types
 // ============================================================================
 
-interface AuthBroadcastMessage {
-  type: 'auth-success'
-  timestamp: number
-}
+type AuthBroadcastMessage =
+  | { type: 'auth-success'; timestamp: number }
+  | { type: 'auth-error'; code: string; timestamp: number }
 
 interface UseAuthBroadcastOptions {
   onSuccess?: () => void
+  /** Fired when a popup lands on its callback with an `?error=` code. */
+  onError?: (code: string) => void
   enabled?: boolean
 }
 
@@ -34,13 +35,19 @@ interface UsePopupTrackerOptions {
  * Note: The callback is responsible for handling session refresh.
  * Use refetchSession() from useSession for smooth updates without page reloads.
  */
-export function useAuthBroadcast({ onSuccess, enabled = true }: UseAuthBroadcastOptions): void {
+export function useAuthBroadcast({
+  onSuccess,
+  onError,
+  enabled = true,
+}: UseAuthBroadcastOptions): void {
   const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
 
-  // Keep callback ref updated without re-running effect
+  // Keep callback refs updated without re-running effect
   useEffect(() => {
     onSuccessRef.current = onSuccess
-  }, [onSuccess])
+    onErrorRef.current = onError
+  }, [onSuccess, onError])
 
   useEffect(() => {
     if (!enabled) return
@@ -50,6 +57,8 @@ export function useAuthBroadcast({ onSuccess, enabled = true }: UseAuthBroadcast
     channel.onmessage = (event: MessageEvent<AuthBroadcastMessage>) => {
       if (event.data.type === 'auth-success') {
         onSuccessRef.current?.()
+      } else if (event.data.type === 'auth-error') {
+        onErrorRef.current?.(event.data.code)
       }
     }
 
@@ -71,6 +80,23 @@ export function postAuthSuccess(): void {
   const channel = new BroadcastChannel(CHANNEL_NAME)
   const message: AuthBroadcastMessage = {
     type: 'auth-success',
+    timestamp: Date.now(),
+  }
+  channel.postMessage(message)
+  channel.close()
+}
+
+/**
+ * Post an auth error to other windows. Called from the auth-complete
+ * page when the OAuth callback redirected there with an `?error=` code,
+ * so the opener's dialog can react (e.g. offer link-conflict recovery)
+ * instead of the failure dying silently with the popup.
+ */
+export function postAuthError(code: string): void {
+  const channel = new BroadcastChannel(CHANNEL_NAME)
+  const message: AuthBroadcastMessage = {
+    type: 'auth-error',
+    code,
     timestamp: Date.now(),
   }
   channel.postMessage(message)

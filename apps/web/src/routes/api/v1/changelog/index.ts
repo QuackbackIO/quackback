@@ -12,6 +12,7 @@ import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
 import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { db, principal, eq } from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostId } from '@quackback/ids'
 
 // Input validation schema
@@ -31,7 +32,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.CHANGELOG_VIEW_DRAFT })
 
           // Parse query params
           const url = new URL(request.url)
@@ -77,7 +78,9 @@ export const Route = createFileRoute('/api/v1/changelog/')({
        */
       POST: async ({ request }) => {
         try {
-          const authResult = await withApiKeyAuth(request, { role: 'team' })
+          const authResult = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.CHANGELOG_MANAGE,
+          })
           // Parse and validate body
           const body = await request.json()
           const parsed = createChangelogSchema.safeParse(body)

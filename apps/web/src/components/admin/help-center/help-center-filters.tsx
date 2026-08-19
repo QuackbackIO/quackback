@@ -5,16 +5,18 @@ import { FilterList } from '@/components/admin/feedback/single-select-filter-lis
 import { HelpCenterCategoryTree, type CategoryActions } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import type { HelpCenterStatusFilter } from './use-help-center-filters'
-import type { HelpCenterCategoryId } from '@quackback/ids'
+import type { KbCategoryId } from '@quackback/ids'
 
 interface HelpCenterFiltersProps {
   status: HelpCenterStatusFilter
   onStatusChange: (status: HelpCenterStatusFilter) => void
   selectedCategoryId: string | undefined
-  onSelectCategory: (id: HelpCenterCategoryId | null) => void
+  onSelectCategory: (id: KbCategoryId | null) => void
   categoryActions: CategoryActions
   showDeleted?: boolean
   onShowDeletedChange?: (showDeleted: boolean | undefined) => void
+  showPerformance?: boolean
+  onShowPerformanceChange?: (showPerformance: boolean | undefined) => void
 }
 
 const ARTICLE_STATUSES = [
@@ -31,6 +33,8 @@ export function HelpCenterFiltersPanel({
   categoryActions,
   showDeleted,
   onShowDeletedChange,
+  showPerformance,
+  onShowPerformanceChange,
 }: HelpCenterFiltersProps) {
   const { data: categories = [] } = useQuery(helpCenterQueries.categories())
 
@@ -48,9 +52,9 @@ export function HelpCenterFiltersPanel({
                 aria-selected={isSelected}
                 onClick={() => onStatusChange(item.id as HelpCenterStatusFilter)}
                 className={cn(
-                  'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors',
                   isSelected
-                    ? 'bg-muted text-foreground'
+                    ? 'bg-muted text-foreground font-medium'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
               >
@@ -81,10 +85,20 @@ export function HelpCenterFiltersPanel({
 
       <FilterSection title="Other">
         <FilterList
-          items={[{ id: 'deleted', name: 'Deleted items' }]}
-          selectedIds={showDeleted ? ['deleted'] : []}
-          onSelect={() => {
-            onShowDeletedChange?.(!showDeleted || undefined)
+          items={[
+            { id: 'performance', name: 'Article performance' },
+            { id: 'deleted', name: 'Deleted items' },
+          ]}
+          selectedIds={[
+            ...(showPerformance ? ['performance'] : []),
+            ...(showDeleted ? ['deleted'] : []),
+          ]}
+          onSelect={(id) => {
+            if (id === 'deleted') {
+              onShowDeletedChange?.(!showDeleted || undefined)
+            } else {
+              onShowPerformanceChange?.(!showPerformance || undefined)
+            }
           }}
         />
       </FilterSection>

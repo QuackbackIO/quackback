@@ -18,9 +18,10 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/auth/session', () => ({ getSession: hoisted.mockGetSession }))
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real db module so tables/operators stay current; override only what this suite drives.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { query: { settings: { findFirst: vi.fn() }, principal: { findFirst: vi.fn() } } },
-  principal: {},
   eq: vi.fn(),
 }))
 

@@ -7,21 +7,20 @@ import type { BoardAccess } from '@/lib/shared/db-types'
 // chain to return one seeded row. Everything else in post.access is pure
 // policy composition we want to exercise for real.
 const limitMock = vi.fn()
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const chain = {
     from: () => chain,
     innerJoin: () => chain,
     where: () => chain,
     limit: (...a: unknown[]) => limitMock(...a),
   }
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: { select: () => chain },
     eq: vi.fn(),
     and: vi.fn(),
     isNull: vi.fn(),
-    posts: {},
-    boards: {},
-    comments: {},
   }
 })
 

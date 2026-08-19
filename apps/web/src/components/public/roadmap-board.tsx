@@ -4,8 +4,11 @@ import { useIntl } from 'react-intl'
 import { MapIcon } from '@heroicons/react/24/solid'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { Card, CardContent } from '@/components/ui/card'
-import type { PostStatusEntity } from '@/lib/shared/db-types'
-import { usePublicRoadmaps, type RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
+import {
+  usePublicRoadmaps,
+  useRoadmapDateBuckets,
+  type RoadmapView,
+} from '@/lib/client/hooks/use-roadmaps-query'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { portalQueries } from '@/lib/client/queries/portal'
@@ -20,14 +23,12 @@ import { usePublicRoadmapFilters } from './use-public-roadmap-filters'
 import { usePublicRoadmapSelection } from './use-public-roadmap-selection'
 
 interface RoadmapBoardProps {
-  statuses: PostStatusEntity[]
   initialRoadmaps?: RoadmapView[]
   initialSelectedRoadmapId?: string | null
   isTeamMember?: boolean
 }
 
 export function RoadmapBoard({
-  statuses,
   initialRoadmaps,
   initialSelectedRoadmapId,
   isTeamMember,
@@ -48,6 +49,28 @@ export function RoadmapBoard({
   const availableRoadmaps = initialRoadmaps ?? roadmaps ?? []
   const effectiveSelectedId = selectedRoadmapId ?? initialSelectedRoadmapId
   const selectedRoadmap = availableRoadmaps.find((r) => r.id === effectiveSelectedId)
+  const { data: dateBuckets = [] } = useRoadmapDateBuckets(
+    (effectiveSelectedId ?? 'roadmap_00000000000000000000000000') as `roadmap_${string}`,
+    { public: true, enabled: selectedRoadmap?.type === 'date' }
+  )
+  const columns =
+    selectedRoadmap?.type === 'date'
+      ? dateBuckets.map((bucket) => ({
+          id: bucket.id,
+          statusId: undefined,
+          bucketId: bucket.id,
+          name: bucket.label,
+          icon: null,
+          color: bucket.noEta ? '#6b7280' : '#3b82f6',
+        }))
+      : (selectedRoadmap?.columns ?? []).map((column) => ({
+          id: column.id,
+          statusId: column.statusId,
+          bucketId: undefined,
+          name: column.name,
+          icon: column.icon,
+          color: column.color,
+        }))
 
   useEffect(() => {
     if (availableRoadmaps.length > 0 && !selectedRoadmapId) {
@@ -131,17 +154,19 @@ export function RoadmapBoard({
             ref={columnsScroll.ref}
             className="flex gap-4 pb-4 h-full overflow-x-auto overflow-y-hidden scrollbar-none snap-x snap-mandatory"
           >
-            {statuses.map((status, index) => (
+            {columns.map((column, index) => (
               <div
-                key={status.id}
+                key={column.id}
                 className="snap-center sm:snap-start flex flex-col animate-in fade-in duration-200 fill-mode-backwards"
                 style={{ animationDelay: `${index * 75}ms` }}
               >
                 <RoadmapColumn
                   roadmapId={effectiveSelectedId as `roadmap_${string}`}
-                  statusId={status.id}
-                  title={status.name}
-                  color={status.color}
+                  statusId={column.statusId}
+                  bucketId={column.bucketId}
+                  title={column.name}
+                  icon={column.icon}
+                  color={column.color}
                   filters={filters}
                 />
               </div>

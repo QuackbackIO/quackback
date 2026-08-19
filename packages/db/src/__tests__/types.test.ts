@@ -4,31 +4,26 @@ import type {
   NewBoard,
   Roadmap,
   NewRoadmap,
-  Tag,
-  NewTag,
-  Post,
-  NewPost,
   PostTag,
   NewPostTag,
-  PostRoadmap,
-  NewPostRoadmap,
-  Vote,
-  NewVote,
+  Post,
+  NewPost,
+  PostTagAssignment,
+  NewPostTagAssignment,
+  PostVote,
+  NewPostVote,
   Comment,
-  NewComment,
-  CommentReaction,
-  NewCommentReaction,
+  NewPostComment,
+  PostCommentReaction,
+  NewPostCommentReaction,
   Integration,
   NewIntegration,
   IntegrationStatus,
   ChangelogEntry,
   NewChangelogEntry,
   PostWithTags,
-  PostWithRoadmaps,
   CommentWithReplies,
   PostWithDetails,
-  RoadmapWithPosts,
-  BoardWithRoadmaps,
 } from '../types'
 
 describe('Type definitions', () => {
@@ -67,7 +62,7 @@ describe('Type definitions', () => {
       expectTypeOf<Roadmap>().toHaveProperty('id')
       expectTypeOf<Roadmap>().toHaveProperty('slug')
       expectTypeOf<Roadmap>().toHaveProperty('name')
-      expectTypeOf<Roadmap>().toHaveProperty('isPublic')
+      expectTypeOf<Roadmap>().toHaveProperty('visibility')
       expectTypeOf<Roadmap>().toHaveProperty('position')
     })
 
@@ -77,15 +72,15 @@ describe('Type definitions', () => {
     })
   })
 
-  describe('Tag types', () => {
-    it('Tag has correct shape', () => {
-      expectTypeOf<Tag>().toHaveProperty('id')
-      expectTypeOf<Tag>().toHaveProperty('name')
-      expectTypeOf<Tag>().toHaveProperty('color')
+  describe('PostTag types', () => {
+    it('PostTag has correct shape', () => {
+      expectTypeOf<PostTag>().toHaveProperty('id')
+      expectTypeOf<PostTag>().toHaveProperty('name')
+      expectTypeOf<PostTag>().toHaveProperty('color')
     })
 
-    it('NewTag has required fields', () => {
-      expectTypeOf<NewTag>().toHaveProperty('name')
+    it('NewPostTag has required fields', () => {
+      expectTypeOf<NewPostTag>().toHaveProperty('name')
     })
   })
 
@@ -112,73 +107,63 @@ describe('Type definitions', () => {
   })
 
   describe('Junction table types', () => {
-    it('PostTag has correct shape', () => {
-      expectTypeOf<PostTag>().toHaveProperty('postId')
-      expectTypeOf<PostTag>().toHaveProperty('tagId')
+    it('PostTagAssignment has correct shape', () => {
+      expectTypeOf<PostTagAssignment>().toHaveProperty('postId')
+      expectTypeOf<PostTagAssignment>().toHaveProperty('tagId')
     })
 
-    it('NewPostTag has required fields', () => {
-      expectTypeOf<NewPostTag>().toHaveProperty('postId')
-      expectTypeOf<NewPostTag>().toHaveProperty('tagId')
-    })
-
-    it('PostRoadmap has correct shape', () => {
-      expectTypeOf<PostRoadmap>().toHaveProperty('postId')
-      expectTypeOf<PostRoadmap>().toHaveProperty('roadmapId')
-    })
-
-    it('NewPostRoadmap has required fields', () => {
-      expectTypeOf<NewPostRoadmap>().toHaveProperty('postId')
-      expectTypeOf<NewPostRoadmap>().toHaveProperty('roadmapId')
+    it('NewPostTagAssignment has required fields', () => {
+      expectTypeOf<NewPostTagAssignment>().toHaveProperty('postId')
+      expectTypeOf<NewPostTagAssignment>().toHaveProperty('tagId')
     })
   })
 
-  describe('Vote types', () => {
-    it('Vote has correct shape', () => {
-      expectTypeOf<Vote>().toHaveProperty('id')
-      expectTypeOf<Vote>().toHaveProperty('postId')
-      expectTypeOf<Vote>().toHaveProperty('principalId')
-      expectTypeOf<Vote>().toHaveProperty('createdAt')
+  describe('PostVote types', () => {
+    it('PostVote has correct shape', () => {
+      expectTypeOf<PostVote>().toHaveProperty('id')
+      expectTypeOf<PostVote>().toHaveProperty('postId')
+      expectTypeOf<PostVote>().toHaveProperty('principalId')
+      expectTypeOf<PostVote>().toHaveProperty('createdAt')
     })
 
-    it('NewVote has required fields', () => {
-      expectTypeOf<NewVote>().toHaveProperty('postId')
-      expectTypeOf<NewVote>().toHaveProperty('principalId')
+    it('NewPostVote has required fields', () => {
+      expectTypeOf<NewPostVote>().toHaveProperty('postId')
+      expectTypeOf<NewPostVote>().toHaveProperty('principalId')
     })
   })
 
   describe('Comment types', () => {
     it('Comment has correct shape', () => {
-      expectTypeOf<Comment>().toHaveProperty('id')
-      expectTypeOf<Comment>().toHaveProperty('postId')
-      expectTypeOf<Comment>().toHaveProperty('parentId')
-      expectTypeOf<Comment>().toHaveProperty('content')
-      expectTypeOf<Comment>().toHaveProperty('createdAt')
+      expectTypeOf<PostComment>().toHaveProperty('id')
+      expectTypeOf<PostComment>().toHaveProperty('postId')
+      expectTypeOf<PostComment>().toHaveProperty('parentId')
+      expectTypeOf<PostComment>().toHaveProperty('content')
+      expectTypeOf<PostComment>().toHaveProperty('createdAt')
     })
 
-    it('NewComment has required fields', () => {
-      expectTypeOf<NewComment>().toHaveProperty('postId')
-      expectTypeOf<NewComment>().toHaveProperty('content')
+    it('NewPostComment has required fields', () => {
+      expectTypeOf<NewPostComment>().toHaveProperty('postId')
+      expectTypeOf<NewPostComment>().toHaveProperty('content')
     })
 
     it('Comment.parentId can be null', () => {
-      // parentId is now CommentId | null (TypeId branded string)
+      // parentId is now PostCommentId | null (TypeId branded string)
       expectTypeOf<Comment['parentId']>().toMatchTypeOf<`comment_${string}` | null>()
     })
   })
 
-  describe('CommentReaction types', () => {
-    it('CommentReaction has correct shape', () => {
-      expectTypeOf<CommentReaction>().toHaveProperty('id')
-      expectTypeOf<CommentReaction>().toHaveProperty('commentId')
-      expectTypeOf<CommentReaction>().toHaveProperty('principalId')
-      expectTypeOf<CommentReaction>().toHaveProperty('emoji')
+  describe('PostCommentReaction types', () => {
+    it('PostCommentReaction has correct shape', () => {
+      expectTypeOf<PostCommentReaction>().toHaveProperty('id')
+      expectTypeOf<PostCommentReaction>().toHaveProperty('commentId')
+      expectTypeOf<PostCommentReaction>().toHaveProperty('principalId')
+      expectTypeOf<PostCommentReaction>().toHaveProperty('emoji')
     })
 
-    it('NewCommentReaction has required fields', () => {
-      expectTypeOf<NewCommentReaction>().toHaveProperty('commentId')
-      expectTypeOf<NewCommentReaction>().toHaveProperty('principalId')
-      expectTypeOf<NewCommentReaction>().toHaveProperty('emoji')
+    it('NewPostCommentReaction has required fields', () => {
+      expectTypeOf<NewPostCommentReaction>().toHaveProperty('commentId')
+      expectTypeOf<NewPostCommentReaction>().toHaveProperty('principalId')
+      expectTypeOf<NewPostCommentReaction>().toHaveProperty('emoji')
     })
   })
 
@@ -224,13 +209,7 @@ describe('Type definitions', () => {
       expectTypeOf<PostWithTags>().toHaveProperty('id')
       expectTypeOf<PostWithTags>().toHaveProperty('title')
       expectTypeOf<PostWithTags>().toHaveProperty('tags')
-      expectTypeOf<PostWithTags['tags']>().toEqualTypeOf<Tag[]>()
-    })
-
-    it('PostWithRoadmaps extends Post with roadmaps array', () => {
-      expectTypeOf<PostWithRoadmaps>().toHaveProperty('id')
-      expectTypeOf<PostWithRoadmaps>().toHaveProperty('roadmaps')
-      expectTypeOf<PostWithRoadmaps['roadmaps']>().toEqualTypeOf<Roadmap[]>()
+      expectTypeOf<PostWithTags['tags']>().toEqualTypeOf<PostTag[]>()
     })
 
     it('CommentWithReplies has recursive replies', () => {
@@ -244,25 +223,12 @@ describe('Type definitions', () => {
       expectTypeOf<PostWithDetails>().toHaveProperty('id')
       expectTypeOf<PostWithDetails>().toHaveProperty('board')
       expectTypeOf<PostWithDetails>().toHaveProperty('tags')
-      expectTypeOf<PostWithDetails>().toHaveProperty('roadmaps')
       expectTypeOf<PostWithDetails>().toHaveProperty('comments')
       expectTypeOf<PostWithDetails>().toHaveProperty('votes')
     })
 
     it('PostWithDetails.board is a Board', () => {
       expectTypeOf<PostWithDetails['board']>().toEqualTypeOf<Board>()
-    })
-
-    it('RoadmapWithPosts extends Roadmap with posts array', () => {
-      expectTypeOf<RoadmapWithPosts>().toHaveProperty('id')
-      expectTypeOf<RoadmapWithPosts>().toHaveProperty('posts')
-      expectTypeOf<RoadmapWithPosts['posts']>().toEqualTypeOf<Post[]>()
-    })
-
-    it('BoardWithRoadmaps extends Board with roadmaps array', () => {
-      expectTypeOf<BoardWithRoadmaps>().toHaveProperty('id')
-      expectTypeOf<BoardWithRoadmaps>().toHaveProperty('roadmaps')
-      expectTypeOf<BoardWithRoadmaps['roadmaps']>().toEqualTypeOf<Roadmap[]>()
     })
   })
 })

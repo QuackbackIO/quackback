@@ -6,7 +6,8 @@ const mockFrom = vi.fn()
 const mockInnerJoin = vi.fn()
 const mockWhere = vi.fn()
 
-vi.mock('@/lib/server/db', async () => {
+// Spread the real db module so tables/operators stay current; override only what this suite drives.
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 
   const chain = {
@@ -22,14 +23,13 @@ vi.mock('@/lib/server/db', async () => {
   }
 
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       select: (...args: unknown[]) => {
         mockSelect(...args)
         return chain
       },
     },
-    principal: { id: 'principal_id', type: 'type', userId: 'user_id' },
-    session: { userId: 'user_id', ipAddress: 'ip_address', createdAt: 'created_at' },
     eq: vi.fn(),
     and: vi.fn(),
     sql: realSql,

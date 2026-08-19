@@ -1,8 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
-import { posts, votes, comments, postTags, postRoadmaps, commentReactions } from '../schema/posts'
+import {
+  posts,
+  postVotes,
+  postComments,
+  postTagAssignments,
+  postCommentReactions,
+} from '../schema/posts'
 import { REACTION_EMOJIS, MODERATION_STATES } from '../types'
-import { boards, roadmaps, tags } from '../schema/boards'
+import { boards, roadmaps, roadmapColumns, postTags } from '../schema/boards'
 import { integrations } from '../schema/integrations'
 import { changelogEntries } from '../schema/changelog'
 import { user, session, settings, principal, invitation } from '../schema/auth'
@@ -52,19 +58,40 @@ describe('Schema definitions', () => {
       expect(columns).toContain('slug')
       expect(columns).toContain('name')
       expect(columns).toContain('description')
-      expect(columns).toContain('isPublic')
+      expect(columns).toContain('type')
+      expect(columns).toContain('baseFilter')
+      expect(columns).toContain('dateSource')
+      expect(columns).toContain('frequency')
+      expect(columns).toContain('visibility')
+      expect(columns).toContain('visibleSegmentIds')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
+      expect(columns).not.toContain('isPublic')
+    })
+
+    it('defines status-backed roadmap columns', () => {
+      expect(getTableName(roadmapColumns)).toBe('roadmap_columns')
+      expect(Object.keys(getTableColumns(roadmapColumns))).toEqual([
+        'id',
+        'roadmapId',
+        'statusId',
+        'name',
+        'icon',
+        'color',
+        'position',
+        'createdAt',
+        'updatedAt',
+      ])
     })
   })
 
-  describe('tags schema', () => {
+  describe('postTags schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(tags)).toBe('tags')
+      expect(getTableName(postTags)).toBe('post_tags')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(tags))
+      const columns = Object.keys(getTableColumns(postTags))
       expect(columns).toContain('id')
       expect(columns).toContain('name')
       expect(columns).toContain('color')
@@ -93,7 +120,7 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      expect(columns.length).toBe(31)
+      expect(columns.length).toBe(34)
     })
 
     it('MODERATION_STATES matches the posts.moderation_state column enum', () => {
@@ -103,40 +130,27 @@ describe('Schema definitions', () => {
     })
   })
 
-  describe('postTags schema', () => {
+  describe('postTagAssignments schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(postTags)).toBe('post_tags')
+      expect(getTableName(postTagAssignments)).toBe('post_tag_assignments')
     })
 
     it('has junction table columns', () => {
-      const columns = Object.keys(getTableColumns(postTags))
+      const columns = Object.keys(getTableColumns(postTagAssignments))
       expect(columns).toContain('postId')
       expect(columns).toContain('tagId')
-      expect(columns.length).toBe(2)
-    })
-  })
-
-  describe('postRoadmaps schema', () => {
-    it('has correct table name', () => {
-      expect(getTableName(postRoadmaps)).toBe('post_roadmaps')
-    })
-
-    it('has junction table columns', () => {
-      const columns = Object.keys(getTableColumns(postRoadmaps))
-      expect(columns).toContain('postId')
-      expect(columns).toContain('roadmapId')
-      expect(columns).toContain('position')
+      expect(columns).toContain('autoTagged')
       expect(columns.length).toBe(3)
     })
   })
 
-  describe('votes schema', () => {
+  describe('postVotes schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(votes)).toBe('votes')
+      expect(getTableName(postVotes)).toBe('post_votes')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(votes))
+      const columns = Object.keys(getTableColumns(postVotes))
       expect(columns).toContain('id')
       expect(columns).toContain('postId')
       expect(columns).toContain('principalId')
@@ -144,13 +158,13 @@ describe('Schema definitions', () => {
     })
   })
 
-  describe('comments schema', () => {
+  describe('postComments schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(comments)).toBe('comments')
+      expect(getTableName(postComments)).toBe('post_comments')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(comments))
+      const columns = Object.keys(getTableColumns(postComments))
       expect(columns).toContain('id')
       expect(columns).toContain('postId')
       expect(columns).toContain('parentId')
@@ -160,18 +174,18 @@ describe('Schema definitions', () => {
     })
 
     it('has parentId for nested comments', () => {
-      const columns = Object.keys(getTableColumns(comments))
+      const columns = Object.keys(getTableColumns(postComments))
       expect(columns).toContain('parentId')
     })
   })
 
-  describe('commentReactions schema', () => {
+  describe('postCommentReactions schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(commentReactions)).toBe('comment_reactions')
+      expect(getTableName(postCommentReactions)).toBe('post_comment_reactions')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(commentReactions))
+      const columns = Object.keys(getTableColumns(postCommentReactions))
       expect(columns).toContain('id')
       expect(columns).toContain('commentId')
       expect(columns).toContain('principalId')

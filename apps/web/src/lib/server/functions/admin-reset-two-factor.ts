@@ -15,6 +15,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { UserId } from '@quackback/ids'
 import { z } from 'zod'
 import { and, db, eq, like, twoFactor, user, verification } from '@/lib/server/db'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
 import { logger } from '@/lib/server/logger'
@@ -28,7 +29,7 @@ const input = z.object({
 export const adminResetTwoFactorFn = createServerFn({ method: 'POST' })
   .validator(input)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const userId = data.userId as UserId
 
     return withAuditEvent(

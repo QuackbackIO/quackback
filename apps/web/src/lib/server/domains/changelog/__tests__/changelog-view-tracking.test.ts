@@ -6,6 +6,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ChangelogId } from '@quackback/ids'
+// Static SUT import (vi.mock below is hoisted above it) so the module's
+// transform is paid at file load, not inside a 5s-timed test — which it blew
+// under a saturated parallel run via the per-test `await import()`.
+import { getPublicChangelogById } from '../changelog.public'
 
 const mockFindFirst = vi.fn()
 const mockSelect = vi.fn()
@@ -13,38 +17,18 @@ const mockUpdate = vi.fn()
 const mockSet = vi.fn()
 const mockWhere = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       changelogEntries: { findFirst: (...a: unknown[]) => mockFindFirst(...a) },
       postStatuses: { findMany: vi.fn().mockResolvedValue([]) },
+      changelogEntryCategories: { findMany: vi.fn().mockResolvedValue([]) },
     },
     select: (...a: unknown[]) => mockSelect(...a),
     update: (...a: unknown[]) => mockUpdate(...a),
   },
-  changelogEntries: {
-    id: 'id',
-    publishedAt: 'published_at',
-    deletedAt: 'deleted_at',
-    viewCount: 'view_count',
-  },
-  changelogEntryPosts: { changelogEntryId: 'changelog_entry_id', postId: 'post_id' },
-  posts: {
-    id: 'posts.id',
-    title: 'posts.title',
-    voteCount: 'posts.voteCount',
-    boardId: 'posts.boardId',
-    statusId: 'posts.statusId',
-    deletedAt: 'posts.deletedAt',
-    moderationState: 'posts.moderationState',
-  },
-  boards: {
-    id: 'boards.id',
-    slug: 'boards.slug',
-    access: 'boards.access',
-    deletedAt: 'boards.deletedAt',
-  },
-  postStatuses: { id: 'id' },
   eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ kind: 'and', args })),
   or: vi.fn((...args: unknown[]) => ({ kind: 'or', args })),
@@ -83,7 +67,6 @@ describe('getPublicChangelogById — view tracking', () => {
       contentJson: null,
       publishedAt: new Date('2026-01-01'),
     })
-    const { getPublicChangelogById } = await import('../changelog.public')
 
     await getPublicChangelogById('cl_1' as ChangelogId)
 
@@ -93,7 +76,6 @@ describe('getPublicChangelogById — view tracking', () => {
 
   it('does not increment when the entry is not found', async () => {
     mockFindFirst.mockResolvedValue(undefined)
-    const { getPublicChangelogById } = await import('../changelog.public')
 
     await expect(getPublicChangelogById('cl_missing' as ChangelogId)).rejects.toBeDefined()
 

@@ -8,6 +8,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId } from '@quackback/ids'
 
 // Input validation schema — `audience` and `access` are intentionally
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
@@ -60,7 +61,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.BOARD_MANAGE })
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
@@ -104,7 +105,7 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.BOARD_MANAGE })
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 

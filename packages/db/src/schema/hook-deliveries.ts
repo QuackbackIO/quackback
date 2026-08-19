@@ -1,10 +1,9 @@
 /**
  * Hook delivery idempotency table.
  *
- * Records every hook job that has been (or is being) processed, keyed by
- * the BullMQ job ID. Handlers do an INSERT … ON CONFLICT DO NOTHING
- * before the side-effecting work; if the conflict triggers, the job has
- * already been (or is being) processed and the handler returns early.
+ * Records every hook job outcome, keyed by the BullMQ job ID. Processing
+ * rows are short leases so a crash before the side effect can recover;
+ * completed rows deduplicate BullMQ replays.
  *
  * This closes a long-standing gap where worker crashes mid-handler caused
  * BullMQ to re-run the job on the next boot — re-firing webhooks (visible
@@ -26,7 +25,10 @@ export const hookDeliveries = pgTable(
     /** Hook type that processed this job (e.g. 'webhook', 'ai'). Useful
      *  for debugging + retention sweeps that target one hook type. */
     hookType: text('hook_type').notNull(),
-    /** Wall-clock time the row was inserted. Used by retention pruning. */
+    /** processing leases can be reclaimed after a worker crash; completed and
+     * failed outcomes remain durable dedupe records. */
+    outcome: text('outcome').notNull().default('completed'),
+    /** Wall-clock time of the latest claim/outcome. Used for leases + pruning. */
     processedAt: timestamp('processed_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

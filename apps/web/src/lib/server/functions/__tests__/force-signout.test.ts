@@ -48,7 +48,10 @@ vi.mock('@tanstack/react-start', () => ({
   },
 }))
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real module first so every table the transitively-imported server
+// functions reference stays defined, then override what this suite asserts on.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { delete: hoisted.deleteMock },
   session: hoisted.sessionTable,
   invitation: { __name: 'invitation' },

@@ -38,7 +38,9 @@ const mockDbWhere = vi.fn()
 const mockLimit = vi.fn()
 const mockFindMany = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real db module so tables/operators stay current; override only what this suite drives.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: (...args: unknown[]) => mockSelect(...args),
     query: {
@@ -46,55 +48,6 @@ vi.mock('@/lib/server/db', () => ({
         findMany: (...args: unknown[]) => mockFindMany(...args),
       },
     },
-  },
-  integrations: {
-    id: 'id',
-    integrationType: 'integrationType',
-    secrets: 'secrets',
-    config: 'config',
-    status: 'status',
-  },
-  integrationEventMappings: {
-    integrationId: 'integrationId',
-    eventType: 'eventType',
-    actionConfig: 'actionConfig',
-    filters: 'filters',
-    enabled: 'enabled',
-  },
-  webhooks: {
-    status: 'status',
-    deletedAt: 'deletedAt',
-    $inferSelect: {},
-  },
-  principal: {
-    id: 'principal.id',
-    userId: 'principal.userId',
-    role: 'principal.role',
-    type: 'principal.type',
-    displayName: 'principal.displayName',
-  },
-  user: {
-    id: 'user.id',
-    email: 'user.email',
-  },
-  // The new filterSubscribersByPostAudience helper looks up the post +
-  // board to decide which mentioned users may actually receive the
-  // notification. Stub the table refs so the helper can build its SQL.
-  posts: {
-    id: 'posts.id',
-    boardId: 'posts.boardId',
-    moderationState: 'posts.moderationState',
-    principalId: 'posts.principalId',
-    deletedAt: 'posts.deletedAt',
-  },
-  boards: {
-    id: 'boards.id',
-    access: 'boards.access',
-    deletedAt: 'boards.deletedAt',
-  },
-  userSegments: {
-    principalId: 'userSegments.principalId',
-    segmentId: 'userSegments.segmentId',
   },
   eq: vi.fn((a: unknown, b: unknown) => ({ _eq: [a, b] })),
   and: vi.fn((...args: unknown[]) => ({ _and: args })),
@@ -308,5 +261,44 @@ describe('post.mentioned target resolution', () => {
     })
 
     expect(emailTargets).toHaveLength(0)
+  })
+})
+
+describe('mention email — reachable only via a contact address', () => {
+  it('emails the contact address when the account address is a placeholder', async () => {
+    // Someone whose provider releases no email carries a synthetic placeholder
+    // on the account. The old truthiness check on `email` handed that
+    // placeholder to the transport, which dropped it silently — so a person
+    // with a perfectly good contact address on file received nothing.
+    setupMentionDbChain([
+      {
+        id: 'principal_mentioned',
+        type: 'user',
+        role: 'user',
+        email: 'sso-oidc-abc-deadbeef@anon.quackback.io',
+        contactEmail: 'reachable@example.com',
+      },
+    ])
+
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const emailTargets = targets.filter((t) => t.type === 'email')
+
+    expect(emailTargets).toHaveLength(1)
+    expect((emailTargets[0].target as { email: string }).email).toBe('reachable@example.com')
+  })
+
+  it('produces no email target when both addresses are placeholders', async () => {
+    setupMentionDbChain([
+      {
+        id: 'principal_mentioned',
+        type: 'user',
+        role: 'user',
+        email: 'sso-oidc-abc-deadbeef@anon.quackback.io',
+        contactEmail: null,
+      },
+    ])
+
+    const targets = await getHookTargets(makePostMentionedEvent())
+    expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
   })
 })

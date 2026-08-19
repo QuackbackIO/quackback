@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
 
-const TITLE_CLASS = 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'
+const TITLE_CLASS = NAV_SECTION_CLASS
 
 /**
  * The canonical admin left-pane subheading. Collapsible by default; pass
@@ -55,7 +56,7 @@ export function FilterSection({
       {open && (
         <div className="mt-2">
           {children}
-          {hint && <p className="mt-2 text-[10px] text-muted-foreground/60">{hint}</p>}
+          {hint && <p className="mt-2 text-xs text-muted-foreground/60">{hint}</p>}
         </div>
       )}
     </div>

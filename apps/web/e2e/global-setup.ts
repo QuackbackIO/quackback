@@ -1,5 +1,10 @@
 import { test as setup, expect } from '@playwright/test'
-import { getMagicLinkToken, ensureTestUserHasRole } from './utils/db-helpers'
+import {
+  getMagicLinkToken,
+  ensureTestUserHasRole,
+  enableMagicLinkMethod,
+  clearSigninRateLimit,
+} from './utils/db-helpers'
 
 const ADMIN_EMAIL = 'demo@example.com'
 const AUTH_FILE = 'e2e/.auth/admin.json'
@@ -18,6 +23,14 @@ const AUTH_FILE = 'e2e/.auth/admin.json'
  */
 setup('authenticate as admin', async ({ page }) => {
   const request = page.request
+
+  // Step 0: Magic link is opt-in (authConfig.oauth.magicLink, absent = off)
+  // and the seed doesn't enable it — provision it idempotently so the
+  // sign-in below isn't refused with magic_link_method_not_allowed. Repeated
+  // runs from one machine also trip the per-IP magic-link limiter, so clear
+  // its buckets up front.
+  enableMagicLinkMethod()
+  clearSigninRateLimit()
 
   // Step 1: Trigger magic-link verification token creation
   const sendResponse = await request.post('/api/auth/sign-in/magic-link', {

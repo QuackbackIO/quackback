@@ -26,7 +26,11 @@ const mockRecordAuditEvent = vi.fn()
 // provider id rather than a hardcoded 'sso'.
 const mockEq = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real module (lazy db proxy; importing is safe) and override only
+// what these tests drive, so the mock never needs re-teaching as the factory's
+// import graph grows (see lib/server/__tests__/README.md).
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       principal: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
@@ -34,14 +38,24 @@ vi.mock('@/lib/server/db', () => ({
       user: { findFirst: (...args: unknown[]) => mockUserFindFirst(...args) },
     },
     update: () => ({ set: mockSet, where: mockWhere }),
-    insert: () => ({ values: (...args: unknown[]) => mockInsertValues(...args) }),
+    // Default-team enrollment lookup: resolves empty (no default team seeded).
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+    insert: () => ({
+      values: (...args: unknown[]) => {
+        mockInsertValues(...args)
+        const chain = {
+          onConflictDoNothing: () => chain,
+          returning: async () => [args[0]],
+        }
+        return chain
+      },
+    }),
   },
   principal: { userId: 'user_id', role: 'role' },
   user: { id: 'user.id' },
   account: { userId: 'account.userId', providerId: 'account.providerId' },
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
   eq: (...args: unknown[]) => mockEq(...args),
-  desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
 }))
 
 vi.mock('@/lib/server/audit/log', () => ({
@@ -63,7 +77,7 @@ type SsoOidc = {
   clientId: string
   autoCreateUsers: boolean
   autoProvisionRole?: 'admin' | 'member' | 'user'
-  attributeMapping?: {
+  roleMapping?: {
     claimPath: string
     rules: { whenContains: string; role: 'admin' | 'member' | 'user' }[]
     syncOnEverySignIn?: boolean
@@ -119,7 +133,7 @@ const callHandlerWith = async (opts: CallOpts = {}) => {
         enabled: true,
         autoCreateUsers: ssoOidc.autoCreateUsers,
         autoProvisionRole: ssoOidc.autoProvisionRole ?? null,
-        claimMapping: ssoOidc.attributeMapping ? { role: ssoOidc.attributeMapping } : null,
+        claimMapping: ssoOidc.roleMapping ? { role: ssoOidc.roleMapping } : null,
         domains: [
           {
             id: 'domain_1',
@@ -229,7 +243,7 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [],
           syncOnEverySignIn: true,
@@ -249,7 +263,7 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'user',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [],
           syncOnEverySignIn: true,
@@ -293,7 +307,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
       providerId: 'custom-oidc',
       registeredIds: new Set(['custom-oidc']),
       ssoOidc: {
-        attributeMapping: { claimPath: 'roles', rules: [] },
+        roleMapping: { claimPath: 'roles', rules: [] },
       },
     })
     expect(mockEq).toHaveBeenCalledWith('account.providerId', 'custom-oidc')
@@ -306,7 +320,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [],
         },
@@ -319,26 +333,6 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     }
     expect(call.metadata.source).toBe('claim_mapping')
   })
-
-  it('provisions from stashed claims, not only the stored id token', async () => {
-    const { stashResolvedClaims } = await import('../resolved-claims-stash')
-    stashResolvedClaims('sso', 'acct-1', { roles: ['admin'] })
-    mockFindFirst.mockResolvedValue({ role: 'user' })
-    mockAccountFindFirst.mockResolvedValue({
-      idToken: `h.${Buffer.from(JSON.stringify({ roles: ['member'] })).toString('base64url')}.s`,
-      accountId: 'acct-1',
-    })
-    await callHandlerWith({
-      ssoOidc: {
-        autoProvisionRole: 'member',
-        attributeMapping: {
-          claimPath: 'roles',
-          rules: [{ whenContains: 'admin', role: 'admin' }],
-        },
-      },
-    })
-    expect(mockSet).toHaveBeenCalledWith({ role: 'admin' })
-  })
 })
 
 describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-independent', () => {
@@ -347,7 +341,7 @@ describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-indepe
     // user's email domain is not a verified domain on the provider. A
     // per-user role claim is its own trust anchor (the IdP attesting THIS
     // user's role), stronger than domain ownership, so the verified-domain
-    // gate must not block it.
+    // gate must not block it. Mirrors WorkOS role assignment.
     mockFindFirst.mockResolvedValue({ role: 'user' })
     mockIdTokenClaims({ roles: ['member'] })
     await callHandlerWith({
@@ -357,7 +351,7 @@ describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-indepe
         // Default role is the no-promote sentinel; ONLY the claim should drive
         // promotion, proving the role came from the assertion, not the default.
         autoProvisionRole: 'user',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [
             { whenContains: 'admin', role: 'admin' },
@@ -379,7 +373,7 @@ describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-indepe
       email: 'james@quackback.io',
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'admin', role: 'admin' }],
         },
@@ -401,7 +395,7 @@ describe('handleAutoProvisionAfter -- returning user whose principal was soft-re
       email: 'james@quackback.io',
       ssoOidc: {
         autoProvisionRole: 'user',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'member', role: 'member' }],
         },
@@ -420,7 +414,7 @@ describe('handleAutoProvisionAfter -- returning user whose principal was soft-re
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'admin', role: 'admin' }],
         },
@@ -440,7 +434,7 @@ describe('handleAutoProvisionAfter -- returning user whose principal was soft-re
       email: 'james@quackback.io',
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'admin', role: 'admin' }],
         },

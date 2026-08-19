@@ -49,7 +49,7 @@ export async function linkTicketToPost(
   input: LinkTicketInput,
   _actorPrincipalId: PrincipalId
 ): Promise<LinkTicketResult> {
-  const linkId = createId('linked_entity')
+  const linkId = createId('post_external_link')
 
   // Insert link (idempotent - ON CONFLICT returns existing)
   const [link] = await db
@@ -191,7 +191,7 @@ export async function getLinkedPosts(input: {
     statusName: r.status_name,
     statusColor: r.status_color,
     board: { name: r.board_name },
-    linkId: fromUuid('linked_entity', r.link_id),
+    linkId: fromUuid('post_external_link', r.link_id),
     linkedAt: typeof r.linked_at === 'string' ? new Date(r.linked_at) : r.linked_at,
   }))
 }

@@ -53,8 +53,10 @@ makeSql.join = (parts: SqlObj[], sep: SqlObj): SqlObj => ({
 // Mock @/lib/server/db
 // -----------------------------------------------------------------------
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       execute: vi.fn(async (sqlObj: SqlObj) => {
         capturedSql = sqlObj.text
@@ -93,16 +95,6 @@ vi.mock('@/lib/server/db', () => {
     inArray: vi.fn((col: unknown, vals: unknown[]) => ({ __cond: 'in', col, vals })),
     isNull: vi.fn((col: unknown) => ({ __cond: 'isNull', col })),
     sql: makeSql,
-    segments: {
-      id: 'id',
-      type: 'type',
-      deletedAt: 'deleted_at',
-    },
-    userSegments: {
-      segmentId: 'segment_id',
-      principalId: 'principal_id',
-      addedBy: 'added_by',
-    },
   }
 })
 

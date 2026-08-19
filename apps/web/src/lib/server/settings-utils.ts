@@ -42,13 +42,13 @@ export async function getSettingsLogoData(): Promise<LogoData | null> {
 }
 
 /**
- * Get favicon data for the settings.
+ * Get portal OG image data for the settings.
  */
-export async function getSettingsFaviconData(): Promise<{ url: string } | null> {
+export async function getSettingsPortalOgImageData(): Promise<LogoData | null> {
   const record = await getSettingsRecord()
   if (!record) return null
 
-  const url = getPublicUrlOrNull(record.faviconKey)
+  const url = getPublicUrlOrNull(record.portalOgImageKey)
   if (!url) return null
 
   return { url }
@@ -58,6 +58,19 @@ export interface HeaderLogoData {
   url: string | null
   displayMode: string | null
   displayName: string | null
+}
+
+/**
+ * Get favicon data for the settings.
+ */
+export async function getSettingsFaviconData(): Promise<LogoData | null> {
+  const record = await getSettingsRecord()
+  if (!record) return null
+
+  const url = getPublicUrlOrNull(record.faviconKey)
+  if (!url) return null
+
+  return { url }
 }
 
 /**

@@ -19,13 +19,19 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ChangelogId, PostId } from '@quackback/ids'
+// Static SUT import (vi.mock below is hoisted above it) so the module transform
+// is paid at file load, not inside a 5s-timed test — which it blew under a
+// saturated parallel run via the per-test `await import()`.
+import { getPublicChangelogById, listPublicChangelogs } from '../changelog.public'
 
 const mockEntryFindFirst = vi.fn()
 const mockEntryFindMany = vi.fn()
 const mockStatusesFindMany = vi.fn()
 const mockSelect = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       changelogEntries: {
@@ -35,34 +41,12 @@ vi.mock('@/lib/server/db', () => ({
       postStatuses: {
         findMany: (...args: unknown[]) => mockStatusesFindMany(...args),
       },
+      changelogEntryCategories: { findMany: vi.fn().mockResolvedValue([]) },
     },
     select: (...args: unknown[]) => mockSelect(...args),
     // getPublicChangelogById records a view via a fire-and-forget update.
     update: () => ({ set: () => ({ where: () => ({ catch: () => {} }) }) }),
   },
-  changelogEntries: {
-    id: 'id',
-    publishedAt: 'published_at',
-    deletedAt: 'deleted_at',
-    viewCount: 'view_count',
-  },
-  changelogEntryPosts: { changelogEntryId: 'changelog_entry_id', postId: 'post_id' },
-  posts: {
-    id: 'posts.id',
-    title: 'posts.title',
-    voteCount: 'posts.voteCount',
-    boardId: 'posts.boardId',
-    statusId: 'posts.statusId',
-    deletedAt: 'posts.deletedAt',
-    moderationState: 'posts.moderationState',
-  },
-  boards: {
-    id: 'boards.id',
-    slug: 'boards.slug',
-    access: 'boards.access',
-    deletedAt: 'boards.deletedAt',
-  },
-  postStatuses: { id: 'id' },
   eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ kind: 'and', args })),
   or: vi.fn((...args: unknown[]) => ({ kind: 'or', args })),
@@ -182,7 +166,6 @@ beforeEach(() => {
 
 describe('getPublicChangelogById — effective display date', () => {
   it('returns displayDate override as publishedAt for portal detail view', async () => {
-    const { getPublicChangelogById } = await import('../changelog.public')
     const displayOverride = new Date('2024-01-15T09:00:00Z')
     const publishedAt = new Date('2025-06-01T12:00:00Z')
 
@@ -203,7 +186,6 @@ describe('getPublicChangelogById — effective display date', () => {
 
 describe('getPublicChangelogById — moderation state filter', () => {
   it('returns only published linked posts; pending/spam/archived/closed are hidden', async () => {
-    const { getPublicChangelogById } = await import('../changelog.public')
     mockEntryFindFirst.mockResolvedValueOnce({
       id: 'cl_1' as ChangelogId,
       title: 'Release Notes',
@@ -227,7 +209,6 @@ describe('getPublicChangelogById — moderation state filter', () => {
   })
 
   it('hides linked posts that are deleted even if their moderationState is published', async () => {
-    const { getPublicChangelogById } = await import('../changelog.public')
     mockEntryFindFirst.mockResolvedValueOnce({
       id: 'cl_1' as ChangelogId,
       title: 'Release Notes',
@@ -252,7 +233,6 @@ describe('getPublicChangelogById — moderation state filter', () => {
 
 describe('listPublicChangelogs — moderation state filter', () => {
   it('returns only published linked posts across all entries', async () => {
-    const { listPublicChangelogs } = await import('../changelog.public')
     mockSelect.mockReturnValueOnce(
       entriesListChain([
         {
@@ -295,7 +275,6 @@ describe('public changelog — board audience filter', () => {
   // audience axis.
 
   it('getPublicChangelogById: hides linked posts whose board audience is not public', async () => {
-    const { getPublicChangelogById } = await import('../changelog.public')
     mockEntryFindFirst.mockResolvedValueOnce({
       id: 'cl_1' as ChangelogId,
       title: 'Release Notes',
@@ -328,7 +307,6 @@ describe('public changelog — board audience filter', () => {
   })
 
   it('listPublicChangelogs: hides non-public-audience linked posts across entries', async () => {
-    const { listPublicChangelogs } = await import('../changelog.public')
     mockSelect.mockReturnValueOnce(
       entriesListChain([
         {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { HelpCenterCategoryId } from '@quackback/ids'
+import type { KbCategoryId } from '@quackback/ids'
 
 const insertValuesCalls: unknown[][] = []
 const updateSetCalls: unknown[][] = []
@@ -13,11 +13,12 @@ function createInsertChain() {
   })
   chain.returning = vi.fn().mockResolvedValue([
     {
-      id: 'category_new1' as HelpCenterCategoryId,
+      id: 'kb_category_new1' as KbCategoryId,
       slug: 'getting-started',
       name: 'Getting Started',
       description: null,
       isPublic: true,
+      segmentIds: [],
       position: 0,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
@@ -39,11 +40,12 @@ function createUpdateChain() {
   })
   chain.returning = vi.fn().mockResolvedValue([
     {
-      id: 'category_1' as HelpCenterCategoryId,
+      id: 'kb_category_1' as KbCategoryId,
       slug: 'getting-started',
       name: 'Getting Started Updated',
       description: 'Updated desc',
       isPublic: true,
+      segmentIds: [],
       position: 0,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-02'),
@@ -71,6 +73,8 @@ vi.mock('@/lib/server/db', () => ({
     },
     insert: vi.fn(() => createInsertChain()),
     update: vi.fn(() => createUpdateChain()),
+    // Redirect-rule cascade cleanup on delete (domains/languages §2) hits this.
+    delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
     transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
       const self = (await import('@/lib/server/db')).db
       return fn(self)
@@ -78,6 +82,12 @@ vi.mock('@/lib/server/db', () => ({
     select: vi.fn(() => ({
       from: (...args: unknown[]) => mockSelectFrom(...args),
     })),
+  },
+  helpCenterRedirectRules: {
+    id: 'id',
+    path: 'path',
+    targetType: 'target_type',
+    targetId: 'target_id',
   },
   helpCenterCategories: {
     id: 'id',
@@ -145,11 +155,12 @@ describe('listCategories', () => {
   it('returns categories with article counts', async () => {
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_1' as HelpCenterCategoryId,
+        id: 'kb_category_1' as KbCategoryId,
         slug: 'getting-started',
         name: 'Getting Started',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -160,7 +171,7 @@ describe('listCategories', () => {
       where: vi.fn().mockReturnValue({
         groupBy: vi
           .fn()
-          .mockResolvedValue([{ categoryId: 'category_1', totalCount: 3, publishedCount: 3 }]),
+          .mockResolvedValue([{ categoryId: 'kb_category_1', totalCount: 3, publishedCount: 3 }]),
       }),
     })
 
@@ -173,11 +184,12 @@ describe('listCategories', () => {
   it('returns 0 article count when no articles exist', async () => {
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_1' as HelpCenterCategoryId,
+        id: 'kb_category_1' as KbCategoryId,
         slug: 'empty',
         name: 'Empty',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -197,23 +209,25 @@ describe('listCategories', () => {
   it('rolls descendant counts up into parent recursiveArticleCount', async () => {
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_parent' as HelpCenterCategoryId,
+        id: 'kb_category_parent' as KbCategoryId,
         parentId: null,
         slug: 'parent',
         name: 'Parent',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
       {
-        id: 'category_child' as HelpCenterCategoryId,
-        parentId: 'category_parent' as HelpCenterCategoryId,
+        id: 'kb_category_child' as KbCategoryId,
+        parentId: 'kb_category_parent' as KbCategoryId,
         slug: 'child',
         name: 'Child',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -224,13 +238,15 @@ describe('listCategories', () => {
       where: vi.fn().mockReturnValue({
         groupBy: vi
           .fn()
-          .mockResolvedValue([{ categoryId: 'category_child', totalCount: 4, publishedCount: 3 }]),
+          .mockResolvedValue([
+            { categoryId: 'kb_category_child', totalCount: 4, publishedCount: 3 },
+          ]),
       }),
     })
 
     const result = await listCategories()
-    const parent = result.find((c) => c.id === 'category_parent')!
-    const child = result.find((c) => c.id === 'category_child')!
+    const parent = result.find((c) => c.id === 'kb_category_parent')!
+    const child = result.find((c) => c.id === 'kb_category_child')!
 
     expect(parent.articleCount).toBe(0)
     expect(parent.publishedArticleCount).toBe(0)
@@ -248,21 +264,23 @@ describe('listPublicCategories', () => {
   it('filters to public categories with articles', async () => {
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_1' as HelpCenterCategoryId,
+        id: 'kb_category_1' as KbCategoryId,
         slug: 'public',
         name: 'Public',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
       {
-        id: 'category_2' as HelpCenterCategoryId,
+        id: 'kb_category_2' as KbCategoryId,
         slug: 'private',
         name: 'Private',
         description: null,
         isPublic: false,
+        segmentIds: [],
         position: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -272,8 +290,8 @@ describe('listPublicCategories', () => {
     mockSelectFrom.mockReturnValue({
       where: vi.fn().mockReturnValue({
         groupBy: vi.fn().mockResolvedValue([
-          { categoryId: 'category_1', totalCount: 2, publishedCount: 2 },
-          { categoryId: 'category_2', totalCount: 1, publishedCount: 1 },
+          { categoryId: 'kb_category_1', totalCount: 2, publishedCount: 2 },
+          { categoryId: 'kb_category_2', totalCount: 1, publishedCount: 1 },
         ]),
       }),
     })
@@ -286,34 +304,37 @@ describe('listPublicCategories', () => {
   it('includes a parent category whose only published articles live under children', async () => {
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_parent' as HelpCenterCategoryId,
+        id: 'kb_category_parent' as KbCategoryId,
         parentId: null,
         slug: 'parent',
         name: 'Parent',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
       {
-        id: 'category_child' as HelpCenterCategoryId,
-        parentId: 'category_parent' as HelpCenterCategoryId,
+        id: 'kb_category_child' as KbCategoryId,
+        parentId: 'kb_category_parent' as KbCategoryId,
         slug: 'child',
         name: 'Child',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
       {
-        id: 'category_empty_root' as HelpCenterCategoryId,
+        id: 'kb_category_empty_root' as KbCategoryId,
         parentId: null,
         slug: 'empty',
         name: 'Empty Root',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -325,7 +346,7 @@ describe('listPublicCategories', () => {
         groupBy: vi
           .fn()
           .mockResolvedValue([
-            { categoryId: 'category_child', totalCount: 14, publishedCount: 14 },
+            { categoryId: 'kb_category_child', totalCount: 14, publishedCount: 14 },
           ]),
       }),
     })
@@ -342,38 +363,40 @@ describe('listPublicCategories', () => {
 describe('getCategoryById', () => {
   it('returns category when found', async () => {
     const mockCat = {
-      id: 'category_1' as HelpCenterCategoryId,
+      id: 'kb_category_1' as KbCategoryId,
       slug: 'test',
       name: 'Test',
       description: null,
       isPublic: true,
+      segmentIds: [],
       position: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
     }
     mockCategoryFindFirst.mockResolvedValue(mockCat)
 
-    const result = await getCategoryById('category_1' as HelpCenterCategoryId)
+    const result = await getCategoryById('kb_category_1' as KbCategoryId)
     expect(result.name).toBe('Test')
   })
 
   it('throws NotFoundError when category does not exist', async () => {
     mockCategoryFindFirst.mockResolvedValue(null)
 
-    await expect(getCategoryById('category_missing' as HelpCenterCategoryId)).rejects.toMatchObject(
-      { code: 'CATEGORY_NOT_FOUND' }
-    )
+    await expect(getCategoryById('kb_category_missing' as KbCategoryId)).rejects.toMatchObject({
+      code: 'CATEGORY_NOT_FOUND',
+    })
   })
 })
 
 describe('getCategoryBySlug', () => {
   it('returns category by slug', async () => {
     mockCategoryFindFirst.mockResolvedValue({
-      id: 'category_1' as HelpCenterCategoryId,
+      id: 'kb_category_1' as KbCategoryId,
       slug: 'getting-started',
       name: 'Getting Started',
       description: null,
       isPublic: true,
+      segmentIds: [],
       position: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -425,7 +448,7 @@ describe('createCategory slug generation (#285)', () => {
 
   it('appends a counter when the derived slug collides', async () => {
     mockCategoryFindFirst
-      .mockResolvedValueOnce({ id: 'category_other' })
+      .mockResolvedValueOnce({ id: 'kb_category_other' })
       .mockResolvedValueOnce(null)
     await createCategory({ name: '反馈' })
     expect((insertValuesCalls[0][0] as Record<string, unknown>).slug).toBe('fan-kui-2')
@@ -434,36 +457,36 @@ describe('createCategory slug generation (#285)', () => {
 
 describe('updateCategory slug generation (#285)', () => {
   it('falls back to a generic slug when an explicit empty slug is given', async () => {
-    await updateCategory('category_1' as HelpCenterCategoryId, { slug: '' })
+    await updateCategory('kb_category_1' as KbCategoryId, { slug: '' })
     expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('category')
   })
 
   it('disambiguates an explicit slug that collides with another category', async () => {
     mockCategoryFindFirst
-      .mockResolvedValueOnce({ id: 'category_other' })
+      .mockResolvedValueOnce({ id: 'kb_category_other' })
       .mockResolvedValueOnce(null)
-    await updateCategory('category_1' as HelpCenterCategoryId, { slug: 'faq' })
+    await updateCategory('kb_category_1' as KbCategoryId, { slug: 'faq' })
     expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('faq-2')
   })
 
   it('keeps an explicit slug that only collides with the same category', async () => {
-    mockCategoryFindFirst.mockResolvedValueOnce({ id: 'category_1' })
-    await updateCategory('category_1' as HelpCenterCategoryId, { slug: 'faq' })
+    mockCategoryFindFirst.mockResolvedValueOnce({ id: 'kb_category_1' })
+    await updateCategory('kb_category_1' as KbCategoryId, { slug: 'faq' })
     expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('faq')
   })
 })
 
 describe('deleteCategory', () => {
   it('soft deletes the category', async () => {
-    mockCategoryFindMany.mockResolvedValue([{ id: 'category_1', parentId: null }])
-    const result = await deleteCategory('category_1' as HelpCenterCategoryId)
+    mockCategoryFindMany.mockResolvedValue([{ id: 'kb_category_1', parentId: null }])
+    const result = await deleteCategory('kb_category_1' as KbCategoryId)
     expect(result).toBeUndefined()
   })
 
   it('throws NotFoundError when category does not exist', async () => {
     mockCategoryFindMany.mockResolvedValue([])
 
-    await expect(deleteCategory('category_missing' as HelpCenterCategoryId)).rejects.toMatchObject({
+    await expect(deleteCategory('kb_category_missing' as KbCategoryId)).rejects.toMatchObject({
       code: 'CATEGORY_NOT_FOUND',
     })
   })
@@ -473,7 +496,7 @@ describe('deleteCategory cascade soft-delete', () => {
   it('soft-deletes a leaf category with no descendants', async () => {
     mockCategoryFindMany.mockResolvedValue([{ id: 'leaf', parentId: null }])
 
-    await expect(deleteCategory('leaf' as HelpCenterCategoryId)).resolves.toBeUndefined()
+    await expect(deleteCategory('leaf' as KbCategoryId)).resolves.toBeUndefined()
   })
 
   it('walks descendants and soft-deletes the full subtree including articles', async () => {
@@ -484,7 +507,7 @@ describe('deleteCategory cascade soft-delete', () => {
       { id: 'd', parentId: 'b' },
     ])
 
-    await expect(deleteCategory('a' as HelpCenterCategoryId)).resolves.toBeUndefined()
+    await expect(deleteCategory('a' as KbCategoryId)).resolves.toBeUndefined()
 
     const inArrayMock = (await import('@/lib/server/db')).inArray as unknown as ReturnType<
       typeof vi.fn
@@ -500,25 +523,25 @@ describe('deleteCategory cascade soft-delete', () => {
 
   it('throws NotFoundError when the category does not exist', async () => {
     mockCategoryFindMany.mockResolvedValue([])
-    await expect(deleteCategory('ghost' as HelpCenterCategoryId)).rejects.toThrow(/not found/i)
+    await expect(deleteCategory('ghost' as KbCategoryId)).rejects.toThrow(/not found/i)
   })
 })
 
 describe('createCategory with parentId and icon', () => {
   it('passes parentId and icon to the database insert', async () => {
     mockCategoryFindMany.mockResolvedValue([
-      { id: 'category_parent1', parentId: null },
-      { id: 'category_1', parentId: null },
+      { id: 'kb_category_parent1', parentId: null },
+      { id: 'kb_category_1', parentId: null },
     ])
     const result = await createCategory({
       name: 'Child Category',
-      parentId: 'category_parent1',
+      parentId: 'kb_category_parent1',
       icon: 'book',
     })
     expect(result.id).toBeDefined()
     expect(insertValuesCalls).toHaveLength(1)
     const insertedValues = insertValuesCalls[0][0] as Record<string, unknown>
-    expect(insertedValues.parentId).toBe('category_parent1')
+    expect(insertedValues.parentId).toBe('kb_category_parent1')
     expect(insertedValues.icon).toBe('book')
   })
 
@@ -534,22 +557,22 @@ describe('createCategory with parentId and icon', () => {
 describe('updateCategory with parentId and icon', () => {
   it('passes parentId and icon in the update set', async () => {
     mockCategoryFindMany.mockResolvedValue([
-      { id: 'category_parent1', parentId: null },
-      { id: 'category_1', parentId: null },
+      { id: 'kb_category_parent1', parentId: null },
+      { id: 'kb_category_1', parentId: null },
     ])
-    await updateCategory('category_1' as HelpCenterCategoryId, {
-      parentId: 'category_parent1',
+    await updateCategory('kb_category_1' as KbCategoryId, {
+      parentId: 'kb_category_parent1',
       icon: 'star',
     })
     expect(updateSetCalls).toHaveLength(1)
     const setValues = updateSetCalls[0][0] as Record<string, unknown>
-    expect(setValues.parentId).toBe('category_parent1')
+    expect(setValues.parentId).toBe('kb_category_parent1')
     expect(setValues.icon).toBe('star')
   })
 
   it('allows clearing parentId and icon by passing null', async () => {
-    mockCategoryFindMany.mockResolvedValue([{ id: 'category_1', parentId: null }])
-    await updateCategory('category_1' as HelpCenterCategoryId, {
+    mockCategoryFindMany.mockResolvedValue([{ id: 'kb_category_1', parentId: null }])
+    await updateCategory('kb_category_1' as KbCategoryId, {
       parentId: null,
       icon: null,
     })
@@ -564,13 +587,14 @@ describe('listPublicCategories returns parentId and icon', () => {
   it('includes parentId and icon in results', async () => {
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_1' as HelpCenterCategoryId,
+        id: 'kb_category_1' as KbCategoryId,
         slug: 'public',
         name: 'Public',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
-        parentId: 'category_parent1',
+        parentId: 'kb_category_parent1',
         icon: 'book',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -581,13 +605,13 @@ describe('listPublicCategories returns parentId and icon', () => {
       where: vi.fn().mockReturnValue({
         groupBy: vi
           .fn()
-          .mockResolvedValue([{ categoryId: 'category_1', totalCount: 2, publishedCount: 2 }]),
+          .mockResolvedValue([{ categoryId: 'kb_category_1', totalCount: 2, publishedCount: 2 }]),
       }),
     })
 
     const result = await listPublicCategories()
     expect(result).toHaveLength(1)
-    expect(result[0].parentId).toBe('category_parent1')
+    expect(result[0].parentId).toBe('kb_category_parent1')
     expect(result[0].icon).toBe('book')
   })
 })
@@ -628,9 +652,7 @@ describe('updateCategory hierarchy validation', () => {
       { id: 'a', parentId: null },
       { id: 'b', parentId: 'a' },
     ])
-    await expect(updateCategory('a' as HelpCenterCategoryId, { parentId: 'a' })).rejects.toThrow(
-      /parent/i
-    )
+    await expect(updateCategory('a' as KbCategoryId, { parentId: 'a' })).rejects.toThrow(/parent/i)
   })
 
   it('rejects moving a category under its own descendant', async () => {
@@ -639,9 +661,7 @@ describe('updateCategory hierarchy validation', () => {
       { id: 'b', parentId: 'a' },
       { id: 'c', parentId: 'b' },
     ])
-    await expect(updateCategory('a' as HelpCenterCategoryId, { parentId: 'c' })).rejects.toThrow(
-      /cycle/i
-    )
+    await expect(updateCategory('a' as KbCategoryId, { parentId: 'c' })).rejects.toThrow(/cycle/i)
   })
 
   it('rejects moving a subtree such that the deepest leaf would exceed MAX_CATEGORY_DEPTH', async () => {
@@ -652,9 +672,7 @@ describe('updateCategory hierarchy validation', () => {
       { id: 'x', parentId: null },
       { id: 'y', parentId: 'x' },
     ])
-    await expect(updateCategory('b' as HelpCenterCategoryId, { parentId: 'y' })).rejects.toThrow(
-      /depth/i
-    )
+    await expect(updateCategory('b' as KbCategoryId, { parentId: 'y' })).rejects.toThrow(/depth/i)
   })
 
   it('allows setting parentId to null (promoting to top-level)', async () => {
@@ -662,9 +680,7 @@ describe('updateCategory hierarchy validation', () => {
       { id: 'a', parentId: null },
       { id: 'b', parentId: 'a' },
     ])
-    await expect(
-      updateCategory('b' as HelpCenterCategoryId, { parentId: null })
-    ).resolves.toBeDefined()
+    await expect(updateCategory('b' as KbCategoryId, { parentId: null })).resolves.toBeDefined()
   })
 })
 
@@ -678,11 +694,12 @@ describe('restoreCategory', () => {
     chain.where = vi.fn().mockReturnValue(chain)
     chain.returning = vi.fn().mockResolvedValue([
       {
-        id: 'category_1' as HelpCenterCategoryId,
+        id: 'kb_category_1' as KbCategoryId,
         slug: 'getting-started',
         name: 'Getting Started',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         parentId: null,
         icon: null,
@@ -697,7 +714,7 @@ describe('restoreCategory', () => {
   it('restores a deleted category within the 30-day window', async () => {
     const recentDeletedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
     mockCategoryFindFirst.mockResolvedValue({
-      id: 'category_1' as HelpCenterCategoryId,
+      id: 'kb_category_1' as KbCategoryId,
       slug: 'getting-started',
       name: 'Getting Started',
       deletedAt: recentDeletedAt,
@@ -709,8 +726,8 @@ describe('restoreCategory', () => {
     const { db } = await import('@/lib/server/db')
     vi.mocked(db.update).mockReturnValueOnce(makeRestoredCategoryChain(setCallsCapture) as never)
 
-    const result = await restoreCategory('category_1' as HelpCenterCategoryId)
-    expect(result.id).toBe('category_1')
+    const result = await restoreCategory('kb_category_1' as KbCategoryId)
+    expect(result.id).toBe('kb_category_1')
     expect(result.deletedAt).toBeNull()
     expect(setCallsCapture.length).toBeGreaterThan(0)
     const setArgs = setCallsCapture[0][0] as Record<string, unknown>
@@ -719,21 +736,21 @@ describe('restoreCategory', () => {
 
   it('throws NotFoundError for a non-existent category', async () => {
     mockCategoryFindFirst.mockResolvedValue(null)
-    await expect(restoreCategory('category_missing' as HelpCenterCategoryId)).rejects.toMatchObject(
-      { code: 'CATEGORY_NOT_FOUND' }
-    )
+    await expect(restoreCategory('kb_category_missing' as KbCategoryId)).rejects.toMatchObject({
+      code: 'CATEGORY_NOT_FOUND',
+    })
   })
 
   it('throws ValidationError when category is not deleted', async () => {
     mockCategoryFindFirst.mockResolvedValue({
-      id: 'category_1' as HelpCenterCategoryId,
+      id: 'kb_category_1' as KbCategoryId,
       slug: 'live',
       name: 'Live Category',
       deletedAt: null,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     })
-    await expect(restoreCategory('category_1' as HelpCenterCategoryId)).rejects.toMatchObject({
+    await expect(restoreCategory('kb_category_1' as KbCategoryId)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     })
   })
@@ -741,14 +758,14 @@ describe('restoreCategory', () => {
   it('throws ValidationError when category is outside the 30-day restore window', async () => {
     const oldDeletedAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
     mockCategoryFindFirst.mockResolvedValue({
-      id: 'category_1' as HelpCenterCategoryId,
+      id: 'kb_category_1' as KbCategoryId,
       slug: 'old',
       name: 'Old Category',
       deletedAt: oldDeletedAt,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     })
-    await expect(restoreCategory('category_1' as HelpCenterCategoryId)).rejects.toMatchObject({
+    await expect(restoreCategory('kb_category_1' as KbCategoryId)).rejects.toMatchObject({
       code: 'RESTORE_EXPIRED',
     })
   })
@@ -756,19 +773,19 @@ describe('restoreCategory', () => {
   it('refuses to restore a child under a still-deleted parent', async () => {
     const recentDeletedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
     mockCategoryFindFirst.mockResolvedValueOnce({
-      id: 'category_child' as HelpCenterCategoryId,
+      id: 'kb_category_child' as KbCategoryId,
       slug: 'child',
       name: 'Child Category',
-      parentId: 'category_parent' as HelpCenterCategoryId,
+      parentId: 'kb_category_parent' as KbCategoryId,
       deletedAt: recentDeletedAt,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     })
     mockCategoryFindFirst.mockResolvedValueOnce({
-      id: 'category_parent' as HelpCenterCategoryId,
+      id: 'kb_category_parent' as KbCategoryId,
       deletedAt: recentDeletedAt,
     })
-    await expect(restoreCategory('category_child' as HelpCenterCategoryId)).rejects.toMatchObject({
+    await expect(restoreCategory('kb_category_child' as KbCategoryId)).rejects.toMatchObject({
       code: 'PARENT_DELETED',
     })
   })
@@ -776,21 +793,21 @@ describe('restoreCategory', () => {
   it('restores a child when its parent is already active', async () => {
     const recentDeletedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
     mockCategoryFindFirst.mockResolvedValueOnce({
-      id: 'category_child' as HelpCenterCategoryId,
+      id: 'kb_category_child' as KbCategoryId,
       slug: 'child',
       name: 'Child Category',
-      parentId: 'category_parent' as HelpCenterCategoryId,
+      parentId: 'kb_category_parent' as KbCategoryId,
       deletedAt: recentDeletedAt,
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date('2024-01-01'),
     })
     mockCategoryFindFirst.mockResolvedValueOnce({
-      id: 'category_parent' as HelpCenterCategoryId,
+      id: 'kb_category_parent' as KbCategoryId,
       deletedAt: null,
     })
     const { db } = await import('@/lib/server/db')
     vi.mocked(db.update).mockReturnValueOnce(makeRestoredCategoryChain() as never)
-    const result = await restoreCategory('category_child' as HelpCenterCategoryId)
+    const result = await restoreCategory('kb_category_child' as KbCategoryId)
     expect(result.deletedAt).toBeNull()
   })
 })
@@ -800,11 +817,12 @@ describe('listCategories with showDeleted option', () => {
     const recentDeletedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_deleted' as HelpCenterCategoryId,
+        id: 'kb_category_deleted' as KbCategoryId,
         slug: 'deleted-cat',
         name: 'Deleted Category',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         parentId: null,
         icon: null,
@@ -830,11 +848,12 @@ describe('listCategories with showDeleted option', () => {
     const recentDeletedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_deleted' as HelpCenterCategoryId,
+        id: 'kb_category_deleted' as KbCategoryId,
         slug: 'deleted-cat',
         name: 'Deleted Category',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         parentId: null,
         icon: null,
@@ -857,11 +876,12 @@ describe('listCategories with showDeleted option', () => {
   it('returns live categories by default (no options)', async () => {
     mockCategoryFindMany.mockResolvedValue([
       {
-        id: 'category_1' as HelpCenterCategoryId,
+        id: 'kb_category_1' as KbCategoryId,
         slug: 'live',
         name: 'Live Category',
         description: null,
         isPublic: true,
+        segmentIds: [],
         position: 0,
         parentId: null,
         icon: null,

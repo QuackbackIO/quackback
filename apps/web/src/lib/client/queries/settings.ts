@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { UserId } from '@quackback/ids'
+import type { IdentityProviderId, UserId } from '@quackback/ids'
 import {
   fetchBrandingConfig,
   fetchPortalConfig,
@@ -12,12 +12,28 @@ import {
   fetchDeveloperConfig,
   fetchWidgetConfig,
   fetchWidgetSecret,
+  fetchWorkflowAbandonedAutoCloseFn,
+  getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
-import { getVerifiedDomainsFn, listIdentityProvidersFn } from '@/lib/server/functions/sso'
+import { getHelpCenterDomainStatusFn } from '@/lib/server/functions/help-center-domain'
+import { listRedirectRulesFn } from '@/lib/server/functions/help-center-redirect-rules'
+import {
+  listTeamsAdminFn,
+  listTeamMembersFn,
+  listAssignableTeammatesFn,
+} from '@/lib/server/functions/teams'
+import {
+  getProviderAccountCountFn,
+  getVerifiedDomainsFn,
+  listIdentityProvidersFn,
+} from '@/lib/server/functions/sso'
+import { listRolesFn } from '@/lib/server/functions/roles'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
+  fetchSettingsPortalOgImageData,
+  fetchSettingsFaviconData,
 } from '@/lib/server/functions/settings-utils'
 
 const STALE_TIME_SHORT = 30 * 1000
@@ -39,6 +55,27 @@ export const settingsQueries = {
       staleTime: STALE_TIME_LONG,
     }),
 
+  teams: () =>
+    queryOptions({
+      queryKey: ['settings', 'teams'],
+      queryFn: listTeamsAdminFn,
+      staleTime: STALE_TIME_SHORT,
+    }),
+
+  assignableTeammates: () =>
+    queryOptions({
+      queryKey: ['settings', 'teams', 'assignable'],
+      queryFn: listAssignableTeammatesFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  teamMembers: (teamId: string) =>
+    queryOptions({
+      queryKey: ['settings', 'teams', teamId, 'members'],
+      queryFn: () => listTeamMembersFn({ data: { teamId } }),
+      staleTime: STALE_TIME_SHORT,
+    }),
+
   logo: () =>
     queryOptions({
       queryKey: ['settings', 'logo'],
@@ -50,6 +87,20 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'headerLogo'],
       queryFn: fetchSettingsHeaderLogoData,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  portalOgImage: () =>
+    queryOptions({
+      queryKey: ['settings', 'portalOgImage'],
+      queryFn: fetchSettingsPortalOgImageData,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  favicon: () =>
+    queryOptions({
+      queryKey: ['settings', 'favicon'],
+      queryFn: fetchSettingsFaviconData,
       staleTime: STALE_TIME_LONG,
     }),
 
@@ -95,6 +146,15 @@ export const settingsQueries = {
       staleTime: STALE_TIME_MEDIUM,
     }),
 
+  /** Identities linked to one provider — read by its Remove control, which
+   *  states what a removal would orphan before offering it. */
+  providerAccountCount: (id: IdentityProviderId) =>
+    queryOptions({
+      queryKey: ['settings', 'identityProviders', id, 'accountCount'],
+      queryFn: () => getProviderAccountCountFn({ data: { id } }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
   developerConfig: () =>
     queryOptions({
       queryKey: ['settings', 'developerConfig'],
@@ -106,6 +166,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'team'],
       queryFn: fetchTeamMembersAndInvitations,
+      staleTime: STALE_TIME_SHORT,
+    }),
+
+  roles: () =>
+    queryOptions({
+      queryKey: ['settings', 'roles'],
+      queryFn: () => listRolesFn(),
       staleTime: STALE_TIME_SHORT,
     }),
 
@@ -135,5 +202,34 @@ export const settingsQueries = {
       queryKey: ['settings', 'helpCenterConfig'],
       queryFn: () => getHelpCenterConfigFn({ data: {} }),
       staleTime: STALE_TIME_LONG,
+    }),
+
+  helpCenterDomainStatus: () =>
+    queryOptions({
+      queryKey: ['settings', 'helpCenterDomainStatus'],
+      queryFn: () => getHelpCenterDomainStatusFn({ data: {} }),
+      staleTime: STALE_TIME_SHORT,
+      // Only meaningful once a domain is configured -- callers gate `enabled`.
+    }),
+
+  helpCenterRedirectRules: () =>
+    queryOptions({
+      queryKey: ['settings', 'helpCenterRedirectRules'],
+      queryFn: () => listRedirectRulesFn({ data: {} }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  workflowAbandonedAutoClose: () =>
+    queryOptions({
+      queryKey: ['settings', 'workflowAbandonedAutoClose'],
+      queryFn: fetchWorkflowAbandonedAutoCloseFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  spamFilterConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'spamFilterConfig'],
+      queryFn: getSpamFilterConfigFn,
+      staleTime: STALE_TIME_MEDIUM,
     }),
 }

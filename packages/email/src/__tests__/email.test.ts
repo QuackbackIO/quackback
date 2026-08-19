@@ -8,7 +8,10 @@ import {
   sendStatusChangeEmail,
   sendNewCommentEmail,
   sendPasswordResetEmail,
+  sendRawEmail,
+  sendCsatRequestEmail,
 } from '../index'
+import { sealed } from './seal'
 
 /** Save and restore env vars around each test. */
 function withCleanEnv() {
@@ -83,7 +86,7 @@ describe('console mode returns { sent: false }', () => {
 
   it('sendInvitationEmail returns { sent: false }', async () => {
     const result = await sendInvitationEmail({
-      to: 'test@example.com',
+      to: sealed('test@example.com'),
       invitedByName: 'Admin',
       workspaceName: 'TestWorkspace',
       inviteLink: 'https://example.com/invite',
@@ -103,7 +106,7 @@ describe('console mode returns { sent: false }', () => {
 
   it('sendMagicLinkEmail returns { sent: false }', async () => {
     const result = await sendMagicLinkEmail({
-      to: 'test@example.com',
+      to: sealed('test@example.com'),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
@@ -139,8 +142,45 @@ describe('console mode returns { sent: false }', () => {
 
   it('sendPasswordResetEmail returns { sent: false }', async () => {
     const result = await sendPasswordResetEmail({
-      to: 'test@example.com',
+      to: sealed('test@example.com'),
       resetLink: 'https://example.com/auth/reset-password?token=abc',
+    })
+    expect(result).toEqual({ sent: false })
+  })
+
+  it('sendCsatRequestEmail returns { sent: false }', async () => {
+    const result = await sendCsatRequestEmail({
+      to: 'visitor@example.com',
+      promptText: 'How did we do?',
+      ratingUrls: [
+        'https://example.com/csat?token=abc&rating=1',
+        'https://example.com/csat?token=abc&rating=2',
+        'https://example.com/csat?token=abc&rating=3',
+        'https://example.com/csat?token=abc&rating=4',
+        'https://example.com/csat?token=abc&rating=5',
+      ],
+      workspaceName: 'TestWorkspace',
+    })
+    expect(result).toEqual({ sent: false })
+  })
+
+  it('sendRawEmail returns { sent: false } (custom From, prerendered html)', async () => {
+    const result = await sendRawEmail({
+      from: 'support@acme.com',
+      to: 'customer@example.com',
+      subject: 'Re: your ticket',
+      html: '<p>Here is the reply.</p>',
+      text: 'Here is the reply.',
+    })
+    expect(result).toEqual({ sent: false })
+  })
+
+  it('sendRawEmail drops a synthetic anonymous recipient', async () => {
+    const result = await sendRawEmail({
+      from: 'support@acme.com',
+      to: 'temp-abc123@anon.quackback.io',
+      subject: 'x',
+      html: '<p>x</p>',
     })
     expect(result).toEqual({ sent: false })
   })

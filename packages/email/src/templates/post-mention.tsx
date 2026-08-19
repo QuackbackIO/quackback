@@ -10,6 +10,7 @@ export interface PostMentionEmailProps {
   postUrl: string
   workspaceName: string
   unsubscribeUrl?: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -20,6 +21,7 @@ export function PostMentionEmail({
   postUrl,
   workspaceName,
   unsubscribeUrl,
+  preferencesUrl,
   logoUrl,
 }: PostMentionEmailProps) {
   const displayName = mentionerName || 'Anonymous user'
@@ -92,6 +94,7 @@ export function PostMentionEmail({
         <NotificationFooter
           reason={`You received this email because you were mentioned in ${workspaceName}.`}
           unsubscribeUrl={unsubscribeUrl}
+          preferencesUrl={preferencesUrl}
         />
       ) : (
         <Text style={typography.footer}>

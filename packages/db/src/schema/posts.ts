@@ -10,16 +10,16 @@ import {
   customType,
   check,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { boards, tags, roadmaps } from './boards'
+import { boards, postTags } from './boards'
 import { postStatuses } from './statuses'
 import { postExternalLinks } from './external-links'
-import { feedbackSuggestions } from './feedback'
 import { principal } from './auth'
 import { MODERATION_STATES } from '../types'
-import type { TiptapContent } from '../types'
+import type { CustomFieldValues, TiptapContent } from '../types'
 
 // Custom tsvector type for full-text search
 const tsvector = customType<{ data: string }>({
@@ -52,7 +52,7 @@ export const posts = pgTable(
       .notNull()
       .references(() => principal.id, { onDelete: 'restrict' }),
     // Status reference to post_statuses table
-    statusId: typeIdColumn('status')('status_id').references(() => postStatuses.id, {
+    statusId: typeIdColumn('post_status')('status_id').references(() => postStatuses.id, {
       onDelete: 'set null',
     }),
     // Owner is also principal-scoped (team member assigned to this post)
@@ -64,17 +64,17 @@ export const posts = pgTable(
     ),
     // Team member who tracked this post from a support conversation on the
     // customer's behalf. The author (principalId) stays the customer.
-    trackedByPrincipalId: typeIdColumnNullable('principal')('tracked_by_principal_id').references(
-      () => principal.id,
-      { onDelete: 'set null' }
-    ),
+    trackedByPrincipalId: typeIdColumnNullable('principal')('tracked_by_principal_id'),
     voteCount: integer('vote_count').default(0).notNull(),
     // Denormalized comment count for performance
     // Maintained by application code in comment.service.ts (create/delete operations)
     commentCount: integer('comment_count').default(0).notNull(),
     // Pinned comment as official response
     // References a team member's root-level comment that serves as the official response
-    pinnedCommentId: typeIdColumnNullable('comment')('pinned_comment_id'),
+    pinnedCommentId: typeIdColumnNullable('post_comment')('pinned_comment_id'),
+    // Board pinning: set posts lead their public board listing under every
+    // sort, most recently pinned first. Null means unpinned.
+    pinnedAt: timestamp('pinned_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
@@ -93,6 +93,10 @@ export const posts = pgTable(
       .notNull(),
     // Key-value metadata attached by the widget SDK
     widgetMetadata: jsonb('widget_metadata').$type<Record<string, string>>(),
+    // Validated answers to the board's configured custom fields
+    // (boards.settings.customFields), keyed by field key. Null when the board
+    // configures no fields.
+    customFieldValues: jsonb('custom_field_values').$type<CustomFieldValues>(),
     // Merge/deduplication: points to the canonical post this was merged into
     canonicalPostId: typeIdColumnNullable('post')('canonical_post_id'),
     mergedAt: timestamp('merged_at', { withTimezone: true }),
@@ -121,15 +125,33 @@ export const posts = pgTable(
     summaryCommentCount: integer('summary_comment_count'),
     // Merge suggestion staleness tracking
     mergeCheckedAt: timestamp('merge_checked_at', { withTimezone: true }),
+    // Nullable target ship date for time-based roadmap columns. Stored as a full
+    // timestamp (single-datetime ETA model); presented at month granularity.
+    eta: timestamp('eta', { withTimezone: true }),
   },
   (table) => [
-    index('posts_board_id_idx').on(table.boardId),
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'posts_tracked_by_principal_id_fk',
+      columns: [table.trackedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
     index('posts_status_id_idx').on(table.statusId),
-    index('posts_principal_id_idx').on(table.principalId),
     index('posts_owner_principal_id_idx').on(table.ownerPrincipalId),
+    // Partial indexes on mostly-null audit columns: never filtered on directly,
+    // but principal deletion RI-checks them per referencing table.
+    index('posts_deleted_by_principal_idx')
+      .on(table.deletedByPrincipalId)
+      .where(sql`"deleted_by_principal_id" IS NOT NULL`),
+    index('posts_merged_by_principal_idx')
+      .on(table.mergedByPrincipalId)
+      .where(sql`"merged_by_principal_id" IS NOT NULL`),
     index('posts_tracked_by_principal_id_idx').on(table.trackedByPrincipalId),
     index('posts_created_at_idx').on(table.createdAt),
     index('posts_vote_count_idx').on(table.voteCount),
+    index('posts_embedding_hnsw_idx')
+      .using('hnsw', sql`${table.embedding} vector_cosine_ops`)
+      .where(sql`${table.embedding} IS NOT NULL`),
     // Composite indexes for post listings sorted by "top" and "new"
     index('posts_board_vote_idx').on(table.boardId, table.voteCount),
     index('posts_board_created_at_idx').on(table.boardId, table.createdAt),
@@ -153,52 +175,46 @@ export const posts = pgTable(
     index('posts_pinned_comment_id_idx').on(table.pinnedCommentId),
     // Index for finding merged/duplicate posts by canonical post
     index('posts_canonical_post_id_idx').on(table.canonicalPostId),
+    // Partial index for time-based roadmap bucketing (only posts with an ETA).
+    index('posts_eta_idx')
+      .on(table.eta)
+      .where(sql`"eta" IS NOT NULL`),
     // CHECK constraints to ensure counts are never negative
     check('vote_count_non_negative', sql`vote_count >= 0`),
     check('comment_count_non_negative', sql`comment_count >= 0`),
   ]
 )
 
-export const postTags = pgTable(
-  'post_tags',
+export const postTagAssignments = pgTable(
+  'post_tag_assignments',
   {
-    postId: typeIdColumn('post')('post_id')
-      .notNull()
-      .references(() => posts.id, { onDelete: 'cascade' }),
-    tagId: typeIdColumn('tag')('tag_id')
-      .notNull()
-      .references(() => tags.id, { onDelete: 'cascade' }),
+    postId: typeIdColumn('post')('post_id').notNull(),
+    tagId: typeIdColumn('post_tag')('tag_id').notNull(),
+    // AI-applied marker: true when the auto-tagging engine (not a human)
+    // attached the tag, so admins can review AI-applied tags.
+    autoTagged: boolean('auto_tagged').default(false).notNull(),
   },
   (table) => [
-    uniqueIndex('post_tags_pk').on(table.postId, table.tagId),
-    index('post_tags_post_id_idx').on(table.postId),
-    index('post_tags_tag_id_idx').on(table.tagId),
+    // FK names predate the post_tags -> post_tag_assignments table rename.
+    foreignKey({
+      name: 'post_tags_post_id_posts_id_fk',
+      columns: [table.postId],
+      foreignColumns: [posts.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'post_tags_tag_id_tags_id_fk',
+      columns: [table.tagId],
+      foreignColumns: [postTags.id],
+    }).onDelete('cascade'),
+    uniqueIndex('post_tag_assignments_pk').on(table.postId, table.tagId),
+    index('post_tag_assignments_tag_id_idx').on(table.tagId),
   ]
 )
 
-export const postRoadmaps = pgTable(
-  'post_roadmaps',
+export const postVotes = pgTable(
+  'post_votes',
   {
-    postId: typeIdColumn('post')('post_id')
-      .notNull()
-      .references(() => posts.id, { onDelete: 'cascade' }),
-    roadmapId: typeIdColumn('roadmap')('roadmap_id')
-      .notNull()
-      .references(() => roadmaps.id, { onDelete: 'cascade' }),
-    position: integer('position').notNull().default(0),
-  },
-  (table) => [
-    uniqueIndex('post_roadmaps_pk').on(table.postId, table.roadmapId),
-    index('post_roadmaps_post_id_idx').on(table.postId),
-    index('post_roadmaps_roadmap_id_idx').on(table.roadmapId),
-    index('post_roadmaps_position_idx').on(table.roadmapId, table.position),
-  ]
-)
-
-export const votes = pgTable(
-  'votes',
-  {
-    id: typeIdWithDefault('vote')('id').primaryKey(),
+    id: typeIdWithDefault('post_vote')('id').primaryKey(),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -209,39 +225,40 @@ export const votes = pgTable(
     // Source tracking for integration-created votes (e.g. Zendesk sidebar)
     sourceType: varchar('source_type', { length: 40 }),
     sourceExternalUrl: text('source_external_url'),
-    // Provenance: which feedback suggestion triggered this proxy vote
-    feedbackSuggestionId: typeIdColumnNullable('feedback_suggestion')(
-      'feedback_suggestion_id'
-    ).references(() => feedbackSuggestions.id, { onDelete: 'set null' }),
     // Which admin/member added this vote on behalf of the voter
-    addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id').references(
-      () => principal.id,
-      { onDelete: 'set null' }
-    ),
+    addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('votes_post_id_idx').on(table.postId),
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'post_votes_added_by_principal_id_fkey',
+      columns: [table.addedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
     // Unique constraint: one vote per principal per post
-    uniqueIndex('votes_principal_post_idx').on(table.postId, table.principalId),
-    index('votes_principal_id_idx').on(table.principalId),
-    index('votes_principal_created_at_idx').on(table.principalId, table.createdAt),
+    uniqueIndex('post_votes_principal_post_idx').on(table.postId, table.principalId),
+    index('post_votes_principal_created_at_idx').on(table.principalId, table.createdAt),
     // Partial index for finding integration-sourced votes
-    index('votes_source_type_idx')
+    index('post_votes_source_type_idx')
       .on(table.sourceType)
       .where(sql`source_type IS NOT NULL`),
+    // RI-lookup protection for principal deletion
+    index('post_votes_added_by_principal_idx')
+      .on(table.addedByPrincipalId)
+      .where(sql`"added_by_principal_id" IS NOT NULL`),
   ]
 )
 
-export const comments = pgTable(
-  'comments',
+export const postComments = pgTable(
+  'post_comments',
   {
-    id: typeIdWithDefault('comment')('id').primaryKey(),
+    id: typeIdWithDefault('post_comment')('id').primaryKey(),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    parentId: typeIdColumn('comment')('parent_id'),
+    parentId: typeIdColumn('post_comment')('parent_id'),
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'restrict' }),
@@ -250,11 +267,11 @@ export const comments = pgTable(
     isTeamMember: boolean('is_team_member').default(false).notNull(),
     isPrivate: boolean('is_private').default(false).notNull(),
     // Status change tracking: records which status transition occurred with this comment
-    statusChangeFromId: typeIdColumnNullable('status')('status_change_from_id').references(
+    statusChangeFromId: typeIdColumnNullable('post_status')('status_change_from_id').references(
       () => postStatuses.id,
       { onDelete: 'set null' }
     ),
-    statusChangeToId: typeIdColumnNullable('status')('status_change_to_id').references(
+    statusChangeToId: typeIdColumnNullable('post_status')('status_change_to_id').references(
       () => postStatuses.id,
       { onDelete: 'set null' }
     ),
@@ -275,29 +292,37 @@ export const comments = pgTable(
       .default('published'),
   },
   (table) => [
-    index('comments_post_id_idx').on(table.postId),
-    index('comments_parent_id_idx').on(table.parentId),
-    index('comments_principal_id_idx').on(table.principalId),
-    index('comments_created_at_idx').on(table.createdAt),
+    foreignKey({
+      name: 'post_comments_parent_id_post_comments_id_fk',
+      columns: [table.parentId],
+      foreignColumns: [table.id],
+    }).onDelete('cascade'),
+    index('post_comments_parent_id_idx').on(table.parentId),
+    index('post_comments_principal_id_idx').on(table.principalId),
+    index('post_comments_created_at_idx').on(table.createdAt),
     // Composite index for comment listings
-    index('comments_post_created_at_idx').on(table.postId, table.createdAt),
-    index('comments_moderation_state_idx').on(table.moderationState),
+    index('post_comments_post_created_at_idx').on(table.postId, table.createdAt),
+    index('post_comments_moderation_state_idx').on(table.moderationState),
     // Partial index for the time-to-resolution analytics query, which joins
     // comments to post_statuses via status_change_to_id. The column is NULL on
     // ordinary comments, so the partial keeps the index to the sparse rows.
-    index('comments_status_change_to_id_idx')
+    index('post_comments_status_change_to_id_idx')
       .on(table.statusChangeToId)
       .where(sql`status_change_to_id IS NOT NULL`),
+    // RI-lookup protection for principal deletion
+    index('post_comments_deleted_by_principal_idx')
+      .on(table.deletedByPrincipalId)
+      .where(sql`"deleted_by_principal_id" IS NOT NULL`),
   ]
 )
 
-export const commentReactions = pgTable(
-  'comment_reactions',
+export const postCommentReactions = pgTable(
+  'post_comment_reactions',
   {
-    id: typeIdWithDefault('reaction')('id').primaryKey(),
-    commentId: typeIdColumn('comment')('comment_id')
+    id: typeIdWithDefault('post_comment_reaction')('id').primaryKey(),
+    commentId: typeIdColumn('post_comment')('comment_id')
       .notNull()
-      .references(() => comments.id, { onDelete: 'cascade' }),
+      .references(() => postComments.id, { onDelete: 'cascade' }),
     // principal_id is required - only authenticated users can react
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
@@ -306,9 +331,12 @@ export const commentReactions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('comment_reactions_comment_id_idx').on(table.commentId),
-    index('comment_reactions_principal_id_idx').on(table.principalId),
-    uniqueIndex('comment_reactions_unique_idx').on(table.commentId, table.principalId, table.emoji),
+    index('post_comment_reactions_principal_id_idx').on(table.principalId),
+    uniqueIndex('post_comment_reactions_unique_idx').on(
+      table.commentId,
+      table.principalId,
+      table.emoji
+    ),
   ]
 )
 
@@ -330,17 +358,18 @@ export const postEditHistory = pgTable(
   },
   (table) => [
     index('post_edit_history_post_id_idx').on(table.postId),
+    index('post_edit_history_editor_principal_idx').on(table.editorPrincipalId),
     index('post_edit_history_created_at_idx').on(table.createdAt),
   ]
 )
 
-export const commentEditHistory = pgTable(
-  'comment_edit_history',
+export const postCommentEditHistory = pgTable(
+  'post_comment_edit_history',
   {
-    id: typeIdWithDefault('comment_edit')('id').primaryKey(),
-    commentId: typeIdColumn('comment')('comment_id')
+    id: typeIdWithDefault('post_comment_edit')('id').primaryKey(),
+    commentId: typeIdColumn('post_comment')('comment_id')
       .notNull()
-      .references(() => comments.id, { onDelete: 'cascade' }),
+      .references(() => postComments.id, { onDelete: 'cascade' }),
     editorPrincipalId: typeIdColumn('principal')('editor_principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'set null' }),
@@ -349,8 +378,9 @@ export const commentEditHistory = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('comment_edit_history_comment_id_idx').on(table.commentId),
-    index('comment_edit_history_created_at_idx').on(table.createdAt),
+    index('post_comment_edit_history_comment_id_idx').on(table.commentId),
+    index('post_comment_edit_history_editor_principal_idx').on(table.editorPrincipalId),
+    index('post_comment_edit_history_created_at_idx').on(table.createdAt),
   ]
 )
 
@@ -358,7 +388,7 @@ export const commentEditHistory = pgTable(
 export const postNotes = pgTable(
   'post_notes',
   {
-    id: typeIdWithDefault('note')('id').primaryKey(),
+    id: typeIdWithDefault('post_note')('id').primaryKey(),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
@@ -400,9 +430,9 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     relationName: 'postOwner',
   }),
   // Pinned comment as official response
-  pinnedComment: one(comments, {
+  pinnedComment: one(postComments, {
     fields: [posts.pinnedCommentId],
-    references: [comments.id],
+    references: [postComments.id],
   }),
   // Merge/deduplication: the canonical post this was merged into
   canonicalPost: one(posts, {
@@ -418,89 +448,71 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     references: [principal.id],
     relationName: 'postMergedBy',
   }),
-  votes: many(votes),
-  comments: many(comments),
-  tags: many(postTags),
-  roadmaps: many(postRoadmaps),
+  votes: many(postVotes),
+  comments: many(postComments),
+  tags: many(postTagAssignments),
   notes: many(postNotes),
   externalLinks: many(postExternalLinks),
-  incomingSuggestions: many(feedbackSuggestions, { relationName: 'suggestionResult' }),
 }))
 
-export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
+export const postVotesRelations = relations(postVotes, ({ one }) => ({
   post: one(posts, {
-    fields: [postRoadmaps.postId],
+    fields: [postVotes.postId],
     references: [posts.id],
   }),
-  roadmap: one(roadmaps, {
-    fields: [postRoadmaps.roadmapId],
-    references: [roadmaps.id],
-  }),
 }))
 
-export const votesRelations = relations(votes, ({ one }) => ({
+export const postCommentsRelations = relations(postComments, ({ one, many }) => ({
   post: one(posts, {
-    fields: [votes.postId],
-    references: [posts.id],
-  }),
-  feedbackSuggestion: one(feedbackSuggestions, {
-    fields: [votes.feedbackSuggestionId],
-    references: [feedbackSuggestions.id],
-    relationName: 'feedbackSuggestionVotes',
-  }),
-}))
-
-export const commentsRelations = relations(comments, ({ one, many }) => ({
-  post: one(posts, {
-    fields: [comments.postId],
+    fields: [postComments.postId],
     references: [posts.id],
   }),
   // Principal-scoped author (Hub-and-Spoke identity)
   author: one(principal, {
-    fields: [comments.principalId],
+    fields: [postComments.principalId],
     references: [principal.id],
     relationName: 'commentAuthor',
   }),
-  parent: one(comments, {
-    fields: [comments.parentId],
-    references: [comments.id],
+  parent: one(postComments, {
+    fields: [postComments.parentId],
+    references: [postComments.id],
     relationName: 'commentReplies',
   }),
-  replies: many(comments, { relationName: 'commentReplies' }),
-  reactions: many(commentReactions),
+  replies: many(postComments, { relationName: 'commentReplies' }),
+  reactions: many(postCommentReactions),
   // Status change tracking
   statusChangeFrom: one(postStatuses, {
-    fields: [comments.statusChangeFromId],
+    fields: [postComments.statusChangeFromId],
     references: [postStatuses.id],
     relationName: 'commentStatusChangeFrom',
   }),
   statusChangeTo: one(postStatuses, {
-    fields: [comments.statusChangeToId],
+    fields: [postComments.statusChangeToId],
     references: [postStatuses.id],
     relationName: 'commentStatusChangeTo',
   }),
   deletedBy: one(principal, {
-    fields: [comments.deletedByPrincipalId],
+    fields: [postComments.deletedByPrincipalId],
     references: [principal.id],
     relationName: 'commentDeletedBy',
   }),
 }))
 
-export const commentReactionsRelations = relations(commentReactions, ({ one }) => ({
-  comment: one(comments, {
-    fields: [commentReactions.commentId],
-    references: [comments.id],
+export const commentReactionsRelations = relations(postCommentReactions, ({ one }) => ({
+  comment: one(postComments, {
+    fields: [postCommentReactions.commentId],
+    references: [postComments.id],
   }),
 }))
 
-export const postTagsRelations = relations(postTags, ({ one }) => ({
+export const postTagAssignmentsRelations = relations(postTagAssignments, ({ one }) => ({
   post: one(posts, {
-    fields: [postTags.postId],
+    fields: [postTagAssignments.postId],
     references: [posts.id],
   }),
-  tag: one(tags, {
-    fields: [postTags.tagId],
-    references: [tags.id],
+  tag: one(postTags, {
+    fields: [postTagAssignments.tagId],
+    references: [postTags.id],
   }),
 }))
 
@@ -522,13 +534,13 @@ export const postEditHistoryRelations = relations(postEditHistory, ({ one }) => 
   }),
 }))
 
-export const commentEditHistoryRelations = relations(commentEditHistory, ({ one }) => ({
-  comment: one(comments, {
-    fields: [commentEditHistory.commentId],
-    references: [comments.id],
+export const commentEditHistoryRelations = relations(postCommentEditHistory, ({ one }) => ({
+  comment: one(postComments, {
+    fields: [postCommentEditHistory.commentId],
+    references: [postComments.id],
   }),
   editor: one(principal, {
-    fields: [commentEditHistory.editorPrincipalId],
+    fields: [postCommentEditHistory.editorPrincipalId],
     references: [principal.id],
     relationName: 'commentEditHistoryEditor',
   }),

@@ -32,7 +32,7 @@ export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
+          className="text-xs text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
         >
           Show less
         </button>
@@ -49,7 +49,7 @@ export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
+          className="text-xs text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
         >
           Show full message
         </button>

@@ -2,28 +2,28 @@ import {
   db,
   helpCenterCategories,
   helpCenterArticles,
-  helpCenterArticleFeedback,
   principal,
   eq,
   and,
   isNull,
-  isNotNull,
-  lte,
   sql,
 } from '@/lib/server/db'
-import type { HelpCenterArticleId, HelpCenterCategoryId, PrincipalId } from '@quackback/ids'
+import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
-import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
 import { uniqueHelpCenterSlug } from './help-center.slug'
+import { deleteRedirectRulesForTarget } from './help-center-redirect-rules.service'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
   UpdateArticleInput,
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
+import { helpCenterVisibilityConditions } from './help-center-search.service'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-articles' })
@@ -51,8 +51,8 @@ export async function resolveArticleWithCategory(
   return {
     ...article,
     category: category
-      ? { id: category.id as HelpCenterCategoryId, slug: category.slug, name: category.name }
-      : { id: article.categoryId as HelpCenterCategoryId, slug: '', name: 'Unknown' },
+      ? { id: category.id as KbCategoryId, slug: category.slug, name: category.name }
+      : { id: article.categoryId as KbCategoryId, slug: '', name: 'Unknown' },
     author: authorRecord?.displayName
       ? {
           id: authorRecord.id as PrincipalId,
@@ -63,9 +63,7 @@ export async function resolveArticleWithCategory(
   }
 }
 
-export async function getArticleById(
-  id: HelpCenterArticleId
-): Promise<HelpCenterArticleWithCategory> {
+export async function getArticleById(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
   const article = await db.query.helpCenterArticles.findFirst({
     where: and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)),
   })
@@ -85,25 +83,21 @@ export async function getArticleBySlug(slug: string): Promise<HelpCenterArticleW
   return resolveArticleWithCategory(article)
 }
 
-export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterArticleWithCategory> {
-  const now = new Date()
-  // Join the parent category so the public lookup also enforces
-  // category.isPublic. Without that check, an article under a category
-  // an admin had flagged private was still reachable by slug — the
-  // category's intent was respected only in the list/nav UI.
+export async function getPublicArticleBySlug(
+  slug: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
+  // Join the parent category so the shared public predicate
+  // (helpCenterVisibilityConditions, the single owner) also enforces
+  // category.isPublic and the viewer's segment gate: an article under a
+  // private or gated category must not be reachable by slug, and a gated
+  // one 404s identically to a missing one.
   const rows = await db
     .select({ article: helpCenterArticles })
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
     .where(
-      and(
-        eq(helpCenterArticles.slug, slug),
-        isNull(helpCenterArticles.deletedAt),
-        isNotNull(helpCenterArticles.publishedAt),
-        lte(helpCenterArticles.publishedAt, now),
-        isNull(helpCenterCategories.deletedAt),
-        eq(helpCenterCategories.isPublic, true)
-      )
+      and(eq(helpCenterArticles.slug, slug), ...helpCenterVisibilityConditions('public', viewer))
     )
     .limit(1)
   const article = rows[0]?.article
@@ -180,16 +174,17 @@ export async function createArticle(
   const [article] = await db
     .insert(helpCenterArticles)
     .values({
-      categoryId: input.categoryId as HelpCenterCategoryId,
+      categoryId: input.categoryId as KbCategoryId,
       title,
       // Store the markdown projection of the canonical contentJson so the
       // article list endpoint (which omits contentJson) still serves images.
-      content: contentJsonToMarkdown(contentJson, content),
+      content: projectContentJsonToMarkdown(contentJson, content),
       contentJson,
       slug,
       principalId: effectivePrincipalId,
       position: input.position ?? null,
       description: input.description?.trim() || null,
+      segmentIds: input.segmentIds ?? [],
     })
     .returning()
 
@@ -204,7 +199,7 @@ export async function createArticle(
 }
 
 export async function updateArticle(
-  id: HelpCenterArticleId,
+  id: KbArticleId,
   input: UpdateArticleInput,
   authorPrincipalId?: PrincipalId
 ): Promise<HelpCenterArticleWithCategory> {
@@ -216,17 +211,9 @@ export async function updateArticle(
       contentType: 'help-center',
     })
     updateData.contentJson = contentJson
-    if (input.content !== undefined) {
-      updateData.content = contentJsonToMarkdown(contentJson, input.content.trim())
-    } else {
-      // contentJson-only edit (no markdown source): refresh the stored column
-      // only when the tree carries images, else leave it as-is.
-      const regenerated = contentJsonToMarkdown(contentJson, '')
-      if (regenerated) updateData.content = regenerated
-    }
+    updateData.content = projectContentJsonToMarkdown(contentJson, input.content?.trim() ?? '')
   }
-  if (input.categoryId !== undefined)
-    updateData.categoryId = input.categoryId as HelpCenterCategoryId
+  if (input.categoryId !== undefined) updateData.categoryId = input.categoryId as KbCategoryId
   if (input.slug !== undefined)
     updateData.slug = await uniqueHelpCenterSlug(
       input.slug.trim(),
@@ -236,6 +223,7 @@ export async function updateArticle(
     )
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
+  if (input.segmentIds !== undefined) updateData.segmentIds = input.segmentIds
   const updated = await db.transaction(async (tx) => {
     if (authorPrincipalId !== undefined) {
       const author = await tx.query.principal.findFirst({
@@ -274,7 +262,7 @@ export async function updateArticle(
   const resolved = await resolveArticleWithCategory(updated)
 
   // Fire-and-forget: re-generate embedding when title or content changed
-  if (input.title || input.content) {
+  if (input.title || input.content || input.contentJson !== undefined) {
     generateArticleEmbedding(id, resolved.title, resolved.content, resolved.category?.name).catch(
       (err) => log.error({ article_id: id, err }, 'article embedding generation failed')
     )
@@ -283,21 +271,24 @@ export async function updateArticle(
   return resolved
 }
 
-export async function publishArticle(
-  id: HelpCenterArticleId
-): Promise<HelpCenterArticleWithCategory> {
+export async function publishArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
   const [updated] = await db
     .update(helpCenterArticles)
     .set({ publishedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
     .returning()
   if (!updated) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
-  return resolveArticleWithCategory(updated)
+  const resolved = await resolveArticleWithCategory(updated)
+
+  // Auto-translate (domains/languages §H3): fire-and-forget, off by default.
+  import('./help-center-auto-translate.service')
+    .then((m) => m.queueAutoTranslateOnPublish(resolved))
+    .catch((err) => log.error({ article_id: id, err }, 'auto-translate queue import failed'))
+
+  return resolved
 }
 
-export async function unpublishArticle(
-  id: HelpCenterArticleId
-): Promise<HelpCenterArticleWithCategory> {
+export async function unpublishArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
   const [updated] = await db
     .update(helpCenterArticles)
     .set({ publishedAt: null, updatedAt: new Date() })
@@ -307,7 +298,7 @@ export async function unpublishArticle(
   return resolveArticleWithCategory(updated)
 }
 
-export async function deleteArticle(id: HelpCenterArticleId): Promise<void> {
+export async function deleteArticle(id: KbArticleId): Promise<void> {
   const result = await db
     .update(helpCenterArticles)
     .set({ deletedAt: new Date() })
@@ -317,11 +308,13 @@ export async function deleteArticle(id: HelpCenterArticleId): Promise<void> {
   if (result.length === 0) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
   }
+
+  // No DB-level FK on redirect rules (polymorphic target) -- remove any rule
+  // pointing at this article explicitly (domains/languages §2).
+  await deleteRedirectRulesForTarget('article', id)
 }
 
-export async function restoreArticle(
-  id: HelpCenterArticleId
-): Promise<HelpCenterArticleWithCategory> {
+export async function restoreArticle(id: KbArticleId): Promise<HelpCenterArticleWithCategory> {
   log.debug({ article_id: id }, 'restore article')
   const article = await db.query.helpCenterArticles.findFirst({
     where: eq(helpCenterArticles.id, id),
@@ -354,59 +347,4 @@ export async function restoreArticle(
   }
 
   return resolveArticleWithCategory(restored)
-}
-
-// ============================================================================
-// Article Feedback
-// ============================================================================
-
-export async function recordArticleFeedback(
-  articleId: HelpCenterArticleId,
-  helpful: boolean,
-  principalId?: PrincipalId | null
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    if (principalId) {
-      const existing = await tx.query.helpCenterArticleFeedback.findFirst({
-        where: and(
-          eq(helpCenterArticleFeedback.articleId, articleId),
-          eq(helpCenterArticleFeedback.principalId, principalId)
-        ),
-      })
-
-      if (existing) {
-        if (existing.helpful === helpful) return
-        await tx
-          .update(helpCenterArticleFeedback)
-          .set({ helpful })
-          .where(eq(helpCenterArticleFeedback.id, existing.id))
-        await tx
-          .update(helpCenterArticles)
-          .set({
-            helpfulCount: helpful
-              ? sql`${helpCenterArticles.helpfulCount} + 1`
-              : sql`${helpCenterArticles.helpfulCount} - 1`,
-            notHelpfulCount: helpful
-              ? sql`${helpCenterArticles.notHelpfulCount} - 1`
-              : sql`${helpCenterArticles.notHelpfulCount} + 1`,
-          })
-          .where(eq(helpCenterArticles.id, articleId))
-        return
-      }
-    }
-
-    await tx.insert(helpCenterArticleFeedback).values({
-      articleId,
-      principalId: principalId ?? null,
-      helpful,
-    })
-    await tx
-      .update(helpCenterArticles)
-      .set(
-        helpful
-          ? { helpfulCount: sql`${helpCenterArticles.helpfulCount} + 1` }
-          : { notHelpfulCount: sql`${helpCenterArticles.notHelpfulCount} + 1` }
-      )
-      .where(eq(helpCenterArticles.id, articleId))
-  })
 }

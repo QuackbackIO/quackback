@@ -25,7 +25,7 @@ function StatItem({
       >
         {value ?? '-'}
       </span>
-      <span className={cn('text-muted-foreground mt-0.5', compact ? 'text-[10px]' : 'text-xs')}>
+      <span className={cn('text-muted-foreground mt-0.5', compact ? 'text-xs' : 'text-xs')}>
         {label}
       </span>
     </div>

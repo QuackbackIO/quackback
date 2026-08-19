@@ -4,12 +4,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 
 interface StatusDropdownProps {
   currentStatus: PostStatusEntity | undefined
   statuses: PostStatusEntity[]
-  onStatusChange: (statusId: StatusId) => void
+  onStatusChange: (statusId: PostStatusId) => void
   disabled?: boolean
   /** Style variant: 'badge' (inline status badge) or 'button' (quick actions style) */
   variant?: 'badge' | 'button'
@@ -30,7 +30,7 @@ export function StatusDropdown({
 }: StatusDropdownProps): React.ReactElement {
   const [open, setOpen] = useState(false)
 
-  const handleStatusChange = (statusId: StatusId) => {
+  const handleStatusChange = (statusId: PostStatusId) => {
     onStatusChange(statusId)
     setOpen(false)
   }
@@ -51,7 +51,7 @@ export function StatusDropdown({
             {currentStatus ? (
               <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-1" />
             ) : (
-              <span className="text-xs text-muted-foreground">No status</span>
+              <span className="text-[13px] text-muted-foreground">No status</span>
             )}
           </button>
         ) : (
@@ -60,7 +60,7 @@ export function StatusDropdown({
             onClick={(e) => e.stopPropagation()}
             className={cn(
               'flex items-center gap-1 px-2 py-1 rounded',
-              'text-xs font-medium',
+              'text-[13px] font-medium',
               'bg-card border border-border/50',
               'hover:bg-muted/50 transition-colors',
               disabled && 'opacity-50 cursor-not-allowed'
@@ -81,7 +81,7 @@ export function StatusDropdown({
             type="button"
             onClick={() => handleStatusChange(status.id)}
             className={cn(
-              'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm',
+              'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[13px]',
               'hover:bg-muted/50 transition-colors',
               status.id === currentStatus?.id && 'bg-muted/40'
             )}

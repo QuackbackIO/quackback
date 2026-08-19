@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId } from '@quackback/ids'
@@ -13,7 +14,9 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
        */
       POST: async ({ request, params }) => {
         try {
-          const { principalId, role } = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId, role } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.POST_VOTE_ON_BEHALF,
+          })
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 

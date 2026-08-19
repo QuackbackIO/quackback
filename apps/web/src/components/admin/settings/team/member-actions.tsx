@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  CheckIcon,
   EllipsisVerticalIcon,
   ShieldCheckIcon,
   ShieldExclamationIcon,
@@ -16,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -26,13 +28,23 @@ import {
   forceSignOutUserFn,
 } from '@/lib/server/functions/admin'
 import { adminResetTwoFactorFn } from '@/lib/server/functions/admin-reset-two-factor'
+import { settingsQueries } from '@/lib/client/queries/settings'
 
 interface MemberActionsProps {
   principalId: string
   userId: string | null
   memberName: string
   memberRole: 'admin' | 'member'
+  /** Resolved workspace assignment, when it differs from the legacy mapping. */
+  assignedRoleId?: string | null
   isLastAdmin: boolean
+}
+
+/** The role choice staged in the confirm dialog. */
+interface RoleChoice {
+  role: 'admin' | 'member'
+  roleId?: string
+  label: string
 }
 
 export function MemberActions({
@@ -40,30 +52,37 @@ export function MemberActions({
   userId,
   memberName,
   memberRole,
+  assignedRoleId,
   isLastAdmin,
 }: MemberActionsProps) {
   const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(false)
-  const [roleDialogOpen, setRoleDialogOpen] = useState(false)
+  const [pendingRole, setPendingRole] = useState<RoleChoice | null>(null)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [resetTfaDialogOpen, setResetTfaDialogOpen] = useState(false)
   const [forceSignOutDialogOpen, setForceSignOutDialogOpen] = useState(false)
 
-  const newRole = memberRole === 'admin' ? 'member' : 'admin'
+  // Custom roles for the role section. Cached alongside the roles tab query.
+  const { data: rolesData } = useQuery(settingsQueries.roles())
+  const customRoles = (rolesData?.roles ?? []).filter((r) => !r.isSystem)
+
   const canChangeRole = !(memberRole === 'admin' && isLastAdmin)
   const canRemove = !(memberRole === 'admin' && isLastAdmin)
 
   const handleRoleChange = async () => {
+    if (!pendingRole) return
     setIsLoading(true)
     try {
-      await updateMemberRoleFn({ data: { principalId, role: newRole } })
+      await updateMemberRoleFn({
+        data: { principalId, role: pendingRole.role, roleId: pendingRole.roleId },
+      })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'roles'] })
     } catch (error) {
-      console.error('Failed to update role:', error)
-      alert(error instanceof Error ? error.message : 'Failed to update role')
+      toast.error(error instanceof Error ? error.message : "Couldn't update role. Try again.")
     } finally {
       setIsLoading(false)
-      setRoleDialogOpen(false)
+      setPendingRole(null)
     }
   }
 
@@ -73,8 +92,7 @@ export function MemberActions({
       await removeTeamMemberFn({ data: { principalId } })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
     } catch (error) {
-      console.error('Failed to remove member:', error)
-      alert(error instanceof Error ? error.message : 'Failed to remove team member')
+      toast.error(error instanceof Error ? error.message : "Couldn't remove teammate. Try again.")
     } finally {
       setIsLoading(false)
       setRemoveDialogOpen(false)
@@ -88,8 +106,9 @@ export function MemberActions({
       await adminResetTwoFactorFn({ data: { userId } })
       await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
     } catch (error) {
-      console.error('Failed to reset 2FA:', error)
-      alert(error instanceof Error ? error.message : 'Failed to reset two-factor')
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't reset two-factor authentication."
+      )
     } finally {
       setIsLoading(false)
       setResetTfaDialogOpen(false)
@@ -115,33 +134,59 @@ export function MemberActions({
     }
   }
 
+  const holdsCustom = customRoles.some((r) => r.id === assignedRoleId)
+  const isCurrent = (choice: { role: 'admin' | 'member'; roleId?: string }) =>
+    choice.roleId ? assignedRoleId === choice.roleId : memberRole === choice.role && !holdsCustom
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-9 w-9">
+          <Button variant="ghost" size="icon">
             <EllipsisVerticalIcon className="h-4 w-4" />
             <span className="sr-only">Member actions</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Change role</DropdownMenuLabel>
           <DropdownMenuItem
-            onClick={() => setRoleDialogOpen(true)}
-            disabled={!canChangeRole}
             className="gap-2"
+            disabled={!canChangeRole || isCurrent({ role: 'admin' })}
+            onClick={() => setPendingRole({ role: 'admin', label: 'Admin' })}
           >
-            {newRole === 'admin' ? (
-              <>
-                <ShieldCheckIcon className="h-4 w-4" />
-                Make admin
-              </>
-            ) : (
-              <>
-                <UserIcon className="h-4 w-4" />
-                Make member
-              </>
-            )}
+            <ShieldCheckIcon className="h-4 w-4" />
+            Admin
+            {isCurrent({ role: 'admin' }) && <CheckIcon className="ml-auto h-3.5 w-3.5" />}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            className="gap-2"
+            disabled={!canChangeRole || isCurrent({ role: 'member' })}
+            onClick={() => setPendingRole({ role: 'member', label: 'Member' })}
+          >
+            <UserIcon className="h-4 w-4" />
+            Member
+            {isCurrent({ role: 'member' }) && <CheckIcon className="ml-auto h-3.5 w-3.5" />}
+          </DropdownMenuItem>
+          {customRoles.length > 0 && (
+            <>
+              <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Custom
+              </DropdownMenuLabel>
+              {customRoles.map((r) => (
+                <DropdownMenuItem
+                  key={r.id}
+                  disabled={!canChangeRole || isCurrent({ role: 'member', roleId: r.id })}
+                  onClick={() => setPendingRole({ role: 'member', roleId: r.id, label: r.name })}
+                >
+                  {r.name}
+                  {isCurrent({ role: 'member', roleId: r.id }) && (
+                    <CheckIcon className="ml-auto h-3.5 w-3.5" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
+          <DropdownMenuSeparator />
           {userId ? (
             <DropdownMenuItem onClick={() => setResetTfaDialogOpen(true)} className="gap-2">
               <ShieldExclamationIcon className="h-4 w-4" />
@@ -168,14 +213,19 @@ export function MemberActions({
       </DropdownMenu>
 
       <ConfirmDialog
-        open={roleDialogOpen}
-        onOpenChange={setRoleDialogOpen}
-        title={newRole === 'admin' ? 'Make admin?' : 'Remove admin privileges?'}
+        open={pendingRole != null}
+        onOpenChange={(open) => !open && setPendingRole(null)}
+        title={`Change role to ${pendingRole?.label}?`}
         description={
-          newRole === 'admin' ? (
+          pendingRole?.role === 'admin' ? (
             <>
               <strong>{memberName}</strong> will be able to manage team settings, members, and all
               workspace configurations.
+            </>
+          ) : pendingRole?.roleId ? (
+            <>
+              <strong>{memberName}</strong> will hold the "{pendingRole.label}" role and exactly the
+              permissions it grants.
             </>
           ) : (
             <>
@@ -184,9 +234,7 @@ export function MemberActions({
             </>
           )
         }
-        confirmLabel={
-          isLoading ? 'Updating...' : newRole === 'admin' ? 'Make admin' : 'Remove admin'
-        }
+        confirmLabel={isLoading ? 'Updating...' : `Change to ${pendingRole?.label ?? ''}`}
         isPending={isLoading}
         onConfirm={handleRoleChange}
       />

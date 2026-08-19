@@ -11,9 +11,11 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(),
 }))
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const drizzle = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
   return {
+    // Spread the real db module so tables/operators stay current; override only what this suite drives.
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         boards: { findFirst: (...a: unknown[]) => hoisted.mockedFindFirstBoards(...a) },
@@ -21,9 +23,6 @@ vi.mock('@/lib/server/db', async () => {
       select: hoisted.mockedSelect,
       insert: hoisted.mockedInsert,
     },
-    boards: { id: 'b', slug: 's', deletedAt: 'd' },
-    posts: { id: 'p' },
-    webhooks: { id: 'w' },
     eq: drizzle.eq,
     and: drizzle.and,
     isNull: drizzle.isNull,

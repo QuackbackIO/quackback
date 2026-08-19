@@ -15,6 +15,7 @@ import {
   eq,
   and,
   isNull,
+  isNotNull,
   posts,
   boards,
   webhooks,
@@ -23,6 +24,8 @@ import {
   asc,
 } from '@/lib/server/db'
 import type { BoardId, PostId } from '@quackback/ids'
+import { emitBestEffort } from '@/lib/server/events/emit'
+import { boardCreated, boardDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 import { slugify } from '@/lib/shared/utils'
@@ -157,6 +160,14 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
 
   const [board] = await db.insert(boards).values(insertValues).returning()
 
+  // WO-6b: audit-relevant board creation event (best-effort, post-mutation).
+  void emitBestEffort(boardCreated, {
+    payload: { boardId: board.id, name: board.name, slug: board.slug },
+    actor: { type: 'service' },
+    entityId: board.id,
+    context: { source: 'admin' },
+  })
+
   return board
 }
 
@@ -257,6 +268,14 @@ export async function deleteBoard(id: BoardId): Promise<void> {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
 
+  // WO-6b: audit-relevant board deletion event.
+  void emitBestEffort(boardDeleted, {
+    payload: { boardId: id },
+    actor: { type: 'service' },
+    entityId: id,
+    context: { source: 'admin' },
+  })
+
   // Clean up webhook board_ids references (fire-and-forget)
   // Removes deleted board ID from any webhook filters
   db.update(webhooks)
@@ -269,6 +288,21 @@ export async function deleteBoard(id: BoardId): Promise<void> {
     .catch((error) => {
       log.error({ err: error }, 'failed to clean up webhook board_ids')
     })
+
+  // Merged sources on this board drop out of the canonical thread once the
+  // board is gone. Recount those canonicals so stored comment/vote totals
+  // match what listViewableMergedSourceIds will render.
+  const mergedSources = await db
+    .selectDistinct({ canonicalPostId: posts.canonicalPostId })
+    .from(posts)
+    .where(and(eq(posts.boardId, id), isNotNull(posts.canonicalPostId)))
+  const { recalculateCanonicalVoteCount } =
+    await import('@/lib/server/domains/posts/post.merge-ids')
+  for (const row of mergedSources) {
+    if (row.canonicalPostId) {
+      await recalculateCanonicalVoteCount(row.canonicalPostId as PostId)
+    }
+  }
 }
 
 /**

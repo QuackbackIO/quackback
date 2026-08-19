@@ -6,9 +6,10 @@ vi.mock('@/lib/server/auth/session', () => ({
 }))
 
 const findFirst = vi.fn()
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { query: { principal: { findFirst: (...a: unknown[]) => findFirst(...a) } } },
-  principal: { userId: 'principal.userId' },
   eq: (col: unknown, val: unknown) => ({ __eq: [col, val] }),
 }))
 

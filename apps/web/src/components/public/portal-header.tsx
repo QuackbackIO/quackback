@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import { buildNavItems } from './portal-header-nav'
+import { resolvePortalNavItems } from './portal-header-nav'
+import { usePreviewDraft } from './preview-draft-context'
+import { isProductEnabled } from '@/lib/shared/types/settings'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
 import { signOut, authClient } from '@/lib/client/auth-client'
+import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
+import { signinErrorLanding } from '@/lib/shared/auth-prompt'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +32,7 @@ import {
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { hasAnyPortalAuthMethod, resolveSoleOidcProvider } from '@/components/auth/oauth-buttons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getMyConversationsFn } from '@/lib/server/functions/chat'
+import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
@@ -37,7 +41,7 @@ interface PortalHeaderProps {
   orgName: string
   orgLogo?: string | null
   /** User's role in the organization (passed from server) */
-  userRole?: 'admin' | 'member' | 'user' | null
+  userRole?: Role | null
   /** Initial user data for SSR (store values override these after hydration) */
   initialUserData?: {
     name: string | null
@@ -61,12 +65,47 @@ export function PortalHeader({
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { session, settings, registeredAuthProviders } = useRouteContext({ from: '__root__' })
 
+  const flags = settings?.featureFlags
+  const feedbackEnabled = isProductEnabled(flags, 'feedback')
   const helpCenterEnabled =
-    !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
+    isProductEnabled(flags, 'helpCenter') && !!settings?.helpCenterConfig?.enabled
   const supportEnabled =
-    !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+    !!flags?.supportTickets || (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled)
+  // Default true so a workspace that never customized this setting keeps
+  // the changelog tab it had before this toggle existed.
+  const changelogEnabled =
+    isProductEnabled(flags, 'changelog') && (settings?.changelogConfig?.portalTabEnabled ?? true)
+  // Status tab: flag + product enabled + tab toggle. A non-public audience
+  // still needs a signed-in viewer to bother showing the tab; the route
+  // enforces the real per-viewer segment gate (settings here are
+  // workspace-global, not per-viewer).
+  const statusAudience = settings?.statusConfig?.audience ?? 'public'
+  const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
+  const statusEnabled =
+    isProductEnabled(flags, 'status') &&
+    !!settings?.statusConfig?.enabled &&
+    (settings?.statusConfig?.portalTabEnabled ?? true) &&
+    (statusAudience === 'public' || statusLoggedIn)
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
-  const navItems = buildNavItems({ helpCenterEnabled, supportEnabled })
+  // Admin-configured help center links render beside the built-in nav on help
+  // pages only. External URLs open in a new tab; root-relative paths stay
+  // in-tab. Legacy configs predate the field, hence the `?? []`.
+  const helpHeaderLinks = onHelpPages
+    ? (settings?.helpCenterConfig?.headerLinks ?? []).slice(0, 3)
+    : []
+  // Unsaved drafts from the admin branding preview (null outside preview mode).
+  const previewDraft = usePreviewDraft()
+  const navItems = resolvePortalNavItems(
+    {
+      feedback: feedbackEnabled,
+      roadmap: feedbackEnabled,
+      changelog: changelogEnabled,
+      help: helpCenterEnabled,
+      support: supportEnabled,
+      status: statusEnabled,
+    },
+    previewDraft?.nav ?? settings?.portalConfig?.nav
+  )
 
   // Hide Log in / Sign up when no portal sign-in surface is usable.
   // Team members can still reach /admin/login directly. Counts any registered
@@ -87,6 +126,7 @@ export function PortalHeader({
 
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
+
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
@@ -134,10 +174,21 @@ export function PortalHeader({
 
   // Skip the sign-in dialog for a single-IdP workspace: go straight to the
   // OIDC provider (same redirect the dialog's "Continue" path uses), returning
-  // to the current page afterwards.
+  // to the current page afterwards. Stash + errorCallbackURL route callback
+  // failures back into the sign-in dialog (with link-conflict recovery for
+  // account_not_linked) instead of Better-Auth's bare error page.
   const redirectToSoleProvider = () => {
     if (!soleOidcProviderId) return
-    void authClient.signIn.oauth2({ providerId: soleOidcProviderId, callbackURL: pathname })
+    stashSsoAttempt({
+      providerId: soleOidcProviderId,
+      providerType: 'oidc',
+      callbackUrl: pathname,
+    })
+    void authClient.signIn.oauth2({
+      providerId: soleOidcProviderId,
+      callbackURL: pathname,
+      errorCallbackURL: signinErrorLanding(pathname),
+    })
   }
 
   const handleSignOut = async () => {
@@ -150,9 +201,31 @@ export function PortalHeader({
   }
 
   // Navigation component
+  const navItemClass = (isActive: boolean) =>
+    cn(
+      'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
+      isActive
+        ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
+        : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
+    )
+
   const Navigation = () => (
     <nav className="portal-nav flex items-center gap-1 whitespace-nowrap">
       {navItems.map((item) => {
+        if (item.kind === 'link') {
+          return (
+            <a
+              key={item.id}
+              href={item.href}
+              target={item.newTab ? '_blank' : undefined}
+              rel="noopener noreferrer"
+              className={navItemClass(false)}
+            >
+              {item.label}
+            </a>
+          )
+        }
+
         const isActive =
           item.to === '/'
             ? pathname === '/' || /^\/[^/]+\/posts\//.test(pathname)
@@ -161,20 +234,12 @@ export function PortalHeader({
               : pathname.startsWith(item.to)
 
         return (
-          <Link
-            key={item.to}
-            to={item.to}
-            className={cn(
-              'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
-              isActive
-                ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
-                : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
-            )}
-          >
-            {intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
-            {item.to === '/support' && supportUnreadTotal > 0 && (
+          <Link key={item.id} to={item.to} className={navItemClass(isActive)}>
+            {item.label ??
+              intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
+            {item.type === 'support' && supportUnreadTotal > 0 && (
               <span
-                className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-[18px] text-primary-foreground"
+                className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
                 aria-label={intl.formatMessage(
                   {
                     id: 'portal.support.unreadBadge',
@@ -187,6 +252,20 @@ export function PortalHeader({
               </span>
             )}
           </Link>
+        )
+      })}
+      {helpHeaderLinks.map((link) => {
+        const external = !link.url.startsWith('/')
+        return (
+          <a
+            key={link.url}
+            href={link.url}
+            target={external ? '_blank' : undefined}
+            rel={external ? 'noopener noreferrer' : undefined}
+            className={navItemClass(false)}
+          >
+            {link.label}
+          </a>
         )
       })}
     </nav>
@@ -270,7 +349,14 @@ export function PortalHeader({
         // Logged-in user - show user dropdown
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+            <Button
+              variant="ghost"
+              className="relative h-9 w-9 rounded-full"
+              aria-label={intl.formatMessage({
+                id: 'portal.header.auth.accountMenu',
+                defaultMessage: 'Open account menu',
+              })}
+            >
               <Avatar className="h-9 w-9" src={avatarUrl} name={name} />
             </Button>
           </DropdownMenuTrigger>

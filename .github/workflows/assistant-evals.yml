@@ -1,0 +1,100 @@
+name: Assistant golden evals
+
+# The Quinn golden eval set (QUINN-TWO-AGENT-SPEC §7) is the regression gate for
+# prompt-space. It hits a real model and a real Postgres, so it never runs in
+# the normal test job — only on manual dispatch, nightly, or a PR labelled
+# "evals". It is gated on the model API key secret existing: without it the job
+# skips cleanly rather than failing red.
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly at 07:00 UTC.
+    - cron: '0 7 * * *'
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+concurrency:
+  group: assistant-evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evals:
+    # Run on dispatch/schedule always; on PRs only when the "evals" label is present.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'evals')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: quackback_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/quackback_test
+      # The configured dev/eval model provider. Only env var NAMES appear here;
+      # values come from repository secrets. The eval env guard fails fast if
+      # any required one is missing.
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      AI_CHAT_MODEL: ${{ secrets.AI_CHAT_MODEL }}
+      AI_ASSISTANT_MODEL: ${{ secrets.AI_ASSISTANT_MODEL }}
+      AI_QUALITY_GATE_MODEL: ${{ secrets.AI_QUALITY_GATE_MODEL }}
+      AI_EMBEDDING_MODEL: ${{ secrets.AI_EMBEDDING_MODEL }}
+
+    steps:
+      - name: Skip when the model API key is not configured
+        id: gate
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "No model API key secret — skipping the golden eval set."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        if: steps.gate.outputs.run == 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Migrate the test database
+        if: steps.gate.outputs.run == 'true'
+        run: bun run db:migrate
+
+      - name: Seed the workspace singleton
+        if: steps.gate.outputs.run == 'true'
+        # The harness updates the settings singleton and finds Quinn's principal;
+        # both come from the standard seed.
+        run: bun run db:seed
+
+      - name: Run the golden eval set
+        if: steps.gate.outputs.run == 'true'
+        run: bun vitest run --config apps/web/evals/vitest.config.ts
+
+      - name: Upload failure transcripts
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: assistant-eval-transcripts
+          path: apps/web/evals/.results/
+          if-no-files-found: ignore
+          retention-days: 14

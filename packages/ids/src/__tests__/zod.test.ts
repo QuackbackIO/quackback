@@ -106,7 +106,7 @@ describe('Zod TypeID Schemas', () => {
     it('accepts any valid TypeID', () => {
       expect(anyTypeIdSchema.parse(generateId('post'))).toBeTruthy()
       expect(anyTypeIdSchema.parse(generateId('board'))).toBeTruthy()
-      expect(anyTypeIdSchema.parse(generateId('comment'))).toBeTruthy()
+      expect(anyTypeIdSchema.parse(generateId('post_comment'))).toBeTruthy()
     })
 
     it('rejects non-TypeID strings', () => {
@@ -162,7 +162,7 @@ describe('Zod TypeID Schemas', () => {
 
   describe('array schemas', () => {
     it('tagIdsSchema validates array of tag TypeIDs', () => {
-      const tagIds = [generateId('tag'), generateId('tag'), generateId('tag')]
+      const tagIds = [generateId('post_tag'), generateId('post_tag'), generateId('post_tag')]
 
       const result = tagIdsSchema.parse(tagIds)
       // Strict TypeID schema returns TypeIDs unchanged
@@ -170,9 +170,9 @@ describe('Zod TypeID Schemas', () => {
     })
 
     it('tagIdsSchema rejects raw UUIDs', () => {
-      const tagId1 = generateId('tag')
+      const tagId1 = generateId('post_tag')
       const uuid2 = '01893d8c-7e80-7000-8000-000000000002'
-      const tagId3 = generateId('tag')
+      const tagId3 = generateId('post_tag')
 
       // Strict schema does not accept UUIDs
       expect(() => tagIdsSchema.parse([tagId1, uuid2, tagId3])).toThrow()
@@ -189,11 +189,11 @@ describe('Zod TypeID Schemas', () => {
       const createPostSchema = z.object({
         title: z.string().min(1),
         boardId: flexibleIdSchema('board'),
-        tagIds: z.array(flexibleIdSchema('tag')),
+        tagIds: z.array(flexibleIdSchema('post_tag')),
       })
 
       const boardId = generateId('board')
-      const tagId1 = generateId('tag')
+      const tagId1 = generateId('post_tag')
       const tagId2 = '01893d8c-7e80-7000-8000-000000000002'
 
       const result = createPostSchema.parse({

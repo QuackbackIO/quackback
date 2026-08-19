@@ -52,7 +52,7 @@ export function normalizeDomain(input: string | undefined | null): string | null
 
 /**
  * Extract and canonicalise the domain portion of an email address.
- * `Foo+Tag@ACME.COM.` → `acme.com`. Returns null if the input doesn't
+ * `Foo+PostTag@ACME.COM.` → `acme.com`. Returns null if the input doesn't
  * contain a single `@` or the domain part fails normalisation.
  */
 export function emailDomain(email: string | undefined | null): string | null {

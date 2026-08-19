@@ -6,11 +6,18 @@
  *
  * @example
  * // In a client component:
- * import type { Board, Tag } from '@/lib/shared/db-types'
+ * import type { Board, PostTag } from '@/lib/shared/db-types'
  * import { REACTION_EMOJIS } from '@/lib/shared/db-types'
  */
 
-import type { SetupState } from '@quackback/db/types'
+import {
+  getSetupState as getSetupStateFromDb,
+  isOnboardingComplete as isOnboardingCompleteFromDb,
+  normalizeOnboardingOutcome as normalizeOnboardingOutcomeFromDb,
+  type SetupState,
+  type UseCaseType,
+  type OnboardingOutcome,
+} from '@quackback/db/types'
 
 // Re-export types only to keep this module client-safe.
 export type * from '@quackback/db/types'
@@ -24,12 +31,31 @@ export {
   MODERATION_RULE_VALUES,
   CONVERSATION_STATUSES,
   CONVERSATION_END_REASONS,
+  CONVERSATION_SPAM_FILED_BY,
+  CONVERSATION_PRIORITIES,
+  TEAM_ASSIGNMENT_METHODS,
+  TICKET_TYPES,
+  TICKET_STATUS_CATEGORIES,
+  TICKET_STAGES,
+  USE_CASE_TYPES,
+  ONBOARDING_OUTCOMES,
+  INTERACTIVE_BLOCK_KINDS,
+  CSAT_FACES,
+  DEFAULT_SETUP_STATE,
 } from '@quackback/db/types'
 export type {
   AccessTier,
   BoardAccess,
   ModerationRuleValue,
   ConversationEndReason,
+  ConversationSpamFiledBy,
+  TeamAssignmentMethod,
+  TicketType,
+  TicketStatusCategory,
+  TicketStage,
+  UseCaseType,
+  OnboardingOutcome,
+  SetupState,
 } from '@quackback/db/types'
 
 // Schema types needed by client components (type-only = no side effects)
@@ -43,6 +69,13 @@ export type {
   UserAttributeDefinition,
   UserAttributeType,
   CurrencyCode,
+  MacroScope,
+  MacroPriority,
+  MacroSnoozePreset,
+  MacroAction,
+  // Structural twin of the assistant config schema; a drift tripwire in
+  // lib/shared/assistant/__tests__/config.test.ts asserts the two agree.
+  StoredAssistantConfig,
 } from '@quackback/db/schema'
 
 // Runtime exports used in client components.
@@ -50,15 +83,22 @@ export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 
 export function getSetupState(setupStateJson: string | null): SetupState | null {
-  if (!setupStateJson) return null
-  try {
-    return JSON.parse(setupStateJson) as SetupState
-  } catch {
-    return null
-  }
+  return getSetupStateFromDb(setupStateJson)
 }
 
 export function isOnboardingComplete(setupState: SetupState | null): boolean {
-  if (!setupState) return false
-  return setupState.steps.core && setupState.steps.workspace && setupState.steps.boards
+  return isOnboardingCompleteFromDb(setupState)
+}
+
+/**
+ * Single source of truth for collapsing a stored `useCase` (including the
+ * legacy saas/consumer/marketplace values) onto the outcome it should
+ * display/behave as. Used by the onboarding picker, board templates, and the
+ * launch checklist — previously each had its own copy of this mapping.
+ * Returns undefined when unset or unrecognized; callers decide their own default.
+ */
+export function normalizeOnboardingOutcome(
+  useCase?: UseCaseType | null
+): OnboardingOutcome | undefined {
+  return normalizeOnboardingOutcomeFromDb(useCase)
 }

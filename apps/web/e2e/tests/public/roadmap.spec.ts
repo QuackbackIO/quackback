@@ -144,7 +144,7 @@ test.describe('Public Roadmap', () => {
     }
 
     // Each card shows a Badge with the board name; shadcn Badge uses data-slot="badge"
-    const boardBadge = roadmapCards.first().locator('[data-slot="badge"]')
+    const boardBadge = roadmapCards.first().locator('[data-slot="badge"]').first()
     await expect(boardBadge).toBeVisible()
   })
 
@@ -158,10 +158,7 @@ test.describe('Public Roadmap', () => {
     const firstCard = roadmapCards.first()
     const href = await firstCard.getAttribute('href')
 
-    await Promise.all([
-      page.waitForURL(/\/posts\//, { timeout: 10000 }),
-      firstCard.click(),
-    ])
+    await Promise.all([page.waitForURL(/\/posts\//, { timeout: 10000 }), firstCard.click()])
 
     if (href) {
       await expect(page).toHaveURL(new RegExp(href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
@@ -211,8 +208,9 @@ test.describe('Public Roadmap', () => {
     await page.waitForLoadState('networkidle')
 
     // The second tab should now be selected
-    await expect(tabs.nth(1)).toHaveAttribute('data-state', 'active')
-    await expect(tabs.nth(0)).not.toHaveAttribute('data-state', 'active')
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'false')
+    await expect(page).toHaveURL(/[?&]roadmap=roadmap_/)
   })
 
   test('URL search param ?roadmap= selects the corresponding roadmap', async ({ page }) => {
@@ -226,19 +224,24 @@ test.describe('Public Roadmap', () => {
       return
     }
 
-    // Get the value of the first tab to use as the roadmap param
-    const firstTab = tabList.first().locator('[role="tab"]').first()
-    const roadmapId = await firstTab.getAttribute('data-value')
-
-    if (!roadmapId) {
+    const tabs = tabList.first().locator('[role="tab"]')
+    if ((await tabs.count()) < 2) {
       test.skip()
       return
     }
 
-    await page.goto(`/roadmap?roadmap=${roadmapId}`)
+    const selectedTabName = (await tabs.nth(1).textContent())?.trim() ?? ''
+    await tabs.nth(1).click()
+    await expect(page).toHaveURL(/[?&]roadmap=roadmap_/)
+    const selectedRoadmapUrl = page.url()
+
+    await page.goto(selectedRoadmapUrl)
     await page.waitForLoadState('networkidle')
 
-    await expect(firstTab).toHaveAttribute('data-state', 'active')
+    await expect(page.getByRole('tab', { name: selectedTabName })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
   })
 
   test('filter bar is rendered on the roadmap page', async ({ page }) => {
@@ -248,11 +251,12 @@ test.describe('Public Roadmap', () => {
       return
     }
 
-    // RoadmapFiltersBar renders a Search button + sort buttons + "Add filter" button.
-    // There is no form or [class*="filters"] element visible — the form is inside a popover.
-    // Check for the "Add filter" button which is always rendered.
-    const addFilterButton = page.getByRole('button', { name: 'Add filter' })
-    await expect(addFilterButton).toBeVisible({ timeout: 5000 })
+    // The toolbar is always visible; active filter chips render in a separate row.
+    const filterButton = page.getByRole('button', { name: 'Filter' })
+    await expect(filterButton).toBeVisible({ timeout: 5000 })
+    await filterButton.click()
+    await expect(page.getByRole('button', { name: 'Board' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Tag' })).toBeVisible()
     // Page should not show an error state
     await expect(page.locator('body')).not.toContainText(/something went wrong/i)
   })

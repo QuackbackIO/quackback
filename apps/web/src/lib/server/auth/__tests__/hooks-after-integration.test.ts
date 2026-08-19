@@ -234,7 +234,9 @@ describe('hooksAfter — successful SSO sign-in by brand-new verified-domain use
   it('updates the principal role to "member" (auto-provision wrote)', async () => {
     await hooksAfter(ssoCallbackCtx({ userId: 'user_new', email: 'alice@acme.com', token: 'tok' }))
 
-    expect(mockUpdateSet).toHaveBeenCalledWith({ role: 'member' })
+    // setPrincipalRole serializes every non-admin role write through a
+    // transaction (last-admin lock), so the promotion lands on the tx mock.
+    expect(mockTxUpdateSet).toHaveBeenCalledWith({ role: 'member' })
   })
 
   it('emits an auth.signin.success audit (proves audit ran last and saw a surviving session)', async () => {
@@ -271,8 +273,10 @@ describe('hooksAfter — bootstrap precedes auto-provision', () => {
 
     // Bootstrap promoted to admin (in the tx).
     expect(mockTxUpdateSet).toHaveBeenCalledWith({ role: 'admin' })
-    // Auto-provision did NOT touch the role (admin is not 'user').
+    // Auto-provision did NOT touch the role (admin is not 'user') — check both
+    // write paths (setPrincipalRole txs non-admin writes).
     expect(mockUpdateSet).not.toHaveBeenCalledWith({ role: 'member' })
+    expect(mockTxUpdateSet).not.toHaveBeenCalledWith({ role: 'member' })
     // Session survived → cleanup passed.
     expect(mockSessionDelete).not.toHaveBeenCalled()
   })

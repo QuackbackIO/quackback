@@ -5,7 +5,7 @@
  * Used for finding similar posts and duplicate detection.
  */
 
-import { db, posts, eq, and, isNull, sql, desc, ne } from '@/lib/server/db'
+import { db, posts, eq, and, isNull, sql, asc, ne } from '@/lib/server/db'
 import type { PostId, BoardId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
@@ -188,7 +188,7 @@ async function searchByEmbedding(
     })
     .from(posts)
     .where(and(...conditions))
-    .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
+    .orderBy(asc(sql`${posts.embedding} <=> ${vectorStr}::vector`))
     .limit(limit)
 
   return results.map((r) => ({

@@ -5,6 +5,8 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { API_KEY_SCOPES, EMPTY_SCOPES_MESSAGE } from '@/lib/server/domains/api-keys/api-key-scopes'
 import type { ApiKeyId } from '@/lib/server/domains/api-keys/api-key.service'
 import { logger } from '@/lib/server/logger'
 
@@ -17,6 +19,7 @@ const log = logger.child({ component: 'api-keys' })
 const createApiKeySchema = z.object({
   name: z.string().min(1, 'Name is required').max(255, 'Name must be 255 characters or less'),
   expiresAt: z.string().datetime().optional().nullable(),
+  scopes: z.array(z.enum(API_KEY_SCOPES)).min(1, EMPTY_SCOPES_MESSAGE).optional(),
 })
 
 const getApiKeySchema = z.object({
@@ -55,18 +58,13 @@ export type RevokeApiKeyInput = z.infer<typeof revokeApiKeySchema>
  */
 export const fetchApiKeys = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list api keys')
-  try {
-    // Only admins can manage API keys
-    await requireAuth({ roles: ['admin'] })
+  // Only admins can manage API keys
+  await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
-    const { listApiKeys } = await import('@/lib/server/domains/api-keys/api-key.service')
-    const keys = await listApiKeys()
-    log.debug({ count: keys.length }, 'api keys fetched')
-    return keys
-  } catch (error) {
-    log.error({ err: error }, 'list api keys failed')
-    throw error
-  }
+  const { listApiKeys } = await import('@/lib/server/domains/api-keys/api-key.service')
+  const keys = await listApiKeys()
+  log.debug({ count: keys.length }, 'api keys fetched')
+  return keys
 })
 
 /**
@@ -76,17 +74,12 @@ export const fetchApiKey = createServerFn({ method: 'GET' })
   .validator(getApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'get api key')
-    try {
-      await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
-      const { getApiKeyById } = await import('@/lib/server/domains/api-keys/api-key.service')
-      const key = await getApiKeyById(data.id as ApiKeyId)
-      log.debug({ found: !!key }, 'api key lookup')
-      return key
-    } catch (error) {
-      log.error({ err: error }, 'get api key failed')
-      throw error
-    }
+    const { getApiKeyById } = await import('@/lib/server/domains/api-keys/api-key.service')
+    const key = await getApiKeyById(data.id as ApiKeyId)
+    log.debug({ found: !!key }, 'api key lookup')
+    return key
   })
 
 // ============================================
@@ -101,23 +94,19 @@ export const createApiKeyFn = createServerFn({ method: 'POST' })
   .validator(createApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create api key')
-    try {
-      const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
-      const { createApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
-      const result = await createApiKey(
-        {
-          name: data.name,
-          expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
-        },
-        auth.principal.id
-      )
-      log.info({ api_key_id: result.apiKey.id }, 'api key created')
-      return result
-    } catch (error) {
-      log.error({ err: error }, 'create api key failed')
-      throw error
-    }
+    const { createApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
+    const result = await createApiKey(
+      {
+        name: data.name,
+        expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+        scopes: data.scopes,
+      },
+      auth.principal.id
+    )
+    log.info({ api_key_id: result.apiKey.id }, 'api key created')
+    return result
   })
 
 /**
@@ -127,17 +116,12 @@ export const updateApiKeyFn = createServerFn({ method: 'POST' })
   .validator(updateApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'update api key')
-    try {
-      await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
-      const { updateApiKeyName } = await import('@/lib/server/domains/api-keys/api-key.service')
-      const key = await updateApiKeyName(data.id as ApiKeyId, data.name)
-      log.info({ api_key_id: key.id }, 'api key updated')
-      return key
-    } catch (error) {
-      log.error({ err: error }, 'update api key failed')
-      throw error
-    }
+    const { updateApiKeyName } = await import('@/lib/server/domains/api-keys/api-key.service')
+    const key = await updateApiKeyName(data.id as ApiKeyId, data.name)
+    log.info({ api_key_id: key.id }, 'api key updated')
+    return key
   })
 
 /**
@@ -148,17 +132,12 @@ export const rotateApiKeyFn = createServerFn({ method: 'POST' })
   .validator(rotateApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'rotate api key')
-    try {
-      await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
-      const { rotateApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
-      const result = await rotateApiKey(data.id as ApiKeyId)
-      log.info({ api_key_id: result.apiKey.id }, 'api key rotated')
-      return result
-    } catch (error) {
-      log.error({ err: error }, 'rotate api key failed')
-      throw error
-    }
+    const { rotateApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
+    const result = await rotateApiKey(data.id as ApiKeyId)
+    log.info({ api_key_id: result.apiKey.id }, 'api key rotated')
+    return result
   })
 
 /**
@@ -168,15 +147,10 @@ export const revokeApiKeyFn = createServerFn({ method: 'POST' })
   .validator(revokeApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'revoke api key')
-    try {
-      await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.API_KEY_MANAGE })
 
-      const { revokeApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
-      await revokeApiKey(data.id as ApiKeyId)
-      log.info({ api_key_id: data.id }, 'api key revoked')
-      return { id: data.id as ApiKeyId }
-    } catch (error) {
-      log.error({ err: error }, 'revoke api key failed')
-      throw error
-    }
+    const { revokeApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
+    await revokeApiKey(data.id as ApiKeyId)
+    log.info({ api_key_id: data.id }, 'api key revoked')
+    return { id: data.id as ApiKeyId }
   })

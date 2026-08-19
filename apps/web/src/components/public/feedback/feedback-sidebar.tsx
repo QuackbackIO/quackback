@@ -66,7 +66,7 @@ export function FeedbackSidebar({
                   {board.postCount > 0 && (
                     <span
                       className={cn(
-                        'text-[10px] font-semibold ms-auto ps-1 shrink-0 tabular-nums',
+                        'text-xs font-semibold ms-auto ps-1 shrink-0 tabular-nums',
                         isActive ? 'text-primary' : 'text-muted-foreground'
                       )}
                     >

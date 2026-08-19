@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId, PrincipalId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
 
 // `createServerFn` needs the TanStack Start build transform; stub it so importing
 // the module under test only registers the (never-run) handler. The viewer-gated
@@ -16,18 +17,20 @@ import {
   projectPostPreview,
   projectChangelogPreview,
   projectArticlePreview,
+  projectTicketPreview,
+  scopeTicketEmbed,
   resolveEmbed,
 } from '../embeds'
-import type { EmbedResolverDeps } from '../embeds'
+import type { EmbedResolverDeps, TicketEmbedRow } from '../embeds'
 
-const sid = (s: string) => s as StatusId
+const sid = (s: string) => s as PostStatusId
 
 const POST_DETAIL = {
   id: 'post_01ktjwt5tyf6br9mw521h13n6n',
   title: 'Dark mode',
   content: 'A native solution would be much appreciated.',
   voteCount: 42,
-  statusId: sid('status_01abc'),
+  statusId: sid('post_status_01abc'),
   board: { name: 'Features', slug: 'features' },
   tags: [{ id: 'tag_1', name: 'Feature', color: '#6366f1' }],
   authorName: 'Marcus Garcia',
@@ -35,8 +38,8 @@ const POST_DETAIL = {
   createdAt: new Date('2026-01-02T03:04:05.000Z'),
 }
 const STATUSES = [
-  { id: sid('status_01abc'), name: 'Planned', color: '#3b82f6' },
-  { id: sid('status_01xyz'), name: 'Shipped', color: '#22c55e' },
+  { id: sid('post_status_01abc'), name: 'Planned', color: '#3b82f6' },
+  { id: sid('post_status_01xyz'), name: 'Shipped', color: '#22c55e' },
 ]
 
 // Canonical portal base injected into the projections (the server fn passes
@@ -69,7 +72,11 @@ describe('projectPostPreview', () => {
     expect(r.statusColor).toBeNull()
   })
   it('nulls the status fields when the status id is not in the taxonomy', () => {
-    const r = projectPostPreview({ ...POST_DETAIL, statusId: sid('status_gone') }, STATUSES, BASE)
+    const r = projectPostPreview(
+      { ...POST_DETAIL, statusId: sid('post_status_gone') },
+      STATUSES,
+      BASE
+    )
     expect(r.statusName).toBeNull()
     expect(r.statusColor).toBeNull()
   })
@@ -118,6 +125,7 @@ describe('resolveEmbed', () => {
       publishedAt: new Date('2026-01-02T03:04:05.000Z'),
     }),
     getArticle: async () => null,
+    getTicket: async () => null,
   }
   const actor = {} as never
 
@@ -245,6 +253,7 @@ describe('resolveEmbed — article', () => {
       publishedAt: new Date('2026-01-02T03:04:05.000Z'),
     }),
     getArticle: async () => ARTICLE_INPUT,
+    getTicket: async () => null,
   }
 
   it('resolves an article happy path through the injected resolver', async () => {
@@ -276,6 +285,150 @@ describe('resolveEmbed — article', () => {
         ...articleDeps,
         getArticle: async () => {
           throw new Error('private')
+        },
+      },
+      BASE
+    )
+    expect(r).toEqual({ unavailable: true })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Ticket embed
+// ---------------------------------------------------------------------------
+
+const REQUESTER = 'principal_01requester' as PrincipalId
+
+const TICKET_ROW: TicketEmbedRow = {
+  id: 'ticket_01ktjwt5tyf6br9mw521h13n6n',
+  number: 142,
+  title: 'Cannot log in',
+  type: 'customer',
+  requesterPrincipalId: REQUESTER,
+  deletedAt: null,
+  conversationId: 'conversation_01pair',
+  statusLabel: 'In progress',
+  statusColor: '#3b82f6',
+  priority: 'high',
+  createdAt: new Date('2026-01-02T03:04:05.000Z'),
+}
+
+function actorOf(over: Partial<Actor>): Actor {
+  return {
+    principalId: null,
+    role: 'user',
+    principalType: 'user',
+    segmentIds: new Set(),
+    ...over,
+  } as Actor
+}
+
+const requesterActor = actorOf({ principalId: REQUESTER, role: 'user' })
+const otherVisitorActor = actorOf({ principalId: 'principal_01other' as PrincipalId, role: 'user' })
+const teamActor = actorOf({ principalId: 'principal_01agent' as PrincipalId, role: 'member' })
+
+describe('projectTicketPreview', () => {
+  it('projects a ticket with its reference, stage label, priority, and absolute url', () => {
+    expect(projectTicketPreview(TICKET_ROW, BASE)).toEqual({
+      kind: 'ticket',
+      ticketId: 'ticket_01ktjwt5tyf6br9mw521h13n6n',
+      conversationId: 'conversation_01pair',
+      reference: '#142',
+      title: 'Cannot log in',
+      statusLabel: 'In progress',
+      statusColor: '#3b82f6',
+      priority: 'high',
+      createdAt: '2026-01-02T03:04:05.000Z',
+      // Converged Messages: the requester-facing ticket URL is the pair's
+      // conversation thread.
+      url: 'https://feedback.example.com/support/conversation_01pair',
+    })
+  })
+  it('tolerates a null stage label and createdAt', () => {
+    const r = projectTicketPreview({ ...TICKET_ROW, statusLabel: null, createdAt: null }, BASE)
+    expect(r.statusLabel).toBeNull()
+    expect(r.createdAt).toBeNull()
+  })
+  it('links an internal ticket (no pair conversation) to the admin inbox', () => {
+    const r = projectTicketPreview(
+      { ...TICKET_ROW, type: 'back_office', conversationId: null },
+      BASE
+    )
+    expect(r.url).toBe(`https://feedback.example.com/admin/inbox?i=${TICKET_ROW.id}`)
+  })
+  it('joins the ticket url cleanly when the base has a trailing slash', () => {
+    const r = projectTicketPreview(TICKET_ROW, 'https://feedback.example.com/')
+    expect(r.url).toBe('https://feedback.example.com/support/conversation_01pair')
+  })
+})
+
+describe('scopeTicketEmbed', () => {
+  it('lets the ticket requester see their own customer ticket', () => {
+    expect(scopeTicketEmbed(TICKET_ROW, requesterActor)).toEqual(TICKET_ROW)
+  })
+  it('lets a team member see the ticket even when they are not the requester', () => {
+    expect(scopeTicketEmbed(TICKET_ROW, teamActor)).toEqual(TICKET_ROW)
+  })
+  it('hides the ticket from a different visitor principal', () => {
+    expect(scopeTicketEmbed(TICKET_ROW, otherVisitorActor)).toBeNull()
+  })
+  it('hides the ticket from an anonymous viewer with no principal', () => {
+    expect(scopeTicketEmbed(TICKET_ROW, actorOf({ principalId: null }))).toBeNull()
+  })
+  it('hides a soft-deleted ticket from the requester', () => {
+    expect(scopeTicketEmbed({ ...TICKET_ROW, deletedAt: new Date() }, requesterActor)).toBeNull()
+  })
+  it('hides a soft-deleted ticket even from a team member', () => {
+    expect(scopeTicketEmbed({ ...TICKET_ROW, deletedAt: new Date() }, teamActor)).toBeNull()
+  })
+  it('does not treat a matching principal on a non-customer ticket as the requester', () => {
+    // A back_office ticket that happens to carry a matching requester principal
+    // is still internal — only a team member may embed it.
+    const backOffice: TicketEmbedRow = { ...TICKET_ROW, type: 'back_office' }
+    expect(scopeTicketEmbed(backOffice, requesterActor)).toBeNull()
+    expect(scopeTicketEmbed(backOffice, teamActor)).toEqual(backOffice)
+  })
+})
+
+describe('resolveEmbed — ticket', () => {
+  const ticketDeps: EmbedResolverDeps = {
+    getPostDetail: async () => POST_DETAIL,
+    listStatuses: async () => STATUSES,
+    getChangelog: async () => null,
+    getArticle: async () => null,
+    getTicket: async () => TICKET_ROW,
+  }
+
+  it('resolves a ticket happy path through the injected resolver', async () => {
+    const r = await resolveEmbed('ticket', TICKET_ROW.id, requesterActor as never, ticketDeps, BASE)
+    expect(r).toMatchObject({
+      kind: 'ticket',
+      reference: '#142',
+      title: 'Cannot log in',
+      url: 'https://feedback.example.com/support/conversation_01pair',
+    })
+  })
+
+  it('returns unavailable when the ticket resolver yields null (viewer denied)', async () => {
+    const r = await resolveEmbed(
+      'ticket',
+      TICKET_ROW.id,
+      otherVisitorActor as never,
+      { ...ticketDeps, getTicket: async () => null },
+      BASE
+    )
+    expect(r).toEqual({ unavailable: true })
+  })
+
+  it('returns unavailable (no exception escapes) when the ticket resolver throws', async () => {
+    const r = await resolveEmbed(
+      'ticket',
+      TICKET_ROW.id,
+      requesterActor as never,
+      {
+        ...ticketDeps,
+        getTicket: async () => {
+          throw new Error('boom')
         },
       },
       BASE

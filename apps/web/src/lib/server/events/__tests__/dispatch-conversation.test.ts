@@ -6,10 +6,12 @@ vi.mock('../process', () => ({ processEvent: (...a: unknown[]) => processEvent(.
 import {
   dispatchConversationCreated,
   dispatchConversationStatusChanged,
+  dispatchConversationAssigned,
   dispatchMessageCreated,
   dispatchMessageNoteCreated,
   dispatchConversationCsatSubmitted,
   dispatchConversationCsatCommentAdded,
+  dispatchAssistantHandedOff,
 } from '../dispatch'
 import type { EventConversationData, EventConversationRef, EventMessageData } from '../types'
 
@@ -34,7 +36,7 @@ const convRef: EventConversationRef = {
   priority: 'none',
 }
 const msg: EventMessageData = {
-  id: 'chat_msg_1',
+  id: 'conversation_msg_1',
   conversationId: 'conversation_1',
   senderType: 'visitor',
   authorPrincipalId: 'principal_v',
@@ -69,11 +71,30 @@ describe('conversation/message dispatch', () => {
     })
   })
 
+  it('dispatchConversationAssigned carries agent and team current + previous (WO-3 slice 2)', async () => {
+    await dispatchConversationAssigned(actor, convRef, 'principal_agent', null, 'team_1', null)
+    const event = processEvent.mock.calls[0][0]
+    expect(event.type).toBe('conversation.assigned')
+    expect(event.data).toEqual({
+      conversation: convRef,
+      assignedAgentPrincipalId: 'principal_agent',
+      previousAgentPrincipalId: null,
+      assignedTeamId: 'team_1',
+      previousTeamId: null,
+    })
+  })
+
   it('dispatchMessageCreated and dispatchMessageNoteCreated use distinct types', async () => {
-    await dispatchMessageCreated(actor, msg, convRef)
+    await dispatchMessageCreated(actor, msg, convRef, true)
     await dispatchMessageNoteCreated(actor, { ...msg, senderType: 'agent' }, convRef)
     expect(processEvent.mock.calls[0][0].type).toBe('message.created')
     expect(processEvent.mock.calls[1][0].type).toBe('message.note_created')
+  })
+
+  it('dispatchMessageCreated carries isFirstMessage (WO-3 slice 5)', async () => {
+    await dispatchMessageCreated(actor, msg, convRef, false)
+    const event = processEvent.mock.calls[0][0]
+    expect(event.data).toEqual({ message: msg, conversation: convRef, isFirstMessage: false })
   })
 
   it('dispatchConversationCsatSubmitted carries rating + comment', async () => {
@@ -104,5 +125,13 @@ describe('conversation/message dispatch', () => {
       comment: 'great',
       submittedAt: '2026-06-05T01:00:00.000Z',
     })
+  })
+
+  it('dispatchAssistantHandedOff carries the conversation id + reason', async () => {
+    await dispatchAssistantHandedOff(actor, 'conversation_1', 'explicit_request')
+    const event = processEvent.mock.calls[0][0]
+    expect(event.type).toBe('assistant.handed_off')
+    expect(event.data).toEqual({ conversationId: 'conversation_1', reason: 'explicit_request' })
+    expect(event.actor).toEqual(actor)
   })
 })

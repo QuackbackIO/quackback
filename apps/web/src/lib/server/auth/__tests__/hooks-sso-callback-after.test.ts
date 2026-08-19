@@ -46,15 +46,10 @@ const tx: TxLike = {
 
 const mockTransaction = vi.fn(async (fn: (tx: TxLike) => Promise<void>) => fn(tx))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { transaction: mockTransaction },
-  principal: {
-    __name: 'principal',
-    id: 'principal.id',
-    role: 'principal.role',
-    type: 'principal.type',
-    userId: 'principal.userId',
-  },
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
   eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),

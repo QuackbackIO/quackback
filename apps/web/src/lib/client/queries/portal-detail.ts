@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
+import type { PostId, PostStatusId, PostCommentId, PrincipalId } from '@quackback/ids'
 import {
   fetchPublicBoardBySlug,
   fetchPublicPostDetail,
@@ -13,7 +13,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
  * Comment type for client components (Date fields may be strings after serialization)
  */
 export interface PublicCommentView {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -21,7 +21,7 @@ export interface PublicCommentView {
   createdAt: Date | string
   deletedAt: Date | string | null
   isRemovedByTeam: boolean
-  parentId: CommentId | null
+  parentId: PostCommentId | null
   isTeamMember: boolean
   isPrivate?: boolean
   isEdited: boolean
@@ -35,7 +35,7 @@ export interface PublicCommentView {
  * Pinned comment for client components (Date fields may be strings after serialization)
  */
 export interface PinnedCommentView {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -53,18 +53,31 @@ export interface PublicPostDetailView {
   title: string
   content: string
   contentJson: unknown
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   principalId: PrincipalId | null
   authorAvatarUrl: string | null
   createdAt: Date | string
+  /** Target ship date (time-based roadmap); null when unset. */
+  eta?: Date | string | null
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>
-  roadmaps: Array<{ id: string; name: string; slug: string }>
+  /**
+   * Root comments loaded so far. The server keyset-paginates by top-level
+   * comment; "show more" fetches append further roots into this same array
+   * (see `useLoadMoreComments`), so every comment mutation keeps operating on
+   * one coherent tree.
+   */
   comments: PublicCommentView[]
+  /** Whether more root comments exist beyond what's loaded. */
+  commentsHasMore?: boolean
+  /** Keyset cursor for the next page of roots, or null when exhausted. */
+  commentsNextCursor?: string | null
+  /** Total live root-comment count (for the "show N more" label). */
+  commentsTotalRootCount?: number
   pinnedComment: PinnedCommentView | null
-  pinnedCommentId: CommentId | null
+  pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
   /**

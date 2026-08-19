@@ -10,8 +10,19 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { posts, comments } from './posts'
+import { posts, postComments } from './posts'
 import { principal } from './auth'
+
+/**
+ * Per-type x per-channel notification preference overrides.
+ * String-keyed by notification type (not the enum) so new notification
+ * types never require a schema/migration change here.
+ * Kept in sync with NotificationMatrix in
+ * apps/web/src/lib/server/domains/subscriptions/notification-matrix.ts.
+ */
+type NotificationMatrix = Partial<
+  Record<string, Partial<Record<'inApp' | 'email' | 'push', boolean>>>
+>
 
 /**
  * Post subscriptions - tracks which users are subscribed to which posts.
@@ -45,7 +56,6 @@ export const postSubscriptions = pgTable(
     // Unique constraint: one subscription per principal per post
     uniqueIndex('post_subscriptions_unique').on(table.postId, table.principalId),
     index('post_subscriptions_principal_idx').on(table.principalId),
-    index('post_subscriptions_post_idx').on(table.postId),
     // Partial index for comment notification lookups
     index('post_subscriptions_post_comments_idx')
       .on(table.postId)
@@ -72,6 +82,10 @@ export const notificationPreferences = pgTable(
     emailStatusChange: boolean('email_status_change').default(true).notNull(),
     emailNewComment: boolean('email_new_comment').default(true).notNull(),
     emailMuted: boolean('email_muted').default(false).notNull(),
+    // Explicit per-type x per-channel overrides. Nullable with no default -
+    // read-time helpers (shouldNotify) supply defaults for absent entries so
+    // this column can be introduced without a backfill.
+    matrix: jsonb('matrix').$type<NotificationMatrix>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -152,9 +166,12 @@ export const inAppNotifications = pgTable(
     postId: typeIdColumnNullable('post')('post_id').references(() => posts.id, {
       onDelete: 'cascade',
     }),
-    commentId: typeIdColumnNullable('comment')('comment_id').references(() => comments.id, {
-      onDelete: 'cascade',
-    }),
+    commentId: typeIdColumnNullable('post_comment')('comment_id').references(
+      () => postComments.id,
+      {
+        onDelete: 'cascade',
+      }
+    ),
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     readAt: timestamp('read_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
@@ -169,6 +186,11 @@ export const inAppNotifications = pgTable(
       .where(sql`read_at IS NULL AND archived_at IS NULL`),
     // Find notifications by related post
     index('in_app_notifications_post_idx').on(table.postId),
+    // FK RI lookup when a comment is deleted; partial because most
+    // notifications don't reference a comment.
+    index('in_app_notifications_comment_idx')
+      .on(table.commentId)
+      .where(sql`"comment_id" IS NOT NULL`),
   ]
 )
 
@@ -181,8 +203,8 @@ export const inAppNotificationsRelations = relations(inAppNotifications, ({ one 
     fields: [inAppNotifications.postId],
     references: [posts.id],
   }),
-  comment: one(comments, {
+  comment: one(postComments, {
     fields: [inAppNotifications.commentId],
-    references: [comments.id],
+    references: [postComments.id],
   }),
 }))

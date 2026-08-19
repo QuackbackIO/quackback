@@ -2,11 +2,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createHmac } from 'crypto'
 
 // Mock the DB and settings imports so the module can load
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: { query: {}, insert: vi.fn(), update: vi.fn() },
-  user: {},
-  session: {},
-  principal: {},
   eq: vi.fn(),
   and: vi.fn(),
   gt: vi.fn(),

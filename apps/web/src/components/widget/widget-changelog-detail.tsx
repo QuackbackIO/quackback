@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
-import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import type { ChangelogId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
@@ -55,10 +55,24 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   return (
     <div className="flex flex-col h-full">
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
-        <div className="px-4 py-3">
+        {/* Readable column when the host panel expands for long-form content. */}
+        <div className="mx-auto w-full max-w-2xl px-4 py-3">
           <time className="text-[11px] text-muted-foreground/60 uppercase tracking-wide">
             {formatDate(entry.publishedAt)}
           </time>
+          {entry.categories.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {entry.categories.map((category) => (
+                <span
+                  key={category.id}
+                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  style={{ backgroundColor: category.color + '1a', color: category.color }}
+                >
+                  {category.name}
+                </span>
+              ))}
+            </div>
+          )}
           <WidgetPortalTitle title={entry.title} onClick={handleViewOnPortal} />
 
           <div className="mt-3">

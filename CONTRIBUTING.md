@@ -18,6 +18,31 @@ bun run dev
 
 Open http://localhost:3000 to see the app.
 
+## Working in a Git Worktree
+
+Quackback supports developing multiple branches at once with `git worktree`:
+
+```bash
+git worktree add ../quackback-my-feature -b my-feature
+cd ../quackback-my-feature
+bun run worktree:bootstrap
+```
+
+The bootstrap script:
+
+- Installs dependencies with a real `bun install`, not a symlink to the main checkout's `node_modules` (a symlink would silently resolve `packages/*` back to the main checkout, so edits to a package there never show up in the worktree)
+- Builds the widget bundle and generates `apps/web/src/routeTree.gen.ts`, both gitignored artifacts the app needs before it can run
+- Creates a `.env` for the worktree from the main checkout's `.env`, then assigns it a free port, its own Postgres database (`quackback_<worktree-directory-name>`), and its own Redis DB index, so it can run alongside other worktrees without touching their dev data
+- Runs migrations against that new database
+
+Every worktree shares the same Postgres/MinIO/Dragonfly/Mailpit containers (started by `bun run setup`); only the database name and Redis index differ per worktree. Re-run the script any time, for example after pulling new migrations. It reuses the existing `.env` values and is safe to run repeatedly.
+
+Removing a worktree does not drop its database. Clean it up manually if you want to reclaim it:
+
+```bash
+docker exec quackback-db dropdb --if-exists quackback_my_feature
+```
+
 ## Project Structure
 
 ```
@@ -32,15 +57,15 @@ quackback/
 │   ├── db/                # Database (Drizzle schema, migrations)
 │   ├── ids/               # TypeID system (branded UUIDs)
 │   └── email/             # Email service (Resend + React Email)
-├── ee/                    # Enterprise Edition features (SSO, SCIM, etc.)
-└── docker-compose.yml     # Local PostgreSQL 18
+├── packages/widget/       # Embeddable widget package
+└── docker-compose.yml     # Local PostgreSQL, Dragonfly, MinIO, and Mailpit
 ```
 
 ## Architecture
 
 Quackback uses **TanStack Start** with **TanStack Router** for file-based routing and server functions.
 
-### Server Functions (`apps/web/src/lib/server-functions/`)
+### Server Functions (`apps/web/src/lib/server/functions/`)
 
 Type-safe RPC endpoints using `createServerFn`:
 
@@ -56,7 +81,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
   })
 ```
 
-### Service Layer (`apps/web/src/lib/{feature}/`)
+### Service Layer (`apps/web/src/lib/server/domains/{feature}/`)
 
 Business logic with typed error handling:
 
@@ -73,10 +98,10 @@ export async function createPost(input: CreatePostInput, author: Author) {
 
 ### Database Access
 
-Always import from `@/lib/db`, not `@quackback/db`:
+Server code imports from `@/lib/server/db`; client-safe types import from `@/lib/shared/db-types`. Do not import `@quackback/db` directly from application code.
 
 ```typescript
-import { db, posts, eq } from '@/lib/db'
+import { db, posts, eq } from '@/lib/server/db'
 
 const post = await db.query.posts.findFirst({
   where: eq(posts.id, postId),

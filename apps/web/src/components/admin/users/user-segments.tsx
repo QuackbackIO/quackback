@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { XMarkIcon, BoltIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import type { UserSegmentSummary } from '@/lib/shared/types'
@@ -9,6 +10,7 @@ import { useRemoveUsersFromSegment, useAssignUsersToSegment } from '@/lib/client
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
+import { SegmentPickerList } from '@/components/admin/segments/segment-picker-list'
 
 interface SegmentBadgeProps {
   segment: UserSegmentSummary
@@ -72,27 +74,51 @@ export function UserSegmentBadges({
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [removingId, setRemovingId] = useState<SegmentId | null>(null)
 
+  // Manual segments the user is not currently in
+  const currentSegmentIds = new Set(segments.map((s) => s.id))
+  const availableManualSegments = (allSegments ?? []).filter(
+    (s) => s.type === 'manual' && !currentSegmentIds.has(s.id as SegmentId)
+  )
+
   const handleRemove = async (segmentId: SegmentId) => {
+    const segment = segments.find((s) => s.id === segmentId)
     setRemovingId(segmentId)
     try {
       await removeUsers.mutateAsync({ segmentId, principalIds: [principalId] })
       onSegmentsChange?.()
+      toast.success(`Removed from ${segment?.name ?? 'segment'}`, {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            assignUsers.mutate(
+              { segmentId, principalIds: [principalId] },
+              {
+                onSuccess: () => onSegmentsChange?.(),
+                onError: () =>
+                  toast.error(`Failed to undo — ${segment?.name ?? 'segment'} was not restored`),
+              }
+            )
+          },
+        },
+      })
+    } catch {
+      toast.error(`Failed to remove from ${segment?.name ?? 'segment'}`)
     } finally {
       setRemovingId(null)
     }
   }
 
   const handleAssign = async (segmentId: SegmentId) => {
-    await assignUsers.mutateAsync({ segmentId, principalIds: [principalId] })
-    onSegmentsChange?.()
-    setPopoverOpen(false)
+    const segment = availableManualSegments.find((s) => s.id === segmentId)
+    try {
+      await assignUsers.mutateAsync({ segmentId, principalIds: [principalId] })
+      onSegmentsChange?.()
+      setPopoverOpen(false)
+      toast.success(`Added to ${segment?.name ?? 'segment'}`)
+    } catch {
+      toast.error(`Failed to add to ${segment?.name ?? 'segment'}`)
+    }
   }
-
-  // Manual segments the user is not currently in
-  const currentSegmentIds = new Set(segments.map((s) => s.id))
-  const availableManualSegments = (allSegments ?? []).filter(
-    (s) => s.type === 'manual' && !currentSegmentIds.has(s.id as SegmentId)
-  )
 
   return (
     <div className="flex flex-wrap gap-1.5 items-center">
@@ -112,30 +138,18 @@ export function UserSegmentBadges({
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+              className="h-5 px-1.5 text-[13px] text-muted-foreground hover:text-foreground"
             >
-              <PlusIcon className="h-3 w-3 mr-0.5" />
+              <PlusIcon className="size-3.5 mr-0.5" />
               Add
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-48 p-1" align="start">
-            <div className="space-y-0.5">
-              {availableManualSegments.map((seg) => (
-                <button
-                  key={seg.id}
-                  type="button"
-                  onClick={() => handleAssign(seg.id as SegmentId)}
-                  disabled={assignUsers.isPending}
-                  className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted/50 transition-colors disabled:opacity-50"
-                >
-                  <span
-                    className="h-2 w-2 rounded-full shrink-0 ring-1 ring-inset ring-black/10"
-                    style={{ backgroundColor: seg.color }}
-                  />
-                  <span className="truncate">{seg.name}</span>
-                </button>
-              ))}
-            </div>
+          <PopoverContent className="w-48 p-0" align="start">
+            <SegmentPickerList
+              segments={availableManualSegments}
+              onSelect={handleAssign}
+              disabled={assignUsers.isPending}
+            />
           </PopoverContent>
         </Popover>
       )}
@@ -163,7 +177,7 @@ export function CompactSegmentBadges({ segments, maxVisible = 2 }: CompactSegmen
       {visible.map((seg) => (
         <span
           key={seg.id}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full text-[10px] font-medium border leading-4"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full text-[11px] font-medium border leading-4"
           style={{
             backgroundColor: seg.color + '20',
             borderColor: seg.color + '40',
@@ -175,7 +189,7 @@ export function CompactSegmentBadges({ segments, maxVisible = 2 }: CompactSegmen
           {seg.name}
         </span>
       ))}
-      {overflow > 0 && <span className="text-[10px] text-muted-foreground">+{overflow}</span>}
+      {overflow > 0 && <span className="text-xs text-muted-foreground">+{overflow}</span>}
     </div>
   )
 }

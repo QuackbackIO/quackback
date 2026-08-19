@@ -25,41 +25,78 @@ function redactPortalConfig(portalConfig: PortalConfig): RedactedPortalConfig {
 }
 
 /**
- * Strips the server-only access policy fields (allowedDomains, widgetSignIn,
- * allowedSegmentIds) from a settings row before returning it to a client-bound
- * context. Keeps access.visibility (it's already public via
- * publicPortalConfig.portalAccess).
+ * Raw settings-row columns that must never reach a client-bound context.
+ * `widgetSecret` is the HMAC key that signs widget identify ssoTokens —
+ * exposing it lets anyone forge verified identities. The rest are
+ * server-side state (tier enforcement, setup progress, metadata config
+ * bags) with no client reader.
+ */
+const SERVER_ONLY_SETTINGS_KEYS = ['widgetSecret', 'metadata', 'tierLimits', 'setupState'] as const
+
+function stripServerOnlyKeys<T extends object>(row: T): T {
+  if (!SERVER_ONLY_SETTINGS_KEYS.some((key) => key in row)) return row
+  const clean = { ...row } as Record<string, unknown>
+  for (const key of SERVER_ONLY_SETTINGS_KEYS) delete clean[key]
+  return clean as T
+}
+
+/**
+ * Strips server-only material from a settings shape before it is returned to
+ * a client-bound context (router context, loader data — both are dehydrated
+ * into the SSR HTML):
  *
- * Accepts either a parsed PortalConfig object or a JSON-string column (raw DB
- * row). When the field is absent or carries no `access` key it is returned
- * untouched. Handles null/undefined gracefully.
+ * - server-only columns of the raw settings row ({@link SERVER_ONLY_SETTINGS_KEYS},
+ *   most critically `widgetSecret`);
+ * - the access policy fields (allowedDomains, widgetSignIn, allowedSegmentIds)
+ *   of `portalConfig`, keeping only access.visibility (already public via
+ *   publicPortalConfig.portalAccess).
+ *
+ * Accepts either the parsed TenantSettings shape or the raw DB row. When the
+ * input carries the raw row as a nested `settings` property (TenantSettings
+ * does), the row is redacted recursively, so one call at any exit point
+ * covers both levels. `portalConfig` may be a parsed object or a JSON-string
+ * column. When nothing needs redaction the input is returned by reference.
  */
 export function redactSettingsForClient<T extends { portalConfig?: PortalConfig | string | null }>(
   row: T
 ): T {
-  const { portalConfig } = row
+  let result = stripServerOnlyKeys(row)
 
-  if (!portalConfig) return row
+  // TenantSettings shape: the raw DB row rides along as `.settings`.
+  const nested = (result as Record<string, unknown>).settings
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const redactedNested = redactSettingsForClient(
+      nested as { portalConfig?: PortalConfig | string | null }
+    )
+    if (redactedNested !== nested) {
+      result = result === row ? ({ ...row } as T) : result
+      ;(result as Record<string, unknown>).settings = redactedNested
+    }
+  }
+
+  const { portalConfig } = result
+
+  if (!portalConfig) return result
 
   // Parsed object form (TenantSettings.portalConfig)
   if (typeof portalConfig === 'object') {
-    if (!portalConfig.access) return row
+    if (!portalConfig.access) return result
     // Cast: the shape is identical at runtime; only the access sub-keys differ.
-    return { ...row, portalConfig: redactPortalConfig(portalConfig) } as T
+    return { ...result, portalConfig: redactPortalConfig(portalConfig) } as T
   }
 
   // JSON-string form (raw DB row column)
   if (typeof portalConfig === 'string') {
     try {
       const parsed = JSON.parse(portalConfig) as Partial<PortalConfig>
-      if (!parsed.access) return row
+      if (!parsed.access) return result
       const redacted = redactPortalConfig(parsed as PortalConfig)
-      return { ...row, portalConfig: JSON.stringify(redacted) } as T
+      return { ...result, portalConfig: JSON.stringify(redacted) } as T
     } catch {
       // Unparseable — return as-is; the downstream parser handles the error.
-      return row
+      return result
     }
   }
 
-  return row
+  return result
 }

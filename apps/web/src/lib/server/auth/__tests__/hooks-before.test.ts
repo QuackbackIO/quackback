@@ -26,16 +26,17 @@ const mockPrincipalFindFirst = vi.fn()
 const mockGetTenantSettings = vi.fn()
 const mockGetPublicPortalConfig = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real db module (tables + operators stay current as new ones are
+// added) and override only the `db` handle with the query stubs this suite
+// drives.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       user: { findFirst: (...a: unknown[]) => mockUserFindFirst(...a) },
       principal: { findFirst: (...a: unknown[]) => mockPrincipalFindFirst(...a) },
     },
   },
-  user: { id: 'user_id', email: 'user_email' },
-  principal: { userId: 'principal_userId', role: 'role' },
-  eq: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
@@ -50,6 +51,11 @@ vi.mock('@/lib/server/auth/signin-rate-limit', () => ({
     mockCheckSignInRateLimit(ip, email),
   checkMagicLinkSendRateLimit: (ip: string, email: string) =>
     mockCheckMagicLinkRateLimit(ip, email),
+}))
+
+const mockCheckAnonMintRateLimit = vi.fn()
+vi.mock('@/lib/server/auth/widget-rate-limit', () => ({
+  checkAnonMintRateLimit: (ip: string) => mockCheckAnonMintRateLimit(ip),
 }))
 
 const mockRecordAuditEvent = vi.fn(async (_spec: unknown) => undefined)
@@ -134,6 +140,7 @@ beforeEach(() => {
   // The provider-registry mocks are seeded by the `tenant()` call above.
   mockCheckSignInRateLimit.mockResolvedValue({ allowed: true })
   mockCheckMagicLinkRateLimit.mockResolvedValue({ allowed: true })
+  mockCheckAnonMintRateLimit.mockResolvedValue({ allowed: true })
 })
 
 // ============================================================
@@ -535,5 +542,97 @@ describe('handleSignInPreCheck — sign-in rate-limit', () => {
     await handleSignInPreCheck(ctx)
     expect(mockCheckSignInRateLimit).toHaveBeenCalledWith(expect.any(String), 'a@b.com')
     expect(mockCheckMagicLinkRateLimit).not.toHaveBeenCalled()
+  })
+})
+
+// ============================================================
+// Anonymous-mint rate limit (widget /sign-in/anonymous)
+// ============================================================
+
+describe('handleSignInPreCheck — anonymous-mint rate-limit', () => {
+  it('bounds the mint per-IP, not per-email (the body carries no email)', async () => {
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    await handleSignInPreCheck(ctx)
+    expect(mockCheckAnonMintRateLimit).toHaveBeenCalledWith(expect.any(String))
+    // The email limiters are for credential/magic-link, not the mint.
+    expect(mockCheckSignInRateLimit).not.toHaveBeenCalled()
+    expect(mockCheckMagicLinkRateLimit).not.toHaveBeenCalled()
+  })
+
+  it('throws a 429 APIError with a Retry-After when the mint limiter caps', async () => {
+    mockCheckAnonMintRateLimit.mockResolvedValueOnce({ allowed: false, retryAfter: 90 })
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    const err = await handleSignInPreCheck(ctx).catch((e) => e)
+    expect((err as { name?: string }).name).toBe('APIError')
+    expect((err as { statusCode?: number }).statusCode).toBe(429)
+    expect((err as { body?: { code?: string } }).body?.code).toBe('rate_limited')
+    expect((err as { headers?: Record<string, string> }).headers?.['Retry-After']).toBe('90')
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('short-circuits before any tenant/DB work (mint never needs the domain policy)', async () => {
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    await handleSignInPreCheck(ctx)
+    expect(mockGetTenantSettings).not.toHaveBeenCalled()
+    expect(mockUserFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('fails open when the mint limiter throws (a cache blip must not block visitors)', async () => {
+    mockCheckAnonMintRateLimit.mockRejectedValueOnce(new Error('redis down'))
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    await handleSignInPreCheck(ctx)
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('omits Retry-After when the mint limiter did not provide one', async () => {
+    mockCheckAnonMintRateLimit.mockResolvedValueOnce({ allowed: false })
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    const err = await handleSignInPreCheck(ctx).catch((e) => e)
+    expect((err as { headers?: Record<string, string> }).headers?.['Retry-After']).toBeUndefined()
+  })
+})
+
+/**
+ * Reserved placeholder domain.
+ *
+ * `anon.quackback.io` backs the synthetic addresses minted for principals with
+ * no real email. Nothing rejected it at any account-creating path, so a
+ * placeholder address could be pre-registered by whoever guessed or derived it
+ * — and once provider-scoped placeholders exist, those are derived from public
+ * subjects with an open-source sanitiser. The squatter wins the address, the
+ * real identity can never link, and neither party can ever verify it because
+ * the transport refuses to deliver there.
+ */
+describe('handleSignInPreCheck — reserved placeholder domain', () => {
+  it.each([
+    '/sign-up/email',
+    '/sign-in/email',
+    '/sign-in/magic-link',
+    '/email-otp/send-verification-otp',
+  ])('refuses a reserved-domain address on %s', async (path) => {
+    const ctx = ctxFor(path, { email: 'temp-user_123@anon.quackback.io' })
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
+    expect(ctx.redirect).toHaveBeenCalled()
+  })
+
+  it('matches case-insensitively and ignores surrounding whitespace', async () => {
+    const ctx = ctxFor('/sign-up/email', { email: '  Temp-User@ANON.Quackback.IO  ' })
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
+  })
+
+  it('refuses before any tenant or rate-limit work happens', async () => {
+    // Cheapest possible rejection, and it keeps the reserved domain out of the
+    // rate-limit keyspace.
+    const ctx = ctxFor('/sign-up/email', { email: 'x@anon.quackback.io' })
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
+    expect(mockGetTenantSettings).not.toHaveBeenCalled()
+  })
+
+  it('leaves a lookalike domain alone', async () => {
+    // Only the exact reserved domain is reserved; a workspace legitimately
+    // owning something similar must not be blocked.
+    const ctx = ctxFor('/sign-up/email', { email: 'real@notanon.quackback.io.example.com' })
+    await handleSignInPreCheck(ctx)
+    expect(ctx.redirect).not.toHaveBeenCalled()
   })
 })

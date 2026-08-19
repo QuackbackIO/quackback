@@ -6,17 +6,18 @@ interface ComingSoonIntegrationProps {
 }
 
 export function ComingSoonIntegration({ catalog }: ComingSoonIntegrationProps) {
+  const capabilities = catalog.capabilities ?? []
   return (
     <div className="space-y-6">
       <IntegrationHeader catalog={catalog} />
 
-      {catalog.capabilities.length > 0 && (
+      {capabilities.length > 0 && (
         <div className="rounded-xl border border-border/40 bg-card p-5">
           <h3 className="text-sm font-medium text-foreground mb-3">
             What this integration will do
           </h3>
           <ul className="space-y-2.5">
-            {catalog.capabilities.map((cap) => (
+            {capabilities.map((cap) => (
               <li key={cap.label} className="flex gap-3">
                 <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/40" />
                 <div>

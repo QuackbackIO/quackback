@@ -18,12 +18,12 @@ export type OnboardingStep =
   | '/auth/login'
   | '/onboarding/account'
   | '/onboarding/boards'
-  | '/onboarding/usecase'
+  | '/onboarding/complete'
   | '/onboarding/workspace'
 
 export function pickOnboardingStep({ session, state }: PickStepInput): OnboardingStep {
   if (!session?.userId) return '/onboarding/account'
-  if (!state) return '/onboarding/usecase'
+  if (!state) return '/onboarding/workspace'
 
   if (state.needsInvitation) return '/auth/login'
 
@@ -34,7 +34,10 @@ export function pickOnboardingStep({ session, state }: PickStepInput): Onboardin
   // was true, but that left useCase silently false-checkmarked when
   // an external pre-seed populated workspace without picking a use
   // case.
-  if (!state.setupState?.useCase) return '/onboarding/usecase'
-  if (!state.setupState?.steps?.workspace) return '/onboarding/workspace'
-  return '/onboarding/boards'
+  if (!state.setupState?.useCase || !state.setupState.steps.workspace) {
+    return '/onboarding/workspace'
+  }
+  if (!state.setupState.steps.startingPoint) return '/onboarding/boards'
+  if (!state.setupState.activationHandoffSeenAt) return '/onboarding/complete'
+  return '/admin'
 }

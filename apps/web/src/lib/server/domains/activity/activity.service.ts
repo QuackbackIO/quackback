@@ -31,8 +31,6 @@ export type ActivityType =
   | 'owner.unassigned'
   | 'tags.added'
   | 'tags.removed'
-  | 'roadmap.added'
-  | 'roadmap.removed'
   | 'comments.locked'
   | 'comments.unlocked'
   | 'comment.pinned'
@@ -40,6 +38,7 @@ export type ActivityType =
   | 'comment.deleted'
   | 'comment.removed'
   | 'comment.restored'
+  | 'external.status_changed'
 
 export interface CreateActivityOpts {
   postId: PostId
@@ -52,7 +51,9 @@ export interface ActivityRow {
   id: string
   postId: string
   principalId: string | null
-  type: ActivityType
+  // Stored rows may contain retired activity values. Reads keep the raw string,
+  // while CreateActivityOpts only accepts currently supported variants.
+  type: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata: Record<string, any>
   createdAt: Date

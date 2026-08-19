@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { InternalError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import {
   successResponse,
@@ -14,7 +15,7 @@ import {
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { BoardId, PrincipalId, StatusId, TagId } from '@quackback/ids'
+import type { BoardId, PrincipalId, PostStatusId, PostTagId } from '@quackback/ids'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 // Input validation schemas
@@ -37,7 +38,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           const url = new URL(request.url)
 
@@ -65,7 +66,9 @@ export const Route = createFileRoute('/api/v1/posts/')({
           const { listInboxPosts } = await import('@/lib/server/domains/posts/post.inbox')
 
           const tagIdArray = tagIdsParam
-            ? (tagIdsParam.split(',').filter((id) => id && isValidTypeId(id, 'tag')) as TagId[])
+            ? (tagIdsParam
+                .split(',')
+                .filter((id) => id && isValidTypeId(id, 'post_tag')) as PostTagId[])
             : undefined
 
           const dateFrom = dateFromParam ? new Date(dateFromParam) : undefined
@@ -128,7 +131,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
        */
       POST: async ({ request }) => {
         try {
-          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_CREATE })
 
           const body = await request.json()
           const parsed = createPostSchema.safeParse(body)
@@ -140,12 +143,12 @@ export const Route = createFileRoute('/api/v1/posts/')({
           }
 
           const boardId = parseTypeId<BoardId>(parsed.data.boardId, 'board', 'board ID')
-          const statusId = parseOptionalTypeId<StatusId>(
+          const statusId = parseOptionalTypeId<PostStatusId>(
             parsed.data.statusId,
-            'status',
+            'post_status',
             'status ID'
           )
-          const tagIds = parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
+          const tagIds = parseTypeIdArray<PostTagId>(parsed.data.tagIds, 'post_tag', 'tag IDs')
 
           // Admin-only override; mirrors how createdAt is gated below.
           const overridePrincipalId =

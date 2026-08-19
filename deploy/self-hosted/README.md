@@ -10,6 +10,7 @@ Deploy Quackback on your own infrastructure with full control over your data.
 - [Database Setup](#database-setup)
 - [Building from Source](#building-from-source)
 - [Reverse Proxy](#reverse-proxy)
+- [Scaling Out](#scaling-out)
 - [Enterprise Edition](#enterprise-edition)
 - [Upgrading](#upgrading)
 - [Troubleshooting](#troubleshooting)
@@ -92,12 +93,14 @@ docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 
 ### Optional
 
-| Variable               | Description             | Default      |
-| ---------------------- | ----------------------- | ------------ |
-| `PORT`                 | Server port             | `3000`       |
-| `NODE_ENV`             | Environment             | `production` |
-| `EMAIL_RESEND_API_KEY` | Email service (Resend)  | -            |
-| `EMAIL_FROM`           | From address for emails | -            |
+| Variable               | Description                                                               | Default      |
+| ---------------------- | ------------------------------------------------------------------------- | ------------ |
+| `PORT`                 | Server port                                                               | `3000`       |
+| `NODE_ENV`             | Environment                                                               | `production` |
+| `QUACKBACK_ROLE`       | Process role: `all`, `web`, or `worker` (see [Scaling Out](#scaling-out)) | `all`        |
+| `SKIP_MIGRATIONS`      | Skip the startup migration step (run migrations out-of-band instead)      | `false`      |
+| `EMAIL_RESEND_API_KEY` | Email service (Resend)                                                    | -            |
+| `EMAIL_FROM`           | From address for emails                                                   | -            |
 
 ### Integrations (Optional)
 
@@ -255,6 +258,94 @@ services:
       - 'traefik.enable=true'
       - 'traefik.http.routers.quackback.rule=Host(`feedback.yourcompany.com`)'
       - 'traefik.http.routers.quackback.tls.certresolver=letsencrypt'
+```
+
+---
+
+## Scaling Out
+
+For deployments with higher load or stricter uptime requirements, run multiple instances:
+
+| Role     | Purpose                                  | Replicas | Notes                                    |
+| -------- | ---------------------------------------- | -------- | ---------------------------------------- |
+| `all`    | HTTP, background workers, and sweepers   | 1        | Default; suitable for single-node setups |
+| `web`    | HTTP only, enqueues but does not consume | 1+       | Safe to scale horizontally               |
+| `worker` | Background workers and sweepers          | 1+       | Required for background jobs to run      |
+
+All replicas must share the same PostgreSQL, Redis, and S3-compatible storage.
+
+Sticky sessions are not required. Realtime features use Redis pub/sub.
+
+Run at least one `worker` replica (or use `all`) at all times, or background jobs like email polling, workflow timers, and analytics refresh will not execute. Multiple worker replicas are safe; jobs are processed exactly once via the shared queue.
+
+### Docker Compose Example
+
+The datastores (Postgres, Dragonfly, MinIO) are the same as in `docker-compose.prod.yml`. The app splits into a scaled `web` service and a `worker` service running the same image. Web replicas cannot each publish port 3000 on the host, so run a reverse proxy or load balancer (see [Reverse Proxy](#reverse-proxy)) in front of the `web` service and let Compose's internal DNS balance across replicas.
+
+```yaml
+services:
+  # postgres, minio: same as docker-compose.prod.yml
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
+    # BullMQ requires cluster_mode=emulated + lock_on_hashtags.
+    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
+    volumes:
+      - dragonfly_data:/data
+
+  web:
+    image: ghcr.io/quackbackio/quackback:latest
+    environment:
+      QUACKBACK_ROLE: web
+      SKIP_MIGRATIONS: 'true'
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/quackback
+      REDIS_URL: redis://dragonfly:6379
+      SECRET_KEY: ${SECRET_KEY}
+      BASE_URL: ${BASE_URL}
+      # plus your S3_* and email settings, same as docker-compose.prod.yml
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - dragonfly
+      - minio
+    deploy:
+      replicas: 3
+
+  worker:
+    image: ghcr.io/quackbackio/quackback:latest
+    environment:
+      QUACKBACK_ROLE: worker
+      SKIP_MIGRATIONS: 'true'
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/quackback
+      REDIS_URL: redis://dragonfly:6379
+      SECRET_KEY: ${SECRET_KEY}
+      BASE_URL: ${BASE_URL}
+      # plus your S3_* and email settings, same as docker-compose.prod.yml
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - dragonfly
+      - minio
+    deploy:
+      replicas: 1
+
+volumes:
+  dragonfly_data:
+```
+
+### Database Migrations at Scale
+
+With a single replica, migrations run automatically on startup. With multiple replicas, set `SKIP_MIGRATIONS=true` on every container (as above) so replicas do not race each other, and run migrations as a separate step before rolling out a new version:
+
+```bash
+# Run migrations as a one-off container on the same network
+docker run --rm \
+  --network <your-compose-network> \
+  -e DATABASE_URL="postgresql://postgres:password@postgres:5432/quackback" \
+  ghcr.io/quackbackio/quackback:latest \
+  bun /app/migrate.mjs
+
+# Then roll out the new image to web and worker replicas
 ```
 
 ---

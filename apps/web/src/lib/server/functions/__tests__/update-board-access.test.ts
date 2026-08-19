@@ -284,13 +284,12 @@ describe('updateBoardAccessFn — auth + not-found', () => {
     expect(state.auditEvents).toEqual([])
   })
 
-  it('rejects non-admin (member) with ForbiddenError', async () => {
-    const { ForbiddenError } = await import('@/lib/shared/errors')
+  it('rejects a caller lacking board.manage', async () => {
+    // updateBoardAccess now gates on board.manage (the single board permission,
+    // which also covers the access matrix); a caller without it is denied by
+    // requireAuth. Managers hold board.manage, so the bar is no longer admin-only.
     mockRequireAuth.mockReset()
-    mockRequireAuth.mockResolvedValue({
-      ...AUTH_ADMIN,
-      principal: { ...AUTH_ADMIN.principal, role: 'member' as const },
-    })
+    mockRequireAuth.mockRejectedValue(new Error('Access denied'))
     await expect(
       getUpdateBoardAccessFn()({
         data: {
@@ -305,7 +304,7 @@ describe('updateBoardAccessFn — auth + not-found', () => {
           },
         },
       })
-    ).rejects.toBeInstanceOf(ForbiddenError)
+    ).rejects.toThrow('Access denied')
   })
 
   it('returns NotFoundError for missing boardId', async () => {

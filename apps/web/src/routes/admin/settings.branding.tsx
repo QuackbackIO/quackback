@@ -1,20 +1,27 @@
-import { useState, useEffect, useRef } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import {
   SunIcon,
   MoonIcon,
-  CheckIcon,
   ArrowPathIcon,
   CameraIcon,
   PaintBrushIcon,
+  ComputerDesktopIcon,
+  DevicePhoneMobileIcon,
+  ArrowTopRightOnSquareIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/solid'
+import type { JSONContent } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -25,309 +32,387 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ImageCropper } from '@/components/ui/image-cropper'
-import CodeMirror from '@uiw/react-codemirror'
-import { css } from '@codemirror/lang-css'
-import { EditorView } from '@codemirror/view'
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { tags } from '@lezer/highlight'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
+import { PortalPreview } from '@/components/admin/settings/branding/portal-preview'
 import {
-  BrandingLayout,
-  BrandingControlsPanel,
-  BrandingPreviewPanel,
-} from '@/components/admin/settings/branding/branding-layout'
-import { ThemePreview } from '@/components/admin/settings/branding/theme-preview'
+  PortalNavEditor,
+  isValidNavLinkUrl,
+} from '@/components/admin/settings/branding/portal-nav-editor'
+import {
+  seedNavEditorItems,
+  type PortalBuiltInNavType,
+} from '@/components/public/portal-header-nav'
+import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
+import { loadBrandingFont } from '@/lib/shared/theme'
 import {
   useBrandingState,
   FONT_OPTIONS,
 } from '@/components/admin/settings/branding/use-branding-state'
-import { oklchColor } from '@/components/admin/settings/branding/oklch-color-extension'
-import { primaryPresetIds, themePresets, type ThemeConfig } from '@/lib/shared/theme'
-import { useSettingsLogo } from '@/lib/client/hooks/use-settings-queries'
-import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
-import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
-import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
+import {
+  primaryPresetIds,
+  themePresets,
+  type ThemeConfig,
+  type ThemeMode,
+} from '@/lib/shared/theme'
+import { useSettingsLogo, useSettingsFavicon } from '@/lib/client/hooks/use-settings-queries'
+import {
+  useUploadWorkspaceLogo,
+  useDeleteWorkspaceLogo,
+  useUploadPortalOgImage,
+  useDeletePortalOgImage,
+  useUploadFavicon,
+  useDeleteFavicon,
+  useUpdatePortalConfig,
+} from '@/lib/client/mutations/settings'
+import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import {
+  DEFAULT_PORTAL_CONFIG,
+  PORTAL_WELCOME_CARD_TITLE_MAX,
+  isProductEnabled,
+} from '@/lib/shared/types/settings'
+import type {
+  PortalConfig,
+  PortalNavItemConfig,
+  PortalWelcomeCard,
+} from '@/lib/shared/types/settings'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
-// ==============================================
-// Custom CodeMirror theme using admin portal CSS variables
-// ==============================================
-const adminEditorTheme = EditorView.theme({
-  '&': {
-    backgroundColor: 'transparent',
-    color: 'var(--foreground)',
-  },
-  '.cm-content': {
-    caretColor: 'var(--foreground)',
-    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
-    fontSize: '0.75rem',
-    lineHeight: '1.625',
-  },
-  '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--foreground)',
-  },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 20%, transparent)',
-  },
-  '.cm-activeLine': {
-    backgroundColor: 'transparent',
-  },
-  '.cm-gutters': {
-    backgroundColor: 'transparent',
-    borderRight: 'none',
-    color: 'var(--muted-foreground)',
-  },
-  '.cm-activeLineGutter': {
-    backgroundColor: 'transparent',
-  },
-  '.cm-tooltip': {
-    backgroundColor: 'var(--popover)',
-    color: 'var(--popover-foreground)',
-    border: '1px solid var(--border)',
-    borderRadius: 'calc(var(--radius) - 2px)',
-  },
-  '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-    backgroundColor: 'var(--accent)',
-    color: 'var(--accent-foreground)',
-  },
-  '.cm-searchMatch': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 30%, transparent)',
-  },
-  '.cm-selectionMatch': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 15%, transparent)',
-  },
-  '&.cm-focused .cm-matchingBracket': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 25%, transparent)',
-    outline: 'none',
-  },
-  '.cm-placeholder': {
-    color: 'var(--muted-foreground)',
-  },
-})
-
-const adminHighlightStyle = syntaxHighlighting(
-  HighlightStyle.define([
-    { tag: tags.keyword, color: 'var(--primary)' },
-    { tag: tags.propertyName, color: 'var(--chart-1, var(--primary))' },
-    { tag: [tags.string, tags.inserted], color: 'var(--chart-5, var(--primary))' },
-    { tag: [tags.number, tags.color], color: 'var(--chart-4, var(--primary))' },
-    { tag: [tags.className, tags.tagName], color: 'var(--chart-2, var(--primary))' },
-    { tag: tags.punctuation, color: 'var(--muted-foreground)' },
-    { tag: tags.separator, color: 'var(--muted-foreground)' },
-    { tag: tags.comment, color: 'var(--muted-foreground)', fontStyle: 'italic' },
-    { tag: tags.invalid, color: 'var(--destructive)' },
-  ])
+// @uiw/react-codemirror + @codemirror/lang-css make this the largest route
+// chunk in the app, yet most visits never open the "Advanced CSS" panel —
+// defer it to its own chunk, loaded only when the <details> is expanded.
+const CustomCssEditor = lazy(() =>
+  import('@/components/admin/settings/branding/custom-css-editor').then((m) => ({
+    default: m.CustomCssEditor,
+  }))
 )
 
-const adminEditorExtensions = [css(), oklchColor, adminEditorTheme, adminHighlightStyle]
+// Fixed-height skeleton matching the editor's rendered height (280px) plus
+// its border, so the Advanced CSS panel doesn't jump while the chunk loads.
+function CustomCssEditorFallback() {
+  return (
+    <div
+      className="h-[280px] animate-pulse rounded-md border border-input bg-muted/30"
+      aria-hidden="true"
+    />
+  )
+}
 
 export const Route = createFileRoute('/admin/settings/branding')({
   loader: async ({ context }) => {
+    // Portal config reads/writes require settings.branding, which non-admin
+    // team roles lack — gate the page like the old Portal page did instead
+    // of letting managers land on a shell full of 403s.
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
+
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
+      context.queryClient.ensureQueryData(settingsQueries.portalOgImage()),
+      context.queryClient.ensureQueryData(settingsQueries.favicon()),
       context.queryClient.ensureQueryData(settingsQueries.customCss()),
+      context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
     ])
   },
   component: BrandingPage,
 })
 
 function BrandingPage() {
-  const { settings, managedFieldPaths } = Route.useRouteContext()
-  const workspaceNameManaged = isPathManagedFromBootstrap(
-    MANAGED_PATHS.WORKSPACE_NAME,
-    managedFieldPaths ?? []
-  )
+  const router = useRouter()
+  const { settings } = Route.useRouteContext()
+  const [, startTransition] = useTransition()
+  // Display-only: the name is edited on Workspace > General.
+  const workspaceName = settings?.name || ''
+
   const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
   const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
   const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const config = portalConfigQuery.data as PortalConfig
 
-  const initialLogoUrl = logoData?.url ?? null
+  const updatePortalConfig = useUpdatePortalConfig()
 
-  // Unified branding state
+  // ============================================
+  // Draft state. Everything below commits through the contextual save bar;
+  // image uploads are the deliberate exception (they apply immediately).
+  // ============================================
   const state = useBrandingState({
-    initialLogoUrl,
+    initialLogoUrl: logoData?.url ?? null,
     initialThemeConfig: brandingConfig as ThemeConfig,
     initialCustomCss: customCss,
   })
 
-  // Workspace name state
-  const [workspaceName, setWorkspaceName] = useState(settings?.name || '')
-  const [isSavingName, setIsSavingName] = useState(false)
-  const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Baselines for dirty tracking — captured once from the loaded values,
+  // advanced after a successful save or an explicit discard.
+  const themeBaseline = useRef({ css: state.cssText, mode: state.themeMode })
 
-  // Timer cleanup on unmount to prevent state updates after unmount
+  // Keep the currently-selected font's stylesheet loaded in this document so
+  // the Select trigger's own font-preview span (and the "Font" summary text)
+  // render in the real typeface, not the fallback stack, while it's async.
   useEffect(() => {
-    return () => {
-      if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current)
-    }
-  }, [])
+    loadBrandingFont(state.currentFontId)
+  }, [state.currentFontId])
 
-  // Debounced workspace name save
-  const handleNameChange = (value: string) => {
-    setWorkspaceName(value)
-    if (nameTimeoutRef.current) {
-      clearTimeout(nameTimeoutRef.current)
+  const [welcomeEnabled, setWelcomeEnabled] = useState(config.welcomeCard?.enabled ?? false)
+  const [welcomeTitle, setWelcomeTitle] = useState(
+    config.welcomeCard?.title ?? DEFAULT_PORTAL_CONFIG.welcomeCard!.title
+  )
+  const [welcomeBody, setWelcomeBody] = useState<TiptapContent>(
+    config.welcomeCard?.body ?? DEFAULT_PORTAL_CONFIG.welcomeCard!.body
+  )
+  const welcomeBaseline = useRef(
+    JSON.stringify({ enabled: welcomeEnabled, title: welcomeTitle, body: welcomeBody })
+  )
+
+  const [navItems, setNavItems] = useState<PortalNavItemConfig[]>(() =>
+    seedNavEditorItems(config.nav)
+  )
+  const navBaseline = useRef(JSON.stringify(navItems))
+
+  const [saving, setSaving] = useState(false)
+
+  const themeDirty =
+    state.cssText !== themeBaseline.current.css || state.themeMode !== themeBaseline.current.mode
+  const welcomeDirty =
+    JSON.stringify({ enabled: welcomeEnabled, title: welcomeTitle, body: welcomeBody }) !==
+    welcomeBaseline.current
+  const navDirty = JSON.stringify(navItems) !== navBaseline.current
+  const isDirty = themeDirty || welcomeDirty || navDirty
+
+  // Navigating away with unsaved edits prompts; closing the tab warns too.
+  useBlocker({
+    shouldBlockFn: () => {
+      if (!isDirty || saving) return false
+      return !window.confirm('You have unsaved branding changes. Leave without saving?')
+    },
+    enableBeforeUnload: () => isDirty,
+  })
+
+  async function handleSave() {
+    // Links with a typed-but-invalid URL would silently vanish from the
+    // portal nav — surface it instead of saving.
+    const brokenLink = navItems.find(
+      (i) => i.type === 'link' && !!i.url && !isValidNavLinkUrl(i.url)
+    )
+    if (navDirty && brokenLink) {
+      toast.error('Fix the link URL before saving (links need a full https:// address).')
+      return
     }
-    nameTimeoutRef.current = setTimeout(async () => {
-      if (value.trim() && value !== settings?.name) {
-        setIsSavingName(true)
-        try {
-          await updateWorkspaceNameFn({ data: { name: value.trim() } })
-        } catch {
-          toast.error('Failed to update workspace name')
-        } finally {
-          setIsSavingName(false)
-        }
+
+    setSaving(true)
+    try {
+      if (themeDirty) {
+        await state.saveTheme()
+        themeBaseline.current = { css: state.cssText, mode: state.themeMode }
       }
-    }, 800)
+      if (welcomeDirty || navDirty) {
+        // Placeholder link rows (no URL yet) are drafts, not config.
+        const items = navItems.filter((i) => i.type !== 'link' || !!i.url)
+        await updatePortalConfig.mutateAsync({
+          ...(welcomeDirty
+            ? { welcomeCard: { enabled: welcomeEnabled, title: welcomeTitle, body: welcomeBody } }
+            : {}),
+          ...(navDirty ? { nav: { items } } : {}),
+        })
+        welcomeBaseline.current = JSON.stringify({
+          enabled: welcomeEnabled,
+          title: welcomeTitle,
+          body: welcomeBody,
+        })
+        navBaseline.current = JSON.stringify(navItems)
+      }
+
+      toast.success('Branding saved')
+      startTransition(() => router.invalidate())
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save branding. Try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
+  function handleDiscard() {
+    state.setCssText(themeBaseline.current.css)
+    state.setThemeMode(themeBaseline.current.mode)
+    const welcome = JSON.parse(welcomeBaseline.current) as {
+      enabled: boolean
+      title: string
+      body: TiptapContent
+    }
+    setWelcomeEnabled(welcome.enabled)
+    setWelcomeTitle(welcome.title)
+    setWelcomeBody(welcome.body)
+    setNavItems(JSON.parse(navBaseline.current) as PortalNavItemConfig[])
+  }
+
+  // ============================================
+  // Preview wiring
+  // ============================================
+  const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
+  // Which built-in tabs are currently unavailable (product/tab off) — the
+  // editor keeps their rows but renders them inert. Mirrors portal-header.
+  const gatedTypes = useMemo(() => {
+    const flags = settings?.featureFlags
+    const gates: Record<PortalBuiltInNavType, boolean> = {
+      feedback: isProductEnabled(flags, 'feedback'),
+      roadmap: isProductEnabled(flags, 'feedback'),
+      changelog:
+        isProductEnabled(flags, 'changelog') &&
+        (settings?.changelogConfig?.portalTabEnabled ?? true),
+      help: isProductEnabled(flags, 'helpCenter') && !!settings?.helpCenterConfig?.enabled,
+      support:
+        !!flags?.supportTickets ||
+        (!!flags?.supportInbox && !!settings?.portalConfig?.support?.enabled),
+      status:
+        isProductEnabled(flags, 'status') &&
+        !!settings?.statusConfig?.enabled &&
+        (settings?.statusConfig?.portalTabEnabled ?? true),
+    }
+    return new Set(
+      (Object.keys(gates) as PortalBuiltInNavType[]).filter((type) => !gates[type])
+    ) as ReadonlySet<string>
+  }, [settings])
+
+  // Structural drafts pushed into the preview iframe (postMessage, no reload).
+  const previewDraft = useMemo<PortalPreviewDraft>(
+    () => ({
+      nav: { items: navItems },
+      welcomeCard: {
+        enabled: welcomeEnabled,
+        title: welcomeTitle,
+        body: welcomeBody,
+      } satisfies PortalWelcomeCard,
+    }),
+    [navItems, welcomeEnabled, welcomeTitle, welcomeBody]
+  )
+
+  // Saved-config remount signal: changes exactly when a save (or upload) lands.
+  const refreshKey = useMemo(
+    () => JSON.stringify([brandingConfig, customCss, config, logoData]),
+    [brandingConfig, customCss, config, logoData]
+  )
+
   return (
-    <>
-      <div className="space-y-6 max-w-5xl">
-        <div className="lg:hidden">
-          <BackLink to="/admin/settings">Settings</BackLink>
-        </div>
-        <PageHeader
-          icon={PaintBrushIcon}
-          title="Branding"
-          description="Customize your portal's appearance and branding"
-        />
+    <div className="space-y-6">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
+      <PageHeader
+        icon={PaintBrushIcon}
+        title="Branding"
+        description="Everything visitors see on your portal — identity, theme, navigation, and content"
+      />
 
-        {/* Two-Column Layout */}
-        <BrandingLayout>
-          <BrandingControlsPanel>
-            {/* Identity Section */}
-            <div className="p-4 sm:p-6 space-y-4">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Identity</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  How your brand appears in the portal header
-                </p>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
-                <div className="flex-1 space-y-1.5">
-                  <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-                    Workspace Name
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="workspace-name"
-                      value={workspaceName}
-                      onChange={(e) => handleNameChange(e.target.value)}
-                      placeholder="My Workspace"
-                      disabled={workspaceNameManaged}
-                    />
-                    {isSavingName && (
-                      <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
-                  </div>
-                  {workspaceNameManaged && (
-                    <p className="text-xs text-muted-foreground">
-                      Managed by your administrator&apos;s config — edit there.
-                    </p>
-                  )}
-                </div>
-              </div>
+      {/* Controls left, live portal preview right (sticky). */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,460px)_minmax(0,1fr)] gap-6 items-start">
+        <div className="space-y-4 min-w-0">
+          <SettingsCard
+            title="Identity"
+            description="The portal header shows your logo and workspace name; the name is edited under General settings"
+          >
+            <div className="flex flex-wrap items-start gap-6">
+              <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
+              <FaviconUploader workspaceName={workspaceName} />
             </div>
+          </SettingsCard>
 
-            {/* Theme Mode Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Theme Mode</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Control how light/dark mode works for portal visitors
-                </p>
+          <SettingsCard
+            title="Social share image"
+            description="Shown when your portal link is shared on social media or in chat apps. Falls back to your logo. Recommended 1200×630"
+          >
+            <OgImageUploader />
+          </SettingsCard>
+
+          <SettingsCard title="Appearance" description="Theme mode, color palette, and typography">
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Theme mode</Label>
+                <Select
+                  value={state.themeMode}
+                  onValueChange={(v) => state.setThemeMode(v as ThemeMode)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">User choice (allow toggle)</SelectItem>
+                    <SelectItem value="light">Light only</SelectItem>
+                    <SelectItem value="dark">Dark only</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <Select value={state.themeMode} onValueChange={state.setThemeMode}>
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">User choice (allow toggle)</SelectItem>
-                  <SelectItem value="light">Light only</SelectItem>
-                  <SelectItem value="dark">Dark only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Theme Preset Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Theme</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Choose a preset to set your portal's color palette
-                </p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                {primaryPresetIds.map((presetId) => {
-                  const preset = themePresets[presetId]
-                  if (!preset) return null
-                  const isActive = state.activePresetId === presetId
-                  return (
-                    <button
-                      key={presetId}
-                      onClick={() => state.setPreset(presetId)}
-                      className={cn(
-                        'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
-                        isActive
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
-                          : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
-                      )}
-                    >
-                      <div
-                        className="h-5 w-5 rounded-full border border-border/50"
-                        style={{ backgroundColor: preset.color }}
-                      />
-                      <span className="w-full truncate">{preset.name}</span>
-                      <span className="w-full text-xs text-muted-foreground leading-tight">
-                        {preset.description}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Typography Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Typography</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Font and corner styling</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Font</Label>
-                  <Select
-                    value={state.currentFontId}
-                    onValueChange={(id) => {
-                      const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
-                      if (selectedFont) state.setFont(selectedFont.value)
-                    }}
-                  >
-                    <SelectTrigger className="w-full h-10">
-                      <SelectValue>
-                        <span style={{ fontFamily: state.font }}>
-                          {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
-                            'Select font'}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Preset</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {primaryPresetIds.map((presetId) => {
+                    const preset = themePresets[presetId]
+                    if (!preset) return null
+                    const isActive = state.activePresetId === presetId
+                    return (
+                      <button
+                        key={presetId}
+                        onClick={() => state.setPreset(presetId)}
+                        className={cn(
+                          'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
+                          isActive
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
+                            : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
+                        )}
+                      >
+                        <div
+                          className="h-5 w-5 rounded-full border border-border/50"
+                          style={{ backgroundColor: preset.color }}
+                        />
+                        <span className="w-full truncate">{preset.name}</span>
+                        <span className="w-full text-xs text-muted-foreground leading-tight">
+                          {preset.description}
                         </span>
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[300px]">
-                      <FontSelectGroup category="Sans Serif" />
-                      <FontSelectGroup category="Serif" />
-                      <FontSelectGroup category="Monospace" />
-                      <FontSelectGroup category="System" />
-                    </SelectContent>
-                  </Select>
+                      </button>
+                    )
+                  })}
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Font</Label>
+                <Select
+                  value={state.currentFontId}
+                  onValueChange={(id) => {
+                    const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
+                    if (selectedFont) state.setFont(selectedFont.value)
+                  }}
+                  onOpenChange={(open) => {
+                    // Every option previews its own name in its own font, all
+                    // rendered at once — load every family the first time the
+                    // menu opens rather than trying to lazily match hover.
+                    if (open) {
+                      for (const f of FONT_OPTIONS) loadBrandingFont(f.id)
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      <span style={{ fontFamily: state.font }}>
+                        {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
+                          'Select font'}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    <FontSelectGroup category="Sans Serif" />
+                    <FontSelectGroup category="Serif" />
+                    <FontSelectGroup category="Monospace" />
+                    <FontSelectGroup category="System" />
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
@@ -349,115 +434,233 @@ function BrandingPage() {
                   />
                 </div>
               </div>
-            </div>
 
-            {/* CSS Editor Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Theme CSS</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Your full theme stylesheet. Design at{' '}
-                  <a
-                    href="https://tweakcn.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    tweakcn.com
-                  </a>
-                </p>
+              <details className="group rounded-lg border border-border/60 bg-muted/30">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-[13px] font-medium text-muted-foreground group-open:text-foreground [&::-webkit-details-marker]:hidden">
+                  Advanced CSS
+                  <span className="ms-auto flex items-center gap-3">
+                    <a
+                      href="https://tweakcn.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-primary hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Design at tweakcn.com
+                    </a>
+                    <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
+                  </span>
+                </summary>
+                <div className="px-3 pb-3">
+                  <Suspense fallback={<CustomCssEditorFallback />}>
+                    <CustomCssEditor value={state.cssText} onChange={state.setCssText} />
+                  </Suspense>
+                </div>
+              </details>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard
+            title="Navigation"
+            description="The portal's top tabs — applies everywhere the portal header shows, including help center and status pages"
+          >
+            <PortalNavEditor
+              items={navItems}
+              onChange={setNavItems}
+              gatedTypes={gatedTypes}
+              onReset={() => setNavItems(seedNavEditorItems(null))}
+            />
+            <p className="mt-3 text-xs text-muted-foreground">
+              Renamed tabs show your text in every language; untouched labels stay translated.
+            </p>
+          </SettingsCard>
+
+          <SettingsCard
+            title="Welcome card"
+            description="A customizable message above the post list on your portal home"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
+                <div>
+                  <Label htmlFor="welcome-enabled" className="text-sm font-medium cursor-pointer">
+                    Enable welcome card
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Shown at the top of the portal home page above the post list
+                  </p>
+                </div>
+                <Switch
+                  id="welcome-enabled"
+                  checked={welcomeEnabled}
+                  onCheckedChange={setWelcomeEnabled}
+                  aria-label="Enable welcome card"
+                />
               </div>
 
-              <CodeMirror
-                value={state.cssText}
-                onChange={state.setCssText}
-                height="280px"
-                theme="none"
-                extensions={adminEditorExtensions}
-                basicSetup={{
-                  lineNumbers: false,
-                  foldGutter: false,
-                  highlightActiveLine: false,
-                  bracketMatching: true,
-                  closeBrackets: true,
-                  autocompletion: true,
-                  tabSize: 2,
-                }}
-                className={cn(
-                  'overflow-hidden rounded-md border border-input',
-                  '[&_.cm-editor]:!outline-none',
-                  '[&_.cm-editor.cm-focused]:ring-1 [&_.cm-editor.cm-focused]:ring-ring',
-                  '[&_.cm-scroller]:overflow-auto'
-                )}
-              />
-            </div>
+              {/* Title and message stay editable when the card is disabled so
+                  admins can draft the next announcement without it going live
+                  the moment they flip the switch on. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="welcome-title" className="text-sm font-medium">
+                  Title
+                </Label>
+                <Input
+                  id="welcome-title"
+                  value={welcomeTitle}
+                  onChange={(e) => setWelcomeTitle(e.target.value)}
+                  placeholder="Share your product feedback!"
+                  maxLength={PORTAL_WELCOME_CARD_TITLE_MAX}
+                />
+              </div>
 
-            {/* Save Button */}
-            <div className="p-4 sm:p-6 border-t border-border">
-              <Button onClick={state.saveTheme} disabled={state.isSaving} className="w-full h-10">
-                {state.isSaving ? (
-                  <>
-                    <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : state.saveSuccess ? (
-                  <>
-                    <CheckIcon className="mr-2 h-4 w-4" />
-                    Saved!
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Message</Label>
+                <WelcomeBodyEditor value={welcomeBody} onChange={setWelcomeBody} />
+              </div>
+            </div>
+          </SettingsCard>
+        </div>
+
+        {/* ── Live portal preview ── */}
+        <div className="xl:sticky xl:top-6 min-w-0 self-start">
+          <div className="mb-3 flex items-center gap-3">
+            <span className="text-sm font-medium">Live preview</span>
+            <span className="hidden sm:inline text-xs text-muted-foreground">
+              the real portal, shown as you see it
+            </span>
+            <div className="ms-auto flex items-center gap-1.5">
+              <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+                <PreviewToggleButton
+                  active={state.previewMode === 'light'}
+                  disabled={state.previewModeDisabled === 'light'}
+                  onClick={() => state.setPreviewMode('light')}
+                  icon={SunIcon}
+                  label="Light"
+                />
+                <PreviewToggleButton
+                  active={state.previewMode === 'dark'}
+                  disabled={state.previewModeDisabled === 'dark'}
+                  onClick={() => state.setPreviewMode('dark')}
+                  icon={MoonIcon}
+                  label="Dark"
+                />
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+                <PreviewToggleButton
+                  active={viewport === 'desktop'}
+                  onClick={() => setViewport('desktop')}
+                  icon={ComputerDesktopIcon}
+                  label="Desktop"
+                  iconOnly
+                />
+                <PreviewToggleButton
+                  active={viewport === 'mobile'}
+                  onClick={() => setViewport('mobile')}
+                  icon={DevicePhoneMobileIcon}
+                  label="Mobile"
+                  iconOnly
+                />
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <a href="/" target="_blank" rel="noopener noreferrer">
+                  Open portal
+                  <ArrowTopRightOnSquareIcon className="size-3.5 ms-1.5" />
+                </a>
               </Button>
             </div>
-          </BrandingControlsPanel>
+          </div>
 
-          <BrandingPreviewPanel
-            label="Preview"
-            headerRight={
-              <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md">
-                <button
-                  onClick={() => state.setPreviewMode('light')}
-                  disabled={state.previewModeDisabled === 'light'}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                    state.previewMode === 'light'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                    state.previewModeDisabled === 'light' && 'opacity-40 cursor-not-allowed'
-                  )}
-                >
-                  <SunIcon className="h-3 w-3" />
-                  Light
-                </button>
-                <button
-                  onClick={() => state.setPreviewMode('dark')}
-                  disabled={state.previewModeDisabled === 'dark'}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                    state.previewMode === 'dark'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                    state.previewModeDisabled === 'dark' && 'opacity-40 cursor-not-allowed'
-                  )}
-                >
-                  <MoonIcon className="h-3 w-3" />
-                  Dark
-                </button>
-              </div>
-            }
-          >
-            <ThemePreview previewMode={state.previewMode} cssVariables={state.parsedCssVariables} />
-          </BrandingPreviewPanel>
-        </BrandingLayout>
+          {mounted && (
+            <PortalPreview
+              theme={state.previewMode}
+              refreshKey={refreshKey}
+              draftCss={state.cssText}
+              draft={previewDraft}
+              viewport={viewport}
+              workspaceName={workspaceName}
+              faviconUrl={logoData?.url ?? null}
+            />
+          )}
+        </div>
       </div>
-    </>
+
+      {/* Contextual save bar — appears only with unsaved changes. */}
+      <div
+        role="region"
+        aria-live="polite"
+        className={cn(
+          'fixed bottom-5 left-1/2 z-40 -translate-x-1/2 transition-all duration-200',
+          isDirty
+            ? 'visible translate-y-0 opacity-100'
+            : 'invisible pointer-events-none translate-y-16 opacity-0'
+        )}
+      >
+        <div className="flex items-center gap-1.5 rounded-xl bg-foreground py-1.5 ps-4 pe-1.5 text-background shadow-xl">
+          <span className="me-2 text-[13px] text-background/75">Unsaved changes</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-background/75 hover:bg-background/10 hover:text-background"
+            onClick={handleDiscard}
+            disabled={saving}
+          >
+            Discard
+          </Button>
+          <Button size="sm" variant="secondary" onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <>
+                <ArrowPathIcon className="me-1.5 size-3.5 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              'Save'
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Isolated so the rich-text editor's heavy deps don't re-render the page. */
+function WelcomeBodyEditor({
+  value,
+  onChange,
+}: {
+  value: TiptapContent
+  onChange: (v: TiptapContent) => void
+}) {
+  const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
+  return (
+    <RichTextEditor
+      value={value}
+      onChange={(json: JSONContent) => onChange(json as TiptapContent)}
+      placeholder="Tell visitors what kind of feedback you'd love to hear…"
+      minHeight="160px"
+      features={{
+        headings: true,
+        images: true,
+        codeBlocks: true,
+        taskLists: true,
+        blockquotes: true,
+        tables: true,
+        dividers: true,
+        bubbleMenu: true,
+        slashMenu: true,
+        embeds: true,
+        quackbackEmbeds: true,
+      }}
+      onImageUpload={uploadImage}
+    />
   )
 }
 
 // ==============================================
-// Inline Logo Uploader
+// Identity uploaders
 // ==============================================
+
+const RASTER_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
 interface LogoUploaderProps {
   workspaceName: string
   onLogoChange?: (url: string | null) => void
@@ -480,14 +683,11 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
     onLogoChange?.(logoUrl)
   }, [logoUrl, onLogoChange])
 
-  const handleLogoClick = () => fileInputRef.current?.click()
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
+    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
       toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
       return
     }
@@ -496,8 +696,7 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
       return
     }
 
-    const imageUrl = URL.createObjectURL(file)
-    setCropImageSrc(imageUrl)
+    setCropImageSrc(URL.createObjectURL(file))
     setShowCropper(true)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -508,12 +707,9 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
       setCropImageSrc(null)
     }
     uploadMutation.mutate(croppedBlob, {
-      onSuccess: () => {
-        toast.success('Logo updated')
-      },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Failed to upload logo')
-      },
+      onSuccess: () => toast.success('Logo updated'),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : 'Failed to upload logo'),
     })
   }
 
@@ -525,62 +721,43 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
     setShowCropper(open)
   }
 
-  const handleDeleteLogo = () => {
-    deleteMutation.mutate(undefined, {
-      onSuccess: () => {
-        toast.success('Logo removed')
-        onLogoChange?.(null)
-      },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Failed to remove logo')
-      },
-    })
-  }
-
-  const isUploading = uploadMutation.isPending
-  const isDeleting = deleteMutation.isPending
-
   return (
-    <div className="flex flex-col items-center gap-2">
-      {/* Logo Preview */}
+    <div className="flex flex-col items-center gap-1.5">
       <button
         type="button"
-        onClick={handleLogoClick}
-        disabled={isUploading}
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploadMutation.isPending}
         className="relative group cursor-pointer"
+        aria-label="Change workspace logo"
       >
         {logoUrl ? (
           <img
             src={logoUrl}
             alt={workspaceName}
-            className="h-16 w-16 rounded-xl object-cover border border-border transition-opacity group-hover:opacity-80"
+            className="h-14 w-14 rounded-xl object-cover border border-border transition-opacity group-hover:opacity-80"
           />
         ) : (
-          <div className="h-16 w-16 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold border border-border transition-opacity group-hover:opacity-80">
+          <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold border border-border transition-opacity group-hover:opacity-80">
             {workspaceName.charAt(0).toUpperCase() || 'W'}
           </div>
         )}
-        {isUploading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl">
-            <ArrowPathIcon className="h-5 w-5 animate-spin text-white" />
-          </div>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
-            <CameraIcon className="h-5 w-5 text-white" />
-          </div>
-        )}
+        <UploaderOverlay busy={uploadMutation.isPending} />
       </button>
-
-      {/* Remove button */}
+      <span className="text-[11px] text-muted-foreground">Logo</span>
       {hasCustomLogo && (
-        <button
-          type="button"
-          onClick={handleDeleteLogo}
-          disabled={isDeleting}
-          className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-        >
-          {isDeleting ? 'Removing...' : 'Remove'}
-        </button>
+        <RemoveAssetButton
+          pending={deleteMutation.isPending}
+          onClick={() =>
+            deleteMutation.mutate(undefined, {
+              onSuccess: () => {
+                toast.success('Logo removed')
+                onLogoChange?.(null)
+              },
+              onError: (error) =>
+                toast.error(error instanceof Error ? error.message : 'Failed to remove logo'),
+            })
+          }
+        />
       )}
 
       <input
@@ -603,6 +780,221 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
         />
       )}
     </div>
+  )
+}
+
+// Wide (1200×630) social share image for the portal's og:image meta tag.
+function OgImageUploader() {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+
+  const { data: ogImageData } = useSuspenseQuery(settingsQueries.portalOgImage())
+  const uploadMutation = useUploadPortalOgImage()
+  const deleteMutation = useDeletePortalOgImage()
+
+  const ogImageUrl = ogImageData?.url ?? null
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
+      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File too large. Maximum size is 5MB')
+      return
+    }
+
+    setCropImageSrc(URL.createObjectURL(file))
+    setShowCropper(true)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc)
+      setCropImageSrc(null)
+    }
+    uploadMutation.mutate(croppedBlob, {
+      onSuccess: () => toast.success('Social share image updated'),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : 'Failed to upload social share image'),
+    })
+  }
+
+  const handleCropperClose = (open: boolean) => {
+    if (!open && cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc)
+      setCropImageSrc(null)
+    }
+    setShowCropper(open)
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploadMutation.isPending}
+        className="relative group cursor-pointer w-full max-w-[320px]"
+        aria-label="Change social share image"
+      >
+        {ogImageUrl ? (
+          <img
+            src={ogImageUrl}
+            alt="Social share image preview"
+            className="w-full aspect-[1200/630] rounded-xl object-cover border border-border transition-opacity group-hover:opacity-80"
+          />
+        ) : (
+          <div className="w-full aspect-[1200/630] rounded-xl border border-dashed border-border bg-muted/30 flex items-center justify-center text-xs text-muted-foreground transition-colors group-hover:border-primary/50">
+            1200 × 630
+          </div>
+        )}
+        <UploaderOverlay busy={uploadMutation.isPending} />
+      </button>
+      {ogImageUrl && (
+        <RemoveAssetButton
+          pending={deleteMutation.isPending}
+          onClick={() =>
+            deleteMutation.mutate(undefined, {
+              onSuccess: () => toast.success('Social share image removed'),
+              onError: (error) =>
+                toast.error(
+                  error instanceof Error ? error.message : 'Failed to remove social share image'
+                ),
+            })
+          }
+        />
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          open={showCropper}
+          onOpenChange={handleCropperClose}
+          onCropComplete={handleCropComplete}
+          aspectRatio={1200 / 630}
+          maxOutputSize={1200}
+          cropShape="rect"
+          title="Crop your social share image"
+        />
+      )}
+    </div>
+  )
+}
+
+function FaviconUploader({ workspaceName }: { workspaceName: string }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { data: faviconData } = useSettingsFavicon()
+  const uploadMutation = useUploadFavicon()
+  const deleteMutation = useDeleteFavicon()
+
+  const faviconUrl = faviconData?.url ?? null
+  const hasCustomFavicon = !!faviconUrl
+
+  // Favicons render at 16–32px, so no cropper — the file uploads as picked.
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
+      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File too large. Maximum size is 5MB')
+      return
+    }
+
+    uploadMutation.mutate(file, {
+      onSuccess: () => toast.success('Favicon updated'),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : 'Failed to upload favicon'),
+    })
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploadMutation.isPending}
+        className="relative group cursor-pointer"
+        aria-label="Change workspace favicon"
+      >
+        {faviconUrl ? (
+          <img
+            src={faviconUrl}
+            alt={`${workspaceName} favicon`}
+            className="h-14 w-14 rounded-xl object-contain border border-border p-2 transition-opacity group-hover:opacity-80"
+          />
+        ) : (
+          <div className="h-14 w-14 rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground transition-opacity group-hover:opacity-80">
+            <CameraIcon className="h-5 w-5" />
+          </div>
+        )}
+        <UploaderOverlay busy={uploadMutation.isPending} />
+      </button>
+      <span className="text-[11px] text-muted-foreground">Favicon</span>
+      {hasCustomFavicon && (
+        <RemoveAssetButton
+          pending={deleteMutation.isPending}
+          onClick={() =>
+            deleteMutation.mutate(undefined, {
+              onSuccess: () => toast.success('Favicon removed'),
+              onError: (error) =>
+                toast.error(error instanceof Error ? error.message : 'Failed to remove favicon'),
+            })
+          }
+        />
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+    </div>
+  )
+}
+
+function UploaderOverlay({ busy }: { busy: boolean }) {
+  return busy ? (
+    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50">
+      <ArrowPathIcon className="h-5 w-5 animate-spin text-white" />
+    </div>
+  ) : (
+    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+      <CameraIcon className="h-5 w-5 text-white" />
+    </div>
+  )
+}
+
+function RemoveAssetButton({ pending, onClick }: { pending: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+    >
+      {pending ? 'Removing…' : 'Remove'}
+    </button>
   )
 }
 

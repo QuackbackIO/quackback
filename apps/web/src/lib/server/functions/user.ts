@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Role } from '@/lib/shared/roles'
 import { createServerFn } from '@tanstack/react-start'
 import { type UserId, type PrincipalId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
@@ -9,8 +10,8 @@ import {
   user,
   principal,
   posts,
-  votes,
-  comments,
+  postVotes,
+  postComments,
   eq,
   and,
   isNull,
@@ -22,6 +23,7 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from '@/lib/server/domains/subscriptions/subscription.service'
+import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'user' })
@@ -46,10 +48,20 @@ const saveAvatarKeySchema = z.object({
     .refine((k) => !k.includes('..'), 'Avatar key must not contain path traversal'),
 })
 
+const notificationChannelSchema = z.enum(['inApp', 'email', 'push'])
+
+// The UI always sends the FULL desired matrix on any single-cell change (it
+// reads the current matrix, applies the one toggle, and writes the whole
+// object back) — so the server does a plain replace of whatever it's given
+// here rather than merging per-cell. See NotificationMatrix in
+// notification-matrix.ts for the shape/precedence rules.
 const updateNotificationPreferencesSchema = z.object({
   emailStatusChange: z.boolean().optional(),
   emailNewComment: z.boolean().optional(),
   emailMuted: z.boolean().optional(),
+  matrix: z
+    .partialRecord(z.string(), z.partialRecord(notificationChannelSchema, z.boolean()))
+    .optional(),
 })
 
 // ============================================
@@ -79,6 +91,7 @@ export interface NotificationPreferences {
   emailStatusChange: boolean
   emailNewComment: boolean
   emailMuted: boolean
+  matrix?: NotificationMatrix
 }
 
 // ============================================
@@ -120,54 +133,49 @@ async function deleteExistingAvatar(userId: string): Promise<string | null> {
 export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserProfile> => {
     log.debug('get profile')
-    try {
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
 
-      const userRecord = await db.query.user.findFirst({
-        where: eq(user.id, session.user.id),
-        columns: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
-          imageKey: true,
-        },
-      })
+    const userRecord = await db.query.user.findFirst({
+      where: eq(user.id, session.user.id),
+      columns: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        imageKey: true,
+      },
+    })
 
-      if (!userRecord) {
-        throw new Error('User not found')
-      }
+    if (!userRecord) {
+      throw new Error('User not found')
+    }
 
-      // Get principal record to determine userType
-      const principalRecord = await db.query.principal.findFirst({
-        where: eq(principal.userId, session.user.id as UserId),
-        columns: { role: true },
-      })
+    // Get principal record to determine userType
+    const principalRecord = await db.query.principal.findFirst({
+      where: eq(principal.userId, session.user.id as UserId),
+      columns: { role: true },
+    })
 
-      const principalRole = principalRecord?.role
-      let userType: 'team' | 'portal' | undefined
-      if (principalRole === 'user') {
-        userType = 'portal'
-      } else if (principalRole) {
-        userType = 'team'
-      }
+    const principalRole = principalRecord?.role
+    let userType: 'team' | 'portal' | undefined
+    if (principalRole === 'user') {
+      userType = 'portal'
+    } else if (principalRole) {
+      userType = 'team'
+    }
 
-      log.debug({ user_id: userRecord.id, user_type: userType }, 'profile fetched')
-      return {
-        id: userRecord.id,
-        name: userRecord.name,
-        email: userRecord.email,
-        image: userRecord.image,
-        imageKey: userRecord.imageKey,
-        hasCustomAvatar: !!userRecord.imageKey,
-        userType,
-      }
-    } catch (error) {
-      log.error({ err: error }, 'get profile failed')
-      throw error
+    log.debug({ user_id: userRecord.id, user_type: userType }, 'profile fetched')
+    return {
+      id: userRecord.id,
+      name: userRecord.name,
+      email: userRecord.email,
+      image: userRecord.image,
+      imageKey: userRecord.imageKey,
+      hasCustomAvatar: !!userRecord.imageKey,
+      userType,
     }
   }
 )
@@ -180,28 +188,23 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .validator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
     log.debug('update profile name')
-    try {
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
-      const { name } = data
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
+    const { name } = data
 
-      const [updated] = await db
-        .update(user)
-        .set({ name: name.trim() })
-        .where(eq(user.id, session.user.id))
-        .returning()
+    const [updated] = await db
+      .update(user)
+      .set({ name: name.trim() })
+      .where(eq(user.id, session.user.id))
+      .returning()
 
-      await syncPrincipalProfile(updated.id as UserId, { displayName: name.trim() })
-      log.info({ user_id: updated.id }, 'profile name updated')
-      return {
-        ...updated,
-        hasCustomAvatar: !!updated.imageKey,
-      }
-    } catch (error) {
-      log.error({ err: error }, 'update profile name failed')
-      throw error
+    await syncPrincipalProfile(updated.id as UserId, { displayName: name.trim() })
+    log.info({ user_id: updated.id }, 'profile name updated')
+    return {
+      ...updated,
+      hasCustomAvatar: !!updated.imageKey,
     }
   })
 
@@ -212,29 +215,24 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
     log.debug('remove avatar')
-    try {
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
 
-      await deleteExistingAvatar(session.user.id)
+    await deleteExistingAvatar(session.user.id)
 
-      const [updated] = await db
-        .update(user)
-        .set({ imageKey: null })
-        .where(eq(user.id, session.user.id))
-        .returning()
+    const [updated] = await db
+      .update(user)
+      .set({ imageKey: null })
+      .where(eq(user.id, session.user.id))
+      .returning()
 
-      await syncPrincipalProfile(updated.id as UserId, { avatarKey: null })
-      log.info({ user_id: updated.id }, 'avatar removed')
-      return {
-        ...updated,
-        hasCustomAvatar: false,
-      }
-    } catch (error) {
-      log.error({ err: error }, 'remove avatar failed')
-      throw error
+    await syncPrincipalProfile(updated.id as UserId, { avatarKey: null })
+    log.info({ user_id: updated.id }, 'avatar removed')
+    return {
+      ...updated,
+      hasCustomAvatar: false,
     }
   }
 )
@@ -247,26 +245,21 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
   .validator(saveAvatarKeySchema)
   .handler(async ({ data }: { data: z.infer<typeof saveAvatarKeySchema> }) => {
     log.debug('save avatar key')
-    try {
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
-
-      await deleteExistingAvatar(session.user.id)
-
-      const [updated] = await db
-        .update(user)
-        .set({ imageKey: data.key })
-        .where(eq(user.id, session.user.id))
-        .returning()
-
-      await syncPrincipalProfile(updated.id as UserId, { avatarKey: data.key })
-      log.info({ user_id: updated.id }, 'avatar key saved')
-    } catch (error) {
-      log.error({ err: error }, 'save avatar key failed')
-      throw error
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
     }
+
+    await deleteExistingAvatar(session.user.id)
+
+    const [updated] = await db
+      .update(user)
+      .set({ imageKey: data.key })
+      .where(eq(user.id, session.user.id))
+      .returning()
+
+    await syncPrincipalProfile(updated.id as UserId, { avatarKey: data.key })
+    log.info({ user_id: updated.id }, 'avatar key saved')
   })
 
 /**
@@ -274,21 +267,16 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
  * Only requires authentication - returns null if user has no member record.
  */
 export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<{ role: 'admin' | 'member' | 'user' | null }> => {
+  async (): Promise<{ role: Role | null }> => {
     log.debug('get user role')
-    try {
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
-
-      const role = await getCurrentUserRole()
-      log.debug({ role }, 'user role fetched')
-      return { role }
-    } catch (error) {
-      log.error({ err: error }, 'get user role failed')
-      throw error
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
     }
+
+    const role = await getCurrentUserRole()
+    log.debug({ role }, 'user role fetched')
+    return { role }
   }
 )
 
@@ -298,15 +286,10 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
 export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<NotificationPreferences> => {
     log.debug('get notification preferences')
-    try {
-      const principalId = await requirePrincipalId()
-      const preferences = await getNotificationPreferences(principalId)
-      log.debug('notification preferences fetched')
-      return preferences
-    } catch (error) {
-      log.error({ err: error }, 'get notification preferences failed')
-      throw error
-    }
+    const principalId = await requirePrincipalId()
+    const preferences = await getNotificationPreferences(principalId)
+    log.debug('notification preferences fetched')
+    return preferences
   }
 )
 
@@ -322,37 +305,38 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
       data: UpdateNotificationPreferencesInput
     }): Promise<NotificationPreferences> => {
       log.debug('update notification preferences')
-      try {
-        const principalId = await requirePrincipalId()
-        const { emailStatusChange, emailNewComment, emailMuted } = data
+      const principalId = await requirePrincipalId()
+      const { emailStatusChange, emailNewComment, emailMuted, matrix } = data
 
-        const updates: {
-          emailStatusChange?: boolean
-          emailNewComment?: boolean
-          emailMuted?: boolean
-        } = {}
+      const updates: {
+        emailStatusChange?: boolean
+        emailNewComment?: boolean
+        emailMuted?: boolean
+        matrix?: NotificationMatrix
+      } = {}
 
-        if (typeof emailStatusChange === 'boolean') {
-          updates.emailStatusChange = emailStatusChange
-        }
-        if (typeof emailNewComment === 'boolean') {
-          updates.emailNewComment = emailNewComment
-        }
-        if (typeof emailMuted === 'boolean') {
-          updates.emailMuted = emailMuted
-        }
-
-        if (Object.keys(updates).length === 0) {
-          throw new Error('No fields to update')
-        }
-
-        const preferences = await updateNotificationPreferences(principalId, updates)
-        log.info('notification preferences updated')
-        return preferences
-      } catch (error) {
-        log.error({ err: error }, 'update notification preferences failed')
-        throw error
+      if (typeof emailStatusChange === 'boolean') {
+        updates.emailStatusChange = emailStatusChange
       }
+      if (typeof emailNewComment === 'boolean') {
+        updates.emailNewComment = emailNewComment
+      }
+      if (typeof emailMuted === 'boolean') {
+        updates.emailMuted = emailMuted
+      }
+      if (matrix) {
+        // Full-object replace, not a per-key merge — see the schema
+        // comment above.
+        updates.matrix = matrix
+      }
+
+      if (Object.keys(updates).length === 0) {
+        throw new Error('No fields to update')
+      }
+
+      const preferences = await updateNotificationPreferences(principalId, updates)
+      log.info('notification preferences updated')
+      return preferences
     }
   )
 
@@ -363,29 +347,24 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
 export const getUserStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserEngagementStats> => {
     log.debug('get user stats')
-    try {
-      const principalId = await requirePrincipalId()
+    const principalId = await requirePrincipalId()
 
-      const [ideasResult, votesResult, commentsResult] = await Promise.all([
-        db
-          .select({ count: count() })
-          .from(posts)
-          .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
-        db.select({ count: count() }).from(votes).where(eq(votes.principalId, principalId)),
-        db
-          .select({ count: count() })
-          .from(comments)
-          .where(and(eq(comments.principalId, principalId), isNull(comments.deletedAt))),
-      ])
+    const [ideasResult, votesResult, commentsResult] = await Promise.all([
+      db
+        .select({ count: count() })
+        .from(posts)
+        .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
+      db.select({ count: count() }).from(postVotes).where(eq(postVotes.principalId, principalId)),
+      db
+        .select({ count: count() })
+        .from(postComments)
+        .where(and(eq(postComments.principalId, principalId), isNull(postComments.deletedAt))),
+    ])
 
-      return {
-        ideas: ideasResult[0]?.count ?? 0,
-        votes: votesResult[0]?.count ?? 0,
-        comments: commentsResult[0]?.count ?? 0,
-      }
-    } catch (error) {
-      log.error({ err: error }, 'get user stats failed')
-      throw error
+    return {
+      ideas: ideasResult[0]?.count ?? 0,
+      votes: votesResult[0]?.count ?? 0,
+      comments: commentsResult[0]?.count ?? 0,
     }
   }
 )

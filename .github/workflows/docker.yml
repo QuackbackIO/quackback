@@ -7,16 +7,21 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: "Commit SHA or ref to build (e.g. a release tag's commit). Lets you re-release a signed image from an exact source commit without moving the git tag."
-        required: true
+        description: "Commit SHA or ref to build (e.g. a release tag's commit). Lets you re-release a signed image from an exact source commit without moving the git tag. Leave blank to build the branch you dispatched from."
+        required: false
+        default: ''
       image_tag:
-        description: 'Image tag to publish as (e.g. 0.10.5). Leave blank to tag sha-<short>.'
+        description: 'Image tag to publish as (e.g. 0.10.5). Leave blank to tag with the branch name (or sha-<short> when a sha is given).'
         required: false
         default: ''
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: docker-${{ github.ref }}-${{ inputs.image_tag || inputs.sha || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   # Build each architecture on its OWN native runner — free arm64 hosted
@@ -43,18 +48,18 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           # On workflow_dispatch, build the requested sha/ref (re-release of an
           # exact source commit); otherwise build the pushed ref as usual.
           ref: ${{ github.event.inputs.sha || github.ref }}
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Resolve lowercase image ref
         run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -62,7 +67,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: ./apps/web/Dockerfile
@@ -81,7 +86,7 @@ jobs:
           mkdir -p /tmp/digests
           touch "/tmp/digests/${DIGEST#sha256:}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: digests-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
@@ -98,33 +103,35 @@ jobs:
       packages: write
       id-token: write # keyless cosign signing via GitHub OIDC
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Resolve lowercase image ref
         run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v6
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         id: meta
         with:
           images: ${{ env.IMAGE }}
+          # The branch-name tag covers branch pushes AND manual dispatches that
+          # build the dispatched branch itself (no sha/image_tag override).
           tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'workflow_dispatch' }}
+            type=ref,event=branch,enable=${{ github.event.inputs.sha == '' && github.event.inputs.image_tag == '' }}
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=${{ github.event.inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag != '' }}
-            type=sha,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag == '' }}
+            type=sha,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag == '' && github.event.inputs.sha != '' }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
@@ -142,7 +149,7 @@ jobs:
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
 
       # Keyless cosign signature over the pushed index digest, required by the
       # cluster's Kyverno verify-images ClusterPolicy (keyless, GitHub OIDC

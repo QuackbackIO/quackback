@@ -10,7 +10,7 @@
  * principal that authored anything is left untouched.
  *
  * The NOT EXISTS list must cover every table where an anon actor can author
- * content, because the FKs are a mix: chat FKs are onDelete:restrict (a missed
+ * content, because the FKs are a mix: conversation FKs are onDelete:restrict (a missed
  * one would throw and be caught), but content like comment_reactions is
  * onDelete:CASCADE — a missing guard there would NOT throw; it would silently
  * cascade-delete real content. So the guard, not the catch block, is the
@@ -18,9 +18,15 @@
  * also cascade but are derived preference state, so sweeping them is intended.)
  * Each principal is still removed in its own transaction so an unexpected
  * restrict reference skips just that row rather than failing the batch.
+ *
+ * NOTE: this NOT EXISTS guard is deliberately BROADER than the users domain's
+ * leadEngagementWhere() (it protects ANY referenced row, not just engagement),
+ * so the two predicates must never be naively unified.
  */
-import { db, eq, sql, principal, session, user } from '@/lib/server/db'
+import type { PrincipalId, UserId } from '@quackback/ids'
+import { db, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { deleteAnonymousIdentity } from './principal.factory'
 
 const log = logger.child({ component: 'anon-sweep' })
 
@@ -44,14 +50,15 @@ export async function sweepAnonymousPrincipals(opts?: {
     FROM principal pr
     WHERE pr.type = 'anonymous'
       AND pr.user_id IS NOT NULL
+      AND pr.contact_email IS NULL
       AND pr.created_at < ${cutoffIso}::timestamptz
       AND NOT EXISTS (SELECT 1 FROM session s WHERE s.user_id = pr.user_id AND s.expires_at > now())
       AND NOT EXISTS (SELECT 1 FROM posts WHERE principal_id = pr.id)
-      AND NOT EXISTS (SELECT 1 FROM votes WHERE principal_id = pr.id)
-      AND NOT EXISTS (SELECT 1 FROM comments WHERE principal_id = pr.id)
-      AND NOT EXISTS (SELECT 1 FROM comment_reactions WHERE principal_id = pr.id)
+      AND NOT EXISTS (SELECT 1 FROM post_votes WHERE principal_id = pr.id)
+      AND NOT EXISTS (SELECT 1 FROM post_comments WHERE principal_id = pr.id)
+      AND NOT EXISTS (SELECT 1 FROM post_comment_reactions WHERE principal_id = pr.id)
       AND NOT EXISTS (SELECT 1 FROM conversations WHERE visitor_principal_id = pr.id)
-      AND NOT EXISTS (SELECT 1 FROM chat_messages WHERE principal_id = pr.id)
+      AND NOT EXISTS (SELECT 1 FROM conversation_messages WHERE principal_id = pr.id)
       AND NOT EXISTS (SELECT 1 FROM post_subscriptions WHERE principal_id = pr.id)
       AND NOT EXISTS (SELECT 1 FROM in_app_notifications WHERE principal_id = pr.id)
     LIMIT ${batchSize}
@@ -62,9 +69,10 @@ export async function sweepAnonymousPrincipals(opts?: {
   for (const t of targets) {
     try {
       await db.transaction(async (tx) => {
-        await tx.delete(principal).where(eq(principal.id, t.principal_id as never))
-        await tx.delete(session).where(eq(session.userId, t.user_id as never))
-        await tx.delete(user).where(eq(user.id, t.user_id as never))
+        await deleteAnonymousIdentity(
+          { principalId: t.principal_id as PrincipalId, userId: t.user_id as UserId },
+          tx
+        )
       })
       deleted++
     } catch (err) {

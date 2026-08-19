@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { Role } from '@/lib/shared/roles'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
@@ -8,7 +9,8 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
-import type { CommentId } from '@quackback/ids'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { PostCommentId } from '@quackback/ids'
 
 // Input validation schema
 const updateCommentSchema = z.object({
@@ -25,9 +27,13 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
-          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
+          const commentId = parseTypeId<PostCommentId>(
+            params.commentId,
+            'post_comment',
+            'comment ID'
+          )
 
           const { getCommentById } = await import('@/lib/server/domains/comments/comment.query')
 
@@ -57,9 +63,15 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.COMMENT_EDIT,
+          })
 
-          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
+          const commentId = parseTypeId<PostCommentId>(
+            params.commentId,
+            'post_comment',
+            'comment ID'
+          )
 
           const body = await request.json()
           const parsed = updateCommentSchema.safeParse(body)
@@ -84,7 +96,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             parsed.data.content,
             {
               principalId,
-              role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
+              role: (principalRecord?.role as Role) ?? 'user',
             },
             {
               contentJson: (parsed.data.contentJson ?? undefined) as
@@ -120,9 +132,15 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.COMMENT_EDIT,
+          })
 
-          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
+          const commentId = parseTypeId<PostCommentId>(
+            params.commentId,
+            'post_comment',
+            'comment ID'
+          )
 
           const { softDeleteComment } =
             await import('@/lib/server/domains/comments/comment.permissions')
@@ -134,7 +152,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
 
           await softDeleteComment(commentId, {
             principalId,
-            role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
+            role: (principalRecord?.role as Role) ?? 'user',
           })
 
           return noContentResponse()

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useIntl, FormattedMessage } from 'react-intl'
@@ -26,9 +26,15 @@ import {
   openAuthPopup,
   usePopupTracker,
   postAuthSuccess,
+  useAuthBroadcast,
 } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
+import { stashSsoAttempt, takeSsoAttempt } from '@/lib/client/sso-attempt-stash'
+import { startProviderLink } from '@/lib/client/start-provider-link'
+import { AUTH_BLOCK_MESSAGES } from '@/lib/server/auth/redirect-errors'
+import type { LinkConflictContext } from './auth-popover-context'
 import { isTeamCallback } from '@/lib/shared/routing'
+import { signinErrorLanding } from '@/lib/shared/auth-prompt'
 import { lookupAuthMethodsFn, type LookupAuthMethodsResult } from '@/lib/server/functions/auth'
 import { OtpCodeStep } from './otp-code-step'
 import { useEmailSignin } from './use-email-signin'
@@ -65,6 +71,9 @@ interface PortalAuthFormInlineProps {
   /** Workspace display name shown in Stage 1 / Stage 2 copy. */
   workspaceName?: string
   callbackUrl?: string
+  /** Open straight into link-conflict recovery (`account_not_linked`
+   *  after a same-tab SSO redirect brought the user back here). */
+  linkConflict?: LinkConflictContext
   onModeSwitch?: (mode: 'login' | 'signup') => void
   /** Lets the surrounding dialog adapt its header to the form's step. */
   onContextChange?: (ctx: { step: AuthFormStep; email: string }) => void
@@ -147,6 +156,7 @@ export function PortalAuthFormInline({
   invitationId,
   workspaceName,
   callbackUrl,
+  linkConflict,
   onModeSwitch,
   onContextChange,
 }: PortalAuthFormInlineProps) {
@@ -171,14 +181,29 @@ export function PortalAuthFormInline({
     | { stage: 'sso-redirecting' }
     | { stage: 'two-factor-challenge' }
     | { stage: 'two-factor-enroll' }
+    | { stage: 'link-conflict' }
 
   // Invitation flow: the email is server-known, so Stage 1 is moot.
   const [view, setView] = useState<View>(
-    invitationId ? { stage: 'methods-step', step: methodsDefaultStep } : { stage: 'email' }
+    linkConflict
+      ? { stage: 'link-conflict' }
+      : invitationId
+        ? { stage: 'methods-step', step: methodsDefaultStep }
+        : { stage: 'email' }
   )
 
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(linkConflict?.email ?? '')
+  // Provider context for link-conflict recovery. Survives the move to the
+  // OTP code step, where a successful verify resumes the link instead of
+  // plain sign-in success. A ref mirror lets the emailSignin onSuccess
+  // closure (bound once at hook init) read the current value.
+  const [conflict, setConflictState] = useState<LinkConflictContext | null>(linkConflict ?? null)
+  const conflictRef = useRef<LinkConflictContext | null>(linkConflict ?? null)
+  const setConflict = (c: LinkConflictContext | null) => {
+    conflictRef.current = c
+    setConflictState(c)
+  }
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loadingAction, setLoadingAction] = useState<LoadingAction | null>(null)
@@ -188,10 +213,70 @@ export function PortalAuthFormInline({
 
   const lookupAuthMethods = useServerFn(lookupAuthMethodsFn)
 
+  /** After a link-conflict OTP verify, resume the failed SSO attempt via
+   *  the explicit link endpoint (full-page redirect to the IdP — usually
+   *  instant, its session is still warm). The user is already signed in
+   *  at this point, so any failure just falls through to plain success. */
+  const resumeConflictLink = async (c: LinkConflictContext): Promise<void> => {
+    if (!c.providerId || !c.providerType) {
+      postAuthSuccess()
+      return
+    }
+    try {
+      const url = await startProviderLink({
+        providerId: c.providerId,
+        providerType: c.providerType,
+        callbackURL: effectiveCallbackUrl,
+      })
+      if (url) {
+        window.location.assign(url)
+        return
+      }
+    } catch {
+      // Fall through — signed in, linking will happen implicitly on the
+      // next SSO sign-in now that the email is verified.
+    }
+    postAuthSuccess()
+  }
+
   const emailSignin = useEmailSignin({
     callbackUrl: effectiveCallbackUrl,
     onSuccess: () => {
+      const c = conflictRef.current
+      if (c) {
+        void resumeConflictLink(c)
+        return
+      }
       postAuthSuccess()
+    },
+  })
+
+  // A popup OAuth attempt that failed broadcasts its `?error=` code here
+  // (the popup closes itself). `account_not_linked` flips this dialog into
+  // link-conflict recovery with the attempt context; other codes surface
+  // as a normal form error instead of dying silently with the popup.
+  useAuthBroadcast({
+    onError: (code) => {
+      setLoadingAction(null)
+      if (code === 'account_not_linked') {
+        const attempt = takeSsoAttempt()
+        setConflict({
+          providerId: attempt?.providerId,
+          providerType: attempt?.providerType,
+          email: attempt?.email,
+        })
+        if (attempt?.email) setEmail(attempt.email)
+        setError('')
+        setView({ stage: 'link-conflict' })
+        return
+      }
+      setError(
+        AUTH_BLOCK_MESSAGES[code as keyof typeof AUTH_BLOCK_MESSAGES] ??
+          intl.formatMessage({
+            id: 'portal.auth.error.generic',
+            defaultMessage: 'Something went wrong. Please try again.',
+          })
+      )
     },
   })
 
@@ -288,9 +373,19 @@ export function PortalAuthFormInline({
       if (result.kind === 'sso-redirect') {
         setView({ stage: 'sso-redirecting' })
         setLoadingAction('sso')
+        // Stash + errorCallbackURL: a failed callback (e.g.
+        // account_not_linked) lands back on the sign-in dialog with the
+        // attempt context intact, instead of Better-Auth's bare error page.
+        stashSsoAttempt({
+          providerId: result.providerId,
+          providerType: 'oidc',
+          email: trimmed,
+          callbackUrl: effectiveCallbackUrl,
+        })
         await authClient.signIn.oauth2({
           providerId: result.providerId,
           callbackURL: effectiveCallbackUrl,
+          errorCallbackURL: signinErrorLanding(effectiveCallbackUrl),
         })
         return
       }
@@ -491,8 +586,37 @@ export function PortalAuthFormInline({
   const backToEmail = () => {
     setError('')
     setPassword('')
+    setConflict(null)
     emailSignin.reset()
     setView({ stage: 'email' })
+  }
+
+  /** Link-conflict recovery: email a confirmation (magic link + code).
+   *  The link lands on /auth/link-sso, which resumes the failed SSO
+   *  attempt under the fresh session; typing the code instead converges
+   *  on the same resume via the emailSignin onSuccess handler. */
+  const sendConflictConfirmation = async () => {
+    setError('')
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.emailRequired',
+          defaultMessage: 'Email is required',
+        })
+      )
+      return
+    }
+    const c = conflictRef.current
+    const linkTarget =
+      c?.providerId && c.providerType
+        ? `/auth/link-sso?provider=${encodeURIComponent(c.providerId)}&type=${c.providerType}&next=${encodeURIComponent(effectiveCallbackUrl)}`
+        : undefined
+    setLoadingAction('email')
+    const res = await emailSignin.requestEmail(trimmed, linkTarget)
+    setLoadingAction(null)
+    if (res.ok) setView({ stage: 'methods-step', step: 'code' })
+    else if (res.error) setError(res.error)
   }
 
   /** Inside the methods sub-form, drop back to the methods default step. */
@@ -792,6 +916,90 @@ export function PortalAuthFormInline({
   }
 
   // ============================================================
+  // Link-conflict recovery — an SSO sign-in matched an existing local
+  // account that isn't verified yet. Confirm the inbox, then resume the
+  // SSO attempt so the provider gets connected.
+  // ============================================================
+  if (view.stage === 'link-conflict') {
+    const conflictProviderName =
+      (conflict?.providerId && enabledProviders.find((p) => p.id === conflict.providerId)?.name) ||
+      intl.formatMessage({
+        id: 'portal.auth.linkConflict.genericProvider',
+        defaultMessage: 'single sign-on',
+      })
+    return (
+      <div className="space-y-4">
+        <BackToEmailLink onClick={backToEmail} />
+        <div className="space-y-2 text-center">
+          <ShieldCheckIcon className="mx-auto h-8 w-8 text-primary" />
+          <p className="font-medium text-foreground">
+            <FormattedMessage
+              id="portal.auth.linkConflict.title"
+              defaultMessage="You already have an account"
+            />
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <FormattedMessage
+              id="portal.auth.linkConflict.body"
+              defaultMessage="To keep your history and connect {provider} to it, confirm your email. We'll send you a sign-in link and code. Once confirmed, {provider} will work every time."
+              values={{
+                provider: (
+                  <span className="font-medium text-foreground">{conflictProviderName}</span>
+                ),
+              }}
+            />
+          </p>
+        </div>
+        {error && <FormError message={error} />}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            void sendConflictConfirmation()
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="conflict-email">
+              <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
+            </Label>
+            <Input
+              id="conflict-email"
+              type="email"
+              autoComplete="email"
+              autoFocus={!email}
+              placeholder={intl.formatMessage({
+                id: 'portal.auth.email.placeholder',
+                defaultMessage: 'you@example.com',
+              })}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loadingAction !== null}
+              required
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={loadingAction !== null || !email.trim()}
+            className="w-full"
+          >
+            {loadingAction === 'email' ? (
+              <ArrowPathIcon className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <EnvelopeIcon className="mr-2 h-4 w-4" />
+                <FormattedMessage
+                  id="portal.auth.linkConflict.send"
+                  defaultMessage="Email me a confirmation link"
+                />
+              </>
+            )}
+          </Button>
+        </form>
+      </div>
+    )
+  }
+
+  // ============================================================
   // Stage 2 — transient SSO redirect spinner
   // ============================================================
   if (view.stage === 'sso-redirecting') {
@@ -840,9 +1048,16 @@ export function PortalAuthFormInline({
             setLoadingAction('sso')
             try {
               setView({ stage: 'sso-redirecting' })
+              stashSsoAttempt({
+                providerId: view.providerId,
+                providerType: 'oidc',
+                email: email.trim() || undefined,
+                callbackUrl: effectiveCallbackUrl,
+              })
               await authClient.signIn.oauth2({
                 providerId: view.providerId,
                 callbackURL: effectiveCallbackUrl,
+                errorCallbackURL: signinErrorLanding(effectiveCallbackUrl),
               })
             } catch (err) {
               setError(

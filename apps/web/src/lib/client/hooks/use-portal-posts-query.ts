@@ -13,7 +13,7 @@ import {
 } from '@/lib/server/functions/public-posts'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PublicPostListItem } from '@/lib/shared/types'
-import type { PostId, StatusId, TagId } from '@quackback/ids'
+import type { PostId, PostStatusId, PostTagId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -21,7 +21,7 @@ import type { PostId, StatusId, TagId } from '@quackback/ids'
 
 interface PublicPostListResult {
   items: PublicPostListItem[]
-  total: number
+  total?: number
   hasMore: boolean
 }
 
@@ -91,15 +91,17 @@ async function fetchPublicPosts(
     data: {
       boardSlug: filters.board,
       search: filters.search,
-      statusIds: statusIds.length > 0 ? (statusIds as StatusId[]) : undefined,
+      statusIds: statusIds.length > 0 ? (statusIds as PostStatusId[]) : undefined,
       statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
-      tagIds: filters.tagIds as TagId[] | undefined,
+      tagIds: filters.tagIds as PostTagId[] | undefined,
       sort: filters.sort || 'top',
       page,
       limit: 20,
       minVotes: filters.minVotes,
       dateFrom: filters.dateFrom,
       responded: filters.responded,
+      owner: filters.owner,
+      segmentIds: filters.segmentIds,
     },
   })) as unknown as PublicPostListResult
 }
@@ -119,6 +121,11 @@ export function usePublicPosts({ filters, initialData, enabled = true }: UsePubl
     queryFn: ({ pageParam }) => fetchPublicPosts(filters, pageParam),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
+    // Page number inverts trivially (page - 1) — visitor-facing feed, so the
+    // wider scroll-back cap (QC-2).
+    getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>
+      firstPageParam > 1 ? firstPageParam - 1 : undefined,
+    maxPages: 8,
     initialData: initialData
       ? {
           pages: [initialData],

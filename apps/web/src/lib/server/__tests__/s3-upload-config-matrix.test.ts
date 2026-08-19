@@ -67,7 +67,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 
 const { generatePresignedUploadUrl } = await import('@/lib/server/storage/s3')
 
-const KEY = 'uploads/abc123/photo.png'
+const KEY = 'post-images/abc123/photo.png'
 const CT = 'image/png'
 
 function verifySig(uploadUrl: string, key: string, ct: string, secret: string): boolean {

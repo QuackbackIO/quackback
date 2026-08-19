@@ -1,0 +1,4 @@
+# Failure transcripts and any local run artifacts. Regenerated on every run;
+# never committed. The harness writes one JSON trace per failing scenario here
+# (see harness/transcript.ts) plus a run summary.
+.results/

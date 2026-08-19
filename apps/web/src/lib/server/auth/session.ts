@@ -3,10 +3,11 @@ import type { UserId, SessionId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth/index'
 import { db, principal as principalTable, eq } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import type { PrincipalType } from '@/lib/shared/roles'
 
 const log = logger.child({ component: 'auth-session' })
 
-export type PrincipalType = 'user' | 'anonymous' | 'service'
+export type { PrincipalType }
 
 export interface SessionUser {
   id: UserId
@@ -20,10 +21,13 @@ export interface SessionUser {
 }
 
 export interface Session {
+  // No `token` field: the Session shape flows into client-bound bootstrap
+  // payloads that are dehydrated into SSR HTML, and embedding the raw token
+  // there would defeat the HttpOnly cookie. Paths that need it (widget
+  // iframe handoff) read the cookie directly.
   session: {
     id: SessionId
     expiresAt: string
-    token: string
     createdAt: string
     updatedAt: string
     userId: UserId
@@ -53,7 +57,6 @@ export async function getSession(): Promise<Session | null> {
       session: {
         id: session.session.id as SessionId,
         expiresAt: session.session.expiresAt.toISOString(),
-        token: session.session.token,
         createdAt: session.session.createdAt.toISOString(),
         updatedAt: session.session.updatedAt.toISOString(),
         userId,

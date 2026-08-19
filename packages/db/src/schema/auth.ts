@@ -16,11 +16,58 @@ import {
   uniqueIndex,
   jsonb,
   integer,
+  foreignKey,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { apiKeys } from './api-keys'
 import { integrations } from './integrations'
+import { companies } from './companies'
+import { roles } from './rbac'
+
+export interface StoredAssistantVoice {
+  tone: string
+  responseLength: string
+  additionalInstructions: string
+}
+
+/**
+ * Structural twin of `AssistantConfig` (z.infer of `assistantConfigSchema` in
+ * apps/web `lib/shared/assistant/config.ts`). packages/db can't import apps/web,
+ * so this hand-written interface mirrors that schema's shape with widened
+ * primitives (string/number instead of the enum/literal types). A drift tripwire
+ * in apps/web (`lib/shared/assistant/__tests__/config.test.ts`) asserts the two
+ * stay structurally identical — edit both sides together.
+ */
+export interface StoredAssistantConfig {
+  version: number
+  identity: { name: string; avatarUrl: string | null }
+  agents: {
+    agent: {
+      voice: StoredAssistantVoice
+      knowledge: {
+        helpCenter: boolean
+        posts: boolean
+        changelog: boolean
+        documents: boolean
+        status: boolean
+      }
+    }
+    copilot: {
+      capabilities: { qa: boolean }
+      knowledge: {
+        helpCenter: boolean
+        posts: boolean
+        pastConversations: boolean
+        internalNotes: boolean
+        tickets: boolean
+        changelog: boolean
+        documents: boolean
+        status: boolean
+      }
+    }
+  }
+}
 
 /**
  * User table - User identities for the application
@@ -46,6 +93,13 @@ export const user = pgTable(
     // BCP-47 locale claim from OIDC (e.g. "en", "en-US"); NULL for
     // sign-up paths that don't carry one (magic-link, password).
     locale: text('locale'),
+    // Teammate-set language preference (BCP-47 tag, e.g. "en", "fr",
+    // "pt-BR"). Distinct from `locale` above: that's an IdP claim captured
+    // at sign-up, this is a value the teammate explicitly chooses via
+    // Settings. NULL means no preference / use the workspace default. Not
+    // constrained to a fixed catalogue -- inbox translation (P2-D) reads
+    // this to decide what language to translate into.
+    preferredLanguage: text('preferred_language'),
     // ISO-3166-1 alpha-2 country code captured from CDN-injected
     // headers (CF-IPCountry, X-Vercel-IP-Country, Fly-Client-IP-Country,
     // X-Country-Code) on session creation. NULL when no header is
@@ -88,6 +142,11 @@ export const user = pgTable(
     index('user_locale_idx')
       .on(table.locale)
       .where(sql`locale IS NOT NULL`),
+    // Trigram GIN index backing the admin people-search substring match:
+    //   WHERE name ILIKE '%term%'  (users/user.service.ts, principal.service.ts).
+    // A leading-wildcard ILIKE cannot use a btree, so mirror the
+    // principal_display_name_trgm_idx approach with a gin_trgm_ops index.
+    index('user_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
   ]
 )
 
@@ -101,16 +160,26 @@ export const user = pgTable(
  * subsequent `/two-factor/verify-totp`; the default `true` matches
  * Better-Auth's expectation for newly-inserted rows.
  */
-export const twoFactor = pgTable('two_factor', {
-  id: typeIdWithDefault('two_factor')('id').primaryKey(),
-  userId: typeIdColumn('user')('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  secret: text('secret').notNull(),
-  backupCodes: text('backup_codes').notNull(),
-  verified: boolean('verified').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const twoFactor = pgTable(
+  'two_factor',
+  {
+    id: typeIdWithDefault('two_factor')('id').primaryKey(),
+    userId: typeIdColumn('user')('user_id').notNull(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    verified: boolean('verified').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'two_factor_user_id_fkey',
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete('cascade'),
+    index('two_factor_user_id_idx').on(table.userId),
+  ]
+)
 
 export const session = pgTable(
   'session',
@@ -130,13 +199,12 @@ export const session = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
   },
   (table) => [
-    index('session_userId_idx').on(table.userId),
-    // Composite index drives the `max(session.created_at) GROUP BY
-    // user_id` aggregate used by the team-list "last sign-in" column
-    // — without it, the planner does an index scan on `session_userId_idx`
-    // but still reads every row's created_at. With this, the planner
-    // can do an index-only scan and stop at the first row per group.
-    index('session_userId_createdAt_idx').on(table.userId, table.createdAt.desc()),
+    // Composite serves both plain user_id lookups and the
+    // `max(session.created_at) GROUP BY user_id` aggregate used by the
+    // team-list "last sign-in" column: the planner can do an index-only
+    // scan and stop at the first row per group.
+    // nullsFirst matches the migration's plain DESC (postgres default).
+    index('session_userId_createdAt_idx').on(table.userId, table.createdAt.desc().nullsFirst()),
     // Range-scan support for the active-users analytics query, which counts
     // distinct users whose session.updated_at falls within the period.
     index('session_updatedAt_idx').on(table.updatedAt),
@@ -165,12 +233,19 @@ export const account = pgTable(
       .notNull(),
   },
   (table) => [
-    index('account_userId_idx').on(table.userId),
-    // Backs the segment evaluator's signup_source lookup:
+    // Also serves plain user_id lookups; backs the segment evaluator's
+    // signup_source lookup:
     // `SELECT provider_id FROM account WHERE user_id = $1 ORDER BY
     // created_at ASC LIMIT 1`. Without the composite the ORDER BY
     // requires a sort even though the WHERE is index-satisfied.
     index('account_userId_createdAt_idx').on(table.userId, table.createdAt),
+    // The identity key. Deliberately NOT unique: this ships to installations we
+    // cannot inspect, and a unique index would abort the migration wherever
+    // duplicates already exist, turning a latent data issue into a failed
+    // upgrade. The index makes detection cheap; the constraint can follow once
+    // the real rate is known. See 0222_account_identity_index.sql.
+    index('account_provider_account_idx').on(table.providerId, table.accountId),
+    index('account_user_provider_idx').on(table.userId, table.providerId),
   ]
 )
 
@@ -222,6 +297,8 @@ export const settings = pgTable('settings', {
   faviconKey: text('favicon_key'),
   // Header logo - S3 storage key
   headerLogoKey: text('header_logo_key'),
+  // Portal social share (OG) image - S3 storage key
+  portalOgImageKey: text('portal_og_image_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
   /**
@@ -267,6 +344,44 @@ export const settings = pgTable('settings', {
    */
   setupState: text('setup_state'),
   /**
+   * Versioned AI-agent identity and behavior configuration. The application
+   * validates this JSONB value with the client-safe V3 schema before use.
+   */
+  assistantConfig: jsonb('assistant_config')
+    .$type<StoredAssistantConfig>()
+    .notNull()
+    .default({
+      version: 3,
+      identity: { name: 'Quinn', avatarUrl: null },
+      agents: {
+        agent: {
+          voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
+          knowledge: {
+            helpCenter: true,
+            posts: false,
+            changelog: false,
+            documents: true,
+            status: false,
+          },
+        },
+        copilot: {
+          capabilities: { qa: true },
+          knowledge: {
+            helpCenter: true,
+            posts: true,
+            pastConversations: true,
+            internalNotes: true,
+            tickets: false,
+            changelog: false,
+            documents: true,
+            status: true,
+          },
+        },
+      },
+    }),
+  /** Optimistic-concurrency token incremented with every assistant config write. */
+  assistantConfigRevision: integer('assistant_config_revision').notNull().default(1),
+  /**
    * Widget configuration (JSON)
    * Structure: { enabled, defaultBoard?, position?, buttonText?, identifyVerification? }
    */
@@ -276,8 +391,20 @@ export const settings = pgTable('settings', {
    * Format: 'wgt_' + 64 hex chars
    */
   widgetSecret: text('widget_secret'),
+  /** First externally embedded widget configuration observation. */
+  widgetInstalledFirstSeenAt: timestamp('widget_installed_first_seen_at', { withTimezone: true }),
+  /** Most recent external observation, write-throttled by the public endpoint. */
+  widgetInstalledLastSeenAt: timestamp('widget_installed_last_seen_at', { withTimezone: true }),
+  /** Normalized external Origin hostname only (no path, query, port, or scheme). */
+  widgetInstalledOriginHost: text('widget_installed_origin_host'),
   /** Feature flags for experimental features (JSON) */
   featureFlags: text('feature_flags'),
+  /**
+   * Inbound spam-filter configuration (JSON)
+   * Structure: { trustedSenders: string[] } — exact addresses or domains
+   * whose inbound messages bypass spam classification entirely.
+   */
+  spamFilterConfig: text('spam_filter_config'),
   /**
    * Help center configuration (JSON)
    * Structure: { enabled, homepageTitle, homepageDescription, seo }
@@ -328,7 +455,9 @@ export const settings = pgTable('settings', {
 })
 
 /**
- * Role-mapping rules applied to an OIDC claim at sign-in (`claim_mapping.role`).
+ * Role-mapping rules applied to an OIDC claim at sign-in. Now the `role`
+ * section of {@link IdentityProviderClaimMapping}; the shape is unchanged from
+ * the former `attribute_mapping` column so migrated rows behave identically.
  */
 export type ClaimRoleMapping = {
   /** Dotted path or namespaced claim on the ID token. */
@@ -339,15 +468,18 @@ export type ClaimRoleMapping = {
   syncOnEverySignIn?: boolean
 }
 
-/** Alias for the role-section shape (resolveSsoRole and similar readers). */
-export type IdentityProviderAttributeMapping = ClaimRoleMapping
-
 /**
- * What this provider's claims mean: `profile` (identity sources and claim
- * paths), `role` (first-match-wins role rules), and `attributes` (claim →
- * user-attribute copy).
+ * What this provider's claims mean, in one column with named sections.
+ *
+ * Replaces `attribute_mapping`, which despite its name only ever held the role
+ * rules above. Profile-field mapping and user-attribute mapping both needed
+ * somewhere to live, and a column each would have left three overlapping
+ * mapping concepts on this table. Readers must tolerate partial and unknown
+ * shapes — see `oidc-claim-mapping.ts` in the web app, which is the only place
+ * this is interpreted.
  */
 export type IdentityProviderClaimMapping = {
+  /** Which claim carries the account id, the email, the display name. */
   profile?: {
     sources?: Array<'idToken' | 'userinfo' | 'accessTokenJwt'>
     claims?: { id?: string; email?: string; name?: string }
@@ -355,29 +487,11 @@ export type IdentityProviderClaimMapping = {
     allowMissingEmail?: boolean
   }
   role?: ClaimRoleMapping
+  /** Claim to user-attribute copying. */
   attributes?: {
     map?: Array<{ claimPath: string; attributeKey: string }>
     overrideExisting?: boolean
-    /** When true, a disappeared claim clears the stored attribute. */
-    syncOnSignIn?: boolean
   }
-}
-
-/**
- * Last successful Test sign-in fixture. Stored as the admin saw it — merged
- * claims plus resolved identity. Mapping is an administrative choice; the
- * column does not redact fields.
- */
-export type IdentityProviderTestCapture = {
-  registrationId: string
-  capturedAt: string
-  identity: {
-    id: string
-    email?: string
-    name?: string
-    sources: Partial<Record<'id' | 'email' | 'name', string>>
-  }
-  claims: Record<string, unknown>
 }
 
 /**
@@ -391,6 +505,18 @@ export type IdentityProviderTestCapture = {
  * migration. Discovery-doc installs leave the manual endpoint columns
  * null; manual installs leave `discoveryUrl` null.
  */
+export type IdentityProviderTestCapture = {
+  registrationId: string
+  capturedAt: string
+  identity: {
+    id: string
+    email?: string
+    name?: string
+    sources: Partial<Record<'id' | 'email' | 'name', string>>
+  }
+  claims: Record<string, unknown>
+}
+
 export const identityProvider = pgTable(
   'identity_provider',
   {
@@ -422,9 +548,9 @@ export const identityProvider = pgTable(
     clientId: text('client_id').notNull(),
     /** Space- or comma-joined custom scopes; `openid email profile` when null. */
     scopes: text('scopes'),
-    /** Authorize-request `prompt`; the default when null. The sentinel 'omit'
-     *  means send no prompt parameter at all, which is NOT the OIDC value
-     *  'none'. See lib/shared/oidc-request.ts. */
+    /** Authorize-request `prompt`; the default account picker when null. The
+     *  sentinel 'omit' means send no prompt parameter at all, which is NOT the
+     *  same as the OIDC value 'none'. See lib/shared/oidc-request.ts. */
     prompt: text('prompt'),
     /** How the client secret reaches the token endpoint ('post' | 'basic');
      *  'post' when null. Some providers accept only one of the two. */
@@ -434,12 +560,6 @@ export const identityProvider = pgTable(
     autoCreateUsers: boolean('auto_create_users').notNull().default(true),
     autoProvisionRole: text('auto_provision_role').$type<'admin' | 'member' | 'user'>(),
     claimMapping: jsonb('claim_mapping').$type<IdentityProviderClaimMapping>(),
-    /**
-     * Legacy role-mapping column. 0127 copies it into `claim_mapping.role`
-     * and leaves the column in place so rolling pods still on the previous
-     * schema can select and write it. Unused by this release; drop later.
-     */
-    attributeMapping: jsonb('attribute_mapping').$type<IdentityProviderAttributeMapping>(),
     showButton: boolean('show_button').notNull().default(false),
     /** Bumped when redirect-affecting details change; freshness baseline. */
     detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),
@@ -484,12 +604,16 @@ export const ssoVerifiedDomain = pgTable(
      * domains stay unlinked until the backfill (Task 9) attaches them.
      * Cascades so removing a provider clears its domain bindings.
      */
-    providerId: typeIdColumnNullable('idp')('provider_id').references(() => identityProvider.id, {
-      onDelete: 'cascade',
-    }),
+    providerId: typeIdColumnNullable('idp')('provider_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
+    // Named to match the constraint the SQL migration created.
+    providerFk: foreignKey({
+      name: 'sso_verified_domain_provider_id_fk',
+      columns: [t.providerId],
+      foreignColumns: [identityProvider.id],
+    }).onDelete('cascade'),
     nameUnique: uniqueIndex('sso_verified_domain_name_unique').on(t.name),
   })
 )
@@ -548,9 +672,16 @@ export const principal = pgTable(
      * /oauth2/callback/:providerId hooks.after middleware.
      */
     lastSsoSignInAt: timestamp('last_sso_sign_in_at', { withTimezone: true }),
-    // Contact email for an anonymous visitor (captured in live chat) so an
-    // offline reply can reach them across conversations. Agent-only — the
-    // principal stays anonymous; never exposed to the visitor.
+    // A reachable address for a principal whose account email cannot receive
+    // mail. Two populations arrive here:
+    //   - an anonymous visitor, captured in the messenger by an agent, so an
+    //     offline reply can reach them across conversations. Agent-only: the
+    //     principal stays anonymous and this is never shown back to them.
+    //   - a signed-in person whose identity provider released no address, so
+    //     their account holds a minted placeholder. They supply this one
+    //     themselves and confirm it by mail before it is written.
+    // Delivery precedence lives in `resolveReplyRecipient`, which places this
+    // above the per-conversation capture and below a real account email.
     contactEmail: text('contact_email'),
     // Manual agent availability override: 'online' (default — route chats to me)
     // vs 'away' (connected but opted out of routing). The presence TTL handles
@@ -558,8 +689,28 @@ export const principal = pgTable(
     chatAvailability: text('chat_availability', { enum: ['online', 'away'] })
       .notNull()
       .default('online'),
+    // The B2B company this person belongs to (support platform §4.4). Soft-owned
+    // FK: set null on company delete so people are never orphaned. Filled on
+    // anonymous-to-identified merge via the contact_email rule (user wins,
+    // source only fills a gap).
+    companyId: typeIdColumnNullable('company')('company_id').references(() => companies.id, {
+      onDelete: 'set null',
+    }),
+    // Blocking (support platform §4.6). `blocked_at` = when the person was
+    // blocked (null = not blocked, the enforcement flag); `blocked_by_principal_id`
+    // = the team actor who blocked them. The FK is self-referential and set-null
+    // so removing the actor never clears a live block on its own. Guards keep
+    // team members and service principals from ever being blocked.
+    blockedAt: timestamp('blocked_at', { withTimezone: true }),
+    blockedByPrincipalId: typeIdColumnNullable('principal')('blocked_by_principal_id'),
   },
   (table) => [
+    // Self-referential blocking actor FK; named to match the SQL migration.
+    foreignKey({
+      name: 'principal_blocked_by_principal_id_principal_id_fk',
+      columns: [table.blockedByPrincipalId],
+      foreignColumns: [table.id],
+    }).onDelete('set null'),
     // Ensure one principal record per human user (partial index excludes service principals)
     uniqueIndex('principal_user_idx')
       .on(table.userId)
@@ -568,12 +719,29 @@ export const principal = pgTable(
     index('principal_contact_email_idx')
       .on(table.contactEmail)
       .where(sql`contact_email IS NOT NULL`),
-    // Index for user listings filtered by role
-    index('principal_role_idx').on(table.role),
     // Index for filtering by principal type
     index('principal_type_idx').on(table.type),
-    // Composite index for date-filtered user listings (e.g. portal users by join date)
+    // Composite index for user listings filtered by role, with or without a
+    // date filter (e.g. portal users by join date)
     index('principal_role_created_at_idx').on(table.role, table.createdAt),
+    // RI-lookup protection: principal deletion checks blocked_by references
+    // against this table itself.
+    index('principal_blocked_by_idx')
+      .on(table.blockedByPrincipalId)
+      .where(sql`"blocked_by_principal_id" IS NOT NULL`),
+    // Case-insensitive prefix search for the @-mention typeahead;
+    // text_pattern_ops lets the planner use it for LIKE 'prefix%'.
+    index('principal_displayname_lower_idx').using(
+      'btree',
+      sql`lower(display_name) text_pattern_ops`
+    ),
+    index('principal_display_name_trgm_idx')
+      .using('gin', sql`${table.displayName} gin_trgm_ops`)
+      .where(sql`${table.displayName} IS NOT NULL`),
+    // Company -> people lookups (sidebar roster, member counts).
+    index('principal_company_id_idx')
+      .on(table.companyId)
+      .where(sql`"company_id" IS NOT NULL`),
   ]
 )
 
@@ -584,6 +752,15 @@ export const invitation = pgTable(
     email: text('email').notNull(),
     name: text('name'),
     role: text('role'),
+    /**
+     * Custom-role grant carried by a team invite: accept maps it onto
+     * role='member' plus a workspace assignment. Null = the legacy role text
+     * alone. SET NULL on role deletion, so a pending invite degrades to its
+     * plain legacy role.
+     */
+    roleId: typeIdColumnNullable('role')('role_id').references(() => roles.id, {
+      onDelete: 'set null',
+    }),
     status: text('status').default('pending').notNull(),
     /**
      * Discriminates team invitations from portal-access invitations.
@@ -614,7 +791,6 @@ export const invitation = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
   },
   (table) => [
-    index('invitation_email_idx').on(table.email),
     // Index for duplicate invitation checks (legacy — kept for backward compatibility)
     index('invitation_email_status_idx').on(table.email, table.status),
     // Composite index for kind-discriminated lookup paths
@@ -710,26 +886,41 @@ export const oauthRefreshToken = pgTable(
       table.userId,
       table.createdAt
     ),
+    // FK RI-lookup protection: session logout/expiry and user deletion
+    // check these columns on every referenced-row delete.
+    index('oauth_refresh_token_session_id_idx').on(table.sessionId),
+    index('oauth_refresh_token_user_id_idx').on(table.userId),
   ]
 )
 
 /**
  * OAuth Access Token table - Short-lived tokens for API access
  */
-export const oauthAccessToken = pgTable('oauth_access_token', {
-  id: text('id').primaryKey(),
-  token: text('token').unique(),
-  clientId: text('client_id')
-    .notNull()
-    .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
-  sessionId: text('session_id').references(() => session.id, { onDelete: 'set null' }),
-  userId: typeIdColumn('user')('user_id').references(() => user.id, { onDelete: 'cascade' }),
-  referenceId: text('reference_id'),
-  refreshId: text('refresh_id').references(() => oauthRefreshToken.id, { onDelete: 'cascade' }),
-  expiresAt: timestamp('expires_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }),
-  scopes: text('scopes').array().notNull(),
-})
+export const oauthAccessToken = pgTable(
+  'oauth_access_token',
+  {
+    id: text('id').primaryKey(),
+    token: text('token').unique(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
+    sessionId: text('session_id').references(() => session.id, { onDelete: 'set null' }),
+    userId: typeIdColumn('user')('user_id').references(() => user.id, { onDelete: 'cascade' }),
+    referenceId: text('reference_id'),
+    refreshId: text('refresh_id').references(() => oauthRefreshToken.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }),
+    scopes: text('scopes').array().notNull(),
+  },
+  (table) => [
+    // FK RI-lookup protection: session logout/expiry, refresh-token
+    // rotation, and user deletion check these columns on every
+    // referenced-row delete.
+    index('oauth_access_token_session_id_idx').on(table.sessionId),
+    index('oauth_access_token_user_id_idx').on(table.userId),
+    index('oauth_access_token_refresh_id_idx').on(table.refreshId),
+  ]
+)
 
 /**
  * OAuth Consent table - Records of user consent for OAuth client scopes
@@ -781,6 +972,10 @@ export const principalRelations = relations(principal, ({ one, many }) => ({
   user: one(user, {
     fields: [principal.userId],
     references: [user.id],
+  }),
+  company: one(companies, {
+    fields: [principal.companyId],
+    references: [companies.id],
   }),
   createdApiKeys: many(apiKeys, { relationName: 'apiKeyCreator' }),
   apiKey: many(apiKeys, { relationName: 'apiKeyPrincipal' }),

@@ -2,7 +2,7 @@
  * Input/Output types for CommentService operations
  */
 
-import type { PostId, CommentId, BoardId, PrincipalId, StatusId } from '@quackback/ids'
+import type { PostId, PostCommentId, BoardId, PrincipalId, PostStatusId } from '@quackback/ids'
 import type { CommentStatusChange } from '@/lib/shared'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
@@ -16,9 +16,9 @@ export interface CreateCommentInput {
    * `content` when omitted so API clients posting raw markdown still get the
    * fast read path. */
   contentJson?: TiptapContent | null
-  parentId?: CommentId | null
+  parentId?: PostCommentId | null
   /** Optional status change to apply atomically with the comment */
-  statusId?: StatusId | null
+  statusId?: PostStatusId | null
   /** Whether this comment is only visible to team members */
   isPrivate?: boolean
   /** Override creation timestamp (admin-only, for imports) */
@@ -38,16 +38,16 @@ export interface UpdateCommentInput {
  */
 export interface CreateCommentResult {
   comment: {
-    id: CommentId
+    id: PostCommentId
     postId: PostId
     content: string
-    parentId: CommentId | null
+    parentId: PostCommentId | null
     principalId: PrincipalId
     isTeamMember: boolean
     isPrivate: boolean
     createdAt: Date
-    statusChangeFromId: StatusId | null
-    statusChangeToId: StatusId | null
+    statusChangeFromId: PostStatusId | null
+    statusChangeToId: PostStatusId | null
   }
   post: {
     id: PostId
@@ -72,9 +72,9 @@ export interface CommentReactionCount {
  * Comment with nested replies (threaded structure)
  */
 export interface CommentThread {
-  id: CommentId
+  id: PostCommentId
   postId: PostId
-  parentId: CommentId | null
+  parentId: PostCommentId | null
   principalId: PrincipalId
   authorName: string | null
   content: string
@@ -104,10 +104,10 @@ export interface ReactionResult {
  */
 export interface CommentContext {
   comment: {
-    id: CommentId
+    id: PostCommentId
     postId: PostId
     content: string
-    parentId: CommentId | null
+    parentId: PostCommentId | null
     principalId: PrincipalId
     createdAt: Date
   }

@@ -21,6 +21,8 @@ export function useUsersFilters() {
       ? (search as { segments?: string }).segments!.split(',').filter(Boolean)
       : undefined
 
+    const tagIds = search.tags ? search.tags.split(',').filter(Boolean) : undefined
+
     return {
       search: search.search,
       verified,
@@ -31,13 +33,16 @@ export function useUsersFilters() {
       voteCount: search.voteCount,
       commentCount: search.commentCount,
       customAttrs: search.customAttrs,
-      includeAnonymous: search.includeAnonymous === 'true',
+      companyAttrs: search.companyAttrs,
+      lifecycle: search.lifecycle,
       sort: search.sort,
       segmentIds,
+      tagIds,
     }
   }, [search])
 
   const selectedUserId = search.selected ?? null
+  const selectedCompanyId = search.company ?? null
 
   const setFilters = useCallback(
     (updates: Partial<UsersFilters>) => {
@@ -59,6 +64,14 @@ export function useUsersFilters() {
             : undefined
           : undefined
 
+      // Convert tagIds array to comma-separated string for URL
+      const tagsParam =
+        'tagIds' in updates
+          ? updates.tagIds && updates.tagIds.length > 0
+            ? updates.tagIds.join(',')
+            : undefined
+          : undefined
+
       void navigate({
         to: '/admin/users',
         search: {
@@ -73,11 +86,16 @@ export function useUsersFilters() {
           ...('voteCount' in updates && { voteCount: updates.voteCount }),
           ...('commentCount' in updates && { commentCount: updates.commentCount }),
           ...('customAttrs' in updates && { customAttrs: updates.customAttrs }),
-          ...('includeAnonymous' in updates && {
-            includeAnonymous: updates.includeAnonymous ? ('true' as const) : undefined,
+          ...('companyAttrs' in updates && { companyAttrs: updates.companyAttrs }),
+          ...('lifecycle' in updates && {
+            lifecycle:
+              updates.lifecycle === 'leads' || updates.lifecycle === 'companies'
+                ? updates.lifecycle
+                : undefined,
           }),
           ...('sort' in updates && { sort: updates.sort }),
           ...('segmentIds' in updates && { segments: segmentsParam }),
+          ...('tagIds' in updates && { tags: tagsParam }),
         },
         replace: true,
       })
@@ -99,14 +117,31 @@ export function useUsersFilters() {
     [navigate, search]
   )
 
+  const setSelectedCompanyId = useCallback(
+    (companyId: string | null) => {
+      void navigate({
+        to: '/admin/users',
+        search: {
+          ...search,
+          company: companyId ?? undefined,
+        },
+        replace: true,
+      })
+    },
+    [navigate, search]
+  )
+
   const clearFilters = useCallback(() => {
     void navigate({
       to: '/admin/users',
       search: {
         sort: search.sort,
         selected: search.selected,
-        // Preserve segment selection when clearing filters
+        company: search.company,
+        // Preserve segment/tag selection and the lifecycle view when clearing filters
         segments: (search as { segments?: string }).segments,
+        tags: search.tags,
+        lifecycle: search.lifecycle,
       },
       replace: true,
     })
@@ -123,7 +158,7 @@ export function useUsersFilters() {
       filters.voteCount ||
       filters.commentCount ||
       filters.customAttrs ||
-      filters.includeAnonymous
+      filters.companyAttrs
     )
   }, [filters])
 
@@ -133,6 +168,8 @@ export function useUsersFilters() {
     clearFilters,
     selectedUserId,
     setSelectedUserId,
+    selectedCompanyId,
+    setSelectedCompanyId,
     hasActiveFilters,
   }
 }

@@ -24,11 +24,15 @@ function WidgetHomeFallback() {
               <input
                 type="text"
                 readOnly
+                aria-label={intl.formatMessage({
+                  id: 'widget.home.input.label',
+                  defaultMessage: 'Feedback title',
+                })}
                 placeholder={intl.formatMessage({
                   id: 'widget.home.input.placeholder',
                   defaultMessage: "What's your idea?",
                 })}
-                className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50"
+                className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/50"
               />
             </div>
           </div>

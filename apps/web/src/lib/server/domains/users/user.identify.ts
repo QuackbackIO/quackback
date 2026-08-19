@@ -5,10 +5,16 @@
  * updatePortalUser (update existing user by principal ID).
  */
 
-import { db, eq, and, principal, user } from '@/lib/server/db'
+import { db, eq, and, principal, user, sql } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
+import {
+  createPrincipal,
+  syncPrincipalProfile,
+  updatePrincipalFields,
+} from '@/lib/server/domains/principals/principal.factory'
 import { NotFoundError } from '@/lib/shared/errors'
+import { isUniqueViolation } from '@/lib/server/utils'
 import type {
   IdentifyPortalUserInput,
   IdentifyPortalUserResult,
@@ -20,7 +26,6 @@ import {
   EXTERNAL_ID_KEY,
   parseUserAttributes,
   extractExternalId,
-  mergeMetadata,
   validateInputAttributes,
 } from './user.attributes'
 
@@ -40,6 +45,11 @@ export async function identifyPortalUser(
 
   const { validAttrs, attrRemovals } = await validateInputAttributes(input.attributes)
 
+  // Set when this call vouches for the email: created verified, or an
+  // existing user flipped false -> true. Surfaced so the caller can audit
+  // the assertion with the acting API credential.
+  let emailVerifiedAsserted = false
+
   // Apply updates to an existing user record and sync the principal
   async function applyUpdates(record: {
     id: UserId
@@ -55,6 +65,7 @@ export async function identifyPortalUser(
     if (input.image !== undefined && input.image !== record.image) userUpdates.image = input.image
     if (input.emailVerified !== undefined && input.emailVerified !== record.emailVerified) {
       userUpdates.emailVerified = input.emailVerified
+      if (input.emailVerified) emailVerifiedAsserted = true
     }
     // Merge attributes and externalId into metadata
     const metadataUpdates = { ...validAttrs }
@@ -67,7 +78,7 @@ export async function identifyPortalUser(
       }
     }
     if (Object.keys(metadataUpdates).length > 0 || metadataRemovals.length > 0) {
-      userUpdates.metadata = mergeMetadata(record.metadata, metadataUpdates, metadataRemovals)
+      userUpdates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${metadataRemovals}::text[]) || ${JSON.stringify(metadataUpdates)}::jsonb)::text`
     }
 
     if (Object.keys(userUpdates).length > 0) {
@@ -75,12 +86,12 @@ export async function identifyPortalUser(
       await db.update(user).set(userUpdates).where(eq(user.id, record.id))
     }
 
-    // Sync principal displayName and avatarUrl if changed
-    const principalUpdates: Record<string, unknown> = {}
+    // Sync principal displayName and avatarUrl if changed (portal-user only)
+    const principalUpdates: { displayName?: string; avatarUrl?: string | null } = {}
     if (input.name !== undefined) principalUpdates.displayName = input.name
     if (input.image !== undefined) principalUpdates.avatarUrl = input.image
     if (Object.keys(principalUpdates).length > 0) {
-      await db.update(principal).set(principalUpdates).where(eq(principal.userId, record.id))
+      await syncPrincipalProfile(record.id, principalUpdates)
     }
 
     // Re-read to get updated values — record must exist since we just updated it
@@ -110,34 +121,38 @@ export async function identifyPortalUser(
     const metadata = Object.keys(initialMeta).length > 0 ? JSON.stringify(initialMeta) : null
 
     try {
-      const [newUser] = await db
-        .insert(user)
-        .values({
-          id: generateId('user'),
-          name: defaultName,
-          email: normalizedEmail,
-          emailVerified: input.emailVerified ?? false,
-          image: input.image ?? null,
-          metadata,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning()
+      const newUser = await db.transaction(async (tx) => {
+        const [createdUser] = await tx
+          .insert(user)
+          .values({
+            id: generateId('user'),
+            name: defaultName,
+            email: normalizedEmail,
+            emailVerified: input.emailVerified ?? false,
+            image: input.image ?? null,
+            metadata,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning()
+        await createPrincipal(
+          {
+            userId: createdUser.id,
+            role: 'user',
+            displayName: defaultName,
+            avatarUrl: input.image ?? null,
+          },
+          tx
+        )
+        return createdUser
+      })
       userRecord = newUser
 
-      await db.insert(principal).values({
-        id: generateId('principal'),
-        userId: newUser.id,
-        role: 'user',
-        displayName: defaultName,
-        avatarUrl: input.image ?? null,
-        createdAt: new Date(),
-      })
-
       created = true
+      if (input.emailVerified === true) emailVerifiedAsserted = true
     } catch (err) {
       // Handle concurrent insert race condition (unique constraint on email)
-      if ((err as { code?: string }).code === '23505') {
+      if (isUniqueViolation(err)) {
         userRecord = (await db.query.user.findFirst({
           where: eq(user.email, normalizedEmail),
           columns: USER_COLUMNS,
@@ -180,6 +195,7 @@ export async function identifyPortalUser(
     attributes: parseUserAttributes(userRecord.metadata ?? null),
     createdAt: userRecord.createdAt,
     created,
+    emailVerifiedAsserted,
   }
 }
 
@@ -238,11 +254,7 @@ export async function updatePortalUser(
     }
   }
   if (Object.keys(metadataUpdates).length > 0 || metadataRemovals.length > 0) {
-    userUpdates.metadata = mergeMetadata(
-      userRecord.metadata ?? null,
-      metadataUpdates,
-      metadataRemovals
-    )
+    userUpdates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${metadataRemovals}::text[]) || ${JSON.stringify(metadataUpdates)}::jsonb)::text`
   }
 
   if (Object.keys(userUpdates).length > 0) {
@@ -250,11 +262,13 @@ export async function updatePortalUser(
     await db.update(user).set(userUpdates).where(eq(user.id, userId))
   }
 
-  const principalUpdates: Record<string, unknown> = {}
+  const principalUpdates: { displayName?: string; avatarUrl?: string | null } = {}
   if (input.name !== undefined) principalUpdates.displayName = input.name
   if (input.image !== undefined) principalUpdates.avatarUrl = input.image
   if (Object.keys(principalUpdates).length > 0) {
-    await db.update(principal).set(principalUpdates).where(eq(principal.id, principalId))
+    await updatePrincipalFields({ principalId }, principalUpdates, {
+      guards: { onlyRole: 'user' },
+    })
   }
 
   const updated = (await db.query.user.findFirst({

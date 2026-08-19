@@ -1,27 +1,76 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { FormattedMessage } from 'react-intl'
-import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
-import { Button } from '@/components/ui/button'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createIsomorphicFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
+import { HelpCenterPopularArticles } from '@/components/help-center/help-center-popular-articles'
+import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import {
   listPublicCategoriesFn,
-  listPublicCategoryEditorsFn,
+  listPopularPublicArticlesFn,
 } from '@/lib/server/functions/help-center'
+import { resolveHcLandingLocale } from '@/lib/shared/help-center-url'
+import { HC_LOCALE_COOKIE } from '@/components/help-center/help-center-locale-switcher'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
 
+const DEFAULT_TITLE = 'How can we help?'
+const DEFAULT_DESCRIPTION =
+  'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.'
+
+/**
+ * SSR-only request context for browser-locale detection. The isomorphic split
+ * keeps the server-only header import out of the client bundle
+ * (import-protection denies it there); a client-side nav that already landed
+ * here has nothing to detect.
+ */
+const landingRequestContext = createIsomorphicFn()
+  .client((): { cookieHeader: string; acceptLanguage: string | null } | null => null)
+  .server((): { cookieHeader: string; acceptLanguage: string | null } | null => {
+    try {
+      const headers = getRequestHeaders()
+      return {
+        cookieHeader: headers.get('cookie') ?? '',
+        acceptLanguage: headers.get('accept-language'),
+      }
+    } catch {
+      return null
+    }
+  })
+
+/** Only meaningful during SSR (browser-detect needs the real request headers/cookies). */
+function landingLocaleRedirectTarget(helpCenterConfig?: HelpCenterConfig): string | null {
+  const additional = helpCenterConfig?.locales?.additional ?? []
+  if (additional.length === 0) return null
+  const req = landingRequestContext()
+  if (!req) return null
+  const cookieMatch = new RegExp(`${HC_LOCALE_COOKIE}=([^;]+)`).exec(req.cookieHeader)
+  return resolveHcLandingLocale({
+    cookieLocale: cookieMatch?.[1] ?? null,
+    acceptLanguage: req.acceptLanguage,
+    enabledAdditionalLocales: additional,
+    defaultLocale: helpCenterConfig?.locales?.default ?? 'en',
+  })
+}
+
 export const Route = createFileRoute('/_portal/hc/')({
+  beforeLoad: async ({ context }) => {
+    const { settings } = context
+    const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined
+    const target = landingLocaleRedirectTarget(helpCenterConfig)
+    if (target) throw redirect({ to: `/hc/${target}` as '/', replace: true })
+  },
   loader: async ({ context }) => {
     const { settings } = context
     const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined
-    const [categories, editors] = await Promise.all([
+    const [categories, popularArticles] = await Promise.all([
       listPublicCategoriesFn({ data: {} }),
-      listPublicCategoryEditorsFn({ data: {} }),
+      listPopularPublicArticlesFn({ data: { limit: 6 } }),
     ])
 
     return {
       categories,
-      editors,
+      popularArticles,
       helpCenterConfig: helpCenterConfig ?? null,
       workspaceName: settings?.name ?? 'Help Center',
       logoUrl: settings?.brandingData?.logoUrl || '/logo.png',
@@ -31,9 +80,8 @@ export const Route = createFileRoute('/_portal/hc/')({
     if (!loaderData) return {}
 
     const { helpCenterConfig, workspaceName, logoUrl } = loaderData
-    const title = helpCenterConfig?.homepageTitle ?? 'How can we help?'
-    const description =
-      helpCenterConfig?.homepageDescription ?? 'Search our knowledge base or browse by category'
+    const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
+    const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION
 
     const pageTitle = `${title} - ${workspaceName}`
 
@@ -53,62 +101,39 @@ export const Route = createFileRoute('/_portal/hc/')({
 })
 
 function HelpCenterLandingPage() {
-  const { categories, editors, helpCenterConfig } = Route.useLoaderData()
+  const { categories, popularArticles, helpCenterConfig } = Route.useLoaderData()
   const { settings } = Route.useRouteContext()
-  const supportEnabled =
-    !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+  const askAiEnabled = !!settings?.featureFlags?.helpCenterAiAnswers
 
-  const title = helpCenterConfig?.homepageTitle ?? 'How can we help?'
-  const description =
-    helpCenterConfig?.homepageDescription ?? 'Search our knowledge base or browse by category'
+  const title = helpCenterConfig?.homepageTitle ?? DEFAULT_TITLE
+  const description = helpCenterConfig?.homepageDescription ?? DEFAULT_DESCRIPTION
+  const collectionCount = getTopLevelCategories(categories).length
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-      <div className="text-center mb-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
-        <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">{title}</h1>
-        <p className="text-muted-foreground text-base mb-8">{description}</p>
-        <HelpCenterHeroSearch />
-      </div>
+    <>
+      <HelpCenterHero variant="home" title={title} description={description}>
+        <HelpCenterHeroSearch askAiEnabled={askAiEnabled} />
+      </HelpCenterHero>
 
-      <div
-        className="animate-in fade-in duration-300 fill-mode-backwards"
+      <section
+        aria-labelledby="hc-topics"
+        className="mx-auto max-w-6xl px-4 pb-16 pt-2 sm:px-6 animate-in fade-in duration-300 fill-mode-backwards"
         style={{ animationDelay: '100ms' }}
       >
-        <HelpCenterCategoryGrid categories={categories} editors={editors} />
-      </div>
-
-      {supportEnabled && (
-        <div
-          className="mx-auto mt-12 flex max-w-2xl flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-card px-6 py-5 animate-in fade-in duration-300 fill-mode-backwards"
-          style={{ animationDelay: '150ms' }}
-        >
-          <div className="flex items-center gap-3">
-            <ChatBubbleLeftRightIcon className="size-8 shrink-0 text-primary" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                <FormattedMessage
-                  id="portal.hc.contactSupport.title"
-                  defaultMessage="Still need help?"
-                />
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                <FormattedMessage
-                  id="portal.hc.contactSupport.body"
-                  defaultMessage="Start a conversation with our team and we'll get back to you."
-                />
-              </p>
-            </div>
-          </div>
-          <Button asChild size="sm">
-            <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
-              <FormattedMessage
-                id="portal.hc.contactSupport.cta"
-                defaultMessage="Contact support"
-              />
-            </Link>
-          </Button>
+        <div className="mb-6 flex items-baseline justify-between gap-4">
+          <h2 id="hc-topics" className="text-2xl font-semibold tracking-tight text-foreground">
+            Browse by topic
+          </h2>
+          {collectionCount > 0 && (
+            <span className="shrink-0 text-sm text-muted-foreground">
+              {collectionCount} {collectionCount === 1 ? 'collection' : 'collections'}
+            </span>
+          )}
         </div>
-      )}
-    </div>
+        <HelpCenterCategoryGrid categories={categories} />
+      </section>
+
+      <HelpCenterPopularArticles articles={popularArticles} />
+    </>
   )
 }

@@ -4,6 +4,7 @@ import {
   POST_URL_PASTE_RE,
   CHANGELOG_URL_PASTE_RE,
   ARTICLE_URL_PASTE_RE,
+  TICKET_URL_PASTE_RE,
 } from '../parse-embed-url'
 
 // Real, round-trip-valid TypeIDs. The changelog prefix is `changelog_`
@@ -12,6 +13,7 @@ import {
 // actually resolve.
 const POST_ID = 'post_01ktjwt5tyf6br9mw521h13n6n'
 const CHANGELOG_ID = 'changelog_01ktjwt5tyf6br9mwcz1vskk44'
+const TICKET_ID = 'ticket_01ktjwt5tyf6br9mw521h13n6n'
 
 describe('parseEmbedUrl', () => {
   it('parses a post url', () => {
@@ -32,6 +34,15 @@ describe('parseEmbedUrl', () => {
   it('rejects a typeid of the wrong kind', () => {
     // A post id sitting on the changelog path must not parse as a changelog.
     expect(parseEmbedUrl(`https://acme.quackback.io/changelog/${POST_ID}`)).toBeNull()
+  })
+  it('parses a support ticket url', () => {
+    expect(parseEmbedUrl(`https://acme.quackback.io/support/ticket/${TICKET_ID}`)).toEqual({
+      kind: 'ticket',
+      id: TICKET_ID,
+    })
+  })
+  it('rejects a non-typeid ticket id', () => {
+    expect(parseEmbedUrl('https://acme.quackback.io/support/ticket/not-an-id')).toBeNull()
   })
   it('ignores unrelated urls', () => {
     expect(parseEmbedUrl('https://youtube.com/watch?v=abc')).toBeNull()
@@ -55,10 +66,17 @@ describe('paste regexes', () => {
     )
     expect(m?.[1]).toBe(CHANGELOG_ID)
   })
+  it('TICKET_URL_PASTE_RE captures the ticket id from a full url', () => {
+    const m = new RegExp(TICKET_URL_PASTE_RE).exec(
+      `https://acme.quackback.io/support/ticket/${TICKET_ID}`
+    )
+    expect(m?.[1]).toBe(TICKET_ID)
+  })
   it('neither paste regex matches a foreign url', () => {
     const foreign = 'https://youtube.com/watch?v=abc'
     expect(new RegExp(POST_URL_PASTE_RE).test(foreign)).toBe(false)
     expect(new RegExp(CHANGELOG_URL_PASTE_RE).test(foreign)).toBe(false)
+    expect(new RegExp(TICKET_URL_PASTE_RE).test(foreign)).toBe(false)
   })
 })
 

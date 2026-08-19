@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 
 // CommentContent wraps rendered content in MentionHoverCardOverlay, which
 // reads branding from the root route context. Stub the hook so the test
@@ -152,10 +152,11 @@ describe('<CommentContent>', () => {
     expect(container.textContent).toContain('👍')
   })
 
-  it('renders emoji nodes that only carry a shortcode name (TipTap omits the Unicode char in JSON)', () => {
-    // @tiptap/extension-emoji persists `{ name: 'tada' }` without `emoji`; the
-    // renderer must look the Unicode char up from the bundled emoji set so
-    // existing stored comments do not show as empty spans.
+  it('renders emoji nodes that only carry a shortcode name (TipTap omits the Unicode char in JSON)', async () => {
+    // @tiptap/extension-emoji persists `{ name: 'tada' }` without `emoji`. The
+    // read-only renderer keeps the heavy emoji dataset OUT of the eager portal
+    // chunk, so it shows the `:tada:` shortcode placeholder first and then
+    // upgrades to the Unicode char after an on-demand dynamic import resolves.
     const json = {
       type: 'doc',
       content: [
@@ -169,6 +170,6 @@ describe('<CommentContent>', () => {
       ],
     }
     const { container } = render(<CommentContent content="Shipped :tada:" contentJson={json} />)
-    expect(container.textContent).toContain('🎉')
+    await waitFor(() => expect(container.textContent).toContain('🎉'))
   })
 })

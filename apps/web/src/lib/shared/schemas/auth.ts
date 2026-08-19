@@ -4,6 +4,12 @@ export const inviteSchema = z.object({
   email: z.string().email('Invalid email address'),
   name: z.string().min(2, 'Name must be at least 2 characters').optional(),
   role: z.enum(['member', 'admin']),
+  /**
+   * Custom-role grant carried by the invite. Only meaningful with
+   * role='member' (customs ride the member legacy role); the server
+   * validates existence and rejects the Owner preset.
+   */
+  roleId: z.string().optional(),
 })
 
 export type InviteInput = z.infer<typeof inviteSchema>

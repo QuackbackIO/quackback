@@ -16,6 +16,7 @@ export {
   useRestorePost,
   useToggleCommentsLock,
   useChangePostBoard,
+  useSetPostEta,
 } from './posts'
 
 // Admin comment mutations
@@ -52,13 +53,15 @@ export {
   useAddNotificationChannel,
   useUpdateNotificationChannel,
   useRemoveNotificationChannel,
-  useAddMonitoredChannel,
-  useUpdateMonitoredChannel,
-  useRemoveMonitoredChannel,
 } from './integrations'
 
 // Status sync mutations
-export { useEnableStatusSync, useDisableStatusSync, useUpdateStatusMappings } from './status-sync'
+export {
+  useEnableStatusSync,
+  useDisableStatusSync,
+  useUpdateStatusMappings,
+  useUpdateTicketStatusMappings,
+} from './status-sync'
 
 // Platform credential mutations
 export { useSavePlatformCredentials, useDeletePlatformCredentials } from './platform-credentials'
@@ -68,9 +71,6 @@ export {
   useSaveAuthProviderCredentials,
   useDeleteAuthProviderCredentials,
 } from './auth-provider-credentials'
-
-// Roadmap posts mutations
-export { useAddPostToRoadmap, useRemovePostFromRoadmap } from './roadmap-posts'
 
 // Roadmap mutations
 export {
@@ -85,10 +85,16 @@ export {
   useMarkNotificationAsRead,
   useMarkAllNotificationsAsRead,
   useArchiveNotification,
+  useArchiveAllReadNotifications,
 } from './notifications'
 
 // User mutations
-export { useCreatePortalUser, useRemovePortalUser, useUpdatePortalUser } from './users'
+export {
+  useCreatePortalUser,
+  useMergeLeadIntoUser,
+  useRemovePortalUser,
+  useUpdatePortalUser,
+} from './users'
 
 // Avatar mutations
 export { useUploadAvatar, useDeleteAvatar } from './avatar'
@@ -110,6 +116,13 @@ export {
   useUpdateUserAttribute,
   useDeleteUserAttribute,
 } from './user-attributes'
+
+// Company attribute mutations
+export {
+  useCreateCompanyAttribute,
+  useUpdateCompanyAttribute,
+  useDeleteCompanyAttribute,
+} from './company-attributes'
 
 // Admin subscription mutations
 export { useUpdateVoterSubscription } from './admin-subscriptions'

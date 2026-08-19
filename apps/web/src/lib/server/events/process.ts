@@ -7,12 +7,13 @@
 
 import { Queue, Worker, UnrecoverableError, type JobsOptions } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { getHook } from './registry'
-import { getHookTargets } from './targets'
 import { isRetryableError } from './hook-utils'
+import { HOOK_RETRY_ATTEMPTS, hookRetryDelayMs } from './retry-schedule'
 import type { HookResult } from './hook-types'
 import type { EventData } from './types'
-import type { WebhookId } from '@quackback/ids'
+import type { ConversationId, IntegrationId, TicketId, WebhookId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'event-process' })
@@ -34,7 +35,9 @@ const QUEUE_NAME = '{event-hooks}'
 const CONCURRENCY = 5
 
 const DEFAULT_JOB_OPTS = {
-  attempts: 3,
+  attempts: HOOK_RETRY_ATTEMPTS,
+  // The per-attempt delays live in retry-schedule.ts (the Worker's
+  // backoffStrategy below); this base value only satisfies the option shape.
   backoff: { type: 'exponential' as const, delay: 1000 },
   // Keep last 1000 completed jobs (or 24h, whichever first) for
   // operational visibility. `true` (immediate purge) makes Bull Board
@@ -47,7 +50,7 @@ const DEFAULT_JOB_OPTS = {
 
 let initPromise: Promise<{
   queue: Queue<HookJobData>
-  worker: Worker<HookJobData>
+  worker: Worker<HookJobData> | null
 }> | null = null
 
 /**
@@ -76,52 +79,118 @@ async function initializeQueue() {
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<HookJobData>(
-    QUEUE_NAME,
-    async (job) => {
-      const { hookType, event, target, config: hookConfig } = job.data
+  // Consumer side is role-gated: web-role replicas enqueue and register
+  // schedules but never construct a Worker (see queue/role.ts).
+  const worker = shouldRunWorkers()
+    ? new Worker<HookJobData>(
+        QUEUE_NAME,
+        async (job) => {
+          const { hookType, event, target, config: hookConfig } = job.data
 
-      // Handle delayed changelog publish sentinel
-      if (hookType === '__changelog_publish__') {
-        await handleDelayedChangelogPublish(hookConfig)
-        return
-      }
+          // Handle delayed changelog publish sentinel
+          if (hookType === '__changelog_publish__') {
+            await handleDelayedChangelogPublish(hookConfig)
+            return
+          }
 
-      // Handle post-merge recheck sentinel
-      if (hookType === '__post_merge_recheck__') {
-        await handlePostMergeRecheck(hookConfig)
-        return
-      }
+          // Handle post-merge recheck sentinel
+          if (hookType === '__post_merge_recheck__') {
+            await handlePostMergeRecheck(hookConfig)
+            return
+          }
 
-      const hook = await getHook(hookType)
-      if (!hook) throw new UnrecoverableError(`Unknown hook: ${hookType}`)
+          // Handle scheduled-maintenance window sentinels. Both handlers re-fetch
+          // current DB state and self-guard, so a stale/duplicate fire is a no-op.
+          if (hookType === '__status_maintenance_start__') {
+            await handleStatusMaintenanceJob(hookConfig, 'start')
+            return
+          }
+          if (hookType === '__status_maintenance_complete__') {
+            await handleStatusMaintenanceJob(hookConfig, 'complete')
+            return
+          }
 
-      let result: HookResult
-      try {
-        // Pass job.id so idempotency-sensitive handlers (webhook, AI)
-        // can dedupe re-runs after worker crashes.
-        result = await hook.run(event, target, hookConfig, { jobId: job.id })
-      } catch (error) {
-        if (isRetryableError(error)) throw error
-        throw new UnrecoverableError(error instanceof Error ? error.message : 'Unknown error')
-      }
+          const hook = await getHook(hookType)
+          if (!hook) throw new UnrecoverableError(`Unknown hook: ${hookType}`)
 
-      if (result.success) {
-        if (result.externalId) {
-          persistExternalLink(job.data, result).catch((err) =>
-            log.error({ err }, 'failed to persist external link')
-          )
+          let result: HookResult
+          try {
+            // Pass job.id so idempotency-sensitive handlers (webhook, AI)
+            // can dedupe re-runs after worker crashes.
+            result = await hook.run(event, target, hookConfig, { jobId: job.id })
+          } catch (error) {
+            if (isRetryableError(error)) throw error
+            throw new UnrecoverableError(error instanceof Error ? error.message : 'Unknown error')
+          }
+
+          // One-shot refresh + retry when the provider reports an expired
+          // token and the resolver attributed the target to an integration
+          // (WO-13: the outbound path previously 401'd until reconnect).
+          if (!result.success && result.authExpired) {
+            const integrationId = (hookConfig as { integrationId?: string }).integrationId
+            if (integrationId) {
+              const { getValidAccessToken } =
+                await import('@/lib/server/integrations/token-refresh')
+              const fresh = await getValidAccessToken(integrationId as IntegrationId)
+              if (fresh) {
+                log.info(
+                  { hook_type: hookType, integration_id: integrationId },
+                  'token expired mid-delivery; refreshed and retrying once'
+                )
+                try {
+                  result = await hook.run(
+                    event,
+                    target,
+                    { ...hookConfig, accessToken: fresh },
+                    { jobId: job.id }
+                  )
+                } catch (error) {
+                  if (isRetryableError(error)) throw error
+                  throw new UnrecoverableError(
+                    error instanceof Error ? error.message : 'Unknown error'
+                  )
+                }
+              }
+            }
+          }
+
+          // Health telemetry (WO-14): record delivery outcome on the
+          // integration, when the resolver attributed this target to one.
+          const integrationId = (hookConfig as { integrationId?: string }).integrationId
+          if (integrationId) {
+            recordIntegrationHealth(integrationId, result).catch((err) =>
+              log.error({ err }, 'failed to record integration health')
+            )
+          }
+
+          if (result.success) {
+            if (result.externalId) {
+              persistExternalLink(job.data, result).catch((err) =>
+                log.error({ err }, 'failed to persist external link')
+              )
+            }
+            return
+          }
+
+          if (result.shouldRetry) {
+            throw new Error(result.error ?? 'Hook failed (retryable)')
+          }
+          throw new UnrecoverableError(result.error ?? 'Hook failed (non-retryable)')
+        },
+        {
+          connection,
+          concurrency: CONCURRENCY,
+          settings: {
+            // Applies to every retry of every hook job: seconds-fast at
+            // first, then jittered hourly backoffs (1h/2h/4h) keeping the
+            // tail alive for roughly seven hours, so an endpoint in a real
+            // outage still receives the delivery once it recovers (see
+            // retry-schedule.ts).
+            backoffStrategy: (attemptsMade: number) => hookRetryDelayMs(attemptsMade),
+          },
         }
-        return
-      }
-
-      if (result.shouldRetry) {
-        throw new Error(result.error ?? 'Hook failed (retryable)')
-      }
-      throw new UnrecoverableError(result.error ?? 'Hook failed (non-retryable)')
-    },
-    { connection, concurrency: CONCURRENCY }
-  )
+      )
+    : null
 
   // Verify Redis is reachable before returning. Without this, a missing
   // Redis hangs every request that dispatches events (post/comment creation).
@@ -134,11 +203,11 @@ async function initializeQueue() {
     ])
   } catch (error) {
     await queue.close().catch(() => {})
-    await worker.close().catch(() => {})
+    await worker?.close().catch(() => {})
     throw error
   }
 
-  worker.on('failed', (job, error) => {
+  worker?.on('failed', (job, error) => {
     if (!job) return
     // UnrecoverableError skips retries entirely (attemptsMade stays at 1),
     // so we must also check the error name to detect permanent failure.
@@ -217,8 +286,26 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
       externalId: result.externalId!,
       externalDisplayId: result.externalDisplayId ?? null,
       externalUrl: result.externalUrl ?? null,
+      origin: 'event', // created by an automatic event delivery (WO-14 provenance)
     })
     .onConflictDoNothing()
+}
+
+/**
+ * Record a delivery outcome on the integration for the settings health panel
+ * (WO-14). Success stamps last_outbound_at; a failure stamps last_error +
+ * last_error_at. Best-effort — never blocks or fails the delivery.
+ */
+async function recordIntegrationHealth(integrationId: string, result: HookResult): Promise<void> {
+  const { db, integrations, eq } = await import('@/lib/server/db')
+  const now = new Date()
+  const patch = result.success
+    ? { lastOutboundAt: now, lastError: null, lastErrorAt: null }
+    : { lastError: (result.error ?? 'Delivery failed').slice(0, 500), lastErrorAt: now }
+  await db
+    .update(integrations)
+    .set(patch)
+    .where(eq(integrations.id, integrationId as import('@quackback/ids').IntegrationId))
 }
 
 /**
@@ -226,22 +313,89 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
  * Target resolution is awaited (~10-50ms). Hook execution runs in the background.
  */
 export async function processEvent(event: EventData): Promise<void> {
-  const targets = await getHookTargets(event)
-  if (targets.length === 0) return
+  // EVENTING-V2 cutover: workflow triggers now ride the outbox → relay →
+  // 'workflow' hook (workflowTriggerResolver), so the legacy fire-and-forget
+  // enqueue-into-the-workflow-queue branch that used to live here is gone. The
+  // outbox makes the trigger durable up to the workflow engine's own dispatch
+  // queue — closing the crash window the old branch could drop a trigger in.
 
-  log.debug(
-    { event_type: event.type, event_id: event.id, target_count: targets.length },
-    'processing event'
-  )
+  // Settle SLA breach clocks off the same event (first-response / time-to-close).
+  // Same fire-and-forget + lazy-import isolation as the workflow dispatch.
+  void import('@/lib/server/domains/sla/sla.event-hooks')
+    .then((m) => m.recordSlaFromEvent(event))
+    .catch((err) => log.error({ err, event_type: event.type }, 'SLA hook failed to load'))
 
+  // Convergence Phase 1a: a visitor message on a conversation paired with a
+  // customer ticket reopens that ticket (dealbreaker 3 — a Messenger reply
+  // must not leave the ticket stuck in "Waiting on customer"). Same
+  // fire-and-forget + lazy-import isolation as the SLA hook above.
+  void import('@/lib/server/domains/tickets/ticket.event-hooks')
+    .then((m) => m.autoReopenPairTicketFromEvent(event))
+    .catch((err) => log.error({ err, event_type: event.type }, 'ticket event hook failed to load'))
+
+  // Confirm the assistant's resolution off a positive first CSAT rating. The
+  // event only fires on the first submission, so the confirm runs at most once
+  // per survey. Same fire-and-forget + lazy-import isolation as above.
+  if (event.type === 'conversation.csat_submitted') {
+    void import('@/lib/server/domains/assistant/assistant.involvement')
+      .then((m) =>
+        m.confirmResolutionFromCsat(event.data.conversation.id as ConversationId, event.data.rating)
+      )
+      .catch((err) =>
+        log.error({ err, event_type: event.type }, 'assistant CSAT hook failed to load')
+      )
+  }
+
+  // Summarize the conversation for future Quinn grounding (P2-A.4) once it
+  // closes. A distinct branch from the generic SLA/CSAT hooks above — never
+  // routed through the workflow engine's SUMMARY_EVENT_TYPES/'summary' target,
+  // since this always runs on close, not per-workspace configuration. Same
+  // fire-and-forget + lazy-import isolation; the service itself is also
+  // best-effort (see conversation-summary.service.ts), so this never throws.
+  if (event.type === 'conversation.status_changed' && event.data.newStatus === 'closed') {
+    void import('@/lib/server/domains/assistant/conversation-summary.service')
+      .then((m) => m.summarizeConversationOnClose(event.data.conversation.id as ConversationId))
+      .catch((err) =>
+        log.error({ err, event_type: event.type }, 'conversation summary hook failed to load')
+      )
+  }
+
+  // Ticket sibling of the conversation-close summary above (Quinn Phase 4:
+  // ticket grounding). Same fire-and-forget + lazy-import isolation; the
+  // service is itself best-effort (see ticket-summary.service.ts), so this
+  // never throws. Ticket status is a three-value category ('open' | 'pending'
+  // | 'closed'); 'closed' is the resolution moment worth summarizing.
+  if (event.type === 'ticket.status_changed' && event.data.newStatus === 'closed') {
+    void import('@/lib/server/domains/assistant/ticket-summary.service')
+      .then((m) => m.summarizeTicketOnClose(event.data.ticket.id as TicketId))
+      .catch((err) =>
+        log.error({ err, event_type: event.type }, 'ticket summary hook failed to load')
+      )
+  }
+
+  // EVENTING-V2 (WO-18 cutover): the durable outbox is the ONLY path. The event
+  // is written transactionally (closing the commit-vs-enqueue loss window) and
+  // the leader relay resolves targets + enqueues onto {event-hooks} — the relay
+  // is the sole enqueuer. The legacy direct getHookTargets + addBulk path is
+  // deleted; there is no flag branch anymore.
+  const { writeEventToOutbox } = await import('./outbox-dispatch')
+  await writeEventToOutbox(event)
+}
+
+/**
+ * Enqueue pre-resolved hook jobs with caller-supplied deterministic job IDs
+ * (EVENTING-V2 WO-3). The outbox relay is the sole caller: it passes
+ * `jobId = ${eventId}:${sink}:${targetKey}` so a re-drained event re-enqueues
+ * the SAME job id, which BullMQ dedupes (and `hook_deliveries` catches the rest)
+ * — the load-bearing mechanism for effectively-once delivery. `addBulk` with an
+ * explicit `opts.jobId` is idempotent: an existing id is not re-added.
+ */
+export async function enqueueHookJobsWithIds(
+  jobs: Array<{ name: string; data: HookJobData; jobId: string }>
+): Promise<void> {
+  if (jobs.length === 0) return
   const queue = await ensureQueue()
-
-  await queue.addBulk(
-    targets.map(({ type, target, config: hookConfig }) => ({
-      name: `${event.type}:${type}`,
-      data: { hookType: type, event, target, config: hookConfig },
-    }))
-  )
+  await queue.addBulk(jobs.map(({ name, data, jobId }) => ({ name, data, opts: { jobId } })))
 }
 
 /**
@@ -255,7 +409,7 @@ export async function closeQueue(): Promise<void> {
   initPromise = null
 
   try {
-    await worker.close()
+    await worker?.close()
   } catch (e) {
     log.error({ err: e }, 'worker close error')
   }
@@ -315,6 +469,8 @@ export async function removeDelayedJob(jobId: string): Promise<void> {
 async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>): Promise<void> {
   const changelogId = hookConfig.changelogId as string | undefined
   const principalId = hookConfig.principalId as string | undefined
+  // Defaults true so a job scheduled before this field existed still sends.
+  const notify = hookConfig.notify !== false
   if (!changelogId) return
 
   const { notifyChangelogPublished } =
@@ -325,7 +481,29 @@ async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>
     ? buildEventActor({ principalId: principalId as import('@quackback/ids').PrincipalId })
     : { type: 'service' as const, displayName: 'scheduler' }
 
-  await notifyChangelogPublished(changelogId as import('@quackback/ids').ChangelogId, actor)
+  await notifyChangelogPublished(changelogId as import('@quackback/ids').ChangelogId, actor, notify)
+}
+
+/**
+ * Handle a scheduled-maintenance window boundary job (auto-start / auto-complete).
+ * The handlers re-fetch DB state and guard on current status, so a stale job
+ * left by a reschedule, or a duplicate, is a harmless no-op.
+ */
+async function handleStatusMaintenanceJob(
+  hookConfig: Record<string, unknown>,
+  phase: 'start' | 'complete'
+): Promise<void> {
+  const incidentId = hookConfig.incidentId as string | undefined
+  if (!incidentId) return
+
+  const { handleMaintenanceStart, handleMaintenanceComplete } =
+    await import('@/lib/server/domains/status/status.maintenance')
+  const id = incidentId as import('@quackback/ids').StatusIncidentId
+  if (phase === 'start') {
+    await handleMaintenanceStart(id)
+  } else {
+    await handleMaintenanceComplete(id)
+  }
 }
 
 /**

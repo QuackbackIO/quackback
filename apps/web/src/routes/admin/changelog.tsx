@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { ChangelogList, ChangelogModal } from '@/components/admin/changelog'
+import { getFirstEnabledAdminProductPath, isProductEnabled } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
   status: z.enum(['draft', 'scheduled', 'published']).optional(),
@@ -10,6 +11,11 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/admin/changelog')({
   validateSearch: searchSchema,
+  beforeLoad: ({ context }) => {
+    if (!isProductEnabled(context.settings?.featureFlags, 'changelog')) {
+      throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
+    }
+  },
   component: ChangelogPage,
 })
 

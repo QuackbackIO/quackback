@@ -3,26 +3,38 @@
  * Queries database to determine all targets for an event.
  */
 
-import type { PostId, PrincipalId, SegmentId, UserId, WebhookId } from '@quackback/ids'
+import type {
+  ConversationId,
+  PostId,
+  PrincipalId,
+  SegmentId,
+  TeamId,
+  TicketId,
+  UserId,
+} from '@quackback/ids'
 import {
   db,
-  integrations,
-  integrationEventMappings,
   eq,
   and,
   inArray,
   isNull,
   principal,
   user,
-  webhooks,
   posts,
   boards,
   userSegments,
+  conversations,
+  tickets,
+  ticketConversations,
 } from '@/lib/server/db'
+import {
+  resolveContactRecipients,
+  contactRecipientFrom,
+  type ContactEmail,
+} from '@/lib/server/email/recipient'
+import { formatTicketNumber } from '@/lib/shared/tickets'
+import { isSupportTicketsEnabled } from '@/lib/server/domains/settings/settings.support'
 import { canViewPost, type Actor } from '@/lib/server/policy'
-import { decryptSecrets } from '@/lib/server/integrations/encryption'
-import { getJiraAccessToken } from '@/lib/server/integrations/jira/access-token'
-import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import {
   getSubscribersForEvent,
   batchGetNotificationPreferences,
@@ -30,12 +42,11 @@ import {
   type Subscriber,
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
-import type { HookTarget } from './hook-types'
+import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
+import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
-import { buildHookContext, type HookContext } from './hook-context'
+import { type HookContext } from './hook-context'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
-import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'targets' })
@@ -145,233 +156,78 @@ function getNotificationEventType(eventType: string): NotificationEventType | nu
 }
 
 /** Events that trigger subscriber email and in-app notifications */
-const SUBSCRIBER_EVENT_TYPES = [
+export const SUBSCRIBER_EVENT_TYPES = [
   'post.status_changed',
   'comment.created',
   'changelog.published',
 ] as const
 /** Events that resolve a single mentioned principal as the notification target */
-const MENTION_EVENT_TYPES = ['post.mentioned'] as const
-const AI_EVENT_TYPES = ['post.created'] as const
-const SUMMARY_EVENT_TYPES = ['post.created', 'comment.created'] as const
+export const MENTION_EVENT_TYPES = ['post.mentioned'] as const
 /**
  * Get all hook targets for an event.
  * Gracefully handles errors - returns empty array on failure.
  */
 export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
   try {
-    // Build context ONCE at the start - consolidates all settings/URL queries
-    const context = await buildHookContext()
-    if (!context) {
-      log.error('failed to build hook context')
-      return []
-    }
+    // WO-18 cutover: the resolver registry is the single resolution path. This
+    // adapter reconstructs the DomainEvent from the legacy EventData and
+    // delegates. Everything the old if-ladder did now lives in a resolver
+    // (integration/webhook/notification/ai/summary), each independently tested.
+    //
+    // Dynamic imports break the load-time cycle: this module's notification
+    // builders are imported BY the notification resolver, so a static import of
+    // the registry here would evaluate that resolver (and its top-level
+    // `new Set(SUBSCRIBER_EVENT_TYPES)`) before this module finished loading.
+    //
+    // 'workflow' targets are excluded — the legacy path never emitted workflow
+    // HOOK targets (workflows dispatch via their own branch); the flag-off
+    // processEvent still does, so including them here would double-dispatch.
+    const [{ registerAllResolvers, resolveTargets }, { extractEntityId }, { getEventDefinition }] =
+      await Promise.all([import('./resolvers'), import('./outbox-dispatch'), import('./catalogue')])
+    registerAllResolvers()
 
-    const targets: HookTarget[] = []
+    const domainEvent = {
+      eventId: event.id,
+      seq: 0n,
+      type: event.type,
+      entityType: getEventDefinition(event.type)?.entity ?? 'unknown',
+      entityId: extractEntityId(event),
+      actorType: event.actor.type === 'user' ? 'user' : 'service',
+      actorId: event.actor.principalId,
+      payload: event.data,
+      context: { depth: 0 },
+      schemaVersion: 1,
+      occurredAt: new Date(event.timestamp),
+    } as unknown as import('./envelope').DomainEvent
 
-    // Integration targets (Slack, Discord, etc.)
-    const integrationTargets = await getIntegrationTargets(event, context)
-    targets.push(...integrationTargets)
-
-    // Email and in-app notification targets (subscribers)
-    if (SUBSCRIBER_EVENT_TYPES.includes(event.type as (typeof SUBSCRIBER_EVENT_TYPES)[number])) {
-      if (event.type === 'changelog.published') {
-        const changelogTargets = await getChangelogSubscriberTargets(event, context)
-        targets.push(...changelogTargets)
-      } else {
-        const subscriberTargets = await getSubscriberTargets(event, context)
-        targets.push(...subscriberTargets)
-      }
-    }
-
-    // Direct-mention targets (single principal whose id is in the payload)
-    if (MENTION_EVENT_TYPES.includes(event.type as (typeof MENTION_EVENT_TYPES)[number])) {
-      const mentionTargets = await getMentionTargets(event, context)
-      targets.push(...mentionTargets)
-    }
-
-    // AI targets (sentiment, embeddings) - only when AI is configured
-    if (getOpenAI() && AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
-      targets.push({
-        type: 'ai',
-        target: { type: 'ai' },
-        config: {},
-      })
-    }
-
-    // Summary targets - AI post summary generation
-    if (
-      getOpenAI() &&
-      SUMMARY_EVENT_TYPES.includes(event.type as (typeof SUMMARY_EVENT_TYPES)[number])
-    ) {
-      targets.push({
-        type: 'summary',
-        target: { type: 'summary' },
-        config: {},
-      })
-    }
-
-    // Webhook targets - external HTTP endpoints (all event types)
-    const webhookTargets = await getWebhookTargets(event)
-    targets.push(...webhookTargets)
-
-    return targets
+    // WO-18: the resolver registry is the single resolution path. next's
+    // "move bell onto message.created / ticket.status_changed" work
+    // (getMessageCreatedTargets / getTicketStatusChangedTargets) is wired into
+    // the notification resolver's BELL routing, so it lands here too.
+    //
+    // bestEffort: this adapter's documented contract is graceful degradation (a
+    // broken sink yields zero targets, never a throw). The relay is the caller
+    // that wants strict all-or-retry semantics, and it calls resolveTargets
+    // directly.
+    const targets = await resolveTargets(domainEvent, { bestEffort: true })
+    return targets.filter((t) => t.type !== 'workflow')
   } catch (error) {
     log.error({ err: error, event_type: event.type }, 'failed to resolve targets')
     return [] // Graceful degradation - don't crash event processing
   }
 }
 
-type CachedIntegrationMapping = {
-  integrationId: string
-  eventType: string
-  integrationType: string
-  secrets: string | null
-  integrationConfig: unknown
-  actionConfig: unknown
-  filters: unknown
-}
-
-async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[]> {
-  const cached = await cacheGet<CachedIntegrationMapping[]>(CACHE_KEYS.INTEGRATION_MAPPINGS)
-  if (cached) {
-    log.debug({ count: cached.length }, 'integration mappings cache hit')
-    return cached
-  }
-
-  const mappings = await db
-    .select({
-      integrationId: integrations.id,
-      eventType: integrationEventMappings.eventType,
-      integrationType: integrations.integrationType,
-      secrets: integrations.secrets,
-      integrationConfig: integrations.config,
-      actionConfig: integrationEventMappings.actionConfig,
-      filters: integrationEventMappings.filters,
-    })
-    .from(integrationEventMappings)
-    .innerJoin(integrations, eq(integrationEventMappings.integrationId, integrations.id))
-    .where(and(eq(integrationEventMappings.enabled, true), eq(integrations.status, 'active')))
-
-  log.debug({ count: mappings.length }, 'integration mappings cache miss')
-  await cacheSet(CACHE_KEYS.INTEGRATION_MAPPINGS, mappings, 300)
-  return mappings
-}
-
-/**
- * Get integration hook targets (Slack, Discord, etc.).
- */
-async function getIntegrationTargets(
-  event: EventData,
-  context: HookContext
-): Promise<HookTarget[]> {
-  // Never forward private comments to external integrations
-  if (
-    (event.type === 'comment.created' ||
-      event.type === 'comment.updated' ||
-      event.type === 'comment.deleted') &&
-    event.data.comment.isPrivate
-  ) {
-    return []
-  }
-
-  // Get all active mappings from cache or DB, then filter by event type
-  const allMappings = await getCachedIntegrationMappings()
-  const mappings = allMappings.filter((m) => m.eventType === event.type)
-
-  if (mappings.length === 0) {
-    return []
-  }
-
-  const targets: HookTarget[] = []
-  const boardIds = extractBoardIds(event)
-
-  // Track seen (integrationType, channelId) pairs to deduplicate
-  const seen = new Set<string>()
-
-  for (const m of mappings) {
-    // Apply board filter — match if any event board overlaps with filter
-    const filters = m.filters as { boardIds?: string[] } | null
-    if (
-      filters?.boardIds?.length &&
-      boardIds.length > 0 &&
-      !boardIds.some((id) => filters.boardIds!.includes(id))
-    ) {
-      continue
-    }
-
-    const integrationConfig = (m.integrationConfig as Record<string, unknown>) || {}
-    const actionConfig = (m.actionConfig as Record<string, unknown>) || {}
-    const channelId = (actionConfig.channelId || integrationConfig.channelId) as string | undefined
-
-    if (!channelId) {
-      log.warn({ integration_type: m.integrationType }, 'no channel id for integration, skipping')
-      continue
-    }
-
-    // Deduplicate by (integrationType, channelId)
-    const dedupeKey = `${m.integrationType}:${channelId}`
-    if (seen.has(dedupeKey)) continue
-    seen.add(dedupeKey)
-
-    let accessToken: string | undefined
-    if (m.secrets) {
-      try {
-        const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
-        accessToken = secrets.accessToken
-      } catch (error) {
-        log.error(
-          { err: error, integration_type: m.integrationType },
-          'failed to decrypt integration secrets'
-        )
-        continue
-      }
-
-      if (m.integrationType === 'jira') {
-        try {
-          accessToken = await getJiraAccessToken({
-            id: m.integrationId,
-            secrets: m.secrets,
-            config: m.integrationConfig,
-          })
-        } catch (error) {
-          log.warn(
-            { err: error, integration_type: m.integrationType },
-            'jira token refresh failed; using cached access token'
-          )
-        }
-      }
-    }
-
-    // Inbound-only fields stay on the integration row; they must not ride
-    // along in hook jobs (webhookSecret especially).
-    const {
-      webhookSecret: _webhookSecret,
-      statusMappings: _statusMappings,
-      statusSyncEnabled: _statusSyncEnabled,
-      externalWebhookId: _externalWebhookId,
-      ...hookConfig
-    } = integrationConfig
-
-    targets.push({
-      type: m.integrationType,
-      target: { channelId },
-      config: {
-        ...hookConfig,
-        accessToken,
-        rootUrl: context.portalBaseUrl,
-      },
-    })
-  }
-
-  return targets
-}
+// WO-18: integration target resolution moved to resolvers/integration.resolver.ts
+// (getIntegrationTargets / getCachedIntegrationMappings deleted here).
 
 /**
  * Get email and in-app notification targets for subscribers.
  * Fetches subscribers once, then builds both email and notification targets.
  */
-async function getSubscriberTargets(event: EventData, context: HookContext): Promise<HookTarget[]> {
+export async function getSubscriberTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
   const postId = extractPostId(event)
   if (!postId) return []
 
@@ -439,10 +295,11 @@ async function buildEmailTargets(
   const principalIds = subscribers.map((s) => s.principalId)
   const prefsMap = await batchGetNotificationPreferences(principalIds)
 
-  // Filter by global email preferences
+  // Filter by per-type x per-channel notification preferences
+  const notificationType = EVENT_TO_NOTIFICATION_TYPE[event.type]
   const eligibleSubscribers = subscribers.filter((subscriber) => {
     const prefs = prefsMap.get(subscriber.principalId)
-    return prefs && shouldSendEmail(event.type, prefs)
+    return prefs && notificationType && shouldNotify(prefs, notificationType, 'email')
   })
   if (eligibleSubscribers.length === 0) return []
 
@@ -455,18 +312,30 @@ async function buildEmailTargets(
     }))
   )
 
-  return eligibleSubscribers.map((subscriber) => ({
-    type: 'email',
-    target: {
-      email: subscriber.email,
-      unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
-    },
-    config: {
-      workspaceName: context.workspaceName,
-      logoUrl: context.logoUrl ?? undefined,
-      ...eventConfig,
-    },
-  }))
+  // `Subscriber.email` is the IDENTITY field `isActorSubscriber` compares
+  // against the actor, so it is read, never overwritten. The delivery address is
+  // decided separately and may differ — a placeholder account reachable only
+  // via its contact address is the case that motivates this. Both fields come
+  // from the subscriber query, so this costs no extra round trip.
+  return eligibleSubscribers.flatMap((subscriber) => {
+    const to = contactRecipientFrom({
+      accountEmail: subscriber.email,
+      contactEmail: subscriber.contactEmail,
+    })
+    if (!to) return []
+    return [
+      emailTarget(
+        to,
+        `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
+        {
+          workspaceName: context.workspaceName,
+          logoUrl: context.logoUrl ?? undefined,
+          preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+          ...eventConfig,
+        }
+      ),
+    ]
+  })
 }
 
 /**
@@ -487,26 +356,24 @@ function extractPostId(event: EventData): PostId | null {
  */
 function isActorSubscriber(subscriber: Subscriber, actor: EventActor): boolean {
   if (actor.type === 'service') return false
+  // principalId is the primary match: it survives the DomainEvent round-trip
+  // (the envelope carries actorId=principalId but not email/userId), so the
+  // "don't notify yourself" filter works identically whether the event came
+  // through the legacy full-actor path or the resolver registry. For a real
+  // user, principalId maps 1:1 to userId, so this is behaviour-preserving.
+  if (actor.principalId && subscriber.principalId === actor.principalId) return true
   return subscriber.userId === actor.userId || subscriber.email === actor.email
 }
 
-const EVENT_EMAIL_PREF_MAP: Record<string, 'emailStatusChange' | 'emailNewComment'> = {
-  'post.status_changed': 'emailStatusChange',
-  'comment.created': 'emailNewComment',
-}
-
 /**
- * Check if email should be sent based on global email preferences.
- * Note: Subscription level (notifyComments/notifyStatusChanges) is already filtered
- * by getSubscribersForEvent. This checks the global email preferences.
+ * Map system event types to notification preference-matrix type keys.
+ * `buildEmailTargets` only ever sees `post.status_changed` and
+ * `comment.created` (changelog/status/mention have their own paths below),
+ * but the map is kept generic for clarity.
  */
-function shouldSendEmail(
-  eventType: string,
-  prefs: { emailStatusChange: boolean; emailNewComment: boolean; emailMuted: boolean }
-): boolean {
-  if (prefs.emailMuted) return false
-  const prefKey = EVENT_EMAIL_PREF_MAP[eventType]
-  return prefKey ? prefs[prefKey] : false
+const EVENT_TO_NOTIFICATION_TYPE: Record<string, string> = {
+  'post.status_changed': 'post_status_changed',
+  'comment.created': 'comment_created',
 }
 
 /**
@@ -665,7 +532,10 @@ const MENTION_ELIGIBLE_ROLES = new Set(['admin', 'member', 'user'])
  *  - one notification target (always, when the principal exists and is eligible)
  *  - one email target (only when the joined user has a non-null email)
  */
-async function getMentionTargets(event: EventData, context: HookContext): Promise<HookTarget[]> {
+export async function getMentionTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
   if (event.type !== 'post.mentioned') return []
 
   const { mentionedPrincipalId, postTitle, postUrl } = event.data
@@ -677,6 +547,7 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
       type: principal.type,
       role: principal.role,
       email: user.email,
+      contactEmail: principal.contactEmail,
     })
     .from(principal)
     .leftJoin(user, eq(principal.userId, user.id))
@@ -704,6 +575,7 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
       // canViewPost only reads role + principalType + segmentIds.
       userId: '',
       email: row.email ?? '',
+      contactEmail: null,
       name: null,
       reason: 'manual',
       notifyComments: false,
@@ -725,14 +597,19 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
     },
   })
 
-  if (row.email) {
-    // Honour the global emailMuted preference. Without this, a user who hit
+  const mentionTo = contactRecipientFrom({
+    accountEmail: row.email,
+    contactEmail: row.contactEmail,
+  })
+  if (mentionTo) {
+    // Honour the per-type x per-channel preference matrix (this subsumes the
+    // global emailMuted kill switch). Without this, a user who hit
     // unsubscribe-all (which sets emailMuted=true) would still get direct
     // mention emails because the mention path doesn't go through the
-    // subscriber filter that runs shouldSendEmail.
+    // subscriber filter that runs shouldNotify.
     const prefsMap = await batchGetNotificationPreferences([row.id as PrincipalId])
     const prefs = prefsMap.get(row.id as PrincipalId)
-    if (!prefs?.emailMuted) {
+    if (!prefs || shouldNotify(prefs, 'post_mentioned', 'email')) {
       const tokenMap = await batchGenerateUnsubscribeTokens([
         {
           principalId: row.id as PrincipalId,
@@ -741,20 +618,16 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
         },
       ])
       const token = tokenMap.get(row.id as PrincipalId)
-      targets.push({
-        type: 'email',
-        target: {
-          email: row.email,
-          unsubscribeUrl: token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : undefined,
-        },
-        config: {
+      targets.push(
+        emailTarget(mentionTo, token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : '', {
           postTitle,
           postUrl,
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
+          preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           eventType: 'post.mentioned',
-        },
-      })
+        })
+      )
     }
   }
 
@@ -762,15 +635,1056 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
 }
 
 // ============================================================================
+// Support-Inbox Assignment + Hand-off Targets (WO-3 slice 1)
+// ============================================================================
+
+/**
+ * Notification target for `conversation.assigned`: the newly-assigned agent
+ * AND, when the conversation's team assignment changed, that team's members
+ * — one combined target (never split recipients across multiple notification
+ * targets; idempotency depends on a single target per event), mirroring
+ * `getTicketAssignedTargets` below. An assignment can move the agent and/or
+ * the team independently (conversation.service's assignTeam can touch
+ * `assignedTeamId` while leaving the agent untouched, and vice versa), so
+ * each side only contributes recipients when IT actually changed.
+ * `buildNotifications` (events/handlers/notification.ts) tells the two
+ * recipient kinds apart by comparing each principal against
+ * `assignedAgentPrincipalId` in config, so the direct assignee gets "you were
+ * assigned" while their teammates get the team-assignment copy. Exported
+ * (like `webhookSubscriptionMatches`) so it's unit-testable without driving
+ * the whole getHookTargets pipeline.
+ */
+export async function getConversationAssignedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'conversation.assigned') return null
+  const {
+    conversation,
+    assignedAgentPrincipalId,
+    previousAgentPrincipalId,
+    assignedTeamId,
+    previousTeamId,
+  } = event.data
+
+  const directAssignee: PrincipalId | null =
+    assignedAgentPrincipalId &&
+    assignedAgentPrincipalId !== previousAgentPrincipalId &&
+    assignedAgentPrincipalId !== event.actor.principalId
+      ? (assignedAgentPrincipalId as PrincipalId)
+      : null
+
+  const recipients = new Set<PrincipalId>()
+  if (directAssignee) recipients.add(directAssignee)
+
+  if (assignedTeamId && assignedTeamId !== previousTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    const memberIds = await listTeamMemberPrincipalIds(assignedTeamId as TeamId)
+    for (const id of memberIds) {
+      if (id !== event.actor.principalId) recipients.add(id)
+    }
+  }
+
+  if (recipients.size === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: [...recipients] },
+    config: { conversationId: conversation.id, assignedAgentPrincipalId: directAssignee },
+  }
+}
+
+/**
+ * Notification target for `ticket.assigned`: the newly-assigned teammate AND,
+ * when the ticket's team assignment changed, that team's members — one
+ * combined target (never split recipients across multiple notification
+ * targets; idempotency depends on a single target per event).
+ * `buildNotifications` (events/handlers/notification.ts) tells the two
+ * recipient kinds apart by comparing each principal against
+ * `assignedPrincipalId` in config, so the direct assignee gets "you were
+ * assigned" while their teammates get the team-assignment copy.
+ */
+/**
+ * The two recipient kinds of a `ticket.assigned` event: the direct assignee
+ * (only when the agent actually changed and isn't the actor) and the members of
+ * a newly-assigned team (actor-excluded). Shared by the bell builder above and
+ * the email builder below so the recipient rule lives in ONE place — the bell
+ * derives per-recipient copy by comparing against `assignedPrincipalId`, the
+ * email bakes a per-target `kind`, but both start from this same set.
+ */
+async function computeTicketAssignmentRecipients(
+  data: {
+    assignedPrincipalId: string | null
+    previousPrincipalId: string | null
+    assignedTeamId: string | null
+    previousTeamId: string | null
+  },
+  actorPrincipalId: string | undefined
+): Promise<{ directAssignee: PrincipalId | null; teamMemberIds: PrincipalId[] }> {
+  const directAssignee: PrincipalId | null =
+    data.assignedPrincipalId &&
+    data.assignedPrincipalId !== data.previousPrincipalId &&
+    data.assignedPrincipalId !== actorPrincipalId
+      ? (data.assignedPrincipalId as PrincipalId)
+      : null
+
+  let teamMemberIds: PrincipalId[] = []
+  if (data.assignedTeamId && data.assignedTeamId !== data.previousTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    const memberIds = await listTeamMemberPrincipalIds(data.assignedTeamId as TeamId)
+    teamMemberIds = memberIds.filter((id) => id !== actorPrincipalId)
+  }
+  return { directAssignee, teamMemberIds }
+}
+
+export async function getTicketAssignedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.assigned') return null
+  const { ticket, assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId } =
+    event.data
+
+  const { directAssignee, teamMemberIds } = await computeTicketAssignmentRecipients(
+    { assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
+    event.actor.principalId
+  )
+
+  const recipients = new Set<PrincipalId>()
+  if (directAssignee) recipients.add(directAssignee)
+  for (const id of teamMemberIds) recipients.add(id)
+
+  if (recipients.size === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: [...recipients] },
+    config: { ticketId: ticket.id, assignedPrincipalId: directAssignee },
+  }
+}
+
+/**
+ * Notification target for `assistant.handed_off`. The payload carries only
+ * `{ conversationId, reason }`, so this re-reads the conversation for its
+ * current team assignment — the assigned team's members when one is set,
+ * else every admin/member principal (the whole agent team). The actor
+ * (Quinn's service principal) is always excluded.
+ */
+export async function getAssistantHandedOffTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'assistant.handed_off') return null
+  const { conversationId, reason } = event.data
+
+  const [conv] = await db
+    .select({ assignedTeamId: conversations.assignedTeamId })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId as ConversationId))
+    .limit(1)
+
+  let recipientIds: PrincipalId[]
+  if (conv?.assignedTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    recipientIds = await listTeamMemberPrincipalIds(conv.assignedTeamId as TeamId)
+  } else {
+    const { listAssignableTeammates } = await import('@/lib/server/domains/teams')
+    recipientIds = (await listAssignableTeammates()).map((t) => t.principalId as PrincipalId)
+  }
+
+  const filtered = recipientIds.filter((id) => id !== event.actor.principalId)
+  if (filtered.length === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: filtered },
+    config: { conversationId, reason },
+  }
+}
+
+/**
+ * Notification target for `post.owner_assigned`: the newly-assigned owner,
+ * excluding the actor (never self-notify — a teammate assigning a post to
+ * themselves gets no bell). The payload is self-contained, so this trusts it
+ * outright — no DB round-trip, mirroring `getConversationNoteMentionedTargets`
+ * below. Exported for direct unit testing.
+ */
+export function getPostOwnerAssignedTargets(event: EventData): HookTarget | null {
+  if (event.type !== 'post.owner_assigned') return null
+  const { postId, postTitle, boardSlug, postUrl, ownerPrincipalId } = event.data
+  if (ownerPrincipalId === event.actor.principalId) return null
+  return {
+    type: 'notification',
+    target: { principalIds: [ownerPrincipalId as PrincipalId] },
+    config: { postId: postId as PostId, postTitle, boardSlug, postUrl },
+  }
+}
+
+/**
+ * Notification target for `conversation.note_mentioned` (WO-3 slice 3):
+ * `mentionedPrincipalIds` is already eligibility-filtered (team-only) and
+ * author-excluded by the emit site (sync-conversation-mentions.ts), so this
+ * resolver trusts the payload outright — no DB round-trip, unlike the other
+ * resolvers above. Exported (like its siblings) for direct unit testing.
+ */
+export function getConversationNoteMentionedTargets(event: EventData): HookTarget | null {
+  if (event.type !== 'conversation.note_mentioned') return null
+  const { conversationId, conversationMessageId, mentionedPrincipalIds, authorName, preview } =
+    event.data
+  if (mentionedPrincipalIds.length === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: mentionedPrincipalIds as PrincipalId[] },
+    config: { conversationId, conversationMessageId, authorName, preview },
+  }
+}
+
+/**
+ * Email targets for `conversation.note_mentioned` — one per mentioned teammate
+ * who has a reachable address and allows `chat_mention` mail.
+ *
+ * A mention is a direct ask, so it is the one internal-note event that reaches
+ * a teammate who is not looking at the inbox. The recipient set is taken
+ * straight from the payload for the same reason the bell above does: the emit
+ * site has already narrowed it to teammates and dropped the author, so a
+ * self-mention never mails itself. `resolveEligibleRecipients` supplies both
+ * remaining gates — an address to send to, and the per-type x per-channel
+ * preference (which subsumes the global emailMuted kill switch), so muting the
+ * mention row on the notification-preferences surface silences this mail while
+ * leaving the bell alone.
+ *
+ * The CTA is the admin inbox, never the portal: the note body is internal and
+ * its audience is agents.
+ */
+export async function getConversationNoteMentionedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'conversation.note_mentioned') return []
+  const { conversationId, mentionedPrincipalIds, authorName, preview } = event.data
+  if (mentionedPrincipalIds.length === 0) return []
+
+  const { recipients, emailMap } = await resolveEligibleRecipients(
+    mentionedPrincipalIds as PrincipalId[],
+    'chat_mention'
+  )
+  if (recipients.length === 0) return []
+
+  const config = {
+    workspaceName: context.workspaceName,
+    conversationId,
+    authorName,
+    preview,
+    ctaUrl: inboxUrl(context.portalBaseUrl, conversationId),
+    logoUrl: context.logoUrl ?? undefined,
+    preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+  } satisfies NoteMentionEmailConfig
+
+  return recipients.map((id) => emailTarget(emailMap.get(id)!, '', { ...config }))
+}
+
+/**
+ * Notification target for `ticket.status_changed` (WO-3 slice 4, extended
+ * for watchers): the requester ∪ the ticket's watchers, in ONE combined
+ * target (single-target invariant, see getTicketAssignedTargets). Fires only
+ * when the new stage is non-null and differs from the previous stage (a
+ * same-stage or null-stage move stays silent for EVERYONE — the requester
+ * must never see internal status names, and agent watchers get stage moves,
+ * not churn) — plus the one deliberate exception: a fresh crossing INTO
+ * `closed` via a null-stage status ("Won't do", "Duplicate") fires with the
+ * generic label 'Closed', so the requester is never left at a silent dead
+ * end (the internal status name still never leaks). Watchers are
+ * actor-excluded.
+ *
+ * STOP-WATCHING HONORED (B18): the requester is reached THROUGH the
+ * subscription row like any other watcher — it is no longer added
+ * unconditionally. `getTicketWatchersForEvent` already returns the requester
+ * exactly when their row exists and is unmuted (they are auto-subscribed at
+ * ticket creation with reason 'requester'), so deleting the row via the
+ * portal's "Stop watching" toggle quiets this bell; a later requester reply
+ * re-subscribes them (appendRequesterReply's re-opt-in rule). The
+ * `requesterPrincipalId` carried in config is NOT a recipient hint — it only
+ * routes the bell's deep link (portal thread vs admin inbox) in the
+ * notification handler. Stage labels are resolved HERE, not carried in the
+ * payload, so a later workspace label edit doesn't retroactively change
+ * historical event data.
+ */
+/**
+ * Active watchers to notify for a ticket event, actor-excluded. `agentsOnly`
+ * narrows to team-member watchers (internal-note recipients). Dynamic import
+ * avoids a static cycle through the tickets domain.
+ */
+async function actorExcludedTicketWatchers(
+  ticketId: TicketId,
+  actorPrincipalId: string | undefined,
+  opts?: { agentsOnly?: boolean }
+): Promise<PrincipalId[]> {
+  const { getTicketWatchersForEvent, getTicketAgentWatchersForEvent } =
+    await import('@/lib/server/domains/tickets/ticket-subscription.service')
+  const watchers = opts?.agentsOnly
+    ? await getTicketAgentWatchersForEvent(ticketId)
+    : await getTicketWatchersForEvent(ticketId)
+  return watchers.filter((id) => id !== actorPrincipalId)
+}
+
+export async function getTicketStatusChangedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.status_changed') return null
+  const { ticket, previousStatus, newStatus, stage, previousStage, requesterPrincipalId, title } =
+    event.data
+  // The generic-close exception to the null-stage silence (see the doc): a
+  // fresh crossing into `closed` whose status projects no public stage still
+  // tells the customer the ticket was closed — as 'Closed', never the
+  // internal status name. Every other same-stage/null-stage move stays silent.
+  const genericClose = !stage && newStatus === 'closed' && previousStatus !== 'closed'
+  if ((!stage || stage === previousStage) && !genericClose) return null
+
+  // The requester rides the subscription row (B18): present + unmuted ⇔ in
+  // this watcher set already, so "Stop watching" quiets the bell.
+  const recipients = new Set<PrincipalId>(
+    await actorExcludedTicketWatchers(ticket.id as TicketId, event.actor.principalId)
+  )
+  if (recipients.size === 0) return null
+
+  const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
+  const stageLabels = await getStageLabels()
+  const stageLabel = stage ? (stageLabels[stage as keyof typeof stageLabels] ?? stage) : 'Closed'
+  const previousStageLabel = previousStage
+    ? (stageLabels[previousStage as keyof typeof stageLabels] ?? previousStage)
+    : null
+
+  return {
+    type: 'notification',
+    target: { principalIds: [...recipients] },
+    config: {
+      ticketId: ticket.id,
+      // The requester's row deep-links into the pair's conversation thread
+      // (the converged Messages surface — no standalone ticket page).
+      conversationId: await pairConversationId(ticket.id as TicketId),
+      title,
+      stageLabel,
+      previousStageLabel,
+      requesterPrincipalId: (requesterPrincipalId as string | undefined) ?? null,
+    },
+  }
+}
+
+/**
+ * Notification target for `ticket.replied`: everyone watching the ticket
+ * (ticket_subscriptions; the service already drops active mutes) minus the
+ * actor, in ONE combined target. An agent reply bells the
+ * requester-as-watcher plus agent watchers; a requester reply bells agent
+ * watchers (the requester is the actor, excluded).
+ */
+export async function getTicketRepliedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.replied') return null
+  const { ticket, content, senderType, title, authorName, requesterPrincipalId } = event.data
+
+  const recipients = await actorExcludedTicketWatchers(
+    ticket.id as TicketId,
+    event.actor.principalId
+  )
+  if (recipients.length === 0) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: {
+      ticketId: ticket.id,
+      // The requester's row deep-links into the pair's conversation thread
+      // (the converged Messages surface — no standalone ticket page).
+      conversationId: await pairConversationId(ticket.id as TicketId),
+      title,
+      authorName: authorName ?? (senderType === 'visitor' ? 'The requester' : 'A teammate'),
+      preview: truncate(content, 140),
+      requesterPrincipalId: requesterPrincipalId ?? null,
+    },
+  }
+}
+
+/**
+ * Notification target for `ticket.note_added`: watching TEAM MEMBERS only —
+ * a requester-watcher is structurally excluded by the role filter, so an
+ * internal note can never leak to a customer through the watcher path.
+ * Actor excluded.
+ */
+export async function getTicketNoteAddedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.note_added') return null
+  const { ticket, content, title, authorName } = event.data
+
+  const recipients = await actorExcludedTicketWatchers(
+    ticket.id as TicketId,
+    event.actor.principalId,
+    {
+      agentsOnly: true,
+    }
+  )
+  if (recipients.length === 0) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: {
+      ticketId: ticket.id,
+      title,
+      authorName: authorName ?? 'A teammate',
+      preview: truncate(content, 140),
+    },
+  }
+}
+
+/**
+ * Notification target for `ticket.external_status_changed`: agent watchers
+ * only (the requester never hears about tracker plumbing — customer-facing
+ * resolution flows through the mapped ticket.status_changed stage crossing).
+ * The actor is the integration's service principal; exclusion is a no-op
+ * unless that principal somehow watches the ticket.
+ */
+export async function getTicketExternalStatusChangedTargets(
+  event: EventData
+): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.external_status_changed') return null
+  const {
+    ticket,
+    title,
+    integrationType,
+    externalDisplayId,
+    externalUrl,
+    externalStatus,
+    transition,
+  } = event.data
+
+  const recipients = await actorExcludedTicketWatchers(
+    ticket.id as TicketId,
+    event.actor.principalId,
+    { agentsOnly: true }
+  )
+  if (recipients.length === 0) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: {
+      ticketId: ticket.id,
+      title,
+      integrationType,
+      reference: externalDisplayId,
+      url: externalUrl,
+      externalStatus,
+      transition,
+    },
+  }
+}
+
+/**
+ * Notification target for `message.created` (WO-3 slice 5, the riskiest
+ * move — reproduces `notifyVisitorMessage`'s deleted team-bell block
+ * EXACTLY): only a VISITOR-sent message bells the team. Recipients are every
+ * admin/member principal — the SAME raw query notifyVisitorMessage used
+ * (role-only, no `principal.type` filter), not `listAssignableTeammates`,
+ * which additionally requires `type: 'user'` and would silently narrow the
+ * recipient set. The anti-spam presence gate is NOT applied here — it runs
+ * in the notification hook itself (events/handlers/notification.ts), since
+ * `isAnyAgentOnline` is a single global Redis check, not a per-recipient one,
+ * and the hook is where the config's `isFirstMessage` flag is read back out.
+ */
+export async function getMessageCreatedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'message.created') return null
+  if (event.data.message.senderType !== 'visitor') return null
+
+  // CONVERGENCE PHASE 1a (the one behavior change the changelog flags):
+  // suppress the team-wide bell for a conversation paired with a CUSTOMER
+  // ticket. The write redirect (ticket-message.service.ts) emits
+  // `ticket.replied` ALONGSIDE `message.created` on a linked pair, and the
+  // watcher-scoped fan-out that rides it (getTicketRepliedTargets +
+  // getTicketRepliedEmailTargets) replaces the team-wide bell — non-watcher
+  // teammates no longer get belled for pair-conversation visitor messages.
+  // Pair-less conversations are untouched.
+  const { resolvePairTicketIdForConversation } =
+    await import('@/lib/server/domains/tickets/pair-thread.service')
+  const pairTicketId = await resolvePairTicketIdForConversation(
+    event.data.message.conversationId as ConversationId
+  )
+  if (pairTicketId) return null
+
+  const team = await db
+    .select({ principalId: principal.id })
+    .from(principal)
+    .where(inArray(principal.role, ['admin', 'member']))
+  if (team.length === 0) return null
+
+  const authorName = event.data.message.authorName ?? 'A visitor'
+  return {
+    type: 'notification',
+    target: { principalIds: team.map((t) => t.principalId as PrincipalId) },
+    config: {
+      conversationId: event.data.conversation.id,
+      authorName,
+      preview: truncate(event.data.message.content, 140),
+      isFirstMessage: event.data.isFirstMessage,
+    },
+  }
+}
+
+// ============================================================================
+// Ticket + SLA lifecycle email targets (support platform)
+//
+// Five exported builders returning `type: 'email'` HookTargets, one target per
+// recipient (the relay derives an idempotent per-recipient job id, so this is
+// redrain-safe). Unlike the bells above — one target, copy derived per principal
+// in the notification handler — email targets bake `kind` + a per-audience
+// `ctaUrl` into each target's TicketEmailConfig, so the email hook stays a dumb
+// switch. All builders take the HookContext for portalBaseUrl/workspaceName/
+// logoUrl and ride the notification preference matrix (shouldNotify, which
+// subsumes the global emailMuted kill switch). See scratchpad plan D3/D4/D6/D8.
+// ============================================================================
+
+/**
+ * The pair's conversation id for a customer ticket. Every requester-holding
+ * customer ticket is a pair (intake creates the backing conversation), so the
+ * requester-facing paths below always resolve one.
+ */
+async function pairConversationId(ticketId: TicketId): Promise<string | null> {
+  const [row] = await db
+    .select({ conversationId: ticketConversations.conversationId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.ticketId, ticketId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return row?.conversationId ?? null
+}
+
+/**
+ * Requester deep link for a ticket email: the pair's conversation thread on
+ * the converged Messages surface (there is no standalone requester ticket
+ * page).
+ */
+async function requesterTicketUrl(portalBaseUrl: string, ticketId: TicketId): Promise<string> {
+  const conversationId = await pairConversationId(ticketId)
+  return conversationId ? `${portalBaseUrl}/support/${conversationId}` : `${portalBaseUrl}/support`
+}
+
+/** Agent inbox deep link (tickets + conversations both select by `?i=`). */
+function inboxUrl(portalBaseUrl: string, id: string): string {
+  return `${portalBaseUrl}/admin/inbox?i=${id}`
+}
+
+/**
+ * The subset of `principalIds` whose stored preferences allow email for the
+ * given matrix key. A principal with no preferences row defaults to allowed
+ * (the matrix default is on — see notification-matrix.ts), matching the
+ * changelog/status email paths.
+ */
+async function filterByEmailPreference(
+  principalIds: PrincipalId[],
+  matrixKey: string
+): Promise<Set<PrincipalId>> {
+  if (principalIds.length === 0) return new Set()
+  const prefsMap = await batchGetNotificationPreferences(principalIds)
+  return new Set(
+    principalIds.filter((id) => {
+      const prefs = prefsMap.get(id)
+      return prefs ? shouldNotify(prefs, matrixKey, 'email') : true
+    })
+  )
+}
+
+/**
+ * The principals to email, and the address for each.
+ *
+ * Two independent questions — is there anywhere to send, and does this person
+ * want this kind of mail — asked together because every ticket and SLA builder
+ * needs both and neither depends on the other. Returning the map alongside the
+ * list saves each caller re-deriving it.
+ */
+async function resolveEligibleRecipients(
+  principalIds: PrincipalId[],
+  matrixKey: string
+): Promise<{ recipients: PrincipalId[]; emailMap: Map<PrincipalId, ContactEmail> }> {
+  if (principalIds.length === 0) return { recipients: [], emailMap: new Map() }
+  const [emailMap, eligible] = await Promise.all([
+    resolveContactRecipients(principalIds),
+    filterByEmailPreference(principalIds, matrixKey),
+  ])
+  return {
+    recipients: principalIds.filter((id) => emailMap.has(id) && eligible.has(id)),
+    emailMap,
+  }
+}
+
+/** Ticket facts re-read from the row when the payload doesn't carry them. */
+async function readTicketFacts(ticketId: TicketId): Promise<{
+  requesterPrincipalId: PrincipalId | null
+  title: string
+  assignedTeamId: TeamId | null
+} | null> {
+  const [row] = await db
+    .select({
+      requesterPrincipalId: tickets.requesterPrincipalId,
+      title: tickets.title,
+      assigneeTeamId: tickets.assigneeTeamId,
+    })
+    .from(tickets)
+    .where(eq(tickets.id, ticketId))
+    .limit(1)
+  if (!row) return null
+  return {
+    requesterPrincipalId: (row.requesterPrincipalId as PrincipalId | null) ?? null,
+    title: row.title,
+    assignedTeamId: (row.assigneeTeamId as TeamId | null) ?? null,
+  }
+}
+
+/**
+ * THE constructor for an email hook target.
+ *
+ * `HookTarget.target` is `unknown` — it has to be, since it carries Slack
+ * channels and webhook URLs too — so branding `EmailTarget.email` enforces
+ * nothing on an object literal. Requiring a `ContactEmail` HERE is what makes
+ * "the address came from the resolver" a compile-time fact rather than a
+ * convention, and it is the only place the cast to the erased wire type
+ * happens.
+ */
+export function emailTarget(
+  email: ContactEmail,
+  unsubscribeUrl: string,
+  config: Record<string, unknown>
+): HookTarget {
+  return { type: 'email', target: { email, unsubscribeUrl } satisfies EmailTarget, config }
+}
+
+function ticketEmailTarget(email: ContactEmail, config: Record<string, unknown>): HookTarget {
+  return emailTarget(email, '', config)
+}
+
+type TicketEmailKind =
+  | 'created'
+  | 'reply'
+  | 'status_resolved'
+  | 'assigned'
+  | 'assigned_team'
+  | 'sla_warning'
+  | 'sla_breach'
+
+interface BaseTicketConfigParams {
+  kind: TicketEmailKind
+  ticketId?: TicketId
+  ticketLabel: string
+  title: string
+  ctaUrl: string
+  context: HookContext
+  messageBody?: string
+  authorName?: string
+  statusChange?: { previousLabel: string | null; newLabel: string }
+  /** B22: a null-stage close ("Won't do"/"Duplicate") renders generic "was
+   *  closed" copy instead of the "was resolved" copy (see ticketEventCopy). */
+  closedGeneric?: boolean
+}
+
+/** The TicketEmailConfig fields every kind shares; the two audience wrappers
+ *  below spread this and add only their audience-specific fields, so a new
+ *  shared field is added in one place. */
+function baseTicketConfig(params: BaseTicketConfigParams): Record<string, unknown> {
+  return {
+    kind: params.kind,
+    workspaceName: params.context.workspaceName,
+    logoUrl: params.context.logoUrl ?? undefined,
+    preferencesUrl: `${params.context.portalBaseUrl}/settings/preferences`,
+    ticketLabel: params.ticketLabel,
+    title: params.title,
+    ticketId: params.ticketId,
+    ctaUrl: params.ctaUrl,
+    messageBody: params.messageBody,
+    authorName: params.authorName,
+    statusChange: params.statusChange,
+    closedGeneric: params.closedGeneric,
+  }
+}
+
+/**
+ * Requester-facing config: per-team From (resolveSendingAddress) and, when an
+ * inbound-capable email channel is configured, a signed per-ticket Reply-To for
+ * reply-by-email (D8/D9). Both are null-safe — absent means branded EMAIL_FROM
+ * and a portal-only footer.
+ */
+async function requesterFacingConfig(
+  params: BaseTicketConfigParams & { ticketId: TicketId; assignedTeamId: TeamId | null }
+): Promise<Record<string, unknown>> {
+  const { resolveSendingAddress } =
+    await import('@/lib/server/domains/channel-accounts/channel-account.service')
+  const { inboundTicketReplyToAddress } =
+    await import('@/lib/server/domains/conversation/conversation.email-channel')
+  const from = (await resolveSendingAddress(params.assignedTeamId, 'support')) ?? undefined
+  const replyTo = inboundTicketReplyToAddress(params.ticketId) ?? undefined
+  return { ...baseTicketConfig(params), from, replyTo }
+}
+
+/** Agent-facing config: branded EMAIL_FROM, no reply-by-email, inbox CTA. */
+function agentFacingConfig(
+  params: BaseTicketConfigParams & { clockLabel?: string; dueLabel?: string }
+): Record<string, unknown> {
+  return { ...baseTicketConfig(params), clockLabel: params.clockLabel, dueLabel: params.dueLabel }
+}
+
+/**
+ * One target per recipient, routing the requester to requesterFacingConfig
+ * (portal CTA, per-team From, reply-by-email) and every other watcher to
+ * agentFacingConfig (inbox CTA, branded From). Shared by the replied + resolved
+ * builders, whose only differences are `kind` and the carried facts.
+ */
+async function buildRequesterOrAgentTargets(params: {
+  recipients: PrincipalId[]
+  emailMap: Map<PrincipalId, ContactEmail>
+  requesterPrincipalId: PrincipalId | null
+  kind: 'reply' | 'status_resolved'
+  ticketId: TicketId
+  ticketLabel: string
+  title: string
+  assignedTeamId: TeamId | null
+  context: HookContext
+  messageBody?: string
+  authorName?: string
+  statusChange?: { previousLabel: string | null; newLabel: string }
+  /** B22: forwarded onto the email config (see BaseTicketConfigParams). */
+  closedGeneric?: boolean
+}): Promise<HookTarget[]> {
+  const { recipients, emailMap, requesterPrincipalId, context } = params
+  const facts = {
+    kind: params.kind,
+    ticketId: params.ticketId,
+    ticketLabel: params.ticketLabel,
+    title: params.title,
+    messageBody: params.messageBody,
+    authorName: params.authorName,
+    statusChange: params.statusChange,
+    closedGeneric: params.closedGeneric,
+  }
+  const targets: HookTarget[] = []
+  for (const id of recipients) {
+    const email = emailMap.get(id)!
+    const config =
+      requesterPrincipalId != null && id === requesterPrincipalId
+        ? await requesterFacingConfig({
+            ...facts,
+            ctaUrl: await requesterTicketUrl(context.portalBaseUrl, params.ticketId),
+            assignedTeamId: params.assignedTeamId,
+            context,
+          })
+        : agentFacingConfig({
+            ...facts,
+            ctaUrl: inboxUrl(context.portalBaseUrl, params.ticketId),
+            context,
+          })
+    targets.push(ticketEmailTarget(email, config))
+  }
+  return targets
+}
+
+/**
+ * `ticket.created` → a single confirmation email to the requester. Uniquely,
+ * the actor is NOT excluded (the filer is exactly who gets the ack), and this is
+ * direct-to-requester, never watcher-sourced. Gated on the support-tickets flag,
+ * a resolvable non-synthetic requester address, and the `ticket_created` matrix
+ * key.
+ */
+export async function getTicketCreatedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'ticket.created') return []
+  if (!(await isSupportTicketsEnabled())) return []
+
+  const t = event.data.ticket
+  // Only a `customer` ticket is a requester-facing thread; internal ticket types
+  // (back_office/tracker) can carry a requesterPrincipalId but must never send
+  // that person a customer confirmation + reply-by-email address — the symmetric
+  // guard to the inbound `tkt-` path's `ticket.type !== 'customer'` drop.
+  if ((t.type as string) !== 'customer') return []
+  const ticketId = t.id as TicketId
+  let requesterPrincipalId = (t.requesterPrincipalId as string | null | undefined) ?? null
+  let title = (t.title as string | undefined) ?? null
+  let assignedTeamId = (t.assignedTeamId as string | null | undefined) ?? null
+
+  if (!requesterPrincipalId || title == null) {
+    const facts = await readTicketFacts(ticketId)
+    if (!facts) return []
+    requesterPrincipalId = requesterPrincipalId ?? facts.requesterPrincipalId
+    title = title ?? facts.title
+    assignedTeamId = assignedTeamId ?? facts.assignedTeamId
+  }
+  if (!requesterPrincipalId || title == null) return []
+
+  const requester = requesterPrincipalId as PrincipalId
+  const emailMap = await resolveContactRecipients([requester])
+  const email = emailMap.get(requester)
+  if (!email) return []
+
+  const eligible = await filterByEmailPreference([requester], 'ticket_created')
+  if (!eligible.has(requester)) return []
+
+  const config = await requesterFacingConfig({
+    kind: 'created',
+    ticketId,
+    ticketLabel: formatTicketNumber(t.number),
+    title,
+    ctaUrl: await requesterTicketUrl(context.portalBaseUrl, ticketId),
+    assignedTeamId: (assignedTeamId as TeamId | null) ?? null,
+    context,
+  })
+  return [ticketEmailTarget(email, config)]
+}
+
+/**
+ * `ticket.replied` (agent reply only) → the ticket's watcher set minus the
+ * actor, filtered by email preference. Each recipient gets kind `reply` with the
+ * full reply body; the requester's target is requester-facing (portal CTA,
+ * per-team From, reply-by-email), agent watchers get the inbox CTA and branded
+ * From (D3 sequencing note).
+ */
+export async function getTicketRepliedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'ticket.replied') return []
+  const { ticket, content, senderType, title, authorName, requesterPrincipalId } = event.data
+  if (senderType !== 'agent') return []
+  if (!(await isSupportTicketsEnabled())) return []
+  // Internal (back-office/tracker) tickets never email their nominal requester
+  // a portal CTA or reply-by-email address — same gate as the created builder;
+  // agent watchers still get their inbox-facing emails below.
+  const emailableRequester =
+    (ticket.type as string) === 'customer'
+      ? ((requesterPrincipalId as string | null | undefined) ?? null)
+      : null
+
+  const ticketId = ticket.id as TicketId
+  const { getTicketWatchersForEvent } =
+    await import('@/lib/server/domains/tickets/ticket-subscription.service')
+  const watchers = (await getTicketWatchersForEvent(ticketId)).filter(
+    (id) => id !== event.actor.principalId
+  )
+  if (watchers.length === 0) return []
+
+  const { recipients, emailMap } = await resolveEligibleRecipients(watchers, 'ticket_replied')
+  if (recipients.length === 0) return []
+
+  const assignedTeamId = ((ticket.assignedTeamId as string | null | undefined) ??
+    null) as TeamId | null
+
+  return buildRequesterOrAgentTargets({
+    recipients,
+    emailMap,
+    requesterPrincipalId: emailableRequester as PrincipalId | null,
+    kind: 'reply',
+    ticketId,
+    ticketLabel: formatTicketNumber(ticket.number),
+    title,
+    assignedTeamId,
+    context,
+    messageBody: content,
+    authorName: authorName ?? undefined,
+  })
+}
+
+/**
+ * `ticket.status_changed` → a resolution email, but only on a genuine category
+ * crossing INTO `closed` (deliberately narrower than the bell, which fires on
+ * any public stage crossing; both ride the `ticket_status_changed` matrix key).
+ * Recipients = the watcher set minus the actor — the requester INCLUDED ONLY
+ * THROUGH their subscription row (B18: auto-subscribed at creation with reason
+ * 'requester', so the portal's "Stop watching" toggle — which deletes the row —
+ * also quiets this email; a later requester reply re-subscribes them).
+ * `emailableRequester` below is NOT recipient sourcing: it only splits the
+ * watching requester's config onto the requester-facing shape (portal CTA,
+ * reply-by-email) vs the agent-facing one.
+ *
+ * Null-stage closes (B22): a status with no `publicStage` ("Won't do",
+ * "Duplicate") still emails on the closed crossing, but with the generic
+ * 'Closed' label and `closedGeneric` copy — the internal status name never
+ * leaks, and the email no longer claims a won't-do ticket was "resolved".
+ * Stage labels resolve at build time via getStageLabels.
+ */
+export async function getTicketResolvedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'ticket.status_changed') return []
+  const { ticket, previousStatus, newStatus, stage, previousStage, requesterPrincipalId, title } =
+    event.data
+  if (!(newStatus === 'closed' && previousStatus !== 'closed')) return []
+  if (!(await isSupportTicketsEnabled())) return []
+
+  // Same customer-type gate as the created/replied builders: internal tickets
+  // never email their nominal requester (agent watchers keep theirs).
+  const emailableRequester =
+    (ticket.type as string) === 'customer'
+      ? ((requesterPrincipalId as string | null | undefined) ?? null)
+      : null
+
+  const ticketId = ticket.id as TicketId
+  const { getTicketWatchersForEvent } =
+    await import('@/lib/server/domains/tickets/ticket-subscription.service')
+  // B18: no unconditional requester add — the row decides (see the doc).
+  const recipientIds = new Set<PrincipalId>(
+    (await getTicketWatchersForEvent(ticketId)).filter((id) => id !== event.actor.principalId)
+  )
+  if (recipientIds.size === 0) return []
+
+  const ids = [...recipientIds]
+  const { recipients, emailMap } = await resolveEligibleRecipients(ids, 'ticket_status_changed')
+  if (recipients.length === 0) return []
+
+  const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
+  const stageLabels = await getStageLabels()
+  const newLabel = stage ? (stageLabels[stage as keyof typeof stageLabels] ?? stage) : 'Closed'
+  const previousLabel = previousStage
+    ? (stageLabels[previousStage as keyof typeof stageLabels] ?? previousStage)
+    : null
+
+  const assignedTeamId = ((ticket.assignedTeamId as string | null | undefined) ??
+    null) as TeamId | null
+
+  return buildRequesterOrAgentTargets({
+    recipients,
+    emailMap,
+    requesterPrincipalId: emailableRequester as PrincipalId | null,
+    kind: 'status_resolved',
+    ticketId,
+    ticketLabel: formatTicketNumber(ticket.number),
+    title,
+    assignedTeamId,
+    context,
+    statusChange: { previousLabel, newLabel },
+    // B22: the generic-close copy branch ("was closed", not "was resolved").
+    closedGeneric: stage == null,
+  })
+}
+
+/**
+ * `ticket.assigned` → agent emails: the direct assignee (kind `assigned`) and a
+ * newly-assigned team's members (kind `assigned_team`), actor-excluded — the
+ * same recipient set as the bell (computeTicketAssignmentRecipients), filtered
+ * by the `ticket_assigned` matrix key. Inbox CTA, branded From.
+ */
+export async function getTicketAssignedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'ticket.assigned') return []
+  if (!(await isSupportTicketsEnabled())) return []
+  const { ticket, assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId } =
+    event.data
+
+  const { directAssignee, teamMemberIds } = await computeTicketAssignmentRecipients(
+    { assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
+    event.actor.principalId
+  )
+
+  const kindById = new Map<PrincipalId, 'assigned' | 'assigned_team'>()
+  if (directAssignee) kindById.set(directAssignee, 'assigned')
+  for (const id of teamMemberIds) if (!kindById.has(id)) kindById.set(id, 'assigned_team')
+  if (kindById.size === 0) return []
+
+  const ids = [...kindById.keys()]
+  const { recipients, emailMap } = await resolveEligibleRecipients(ids, 'ticket_assigned')
+  if (recipients.length === 0) return []
+
+  const ticketId = ticket.id as TicketId
+  const ticketLabel = formatTicketNumber(ticket.number)
+  const ctaUrl = inboxUrl(context.portalBaseUrl, ticketId)
+  // EventTicketRef carries no title (unlike the replied/status payloads), so
+  // re-read it for the assignment copy — but only once we know there's a recipient.
+  const title = (await readTicketFacts(ticketId))?.title ?? `Ticket ${ticketLabel}`
+
+  return recipients.map((id) =>
+    ticketEmailTarget(
+      emailMap.get(id)!,
+      agentFacingConfig({ kind: kindById.get(id)!, ticketId, ticketLabel, title, ctaUrl, context })
+    )
+  )
+}
+
+/** ISO due-date → a short "Jul 17, 02:00 UTC" label for SLA emails. */
+function formatSlaDue(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  })
+}
+
+/**
+ * `sla.approaching_breach` / `sla.breached` → agent emails. SLA events are
+ * conversation-scoped, so this re-reads the conversation for its assigned agent
+ * (preferred) else the assigned team's members (getAssistantHandedOffTargets
+ * pattern). kinds `sla_warning` / `sla_breach`, matrix keys of the same name,
+ * inbox CTA on the conversation. No ticket threading (there is no ticket).
+ */
+export async function getSlaEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'sla.approaching_breach' && event.type !== 'sla.breached') return []
+  const { conversationId, clock, dueAt } = event.data
+
+  const [conv] = await db
+    .select({
+      assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
+      assignedTeamId: conversations.assignedTeamId,
+      visitorName: principal.displayName,
+    })
+    .from(conversations)
+    .leftJoin(principal, eq(conversations.visitorPrincipalId, principal.id))
+    .where(eq(conversations.id, conversationId as ConversationId))
+    .limit(1)
+  if (!conv) return []
+
+  let recipientIds: PrincipalId[]
+  if (conv.assignedAgentPrincipalId) {
+    recipientIds = [conv.assignedAgentPrincipalId as PrincipalId]
+  } else if (conv.assignedTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    recipientIds = await listTeamMemberPrincipalIds(conv.assignedTeamId as TeamId)
+  } else {
+    return []
+  }
+  if (recipientIds.length === 0) return []
+
+  // The copy kind and the preference matrix key are the same string.
+  const kind =
+    event.type === 'sla.approaching_breach' ? ('sla_warning' as const) : ('sla_breach' as const)
+
+  const { recipients, emailMap } = await resolveEligibleRecipients(recipientIds, kind)
+  if (recipients.length === 0) return []
+
+  const title = conv.visitorName ?? 'a customer'
+  const clockLabel =
+    clock === 'first_response'
+      ? 'first response'
+      : clock === 'next_response'
+        ? 'next response'
+        : clock === 'time_to_resolve'
+          ? 'time to resolve'
+          : 'resolution'
+  const dueLabel = formatSlaDue(dueAt)
+  const ctaUrl = inboxUrl(context.portalBaseUrl, conversationId)
+
+  return recipients.map((id) =>
+    ticketEmailTarget(
+      emailMap.get(id)!,
+      agentFacingConfig({ kind, ticketLabel: '', title, ctaUrl, context, clockLabel, dueLabel })
+    )
+  )
+}
+
+// ============================================================================
 // Changelog Subscriber Targets
 // ============================================================================
 
 /**
- * Get subscriber targets for changelog.published events.
- * Looks up all posts linked to the changelog, gets their subscribers,
- * and deduplicates across posts.
+ * Get subscriber targets for changelog.published events: the UNION of the
+ * dedicated `changelog_subscriptions` table (primary, opt-out source) and
+ * the legacy linked-post subscribers (additive — "subscribers of a feature
+ * also hear it shipped"). An explicit changelog unsubscribe always wins over
+ * the linked-post source, even for a principal who never had a
+ * `changelog_subscriptions` row: {@link unsubscribeChangelog} upserts one.
  */
-async function getChangelogSubscriberTargets(
+export async function getChangelogSubscriberTargets(
   event: EventData,
   context: HookContext
 ): Promise<HookTarget[]> {
@@ -779,8 +1693,21 @@ async function getChangelogSubscriberTargets(
   const changelogId = event.data.changelog.id
   if (!changelogId) return []
 
-  // Look up linked posts
-  const { changelogEntryPosts, eq: eqOp } = await import('@/lib/server/db')
+  const {
+    changelogEntries,
+    changelogEntryPosts,
+    changelogSubscriptions,
+    isNull,
+    isNotNull,
+    eq: eqOp,
+  } = await import('@/lib/server/db')
+  const { getChangelogSettings } = await import('@/lib/server/domains/settings/settings.changelog')
+  const { resolveSendingAddress } =
+    await import('@/lib/server/domains/channel-accounts/channel-account.service')
+  const { batchGenerateChangelogUnsubscribeTokens } =
+    await import('@/lib/server/domains/subscriptions/subscription.service')
+
+  // 1. Legacy linked-post subscribers (additive source).
   const linkedPosts = await db.query.changelogEntryPosts.findMany({
     where: eqOp(
       changelogEntryPosts.changelogEntryId,
@@ -788,26 +1715,93 @@ async function getChangelogSubscriberTargets(
     ),
     columns: { postId: true },
   })
-
-  if (linkedPosts.length === 0) return []
-
   const postIds = linkedPosts.map((lp) => lp.postId)
 
-  // Get subscribers for all linked posts, deduplicated
-  const allSubscribers: Map<string, Subscriber> = new Map()
+  const linkedPostSubscribers: Map<string, Subscriber> = new Map()
   for (const postId of postIds) {
-    const subscribers = await getSubscribersForEvent(postId, 'status_change')
-    for (const sub of subscribers) {
-      if (!allSubscribers.has(sub.principalId)) {
-        allSubscribers.set(sub.principalId, sub)
+    const subs = await getSubscribersForEvent(postId, 'status_change')
+    for (const sub of subs) {
+      if (!linkedPostSubscribers.has(sub.principalId)) {
+        linkedPostSubscribers.set(sub.principalId, sub)
       }
+    }
+  }
+
+  // 2. Dedicated changelog_subscriptions table (primary source).
+  const subscriptionRows = await db
+    .select({
+      principalId: changelogSubscriptions.principalId,
+      userId: principal.userId,
+      email: user.email,
+      contactEmail: principal.contactEmail,
+      name: user.name,
+    })
+    .from(changelogSubscriptions)
+    .innerJoin(principal, eqOp(changelogSubscriptions.principalId, principal.id))
+    .innerJoin(user, eqOp(principal.userId, user.id))
+    .where(and(isNull(changelogSubscriptions.unsubscribedAt), isNotNull(user.email)))
+
+  const allSubscribers: Map<string, Subscriber> = new Map()
+  for (const row of subscriptionRows) {
+    if (!row.email) continue
+    allSubscribers.set(row.principalId, {
+      principalId: row.principalId,
+      userId: row.userId!,
+      email: row.email,
+      contactEmail: row.contactEmail,
+      name: row.name,
+      reason: 'manual',
+      notifyComments: false,
+      notifyStatusChanges: true,
+    })
+  }
+
+  // An explicit changelog unsubscribe (a row with unsubscribedAt set) must
+  // exclude a principal from the additive linked-post source too.
+  if (linkedPostSubscribers.size > 0) {
+    const optOutRows = await db
+      .select({ principalId: changelogSubscriptions.principalId })
+      .from(changelogSubscriptions)
+      .where(isNotNull(changelogSubscriptions.unsubscribedAt))
+    const optOutIds = new Set<string>(optOutRows.map((r) => r.principalId))
+    for (const [id, sub] of linkedPostSubscribers) {
+      if (!allSubscribers.has(id) && !optOutIds.has(id)) {
+        allSubscribers.set(id, sub)
+      }
+    }
+  }
+
+  // Segment targeting: a non-empty segmentIds list on the entry restricts the
+  // whole fan-out (email + in-app, both subscriber sources) to principals
+  // holding at least one targeted segment. An empty list broadcasts to every
+  // subscriber — same "segment list, [] = everyone" convention as the
+  // segment-gate primitive.
+  const entryRows = await db
+    .select({ segmentIds: changelogEntries.segmentIds })
+    .from(changelogEntries)
+    .where(eqOp(changelogEntries.id, changelogId as import('@quackback/ids').ChangelogId))
+    .limit(1)
+  const targetedSegmentIds = entryRows[0]?.segmentIds ?? []
+  if (targetedSegmentIds.length > 0) {
+    const memberRows = await db
+      .select({ principalId: userSegments.principalId })
+      .from(userSegments)
+      .where(inArray(userSegments.segmentId, targetedSegmentIds as SegmentId[]))
+    const memberIds = new Set<string>(memberRows.map((r) => r.principalId))
+    for (const id of allSubscribers.keys()) {
+      if (!memberIds.has(id)) allSubscribers.delete(id)
     }
   }
 
   const subscribers = [...allSubscribers.values()]
   log.debug(
-    { count: subscribers.length, post_count: postIds.length, changelog_id: changelogId },
-    'found unique subscribers across linked posts'
+    {
+      count: subscribers.length,
+      post_count: postIds.length,
+      targeted_segment_count: targetedSegmentIds.length,
+      changelog_id: changelogId,
+    },
+    'found unique changelog subscribers (dedicated + linked-post union)'
   )
   if (subscribers.length === 0) return []
 
@@ -822,42 +1816,53 @@ async function getChangelogSubscriberTargets(
   // Build changelog URL
   const changelogUrl = `${context.portalBaseUrl}/changelog`
 
-  // Email targets
-  const principalIds = nonActorSubscribers.map((s) => s.principalId)
-  const prefsMap = await batchGetNotificationPreferences(principalIds)
-
-  const eligibleSubscribers = nonActorSubscribers.filter((subscriber) => {
-    const prefs = prefsMap.get(subscriber.principalId)
-    return prefs && shouldSendEmail('post.status_changed', prefs)
-  })
+  // Email targets — gated on the per-principal notification matrix
+  // (changelog_published/email, which subsumes emailMuted) and the
+  // changelog.emailsDisabled kill switch (in-app notification targets below
+  // are unaffected by emailsDisabled — that switch is email-specific).
+  const { emailsDisabled } = await getChangelogSettings()
+  const eligibleSubscribers = emailsDisabled
+    ? []
+    : await (async () => {
+        const principalIds = nonActorSubscribers.map((s) => s.principalId)
+        const prefsMap = await batchGetNotificationPreferences(principalIds)
+        return nonActorSubscribers.filter((subscriber) => {
+          const prefs = prefsMap.get(subscriber.principalId)
+          return prefs ? shouldNotify(prefs, 'changelog_published', 'email') : true
+        })
+      })()
 
   if (eligibleSubscribers.length > 0) {
-    // Use the first linked post for unsubscribe tokens
-    const firstPostId = postIds[0]
-    const tokenMap = await batchGenerateUnsubscribeTokens(
-      eligibleSubscribers.map((s) => ({
-        principalId: s.principalId,
-        postId: firstPostId,
-        action: 'unsubscribe_post' as const,
-      }))
+    const from = (await resolveSendingAddress(null, 'changelog')) ?? undefined
+    const tokenMap = await batchGenerateChangelogUnsubscribeTokens(
+      eligibleSubscribers.map((s) => s.principalId)
     )
 
+    // Both address fields already came back with the subscriber rows, so the
+    // delivery address is decided here rather than in a second batched query.
     for (const subscriber of eligibleSubscribers) {
-      targets.push({
-        type: 'email',
-        target: {
-          email: subscriber.email,
-          unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
-        },
-        config: {
-          workspaceName: context.workspaceName,
-          logoUrl: context.logoUrl ?? undefined,
-          changelogTitle: event.data.changelog.title,
-          changelogUrl,
-          contentPreview: event.data.changelog.contentPreview,
-          eventType: 'changelog.published',
-        },
+      const to = contactRecipientFrom({
+        accountEmail: subscriber.email,
+        contactEmail: subscriber.contactEmail,
       })
+      if (!to) continue
+      targets.push(
+        emailTarget(
+          to,
+          `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
+          {
+            workspaceName: context.workspaceName,
+            logoUrl: context.logoUrl ?? undefined,
+            preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+            changelogTitle: event.data.changelog.title,
+            changelogUrl,
+            contentPreview: event.data.changelog.contentPreview,
+            contentHtml: event.data.changelog.contentHtml,
+            eventType: 'changelog.published',
+            from,
+          }
+        )
+      )
     }
   }
 
@@ -869,6 +1874,7 @@ async function getChangelogSubscriberTargets(
         principalIds: nonActorSubscribers.map((s) => s.principalId),
       },
       config: {
+        changelogId,
         changelogTitle: event.data.changelog.title,
         changelogUrl,
         contentPreview: event.data.changelog.contentPreview,
@@ -881,6 +1887,255 @@ async function getChangelogSubscriberTargets(
 }
 
 // ============================================================================
+// Status Page Subscriber Targets
+// ============================================================================
+
+const STATUS_COMPONENT_STATUS_LABELS: Record<string, string> = {
+  operational: 'Operational',
+  degraded_performance: 'Degraded performance',
+  partial_outage: 'Partial outage',
+  major_outage: 'Major outage',
+  under_maintenance: 'Under maintenance',
+}
+
+const STATUS_LIFECYCLE_LABELS: Record<string, string> = {
+  investigating: 'Investigating',
+  identified: 'Identified',
+  monitoring: 'Monitoring',
+  resolved: 'Resolved',
+  scheduled: 'Scheduled',
+  in_progress: 'In progress',
+  verifying: 'Verifying',
+  completed: 'Completed',
+}
+
+/**
+ * Subscriber targets for the two status publish events (incident_created,
+ * maintenance_scheduled). A subscriber is notified iff (a) they pass the
+ * page-level audience gate AND (b) they can see at least one affected
+ * component (Status Product Spec §4). Email is additionally gated on the
+ * workspace `emailsDisabled` switch and the per-principal notification
+ * matrix (`status_incident`/email, which subsumes `emailMuted`); the in-app
+ * notification ignores `emailsDisabled` (it's email-specific).
+ */
+export async function getStatusSubscriberTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'status.incident_created' && event.type !== 'status.maintenance_scheduled') {
+    return []
+  }
+  const incident = event.data.incident
+  const affectedComponentIds = incident.componentIds
+
+  const {
+    statusComponents,
+    statusIncidentUpdates,
+    isNull: isNullOp,
+    inArray: inArrayOp,
+    eq: eqOp,
+    asc: ascOp,
+  } = await import('@/lib/server/db')
+  const { getActiveSubscribersForComponents } =
+    await import('@/lib/server/domains/status/status.subscription')
+  const { isStatusAudienceGranted } = await import('@/lib/server/domains/status/status.audience')
+  const { canViewStatusComponent } = await import('@/lib/server/policy/status')
+  const { getStatusSettings } = await import('@/lib/server/domains/settings/settings.status')
+  const { batchGenerateStatusUnsubscribeTokens } =
+    await import('@/lib/server/domains/subscriptions/subscription.service')
+
+  const settings = await getStatusSettings()
+
+  // Affected components (for the per-subscriber visibility check + email body).
+  const affected = affectedComponentIds.length
+    ? await db
+        .select({
+          id: statusComponents.id,
+          name: statusComponents.name,
+          segmentIds: statusComponents.segmentIds,
+        })
+        .from(statusComponents)
+        .where(
+          and(
+            inArrayOp(statusComponents.id, affectedComponentIds as never),
+            isNullOp(statusComponents.deletedAt)
+          )
+        )
+    : []
+  const affectedById = new Map(affected.map((c) => [String(c.id), c]))
+
+  // The base subscriber pool (page-wide OR overlapping an affected component).
+  const principalIds = (await getActiveSubscribersForComponents(
+    affectedComponentIds as never
+  )) as PrincipalId[]
+  if (principalIds.length === 0) return []
+
+  // Batch-load role/type + segments + email for each subscriber.
+  const principals = await db
+    .select({
+      id: principal.id,
+      role: principal.role,
+      type: principal.type,
+      email: user.email,
+      contactEmail: principal.contactEmail,
+    })
+    .from(principal)
+    .leftJoin(user, eq(principal.userId, user.id))
+    .where(inArray(principal.id, principalIds))
+
+  const segmentRows = await db
+    .select({ principalId: userSegments.principalId, segmentId: userSegments.segmentId })
+    .from(userSegments)
+    .where(inArray(userSegments.principalId, principalIds))
+  const segmentsByPrincipal = new Map<string, Set<SegmentId>>()
+  for (const row of segmentRows) {
+    const key = String(row.principalId)
+    const set = segmentsByPrincipal.get(key) ?? new Set<SegmentId>()
+    set.add(row.segmentId as SegmentId)
+    segmentsByPrincipal.set(key, set)
+  }
+
+  // Eligible = passes page gate AND can see ≥1 affected component.
+  const eligible = principals.filter((p) => {
+    const actor: Actor = {
+      principalId: p.id,
+      role: (p.role ?? null) as Actor['role'],
+      principalType: p.type as Actor['principalType'],
+      segmentIds: segmentsByPrincipal.get(String(p.id)) ?? new Set(),
+    }
+    if (!isStatusAudienceGranted(actor, settings)) return false
+    if (affected.length === 0) return true
+    return affected.some((c) => canViewStatusComponent(actor, { segmentIds: c.segmentIds }))
+  })
+  if (eligible.length === 0) return []
+
+  const targets: HookTarget[] = []
+  const incidentUrl = `${context.portalBaseUrl}/status/${incident.id}`
+
+  // The publish payload doesn't carry the first update body; fetch the
+  // earliest update (the one written at create time) for the email body.
+  const [firstUpdate] = await db
+    .select({ body: statusIncidentUpdates.body })
+    .from(statusIncidentUpdates)
+    .where(eqOp(statusIncidentUpdates.incidentId, incident.id as never))
+    .orderBy(ascOp(statusIncidentUpdates.createdAt))
+    .limit(1)
+  const firstUpdateBody = firstUpdate?.body ?? ''
+
+  // Per-viewer affected list is uniform here (all eligible can see ≥1); the
+  // email lists every affected component the workspace marked — acceptable,
+  // since eligibility already required visibility. Humanize for display.
+  const affectedForEmail = affectedComponentIds
+    .map((id) => affectedById.get(String(id)))
+    .filter((c): c is NonNullable<typeof c> => !!c)
+    .map((c) => ({
+      name: c.name,
+      status:
+        STATUS_COMPONENT_STATUS_LABELS[incidentStatusForComponent(incident, String(c.id))] ??
+        'Operational',
+    }))
+
+  // In-app notification target (all eligible; ignores emailsDisabled).
+  targets.push({
+    type: 'notification',
+    target: { principalIds: eligible.map((p) => p.id as PrincipalId) },
+    config: {
+      eventType: event.type,
+      incidentId: incident.id,
+      incidentTitle: incident.title,
+      incidentUrl,
+      kind: incident.kind,
+      impact: incident.impact,
+      statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
+    },
+  })
+
+  // Email targets — gated by emailsDisabled + per-principal notification matrix.
+  if (!settings.emailsDisabled) {
+    const withEmail = eligible.flatMap((p) => {
+      const to = contactRecipientFrom({ accountEmail: p.email, contactEmail: p.contactEmail })
+      return to ? [{ ...p, to }] : []
+    })
+    if (withEmail.length > 0) {
+      const prefsMap = await batchGetNotificationPreferences(
+        withEmail.map((p) => p.id as PrincipalId)
+      )
+      const emailable = withEmail.filter((p) => {
+        const prefs = prefsMap.get(p.id as PrincipalId)
+        return prefs ? shouldNotify(prefs, 'status_incident', 'email') : true
+      })
+      if (emailable.length > 0) {
+        const tokenMap = await batchGenerateStatusUnsubscribeTokens(
+          emailable.map((p) => p.id as PrincipalId)
+        )
+        for (const p of emailable) {
+          targets.push(
+            emailTarget(
+              p.to,
+              `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(p.id as PrincipalId)}`,
+              {
+                eventType: event.type,
+                workspaceName: context.workspaceName,
+                logoUrl: context.logoUrl ?? undefined,
+                preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+                incidentTitle: incident.title,
+                incidentUrl,
+                impact: incident.impact,
+                statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
+                body: firstUpdateBody,
+                affectedComponents: affectedForEmail,
+                scheduledStartLabel: incident.scheduledStartAt
+                  ? formatStatusDate(incident.scheduledStartAt)
+                  : null,
+                scheduledEndLabel: incident.scheduledEndAt
+                  ? formatStatusDate(incident.scheduledEndAt)
+                  : null,
+              }
+            )
+          )
+        }
+      }
+    }
+  }
+
+  return targets
+}
+
+/** The status a specific component was set to while this incident is open. The
+ *  publish payload doesn't carry per-component target statuses, so fall back to
+ *  a sensible label; the live page always has the authoritative value. */
+function incidentStatusForComponent(
+  incident: { impact: string; kind: string },
+  _componentId: string
+): string {
+  if (incident.kind === 'maintenance') return 'under_maintenance'
+  switch (incident.impact) {
+    case 'critical':
+      return 'major_outage'
+    case 'major':
+      return 'partial_outage'
+    case 'minor':
+      return 'degraded_performance'
+    default:
+      return 'degraded_performance'
+  }
+}
+
+/** ISO string → "July 12, 2026, 02:00 UTC" for maintenance-window emails. */
+function formatStatusDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  })
+}
+
+// ============================================================================
 // Webhook Targets
 // ============================================================================
 
@@ -888,7 +2143,7 @@ async function getChangelogSubscriberTargets(
  * Whether a webhook subscription matches an event. The board filter applies
  * only to board-bearing events (post/comment); conversation/message events
  * have no board and match on event-type subscription alone, so a webhook with
- * a board filter still receives the chat events it subscribed to.
+ * a board filter still receives the conversation events it subscribed to.
  */
 export function webhookSubscriptionMatches(
   webhook: { events: string[]; boardIds: string[] | null },
@@ -902,74 +2157,9 @@ export function webhookSubscriptionMatches(
   return true
 }
 
-/**
- * Get webhook hook targets for an event.
- * Queries active webhooks subscribed to this event type and filters by board.
- */
-async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
-  // Never deliver private comments to external webhooks
-  if (
-    (event.type === 'comment.created' ||
-      event.type === 'comment.updated' ||
-      event.type === 'comment.deleted') &&
-    event.data.comment.isPrivate
-  ) {
-    return []
-  }
-
-  try {
-    // Get all active, non-deleted webhooks from cache or DB (filter in JS)
-    let activeWebhooks = await cacheGet<(typeof webhooks.$inferSelect)[]>(
-      CACHE_KEYS.ACTIVE_WEBHOOKS
-    )
-    if (activeWebhooks) {
-      log.debug({ count: activeWebhooks.length }, 'active webhooks cache hit')
-    } else {
-      activeWebhooks = await db.query.webhooks.findMany({
-        where: and(eq(webhooks.status, 'active'), isNull(webhooks.deletedAt)),
-      })
-      log.debug({ count: activeWebhooks.length }, 'active webhooks cache miss')
-      await cacheSet(CACHE_KEYS.ACTIVE_WEBHOOKS, activeWebhooks, 300)
-    }
-
-    if (activeWebhooks.length === 0) {
-      return []
-    }
-
-    // Extract boardId(s) from event for filtering
-    const boardIds = extractBoardIds(event)
-
-    // Filter by event-type subscription and (board-bearing events only) board.
-    const matchingWebhooks = activeWebhooks.filter((webhook) =>
-      webhookSubscriptionMatches(webhook, event)
-    )
-
-    log.debug(
-      { count: matchingWebhooks.length, event_type: event.type, board_ids: boardIds },
-      'found matching webhooks for event'
-    )
-
-    // Build targets - decrypt secrets for delivery
-    const targets: HookTarget[] = []
-    for (const webhook of matchingWebhooks) {
-      try {
-        const secret = decryptWebhookSecret(webhook.secret)
-        targets.push({
-          type: 'webhook',
-          target: { url: webhook.url },
-          config: { secret, webhookId: webhook.id as WebhookId },
-        })
-      } catch (error) {
-        log.error({ err: error, webhook_id: webhook.id }, 'failed to decrypt webhook secret')
-        // Skip this webhook rather than crash all
-      }
-    }
-    return targets
-  } catch (error) {
-    log.error({ err: error }, 'failed to resolve webhook targets')
-    return []
-  }
-}
+// WO-18: webhook target resolution moved to resolvers/webhook.resolver.ts
+// (getWebhookTargets deleted here). webhookSubscriptionMatches + extractBoardIds
+// stay — they are exported/tested and reused by the webhook resolver's logic.
 
 /**
  * Extract board ID(s) from event data.

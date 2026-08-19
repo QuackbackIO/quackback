@@ -14,8 +14,11 @@
  * the pattern in `settings.service.ts` (verified-domain CRUD).
  */
 
+import type { Role } from '@/lib/shared/roles'
 import {
   db,
+  account,
+  count,
   eq,
   identityProvider,
   ssoVerifiedDomain,
@@ -34,6 +37,7 @@ import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
 import { verifiedDomainCount, shouldRenderPublicButton } from '@/lib/server/auth/provider-ids'
 import type { VerifiedDomain } from './settings.types'
 import { invalidateSettingsCache, wrapDbError } from './settings.helpers'
+import { ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'identity-providers' })
 
@@ -76,7 +80,7 @@ export interface IdentityProvider {
    *  method — the "keep one method enabled" guard treats it as not counting. */
   configured: boolean
   autoCreateUsers: boolean
-  autoProvisionRole: 'admin' | 'member' | 'user' | null
+  autoProvisionRole: Role | null
   claimMapping: IdentityProviderClaimMapping | null
   showButton: boolean
   /** ISO-8601 UTC; null until a redirect-affecting detail changes. */
@@ -116,7 +120,7 @@ export interface UpsertIdentityProviderInput {
   tokenEndpointAuthMethod?: string | null
   enabled?: boolean
   autoCreateUsers?: boolean
-  autoProvisionRole?: 'admin' | 'member' | 'user' | null
+  autoProvisionRole?: Role | null
   claimMapping?: IdentityProviderClaimMapping | null
   showButton?: boolean
 }
@@ -141,6 +145,42 @@ export function deriveVisibility(p: {
   domains: { verifiedAt: string | null }[]
 }): 'button' | 'routed' {
   return verifiedDomainCount(p) > 0 ? 'routed' : 'button'
+}
+
+/** Fields whose change invalidates a prior successful connection test. */
+const CONNECTION_FIELDS = [
+  'clientId',
+  'discoveryUrl',
+  'authorizationUrl',
+  'tokenUrl',
+  'userInfoUrl',
+  'jwksUri',
+  'issuer',
+  // Scopes decide which claims the IdP releases, which is precisely what the
+  // test validates. Omitting them let a stale pass keep vouching for a scope
+  // set the test never exercised. Prompt and the token-endpoint auth method are
+  // here for the same reason: both can make a request the IdP refuses.
+  'scopes',
+  'prompt',
+  'tokenEndpointAuthMethod',
+] as const
+
+type ConnectionField = (typeof CONNECTION_FIELDS)[number]
+
+/**
+ * True when an upsert changes anything the connection test depends on, so
+ * `detailsChangedAt` must be restamped and a prior `lastSuccessfulTestAt`
+ * stops counting (`isSsoTestValid` compares the two).
+ *
+ * Honours patch semantics: a field the caller did not supply is not a change,
+ * so editing an unrelated field (a label, say) never invalidates a good test.
+ * Pure and exported so the rule is unit-testable without a transaction.
+ */
+export function connectionAffectingChange(
+  input: Partial<Pick<UpsertIdentityProviderInput, ConnectionField>>,
+  existing: Pick<IdentityProvider, ConnectionField>
+): boolean {
+  return CONNECTION_FIELDS.some((f) => input[f] !== undefined && input[f] !== existing[f])
 }
 
 // ============================================================================
@@ -388,23 +428,7 @@ export async function upsertIdentityProvider(
         // authorization/token/userinfo URLs). The gate `isSsoTestValid`
         // compares `lastSuccessfulTestAt` vs `detailsChangedAt`; without this
         // stamp a pre-edit test could vouch for a swapped token endpoint.
-        const jsonUnchanged = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-        const connectionChanged =
-          input.clientId !== existing.clientId ||
-          (input.discoveryUrl !== undefined && input.discoveryUrl !== existing.discoveryUrl) ||
-          (input.authorizationUrl !== undefined &&
-            input.authorizationUrl !== existing.authorizationUrl) ||
-          (input.tokenUrl !== undefined && input.tokenUrl !== existing.tokenUrl) ||
-          (input.userInfoUrl !== undefined && input.userInfoUrl !== existing.userInfoUrl) ||
-          (input.jwksUri !== undefined && input.jwksUri !== existing.jwksUri) ||
-          (input.issuer !== undefined && input.issuer !== existing.issuer) ||
-          (input.scopes !== undefined && input.scopes !== existing.scopes) ||
-          (input.prompt !== undefined && input.prompt !== existing.prompt) ||
-          (input.tokenEndpointAuthMethod !== undefined &&
-            input.tokenEndpointAuthMethod !== existing.tokenEndpointAuthMethod) ||
-          (input.claimMapping !== undefined &&
-            !jsonUnchanged(input.claimMapping?.profile, existing.claimMapping?.profile))
-        if (connectionChanged) {
+        if (connectionAffectingChange(input, existing)) {
           patch.detailsChangedAt = new Date()
         }
 
@@ -470,6 +494,31 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
 
     const deleted = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ registrationId: identityProvider.registrationId })
+        .from(identityProvider)
+        .where(eq(identityProvider.id, id))
+      if (!existing) return null
+
+      // Refuse while identities still reference it. Deletion removes the row
+      // and its credential but leaves `account` rows carrying the old
+      // registrationId, and registrationId is immutable on update — so
+      // delete-and-recreate is the natural admin move for changing one, and it
+      // silently orphans every identity. A real-email provider papers over it
+      // by re-linking on address match; a placeholder-address provider has no
+      // shared key at all, so its people come back as brand-new accounts and
+      // lose their votes, roles and conversations with no way back.
+      const [{ n }] = await tx
+        .select({ n: count() })
+        .from(account)
+        .where(eq(account.providerId, existing.registrationId))
+      if (n > 0) {
+        throw new ValidationError(
+          'PROVIDER_HAS_ACCOUNTS',
+          `${n} ${n === 1 ? 'person signs' : 'people sign'} in through this provider. Removing it would orphan ${n === 1 ? 'their account' : 'their accounts'}. Disable it instead, or remove those accounts first.`
+        )
+      }
+
       const [row] = await tx
         .delete(identityProvider)
         .where(eq(identityProvider.id, id))
@@ -485,6 +534,9 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
     // the trailing resetAuth() + cache invalidation for the whole delete.
     await deletePlatformCredentials(`${AUTH_CREDENTIAL_PREFIX}${deleted.registrationId}`)
   } catch (error) {
+    // A refusal is a decision, not a database fault — let it through intact so
+    // the admin sees why rather than a generic write error.
+    if (error instanceof ValidationError) throw error
     log.error({ err: error }, 'delete identity provider failed')
     wrapDbError('delete identity provider', error)
   }
@@ -536,7 +588,7 @@ export async function stampDetailsChanged(id: IdentityProviderId): Promise<void>
 /** Stamp `last_successful_test_at = now()` and persist the test fixture. */
 export async function markTestSucceeded(
   id: IdentityProviderId,
-  capture?: SsoTestCapture
+  capture?: SsoTestCapture,
 ): Promise<void> {
   log.info({ id }, 'mark identity provider test succeeded')
   try {

@@ -3,8 +3,10 @@
  * and update portal access settings (admin only).
  */
 import { z } from 'zod'
+import type { Role } from '@/lib/shared/roles'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { UserId, PrincipalId, SegmentId } from '@quackback/ids'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'portal-access' })
@@ -73,7 +75,7 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
       // No session available; treat as anonymous.
     }
 
-    let role: 'admin' | 'member' | 'user' | null = null
+    let role: Role | null = null
     let userEmail: string | null = null
     let emailVerified = false
     let isAnonymousPrincipal = false
@@ -101,7 +103,7 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
         if (principalRecord?.type === 'anonymous') {
           isAnonymousPrincipal = true
         }
-        role = (principalRecord?.role as 'admin' | 'member' | 'user' | null) ?? null
+        role = (principalRecord?.role as Role | null) ?? null
         resolvedPrincipalId = principalRecord?.id ?? null
       }
     }
@@ -163,17 +165,14 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
     //     A private portal must never silently become public on transient errors.
     let result: { granted: boolean; reason: string }
     try {
-      const [{ getPortalConfig }, { getWidgetConfig }, { evaluatePortalAccess }] =
-        await Promise.all([
-          import('@/lib/server/domains/settings/settings.service'),
-          import('@/lib/server/domains/settings/settings.widget'),
-          import('@/lib/server/domains/settings/portal-access'),
-        ])
-      const [portalConfig, widgetConfig] = await Promise.all([
-        getPortalConfig(),
-        getWidgetConfig().catch(() => null),
+      const [{ getPortalConfig }, { evaluatePortalAccess }] = await Promise.all([
+        import('@/lib/server/domains/settings/settings.service'),
+        import('@/lib/server/domains/settings/portal-access'),
       ])
-      const identifyVerificationEnabled = widgetConfig?.identifyVerification ?? false
+      const portalConfig = await getPortalConfig()
+      // Widget identify is verified-only (backend-signed ssoToken; GH issue
+      // #300), so HMAC verification is structural, not a per-workspace toggle.
+      const identifyVerificationEnabled = true
 
       // Check segment membership — only when authenticated and the config lists allowed segments.
       // Fail CLOSED on DB error: a lookup failure never grants access.
@@ -354,7 +353,7 @@ export const updatePortalAccessFn = createServerFn({ method: 'POST' })
         import('@tanstack/react-start/server'),
         import('@/lib/server/audit/log'),
       ])
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     log.debug(
       {
         visibility: data.visibility,

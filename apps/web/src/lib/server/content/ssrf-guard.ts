@@ -111,6 +111,16 @@ function isPrivateIpv6(addr: string): boolean {
   if (/^(fc|fd)[0-9a-f]{2}:/.test(lower)) return true
   // Link-local fe80::/10 — fe8x, fe9x, feax, febx
   if (/^fe[89ab][0-9a-f]:/.test(lower)) return true
+  // Transition/tunneling ranges that embed an attacker-controllable IPv4 (or
+  // tunnel arbitrary traffic): a server-side fetch never legitimately targets
+  // one, and each is a private-IPv4-embedding SSRF bypass around the v4 check.
+  // NAT64 64:ff9b::/96
+  if (/^0*64:0*ff9b:/.test(lower)) return true
+  // 6to4 2002::/16 (the whole range is 6to4-mapped IPv4)
+  if (/^2002:/.test(lower)) return true
+  // Teredo 2001:0000::/32 (second hextet all-zero; distinct from 2001:db8 above
+  // and from routable 2001:xxxx globals)
+  if (/^2001:0{1,4}:/.test(lower)) return true
   return false
 }
 

@@ -50,22 +50,28 @@ function createUpdateChain() {
 const mockFindFirst = vi.fn()
 const mockSelectFrom = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
-  db: {
-    query: {
-      user: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
-      principal: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: 'principal_abc' as PrincipalId,
-        }),
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (() => {
+    const mocked = {
+      query: {
+        user: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+        principal: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: 'principal_abc' as PrincipalId,
+          }),
+        },
       },
-    },
-    insert: vi.fn(() => createInsertChain()),
-    update: vi.fn(() => createUpdateChain()),
-    select: vi.fn(() => ({
-      from: (...args: unknown[]) => mockSelectFrom(...args),
-    })),
-  },
+      insert: vi.fn(() => createInsertChain()),
+      update: vi.fn(() => createUpdateChain()),
+      select: vi.fn(() => ({
+        from: (...args: unknown[]) => mockSelectFrom(...args),
+      })),
+    } as Record<string, unknown>
+    mocked.transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(mocked)
+    return mocked
+  })(),
   eq: vi.fn(),
   and: vi.fn(),
   or: vi.fn(),
@@ -74,26 +80,7 @@ vi.mock('@/lib/server/db', () => ({
   isNull: vi.fn(),
   desc: vi.fn(),
   asc: vi.fn(),
-  sql: vi.fn(),
-  principal: { id: 'id', userId: 'user_id', role: 'role' },
-  user: {
-    id: 'id',
-    name: 'name',
-    email: 'email',
-    image: 'image',
-    emailVerified: 'email_verified',
-    metadata: 'metadata',
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-  },
-  posts: {},
-  comments: {},
-  votes: {},
-  postStatuses: {},
-  boards: {},
-  userSegments: {},
-  segments: {},
-  userAttributeDefinitions: 'user_attribute_definitions',
+  sql: vi.fn(() => ({ kind: 'atomic-metadata-patch' })),
 }))
 
 vi.mock('@quackback/ids', () => ({
@@ -313,9 +300,11 @@ describe('user.service', () => {
 
       expect(updateSetCalls.length).toBeGreaterThanOrEqual(1)
       const setArgs = updateSetCalls[0][0] as Record<string, unknown>
-      const metadata = JSON.parse(setArgs.metadata as string)
-      expect(metadata._externalUserId).toBe('ext-456')
-      expect(metadata.plan).toBe('pro')
+      expect(setArgs.metadata).toEqual({ kind: 'atomic-metadata-patch' })
+      const { mergeMetadata } = await import('../user.attributes')
+      expect(
+        JSON.parse(mergeMetadata(existingUser.metadata, { _externalUserId: 'ext-456' }, []))
+      ).toEqual({ plan: 'pro', _externalUserId: 'ext-456' })
     })
 
     it('should preserve _externalUserId when updating only attributes', async () => {
@@ -342,9 +331,12 @@ describe('user.service', () => {
 
       expect(updateSetCalls.length).toBeGreaterThanOrEqual(1)
       const setArgs = updateSetCalls[0][0] as Record<string, unknown>
-      const metadata = JSON.parse(setArgs.metadata as string)
-      expect(metadata.plan).toBe('enterprise')
-      expect(metadata._externalUserId).toBe('ext-789') // must be preserved
+      expect(setArgs.metadata).toEqual({ kind: 'atomic-metadata-patch' })
+      const { mergeMetadata } = await import('../user.attributes')
+      expect(JSON.parse(mergeMetadata(existingUser.metadata, { plan: 'enterprise' }, []))).toEqual({
+        plan: 'enterprise',
+        _externalUserId: 'ext-789',
+      })
     })
 
     it('mints a principal when the user exists after a detach', async () => {
@@ -396,9 +388,11 @@ describe('user.service', () => {
 
       expect(updateSetCalls.length).toBeGreaterThanOrEqual(1)
       const setArgs = updateSetCalls[0][0] as Record<string, unknown>
-      const metadata = JSON.parse(setArgs.metadata as string)
-      expect(metadata.plan).toBe('pro')
-      expect(metadata).not.toHaveProperty('_externalUserId')
+      expect(setArgs.metadata).toEqual({ kind: 'atomic-metadata-patch' })
+      const { mergeMetadata } = await import('../user.attributes')
+      expect(JSON.parse(mergeMetadata(existingUser.metadata, {}, ['_externalUserId']))).toEqual({
+        plan: 'pro',
+      })
     })
   })
 })

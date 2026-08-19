@@ -7,8 +7,8 @@ import { editPostSchema } from '@/lib/shared/schemas/posts'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useUpdatePost, useUpdatePostTags } from '@/lib/client/mutations/posts'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
-import type { BoardId, PostId, StatusId, TagId } from '@quackback/ids'
+import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
+import type { BoardId, PostId, PostStatusId, PostTagId } from '@quackback/ids'
 import { Form } from '@/components/ui/form'
 import type { AdminEditPostInput } from '@/lib/shared/types'
 import { PostFormFields } from './post-form-fields'
@@ -18,15 +18,15 @@ interface PostToEdit {
   title: string
   content: string
   contentJson?: unknown
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   board: { id: BoardId; name: string; slug: string }
-  tags: { id: TagId; name: string; color: string }[]
+  tags: { id: PostTagId; name: string; color: string }[]
 }
 
 interface EditPostDialogProps {
   post: PostToEdit
   boards: Board[]
-  tags: Tag[]
+  tags: PostTag[]
   statuses: PostStatusEntity[]
   open: boolean
   onOpenChange: (open: boolean) => void

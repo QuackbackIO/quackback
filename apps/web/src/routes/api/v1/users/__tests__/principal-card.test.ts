@@ -23,27 +23,14 @@ const selectChain = {
   limit: vi.fn(),
 }
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       principal: { findFirst: vi.fn() },
     },
     select: vi.fn(() => selectChain),
-  },
-  principal: {
-    id: 'id',
-    userId: 'user_id',
-    type: 'type',
-    role: 'role',
-    displayName: 'display_name',
-    avatarUrl: 'avatar_url',
-    avatarKey: 'avatar_key',
-    createdAt: 'created_at',
-  },
-  user: {
-    id: 'id',
-    image: 'image',
-    imageKey: 'image_key',
   },
   eq: vi.fn((col, val) => ({ _eq: [col, val] })),
 }))

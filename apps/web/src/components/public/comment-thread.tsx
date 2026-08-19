@@ -16,6 +16,7 @@ import { ReactionChip } from '@/components/shared/reaction-chip'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
@@ -26,12 +27,13 @@ import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn, getInitials } from '@/lib/shared/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { CommentContent } from '@/components/public/comment-content'
+import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 
 /**
  * Groups root-level comments so consecutive private comments are wrapped
@@ -125,7 +127,7 @@ interface CommentThreadProps {
   /** Enable comment pinning (admin only) */
   canPinComments?: boolean
   /** Callback when comment is pinned */
-  onPinComment?: (commentId: CommentId) => void
+  onPinComment?: (commentId: PostCommentId) => void
   /** Callback when comment is unpinned */
   onUnpinComment?: () => void
   /** Whether pin/unpin is in progress */
@@ -137,16 +139,18 @@ interface CommentThreadProps {
   currentStatusId?: string | null
   /** Whether the current user is a team member */
   isTeamMember?: boolean
+  /** Link comment authors to their public profile (portal only). */
+  linkAuthors?: boolean
   /** Hide the comment form area entirely (for readonly previews) */
   hideCommentForm?: boolean
   /** Callback when a comment is deleted */
-  onDeleteComment?: (commentId: CommentId) => void
+  onDeleteComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being deleted (for loading state) */
-  deletingCommentId?: CommentId | null
+  deletingCommentId?: PostCommentId | null
   /** Callback when a comment is restored (team only) */
-  onRestoreComment?: (commentId: CommentId) => void
+  onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
-  restoringCommentId?: CommentId | null
+  restoringCommentId?: PostCommentId | null
 }
 
 export function CommentThread({
@@ -168,6 +172,7 @@ export function CommentThread({
   statuses,
   currentStatusId,
   isTeamMember,
+  linkAuthors = false,
   hideCommentForm = false,
   onDeleteComment,
   deletingCommentId,
@@ -265,6 +270,7 @@ export function CommentThread({
             onUnpinComment,
             isPinPending,
             isTeamMember,
+            linkAuthors,
             onDeleteComment,
             deletingCommentId,
             onRestoreComment,
@@ -288,19 +294,21 @@ interface CommentItemProps {
   pinnedCommentId?: string | null
   // Admin mode props
   canPinComments?: boolean
-  onPinComment?: (commentId: CommentId) => void
+  onPinComment?: (commentId: PostCommentId) => void
   onUnpinComment?: () => void
   isPinPending?: boolean
   /** Whether the current user is a team member */
   isTeamMember?: boolean
+  /** Link the author name to their public profile (portal only). */
+  linkAuthors?: boolean
   /** Callback when a comment is deleted */
-  onDeleteComment?: (commentId: CommentId) => void
+  onDeleteComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being deleted */
-  deletingCommentId?: CommentId | null
+  deletingCommentId?: PostCommentId | null
   /** Callback when a comment is restored (team only) */
-  onRestoreComment?: (commentId: CommentId) => void
+  onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
-  restoringCommentId?: CommentId | null
+  restoringCommentId?: PostCommentId | null
   /** Whether this comment is rendered inside a PrivateNoteCard (suppresses per-comment private styling) */
   insidePrivateCard?: boolean
 }
@@ -322,6 +330,7 @@ function CommentItem({
   onUnpinComment,
   isPinPending = false,
   isTeamMember,
+  linkAuthors = false,
   onDeleteComment,
   deletingCommentId,
   onRestoreComment,
@@ -338,6 +347,7 @@ function CommentItem({
   const [editContent, setEditContent] = useState(comment.content)
   const editJsonRef = useRef<TiptapContent | null>(comment.contentJson ?? null)
   const [editError, setEditError] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   // Stored doc preferred; legacy rows fall back to a markdown parse.
   const editInitialJson = useMemo<TiptapContent>(() => {
@@ -346,7 +356,7 @@ function CommentItem({
   }, [comment.contentJson, comment.content])
 
   const editMutation = useEditComment({
-    commentId: comment.id as CommentId,
+    commentId: comment.id as PostCommentId,
     postId,
   })
 
@@ -490,6 +500,7 @@ function CommentItem({
                     onUnpinComment={onUnpinComment}
                     isPinPending={isPinPending}
                     isTeamMember={isTeamMember}
+                    linkAuthors={linkAuthors}
                     onDeleteComment={onDeleteComment}
                     deletingCommentId={deletingCommentId}
                     onRestoreComment={onRestoreComment}
@@ -541,13 +552,27 @@ function CommentItem({
               )}
               <AvatarFallback className="text-xs">{getInitials(comment.authorName)}</AvatarFallback>
             </Avatar>
-            <span className="font-medium text-sm">
-              {comment.authorName ||
-                intl.formatMessage({
-                  id: 'portal.commentThread.authorFallback',
-                  defaultMessage: 'Anonymous',
-                })}
-            </span>
+            {linkAuthors && comment.principalId ? (
+              <AuthorHoverCard
+                principalId={comment.principalId}
+                displayName={comment.authorName}
+                className="font-medium text-sm"
+              >
+                {comment.authorName ||
+                  intl.formatMessage({
+                    id: 'portal.commentThread.authorFallback',
+                    defaultMessage: 'Anonymous',
+                  })}
+              </AuthorHoverCard>
+            ) : (
+              <span className="font-medium text-sm">
+                {comment.authorName ||
+                  intl.formatMessage({
+                    id: 'portal.commentThread.authorFallback',
+                    defaultMessage: 'Anonymous',
+                  })}
+              </span>
+            )}
             {comment.isTeamMember && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -598,7 +623,7 @@ function CommentItem({
               </Tooltip>
             )}
             {comment.isPrivate && !insidePrivateCard && (
-              <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
+              <Badge className="text-[11px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
                 <LockClosedIcon className="h-2.5 w-2.5 me-0.5" />
                 {intl.formatMessage({
                   id: 'portal.commentThread.internalNote',
@@ -607,7 +632,7 @@ function CommentItem({
               </Badge>
             )}
             {isPinned && (
-              <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+              <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary border-0">
                 <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
                 {intl.formatMessage({
                   id: 'portal.commentThread.pinnedBadge',
@@ -805,7 +830,9 @@ function CommentItem({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={isPinned ? onUnpinComment : () => onPinComment?.(comment.id as CommentId)}
+                onClick={
+                  isPinned ? onUnpinComment : () => onPinComment?.(comment.id as PostCommentId)
+                }
                 disabled={isPinPending}
               >
                 <MapPinIcon className="h-3 w-3 me-1" />
@@ -824,7 +851,7 @@ function CommentItem({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => onRestoreComment!(comment.id as CommentId)}
+                onClick={() => onRestoreComment!(comment.id as PostCommentId)}
                 disabled={isBeingRestored}
               >
                 <ArrowUturnLeftIcon className="h-3 w-3 me-1" />
@@ -862,7 +889,7 @@ function CommentItem({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-                onClick={() => onDeleteComment!(comment.id as CommentId)}
+                onClick={() => setDeleteConfirmOpen(true)}
                 disabled={isBeingDeleted}
               >
                 <TrashIcon className="h-3 w-3 me-1" />
@@ -876,6 +903,34 @@ function CommentItem({
                       defaultMessage: 'Delete',
                     })}
               </Button>
+            )}
+            {canDelete && (
+              <ConfirmDialog
+                open={deleteConfirmOpen}
+                onOpenChange={setDeleteConfirmOpen}
+                title={intl.formatMessage({
+                  id: 'portal.commentThread.deleteConfirmTitle',
+                  defaultMessage: 'Delete this comment?',
+                })}
+                description={intl.formatMessage({
+                  id: 'portal.commentThread.deleteConfirmDescription',
+                  defaultMessage: "It will be removed from the thread. This can't be undone.",
+                })}
+                confirmLabel={intl.formatMessage({
+                  id: 'portal.commentThread.delete',
+                  defaultMessage: 'Delete',
+                })}
+                cancelLabel={intl.formatMessage({
+                  id: 'portal.commentThread.keepIt',
+                  defaultMessage: 'Keep it',
+                })}
+                variant="destructive"
+                isPending={isBeingDeleted}
+                onConfirm={() => {
+                  onDeleteComment!(comment.id as PostCommentId)
+                  setDeleteConfirmOpen(false)
+                }}
+              />
             )}
           </div>
 
@@ -930,6 +985,7 @@ function CommentItem({
                   onUnpinComment={onUnpinComment}
                   isPinPending={isPinPending}
                   isTeamMember={isTeamMember}
+                  linkAuthors={linkAuthors}
                   onDeleteComment={onDeleteComment}
                   deletingCommentId={deletingCommentId}
                   onRestoreComment={onRestoreComment}

@@ -22,21 +22,21 @@ const mockFindFirst = vi.fn()
 const mockSelect = vi.fn()
 const mockUpdate = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: { principal: { findFirst: (...a: unknown[]) => mockFindFirst(...a) } },
     select: (...a: unknown[]) => mockSelect(...a),
     update: (...a: unknown[]) => mockUpdate(...a),
   },
-  // Drizzle helpers / table identifiers — only need to be defined, not functional.
+  // Drizzle helpers — only need to be defined, not functional.
   eq: vi.fn(),
   ne: vi.fn(),
   and: vi.fn(),
   or: vi.fn(),
   sql: vi.fn(() => ({ as: vi.fn() })),
   ilike: vi.fn(),
-  principal: { id: 'id', userId: 'userId', role: 'role', type: 'type' },
-  user: {},
 }))
 
 const { updateMemberRole, removeTeamMember } = await import('../principal.service')

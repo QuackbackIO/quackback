@@ -9,13 +9,14 @@ vi.mock('@/lib/server/auth', () => ({
   },
 }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       principal: { findFirst: vi.fn() },
     },
   },
-  principal: {},
   eq: vi.fn(),
 }))
 

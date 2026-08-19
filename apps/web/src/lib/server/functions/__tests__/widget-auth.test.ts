@@ -11,7 +11,10 @@ const mockSessionFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
 const mockInsert = vi.fn()
 const mockReturning = vi.fn()
-const mockValues = vi.fn(() => ({ returning: mockReturning }))
+const mockValues = vi.fn(() => {
+  const chain = { returning: mockReturning, onConflictDoNothing: () => chain }
+  return chain
+})
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -86,6 +89,27 @@ describe('getWidgetSession', () => {
 
     const result = await getWidgetSession()
     expect(result).toBeNull()
+  })
+
+  it('normalizes the signed bearer form to the raw token for the lookup', async () => {
+    // The auth library's set-auth-token header carries `<token>.<signature>`;
+    // the DB stores the raw token, so the lookup must use the prefix.
+    mockGet.mockReturnValue('Bearer raw-token-123.c2lnbmF0dXJl')
+    mockSessionFindFirst.mockResolvedValue({
+      userId: 'user_1',
+      user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: null },
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      role: 'user',
+      type: 'anonymous',
+    })
+
+    const result = await getWidgetSession()
+
+    const { eq } = await import('@/lib/server/db')
+    expect(eq).toHaveBeenCalledWith('token', 'raw-token-123')
+    expect(result).not.toBeNull()
   })
 
   it('should return auth context for valid session with existing principal', async () => {

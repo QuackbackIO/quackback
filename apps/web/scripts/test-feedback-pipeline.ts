@@ -455,7 +455,7 @@ async function main() {
 
     const boardId = createCandidate.board_id ?? featureBoard.id
     const newPostId = toUuid(generateId('post'))
-    const voteId = toUuid(generateId('vote'))
+    const voteId = toUuid(generateId('post_vote'))
 
     // Create post
     await sql`
@@ -467,7 +467,7 @@ async function main() {
 
     // Add initial vote
     await sql`
-      INSERT INTO votes (id, post_id, principal_id) VALUES (${voteId}, ${newPostId}, ${principalId})
+      INSERT INTO post_votes (id, post_id, principal_id) VALUES (${voteId}, ${newPostId}, ${principalId})
       ON CONFLICT DO NOTHING
     `
     createdVoteIds.push(voteId)
@@ -587,11 +587,11 @@ async function main() {
   if (!KEEP_DATA) {
     console.log(`\n9. Cleanup\n`)
 
-    await sql`DELETE FROM votes WHERE id = ANY(${createdVoteIds})`
+    await sql`DELETE FROM post_votes WHERE id = ANY(${createdVoteIds})`
     await sql`DELETE FROM feedback_suggestions WHERE raw_feedback_item_id = ANY(${allRawIds})`
     await sql`DELETE FROM feedback_signals WHERE raw_feedback_item_id = ANY(${allRawIds})`
     await sql`DELETE FROM raw_feedback_items WHERE id = ANY(${allRawIds})`
-    await sql`DELETE FROM votes WHERE post_id = ANY(${createdPostIds})`
+    await sql`DELETE FROM post_votes WHERE post_id = ANY(${createdPostIds})`
     await sql`DELETE FROM posts WHERE id = ANY(${createdPostIds})`
 
     console.log(`  Cleaned up ${createdPostIds.length} test posts, ${allRawIds.length} raw items`)

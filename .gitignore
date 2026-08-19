@@ -67,3 +67,6 @@ apps/web/next-env.d.ts
 docs/superpowers/
 .codex
 .claude/
+
+# Local scratch
+scratchpad/

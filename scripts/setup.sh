@@ -41,13 +41,17 @@ else
   echo -e "${GREEN}.env already exists${NC}"
 fi
 
-# Generate SECRET_KEY if empty
-if grep -q '^SECRET_KEY=""' .env 2>/dev/null; then
+# Generate SECRET_KEY if missing or empty
+if ! grep -q '^SECRET_KEY=.' .env 2>/dev/null; then
   SECRET=$(openssl rand -hex 32)
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s/^SECRET_KEY=\"\"/SECRET_KEY=\"$SECRET\"/" .env
+  if grep -q '^SECRET_KEY=' .env 2>/dev/null; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' "s/^SECRET_KEY=.*/SECRET_KEY=$SECRET/" .env
+    else
+      sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$SECRET/" .env
+    fi
   else
-    sed -i "s/^SECRET_KEY=\"\"/SECRET_KEY=\"$SECRET\"/" .env
+    printf '\nSECRET_KEY=%s\n' "$SECRET" >> .env
   fi
   echo -e "${GREEN}Generated SECRET_KEY${NC}"
 fi

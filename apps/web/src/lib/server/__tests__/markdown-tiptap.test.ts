@@ -3,7 +3,10 @@ import {
   markdownToTiptapJson,
   tiptapJsonToMarkdown,
   contentJsonToMarkdown,
+  projectContentJsonToMarkdown,
   commentMarkdownToTiptapJson,
+  tiptapJsonToText,
+  hasTextLeaf,
 } from '../markdown-tiptap'
 
 describe('markdownToTiptapJson', () => {
@@ -236,57 +239,7 @@ describe('contentJsonToMarkdown', () => {
     expect(result).toContain('![S](https://cdn.example.com/s.png)')
   })
 
-  test('keeps emoji (as the Unicode character) when restoring an image', () => {
-    // The reported bug: a post written with the `:` emoji picker made the whole
-    // document non-reserializable, so the API fell back to stored markdown —
-    // which has the shortcodes but not the images. Both must survive.
-    const doc = {
-      type: 'doc' as const,
-      content: [
-        {
-          type: 'paragraph',
-          content: [
-            { type: 'text', text: 'We shipped it ' },
-            { type: 'emoji', attrs: { name: 'tada' } },
-          ],
-        },
-        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
-      ],
-    }
-    const result = contentJsonToMarkdown(doc, 'We shipped it :tada:')
-    expect(result).toContain('We shipped it 🎉')
-    expect(result).not.toContain(':tada:')
-    expect(result).toContain('![S](https://cdn.example.com/s.png)')
-  })
-
-  test('prefers an emoji node’s stored character over the shortcode table', () => {
-    const doc = {
-      type: 'doc' as const,
-      content: [
-        { type: 'paragraph', content: [{ type: 'emoji', attrs: { name: 'tada', emoji: '🎊' } }] },
-        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
-      ],
-    }
-    expect(contentJsonToMarkdown(doc, 'stored')).toContain('🎊')
-  })
-
-  test('keeps a custom emoji as its shortcode when it has no Unicode character', () => {
-    // Workspace-uploaded emoji are image-backed and have no character to emit;
-    // `:name:` is what the editor round-trips them as.
-    const doc = {
-      type: 'doc' as const,
-      content: [
-        { type: 'paragraph', content: [{ type: 'emoji', attrs: { name: 'quackback_logo' } }] },
-        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
-      ],
-    }
-    expect(contentJsonToMarkdown(doc, 'stored')).toContain(':quackback_logo:')
-  })
-
-  test('keeps stored markdown when an image coexists with an unsupported node', () => {
-    // A youtube embed has no server renderer; re-serializing would drop it, so
-    // the whole document keeps its stored markdown (image not re-derived) rather
-    // than losing the embed.
+  test('keeps images when they coexist with a YouTube embed', () => {
     const doc = {
       type: 'doc' as const,
       content: [
@@ -294,8 +247,38 @@ describe('contentJsonToMarkdown', () => {
         { type: 'youtube', attrs: { src: 'https://youtu.be/abc' } },
       ],
     }
-    const stored = 'stored markdown with :::youtube::: and no image'
-    expect(contentJsonToMarkdown(doc, stored)).toBe(stored)
+    const result = contentJsonToMarkdown(doc, 'stale stored markdown')
+    expect(result).toContain('![S](https://cdn.example.com/s.png)')
+    expect(result).toContain('https://youtu.be/abc')
+  })
+
+  test('keeps images when they coexist with emoji and Quackback embeds', () => {
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Launch ' },
+            { type: 'emoji', attrs: { name: 'tada' } },
+          ],
+        },
+        { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S' } },
+        { type: 'quackbackEmbed', attrs: { kind: 'post', id: 'post_123' } },
+      ],
+    }
+    const result = contentJsonToMarkdown(doc, 'stale stored markdown')
+    expect(result).toContain('🎉')
+    expect(result).toContain('![S](https://cdn.example.com/s.png)')
+    expect(result).toContain('[Embedded post: post_123]')
+  })
+
+  test('projects current text for an image-free structured-only edit', () => {
+    const doc = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'New structured text' }] }],
+    }
+    expect(projectContentJsonToMarkdown(doc, 'stale text')).toContain('New structured text')
   })
 
   test('returns the stored markdown verbatim for image-free content', () => {
@@ -405,5 +388,127 @@ describe('commentMarkdownToTiptapJson', () => {
     const result = commentMarkdownToTiptapJson('Hello 😀 world!')
     const json = JSON.stringify(result)
     expect(json).toContain('😀')
+  })
+})
+
+describe('tiptapJsonToText', () => {
+  test('joins multiple paragraphs with a newline', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'First paragraph.' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Second paragraph.' }] },
+      ],
+    }
+    expect(tiptapJsonToText(doc)).toBe('First paragraph.\nSecond paragraph.')
+  })
+
+  test('renders a bullet list as one item per line', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 1' }] }],
+            },
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 2' }] }],
+            },
+          ],
+        },
+      ],
+    }
+    expect(tiptapJsonToText(doc)).toBe('Item 1\nItem 2')
+  })
+
+  test('renders an image node as [image]', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Look:' }] },
+        { type: 'chatImage', attrs: { src: 'https://cdn.example.com/x.png' } },
+      ],
+    }
+    expect(tiptapJsonToText(doc)).toContain('[image]')
+  })
+
+  test('renders a mention as @label', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'cc ' },
+            { type: 'mention', attrs: { id: 'p1', label: 'Alice' } },
+          ],
+        },
+      ],
+    }
+    expect(tiptapJsonToText(doc)).toBe('cc @Alice')
+  })
+
+  test('a hard break becomes a newline', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'line one' },
+            { type: 'hardBreak' },
+            { type: 'text', text: 'line two' },
+          ],
+        },
+      ],
+    }
+    expect(tiptapJsonToText(doc)).toBe('line one\nline two')
+  })
+
+  test('an empty doc returns an empty string', () => {
+    expect(tiptapJsonToText({ type: 'doc', content: [] })).toBe('')
+  })
+
+  test('an image-only doc still renders [image] (callers, not this helper, decide whether to use it)', () => {
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'chatImage', attrs: { src: 'https://cdn.example.com/x.png' } }],
+    }
+    expect(tiptapJsonToText(doc)).toBe('[image]')
+  })
+})
+
+describe('hasTextLeaf', () => {
+  test('true for a doc with real text', () => {
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
+    }
+    expect(hasTextLeaf(doc)).toBe(true)
+  })
+
+  test('false for an image-only doc', () => {
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'chatImage', attrs: { src: 'https://cdn.example.com/x.png' } }],
+    }
+    expect(hasTextLeaf(doc)).toBe(false)
+  })
+
+  test('false for a doc whose only text node is whitespace', () => {
+    const doc = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '   ' }] }],
+    }
+    expect(hasTextLeaf(doc)).toBe(false)
+  })
+
+  test('false for null/undefined', () => {
+    expect(hasTextLeaf(null)).toBe(false)
+    expect(hasTextLeaf(undefined)).toBe(false)
   })
 })

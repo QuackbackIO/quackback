@@ -36,7 +36,7 @@ describe('CACHE_KEYS', () => {
   it('exports expected cache key constants', () => {
     expect(CACHE_KEYS.TENANT_SETTINGS).toBe('settings:tenant')
     expect(CACHE_KEYS.INTEGRATION_MAPPINGS).toBe('hooks:integration-mappings')
-    expect(CACHE_KEYS.ACTIVE_WEBHOOKS).toBe('hooks:webhooks-active')
+    expect(CACHE_KEYS.ACTIVE_WEBHOOKS).toBe('hooks:webhooks-active:v2')
     expect(CACHE_KEYS.SLACK_CHANNELS).toBe('slack:channels')
   })
 })

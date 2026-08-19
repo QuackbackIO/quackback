@@ -6,7 +6,15 @@ import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { CategoryIcon } from '@/components/help-center/category-icon'
-import { ArrowTopRightOnSquareIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline'
+import {
+  ArrowTopRightOnSquareIcon,
+  EllipsisHorizontalIcon,
+  HandThumbDownIcon,
+  LanguageIcon,
+} from '@heroicons/react/24/outline'
+import { ArticleTranslationsDialog } from '@/components/admin/help-center/article-translations-dialog'
+import { ArticleFeedbackReasonsDialog } from '@/components/admin/help-center/article-feedback-reasons-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -25,6 +33,7 @@ import {
 } from '@/components/ui/select'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormError } from '@/components/shared/form-error'
+import { ArticleAudienceControl } from '@/components/admin/help-center/article-audience-control'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { updateArticleSchema } from '@/lib/shared/schemas/help-center'
@@ -35,13 +44,14 @@ import {
   useUnpublishArticle,
 } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
+import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { getInitialContentJson } from '@/components/admin/feedback/detail/post-utils'
 import { cn } from '@/lib/shared/utils'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { KbArticleId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 
 interface HelpCenterArticleEditorProps {
-  articleId: HelpCenterArticleId
+  articleId: KbArticleId
 }
 
 /**
@@ -56,6 +66,8 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   const navigate = useNavigate()
   const { upload: uploadImage } = useImageUpload({ prefix: 'help-center' })
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
+  const [translationsOpen, setTranslationsOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const hasInitialized = useRef(false)
 
   const updateArticleMutation = useUpdateArticle()
@@ -66,6 +78,12 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
     ...helpCenterQueries.articleDetail(articleId),
   })
   const { data: categories = [] } = useQuery(helpCenterQueries.categories())
+  const segmentsQuery = useQuery({
+    queryKey: ['admin', 'segments'] as const,
+    queryFn: () => listSegmentsFn(),
+    staleTime: 60_000,
+  })
+  const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   const form = useForm({
     resolver: standardSchemaResolver(updateArticleSchema),
@@ -75,11 +93,13 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
       description: '',
       content: '',
       categoryId: '',
+      segmentIds: [] as string[],
     },
   })
 
   const { isDirty } = form.formState
   const categoryId = form.watch('categoryId')
+  const segmentIds = form.watch('segmentIds') ?? []
 
   useEffect(() => {
     if (article && !hasInitialized.current) {
@@ -90,6 +110,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
         description: article.description ?? '',
         content: article.content,
         categoryId: article.categoryId,
+        segmentIds: article.segmentIds ?? [],
       })
       setContentJson(getInitialContentJson(article))
     }
@@ -106,6 +127,13 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   const handleCategoryChange = useCallback(
     (id: string) => {
       form.setValue('categoryId', id, { shouldDirty: true })
+    },
+    [form]
+  )
+
+  const handleSegmentsChange = useCallback(
+    (ids: string[]) => {
+      form.setValue('segmentIds', ids, { shouldDirty: true })
     },
     [form]
   )
@@ -127,6 +155,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
         categoryId: data.categoryId,
+        segmentIds: data.segmentIds ?? [],
       },
       {
         onSuccess: () => {
@@ -136,6 +165,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
             description: data.description?.trim() ?? '',
             content: data.content,
             categoryId: data.categoryId,
+            segmentIds: data.segmentIds ?? [],
           })
         },
       }
@@ -233,6 +263,39 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                   ))}
                 </SelectContent>
               </Select>
+
+              <ArticleAudienceControl
+                segments={segments}
+                value={segmentIds}
+                onChange={handleSegmentsChange}
+              />
+
+              {article.notHelpfulCount > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFeedbackOpen(true)}
+                  className="h-8 rounded-full text-xs px-3"
+                >
+                  <HandThumbDownIcon className="h-3.5 w-3.5" />
+                  Unhelpful
+                  <Badge size="sm" shape="pill" variant="secondary">
+                    {article.notHelpfulCount}
+                  </Badge>
+                </Button>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTranslationsOpen(true)}
+                className="h-8 rounded-full text-xs px-3"
+              >
+                <LanguageIcon className="h-3.5 w-3.5" />
+                Translations
+              </Button>
 
               {isPublished ? (
                 <div className="flex items-center gap-1">
@@ -357,6 +420,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                         placeholder="Start writing..."
                         minHeight="60vh"
                         borderless
+                        toolbarPosition="bottom"
                         features={{
                           headings: true,
                           images: true,
@@ -381,6 +445,16 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
           </div>
         </ScrollArea>
       </form>
+      <ArticleTranslationsDialog
+        articleId={articleId}
+        open={translationsOpen}
+        onOpenChange={setTranslationsOpen}
+      />
+      <ArticleFeedbackReasonsDialog
+        articleId={articleId}
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+      />
     </Form>
   )
 }

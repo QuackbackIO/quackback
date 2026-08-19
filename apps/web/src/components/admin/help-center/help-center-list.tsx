@@ -14,10 +14,10 @@ import { useDeleteArticle, useDeleteCategory } from '@/lib/client/mutations/help
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { collectDescendantIds } from '@/lib/shared/help-center-tree'
 import { Route } from '@/routes/admin/help-center'
-import type { HelpCenterArticleId, HelpCenterCategoryId } from '@quackback/ids'
+import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 
 type CategoryDialogState =
-  | { mode: 'new'; parentId: HelpCenterCategoryId | null }
+  | { mode: 'new'; parentId: KbCategoryId | null }
   | { mode: 'edit'; category: TreeCategory }
   | null
 
@@ -26,7 +26,7 @@ export function HelpCenterList() {
   const { filters, setFilters, hasActiveFilters } = useHelpCenterFilters()
 
   const [deleteArticleDialogOpen, setDeleteArticleDialogOpen] = useState(false)
-  const [articleToDelete, setArticleToDelete] = useState<HelpCenterArticleId | null>(null)
+  const [articleToDelete, setArticleToDelete] = useState<KbArticleId | null>(null)
 
   const [categoryDialogState, setCategoryDialogState] = useState<CategoryDialogState>(null)
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<TreeCategory | null>(null)
@@ -60,7 +60,7 @@ export function HelpCenterList() {
   }, [])
 
   const handleEdit = useCallback(
-    (id: HelpCenterArticleId) => {
+    (id: KbArticleId) => {
       startTransition(() => {
         void navigate({
           to: '/admin/help-center/articles/$articleId',
@@ -71,7 +71,7 @@ export function HelpCenterList() {
     [navigate]
   )
 
-  const handleDeleteArticle = (id: HelpCenterArticleId) => {
+  const handleDeleteArticle = (id: KbArticleId) => {
     setArticleToDelete(id)
     setDeleteArticleDialogOpen(true)
   }
@@ -161,6 +161,10 @@ export function HelpCenterList() {
             onShowDeletedChange={(showDeleted) =>
               setFilters({ showDeleted: showDeleted ?? undefined })
             }
+            showPerformance={filters.showPerformance}
+            onShowPerformanceChange={(showPerformance) =>
+              setFilters({ showPerformance: showPerformance ?? undefined })
+            }
           />
         }
         hasActiveFilters={hasActiveFilters}
@@ -196,6 +200,7 @@ export function HelpCenterList() {
                 description: categoryDialogState.category.description,
                 icon: categoryDialogState.category.icon,
                 isPublic: categoryDialogState.category.isPublic,
+                segmentIds: categoryDialogState.category.segmentIds,
                 parentId: categoryDialogState.category.parentId,
               }
             : undefined

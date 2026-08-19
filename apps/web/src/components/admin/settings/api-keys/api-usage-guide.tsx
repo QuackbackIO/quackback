@@ -16,6 +16,7 @@ import {
   PHPIcon,
 } from '@/components/admin/settings/lang-icons'
 import { cn } from '@/lib/shared/utils'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 
 // ——————————————————————————————————————————————————
 // Language definitions
@@ -158,7 +159,7 @@ const LANG_ICONS: Record<string, (props: { className?: string }) => React.ReactE
 const API_RESOURCES = [
   'posts',
   'boards',
-  'comments',
+  'post_comments',
   'statuses',
   'tags',
   'webhooks',
@@ -176,23 +177,19 @@ interface ApiUsageGuideProps {
 
 export function ApiUsageGuide({ apiBaseUrl }: ApiUsageGuideProps) {
   const [selectedLang, setSelectedLang] = useState('curl')
-  const [copiedCode, setCopiedCode] = useState(false)
-  const [copiedUrl, setCopiedUrl] = useState(false)
+  const { copied: copiedCode, copy: copyCode } = useCopyToClipboard()
+  const { copied: copiedUrl, copy: copyUrl } = useCopyToClipboard()
 
   const lang = LANGUAGES.find((l) => l.id === selectedLang) ?? LANGUAGES[0]
 
   const codeOutput = useMemo(() => lang.code(apiBaseUrl), [lang, apiBaseUrl])
 
   async function handleCopyCode() {
-    await navigator.clipboard.writeText(codeOutput)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
+    await copyCode(codeOutput)
   }
 
   async function handleCopyUrl() {
-    await navigator.clipboard.writeText(apiBaseUrl)
-    setCopiedUrl(true)
-    setTimeout(() => setCopiedUrl(false), 2000)
+    await copyUrl(apiBaseUrl)
   }
 
   return (
@@ -220,7 +217,7 @@ export function ApiUsageGuide({ apiBaseUrl }: ApiUsageGuideProps) {
                 onClick={handleCopyUrl}
                 className="group flex items-center gap-1.5 w-full text-left"
               >
-                <code className="flex-1 text-[10px] font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1.5 truncate">
+                <code className="flex-1 text-xs font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1.5 truncate">
                   {apiBaseUrl}
                 </code>
                 <span className="shrink-0 text-muted-foreground group-hover:text-foreground transition-colors">
@@ -244,7 +241,7 @@ export function ApiUsageGuide({ apiBaseUrl }: ApiUsageGuideProps) {
             </div>
             <p className="text-[11px] text-muted-foreground ml-7">
               Add your API key as a Bearer token in the{' '}
-              <code className="text-[10px] bg-muted/50 px-1 py-0.5 rounded font-mono">
+              <code className="text-xs bg-muted/50 px-1 py-0.5 rounded font-mono">
                 Authorization
               </code>{' '}
               header. Create a key above if you don't have one.
@@ -308,7 +305,7 @@ export function ApiUsageGuide({ apiBaseUrl }: ApiUsageGuideProps) {
               {API_RESOURCES.map((resource) => (
                 <span
                   key={resource}
-                  className="text-[10px] font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
+                  className="text-xs font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
                 >
                   {resource}
                 </span>

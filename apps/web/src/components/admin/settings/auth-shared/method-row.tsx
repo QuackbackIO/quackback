@@ -85,7 +85,7 @@ export function MethodRow({
                     <TooltipTrigger asChild>
                       <Badge
                         variant="outline"
-                        className="text-[10px] px-1.5 py-0 inline-flex items-center gap-1"
+                        className="text-[11px] px-1.5 py-0 inline-flex items-center gap-1"
                       >
                         <LockClosedIcon className="h-3 w-3" />
                         {badge}
@@ -97,7 +97,7 @@ export function MethodRow({
                   </Tooltip>
                 </TooltipProvider>
               ) : (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                <Badge variant="outline" className="text-[11px] px-1.5 py-0">
                   {badge}
                 </Badge>
               ))}

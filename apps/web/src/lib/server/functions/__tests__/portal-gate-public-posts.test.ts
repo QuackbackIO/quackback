@@ -103,6 +103,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 }))
 
 vi.mock('@/lib/server/functions/workspace', () => ({ getSettings: vi.fn() }))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getPortalConfig: vi.fn().mockResolvedValue({}),
+}))
 const mockCanVotePost = vi.fn(() => ({ allowed: true }) as { allowed: boolean; reason?: string })
 vi.mock('@/lib/server/policy', () => ({
   canViewBoard: vi.fn(),
@@ -138,7 +141,9 @@ mockInnerJoin.mockReturnValue({
     limit: mockBoardRowLimit,
   }),
 })
-vi.mock('@/lib/server/db', () => ({
+// Spread the real db module so tables/operators stay current; override only what this suite drives.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
@@ -150,10 +155,6 @@ vi.mock('@/lib/server/db', () => ({
     }),
     query: { principal: { findFirst: vi.fn().mockResolvedValue(null) } },
   },
-  posts: {},
-  boards: {},
-  postStatuses: {},
-  principal: { userId: 'userId' },
   eq: vi.fn(),
   inArray: vi.fn(),
   and: vi.fn(),
@@ -236,8 +237,14 @@ describe('listPublicRoadmapsFn — portal-visibility gate', () => {
         name: 'Q1',
         slug: 'q1',
         description: null,
-        isPublic: true,
+        type: 'column',
+        baseFilter: {},
+        dateSource: null,
+        frequency: null,
+        visibility: 'public',
+        visibleSegmentIds: null,
         position: 0,
+        columns: [],
         createdAt: now,
         updatedAt: now,
       },
@@ -261,8 +268,14 @@ describe('listPublicRoadmapsFn — portal-visibility gate', () => {
         name: 'Q2',
         slug: 'q2',
         description: null,
-        isPublic: true,
+        type: 'column',
+        baseFilter: {},
+        dateSource: null,
+        frequency: null,
+        visibility: 'public',
+        visibleSegmentIds: null,
         position: 1,
+        columns: [],
         createdAt: now,
         updatedAt: now,
       },
@@ -315,8 +328,8 @@ describe('getPublicRoadmapPostsFn — portal-visibility gate', () => {
           title: 'Ship it',
           voteCount: 3,
           statusId: 'st_1',
+          eta: null,
           board: { id: 'b1', name: 'Ideas', slug: 'ideas' },
-          roadmapEntry: { postId: 'post_1', roadmapId: 'rm_1', position: 0 },
         },
       ],
       hasMore: false,

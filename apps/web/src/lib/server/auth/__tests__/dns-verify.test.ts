@@ -14,6 +14,9 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock('node:dns/promises', () => ({
   resolveTxt: hoisted.mockResolveTxt,
+  // Node builtin mocks need a default export or scoped vitest runs fail to
+  // resolve the module (full-suite runs mask this via import order).
+  default: { resolveTxt: hoisted.mockResolveTxt },
 }))
 
 const { lookupVerificationTxt } = await import('../dns-verify')

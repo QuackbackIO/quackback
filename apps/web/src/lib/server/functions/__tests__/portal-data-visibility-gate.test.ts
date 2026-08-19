@@ -56,7 +56,15 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   getOptionalAuth: vi.fn(),
   requireAuth: vi.fn(),
   hasAuthCredentials: vi.fn().mockReturnValue(false),
-  policyActorFromAuth: vi.fn(),
+  // The gate now consults can(actor, ...) — resolve to an anonymous-shaped
+  // actor so the permission read has something real to look at.
+  policyActorFromAuth: vi.fn().mockResolvedValue({
+    principalId: null,
+    role: null,
+    principalType: 'anonymous',
+    segmentIds: new Set(),
+    permissions: new Set(),
+  }),
 }))
 
 vi.mock('@/lib/server/functions/workspace', () => ({ getSettings: vi.fn() }))
@@ -99,7 +107,7 @@ const POSTS_RESULT = {
       id: 'post_secret1',
       title: 'Private roadmap idea',
       content: 'sensitive',
-      statusId: 'status_1',
+      statusId: 'post_status_1',
       voteCount: 9,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       commentCount: 2,
@@ -109,7 +117,7 @@ const POSTS_RESULT = {
       board: { id: 'board_1', name: 'Roadmap', slug: 'roadmap' },
     },
   ],
-  total: -1,
+  total: undefined,
   hasMore: false,
 }
 

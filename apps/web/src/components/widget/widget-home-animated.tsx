@@ -38,6 +38,17 @@ interface WidgetPost {
   board?: { id: string; name: string; slug: string }
 }
 
+function toWidgetPost(post: WidgetPost): WidgetPost {
+  return {
+    id: post.id,
+    title: post.title,
+    voteCount: post.voteCount,
+    statusId: post.statusId,
+    commentCount: post.commentCount,
+    board: post.board,
+  }
+}
+
 interface StatusInfo {
   id: string
   name: string
@@ -80,9 +91,6 @@ interface SearchResult {
 }
 
 const similarSearchCache = new Map<string, SearchResult>()
-
-const identityInputCls =
-  'bg-background rounded-md border border-border/50 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 transition-colors'
 
 // ── Shared post row used in both similar-posts and popular-ideas lists ──
 
@@ -192,7 +200,6 @@ export function WidgetHomeAnimated({
     user,
     emitEvent,
     metadata,
-    identifyWithEmail,
   } = useWidgetAuth()
   const { upload: uploadImage } = useWidgetImageUpload()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -228,14 +235,12 @@ export function WidgetHomeAnimated({
     [boardPermissions]
   )
   const canPost = boardPermissions?.[selectedBoardId]?.canSubmit ?? false
-  // An anonymous visitor on a board that does not allow anonymous submission must
-  // identify first; the form collects an email and escalates to a real user.
-  const needsEmail = !isIdentified && !hmacRequired && !canPost
   // An identified viewer denied by the selected board's submit tier (segments/
   // team) is an authorization failure — surface it instead of "Posting as X".
+  // An anonymous visitor on a members-only board must sign in via the host
+  // app / portal; there is no inline email capture (see GH issue #300).
   const submitNoAccess = isIdentified && !!selectedBoardId && !canPost
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
+  const signInRequired = !isIdentified && !!selectedBoardId && !canPost
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -261,41 +266,31 @@ export function WidgetHomeAnimated({
     isFetching: isFetchingPosts,
   } = useInfiniteQuery({
     queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all'],
-    queryFn: ({ pageParam }) =>
-      listPublicPostsFn({
+    queryFn: async ({ pageParam }) => {
+      const page = await listPublicPostsFn({
         data: {
           sort: 'top',
           page: pageParam,
           limit: 20,
           boardSlug: activeBoardSlug ?? undefined,
         },
-      }),
+      })
+      return { ...page, items: page.items.map(toWidgetPost) }
+    },
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
     // Only seed from SSR data on the initial unfiltered view
     initialData:
       activeBoardSlug === null
         ? {
-            pages: [{ items: initialPosts, total: -1, hasMore: initialHasMore }],
+            pages: [{ items: initialPosts, total: undefined, hasMore: initialHasMore }],
             pageParams: [1],
           }
         : undefined,
   })
 
   const allPopularPosts: WidgetPost[] = useMemo(
-    () =>
-      postsData?.pages.flatMap((page) =>
-        page.items.map(
-          (p): WidgetPost => ({
-            id: p.id,
-            title: p.title,
-            voteCount: p.voteCount,
-            statusId: p.statusId ?? null,
-            commentCount: (p as WidgetPost).commentCount ?? 0,
-            board: (p as WidgetPost).board,
-          })
-        )
-      ) ?? [],
+    () => postsData?.pages.flatMap((page) => page.items) ?? [],
     [postsData]
   )
 
@@ -400,57 +395,22 @@ export function WidgetHomeAnimated({
     setTitle('')
     setContentJson(null)
     setContentHtml('')
-    setEmail('')
-    setName('')
     setError(null)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim() || !selectedBoardId || isSubmitting) return
-    if (needsEmail && !email.trim()) return
 
     setIsSubmitting(true)
     setError(null)
 
     try {
-      if (needsEmail) {
-        const identified = await identifyWithEmail(email.trim(), name.trim() || undefined)
-        if (!identified) {
-          setError(
-            intl.formatMessage({
-              id: 'widget.home.form.errorEmail',
-              defaultMessage: 'Could not verify your email. Please try again.',
-            })
-          )
-          setIsSubmitting(false)
-          return
-        }
-        // Identifying escalates an anonymous visitor to a real authenticated
-        // user, which satisfies an `authenticated` submit tier — but NOT a
-        // `segments`/`team` tier. Re-check the selected board's capability with
-        // the now-Bearer identity before posting, so we surface a clear
-        // no-access message instead of firing a createPost the server rejects
-        // (#191). The feed's boardPermissions also refetches on sessionVersion.
-        const [{ getWidgetAuthHeaders }, { fetchBoardCapabilitiesFn }] = await Promise.all([
-          import('@/lib/client/widget-auth'),
-          import('@/lib/server/functions/portal'),
-        ])
-        const freshPermissions = await fetchBoardCapabilitiesFn({
-          headers: getWidgetAuthHeaders(),
-        })
-        if (!freshPermissions?.[selectedBoardId]?.canSubmit) {
-          setError(
-            intl.formatMessage({
-              id: 'widget.home.form.noAccess',
-              defaultMessage: "You don't have access to post on this board",
-            })
-          )
-          setIsSubmitting(false)
-          return
-        }
-      } else if (!canPost) {
-        if (hmacRequired) {
+      if (!canPost) {
+        if (!isIdentified) {
+          // Anonymous visitor on a members-only board: identity comes from the
+          // host app's SSO identify or a portal sign-in, never inline email
+          // capture (GH issue #300).
           sendToHost({ type: 'quackback:navigate', url: `${window.location.origin}/auth/login` })
           setIsSubmitting(false)
           return
@@ -525,8 +485,7 @@ export function WidgetHomeAnimated({
     }
   }
 
-  const canSubmitForm =
-    title.trim() && selectedBoardId && (!needsEmail || email.trim()) && (canPost || needsEmail)
+  const canSubmitForm = title.trim() && selectedBoardId && canPost
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
@@ -572,7 +531,7 @@ export function WidgetHomeAnimated({
                       </SelectTrigger>
                       <SelectContent align="start">
                         {boards.map((b) => (
-                          <SelectItem key={b.id} value={b.id} className="text-xs py-1">
+                          <SelectItem key={b.id} value={b.id} className="py-1">
                             {b.name}
                           </SelectItem>
                         ))}
@@ -606,6 +565,10 @@ export function WidgetHomeAnimated({
                   defaultMessage: "What's your idea?",
                 })}
                 value={title}
+                aria-label={intl.formatMessage({
+                  id: 'widget.home.input.label',
+                  defaultMessage: 'Feedback title',
+                })}
                 onChange={(e) => {
                   const val = e.target.value
                   setTitle(val)
@@ -615,7 +578,7 @@ export function WidgetHomeAnimated({
                 onFocus={() => {
                   if (title && !expanded) setExpanded(true)
                 }}
-                className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary"
+                className="flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
                 initial={false}
                 animate={{
                   fontSize: expanded ? '1rem' : '0.875rem',
@@ -720,31 +683,6 @@ export function WidgetHomeAnimated({
                     transition={{ duration: 0.2, delay: 0.15 }}
                     className="border-t border-border bg-muted/30"
                   >
-                    {needsEmail && (
-                      <div className="px-3 pt-2 pb-1 flex gap-2">
-                        <input
-                          type="email"
-                          required
-                          placeholder={intl.formatMessage({
-                            id: 'widget.home.form.emailPlaceholder',
-                            defaultMessage: 'Your email',
-                          })}
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className={`flex-1 min-w-0 ${identityInputCls}`}
-                        />
-                        <input
-                          type="text"
-                          placeholder={intl.formatMessage({
-                            id: 'widget.home.form.namePlaceholder',
-                            defaultMessage: 'Name (optional)',
-                          })}
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          className={`w-28 shrink-0 ${identityInputCls}`}
-                        />
-                      </div>
-                    )}
                     <div className="flex items-center justify-between px-3 py-2">
                       <p className="text-[11px] text-muted-foreground truncate me-2">
                         {submitNoAccess ? (
@@ -764,25 +702,11 @@ export function WidgetHomeAnimated({
                               ),
                             }}
                           />
-                        ) : needsEmail ? (
-                          email.trim() ? (
-                            <FormattedMessage
-                              id="widget.home.posting.postingAs"
-                              defaultMessage="Posting as {name}"
-                              values={{
-                                name: (
-                                  <span className="font-medium text-foreground">
-                                    {email.trim()}
-                                  </span>
-                                ),
-                              }}
-                            />
-                          ) : (
-                            <FormattedMessage
-                              id="widget.home.posting.emailRequired"
-                              defaultMessage="Your email is required"
-                            />
-                          )
+                        ) : signInRequired ? (
+                          <FormattedMessage
+                            id="widget.home.posting.signInRequired"
+                            defaultMessage="Sign in to post on this board"
+                          />
                         ) : (
                           <FormattedMessage
                             id="widget.home.posting.postingAnonymously"
@@ -841,11 +765,19 @@ export function WidgetHomeAnimated({
                       id: 'widget.home.popular.search.placeholder',
                       defaultMessage: 'Search ideas...',
                     })}
-                    className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
+                    aria-label={intl.formatMessage({
+                      id: 'widget.home.popular.search.label',
+                      defaultMessage: 'Search popular ideas',
+                    })}
+                    className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   />
                   <button
                     type="button"
                     onClick={() => setPopularSearchOpen(false)}
+                    aria-label={intl.formatMessage({
+                      id: 'widget.home.popular.search.close',
+                      defaultMessage: 'Close search',
+                    })}
                     className="shrink-0 text-muted-foreground/60 hover:text-foreground transition-colors"
                   >
                     <XMarkIcon className="w-3 h-3" />
@@ -930,7 +862,7 @@ export function WidgetHomeAnimated({
               <>
                 {(isPopularSearchFetching || popularSearch !== debouncedPopularSearch) && (
                   <div className="flex justify-center py-4">
-                    <span className="text-[10px] text-muted-foreground/50">
+                    <span className="text-xs text-muted-foreground/50">
                       <FormattedMessage
                         id="widget.home.popular.search.searching"
                         defaultMessage="Searching..."
@@ -983,7 +915,7 @@ export function WidgetHomeAnimated({
               <>
                 {isFetchingPosts && !isFetchingNextPage && allPopularPosts.length === 0 && (
                   <div className="flex justify-center py-4">
-                    <span className="text-[10px] text-muted-foreground/50">
+                    <span className="text-xs text-muted-foreground/50">
                       <FormattedMessage
                         id="widget.home.popular.loading"
                         defaultMessage="Loading..."
@@ -1035,7 +967,7 @@ export function WidgetHomeAnimated({
                     {hasNextPage && (
                       <div ref={postsSentinelRef} className="flex justify-center py-2">
                         {isFetchingNextPage && (
-                          <span className="text-[10px] text-muted-foreground/50">
+                          <span className="text-xs text-muted-foreground/50">
                             <FormattedMessage
                               id="widget.home.popular.loading"
                               defaultMessage="Loading..."

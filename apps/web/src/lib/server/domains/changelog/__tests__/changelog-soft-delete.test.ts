@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ChangelogId } from '@quackback/ids'
+// Static imports (vitest hoists the vi.mock below above them, so the db mock
+// still applies). Importing the module graph here — at file load rather than
+// inside each test via `await import()` — keeps its transform cost out of the
+// per-test 5s timeout, which it otherwise blew under a saturated parallel run.
+import { getPublicChangelogById, listPublicChangelogs } from '../changelog.public'
+import { deleteChangelog } from '../changelog.service'
+import { isNull, eq, lt } from '@/lib/server/db'
 
 const mockEntryFindFirst = vi.fn()
 const mockEntryFindMany = vi.fn()
@@ -10,11 +17,14 @@ const mockUpdateSet = vi.fn()
 const mockUpdateWhere = vi.fn()
 const mockUpdateReturning = vi.fn()
 
-const changelogEntriesTable = {
+// Hoisted so the (hoisted) vi.mock factory below can return it directly — the
+// static SUT import above evaluates that factory before this file's own body,
+// so a plain const would be read before initialization.
+const changelogEntriesTable = vi.hoisted(() => ({
   id: { name: 'id' },
   publishedAt: { name: 'published_at' },
   deletedAt: { name: 'deleted_at' },
-}
+}))
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -26,6 +36,7 @@ vi.mock('@/lib/server/db', () => ({
       postStatuses: {
         findMany: (...args: unknown[]) => mockStatusesFindMany(...args),
       },
+      changelogEntryCategories: { findMany: vi.fn().mockResolvedValue([]) },
     },
     select: (...args: unknown[]) => mockSelect(...args),
     update: () => ({
@@ -44,6 +55,8 @@ vi.mock('@/lib/server/db', () => ({
   },
   changelogEntries: changelogEntriesTable,
   changelogEntryPosts: { changelogEntryId: 'changelog_entry_id', postId: 'post_id' },
+  changelogEntryCategories: { changelogEntryId: 'changelog_entry_id', categoryId: 'category_id' },
+  changelogCategories: { id: 'id', name: 'name' },
   posts: {
     id: 'posts.id',
     title: 'posts.title',
@@ -108,9 +121,6 @@ beforeEach(() => {
 
 describe('getPublicChangelogById', () => {
   it('filters out soft-deleted entries (isNull deletedAt)', async () => {
-    const { getPublicChangelogById } = await import('../changelog.public')
-    const { isNull } = await import('@/lib/server/db')
-
     mockEntryFindFirst.mockResolvedValueOnce({
       id: 'cl_1' as ChangelogId,
       title: 'Test',
@@ -127,9 +137,6 @@ describe('getPublicChangelogById', () => {
 
 describe('listPublicChangelogs', () => {
   it('filters out soft-deleted entries (isNull deletedAt)', async () => {
-    const { listPublicChangelogs } = await import('../changelog.public')
-    const { isNull } = await import('@/lib/server/db')
-
     mockSelect.mockReturnValueOnce(entriesListChain([]))
 
     await listPublicChangelogs({})
@@ -138,9 +145,6 @@ describe('listPublicChangelogs', () => {
   })
 
   it('keeps cursor pagination working when the anchor row was soft-deleted', async () => {
-    const { listPublicChangelogs } = await import('../changelog.public')
-    const { eq, lt } = await import('@/lib/server/db')
-
     // Cursor row still has its publishedAt because deleteChangelog
     // preserves it precisely so pagination has an anchor.
     mockEntryFindFirst.mockResolvedValueOnce({
@@ -173,8 +177,6 @@ describe('listPublicChangelogs', () => {
 describe('deleteChangelog', () => {
   it('sets deletedAt but preserves publishedAt so cursors stay valid', async () => {
     mockUpdateReturning.mockResolvedValueOnce([{ id: 'cl_1' }])
-
-    const { deleteChangelog } = await import('../changelog.service')
     await deleteChangelog('cl_1' as ChangelogId)
 
     const setArgs = mockUpdateSet.mock.calls[0][0] as Record<string, unknown>

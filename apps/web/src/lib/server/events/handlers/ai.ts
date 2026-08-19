@@ -10,8 +10,14 @@ import type { EventData } from '../types'
 import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment/sentiment.service'
 import { generatePostEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import type { PostId } from '@quackback/ids'
-import { db, postTags, tags, eq } from '@/lib/server/db'
-import { claimHookDelivery } from '../hook-idempotency'
+import { db, postTagAssignments, postTags, eq } from '@/lib/server/db'
+import {
+  claimHookDelivery,
+  completeHookDelivery,
+  failHookDelivery,
+  releaseHookDelivery,
+} from '../hook-idempotency'
+import { isRetryableError } from '../hook-utils'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ai' })
@@ -42,29 +48,47 @@ export const aiHook: HookHandler = {
 
     log.debug({ post_id: postId }, 'processing post')
 
-    // Run sentiment and embedding in parallel
-    const [sentimentResult, embeddingResult] = await Promise.allSettled([
-      processSentiment(postId, post.title, post.content),
-      processEmbedding(postId, post.title, post.content),
-    ])
+    // Sentiment and embedding are individually best-effort (each is wrapped
+    // in its own try/catch below and Promise.allSettled never rejects), so
+    // this try/catch exists for failures around that work: a thrown error
+    // here means the claim above must not be left dangling. Leaving it
+    // dangling would wedge the delivery in the 'processing' state for the
+    // rest of the 5-minute lease window, so a BullMQ retry in that window
+    // would see the claim as already-taken and silently skip the re-run —
+    // the same class of bug the webhook handler guards against.
+    try {
+      const [sentimentResult, embeddingResult] = await Promise.allSettled([
+        processSentiment(postId, post.title, post.content),
+        processEmbedding(postId, post.title, post.content),
+      ])
 
-    const sentimentOk = sentimentResult.status === 'fulfilled' && sentimentResult.value
-    const embeddingOk = embeddingResult.status === 'fulfilled' && embeddingResult.value
+      const sentimentOk = sentimentResult.status === 'fulfilled' && sentimentResult.value
+      const embeddingOk = embeddingResult.status === 'fulfilled' && embeddingResult.value
 
-    // Log any failures
-    if (sentimentResult.status === 'rejected') {
-      log.error({ err: sentimentResult.reason, post_id: postId }, 'sentiment failed')
+      // Log any failures
+      if (sentimentResult.status === 'rejected') {
+        log.error({ err: sentimentResult.reason, post_id: postId }, 'sentiment failed')
+      }
+      if (embeddingResult.status === 'rejected') {
+        log.error({ err: embeddingResult.reason, post_id: postId }, 'embedding failed')
+      }
+
+      log.info(
+        { post_id: postId, sentiment_ok: sentimentOk, embedding_ok: embeddingOk },
+        'post analysis complete'
+      )
+
+      await completeHookDelivery(ctx?.jobId)
+
+      return { success: true }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+      log.error({ err: error, post_id: postId }, 'post analysis failed')
+      const retryable = isRetryableError(error)
+      if (retryable) await releaseHookDelivery(ctx?.jobId)
+      else await failHookDelivery(ctx?.jobId)
+      return { success: false, error: errorMsg, shouldRetry: retryable }
     }
-    if (embeddingResult.status === 'rejected') {
-      log.error({ err: embeddingResult.reason, post_id: postId }, 'embedding failed')
-    }
-
-    log.info(
-      { post_id: postId, sentiment_ok: sentimentOk, embedding_ok: embeddingOk },
-      'post analysis complete'
-    )
-
-    return { success: true }
   },
 }
 
@@ -87,10 +111,10 @@ async function processSentiment(postId: PostId, title: string, content: string):
 async function getPostTagNames(postId: PostId): Promise<string[]> {
   try {
     const result = await db
-      .select({ name: tags.name })
-      .from(postTags)
-      .innerJoin(tags, eq(postTags.tagId, tags.id))
-      .where(eq(postTags.postId, postId))
+      .select({ name: postTags.name })
+      .from(postTagAssignments)
+      .innerJoin(postTags, eq(postTagAssignments.tagId, postTags.id))
+      .where(eq(postTagAssignments.postId, postId))
 
     return result.map((r) => r.name)
   } catch (error) {
@@ -106,7 +130,10 @@ async function processEmbedding(postId: PostId, title: string, content: string):
   // Fetch tags to include in embedding for better semantic matching
   const tagNames = await getPostTagNames(postId)
   if (tagNames.length > 0) {
-    log.debug({ post_id: postId, tag_count: tagNames.length, tags: tagNames }, 'including tags in embedding')
+    log.debug(
+      { post_id: postId, tag_count: tagNames.length, tags: tagNames },
+      'including tags in embedding'
+    )
   }
 
   const success = await generatePostEmbedding(postId, title, content, tagNames)

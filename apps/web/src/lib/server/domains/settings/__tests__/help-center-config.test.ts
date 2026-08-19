@@ -35,6 +35,7 @@ describe('HelpCenterSeoConfig', () => {
         sitemapEnabled: false,
         structuredDataEnabled: false,
         ogImageKey: 'uploads/og-image.png',
+        indexable: true,
       }
       expect(config.metaDescription).toBe('Our help center')
       expect(config.ogImageKey).toBe('uploads/og-image.png')
@@ -69,11 +70,16 @@ describe('HelpCenterConfig', () => {
         enabled: true,
         homepageTitle: 'Get Help',
         homepageDescription: 'Browse our docs',
+        headerLinks: [{ label: 'Community', url: 'https://community.example.com' }],
+        domain: { domain: null, verifiedAt: null },
+        locales: { default: 'en', additional: [], chrome: {} },
+        autoTranslate: { enabled: false, protectedTerms: [] },
         seo: {
           metaDescription: 'Help center',
           sitemapEnabled: true,
           structuredDataEnabled: true,
           ogImageKey: null,
+          indexable: true,
         },
       }
       expect(config.enabled).toBe(true)

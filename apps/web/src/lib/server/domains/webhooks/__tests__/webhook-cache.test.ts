@@ -43,7 +43,9 @@ function makeWebhookRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     insert: (...args: unknown[]) => mockInsert(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
@@ -54,12 +56,6 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
   },
-  webhooks: {
-    id: 'id',
-    status: 'status',
-    deletedAt: 'deletedAt',
-  },
-  settings: { tierLimits: 'tier_limits' },
   eq: vi.fn(),
   and: vi.fn(),
   isNull: vi.fn(),

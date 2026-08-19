@@ -18,14 +18,14 @@ import {
   user,
   type Principal,
 } from '@/lib/server/db'
-import type { ServiceMetadata } from '@/lib/server/db'
-import type { PrincipalId, UserId } from '@quackback/ids'
-import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import type { PrincipalId, RoleId, UserId } from '@quackback/ids'
+import { InternalError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember, isAdmin } from '@/lib/shared/roles'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import type { PermissionKey } from '@/lib/shared/permissions'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import type { TeamMember } from './principal.types'
 import { logger } from '@/lib/server/logger'
+import { setPrincipalRole } from './principal.factory'
 
 const log = logger.child({ component: 'principals' })
 
@@ -63,44 +63,24 @@ export async function getMemberById(principalId: PrincipalId): Promise<Principal
 }
 
 /**
- * Create a service principal (for API keys or integrations)
+ * Principal creation, the role writer, and the profile-sync helpers now live in
+ * the principal factory — the single owner of principal inserts and role writes.
+ * Re-exported here so existing importers are unchanged.
  */
-export async function createServicePrincipal(params: {
-  role: 'admin' | 'member'
-  displayName: string
-  serviceMetadata: ServiceMetadata
-}): Promise<Principal> {
-  const [created] = await db
-    .insert(principal)
-    .values({
-      userId: null,
-      type: 'service',
-      role: params.role,
-      displayName: params.displayName,
-      serviceMetadata: params.serviceMetadata,
-      createdAt: new Date(),
-    })
-    .returning()
-
-  return created
-}
+export {
+  createServicePrincipal,
+  syncPrincipalProfile,
+  syncPrincipalProfileById,
+} from './principal.factory'
 
 /**
- * Sync profile fields from user table to their principal record.
- * Called when a user changes their name or avatar.
+ * Teammates are identified humans (type='user') holding a teammate role
+ * (role != 'user'). One shared predicate so the team listers cannot drift.
+ * Without the role guard a portal end-user (role='user', type='user') would
+ * leak into team surfaces. People-facing pickers use searchPeople instead.
  */
-export async function syncPrincipalProfile(
-  userId: UserId,
-  updates: {
-    displayName?: string
-    avatarUrl?: string | null
-    avatarKey?: string | null
-  }
-): Promise<void> {
-  await db
-    .update(principal)
-    .set(updates)
-    .where(and(eq(principal.userId, userId), eq(principal.type, 'user')))
+function teamMemberWhere() {
+  return and(eq(principal.type, 'user'), ne(principal.role, 'user'))
 }
 
 /**
@@ -138,7 +118,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
       .leftJoin(lastSession, eq(lastSession.userId, user.id))
-      .where(eq(principal.type, 'user'))
+      .where(teamMemberWhere())
 
     // The `max()` aggregate comes back as a string from postgres-js
     // (Date mapping only fires on plain timestamp column selects);
@@ -156,10 +136,38 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 }
 
 /**
- * Search members (all human principals) by name or email.
- * Returns a limited result set for use in typeahead/combobox components.
+ * Public-safe teammate avatars for the widget Home header: name + image only,
+ * nothing else leaves the server. Same teammate predicate as listTeamMembers
+ * (identified human + teammate role) so portal end-users, anonymous visitors,
+ * and service principals can never appear. Members with a real avatar image
+ * sort first so the cluster shows faces over initials.
  */
-export async function searchMembers(params: {
+export async function listTeamAvatars(
+  limit = 3
+): Promise<{ name: string; avatarUrl: string | null }[]> {
+  try {
+    const rows = await db
+      .select({ name: user.name, avatarUrl: user.image })
+      .from(principal)
+      .innerJoin(user, eq(principal.userId, user.id))
+      .where(teamMemberWhere())
+      .orderBy(sql`(${user.image} IS NOT NULL) DESC`, principal.createdAt)
+      .limit(limit)
+    return rows
+  } catch (error) {
+    log.error({ err: error }, 'failed to list team avatars')
+    throw new InternalError('DATABASE_ERROR', 'Failed to list team avatars', error)
+  }
+}
+
+/**
+ * Search PEOPLE by name or email: all identified humans, portal end-users
+ * deliberately included (anonymous and service principals excluded via
+ * type='user'). This is the on-behalf picker query (proxy voting, author
+ * selection), NOT a team roster: teammate surfaces use listTeamMembers,
+ * which applies teamMemberWhere().
+ */
+export async function searchPeople(params: {
   search?: string
   limit?: number
 }): Promise<TeamMember[]> {
@@ -180,9 +188,8 @@ export async function searchMembers(params: {
       image: user.image,
       role: principal.role,
       createdAt: principal.createdAt,
-      // searchMembers is the typeahead path — never displays
-      // last-sign-in, so a null literal is cheaper than the
-      // group-by needed in listTeamMembers.
+      // The typeahead path never displays last-sign-in, so a null
+      // literal is cheaper than the group-by in listTeamMembers.
       lastSignInAt: sql<Date | null>`NULL::timestamptz`,
     })
     .from(principal)
@@ -210,7 +217,12 @@ export async function countMembers(): Promise<number> {
 }
 
 /**
- * Update a team member's role
+ * Update a team member's role. `opts.assignRoleId` grants a specific role
+ * from the roles table instead of the legacy preset mapping — the member's
+ * legacy column stays 'member' (the teammate wall and seat predicates key on
+ * it) while the workspace assignment carries the actual grant. Owner is
+ * excluded: that tier rides the legacy 'admin' role and its promotion path.
+ *
  * @throws ForbiddenError if trying to modify own role
  * @throws ForbiddenError if this would leave no admins
  * @throws NotFoundError if principal not found or not a team member
@@ -220,11 +232,30 @@ export async function updateMemberRole(
   newRole: 'admin' | 'member',
   actingPrincipalId: PrincipalId,
   actor: AuditActor | null = null,
-  headers?: Headers
+  headers?: Headers,
+  opts?: { assignRoleId?: RoleId; granterPermissions?: readonly PermissionKey[] }
 ): Promise<void> {
   // Cannot modify own role
   if (principalId === actingPrincipalId) {
     throw new ForbiddenError('CANNOT_MODIFY_SELF', 'You cannot change your own role')
+  }
+
+  let assignedRoleName: string | null = null
+  if (opts?.assignRoleId) {
+    if (newRole !== 'member') {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'Custom role grants ride the member role; use role admin without a roleId to promote'
+      )
+    }
+    // Assignment is a grant: fail closed if the caller didn't supply its own
+    // resolved set for the ceiling check.
+    if (!opts.granterPermissions) {
+      throw new ForbiddenError('GRANT_CEILING', 'Assigner permission set is required')
+    }
+    const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
+    const target = await assertGrantableRole(opts.assignRoleId, opts.granterPermissions)
+    assignedRoleName = target.name
   }
 
   try {
@@ -256,11 +287,13 @@ export async function updateMemberRole(
 
     const previousRole = targetMember.role
 
-    // Update the role
-    await db.update(principal).set({ role: newRole }).where(eq(principal.id, principalId))
-    if (targetMember.userId) {
-      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
-    }
+    // Update the role (the factory busts PRINCIPAL_BY_USER from the row's
+    // userId and reconciles the workspace assignment in the same transaction).
+    await setPrincipalRole({ principalId }, newRole, {
+      knownUserId: targetMember.userId,
+      assignRoleId: opts?.assignRoleId,
+      assignGrantedBy: actingPrincipalId,
+    })
 
     // Audit the role change. Already audited from the SSO/JIT path
     // (`auth/hooks.ts` emits user.role.changed there). Admin manual
@@ -273,7 +306,10 @@ export async function updateMemberRole(
         headers,
         target: { type: 'principal', id: principalId },
         before: { role: previousRole },
-        after: { role: newRole },
+        after: {
+          role: newRole,
+          ...(assignedRoleName ? { assignedRole: assignedRoleName } : {}),
+        },
       })
     }
   } catch (error) {
@@ -332,10 +368,7 @@ export async function removeTeamMember(
     const previousRole = targetMember.role
 
     // Convert to portal user by setting role to 'user'
-    await db.update(principal).set({ role: 'user' }).where(eq(principal.id, principalId))
-    if (targetMember.userId) {
-      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
-    }
+    await setPrincipalRole({ principalId }, 'user', { knownUserId: targetMember.userId })
 
     // Audit the removal. The audit-event taxonomy already reserves
     // `user.removed` for this exact action (audit/log.ts); without an

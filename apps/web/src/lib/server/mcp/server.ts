@@ -21,7 +21,12 @@ export function createMcpServer(auth: McpAuthContext): McpServer {
   return server
 }
 
-/** Wrap a resource callback with a scope check. */
+/**
+ * Wrap a resource callback with a scope check. The scope literals below are
+ * per-resource requirements, not a scope list: each is typed McpScope (an
+ * alias of the API_KEY_SCOPES vocabulary), so a scope removed from the
+ * vocabulary fails typecheck here rather than drifting.
+ */
 function scopeGated(
   auth: McpAuthContext,
   scope: McpScope,
@@ -90,8 +95,8 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'quackback://tags',
     { description: 'List all tags' },
     scopeGated(auth, 'read:feedback', async () => {
-      const { listTags } = await import('@/lib/server/domains/tags/tag.service')
-      const tags = await listTags()
+      const { listPostTags } = await import('@/lib/server/domains/post-tags/post-tag.service')
+      const tags = await listPostTags()
       return jsonResource(
         'tags',
         tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))
@@ -140,6 +145,21 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
               uri: 'quackback://help-center/categories',
               mimeType: 'text/plain',
               text: 'Help center is not enabled. Enable it in Settings > Features.',
+            },
+          ],
+        }
+      }
+      // Team-only, matching the article search/get_details tools: the raw
+      // category list includes private and segment-gated categories, which
+      // must not leak to an OAuth portal user holding the read:article scope.
+      const { isTeamMember } = await import('@/lib/shared/roles')
+      if (!isTeamMember(auth.role)) {
+        return {
+          contents: [
+            {
+              uri: 'quackback://help-center/categories',
+              mimeType: 'text/plain',
+              text: 'Error: This resource requires a team member (admin or member) role.',
             },
           ],
         }

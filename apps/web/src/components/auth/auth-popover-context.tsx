@@ -2,16 +2,28 @@ import { createContext, useContext, useState, useCallback, useRef, type ReactNod
 
 type AuthMode = 'login' | 'signup'
 
+/** An `account_not_linked` recovery request: the OAuth sign-in found an
+ *  existing local account that isn't verified yet. The dialog opens
+ *  straight into the link-conflict view so the user can confirm the
+ *  email and have the provider connected. */
+export interface LinkConflictContext {
+  providerId?: string
+  providerType?: 'oidc' | 'social'
+  email?: string
+}
+
 interface OpenAuthPopoverOptions {
   mode: AuthMode
   onSuccess?: () => void
   callbackUrl?: string
+  linkConflict?: LinkConflictContext
 }
 
 interface AuthPopoverContextValue {
   isOpen: boolean
   mode: AuthMode
   callbackUrl: string | undefined
+  linkConflict: LinkConflictContext | undefined
   openAuthPopover: (options: OpenAuthPopoverOptions) => void
   closeAuthPopover: () => void
   setMode: (mode: AuthMode) => void
@@ -29,18 +41,21 @@ export function AuthPopoverProvider({ children }: AuthPopoverProviderProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [mode, setMode] = useState<AuthMode>('login')
   const [callbackUrl, setCallbackUrl] = useState<string | undefined>(undefined)
+  const [linkConflict, setLinkConflict] = useState<LinkConflictContext | undefined>(undefined)
   const onSuccessCallbackRef = useRef<(() => void) | null>(null)
 
   const openAuthPopover = useCallback((options: OpenAuthPopoverOptions) => {
     setMode(options.mode)
     onSuccessCallbackRef.current = options.onSuccess || null
     setCallbackUrl(options.callbackUrl)
+    setLinkConflict(options.linkConflict)
     setIsOpen(true)
   }, [])
 
   const reset = useCallback(() => {
     setIsOpen(false)
     setCallbackUrl(undefined)
+    setLinkConflict(undefined)
     onSuccessCallbackRef.current = null
   }, [])
 
@@ -57,6 +72,7 @@ export function AuthPopoverProvider({ children }: AuthPopoverProviderProps) {
         isOpen,
         mode,
         callbackUrl,
+        linkConflict,
         openAuthPopover,
         closeAuthPopover,
         setMode,

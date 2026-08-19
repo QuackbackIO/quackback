@@ -1,15 +1,19 @@
-import { describe, it, expect, vi } from 'vitest'
-import { reconcileFileIntoDb, type ReconcileDeps } from '../reconciler'
+import { describe, expect, it, vi } from 'vitest'
+import { mergeSetupState, reconcileFileIntoDb, type ReconcileDeps } from '../reconciler'
+import type { SetupState } from '@/lib/shared/db-types'
+
+const incompleteState = (overrides: Partial<SetupState> = {}): SetupState => ({
+  version: 2,
+  steps: { core: true, workspace: false, startingPoint: null },
+  ...overrides,
+})
 
 const baseDeps = (): ReconcileDeps => ({
   readSettings: vi.fn(async () => ({
     id: 'ws_1',
     name: 'Old',
     slug: 'old',
-    setupState: JSON.stringify({
-      version: 1,
-      steps: { core: true, workspace: false, boards: false },
-    }),
+    setupState: JSON.stringify(incompleteState()),
     tierLimits: null,
     managedFieldPaths: [],
   })),
@@ -20,86 +24,104 @@ const baseDeps = (): ReconcileDeps => ({
 })
 
 describe('reconcileFileIntoDb', () => {
-  it('writes name + slug + managedFieldPaths when workspace is in spec', async () => {
-    const deps = baseDeps()
-    await reconcileFileIntoDb({ workspace: { name: 'Acme', slug: 'acme' } }, deps)
-    expect(deps.updateSettings).toHaveBeenCalledTimes(1)
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    expect(arg.name).toBe('Acme')
-    expect(arg.slug).toBe('acme')
-    expect(arg.managedFieldPaths).toEqual(['workspace.name', 'workspace.slug'])
-  })
-
-  it('marks setupState.steps.workspace=true when workspace.name is managed', async () => {
-    const deps = baseDeps()
-    await reconcileFileIntoDb({ workspace: { name: 'Acme' } }, deps)
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    const setup = JSON.parse(arg.setupState as string)
-    expect(setup.steps.workspace).toBe(true)
-  })
-
-  it('marks setupState.steps.workspace=true when ONLY workspace.slug is managed', async () => {
-    const deps = baseDeps()
-    await reconcileFileIntoDb({ workspace: { slug: 'acme' } }, deps)
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    const setup = JSON.parse(arg.setupState as string)
-    expect(setup.steps.workspace).toBe(true)
-  })
-
-  it('forces every setupState step + stamps completedAt when workspace.onboardingComplete=true', async () => {
+  it('writes workspace fields and records the config intent for the locked state update', async () => {
     const deps = baseDeps()
     await reconcileFileIntoDb(
-      { workspace: { name: 'Acme', slug: 'acme', onboardingComplete: true } },
+      { workspace: { name: 'Acme', slug: 'acme', useCase: 'customer_support' } },
       deps
     )
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    const setup = JSON.parse(arg.setupState as string)
-    expect(setup.steps).toEqual({ core: true, workspace: true, boards: true })
-    expect(typeof setup.completedAt).toBe('string')
-    expect(new Date(setup.completedAt).toString()).not.toBe('Invalid Date')
+
+    const update = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    expect(update).toEqual(
+      expect.objectContaining({
+        name: 'Acme',
+        slug: 'acme',
+        setupWorkspace: { name: 'Acme', slug: 'acme', useCase: 'customer_support' },
+        managedFieldPaths: ['workspace.name', 'workspace.slug', 'workspace.useCase'],
+      })
+    )
+    expect(update).not.toHaveProperty('setupState')
   })
 
-  it('preserves an existing completedAt rather than re-stamping on every reconcile', async () => {
-    const deps = baseDeps()
-    const stamped = '2026-01-01T00:00:00.000Z'
-    deps.readSettings = vi.fn(async () => ({
-      id: 'ws_1',
+  it.each([{ name: 'Acme' }, { slug: 'acme' }])(
+    'marks the workspace step complete for a partial managed workspace: %o',
+    (workspace) => {
+      const next = mergeSetupState(JSON.stringify(incompleteState()), workspace)
+      expect(next.steps.workspace).toBe(true)
+      expect(next.steps.startingPoint).toBeNull()
+    }
+  )
+
+  it('completes every setup step when onboardingComplete is managed', () => {
+    const next = mergeSetupState(JSON.stringify(incompleteState({ useCase: 'help_center' })), {
+      onboardingComplete: true,
+    })
+
+    expect(next.version).toBe(2)
+    expect(next.steps.core).toBe(true)
+    expect(next.steps.workspace).toBe(true)
+    expect(next.steps.startingPoint).toEqual(
+      expect.objectContaining({
+        outcome: 'help_center',
+        resourceType: 'none',
+        source: 'managed',
+        resolution: 'configured',
+      })
+    )
+    expect(next.completedAt).toEqual(expect.any(String))
+    expect(next.completionSource).toBe('managed')
+  })
+
+  it('preserves completion, handoff and task-resolution state across reconciliation', () => {
+    const completedAt = '2026-01-01T00:00:00.000Z'
+    const next = mergeSetupState(
+      JSON.stringify(
+        incompleteState({
+          useCase: 'product_feedback',
+          completedAt,
+          completionSource: 'wizard',
+          activationHandoffSeenAt: '2026-01-02T00:00:00.000Z',
+          taskResolutions: {
+            product_feedback: {
+              'add-to-site': { resolution: 'deferred', resolvedAt: completedAt },
+              'customize-branding': { resolution: 'dismissed', resolvedAt: completedAt },
+            },
+          },
+        })
+      ),
+      { name: 'Acme' }
+    )
+
+    expect(next.completedAt).toBe(completedAt)
+    expect(next.completionSource).toBe('wizard')
+    expect(next.activationHandoffSeenAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(next.taskResolutions).toEqual({
+      product_feedback: {
+        'add-to-site': { resolution: 'deferred', resolvedAt: completedAt },
+        'customize-branding': { resolution: 'dismissed', resolvedAt: completedAt },
+      },
+    })
+  })
+
+  it('does not create a starting point unless onboardingComplete is set', () => {
+    const next = mergeSetupState(JSON.stringify(incompleteState()), {
       name: 'Acme',
-      slug: 'acme',
-      setupState: JSON.stringify({
-        version: 1,
-        steps: { core: true, workspace: true, boards: true },
-        completedAt: stamped,
-      }),
-      tierLimits: null,
-      managedFieldPaths: ['workspace.name', 'workspace.slug'],
-    }))
-    await reconcileFileIntoDb(
-      { workspace: { name: 'Acme', slug: 'acme', onboardingComplete: true } },
-      deps
-    )
-    // The reconciler should detect a no-op and skip updateSettings entirely.
-    expect(deps.updateSettings).not.toHaveBeenCalled()
+      useCase: 'internal',
+    })
+    expect(next.steps.startingPoint).toBeNull()
+    expect(next.completedAt).toBeUndefined()
+    expect(next.useCase).toBe('internal')
   })
 
-  it('does NOT force boards step when workspace.onboardingComplete is absent', async () => {
-    const deps = baseDeps()
-    await reconcileFileIntoDb({ workspace: { name: 'Acme', slug: 'acme' } }, deps)
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    const setup = JSON.parse(arg.setupState as string)
-    expect(setup.steps.boards).toBe(false)
-    expect(setup.completedAt).toBeUndefined()
-  })
-
-  it('writes tierLimits as a JSON-encoded string', async () => {
+  it('writes tier limits as JSON', async () => {
     const deps = baseDeps()
     await reconcileFileIntoDb({ tierLimits: { maxBoards: 7 } }, deps)
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    expect(JSON.parse(arg.tierLimits as string)).toEqual({ maxBoards: 7 })
-    expect(arg.managedFieldPaths).toEqual(['tierLimits'])
+    const update = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    expect(JSON.parse(update.tierLimits as string)).toEqual({ maxBoards: 7 })
+    expect(update.managedFieldPaths).toEqual(['tierLimits'])
   })
 
-  it('ignores deprecated auth and features keys while reconciling supported fields', async () => {
+  it('ignores deprecated auth and features keys', async () => {
     const deps = baseDeps()
     await reconcileFileIntoDb(
       {
@@ -110,16 +132,15 @@ describe('reconcileFileIntoDb', () => {
       },
       deps
     )
-
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    expect(arg.name).toBe('Acme')
-    expect(JSON.parse(arg.tierLimits as string)).toEqual({ maxBoards: 3 })
-    expect(arg.managedFieldPaths).toEqual(['workspace.name', 'tierLimits'])
-    expect(arg).not.toHaveProperty('authConfig')
-    expect(arg).not.toHaveProperty('featureFlags')
+    const update = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    expect(update.name).toBe('Acme')
+    expect(JSON.parse(update.tierLimits as string)).toEqual({ maxBoards: 3 })
+    expect(update.managedFieldPaths).toEqual(['workspace.name', 'tierLimits'])
+    expect(update).not.toHaveProperty('authConfig')
+    expect(update).not.toHaveProperty('featureFlags')
   })
 
-  it('clears managedFieldPaths when called with an empty spec', async () => {
+  it('clears managed paths when the config is emptied', async () => {
     const deps = baseDeps()
     deps.readSettings = vi.fn(async () => ({
       id: 'ws_1',
@@ -130,27 +151,26 @@ describe('reconcileFileIntoDb', () => {
       managedFieldPaths: ['tierLimits', 'workspace.name'],
     }))
     await reconcileFileIntoDb({}, deps)
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    expect(arg.managedFieldPaths).toEqual([])
+    const update = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    expect(update.managedFieldPaths).toEqual([])
   })
 
-  it('invalidates settings + tier-limits caches after every reconcile', async () => {
+  it('invalidates settings and tier caches after a write', async () => {
     const deps = baseDeps()
     await reconcileFileIntoDb({ tierLimits: { maxBoards: 1 } }, deps)
-    expect(deps.invalidateSettingsCache).toHaveBeenCalledTimes(1)
-    expect(deps.invalidateTierLimitsCache).toHaveBeenCalledTimes(1)
+    expect(deps.invalidateSettingsCache).toHaveBeenCalledOnce()
+    expect(deps.invalidateTierLimitsCache).toHaveBeenCalledOnce()
   })
 
-  it('skips updateSettings when nothing has changed', async () => {
+  it('skips a no-op reconcile', async () => {
     const deps = baseDeps()
     deps.readSettings = vi.fn(async () => ({
       id: 'ws_1',
       name: 'Acme',
       slug: 'acme',
-      setupState: JSON.stringify({
-        version: 1,
-        steps: { core: true, workspace: true, boards: false },
-      }),
+      setupState: JSON.stringify(
+        incompleteState({ steps: { core: true, workspace: true, startingPoint: null } })
+      ),
       tierLimits: null,
       managedFieldPaths: ['workspace.name', 'workspace.slug'],
     }))
@@ -158,40 +178,39 @@ describe('reconcileFileIntoDb', () => {
     expect(deps.updateSettings).not.toHaveBeenCalled()
   })
 
-  it('creates a settings row when none exists and spec has workspace.name + slug', async () => {
+  it('creates a V2 settings row when the config provides a name and slug', async () => {
     const deps = baseDeps()
     deps.readSettings = vi.fn(async () => null)
     await reconcileFileIntoDb({ workspace: { name: 'Acme', slug: 'acme' } }, deps)
-    expect(deps.createSettings).toHaveBeenCalledTimes(1)
+
+    expect(deps.createSettings).toHaveBeenCalledOnce()
     expect(deps.updateSettings).not.toHaveBeenCalled()
-    const arg = (deps.createSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    expect(arg).toEqual(
+    const insert = (deps.createSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    const setup = JSON.parse(insert.setupState as string)
+    expect(insert).toEqual(
       expect.objectContaining({
         name: 'Acme',
         slug: 'acme',
         managedFieldPaths: ['workspace.name', 'workspace.slug'],
       })
     )
-    // setupState marks workspace step done because the file declares it
-    const setup = JSON.parse(arg.setupState as string)
-    expect(setup.steps.workspace).toBe(true)
-    // Cache invalidations fire after a successful insert
-    expect(deps.invalidateSettingsCache).toHaveBeenCalledTimes(1)
-    expect(deps.invalidateTierLimitsCache).toHaveBeenCalledTimes(1)
+    expect(setup).toEqual(
+      expect.objectContaining({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+      })
+    )
+    expect(deps.invalidateSettingsCache).toHaveBeenCalledOnce()
+    expect(deps.invalidateTierLimitsCache).toHaveBeenCalledOnce()
   })
 
-  it('skips create when spec is missing workspace.name or slug', async () => {
-    const deps = baseDeps()
-    deps.readSettings = vi.fn(async () => null)
-    await reconcileFileIntoDb({ tierLimits: { maxBoards: 5 } }, deps)
-    expect(deps.createSettings).not.toHaveBeenCalled()
-    expect(deps.updateSettings).not.toHaveBeenCalled()
-  })
-
-  it('skips create when only workspace.name is present (slug missing)', async () => {
-    const deps = baseDeps()
-    deps.readSettings = vi.fn(async () => null)
-    await reconcileFileIntoDb({ workspace: { name: 'Acme' } }, deps)
-    expect(deps.createSettings).not.toHaveBeenCalled()
-  })
+  it.each([{ tierLimits: { maxBoards: 5 } }, { workspace: { name: 'Acme' } }])(
+    'does not create an incomplete settings row: %o',
+    async (spec) => {
+      const deps = baseDeps()
+      deps.readSettings = vi.fn(async () => null)
+      await reconcileFileIntoDb(spec, deps)
+      expect(deps.createSettings).not.toHaveBeenCalled()
+    }
+  )
 })

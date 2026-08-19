@@ -25,12 +25,12 @@ import {
   ArrowUturnLeftIcon,
   UserIcon,
   TagIcon,
-  MapIcon,
   LockClosedIcon,
   LockOpenIcon,
   ChatBubbleLeftIcon,
   HandThumbUpIcon,
   FolderIcon,
+  LinkIcon,
 } from '@heroicons/react/16/solid'
 import { IconGitMerge } from '@tabler/icons-react'
 import { SOURCE_TYPE_LABELS } from '@/components/admin/feedback/source-type-icon'
@@ -44,7 +44,7 @@ interface ActivityItem {
   id: string
   postId: string
   principalId: string | null
-  type: ActivityType
+  type: string
   metadata: Record<string, unknown>
   createdAt: string
   actorName: string | null
@@ -115,6 +115,34 @@ const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
   'post.restored': {
     icon: ArrowUturnLeftIcon,
     label: (_, a) => `${actorLabel(a)} restored this post`,
+  },
+  'external.status_changed': {
+    icon: LinkIcon,
+    label: (m) => {
+      const reference = (m.externalDisplayId as string | undefined) ?? 'A linked issue'
+      const transition = m.transition as string | undefined
+      const verb =
+        transition === 'closed'
+          ? 'was closed'
+          : transition === 'reopened'
+            ? 'was reopened'
+            : `moved to "${(m.externalStatus as string | undefined) ?? 'a new status'}"`
+      return `${reference} ${verb}`
+    },
+    detail: (m) => {
+      const url = m.externalUrl as string | undefined
+      if (!url) return null
+      return (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-muted-foreground underline underline-offset-2"
+        >
+          View issue
+        </a>
+      )
+    },
   },
   'status.changed': {
     icon: ChatBubbleLeftIcon,
@@ -247,16 +275,6 @@ const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
       )
     },
   },
-  'roadmap.added': {
-    icon: MapIcon,
-    label: (_, a) => `${actorLabel(a)} added to roadmap`,
-    detail: (m) => <span className="text-xs text-muted-foreground">{m.roadmapName as string}</span>,
-  },
-  'roadmap.removed': {
-    icon: MapIcon,
-    label: (_, a) => `${actorLabel(a)} removed from roadmap`,
-    detail: (m) => <span className="text-xs text-muted-foreground">{m.roadmapName as string}</span>,
-  },
   'comments.locked': {
     icon: LockClosedIcon,
     label: (_, a) => `${actorLabel(a)} locked comments`,
@@ -369,7 +387,7 @@ function ActivityEntry({
   activity: ActivityItem
   mergeStateByDuplicateId: Map<string, boolean>
 }) {
-  const config = ACTIVITY_CONFIG[activity.type]
+  const config = ACTIVITY_CONFIG[activity.type as ActivityType]
   if (!config) return null
 
   const Icon = config.icon

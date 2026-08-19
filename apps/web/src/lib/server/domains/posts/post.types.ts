@@ -2,8 +2,15 @@
  * Input/Output types for PostService operations
  */
 
-import type { Post, Board, BoardAccess, Tag, TiptapContent } from '@/lib/server/db'
-import type { PostId, BoardId, TagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
+import type { Post, Board, BoardAccess, PostTag, TiptapContent } from '@/lib/server/db'
+import type {
+  PostId,
+  BoardId,
+  PostTagId,
+  PostStatusId,
+  PrincipalId,
+  PostCommentId,
+} from '@quackback/ids'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 
 /**
@@ -14,13 +21,16 @@ export interface CreatePostInput {
   title: string
   content?: string
   contentJson?: TiptapContent | null
-  statusId?: StatusId
-  tagIds?: TagId[]
+  statusId?: PostStatusId
+  tagIds?: PostTagId[]
   widgetMetadata?: Record<string, string>
   /** Override creation timestamp (admin-only, for imports) */
   createdAt?: Date
   /** The team member who initiated this post on the customer's behalf. */
   trackedByPrincipalId?: PrincipalId | null
+  /** Answers to the board's configured custom fields (boards.settings.customFields),
+   *  keyed by field key. Validated against the board's declaration on write. */
+  customFields?: Record<string, unknown>
 }
 
 /**
@@ -30,9 +40,14 @@ export interface UpdatePostInput {
   title?: string
   content?: string
   contentJson?: TiptapContent | null
-  statusId?: StatusId
-  tagIds?: TagId[]
+  statusId?: PostStatusId
+  tagIds?: PostTagId[]
   ownerPrincipalId?: PrincipalId | null
+  /** Target ship date for time-based roadmaps; null clears it. */
+  eta?: Date | null
+  /** Board pinning: true pins the post to lead its public board listing,
+   *  false unpins. Maps to posts.pinned_at. */
+  pinned?: boolean
 }
 
 /**
@@ -50,7 +65,7 @@ export interface VoteResult {
  */
 export interface ChangeStatusInput {
   postId: PostId
-  statusId: StatusId
+  statusId: PostStatusId
 }
 
 /**
@@ -63,12 +78,11 @@ export interface PostWithDetails extends Post {
     slug: string
   }
   tags: Array<{
-    id: TagId
+    id: PostTagId
     name: string
     color: string
   }>
   commentCount: number
-  roadmapIds: string[]
   /** Pinned comment displayed as official response */
   pinnedComment: PinnedComment | null
   /** Author name resolved from member->user relation */
@@ -84,13 +98,13 @@ export interface PublicPostListItem {
   id: PostId
   title: string
   content: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   principalId: PrincipalId | null
   createdAt: Date
   commentCount: number
-  tags: Array<{ id: TagId; name: string; color: string }>
+  tags: Array<{ id: PostTagId; name: string; color: string }>
   board?: { id: BoardId; name: string; slug: string }
 }
 
@@ -99,7 +113,7 @@ export interface PublicPostListItem {
  */
 export interface PublicPostListResult {
   items: PublicPostListItem[]
-  total: number
+  total?: number
   hasMore: boolean
 }
 
@@ -109,10 +123,10 @@ export interface PublicPostListResult {
 export interface InboxPostListParams {
   boardIds?: BoardId[]
   /** Filter by status IDs (legacy, prefer statusSlugs) */
-  statusIds?: StatusId[]
+  statusIds?: PostStatusId[]
   /** Filter by status slugs - uses indexed lookup */
   statusSlugs?: string[]
-  tagIds?: TagId[]
+  tagIds?: PostTagId[]
   /** Filter by segment IDs - posts whose author is in any of these segments */
   segmentIds?: import('@quackback/ids').SegmentId[]
   ownerId?: string | null
@@ -124,7 +138,7 @@ export interface InboxPostListParams {
   /** Filter by team response state */
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: Date
-  sort?: 'newest' | 'oldest' | 'votes'
+  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
   cursor?: string
@@ -145,7 +159,7 @@ export interface InboxPostListResult {
  */
 export interface PostListItem extends Post {
   board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Array<Pick<Tag, 'id' | 'name' | 'color'>>
+  tags: Array<Pick<PostTag, 'id' | 'name' | 'color'> & { autoTagged: boolean }>
   commentCount: number
   /** Author name resolved from member->user relation */
   authorName: string | null
@@ -158,7 +172,7 @@ export interface PostForExport {
   id: string
   title: string
   content: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   authorEmail: string | null
@@ -178,7 +192,7 @@ export interface PostForExport {
 export interface RoadmapPost {
   id: string
   title: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   board: { id: string; name: string; slug: string }
 }
@@ -188,7 +202,7 @@ export interface RoadmapPost {
  */
 export interface RoadmapPostListResult {
   items: RoadmapPost[]
-  total: number
+  total?: number
   hasMore: boolean
 }
 
@@ -196,7 +210,7 @@ export interface RoadmapPostListResult {
  * Pinned comment serving as the official response
  */
 export interface PinnedComment {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -210,7 +224,7 @@ export interface PinnedComment {
  * Public comment for portal view
  */
 export interface PublicComment {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -218,7 +232,7 @@ export interface PublicComment {
   createdAt: Date
   deletedAt: Date | null
   isRemovedByTeam: boolean
-  parentId: CommentId | null
+  parentId: PostCommentId | null
   isTeamMember: boolean
   isPrivate: boolean
   isEdited: boolean
@@ -236,12 +250,14 @@ export interface PublicPostDetail {
   title: string
   content: string
   contentJson: TiptapContent | null
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   principalId: PrincipalId | null
   authorAvatarUrl: string | null
   createdAt: Date
+  /** Target ship date (time-based roadmap); null when unset. */
+  eta: Date | string | null
   board: { id: string; name: string; slug: string }
   /**
    * The board's per-action access matrix. Server-only — `fetchPublicPostDetail`
@@ -250,14 +266,36 @@ export interface PublicPostDetail {
    */
   boardAccess: BoardAccess
   tags: Array<{ id: string; name: string; color: string }>
-  roadmaps: Array<{ id: string; name: string; slug: string }>
+  /**
+   * First page of root comments (each carrying its full reply subtree).
+   * Comments are keyset-paginated by TOP-LEVEL comment on `(created_at, id)`
+   * ascending — bounding the number of roots bounds the payload, since reply
+   * chains are shallow. `commentsHasMore` / `commentsNextCursor` drive the
+   * portal/widget "show more comments" affordance.
+   */
   comments: PublicComment[]
+  /** Whether more root comments exist beyond this page. */
+  commentsHasMore: boolean
+  /** Opaque keyset cursor for the next page of roots, or null when exhausted. */
+  commentsNextCursor: string | null
+  /** Total live root-comment count (drives the "show N more" label). */
+  commentsTotalRootCount: number
   /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
-  pinnedCommentId: CommentId | null
+  pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked: boolean
+}
+
+/**
+ * Keyset cursor over root comments, encoded as `<createdAtISO>|<uuid>`.
+ * `createdAt` breaks ties deterministically with the comment id so pages
+ * never overlap or skip under the `(created_at, id)` ordering.
+ */
+export interface CommentCursor {
+  createdAt: string
+  id: string
 }
 
 /**
@@ -285,8 +323,8 @@ export interface AdminEditPostInput {
   title: string
   content: string
   contentJson?: TiptapContent | null
-  statusId?: StatusId
-  tagIds: TagId[]
+  statusId?: PostStatusId
+  tagIds: PostTagId[]
 }
 
 /**

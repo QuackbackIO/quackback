@@ -59,6 +59,8 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
   }),
   openAuthPopup: vi.fn(),
   postAuthSuccess: vi.fn(),
+  postAuthError: vi.fn(),
+  useAuthBroadcast: vi.fn(),
 }))
 
 // OtpCodeStep imports input-otp, which schedules real setTimeouts on mount.

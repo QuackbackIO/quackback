@@ -14,6 +14,7 @@ import {
   and,
   desc,
   isNull,
+  isNotNull,
   sql,
   inAppNotifications,
   posts,
@@ -147,18 +148,19 @@ export async function getNotificationsForMember(
     .limit(limit)
     .offset(offset)
 
-  // Count total (for pagination)
-  const totalResult = await db
-    .select({ count: sql<number>`count(*)::int`.as('count') })
-    .from(inAppNotifications)
-    .where(where)
+  // Total (for pagination) and unread counts are independent of each other and
+  // of the list query above, so fire them in parallel rather than serially.
+  const [totalResult, unreadResult] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int`.as('count') })
+      .from(inAppNotifications)
+      .where(where),
+    db
+      .select({ count: sql<number>`count(*)::int`.as('count') })
+      .from(inAppNotifications)
+      .where(and(baseWhere, isNull(inAppNotifications.readAt))),
+  ])
   const total = totalResult[0]?.count ?? 0
-
-  // Count unread
-  const unreadResult = await db
-    .select({ count: sql<number>`count(*)::int`.as('count') })
-    .from(inAppNotifications)
-    .where(and(baseWhere, isNull(inAppNotifications.readAt)))
   const unreadCount = unreadResult[0]?.count ?? 0
 
   const notifications: NotificationWithPost[] = rows.map((row) => {
@@ -292,10 +294,7 @@ export async function archiveNotification(
   principalId: PrincipalId,
   notificationId: NotificationId
 ): Promise<void> {
-  log.debug(
-    { principal_id: principalId, notification_id: notificationId },
-    'archive notification'
-  )
+  log.debug({ principal_id: principalId, notification_id: notificationId }, 'archive notification')
   const existing = await db.query.inAppNotifications.findFirst({
     where: and(
       eq(inAppNotifications.id, notificationId),
@@ -314,14 +313,23 @@ export async function archiveNotification(
 }
 
 /**
- * Archive all notifications for a member
+ * Archive all notifications for a member. Pass `{ onlyRead: true }` to
+ * archive just the read ones, leaving unread notifications in place.
  */
-export async function archiveAllNotifications(principalId: PrincipalId): Promise<void> {
-  log.debug({ principal_id: principalId }, 'archive all notifications')
+export async function archiveAllNotifications(
+  principalId: PrincipalId,
+  options: { onlyRead?: boolean } = {}
+): Promise<void> {
+  const { onlyRead = false } = options
+  log.debug({ principal_id: principalId, only_read: onlyRead }, 'archive all notifications')
   await db
     .update(inAppNotifications)
     .set({ archivedAt: new Date() })
     .where(
-      and(eq(inAppNotifications.principalId, principalId), isNull(inAppNotifications.archivedAt))
+      and(
+        eq(inAppNotifications.principalId, principalId),
+        isNull(inAppNotifications.archivedAt),
+        onlyRead ? isNotNull(inAppNotifications.readAt) : undefined
+      )
     )
 }

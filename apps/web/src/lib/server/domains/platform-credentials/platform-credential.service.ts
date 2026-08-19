@@ -19,6 +19,7 @@ import { encryptPlatformCredentials } from '@/lib/server/integrations/encryption
 import { config } from '@/lib/server/config'
 import { DbCredentialSource, EnvCredentialSource, type CredentialSource } from './credential-source'
 import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
+import { memoizePerRequest } from '@/lib/server/functions/auth-request-cache'
 
 interface SavePlatformCredentialsInput {
   integrationType: string
@@ -119,7 +120,13 @@ export async function savePlatformCredentials({
   // One Redis round-trip drops both keys (TENANT_SETTINGS for the
   // version-check fallback, PLATFORM_INTEGRATION_TYPES for the cached
   // configured-types Set hit by getRegisteredAuthProviders).
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
+  await cacheDel(
+    CACHE_KEYS.TENANT_SETTINGS,
+    CACHE_KEYS.PLATFORM_INTEGRATION_TYPES,
+    // The registered-provider list gates on the configured-types Set (a saved
+    // credential is what flips a provider to "registered"), so drop it too.
+    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS
+  )
 }
 
 /**
@@ -152,6 +159,14 @@ export async function hasPlatformCredentials(integrationType: string): Promise<b
  * and save/delete flows invalidate the key.
  */
 export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
+  // Deduped per request: several bootstrap/auth callers (getRegisteredAuthProviders
+  // alone hits it twice) invoke this within one request, and even the cached path
+  // costs a Redis round-trip. memoizePerRequest shares one computation across all
+  // callers in the same request and transparently no-ops outside a request scope.
+  return memoizePerRequest('platform-cred:configured-types', computeConfiguredIntegrationTypes)
+}
+
+async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
   // env mode: derive from the pod's current env on every call. There is no write
   // path to invalidate a Redis entry in env mode, so caching would serve a stale set
   // for up to the TTL after OpenBao/ESO changes the managed credentials (e.g. an empty
@@ -193,5 +208,11 @@ export async function deletePlatformCredentials(integrationType: string): Promis
     await bumpAuthConfigVersionInTx(tx)
   })
   resetAuth()
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
+  await cacheDel(
+    CACHE_KEYS.TENANT_SETTINGS,
+    CACHE_KEYS.PLATFORM_INTEGRATION_TYPES,
+    // The registered-provider list gates on the configured-types Set (a saved
+    // credential is what flips a provider to "registered"), so drop it too.
+    CACHE_KEYS.REGISTERED_AUTH_PROVIDERS
+  )
 }

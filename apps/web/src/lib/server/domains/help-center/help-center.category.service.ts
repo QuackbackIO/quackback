@@ -2,6 +2,7 @@ import {
   db,
   helpCenterCategories,
   helpCenterArticles,
+  segments,
   eq,
   and,
   isNull,
@@ -10,10 +11,13 @@ import {
   sql,
   inArray,
 } from '@/lib/server/db'
-import type { HelpCenterCategoryId } from '@quackback/ids'
+import type { KbCategoryId, SegmentId } from '@quackback/ids'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { slugify } from '@/lib/shared/utils'
 import { uniqueHelpCenterSlug } from './help-center.slug'
+import { deleteRedirectRulesForTarget } from './help-center-redirect-rules.service'
 import type {
   HelpCenterCategory,
   HelpCenterCategoryWithCount,
@@ -149,15 +153,15 @@ export async function listCategories(
   const flat = categories.map((c) => ({ id: c.id, parentId: c.parentId ?? null }))
   const recursiveTotal = computeRecursiveCounts(
     flat,
-    (id) => countMap.get(id as HelpCenterCategoryId)?.total ?? 0
+    (id) => countMap.get(id as KbCategoryId)?.total ?? 0
   )
   const recursivePublished = computeRecursiveCounts(
     flat,
-    (id) => countMap.get(id as HelpCenterCategoryId)?.published ?? 0
+    (id) => countMap.get(id as KbCategoryId)?.published ?? 0
   )
 
   return categories.map((cat) => {
-    const row = countMap.get(cat.id as HelpCenterCategoryId)
+    const row = countMap.get(cat.id as KbCategoryId)
     return {
       ...cat,
       articleCount: row?.total ?? 0,
@@ -168,14 +172,23 @@ export async function listCategories(
   })
 }
 
-export async function listPublicCategories(): Promise<HelpCenterCategoryWithCount[]> {
+export async function listPublicCategories(
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategoryWithCount[]> {
   const all = await listCategories()
   return all
-    .filter((cat) => cat.isPublic && cat.recursivePublishedArticleCount > 0)
+    .filter(
+      (cat) =>
+        cat.isPublic &&
+        // Segment gate ([] = everyone) — same per-category semantics as the
+        // article-side SQL predicate (helpCenterVisibilityConditions).
+        segmentGateAllows(viewer, cat.segmentIds) &&
+        cat.recursivePublishedArticleCount > 0
+    )
     .map((cat) => ({ ...cat, articleCount: cat.recursivePublishedArticleCount }))
 }
 
-export async function getCategoryById(id: HelpCenterCategoryId): Promise<HelpCenterCategory> {
+export async function getCategoryById(id: KbCategoryId): Promise<HelpCenterCategory> {
   const category = await db.query.helpCenterCategories.findFirst({
     where: and(eq(helpCenterCategories.id, id), isNull(helpCenterCategories.deletedAt)),
   })
@@ -200,8 +213,20 @@ export async function getCategoryBySlug(slug: string): Promise<HelpCenterCategor
  * marked public. Routes that serve the unauthenticated help-center UI
  * must use this — otherwise an admin marking a category private hides
  * it from the nav but not from a direct-slug lookup.
+ *
+ * Deliberately not built on helpCenterVisibilityConditions (the shared
+ * article predicate owner): this query has no article join, so only the
+ * category-side conditions (not deleted, isPublic, segment gate) apply
+ * here. Keep the category-side semantics in lockstep with that owner.
+ *
+ * A segment-gated category the viewer isn't a member of throws the same
+ * NotFoundError shape as a genuinely missing slug, so gated content can't
+ * be distinguished from nonexistent content.
  */
-export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterCategory> {
+export async function getPublicCategoryBySlug(
+  slug: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategory> {
   const category = await db.query.helpCenterCategories.findFirst({
     where: and(
       eq(helpCenterCategories.slug, slug),
@@ -209,7 +234,7 @@ export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterC
       eq(helpCenterCategories.isPublic, true)
     ),
   })
-  if (!category) {
+  if (!category || !segmentGateAllows(viewer, category.segmentIds)) {
     throw new NotFoundError('CATEGORY_NOT_FOUND', `Category with slug "${slug}" not found`)
   }
   return category
@@ -224,6 +249,26 @@ const findCategorySlugConflict = (slug: string) =>
     where: eq(helpCenterCategories.slug, slug),
     columns: { id: true },
   })
+
+/**
+ * Validate a segment-gate list: every id must be an existing, non-deleted
+ * segment. Returns the deduplicated list. Rejecting unknown ids (rather than
+ * silently dropping them) surfaces admin typos and stale client state.
+ */
+async function validateSegmentIds(segmentIds: string[]): Promise<string[]> {
+  const unique = [...new Set(segmentIds)]
+  if (unique.length === 0) return []
+  const rows = await db.query.segments.findMany({
+    where: and(inArray(segments.id, unique as SegmentId[]), isNull(segments.deletedAt)),
+    columns: { id: true },
+  })
+  const valid = new Set<string>(rows.map((r) => r.id))
+  const unknown = unique.filter((id) => !valid.has(id))
+  if (unknown.length > 0) {
+    throw new ValidationError('VALIDATION_ERROR', `Unknown segment id(s): ${unknown.join(', ')}`)
+  }
+  return unique
+}
 
 export async function createCategory(input: CreateCategoryInput): Promise<HelpCenterCategory> {
   const name = input.name?.trim()
@@ -254,8 +299,9 @@ export async function createCategory(input: CreateCategoryInput): Promise<HelpCe
       slug,
       description: input.description?.trim() || null,
       isPublic: input.isPublic ?? true,
+      segmentIds: input.segmentIds ? await validateSegmentIds(input.segmentIds) : [],
       position: input.position ?? 0,
-      parentId: (input.parentId as HelpCenterCategoryId) ?? null,
+      parentId: (input.parentId as KbCategoryId) ?? null,
       icon: input.icon ?? null,
     })
     .returning()
@@ -264,7 +310,7 @@ export async function createCategory(input: CreateCategoryInput): Promise<HelpCe
 }
 
 export async function updateCategory(
-  id: HelpCenterCategoryId,
+  id: KbCategoryId,
   input: UpdateCategoryInput
 ): Promise<HelpCenterCategory> {
   const updateData: Partial<typeof helpCenterCategories.$inferInsert> = { updatedAt: new Date() }
@@ -278,6 +324,8 @@ export async function updateCategory(
     )
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
+  if (input.segmentIds !== undefined)
+    updateData.segmentIds = await validateSegmentIds(input.segmentIds)
   if (input.position !== undefined) updateData.position = input.position
   if (input.icon !== undefined) updateData.icon = input.icon ?? null
 
@@ -291,7 +339,7 @@ export async function updateCategory(
       movingId: id,
       newParentId: (input.parentId as string | null) ?? null,
     })
-    updateData.parentId = (input.parentId as HelpCenterCategoryId) ?? null
+    updateData.parentId = (input.parentId as KbCategoryId) ?? null
   }
 
   const [updated] = await db
@@ -304,7 +352,7 @@ export async function updateCategory(
   return updated
 }
 
-export async function deleteCategory(id: HelpCenterCategoryId): Promise<void> {
+export async function deleteCategory(id: KbCategoryId): Promise<void> {
   const flat = await db.query.helpCenterCategories.findMany({
     where: isNull(helpCenterCategories.deletedAt),
     columns: { id: true, parentId: true },
@@ -317,22 +365,32 @@ export async function deleteCategory(id: HelpCenterCategoryId): Promise<void> {
     flat as Array<{ id: string; parentId: string | null }>,
     id
   )
-  const ids = [...toDelete] as HelpCenterCategoryId[]
+  const ids = [...toDelete] as KbCategoryId[]
   const now = new Date()
 
-  await db.transaction(async (tx) => {
+  const deletedArticleIds = await db.transaction(async (tx) => {
     await tx
       .update(helpCenterCategories)
       .set({ deletedAt: now })
       .where(and(inArray(helpCenterCategories.id, ids), isNull(helpCenterCategories.deletedAt)))
-    await tx
+    const deletedArticles = await tx
       .update(helpCenterArticles)
       .set({ deletedAt: now })
       .where(and(inArray(helpCenterArticles.categoryId, ids), isNull(helpCenterArticles.deletedAt)))
+      .returning({ id: helpCenterArticles.id })
+    return deletedArticles.map((a) => a.id)
   })
+
+  // No DB-level FK on redirect rules (polymorphic target) -- remove any rule
+  // pointing at these categories or the articles cascaded with them
+  // (domains/languages §2).
+  await Promise.all([
+    ...ids.map((categoryId) => deleteRedirectRulesForTarget('category', categoryId)),
+    ...deletedArticleIds.map((articleId) => deleteRedirectRulesForTarget('article', articleId)),
+  ])
 }
 
-export async function restoreCategory(id: HelpCenterCategoryId): Promise<HelpCenterCategory> {
+export async function restoreCategory(id: KbCategoryId): Promise<HelpCenterCategory> {
   log.debug({ category_id: id }, 'restore category')
   const category = await db.query.helpCenterCategories.findFirst({
     where: eq(helpCenterCategories.id, id),

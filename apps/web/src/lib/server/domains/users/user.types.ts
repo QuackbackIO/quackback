@@ -4,7 +4,7 @@
  * Types for portal user management operations.
  */
 
-import type { PrincipalId, StatusId, SegmentId } from '@quackback/ids'
+import type { PrincipalId, PostStatusId, SegmentId } from '@quackback/ids'
 
 // ============================================
 // Segment summary (embedded in user records)
@@ -37,6 +37,14 @@ export interface PortalUserListItem {
   segments: UserSegmentSummary[]
   /** Raw metadata JSON string — parsed at the route layer into `attributes` */
   metadata: string | null
+  /** Lead = engaged anonymous principal (type='anonymous'); see lifecycle doc. */
+  isLead: boolean
+  /** Email a lead volunteered mid-conversation (unverified, self-asserted). */
+  contactEmail: string | null
+  /** Freshest activity signal: session touch or device beacon; null = none. */
+  lastSeenAt: Date | null
+  /** ISO-3166-1 alpha-2 country code captured at sign-up; null when no geo-aware proxy header was present. */
+  country: string | null
 }
 
 /**
@@ -55,6 +63,10 @@ export interface PortalUserListItemView {
   voteCount: number
   segments: UserSegmentSummary[]
   metadata: string | null
+  isLead: boolean
+  contactEmail: string | null
+  lastSeenAt: Date | string | null
+  country: string | null
 }
 
 /**
@@ -94,6 +106,7 @@ export interface PortalUserListParams {
     | 'newest'
     | 'oldest'
     | 'most_active'
+    | 'last_active'
     | 'most_posts'
     | 'most_comments'
     | 'most_votes'
@@ -102,8 +115,20 @@ export interface PortalUserListParams {
   limit?: number
   /** Filter by segment IDs (OR logic — users in ANY of the given segments) */
   segmentIds?: import('@quackback/ids').SegmentId[]
-  /** Include anonymous users (principal.type='anonymous'). Default: false (only identified users). */
-  includeAnonymous?: boolean
+  /** Filter by user tag IDs (OR logic — users carrying ANY of the given tags) */
+  tagIds?: import('@quackback/ids').UserTagId[]
+  /**
+   * Lifecycle view over the three-tier people model:
+   * - visitor: anonymous with no engagement yet (idle minted session, or an
+   *   agent-started conversation they never replied to). Not a directory row;
+   *   the analytics Visitors section covers that tier.
+   * - lead ('leads'): anonymous (type='anonymous') AND engaged — authored a
+   *   message/post/vote/comment/reaction or volunteered a contact email
+   *   (unverified). Enforced by leadEngagementWhere() in user.service.ts.
+   * - user ('users', default): verified identified account (type='user');
+   *   the identity merge carries a lead's history forward on sign-in.
+   */
+  lifecycle?: 'users' | 'leads'
 }
 
 /**
@@ -136,7 +161,7 @@ export interface EngagedPost {
   id: string
   title: string
   content: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   statusName: string | null
   statusColor: string
   voteCount: number
@@ -193,6 +218,13 @@ export interface IdentifyPortalUserResult {
   createdAt: Date
   /** true if a new user was created, false if an existing user was updated */
   created: boolean
+  /**
+   * True when THIS call asserted the email as verified: the user was created
+   * with emailVerified=true, or an existing user was flipped false -> true.
+   * Callers audit the assertion (`user.email_verified.asserted`) when set —
+   * asserting a verified email is a trust decision that grants portal access.
+   */
+  emailVerifiedAsserted: boolean
 }
 
 /**

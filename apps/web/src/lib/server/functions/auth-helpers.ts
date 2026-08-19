@@ -5,12 +5,14 @@
  */
 
 import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
-import { generateId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { getSettings } from './workspace'
-import { db, principal, eq } from '@/lib/server/db'
+import { db, principal, eq, type PermissionKey } from '@/lib/server/db'
+import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
+import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
+import { requireSettingsCached } from '@/lib/server/domains/settings/settings.helpers'
+import { memoizePerRequest } from './auth-request-cache'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-helpers' })
@@ -47,12 +49,35 @@ export function hasAuthCredentials(): boolean {
  * This avoids nested server function call issues.
  */
 async function getSessionDirect(): Promise<SessionResult | null> {
-  try {
-    return await auth.api.getSession({ headers: getRequestHeaders() })
-  } catch (error) {
-    log.error({ err: error }, 'get session failed')
-    return null
-  }
+  // Memoized per request: the same better-auth session lookup would otherwise
+  // repeat for every requireAuth/getOptionalAuth call in the request.
+  return memoizePerRequest('session', async () => {
+    try {
+      return await auth.api.getSession({ headers: getRequestHeaders() })
+    } catch (error) {
+      log.error({ err: error }, 'get session failed')
+      return null
+    }
+  })
+}
+
+/**
+ * The tenant settings row, served from the Redis-cached tenant-settings blob
+ * (a single Redis GET when warm) and additionally memoized per request. This is
+ * the auth-helper READ path only — never a read-modify-write, which must keep
+ * using the uncached settings read so a write is never based on a cached row.
+ * Returns null when unconfigured (getOptionalAuth's public surfaces treat that
+ * as "no auth" rather than an error).
+ */
+async function getAuthSettings() {
+  return memoizePerRequest('settings', async () => {
+    try {
+      return await requireSettingsCached()
+    } catch (error) {
+      log.error({ err: error }, 'auth settings read failed')
+      return null
+    }
+  })
 }
 
 export type { Role }
@@ -75,72 +100,108 @@ export interface AuthContext {
     role: Role
     type: string
   }
+  /**
+   * The caller's resolved (assignment-derived) permission set. Required so no
+   * consumer ever falls back to the wider legacy preset expansion for a
+   * context that skipped resolution — with custom roles the resolved set can
+   * be narrower than the preset, and a fallback would silently widen.
+   */
+  permissions: PermissionKey[]
 }
 
 /**
- * Require authentication with optional role check.
- * Throws if user is not authenticated or doesn't have required role.
+ * Require authentication, optionally gated on a permission.
+ *
+ * `{ permission }` checks the caller's resolved permission set (their role's
+ * preset bundle). Bare `requireAuth()` requires only a valid principal. The
+ * legacy `{ roles }` form was retired at the Phase C completion gate.
  *
  * @example
- * // Require any team member
- * const auth = await requireAuth({ roles: ['admin', 'member'] })
- *
- * // Require admin only
- * const auth = await requireAuth({ roles: ['admin'] })
- *
- * // Just require authentication (any role)
- * const auth = await requireAuth()
+ * const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+ * const anyAuth = await requireAuth()
  */
-export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
-  log.debug({ roles: options?.roles }, 'require auth')
-  try {
-    const session = await getSessionDirect()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
-    const userId = session.user.id as UserId
+export async function requireAuth(options?: { permission?: PermissionKey }): Promise<AuthContext> {
+  log.debug({ permission: options?.permission }, 'require auth')
+  const session = await getSessionDirect()
+  if (!session?.user) {
+    throw new Error('Authentication required')
+  }
+  const userId = session.user.id as UserId
 
-    const appSettings = await getSettings()
-    if (!appSettings) {
-      throw new Error('Workspace not configured')
-    }
+  const appSettings = await getAuthSettings()
+  if (!appSettings) {
+    throw new Error('Workspace not configured')
+  }
 
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, userId),
-    })
-
-    if (!principalRecord) {
-      throw new Error('Access denied: Not a team member')
+  // Memoized per request keyed on user: the principal read + permission join
+  // is identical for every requireAuth call in the request.
+  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
+    `principal:${userId}`,
+    async () => {
+      const record = await db.query.principal.findFirst({
+        where: eq(principal.userId, userId),
+      })
+      if (!record) {
+        throw new Error('Access denied: Not a team member')
+      }
+      const perms = await permissionsForPrincipal(record.id, record.role as Role)
+      return { principalRecord: record, resolvedPermissions: perms }
     }
+  )
 
-    if (options?.roles && !options.roles.includes(principalRecord.role as Role)) {
-      throw new Error(
-        `Access denied: Requires [${options.roles.join(', ')}], got ${principalRecord.role}`
-      )
-    }
+  const role = principalRecord.role as Role
 
-    return {
-      settings: {
-        id: appSettings.id as WorkspaceId,
-        slug: appSettings.slug,
-        name: appSettings.name,
-        logoKey: appSettings.logoKey ?? null,
-      },
-      user: {
-        id: userId,
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image ?? null,
-      },
-      principal: {
-        id: principalRecord.id as PrincipalId,
-        role: principalRecord.role as Role,
-        type: principalRecord.type,
-      },
-    }
-  } catch (error) {
-    log.error({ err: error }, 'require auth failed')
-    throw error
+  if (options?.permission && !resolvedPermissions.has(options.permission)) {
+    throw new Error(
+      `Access denied: Requires permission '${options.permission}', role ${role} lacks it`
+    )
+  }
+
+  return {
+    settings: {
+      id: appSettings.id as WorkspaceId,
+      slug: appSettings.slug,
+      name: appSettings.name,
+      logoKey: appSettings.logoKey ?? null,
+    },
+    user: {
+      id: userId,
+      email: session.user.email,
+      name: session.user.name,
+      image: session.user.image ?? null,
+    },
+    principal: {
+      id: principalRecord.id as PrincipalId,
+      role: principalRecord.role as Role,
+      type: principalRecord.type,
+    },
+    permissions: [...resolvedPermissions],
+  }
+}
+
+// The denial-vocabulary matcher for the throws above lives in the pure leaf
+// module auth-errors.ts (so consumers and tests can reach the real matcher
+// without this module's auth-stack import graph); re-exported here so the
+// vocabulary and its matcher still travel together for existing importers.
+export { isAuthDenialError } from './auth-errors'
+
+/**
+ * Assert the authenticated caller holds a permission, throwing the same
+ * canonical message `requireAuth({ permission })` uses. For the rare gate
+ * whose required permission is computed at runtime (a field- or action-scoped
+ * write), so the gate must stay a bare `requireAuth()` for the authz scanner
+ * while the per-action permission is still enforced. Consumes the gate's
+ * already-resolved (assignment-derived) permission set — never a legacy
+ * fallback, which could be wider than a custom role's actual grant.
+ */
+export function assertPermission(
+  auth: Pick<AuthContext, 'permissions' | 'principal'>,
+  permission: PermissionKey
+): void {
+  if (!auth.permissions.includes(permission)) {
+    throw new Error(
+      `Access denied: Requires permission '${permission}', role ${auth.principal.role} lacks it`
+    )
   }
 }
 
@@ -153,61 +214,63 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
   log.debug('get optional auth')
-  try {
-    const session = await getSessionDirect()
-    if (!session?.user) {
-      return null
-    }
-    const userId = session.user.id as UserId
+  const session = await getSessionDirect()
+  if (!session?.user) {
+    return null
+  }
+  const userId = session.user.id as UserId
 
-    const appSettings = await getSettings()
-    if (!appSettings) {
-      return null
-    }
+  const appSettings = await getAuthSettings()
+  if (!appSettings) {
+    return null
+  }
 
-    let principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, userId),
-    })
+  // Memoized per request (distinct key from requireAuth: this path lazily
+  // creates the principal and skips the permission join for end users).
+  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
+    `optionalPrincipal:${userId}`,
+    async () => {
+      // Resolve (or lazily create) the caller's principal. The factory is
+      // read-first and race-safe against a concurrent first-touch.
+      const { principal: record } = await ensurePrincipalForUser({
+        userId,
+        role: 'user',
+        displayName: session.user.name,
+        avatarUrl: session.user.image ?? null,
+      })
 
-    // Auto-create principal record for authenticated users without one
-    if (!principalRecord) {
-      const newPrincipalId = generateId('principal')
-      const [created] = await db
-        .insert(principal)
-        .values({
-          id: newPrincipalId,
-          userId,
-          role: 'user',
-          displayName: session.user.name,
-          avatarUrl: session.user.image ?? null,
-          createdAt: new Date(),
-        })
-        .returning()
-      principalRecord = created
+      // Same assignment-derived resolution as requireAuth, so portal/public
+      // surfaces that gate on the optional context honour custom roles too.
+      // End users (role 'user') never carry workspace assignments — the role
+      // reconcile and seed heal enforce that — so the dominant portal case
+      // skips the join instead of paying a guaranteed-empty DB read.
+      const perms =
+        record.role === 'user'
+          ? new Set<PermissionKey>()
+          : await permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
+      return { principalRecord: record, resolvedPermissions: perms }
     }
+  )
 
-    return {
-      settings: {
-        id: appSettings.id as WorkspaceId,
-        slug: appSettings.slug,
-        name: appSettings.name,
-        logoKey: appSettings.logoKey ?? null,
-      },
-      user: {
-        id: userId,
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image ?? null,
-      },
-      principal: {
-        id: principalRecord.id as PrincipalId,
-        role: principalRecord.role as Role,
-        type: principalRecord.type,
-      },
-    }
-  } catch (error) {
-    log.error({ err: error }, 'get optional auth failed')
-    throw error
+  return {
+    settings: {
+      id: appSettings.id as WorkspaceId,
+      slug: appSettings.slug,
+      name: appSettings.name,
+      logoKey: appSettings.logoKey ?? null,
+    },
+    user: {
+      id: userId,
+      email: session.user.email,
+      name: session.user.name,
+      image: session.user.image ?? null,
+    },
+    principal: {
+      id: principalRecord.id as PrincipalId,
+      role: principalRecord.role as Role,
+      type: principalRecord.type,
+    },
+    permissions: [...resolvedPermissions],
   }
 }
 
@@ -247,5 +310,6 @@ export async function policyActorFromAuth(auth: AuthContext | null): Promise<Act
     role: auth.principal.role,
     principalType: normalizePrincipalType(auth.principal.type),
     segmentIds,
+    permissions: new Set(auth.permissions),
   }
 }

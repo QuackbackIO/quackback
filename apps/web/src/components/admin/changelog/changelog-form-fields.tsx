@@ -42,6 +42,7 @@ export function ChangelogFormFields({
                 minHeight="100%"
                 className="h-full"
                 borderless
+                toolbarPosition="bottom"
                 features={{
                   headings: true,
                   images: true,

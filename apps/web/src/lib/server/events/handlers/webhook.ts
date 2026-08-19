@@ -7,13 +7,20 @@
  */
 
 import crypto from 'crypto'
-import dns from 'dns/promises'
 import type { HookHandler, HookResult, HookRunContext } from '../hook-types'
 import type { EventData } from '../types'
 import type { WebhookTarget, WebhookConfig } from '../integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
+import { safeFetch, SsrfError, TimeoutError } from '@/lib/server/content/ssrf-guard'
 import { isRetryableError } from '../hook-utils'
-import { claimHookDelivery } from '../hook-idempotency'
+import {
+  claimHookDelivery,
+  completeHookDelivery,
+  failHookDelivery,
+  releaseHookDelivery,
+} from '../hook-idempotency'
+import { db, webhooks, eq } from '@/lib/server/db'
+import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import { logger } from '@/lib/server/logger'
 
 export type { WebhookTarget, WebhookConfig }
@@ -23,69 +30,6 @@ const log = logger.child({ component: 'webhook' })
 const TIMEOUT_MS = 5_000 // 5s timeout for single attempt
 const USER_AGENT = 'Quackback-Webhook/1.0 (+https://quackback.io)'
 
-/**
- * Private IP ranges that should be blocked (SSRF protection).
- * Checked at delivery time to prevent DNS rebinding attacks.
- */
-const PRIVATE_IP_RANGES = [
-  /^127\./, // Loopback
-  /^10\./, // Class A private
-  /^172\.(1[6-9]|2[0-9]|3[01])\./, // Class B private
-  /^192\.168\./, // Class C private
-  /^169\.254\./, // Link-local
-  /^0\./, // "This" network
-  /^::1$/, // IPv6 loopback
-  /^f[cd]00:/i, // IPv6 private (fc00::/7 = fc00::/8 + fd00::/8)
-  /^fe80:/i, // IPv6 link-local
-  /^::ffff:(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.)/, // IPv4-mapped IPv6
-]
-
-/**
- * Check if an IP address is private/internal.
- */
-function isPrivateIP(ip: string): boolean {
-  return PRIVATE_IP_RANGES.some((pattern) => pattern.test(ip))
-}
-
-/**
- * Resolve hostname and verify it doesn't point to a private IP.
- * Returns the resolved IP to use for the actual request (prevents TOCTOU/DNS rebinding).
- */
-async function resolveAndValidateIP(
-  hostname: string
-): Promise<{ valid: boolean; ip?: string; error?: string }> {
-  try {
-    // Prefer IPv4 for broader compatibility
-    const addresses = await dns.resolve4(hostname).catch(() => [])
-
-    if (addresses.length === 0) {
-      // Try IPv6 if no IPv4
-      const addresses6 = await dns.resolve6(hostname).catch(() => [])
-      if (addresses6.length === 0) {
-        return { valid: false, error: 'Could not resolve hostname' }
-      }
-      // Check IPv6 addresses
-      for (const ip of addresses6) {
-        if (isPrivateIP(ip)) {
-          return { valid: false, error: `DNS resolves to private IP: ${ip}` }
-        }
-      }
-      return { valid: true, ip: `[${addresses6[0]}]` } // IPv6 needs brackets in URL
-    }
-
-    // Check IPv4 addresses
-    for (const ip of addresses) {
-      if (isPrivateIP(ip)) {
-        return { valid: false, error: `DNS resolves to private IP: ${ip}` }
-      }
-    }
-
-    return { valid: true, ip: addresses[0] }
-  } catch (error) {
-    return { valid: false, error: `DNS resolution failed: ${error}` }
-  }
-}
-
 export const webhookHook: HookHandler = {
   async run(
     event: EventData,
@@ -93,8 +37,7 @@ export const webhookHook: HookHandler = {
     config: unknown,
     ctx?: HookRunContext
   ): Promise<HookResult> {
-    const { url } = target as WebhookTarget
-    const { secret, webhookId } = config as WebhookConfig
+    const { webhookId } = config as WebhookConfig
 
     // Idempotency: if BullMQ is re-running this job after a worker crash,
     // skip the delivery — the previous attempt already POSTed (and the
@@ -102,25 +45,46 @@ export const webhookHook: HookHandler = {
     // deliveries on every rolling restart that interrupts a worker.
     const claimed = await claimHookDelivery(ctx?.jobId, 'webhook')
     if (!claimed) {
-      log.debug({ job_id: ctx?.jobId, url }, 'skipping duplicate delivery')
+      log.debug({ job_id: ctx?.jobId, webhook_id: webhookId }, 'skipping duplicate delivery')
       return { success: true }
+    }
+
+    // Delivery-time re-validation (mirrors the app-webhook hook): the
+    // enqueue-time snapshot — including the queued target URL — is superseded
+    // by the live row, so a webhook disabled, soft-deleted, or re-pointed
+    // between enqueue and delivery (or during BullMQ retries) is honored.
+    // The signing secret also never travels in the job payload (it would
+    // otherwise sit in plaintext in Redis for the job's lifetime) — it's
+    // loaded and decrypted here, right before it's needed.
+    let secret: string
+    let url: string
+    try {
+      const row = await db.query.webhooks.findFirst({
+        where: eq(webhooks.id, webhookId),
+        columns: { secret: true, url: true, status: true, deletedAt: true },
+      })
+      if (!row || row.status !== 'active' || row.deletedAt !== null) {
+        // Deleted or disabled after this delivery was enqueued — a retry
+        // can't make it deliverable again.
+        log.warn({ webhook_id: webhookId }, 'webhook no longer deliverable, skipping')
+        await failHookDelivery(ctx?.jobId)
+        return { success: false, error: 'Webhook not deliverable', shouldRetry: false }
+      }
+      secret = decryptWebhookSecret(row.secret)
+      url = row.url
+    } catch (error) {
+      log.error({ err: error, webhook_id: webhookId }, 'failed to load webhook secret')
+      await releaseHookDelivery(ctx?.jobId)
+      return { success: false, error: 'Failed to load webhook secret', shouldRetry: true }
     }
 
     log.debug({ event_type: event.type, url }, 'processing webhook')
 
-    // SSRF protection: Resolve and validate IP at delivery time
-    // Note: We validate the IP but use the original hostname for the request
-    // to ensure TLS certificates match. The TOCTOU window is minimal in practice.
-    const parsedUrl = new URL(url)
-    const ipCheck = await resolveAndValidateIP(parsedUrl.hostname)
-    if (!ipCheck.valid) {
-      log.error({ url, reason: ipCheck.error }, 'ssrf blocked')
-      return { success: false, error: ipCheck.error, shouldRetry: false }
-    }
-
     // Build payload
     const payload = JSON.stringify({
-      id: `evt_${crypto.randomUUID().replace(/-/g, '')}`,
+      // Stable across BullMQ attempts so receivers can also deduplicate the
+      // narrow crash-after-POST-before-ack window.
+      id: event.id,
       type: event.type,
       createdAt: event.timestamp,
       data: event.data,
@@ -140,21 +104,20 @@ export const webhookHook: HookHandler = {
     }
 
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
-
-      const response = await fetch(url, {
+      // safeFetch is the single SSRF chokepoint: it validates the host, then
+      // pins the connection to the validated IP (no second DNS resolution),
+      // closing the TOCTOU the bare fetch left open, and never follows a
+      // redirect. Replaces this handler's own divergent private-IP guard.
+      const response = await safeFetch(url, {
         method: 'POST',
         headers,
         body: payload,
-        signal: controller.signal,
-        redirect: 'error', // Prevent SSRF via redirects to internal IPs
+        timeoutMs: TIMEOUT_MS,
       })
-
-      clearTimeout(timeoutId)
 
       if (response.ok) {
         log.info({ event_type: event.type, url }, 'webhook delivered')
+        await completeHookDelivery(ctx?.jobId)
         await updateWebhookSuccess(webhookId)
         return { success: true }
       }
@@ -163,15 +126,29 @@ export const webhookHook: HookHandler = {
       const error = `HTTP ${response.status}`
       log.warn({ url, status: response.status }, 'webhook delivery failed')
       const retryable = response.status >= 500 || response.status === 429
+      if (retryable) await releaseHookDelivery(ctx?.jobId)
+      else await failHookDelivery(ctx?.jobId)
       return { success: false, error, shouldRetry: retryable }
     } catch (error) {
-      let errorMsg = 'Unknown error'
-      if (error instanceof Error) {
-        errorMsg = error.name === 'AbortError' ? 'Request timeout' : error.message
+      // An SSRF-blocked target (private/internal IP, bad scheme) never becomes
+      // valid on retry — fail permanently, as the old pre-check did.
+      if (error instanceof SsrfError) {
+        log.error({ url, reason: error.message }, 'ssrf blocked')
+        await failHookDelivery(ctx?.jobId)
+        return { success: false, error: error.message, shouldRetry: false }
+      }
+      // A timeout is transient — retry.
+      if (error instanceof TimeoutError) {
+        log.warn({ url }, 'webhook delivery timed out')
+        await releaseHookDelivery(ctx?.jobId)
+        return { success: false, error: 'Request timeout', shouldRetry: true }
       }
 
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error, url }, 'webhook delivery failed')
       const retryable = isRetryableError(error)
+      if (retryable) await releaseHookDelivery(ctx?.jobId)
+      else await failHookDelivery(ctx?.jobId)
       return { success: false, error: errorMsg, shouldRetry: retryable }
     }
   },
@@ -182,7 +159,6 @@ export const webhookHook: HookHandler = {
  */
 async function updateWebhookSuccess(webhookId: WebhookId): Promise<void> {
   try {
-    const { db, webhooks, eq } = await import('@/lib/server/db')
     await db
       .update(webhooks)
       .set({

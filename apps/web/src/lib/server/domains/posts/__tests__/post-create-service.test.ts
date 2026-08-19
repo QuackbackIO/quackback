@@ -4,12 +4,16 @@
  * lands on every attributed row.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BoardId, PrincipalId, StatusId } from '@quackback/ids'
+import type { BoardId, PrincipalId, PostStatusId } from '@quackback/ids'
 
 const recordAuditEvent = vi.fn()
 const rehostExternalImages = vi.fn(async (json: unknown) => json)
 
-const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTags: [] }
+const insertedRows: Record<string, unknown[]> = {
+  posts: [],
+  post_votes: [],
+  postTagAssignments: [],
+}
 const subscribeToPost = vi.fn()
 const dispatchPostCreated = vi.fn().mockResolvedValue(undefined)
 const syncPostMentions = vi.fn().mockResolvedValue(undefined)
@@ -50,7 +54,7 @@ vi.mock('@/lib/server/db', async () => {
           {
             id: 'post_new' as unknown,
             boardId: 'board_b' as unknown,
-            statusId: 'status_open' as unknown,
+            statusId: 'post_status_open' as unknown,
             title: 'New post',
             content: 'Body',
             principalId: (insertedRows.posts.at(-1) as { principalId: string }).principalId,
@@ -85,7 +89,7 @@ vi.mock('@/lib/server/db', async () => {
           }),
         },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -116,8 +120,8 @@ vi.mock('@/lib/server/db', async () => {
     boards: { id: 'board_id' },
     posts: { __name: 'posts', id: 'post_id' },
     postStatuses: { id: 'status_id' },
-    postTags: { __name: 'postTags' },
-    votes: { __name: 'votes' },
+    postTagAssignments: { __name: 'postTagAssignments' },
+    postVotes: { __name: 'post_votes' },
     eq: vi.fn(),
     and: vi.fn((...args: unknown[]) => args),
     sql: realSql,
@@ -144,6 +148,7 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 vi.mock('@/lib/server/markdown-tiptap', () => ({
   markdownToTiptapJson: vi.fn(() => ({})),
   contentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
+  projectContentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
 }))
 
 vi.mock('@/lib/server/content/rehost-images', () => ({
@@ -168,8 +173,8 @@ vi.mock('@/lib/server/audit/log', () => ({
 describe('createPost author attribution', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
-    insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.post_votes.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     txLockedBoardRows.value = [{ deletedAt: null, access: LOCKED_ANON_ACCESS }]
   })
@@ -183,13 +188,13 @@ describe('createPost author attribution', () => {
         boardId: 'board_b' as unknown as BoardId,
         title: 'New post',
         content: 'Body',
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       { principalId: overridePrincipal }
     )
 
     const postRow = insertedRows.posts[0] as { principalId: PrincipalId }
-    const voteRow = insertedRows.votes[0] as { principalId: PrincipalId }
+    const voteRow = insertedRows.post_votes[0] as { principalId: PrincipalId }
     expect(postRow.principalId).toBe(overridePrincipal)
     expect(voteRow.principalId).toBe(overridePrincipal)
     expect(subscribeToPost).toHaveBeenCalledWith(overridePrincipal, 'post_new', 'author')
@@ -199,8 +204,8 @@ describe('createPost author attribution', () => {
 describe('createPost held audit event', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
-    insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.post_votes.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     recordAuditEvent.mockClear()
     txLockedBoardRows.value = [{ deletedAt: null, access: LOCKED_ANON_ACCESS }]
@@ -235,7 +240,7 @@ describe('createPost held audit event', () => {
         boardId: 'board_b' as unknown as BoardId,
         title: 'Held post',
         content: 'Body',
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       {
         principalId,
@@ -282,7 +287,7 @@ describe('createPost held audit event', () => {
         boardId: 'board_b' as unknown as BoardId,
         title: 'Published post',
         content: 'Body',
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       {
         principalId,
@@ -297,8 +302,8 @@ describe('createPost held audit event', () => {
 describe('createPost dispatch guard (moderation)', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
-    insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.post_votes.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     recordAuditEvent.mockClear()
     dispatchPostCreated.mockClear()
@@ -334,7 +339,7 @@ describe('createPost dispatch guard (moderation)', () => {
         boardId: 'board_b' as unknown as BoardId,
         title: 'Held post',
         content: 'Body',
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       {
         principalId,
@@ -373,7 +378,7 @@ describe('createPost dispatch guard (moderation)', () => {
         boardId: 'board_b' as unknown as BoardId,
         title: 'Published post',
         content: 'Body',
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       {
         principalId,
@@ -412,7 +417,7 @@ describe('createPost dispatch guard (moderation)', () => {
         boardId: 'board_b' as unknown as BoardId,
         title: 'Held post',
         content: 'Body',
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       {
         principalId,
@@ -427,8 +432,8 @@ describe('createPost dispatch guard (moderation)', () => {
 describe('createPost TOCTOU board re-check', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
-    insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.post_votes.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     rehostExternalImages.mockClear()
     txLockedBoardRows.value = [{ deletedAt: null, access: LOCKED_ANON_ACCESS }]
@@ -452,7 +457,7 @@ describe('createPost TOCTOU board re-check', () => {
           boardId: 'board_b' as unknown as BoardId,
           title: 'Pre-deleted post',
           content: 'Body',
-          statusId: 'status_open' as unknown as StatusId,
+          statusId: 'post_status_open' as unknown as PostStatusId,
         },
         { principalId }
       )
@@ -462,7 +467,7 @@ describe('createPost TOCTOU board re-check', () => {
     expect(rehostExternalImages).not.toHaveBeenCalled()
     // And nothing must reach the DB either.
     expect(insertedRows.posts).toHaveLength(0)
-    expect(insertedRows.votes).toHaveLength(0)
+    expect(insertedRows.post_votes).toHaveLength(0)
   })
 
   it('throws BOARD_NOT_FOUND when the board is soft-deleted between the precheck and the locked re-check', async () => {
@@ -482,7 +487,7 @@ describe('createPost TOCTOU board re-check', () => {
           boardId: 'board_b' as unknown as BoardId,
           title: 'Racy post',
           content: 'Body',
-          statusId: 'status_open' as unknown as StatusId,
+          statusId: 'post_status_open' as unknown as PostStatusId,
         },
         { principalId }
       )
@@ -490,7 +495,7 @@ describe('createPost TOCTOU board re-check', () => {
 
     // The insert must not have run.
     expect(insertedRows.posts).toHaveLength(0)
-    expect(insertedRows.votes).toHaveLength(0)
+    expect(insertedRows.post_votes).toHaveLength(0)
   })
 
   it('throws BOARD_NOT_FOUND when the locked re-check returns no rows (board hard-deleted)', async () => {
@@ -505,13 +510,13 @@ describe('createPost TOCTOU board re-check', () => {
           boardId: 'board_b' as unknown as BoardId,
           title: 'Racy post',
           content: 'Body',
-          statusId: 'status_open' as unknown as StatusId,
+          statusId: 'post_status_open' as unknown as PostStatusId,
         },
         { principalId }
       )
     ).rejects.toThrow(/BOARD_NOT_FOUND|not found/i)
 
     expect(insertedRows.posts).toHaveLength(0)
-    expect(insertedRows.votes).toHaveLength(0)
+    expect(insertedRows.post_votes).toHaveLength(0)
   })
 })

@@ -30,6 +30,16 @@ export function safeSigninRedirect(
   return buildSigninRedirect(callbackUrl, { mode: opts?.mode, error: d.error })
 }
 
+/** Absolute-path form of the sign-in landing, for use as an OAuth
+ *  `errorCallbackURL`: the portal root with the dialog requested and the
+ *  destination carried. Better-Auth appends its `error=<code>` query
+ *  param onto this URL, which `parseAuthPromptSearch` then picks up. */
+export function signinErrorLanding(callbackUrl?: string): string {
+  const params = new URLSearchParams({ auth: 'signin' })
+  if (callbackUrl && isSafeCallbackUrl(callbackUrl)) params.set('callbackUrl', callbackUrl)
+  return `/?${params.toString()}`
+}
+
 /** Builds the redirect that replaces a former `/auth/login` target:
  *  the portal root with the dialog requested and the destination carried. */
 export function buildSigninRedirect(

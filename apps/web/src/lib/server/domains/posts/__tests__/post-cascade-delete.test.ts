@@ -61,10 +61,9 @@ vi.mock('@/lib/server/integrations/archive', () => ({
   archiveExternalIssue: (...args: unknown[]) => mockArchiveExternalIssue(...args),
 }))
 
-const mockDecryptSecrets = vi.fn()
-vi.mock('@/lib/server/integrations/encryption', () => ({
-  decryptSecrets: (...args: unknown[]) => mockDecryptSecrets(...args),
-  encryptSecrets: vi.fn((v: unknown) => JSON.stringify(v)),
+const mockGetValidAccessToken = vi.fn()
+vi.mock('@/lib/server/integrations/token-refresh', () => ({
+  getValidAccessToken: (...args: unknown[]) => mockGetValidAccessToken(...args),
 }))
 
 import { executeCascadeDelete, type CascadeChoice } from '../post.cascade-delete'
@@ -154,13 +153,14 @@ describe('executeCascadeDelete', () => {
       }),
     ])
 
-    mockDecryptSecrets.mockReturnValue({ accessToken: 'ghp_test' })
+    mockGetValidAccessToken.mockResolvedValue('ghp_test')
     mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'closed' })
     mockUpdateWhere.mockResolvedValue(undefined)
 
     const results = await executeCascadeDelete(POST_ID, [{ linkId: 'link-1', shouldArchive: true }])
 
-    expect(mockDecryptSecrets).toHaveBeenCalledWith('encrypted-blob')
+    // Token comes from the unified refresh helper, keyed by integration id.
+    expect(mockGetValidAccessToken).toHaveBeenCalledWith('int-1')
     expect(mockArchiveExternalIssue).toHaveBeenCalledWith('github', {
       externalId: '42',
       externalUrl: 'https://github.com/org/repo/issues/42',
@@ -178,7 +178,7 @@ describe('executeCascadeDelete', () => {
   it('updates link status to action value on success', async () => {
     mockSelectWhere.mockResolvedValueOnce([linkRow('link-1', 'linear', 'LIN-1')])
 
-    mockDecryptSecrets.mockReturnValue({ accessToken: 'tok' })
+    mockGetValidAccessToken.mockResolvedValue('tok')
     mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'archived' })
     mockUpdateWhere.mockResolvedValue(undefined)
 
@@ -190,7 +190,7 @@ describe('executeCascadeDelete', () => {
   it('updates link status to error on failure', async () => {
     mockSelectWhere.mockResolvedValueOnce([linkRow('link-1', 'linear', 'LIN-1')])
 
-    mockDecryptSecrets.mockReturnValue({ accessToken: 'tok' })
+    mockGetValidAccessToken.mockResolvedValue('tok')
     mockArchiveExternalIssue.mockResolvedValue({ success: false, error: 'Auth expired' })
     mockUpdateWhere.mockResolvedValue(undefined)
 
@@ -207,7 +207,7 @@ describe('executeCascadeDelete', () => {
       linkRow('link-B', 'linear', 'LIN-5', { integrationId: 'int-2' }),
     ])
 
-    mockDecryptSecrets.mockReturnValue({ accessToken: 'tok' })
+    mockGetValidAccessToken.mockResolvedValue('tok')
 
     mockArchiveExternalIssue
       .mockResolvedValueOnce({ success: true, action: 'closed' })
@@ -239,7 +239,7 @@ describe('executeCascadeDelete', () => {
   it('filters out choices with shouldArchive=false', async () => {
     mockSelectWhere.mockResolvedValueOnce([linkRow('link-1', 'linear', 'LIN-1')])
 
-    mockDecryptSecrets.mockReturnValue({ accessToken: 'tok' })
+    mockGetValidAccessToken.mockResolvedValue('tok')
     mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'archived' })
     mockUpdateWhere.mockResolvedValue(undefined)
 
@@ -251,15 +251,25 @@ describe('executeCascadeDelete', () => {
     expect(mockArchiveExternalIssue).toHaveBeenCalledTimes(1)
   })
 
-  it('uses access_token fallback when accessToken is not present', async () => {
-    mockSelectWhere.mockResolvedValueOnce([linkRow('link-1', 'notion', 'page-1')])
+  it('dedupes token retrieval per integration across links', async () => {
+    // Two links on the same integration: the helper is called once, its
+    // token reused (the access_token-key fallback itself now lives in the
+    // helper and is covered by token-refresh.test.ts).
+    mockSelectWhere.mockResolvedValueOnce([
+      linkRow('link-A', 'notion', 'page-1', { integrationId: 'int-9' }),
+      linkRow('link-B', 'notion', 'page-2', { integrationId: 'int-9' }),
+    ])
 
-    mockDecryptSecrets.mockReturnValue({ access_token: 'notion_secret' })
+    mockGetValidAccessToken.mockResolvedValue('notion_secret')
     mockArchiveExternalIssue.mockResolvedValue({ success: true, action: 'archived' })
     mockUpdateWhere.mockResolvedValue(undefined)
 
-    await executeCascadeDelete(POST_ID, [{ linkId: 'link-1', shouldArchive: true }])
+    await executeCascadeDelete(POST_ID, [
+      { linkId: 'link-A', shouldArchive: true },
+      { linkId: 'link-B', shouldArchive: true },
+    ])
 
+    expect(mockGetValidAccessToken).toHaveBeenCalledTimes(1)
     expect(mockArchiveExternalIssue).toHaveBeenCalledWith(
       'notion',
       expect.objectContaining({ accessToken: 'notion_secret' })

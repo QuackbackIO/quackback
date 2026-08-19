@@ -21,7 +21,7 @@ import {
 import { mergePost } from '@/lib/server/domains/posts/post.merge'
 import { logger } from '@/lib/server/logger'
 import { NotFoundError } from '@/lib/shared/errors'
-import type { PostId, PrincipalId, MergeSuggestionId } from '@quackback/ids'
+import type { PostId, PrincipalId, PostMergeSuggestionId } from '@quackback/ids'
 
 const log = logger.child({ component: 'merge-suggestion' })
 
@@ -49,7 +49,7 @@ export interface CreateMergeSuggestionOpts {
 }
 
 export interface MergeSuggestionView {
-  id: MergeSuggestionId
+  id: PostMergeSuggestionId
   sourcePostId: PostId
   targetPostId: PostId
   status: string
@@ -99,12 +99,16 @@ export async function createMergeSuggestion(opts: CreateMergeSuggestionOpts): Pr
  * Accept a merge suggestion — performs the actual post merge and marks suggestion accepted.
  */
 export async function acceptMergeSuggestion(
-  id: MergeSuggestionId,
+  id: PostMergeSuggestionId,
   principalId: PrincipalId,
   opts?: { swapDirection?: boolean }
 ): Promise<void> {
   log.info(
-    { merge_suggestion_id: id, principal_id: principalId, swap_direction: opts?.swapDirection ?? false },
+    {
+      merge_suggestion_id: id,
+      principal_id: principalId,
+      swap_direction: opts?.swapDirection ?? false,
+    },
     'accept merge suggestion'
   )
   const suggestion = await db.query.mergeSuggestions.findFirst({
@@ -160,7 +164,7 @@ export async function acceptMergeSuggestion(
  * Dismiss a merge suggestion.
  */
 export async function dismissMergeSuggestion(
-  id: MergeSuggestionId,
+  id: PostMergeSuggestionId,
   principalId: PrincipalId
 ): Promise<void> {
   log.info({ merge_suggestion_id: id, principal_id: principalId }, 'dismiss merge suggestion')
@@ -179,7 +183,7 @@ export async function dismissMergeSuggestion(
  * Restore a dismissed merge suggestion back to pending.
  */
 export async function restoreMergeSuggestion(
-  id: MergeSuggestionId,
+  id: PostMergeSuggestionId,
   principalId: PrincipalId
 ): Promise<void> {
   log.info({ merge_suggestion_id: id, principal_id: principalId }, 'restore merge suggestion')
@@ -284,7 +288,10 @@ export async function getPendingMergeSuggestions(opts: {
   }>
   total: number
 }> {
-  log.debug({ sort: opts.sort ?? 'newest', limit: opts.limit ?? 50 }, 'get pending merge suggestions')
+  log.debug(
+    { sort: opts.sort ?? 'newest', limit: opts.limit ?? 50 },
+    'get pending merge suggestions'
+  )
   // Step 1: Fetch count + merge suggestion rows in parallel
   const orderBy =
     opts.sort === 'relevance'

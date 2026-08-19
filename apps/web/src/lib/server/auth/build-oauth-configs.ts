@@ -21,18 +21,22 @@
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
-import {
-  allowsMissingEmail,
-  identitySourcesFor,
-  profileClaimFor,
-} from '@/lib/shared/oidc-claim-mapping'
 import { resolveIdentity } from './resolve-identity'
 import { synthesizeName } from './placeholder-identity'
+import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
 
 // Re-exported so server callers keep this import path. The implementation lives
-// in `shared` because the admin editor needs it too.
+// in `shared` because the admin editor needs it too, and having exactly one
+// scope resolver is the whole point — see oidc-scopes.ts. The connection test
+// mirrors this same set, so a passing test exercises the scope request that
+// production sign-in will actually make.
 export { DEFAULT_OIDC_SCOPES, effectiveScopes } from '@/lib/shared/oidc-scopes'
 
+/**
+ * What the resolver hands back to the plugin. Mirrors the library's
+ * `OAuth2UserInfo` while staying open, because the raw claims ride along and
+ * `mapProfileToUser` reads them for locale and avatar.
+ */
 export type ResolvedProfile = {
   id: string
   email?: string
@@ -51,18 +55,24 @@ export interface GenericOAuthConfig {
   pkce?: boolean
   authorizationUrl?: string
   tokenUrl?: string
-  /** Manual-endpoint userinfo URL. */
+  /** Manual-endpoint userinfo URL. Without this the plugin's id_token →
+   *  userinfo fallback has nowhere to go for a provider with no discovery
+   *  document, and the callback aborts with `user_info_is_missing`. */
   userInfoUrl?: string
-  /** Custom user-info resolution. Attached to EVERY provider. */
+  /** Custom user-info resolution. Attached to EVERY provider — it is a superset
+   *  of the plugin's own behaviour, so leaving it off any provider would
+   *  reinstate a second resolution path. */
   getUserInfo?: (tokens: {
     idToken?: string
     accessToken?: string
   }) => Promise<ResolvedProfile | null>
   scopes?: string[]
-  /** How the client secret reaches the token endpoint. */
+  /** How the client secret reaches the token endpoint. Some providers accept
+   *  only one of the two, and this was previously fixed in code. */
   authentication?: 'basic' | 'post'
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
-  // Unset means send no `prompt` parameter (the `omit` choice).
+  // Default prompt is `login` (see DEFAULT_OIDC_PROMPT). select_account is
+  // OIDC-optional and many IdPs ignore or reject it.
   prompt?:
     | 'none'
     | 'login'
@@ -96,18 +106,34 @@ export interface BuildGenericOAuthConfigsArgs {
   tierAllowsOidc: boolean
   /**
    * Fetches a provider's discovery document, or null when it is unreachable.
-   * Injected so this module stays free of fetch imports.
+   *
+   * Injected the same way `creds` is, which keeps this module free of fetch and
+   * DB imports. Resolution happens HERE, at build time, because the plugin's
+   * `getUserInfo` seam receives only the token set — not the discovery document
+   * the callback fetched moments earlier. Without closing the endpoint over at
+   * build time the resolver would have to re-fetch discovery on every sign-in,
+   * and the fast path's "no network" property would not be real.
    */
   discovery?: (
     discoveryUrl: string
   ) => Promise<{ userinfo_endpoint?: unknown; prompt_values_supported?: unknown } | null>
-  /** Fetches a userinfo document with the bearer token. */
+  /** Fetches a userinfo document with the bearer token. Injected for the same
+   *  reason as `discovery`: the guarded fetch belongs outside this module. */
   fetchUserInfo?: (url: string, accessToken: string) => Promise<Record<string, unknown> | null>
+  /** Called when resolution succeeds but observed a discrepancy. Injected so
+   *  this module needs no audit or DB imports. */
+  onResolutionWarning?: (registrationId: string, warnings: readonly string[]) => void
+  /** Called with the claims behind a successful resolution, so downstream
+   *  consumers need not re-derive them from stored tokens. */
   onResolved?: (registrationId: string, accountId: string, claims: Record<string, unknown>) => void
   /**
-   * Read-or-mint placeholder address. `getUserInfo` runs on every sign-in, so
-   * minting here unconditionally would hand a returning person a different
-   * address each time.
+   * Returns the placeholder address to use for a provider that released none.
+   *
+   * READ-OR-MINT, not mint: `getUserInfo` runs on every sign-in, so minting
+   * here unconditionally would hand a returning person a different address each
+   * time. The implementation looks up the account by this identity and reuses
+   * the stored address, minting only when there is no account yet. Injected so
+   * this module keeps needing no DB import.
    */
   placeholderEmailFor?: (registrationId: string, accountId: string) => Promise<string>
   /** Attached to every config so `user.locale` populates from sign-in. */
@@ -133,6 +159,7 @@ export async function buildGenericOAuthConfigs({
   tierAllowsOidc,
   discovery,
   fetchUserInfo,
+  onResolutionWarning,
   onResolved,
   placeholderEmailFor,
   mapProfileToUser,
@@ -156,9 +183,10 @@ export async function buildGenericOAuthConfigs({
     const discoveryUrl = provider.discoveryUrl || c.discoveryUrl || undefined
     const authorizationUrl = provider.authorizationUrl || undefined
     const tokenUrl = provider.tokenUrl || undefined
-    // A manual endpoint is an explicit choice and the row wins. Discovery is
-    // still fetched when the row has one, because the same document carries
-    // `prompt_values_supported`.
+    // A manual endpoint is an explicit choice and the row wins, so discovery
+    // never overwrites `userInfoUrl`. Discovery is still fetched when the row
+    // has one, because the same document carries `prompt_values_supported`,
+    // which has no manual equivalent.
     let userInfoUrl = provider.userInfoUrl || undefined
     let promptValuesSupported: string[] | null = null
     if (discoveryUrl && discovery) {
@@ -173,69 +201,64 @@ export async function buildGenericOAuthConfigs({
       }
     }
 
+    // One builder, read by production here and by the connection test there.
     const request = authorizeRequestFor(provider)
-    // Filter the implicit default against `prompt_values_supported`. An
-    // explicit stored prompt is always sent: the admin picked it, and an
-    // IdP rejection is visible where a silent omission is not.
-    const prompt =
-      provider.prompt != null
-        ? request.prompt
-        : supportsPrompt(request.prompt, promptValuesSupported)
-          ? request.prompt
-          : undefined
 
-    const rowUserInfoUrl = provider.userInfoUrl || undefined
+    // Derived suppression: a provider that publishes its prompt list and omits
+    // ours would reject the request outright, so drop it rather than send a
+    // parameter we already know will fail. Silence means unknown, not
+    // unsupported — almost nobody publishes this — so the default still goes.
+    const prompt = supportsPrompt(request.prompt, promptValuesSupported)
+      ? request.prompt
+      : undefined
+
+    // One resolver for every provider, mapped or not. It is a superset of the
+    // library's own behaviour, so withholding it from unmapped providers would
+    // leave two resolution paths — the thing this work exists to remove.
+    const resolvedUserInfoUrl = userInfoUrl
     const getUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {
-      const mapping = {
-        sources: identitySourcesFor(provider.claimMapping),
-        idClaim: profileClaimFor(provider.claimMapping, 'id'),
-        emailClaim: profileClaimFor(provider.claimMapping, 'email'),
-        nameClaim: profileClaimFor(provider.claimMapping, 'name'),
-      }
-      // Row first, then request-time discovery — never a URL captured at
-      // auth-instance build, which can miss userinfo after a discovery outage.
-      const resolveUserInfoUrl = async (): Promise<string | undefined> => {
-        if (rowUserInfoUrl) return rowUserInfoUrl
-        if (!mapping.sources.includes('userinfo')) return undefined
-        if (!discoveryUrl || !discovery) return undefined
-        const doc = await discovery(discoveryUrl)
-        return typeof doc?.userinfo_endpoint === 'string' ? doc.userinfo_endpoint : undefined
-      }
       const result = await resolveIdentity({
         tokens,
-        fetchUserInfo: async () => {
-          const url = await resolveUserInfoUrl()
-          return url && tokens.accessToken && fetchUserInfo
-            ? await fetchUserInfo(url, tokens.accessToken)
-            : null
-        },
-        mapping,
+        fetchUserInfo: async () =>
+          resolvedUserInfoUrl && tokens.accessToken && fetchUserInfo
+            ? await fetchUserInfo(resolvedUserInfoUrl, tokens.accessToken)
+            : null,
       })
       if (!result.ok) return null
-      const { id, email, name, emailVerified, claims } = result.identity
+      const { id, email, name, emailVerified, claims, warnings } = result.identity
+      // Phase one of observe-then-enforce: the discrepancy is recorded, not
+      // acted on, so the real rate is known before a release starts refusing
+      // sign-ins over it. `onWarning` is injected for the same reason the
+      // fetches are — this module stays free of DB and audit imports.
+      if (warnings?.length && onResolutionWarning) {
+        onResolutionWarning(provider.registrationId, warnings)
+      }
+      // Hand the freshly-validated claims to role provisioning, which would
+      // otherwise re-read the stored ID token — and find nothing for a provider
+      // that resolves identity from userinfo or an access token.
       onResolved?.(provider.registrationId, id, claims)
 
+      // Gap-fill runs LAST, after every real source has been tried, so it can
+      // never shadow something the provider actually sent.
+      //
+      // A synthesized name needs no opt-in: it only ever rescues a sign-in that
+      // would fail outright, and a display name creates nothing irreversible.
+      // A minted address does, so it stays behind `allowMissingEmail`, which is
+      // off unless an admin turned it on.
       const resolvedName = name ?? synthesizeName(claims, id)
       let resolvedEmail = email
-      let minted = false
       if (!resolvedEmail && allowsMissingEmail(provider.claimMapping) && placeholderEmailFor) {
         resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
-        minted = true
       }
-      const picture = claims.picture
-      const image = typeof picture === 'string' && picture.length > 0 ? picture : undefined
-      const locale = typeof claims.locale === 'string' && claims.locale.length > 0 ? claims.locale : undefined
 
-      // Only identity columns plus locale (mapProfileToUser reads it). Extra
-      // claims stay on the stash — spreading them here would write JWT keys
-      // onto the user row (isAnonymous, twoFactorEnabled, …).
+      // Raw claims first, mapped fields last: the mapped values are the
+      // resolved answer and must not be shadowed by a same-named raw claim.
       return {
+        ...claims,
         id,
-        emailVerified: minted ? false : emailVerified,
+        emailVerified,
         ...(resolvedEmail ? { email: resolvedEmail } : {}),
         ...(resolvedName ? { name: resolvedName } : {}),
-        ...(image ? { image } : {}),
-        ...(locale ? { locale } : {}),
       }
     }
 

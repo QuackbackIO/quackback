@@ -4,12 +4,14 @@
  * codes (the SSO break-glass) nested at the bottom of the same card.
  *
  * Each row surfaces the domain→visibility rule as an enforced-domain badge —
- * the same label the end user meets at login. Editing a row (or adding one)
- * opens `<ProviderEditor>`, which holds the connection / domains / mapping /
- * test sections. When the custom-OIDC tier is off, the provider list is
- * replaced by an upgrade prompt but the recovery codes stay.
+ * the same label the end user meets at login. Adding or configuring a provider
+ * leaves this page: /sso/new is the short create form and /sso/:id is the
+ * provider's own page (connection, sign-in, accounts, claim mapping, removal).
+ * When the custom-OIDC tier is off, the provider list is replaced by an
+ * upgrade prompt but the recovery codes stay.
  */
 import { useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
@@ -19,7 +21,6 @@ import {
   PlusIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/solid'
-import type { IdentityProviderId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { IdpLogo } from '@/components/icons/idp-provider-icons'
@@ -29,9 +30,8 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { upsertIdentityProviderFn } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
-import { SsoTestSignInProvider } from '../sso/use-sso-test-sign-in'
 import { RecoveryCodesSection } from '../sso/recovery-codes-section'
-import { ProviderEditor } from './provider-editor'
+import { isOnlyWorkingMethod } from './provider-shared'
 
 export function IdentityProvidersSection({
   tierEnabled,
@@ -45,24 +45,17 @@ export function IdentityProvidersSection({
   const providersQuery = useSuspenseQuery(settingsQueries.identityProviders())
   const providers = providersQuery.data ?? []
 
-  const [editing, setEditing] = useState<
-    { mode: 'new' } | { mode: 'edit'; id: IdentityProviderId } | null
-  >(null)
-  const editingProvider =
-    editing?.mode === 'edit' ? (providers.find((p) => p.id === editing.id) ?? null) : null
-
-  // The SSO card renders the same whether or not the tier is on — only the
-  // action button and body differ (handled inline). Defined once so both
-  // paths render an identical card + nested recovery codes.
-  const ssoCard = (
+  return (
     <SettingsCard
       title="Single sign-on (OIDC)"
       description="Okta, Auth0, Microsoft Entra, Keycloak, or any OpenID Connect IdP."
       action={
         tierEnabled ? (
-          <Button type="button" size="sm" onClick={() => setEditing({ mode: 'new' })}>
-            <PlusIcon className="mr-1 h-3.5 w-3.5" />
-            Add provider
+          <Button type="button" size="sm" asChild>
+            <Link to="/admin/settings/security/sso/new">
+              <PlusIcon className="mr-1 h-3.5 w-3.5" />
+              Add provider
+            </Link>
           </Button>
         ) : undefined
       }
@@ -96,7 +89,6 @@ export function IdentityProvidersSection({
               key={provider.id}
               provider={provider}
               enabledMethodCount={enabledMethodCount}
-              onEdit={() => setEditing({ mode: 'edit', id: provider.id })}
             />
           ))}
         </ul>
@@ -109,49 +101,14 @@ export function IdentityProvidersSection({
       <RecoveryCodesSection />
     </SettingsCard>
   )
-
-  // The SSO test flow (popup + a global postMessage listener) is only
-  // reachable with the tier on (Add provider / Edit), so skip mounting its
-  // provider — and its idle listener — for tier-off accounts.
-  if (!tierEnabled) return ssoCard
-
-  return (
-    <SsoTestSignInProvider>
-      {ssoCard}
-      {editing && (
-        <ProviderEditor
-          key={editing.mode === 'edit' ? editing.id : 'new'}
-          provider={editingProvider}
-          open
-          isOnlyMethod={isOnlyWorkingMethod(editingProvider, enabledMethodCount)}
-          onOpenChange={(o) => {
-            if (!o) setEditing(null)
-          }}
-          onSaved={(saved) => setEditing({ mode: 'edit', id: saved.id })}
-        />
-      )}
-    </SsoTestSignInProvider>
-  )
-}
-
-/** This provider is the last thing standing between the workspace and a
- *  no-auth lockout when it's the sole enabled + configured sign-in method;
- *  turning it off must be blocked. */
-function isOnlyWorkingMethod(
-  provider: { enabled: boolean; configured: boolean } | null | undefined,
-  enabledMethodCount: number
-): boolean {
-  return enabledMethodCount === 1 && !!provider?.enabled && !!provider?.configured
 }
 
 function ProviderRow({
   provider,
   enabledMethodCount,
-  onEdit,
 }: {
   provider: IdentityProvider
   enabledMethodCount: number
-  onEdit: () => void
 }) {
   const queryClient = useQueryClient()
   const upsert = useServerFn(upsertIdentityProviderFn)
@@ -231,14 +188,14 @@ function ProviderRow({
             aria-label={`Enable ${provider.label}`}
           />
         </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={onEdit}
-          aria-label={`Edit ${provider.label}`}
-        >
-          Edit
+        <Button type="button" size="sm" variant="outline" asChild>
+          <Link
+            to="/admin/settings/security/sso/$providerId"
+            params={{ providerId: provider.id }}
+            aria-label={`Configure ${provider.label}`}
+          >
+            Configure
+          </Link>
         </Button>
       </div>
     </li>

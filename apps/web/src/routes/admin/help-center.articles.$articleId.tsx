@@ -2,7 +2,7 @@ import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { HelpCenterArticleEditor } from '@/components/admin/help-center/help-center-article-editor'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { KbArticleId } from '@quackback/ids'
 
 export const Route = createFileRoute('/admin/help-center/articles/$articleId')({
   loader: async ({ context, params }) => {
@@ -12,9 +12,7 @@ export const Route = createFileRoute('/admin/help-center/articles/$articleId')({
     // before the article fetch resolves.
     await Promise.all([
       queryClient.ensureQueryData(helpCenterQueries.categories()),
-      queryClient.ensureQueryData(
-        helpCenterQueries.articleDetail(params.articleId as HelpCenterArticleId)
-      ),
+      queryClient.ensureQueryData(helpCenterQueries.articleDetail(params.articleId as KbArticleId)),
     ])
     return {}
   },
@@ -30,5 +28,5 @@ function HelpCenterArticleEditorPage() {
     return <Navigate to="/admin/feedback" />
   }
 
-  return <HelpCenterArticleEditor articleId={articleId as HelpCenterArticleId} />
+  return <HelpCenterArticleEditor articleId={articleId as KbArticleId} />
 }

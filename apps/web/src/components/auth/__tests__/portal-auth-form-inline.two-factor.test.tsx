@@ -52,6 +52,8 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
   }),
   openAuthPopup: vi.fn(),
   postAuthSuccess: vi.fn(),
+  postAuthError: vi.fn(),
+  useAuthBroadcast: vi.fn(),
 }))
 
 vi.mock('@/components/ui/input-otp', () => ({

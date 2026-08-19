@@ -36,3 +36,15 @@ export function escapeHtml(text: string): string {
 export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown error'
 }
+
+/**
+ * Shape an issue-tracker error: a user-facing message plus the optional
+ * `retryable`/`status` fields the create hooks read back off it (see
+ * IssueTrackerCapability.create).
+ */
+export function issueError(
+  message: string,
+  opts: { retryable?: boolean; status?: number } = {}
+): Error {
+  return Object.assign(new Error(message), opts)
+}

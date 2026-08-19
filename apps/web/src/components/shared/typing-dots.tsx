@@ -1,4 +1,4 @@
-/** Three bouncing dots for a chat "is typing…" indicator. */
+/** Three bouncing dots for a conversation "is typing…" indicator. */
 export function TypingDots() {
   return (
     <span className="inline-flex items-center gap-0.5" aria-hidden>

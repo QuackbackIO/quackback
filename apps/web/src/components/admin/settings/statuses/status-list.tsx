@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { ColorPickerGrid, ColorHexInput, randomColor } from '@/components/shared/color-picker'
 import {
   Dialog,
   DialogContent,
@@ -75,134 +76,6 @@ const CATEGORY_INFO: Record<StatusCategory, { label: string; description: string
 }
 
 const CATEGORY_ORDER: StatusCategory[] = ['active', 'complete', 'closed']
-
-const PRESET_COLORS = [
-  // Row 1 - Vibrant
-  '#ef4444', // Red
-  '#f97316', // Orange
-  '#eab308', // Yellow
-  '#22c55e', // Green
-  '#14b8a6', // Teal
-  '#3b82f6', // Blue
-  '#8b5cf6', // Violet
-  '#ec4899', // Pink
-  // Row 2 - Muted
-  '#f87171', // Light Red
-  '#fb923c', // Light Orange
-  '#facc15', // Light Yellow
-  '#4ade80', // Light Green
-  '#2dd4bf', // Light Teal
-  '#60a5fa', // Light Blue
-  '#a78bfa', // Light Violet
-  '#f472b6', // Light Pink
-  // Row 3 - Dark
-  '#b91c1c', // Dark Red
-  '#c2410c', // Dark Orange
-  '#a16207', // Dark Yellow
-  '#15803d', // Dark Green
-  '#0f766e', // Dark Teal
-  '#1d4ed8', // Dark Blue
-  '#6d28d9', // Dark Violet
-  '#be185d', // Dark Pink
-  // Row 4 - Neutrals
-  '#0f172a', // Slate 900
-  '#334155', // Slate 700
-  '#64748b', // Slate 500
-  '#94a3b8', // Slate 400
-  '#475569', // Slate 600
-  '#1e293b', // Slate 800
-  '#78716c', // Stone 500
-  '#a8a29e', // Stone 400
-]
-
-function randomColor(): string {
-  return (
-    '#' +
-    Math.floor(Math.random() * 0xffffff)
-      .toString(16)
-      .padStart(6, '0')
-  )
-}
-
-interface ColorPickerGridProps {
-  selectedColor: string
-  onColorChange: (color: string) => void
-}
-
-function ColorPickerGrid({
-  selectedColor,
-  onColorChange,
-}: ColorPickerGridProps): React.ReactElement {
-  return (
-    <div className="grid grid-cols-8 gap-1.5">
-      {PRESET_COLORS.map((c) => (
-        <button
-          key={c}
-          type="button"
-          className={cn(
-            'h-6 w-6 rounded-full border-2 transition-colors',
-            selectedColor.toLowerCase() === c.toLowerCase()
-              ? 'border-foreground'
-              : 'border-transparent'
-          )}
-          style={{ backgroundColor: c }}
-          onClick={() => onColorChange(c)}
-        />
-      ))}
-    </div>
-  )
-}
-
-function ColorHexInput({
-  color,
-  onColorChange,
-}: {
-  color: string
-  onColorChange: (color: string) => void
-}) {
-  const [hexInput, setHexInput] = useState(color)
-
-  // Sync when color changes externally (preset click)
-  useEffect(() => {
-    setHexInput(color)
-  }, [color])
-
-  function handleHexChange(value: string) {
-    setHexInput(value)
-    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-      onColorChange(value)
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className="h-6 w-6 rounded-md border border-border shrink-0"
-        style={{ backgroundColor: color }}
-      />
-      <Input
-        value={hexInput}
-        onChange={(e) => handleHexChange(e.target.value)}
-        className="font-mono text-xs h-7"
-        placeholder="#000000"
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        onClick={() => {
-          const c = randomColor()
-          setHexInput(c)
-          onColorChange(c)
-        }}
-        title="Random color"
-      >
-        <ArrowPathIcon className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  )
-}
 
 export function StatusList({ initialStatuses }: StatusListProps) {
   const router = useRouter()

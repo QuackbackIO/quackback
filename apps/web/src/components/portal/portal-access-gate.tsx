@@ -17,6 +17,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { toast } from 'sonner'
+import { escapeInlineStyle } from '@/lib/shared/safe-inline-content'
 import {
   ArrowPathIcon,
   ChevronUpIcon,
@@ -264,7 +265,7 @@ function DecorativeBackdrop({
                       {post.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="inline-flex items-center rounded bg-muted px-1.5 text-[10px] font-medium text-muted-foreground"
+                          className="inline-flex items-center rounded bg-muted px-1.5 text-xs font-medium text-muted-foreground"
                         >
                           {tag}
                         </span>
@@ -306,7 +307,7 @@ function DecorativeBackdrop({
                       <ChatBubbleLeftIcon className="h-4 w-4" />
                     )}
                     <span className="truncate">{board.name}</span>
-                    <span className="ms-auto text-[10px] font-semibold tabular-nums">
+                    <span className="ms-auto text-xs font-semibold tabular-nums">
                       {board.count}
                     </span>
                   </div>
@@ -546,8 +547,10 @@ export function PortalAccessGate({
     <PortalIntlProvider locale={locale ?? DEFAULT_LOCALE}>
       <div className="relative min-h-screen">
         {/* Theme/custom CSS injected here too so the backdrop looks branded */}
-        {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-        {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+        {themeStyles && (
+          <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
+        )}
+        {customCss && <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />}
 
         {/* Blurred decorative backdrop — a fake board, no real content */}
         <div

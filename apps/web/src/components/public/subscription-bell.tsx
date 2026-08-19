@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
+import { toast } from 'sonner'
 import { BellIcon, BellAlertIcon, CheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import {
@@ -97,15 +98,19 @@ export function SubscriptionBell({
 
         // Sync with server truth
         await fetchStatus()
-      } catch (error) {
-        // Revert on error
-        console.error('Failed to update subscription:', error)
+      } catch {
         setStatus(previousStatus)
+        toast.error(
+          intl.formatMessage({
+            id: 'portal.subscriptionBell.error',
+            defaultMessage: "Couldn't update notifications. Try again.",
+          })
+        )
       } finally {
         setLoading(false)
       }
     },
-    [postId, disabled, onAuthRequired, status]
+    [postId, disabled, onAuthRequired, status, intl]
   )
 
   const level = status.level

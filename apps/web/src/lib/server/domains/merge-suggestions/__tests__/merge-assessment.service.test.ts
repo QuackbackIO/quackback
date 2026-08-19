@@ -6,21 +6,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PostId } from '@quackback/ids'
 import type { MergeCandidate } from '../merge-search.service'
 
-// --- Mock OpenAI ---
-const mockCreate = vi.fn()
-vi.mock('@/lib/server/domains/ai/config', () => ({
-  getOpenAI: vi.fn(() => ({
-    chat: {
-      completions: { create: (...args: unknown[]) => mockCreate(...args) },
-    },
-  })),
-  stripCodeFences: vi.fn((text: string) => text),
+const mockConfig = vi.hoisted(() => ({
+  openaiApiKey: 'test-key' as string | undefined,
+  openaiBaseUrl: 'http://localhost:9999/v1' as string | undefined,
+}))
+vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
+
+const mockChat = vi.fn()
+vi.mock('@tanstack/ai', () => ({
+  chat: (...args: unknown[]) => mockChat(...args),
+}))
+vi.mock('@tanstack/ai-openai/compatible', () => ({
+  openaiCompatibleText: (...args: unknown[]) => ({ kind: 'text', args }),
 }))
 
-vi.mock('@/lib/server/domains/ai/retry', () => ({
-  withRetry: vi.fn((fn: () => Promise<unknown>) =>
-    fn().then((result: unknown) => ({ result, retryCount: 0 }))
-  ),
+vi.mock('@/lib/server/domains/ai/config', () => ({
+  isAiClientConfigured: (apiKey?: string, baseUrl?: string) => Boolean(apiKey) && Boolean(baseUrl),
+  structuredOutputProviderOptions: () => ({}),
 }))
 
 // Tier-limit gate runs before the LLM call. Stub the resolver so it
@@ -48,6 +50,8 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
 describe('merge-assessment.service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockConfig.openaiApiKey = 'test-key'
+    mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   })
 
   const sourcePost = {
@@ -83,25 +87,21 @@ describe('merge-assessment.service', () => {
 
   describe('assessMergeCandidates', () => {
     it('should return confirmed duplicates above confidence threshold', async () => {
-      mockCreate.mockResolvedValueOnce({
-        choices: [
+      // With outputSchema, chat() always resolves the { results: [...] }
+      // object shape — the schema forces the provider to emit it.
+      mockChat.mockResolvedValueOnce({
+        results: [
           {
-            message: {
-              content: JSON.stringify([
-                {
-                  candidatePostId: 'post_cand1',
-                  isDuplicate: true,
-                  confidence: 0.9,
-                  reasoning: 'Both request dark mode',
-                },
-                {
-                  candidatePostId: 'post_cand2',
-                  isDuplicate: true,
-                  confidence: 0.4,
-                  reasoning: 'Related but different',
-                },
-              ]),
-            },
+            candidatePostId: 'post_cand1',
+            isDuplicate: true,
+            confidence: 0.9,
+            reasoning: 'Both request dark mode',
+          },
+          {
+            candidatePostId: 'post_cand2',
+            isDuplicate: true,
+            confidence: 0.4,
+            reasoning: 'Related but different',
           },
         ],
       })
@@ -115,22 +115,14 @@ describe('merge-assessment.service', () => {
       expect(results[0].reasoning).toBe('Both request dark mode')
     })
 
-    it('should handle { results: [...] } JSON shape', async () => {
-      mockCreate.mockResolvedValueOnce({
-        choices: [
+    it('should handle the { results: [...] } JSON shape', async () => {
+      mockChat.mockResolvedValueOnce({
+        results: [
           {
-            message: {
-              content: JSON.stringify({
-                results: [
-                  {
-                    candidatePostId: 'post_cand1',
-                    isDuplicate: true,
-                    confidence: 0.8,
-                    reasoning: 'Same feature request',
-                  },
-                ],
-              }),
-            },
+            candidatePostId: 'post_cand1',
+            isDuplicate: true,
+            confidence: 0.8,
+            reasoning: 'Same feature request',
           },
         ],
       })
@@ -143,19 +135,13 @@ describe('merge-assessment.service', () => {
     })
 
     it('should filter out confidence below 0.75 threshold', async () => {
-      mockCreate.mockResolvedValueOnce({
-        choices: [
+      mockChat.mockResolvedValueOnce({
+        results: [
           {
-            message: {
-              content: JSON.stringify([
-                {
-                  candidatePostId: 'post_cand1',
-                  isDuplicate: true,
-                  confidence: 0.7,
-                  reasoning: 'Somewhat related',
-                },
-              ]),
-            },
+            candidatePostId: 'post_cand1',
+            isDuplicate: true,
+            confidence: 0.7,
+            reasoning: 'Somewhat related',
           },
         ],
       })
@@ -167,19 +153,13 @@ describe('merge-assessment.service', () => {
     })
 
     it('should filter out isDuplicate === false', async () => {
-      mockCreate.mockResolvedValueOnce({
-        choices: [
+      mockChat.mockResolvedValueOnce({
+        results: [
           {
-            message: {
-              content: JSON.stringify([
-                {
-                  candidatePostId: 'post_cand1',
-                  isDuplicate: false,
-                  confidence: 0.9,
-                  reasoning: 'Different requests',
-                },
-              ]),
-            },
+            candidatePostId: 'post_cand1',
+            isDuplicate: false,
+            confidence: 0.9,
+            reasoning: 'Different requests',
           },
         ],
       })
@@ -195,13 +175,27 @@ describe('merge-assessment.service', () => {
       const results = await assessMergeCandidates(sourcePost, [], 'test-model')
 
       expect(results).toHaveLength(0)
-      expect(mockCreate).not.toHaveBeenCalled()
+      expect(mockChat).not.toHaveBeenCalled()
     })
 
-    it('should handle invalid JSON response gracefully', async () => {
-      mockCreate.mockResolvedValueOnce({
-        choices: [{ message: { content: 'not json at all' } }],
-      })
+    it('should return empty when AI is unconfigured', async () => {
+      mockConfig.openaiApiKey = undefined
+      const { assessMergeCandidates } = await import('../merge-assessment.service')
+      const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
+
+      expect(results).toHaveLength(0)
+      expect(mockChat).not.toHaveBeenCalled()
+    })
+
+    it('should handle a malformed/unparseable model response gracefully', async () => {
+      // chat() throws a tagged Error when the response isn't valid JSON or
+      // doesn't match outputSchema — the structured-output analogue of the
+      // old JSON.parse-failure branch. That maps to [], not a throw.
+      mockChat.mockRejectedValueOnce(
+        Object.assign(new Error('response did not match schema'), {
+          code: 'structured-output-parse-failed',
+        })
+      )
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
       const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
@@ -209,15 +203,29 @@ describe('merge-assessment.service', () => {
       expect(results).toHaveLength(0)
     })
 
-    it('should handle empty LLM response', async () => {
-      mockCreate.mockResolvedValueOnce({
-        choices: [{ message: { content: null } }],
-      })
+    it('should handle an empty LLM response', async () => {
+      mockChat.mockRejectedValueOnce(
+        Object.assign(new Error('missing structured result'), {
+          code: 'structured-output-missing-result',
+        })
+      )
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
       const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
 
       expect(results).toHaveLength(0)
+    })
+
+    it('should let a real transport/network error propagate (not swallow it as [])', async () => {
+      // Unlike a parse/validation failure, this error carries no `.code` —
+      // it's indistinguishable from any other network failure, so the old
+      // uncaught-`withRetry`-failure behavior is preserved: it throws.
+      mockChat.mockRejectedValueOnce(new Error('fetch failed: ECONNREFUSED'))
+
+      const { assessMergeCandidates } = await import('../merge-assessment.service')
+      await expect(assessMergeCandidates(sourcePost, candidates, 'test-model')).rejects.toThrow(
+        'fetch failed: ECONNREFUSED'
+      )
     })
   })
 

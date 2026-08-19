@@ -27,7 +27,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex items-center justify-between px-3 py-2.5">
         <h3 className="font-semibold text-sm">Notifications</h3>
         {unreadCount > 0 && (
           <Button
@@ -53,8 +53,8 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
           <p className="text-sm text-muted-foreground">Failed to load</p>
         </div>
       ) : hasNotifications ? (
-        <div className="max-h-80 overflow-hidden">
-          <ScrollArea className="max-h-80">
+        <div className="max-h-72 overflow-hidden">
+          <ScrollArea className="max-h-72">
             <div className="divide-y divide-border/40">
               {notifications.map((notification) => (
                 <NotificationItem
@@ -76,7 +76,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
 
       {/* Footer */}
       {hasNotifications && (
-        <div className="border-t border-border/40 px-4 py-2.5">
+        <div className="border-t border-border/40 px-3 py-2">
           <Link
             to={isAdminContext ? '/admin/notifications' : '/notifications'}
             onClick={onClose}

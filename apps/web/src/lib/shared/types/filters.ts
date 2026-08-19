@@ -25,7 +25,7 @@ export interface InboxFilters {
   updatedBefore?: string
   /** Only show posts with pending duplicate suggestions */
   hasDuplicates?: boolean
-  sort?: 'newest' | 'oldest' | 'votes'
+  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   showDeleted?: boolean
 }
 
@@ -46,6 +46,17 @@ export interface PublicFeedbackFilters {
   minVotes?: number
   dateFrom?: string
   responded?: RespondedFilter
+  /**
+   * Team-only: owner principal id, or the literal 'unassigned' for posts with
+   * no owner. Applied server-side only for callers holding post.view_private;
+   * silently ignored otherwise.
+   */
+  owner?: string
+  /**
+   * Team-only: filter to posts authored by users in any of these segments.
+   * Applied server-side only for post.view_private holders.
+   */
+  segmentIds?: string[]
 }
 
 /**
@@ -81,6 +92,8 @@ export interface UsersFilters {
   search?: string
   /** Segment selection from sidebar (multi-select, like statuses for posts) */
   segmentIds?: string[]
+  /** User tag selection (multi-select, OR logic) */
+  tagIds?: string[]
   verified?: boolean
   dateFrom?: string
   dateTo?: string
@@ -92,12 +105,16 @@ export interface UsersFilters {
   commentCount?: string
   /** Custom attribute filters: "key:op:value,key2:op:value2" */
   customAttrs?: string
-  /** Include anonymous users (principal.type='anonymous'). Default: false. */
-  includeAnonymous?: boolean
+  /** Companies-tab filters, same encoding (reserved keys: plan, mrr). */
+  companyAttrs?: string
+  /** Lifecycle view: identified users (default), engaged anonymous leads, or
+   *  the companies directory. */
+  lifecycle?: 'users' | 'leads' | 'companies'
   sort?:
     | 'newest'
     | 'oldest'
     | 'most_active'
+    | 'last_active'
     | 'most_posts'
     | 'most_comments'
     | 'most_votes'

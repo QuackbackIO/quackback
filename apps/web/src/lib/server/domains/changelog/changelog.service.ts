@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- notifyChangelogPublished builds the full email
+   body payload alongside the existing claim/release writes */
 /**
  * Changelog Service - Core CRUD operations
  *
@@ -25,14 +27,17 @@ import {
 } from '@/lib/server/db'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
+import { changelogBodyHtml } from './changelog-email-body'
 import {
   buildEventActor,
   dispatchChangelogPublished,
   type EventActor,
 } from '@/lib/server/events/dispatch'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
+import { setEntryCategories, getCategoriesForEntries } from './changelog-category.service'
+import { embedChangelogEntryOnPublish } from './changelog-embedding.service'
 import { logger } from '@/lib/server/logger'
 
 import { isSameDay } from 'date-fns'
@@ -107,11 +112,13 @@ export async function createChangelog(
       title,
       // Store the markdown projection of the canonical contentJson so every
       // consumer of the `content` column (webhooks, notifications) sees images.
-      content: contentJsonToMarkdown(contentJson, content),
+      content: projectContentJsonToMarkdown(contentJson, content),
       contentJson,
       principalId: author.principalId,
       publishedAt,
       ...(displayDate != null && { displayDate }),
+      ...(input.featuredImageUrl != null && { featuredImageUrl: input.featuredImageUrl }),
+      ...(input.segmentIds != null && { segmentIds: input.segmentIds }),
     })
     .returning()
 
@@ -120,10 +127,18 @@ export async function createChangelog(
     await linkPostsToChangelog(entry.id, input.linkedPostIds)
   }
 
-  // Dispatch event or schedule delayed job based on publish state
+  // Link categories if provided
+  if (input.categoryIds && input.categoryIds.length > 0) {
+    await setEntryCategories(entry.id, input.categoryIds)
+  }
+
+  // Dispatch event or schedule delayed job based on publish state. `notify`
+  // defaults true; false stamps notifiedAt without dispatching (see
+  // notifyChangelogPublished).
+  const notify = input.notify ?? true
   const actor = buildEventActor({ principalId: author.principalId })
   if (input.publishState.type === 'published') {
-    notifyChangelogPublished(entry.id, actor).catch((err) =>
+    notifyChangelogPublished(entry.id, actor, notify).catch((err) =>
       log.error({ err }, 'failed to dispatch changelog published event')
     )
   } else if (input.publishState.type === 'scheduled' && publishedAt) {
@@ -133,7 +148,7 @@ export async function createChangelog(
         jobId: `changelog-publish--${entry.id}`,
         handler: '__changelog_publish__',
         delayMs,
-        payload: { changelogId: entry.id, principalId: author.principalId },
+        payload: { changelogId: entry.id, principalId: author.principalId, notify },
         actor,
       }).catch((err) => log.error({ err }, 'failed to schedule changelog publish job'))
     }
@@ -189,28 +204,35 @@ export async function updateChangelog(
       principalId: existing.principalId ?? undefined,
     })
     updateData.contentJson = contentJson
-    // Every content edit carries `input.content` (the API accepts only markdown;
-    // the editor emits markdown alongside contentJson), so the fallback reflects
-    // the new doc. `existing.content` is only a defensive default for a
-    // contentJson-only edit, which no caller makes.
-    updateData.content = contentJsonToMarkdown(
+    updateData.content = projectContentJsonToMarkdown(
       contentJson,
       (input.content ?? existing.content).trim()
     )
   }
 
   if (input.displayDate !== undefined) {
-    validateDisplayDate(existing.publishedAt, input.displayDate)
     const publishedAtRef =
       input.publishState !== undefined
         ? getPublishedAtFromState(input.publishState)
         : existing.publishedAt
+    validateDisplayDate(publishedAtRef, input.displayDate)
     updateData.displayDate = normalizeDisplayDate(input.displayDate, publishedAtRef)
   }
 
   // Handle publish state change
   if (input.publishState !== undefined) {
     updateData.publishedAt = getPublishedAtFromState(input.publishState)
+  }
+
+  // featuredImageUrl: undefined leaves it, null clears it, a string replaces it.
+  if (input.featuredImageUrl !== undefined) {
+    updateData.featuredImageUrl = input.featuredImageUrl
+  }
+
+  // segmentIds: undefined leaves the targeting untouched; a provided list
+  // (including []) replaces it wholesale.
+  if (input.segmentIds !== undefined) {
+    updateData.segmentIds = input.segmentIds
   }
 
   // Update the entry
@@ -227,18 +249,24 @@ export async function updateChangelog(
     }
   }
 
+  // Update linked categories if provided (full replace)
+  if (input.categoryIds !== undefined) {
+    await setEntryCategories(id, input.categoryIds)
+  }
+
   // Handle event dispatch / scheduling when publish state changes
   if (input.publishState !== undefined) {
     const jobId = `changelog-publish--${id}`
     const actor = existing.principalId
       ? buildEventActor({ principalId: existing.principalId })
       : { type: 'service' as const, displayName: 'system' }
+    const notify = input.notify ?? true
 
     if (input.publishState.type === 'published') {
       // Cancel any pending scheduled job, then announce. The helper's atomic
       // claim makes this a no-op if the entry was already announced.
       cancelScheduledDispatch(jobId).catch(() => {})
-      notifyChangelogPublished(id, actor).catch((err) =>
+      notifyChangelogPublished(id, actor, notify).catch((err) =>
         log.error({ err }, 'failed to dispatch changelog published event')
       )
     } else if (input.publishState.type === 'scheduled') {
@@ -250,7 +278,7 @@ export async function updateChangelog(
             jobId,
             handler: '__changelog_publish__',
             delayMs,
-            payload: { changelogId: id, principalId: existing.principalId },
+            payload: { changelogId: id, principalId: existing.principalId, notify },
             actor,
           }).catch((err) => log.error({ err }, 'failed to schedule changelog publish job'))
         }
@@ -258,6 +286,17 @@ export async function updateChangelog(
     } else if (input.publishState.type === 'draft') {
       cancelScheduledDispatch(jobId).catch(() => {})
     }
+  }
+
+  // Re-embed on a content/title edit (Quinn Phase 4). The publish-transition
+  // paths above already re-embed via `notifyChangelogPublished`; this covers an
+  // edit to an ALREADY-published entry whose `publishState` didn't change (that
+  // helper isn't called then). The embed service no-ops for drafts/scheduled
+  // entries, so an unpublished edit stays unembedded. Fire-and-forget.
+  const contentChanged =
+    input.contentJson !== undefined || input.content !== undefined || input.title !== undefined
+  if (contentChanged && input.publishState === undefined) {
+    void embedChangelogEntryOnPublish(id)
   }
 
   return getChangelogById(id)
@@ -361,6 +400,14 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     })
   )
 
+  // Categories (labels) attached to this entry.
+  const categoriesMap = await getCategoriesForEntries([id])
+  const categories = (categoriesMap.get(id) ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    color: c.color,
+  }))
+
   return {
     id: entry.id,
     title: entry.title,
@@ -369,10 +416,14 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     principalId: entry.principalId,
     publishedAt: entry.publishedAt,
     displayDate: entry.displayDate,
+    featuredImageUrl: entry.featuredImageUrl,
+    segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    viewCount: entry.viewCount,
     author,
     linkedPosts,
+    categories,
     status: computeStatus(entry.publishedAt),
   }
 }
@@ -406,11 +457,19 @@ function liveUnnotifiedConditions(now: Date) {
  * concurrent publish paths and the reconciler never double-notify. If the
  * dispatch fails the claim is released so the reconciler retries later.
  *
- * Returns true when this call sent the announcement, false otherwise.
+ * `notify=false` (the publish-time "Send email to subscribers" checkbox,
+ * unchecked) still performs the atomic claim — so the entry is marked
+ * announced and the reconciler leaves it alone forever — but skips the
+ * actual dispatch. This preserves the idempotence invariant: an entry is
+ * claimed at most once, dispatched or not.
+ *
+ * Returns true when this call claimed the entry (dispatched or silently
+ * claimed), false when another caller had already claimed it.
  */
 export async function notifyChangelogPublished(
   id: ChangelogId,
-  actor: EventActor
+  actor: EventActor,
+  notify: boolean = true
 ): Promise<boolean> {
   const now = new Date()
   const [claimed] = await db
@@ -420,6 +479,16 @@ export async function notifyChangelogPublished(
     .returning()
 
   if (!claimed) return false
+
+  // Embed the just-published entry for Quinn grounding (Quinn Phase 4).
+  // Fire-and-forget + best-effort (the service swallows its own errors), off
+  // the exact publish moment: this helper is the single funnel every publish
+  // path (create, update-to-published, scheduled job, reconciler) reaches, so
+  // one call here covers them all. Independent of `notify` — the entry is now
+  // public knowledge whether or not subscribers were emailed.
+  void embedChangelogEntryOnPublish(id)
+
+  if (!notify) return true
 
   try {
     const linkedPosts = await db.query.changelogEntryPosts.findMany({
@@ -434,6 +503,7 @@ export async function notifyChangelogPublished(
         id: claimed.id,
         title: claimed.title,
         contentPreview: claimed.content.slice(0, 200),
+        contentHtml: changelogBodyHtml(claimed.content, claimed.contentJson),
         publishedAt: claimed.publishedAt!,
         linkedPostCount: linkedPosts.length,
       },

@@ -1,5 +1,6 @@
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { authClient } from '@/lib/client/auth-client'
+import { stashSsoAttempt } from '@/lib/client/sso-attempt-stash'
 
 export type OAuthProviderEntry = {
   id: string
@@ -10,21 +11,34 @@ export type OAuthProviderEntry = {
 /**
  * Get the OAuth redirect URL for a provider.
  * Handles routing between signIn.oauth2 (generic) and signIn.social (built-in).
+ *
+ * `errorCallbackURL` is always set to the same popup landing: without it,
+ * Better-Auth bounces callback failures to its own bare `/api/auth/error`
+ * page, stranding the user outside our UI entirely. The attempt is stashed
+ * so an `account_not_linked` failure can offer link-conflict recovery with
+ * the provider context intact.
  */
 export async function getOAuthRedirectUrl(
   provider: OAuthProviderEntry,
   callbackURL: string
 ): Promise<string | null> {
+  stashSsoAttempt({
+    providerId: provider.id,
+    providerType: provider.type === 'generic-oauth' ? 'oidc' : 'social',
+    callbackUrl: callbackURL,
+  })
   const result =
     provider.type === 'generic-oauth'
       ? await authClient.signIn.oauth2({
           providerId: provider.id,
           callbackURL,
+          errorCallbackURL: callbackURL,
           disableRedirect: true,
         })
       : await authClient.signIn.social({
           provider: provider.id,
           callbackURL,
+          errorCallbackURL: callbackURL,
           disableRedirect: true,
         })
   return result.data?.url ?? null

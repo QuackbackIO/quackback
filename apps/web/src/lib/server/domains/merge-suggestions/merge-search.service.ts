@@ -5,7 +5,7 @@
  * parallel vector + FTS queries, score merging, hybrid threshold filtering.
  */
 
-import { db, posts, and, isNull, isNotNull, ne, desc, sql } from '@/lib/server/db'
+import { db, posts, and, isNull, isNotNull, ne, desc, asc, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import type { PostId } from '@quackback/ids'
 
@@ -102,7 +102,7 @@ export async function findMergeCandidates(
         sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${VECTOR_THRESHOLD}`
       )
     )
-    .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
+    .orderBy(asc(sql`${posts.embedding} <=> ${vectorStr}::vector`))
     .limit(fetchLimit)
 
   const [ftsMatches, vectorMatches] = await Promise.all([ftsPromise, vectorPromise])

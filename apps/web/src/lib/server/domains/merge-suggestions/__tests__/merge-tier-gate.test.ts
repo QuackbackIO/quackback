@@ -9,9 +9,20 @@ vi.mock('@/lib/server/domains/ai/usage-counter', () => ({
   aiTokensThisMonth: vi.fn(),
 }))
 
+vi.mock('@/lib/server/config', () => ({
+  config: { openaiApiKey: undefined, openaiBaseUrl: undefined },
+}))
+
 vi.mock('@/lib/server/domains/ai/config', () => ({
-  getOpenAI: vi.fn(() => null),
-  stripCodeFences: vi.fn((s: string) => s),
+  isAiClientConfigured: vi.fn(() => false),
+  structuredOutputProviderOptions: vi.fn(() => ({})),
+}))
+
+vi.mock('@tanstack/ai', () => ({
+  chat: vi.fn(),
+}))
+vi.mock('@tanstack/ai-openai/compatible', () => ({
+  openaiCompatibleText: vi.fn((...args: unknown[]) => ({ kind: 'text', args })),
 }))
 
 import { assessMergeCandidates } from '../merge-assessment.service'

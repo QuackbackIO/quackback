@@ -16,11 +16,6 @@ import type { PostCreatedEvent } from '../types'
 // and Dragonfly are real.
 // ---------------------------------------------------------------------------
 
-const mockGetHookTargets = vi.fn()
-vi.mock('../targets', () => ({
-  getHookTargets: (...args: unknown[]) => mockGetHookTargets(...args),
-}))
-
 const mockHookRun = vi.fn()
 const mockGetHook = vi.fn()
 vi.mock('../registry', () => ({
@@ -32,20 +27,15 @@ vi.mock('@/lib/server/config', () => ({
 }))
 
 // Stub db import so updateWebhookFailureCount doesn't crash
-vi.mock('@/lib/server/db', () => ({
+// Spread the real db module so tables/operators stay current; override only what this suite drives.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     update: vi.fn(() => ({
       set: vi.fn(() => ({
         where: vi.fn().mockResolvedValue(undefined),
       })),
     })),
-  },
-  webhooks: {
-    id: 'id',
-    failureCount: 'failureCount',
-    status: 'status',
-    lastTriggeredAt: 'lastTriggeredAt',
-    lastError: 'lastError',
   },
   eq: vi.fn(),
   sql: vi.fn(),
@@ -63,7 +53,7 @@ vi.mock('../hook-utils', async (importOriginal) => {
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { processEvent, closeQueue } from '../process'
+import { closeQueue, enqueueHookJobsWithIds } from '../process'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,6 +103,25 @@ function makeEvent(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent 
   }
 }
 
+// Post-WO-18 the outbox is the sole delivery path: processEvent only writes the
+// durable outbox, and the RELAY is what enqueues into BullMQ. This integration
+// test covers the real queue → worker → hook pipeline, so it enqueues via the
+// relay's own helper. The jobId here is a simple positional key — the relay's
+// deterministic content-hash jobId + at-least-once re-drain idempotency are the
+// relay's own concern and are covered in relay.test.ts, not here.
+function enqueueViaRelay(
+  event: PostCreatedEvent,
+  targets: Array<{ type: string; target: unknown; config: Record<string, unknown> }>
+): Promise<void> {
+  return enqueueHookJobsWithIds(
+    targets.map((t, i) => ({
+      name: `${event.type}:${t.type}`,
+      data: { hookType: t.type, event, target: t.target, config: t.config },
+      jobId: `${event.id}:${t.type}:${i}`,
+    }))
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -146,12 +155,10 @@ describe('BullMQ Integration (real Dragonfly)', async () => {
 
     // Return a single target
     const event = makeEvent()
-    mockGetHookTargets.mockResolvedValue([
-      { type: 'test-hook', target: { channel: 'C123' }, config: { token: 'tok' } },
-    ])
+    const targets = [{ type: 'test-hook', target: { channel: 'C123' }, config: { token: 'tok' } }]
 
-    // Enqueue
-    await processEvent(event)
+    // Enqueue (via the relay's helper, as the relay would after resolving targets)
+    await enqueueViaRelay(event, targets)
 
     // Wait for the worker to pick it up and call our hook (timeout 5s)
     const result = await Promise.race([
@@ -191,13 +198,13 @@ describe('BullMQ Integration (real Dragonfly)', async () => {
     mockGetHook.mockReturnValue({ run: mockHookRun })
 
     const event = makeEvent({ id: `evt-multi-${Date.now()}` })
-    mockGetHookTargets.mockResolvedValue([
+    const targets = [
       { type: 'test-hook', target: { channel: 'C1' }, config: {} },
       { type: 'test-hook', target: { channel: 'C2' }, config: {} },
       { type: 'test-hook', target: { channel: 'C3' }, config: {} },
-    ])
+    ]
 
-    await processEvent(event)
+    await enqueueViaRelay(event, targets)
 
     await Promise.race([
       allCalled,
@@ -231,9 +238,9 @@ describe('BullMQ Integration (real Dragonfly)', async () => {
     mockGetHook.mockReturnValue({ run: mockHookRun })
 
     const event = makeEvent({ id: `evt-retry-${Date.now()}` })
-    mockGetHookTargets.mockResolvedValue([{ type: 'test-hook', target: {}, config: {} }])
+    const targets = [{ type: 'test-hook', target: {}, config: {} }]
 
-    await processEvent(event)
+    await enqueueViaRelay(event, targets)
 
     // BullMQ retries with exponential backoff (1s, 2s) — total up to ~4s
     await Promise.race([
@@ -261,9 +268,9 @@ describe('BullMQ Integration (real Dragonfly)', async () => {
     mockGetHook.mockReturnValue({ run: mockHookRun })
 
     const event = makeEvent({ id: `evt-perm-fail-${Date.now()}` })
-    mockGetHookTargets.mockResolvedValue([{ type: 'test-hook', target: {}, config: {} }])
+    const targets = [{ type: 'test-hook', target: {}, config: {} }]
 
-    await processEvent(event)
+    await enqueueViaRelay(event, targets)
 
     // Wait for the hook to be called
     await Promise.race([

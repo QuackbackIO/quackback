@@ -1,5 +1,13 @@
 import { computeManagedPaths } from './managed-paths'
 import type { QuackbackConfigSpec } from './schema'
+import {
+  DEFAULT_SETUP_STATE,
+  getSetupState,
+  normalizeOnboardingOutcome,
+  type SetupState,
+} from '@/lib/shared/db-types'
+
+type ConfigWorkspace = NonNullable<QuackbackConfigSpec['workspace']>
 
 export interface SettingsRow {
   id: string
@@ -13,7 +21,8 @@ export interface SettingsRow {
 export interface SettingsUpdate {
   name?: string
   slug?: string
-  setupState?: string
+  /** Re-applied to the locked, latest setup state by production deps. */
+  setupWorkspace?: ConfigWorkspace
   tierLimits?: string
   managedFieldPaths: string[]
 }
@@ -99,7 +108,7 @@ export async function reconcileFileIntoDb(
   if (spec.workspace !== undefined) {
     const setup = mergeSetupState(current.setupState, spec.workspace)
     const serialized = JSON.stringify(setup)
-    if (serialized !== current.setupState) update.setupState = serialized
+    if (serialized !== current.setupState) update.setupWorkspace = spec.workspace
   }
 
   if (spec.tierLimits !== undefined) {
@@ -119,24 +128,14 @@ export async function reconcileFileIntoDb(
   await deps.invalidateTierLimitsCache()
 }
 
-interface SetupStateShape {
-  version: number
-  steps: { core: boolean; workspace: boolean; boards: boolean }
-  useCase?: 'saas' | 'consumer' | 'marketplace' | 'internal'
-  completedAt?: string
-}
-
-function mergeSetupState(
-  existing: string | null,
-  workspace: {
-    name?: string
-    slug?: string
-    useCase?: 'saas' | 'consumer' | 'marketplace' | 'internal'
-    onboardingComplete?: boolean
-  }
-): SetupStateShape {
-  const parsed = existing ? (safeJsonParse(existing) as Partial<SetupStateShape> | null) : null
-  const parsedSteps = parsed?.steps
+export function mergeSetupState(
+  existing: string | SetupState | null,
+  workspace: ConfigWorkspace
+): SetupState {
+  const parsed =
+    typeof existing === 'string'
+      ? (getSetupState(existing) ?? DEFAULT_SETUP_STATE)
+      : (existing ?? DEFAULT_SETUP_STATE)
   // Workspace step is "done" when either name or slug ships in the
   // file. Slug-only declarations need this so the wizard advances when
   // only the slug is managed.
@@ -147,26 +146,36 @@ function mergeSetupState(
   // serialized JSON and defeat the no-op detection in
   // reconcileFileIntoDb (every reapply would touch the DB).
   const completedAt = forceComplete
-    ? (parsed?.completedAt ?? new Date().toISOString())
-    : parsed?.completedAt
+    ? (parsed.completedAt ?? new Date().toISOString())
+    : parsed.completedAt
+  const outcome = normalizeOnboardingOutcome(workspace.useCase) ?? parsed.useCase
+  const startingPoint = forceComplete
+    ? (parsed.steps.startingPoint ?? {
+        outcome: outcome ?? 'product_feedback',
+        resourceType: 'none' as const,
+        source: 'managed' as const,
+        resolution: 'configured' as const,
+        completedAt: completedAt!,
+      })
+    : parsed.steps.startingPoint
   return {
-    version: 1,
+    version: 2,
     steps: {
-      core: forceComplete ? true : (parsedSteps?.core ?? true),
-      workspace: forceComplete || fileSetsWorkspace ? true : (parsedSteps?.workspace ?? false),
-      boards: forceComplete ? true : (parsedSteps?.boards ?? false),
+      core: forceComplete ? true : parsed.steps.core,
+      workspace: forceComplete || fileSetsWorkspace ? true : parsed.steps.workspace,
+      startingPoint,
     },
-    useCase: workspace.useCase ?? parsed?.useCase,
-    completedAt,
-  }
-}
-
-function safeJsonParse(s: string): Record<string, unknown> | null {
-  try {
-    const v = JSON.parse(s)
-    return v && typeof v === 'object' ? (v as Record<string, unknown>) : null
-  } catch {
-    return null
+    ...(outcome ? { useCase: outcome } : {}),
+    ...(completedAt ? { completedAt } : {}),
+    ...(forceComplete
+      ? { completionSource: parsed.completionSource ?? ('managed' as const) }
+      : parsed.completionSource
+        ? { completionSource: parsed.completionSource }
+        : {}),
+    ...(parsed.activationHandoffSeenAt
+      ? { activationHandoffSeenAt: parsed.activationHandoffSeenAt }
+      : {}),
+    ...(parsed.taskResolutions ? { taskResolutions: parsed.taskResolutions } : {}),
   }
 }
 

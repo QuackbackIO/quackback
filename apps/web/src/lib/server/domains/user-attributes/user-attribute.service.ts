@@ -2,6 +2,7 @@ import { db, eq, asc, userAttributeDefinitions } from '@/lib/server/db'
 import type { UserAttributeId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
+import { isUniqueViolation } from '@/lib/server/utils'
 import type {
   UserAttribute,
   CreateUserAttributeInput,
@@ -71,7 +72,7 @@ export async function createUserAttribute(input: CreateUserAttributeInput): Prom
     return rowToUserAttribute(row)
   } catch (error) {
     if (error instanceof ValidationError) throw error
-    if ((error as { code?: string }).code === '23505') {
+    if (isUniqueViolation(error)) {
       throw new ConflictError('DUPLICATE_KEY', `An attribute with that key already exists`)
     }
     log.error({ err: error }, 'failed to create user attribute')

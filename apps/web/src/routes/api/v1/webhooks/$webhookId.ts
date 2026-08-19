@@ -10,6 +10,7 @@ import {
 import { parseTypeId, parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
 import { toWebhookResponse } from '@/lib/server/domains/api/webhooks'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId, WebhookId } from '@quackback/ids'
 
 // Input validation schema
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.WEBHOOK_VIEW })
 
           const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 
@@ -48,7 +49,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.WEBHOOK_MANAGE })
 
           const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 
@@ -61,9 +62,10 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
             })
           }
 
-          const boardIds = parsed.data.boardIds != null
-            ? parseTypeIdArray<BoardId>(parsed.data.boardIds, 'board', 'board IDs')
-            : parsed.data.boardIds
+          const boardIds =
+            parsed.data.boardIds != null
+              ? parseTypeIdArray<BoardId>(parsed.data.boardIds, 'board', 'board IDs')
+              : parsed.data.boardIds
 
           const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
           const webhook = await updateWebhook(webhookId, {
@@ -85,7 +87,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.WEBHOOK_MANAGE })
 
           const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 

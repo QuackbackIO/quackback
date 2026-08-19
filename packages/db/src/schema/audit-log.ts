@@ -10,7 +10,7 @@
  * leave a coherent trace; `actor_user_id` is nullable so user deletion
  * preserves the audit row.
  */
-import { pgTable, text, timestamp, index, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, index, jsonb, foreignKey } from 'drizzle-orm/pg-core'
 import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { user } from './auth'
 
@@ -20,9 +20,7 @@ export const auditLog = pgTable(
     id: typeIdWithDefault('audit')('id').primaryKey(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
     /** Null when the actor's user row has been deleted. */
-    actorUserId: typeIdColumnNullable('user')('actor_user_id').references(() => user.id, {
-      onDelete: 'set null',
-    }),
+    actorUserId: typeIdColumnNullable('user')('actor_user_id'),
     /** Denormalised so deletions don't anonymise old rows. */
     actorEmail: text('actor_email'),
     /** Actor's role at write time ('admin' | 'member' | 'user' | 'service'). */
@@ -47,9 +45,23 @@ export const auditLog = pgTable(
     metadata: jsonb('metadata'),
   },
   (table) => [
-    index('audit_log_occurred_at_idx').on(table.occurredAt),
-    index('audit_log_actor_user_id_occurred_at_idx').on(table.actorUserId, table.occurredAt),
-    index('audit_log_event_type_occurred_at_idx').on(table.eventType, table.occurredAt),
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'audit_log_actor_user_id_fkey',
+      columns: [table.actorUserId],
+      foreignColumns: [user.id],
+    }).onDelete('set null'),
+    // occurred_at is DESC (nullsFirst = postgres default for plain DESC)
+    // to serve the newest-first feed, matching the migration.
+    index('audit_log_occurred_at_idx').on(table.occurredAt.desc().nullsFirst()),
+    index('audit_log_actor_user_id_occurred_at_idx').on(
+      table.actorUserId,
+      table.occurredAt.desc().nullsFirst()
+    ),
+    index('audit_log_event_type_occurred_at_idx').on(
+      table.eventType,
+      table.occurredAt.desc().nullsFirst()
+    ),
     index('audit_log_request_id_idx').on(table.requestId),
   ]
 )

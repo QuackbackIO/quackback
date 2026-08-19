@@ -5,12 +5,12 @@
  * Moved here to centralize domain types and fix import direction.
  */
 
-import type { Board, Tag } from '@/lib/shared/db-types'
-import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
+import type { Board, PostTag } from '@/lib/shared/db-types'
+import type { PostId, PostStatusId, PostCommentId, PrincipalId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
 export interface PinnedComment {
-  id: CommentId
+  id: PostCommentId
   content: string
   authorName: string | null
   principalId: PrincipalId | null
@@ -23,7 +23,7 @@ export interface PinnedComment {
  * Reaction count with user's reaction state.
  * Re-exported from shared for convenience.
  */
-export type CommentReaction = CommentReactionCount
+export type PostCommentReaction = CommentReactionCount
 
 /**
  * Comment with nested replies and reactions.
@@ -37,7 +37,7 @@ export interface PostDetails {
   title: string
   content: string
   contentJson?: unknown
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   hasVoted: boolean
   // Principal-scoped identity (Hub-and-Spoke model)
@@ -47,19 +47,25 @@ export interface PostDetails {
   authorName: string | null
   authorEmail: string | null
   createdAt: Date
+  /** Target ship date (time-based roadmap); null when unset. */
+  eta?: Date | string | null
   board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Pick<Tag, 'id' | 'name' | 'color'>[]
+  tags: Pick<PostTag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
+  /** Whether more root comments exist beyond what's loaded (keyset pagination). */
+  commentsHasMore?: boolean
+  /** Keyset cursor for the next page of root comments, or null when exhausted. */
+  commentsNextCursor?: string | null
+  /** Total live root-comment count (for the "show N more" label). */
+  commentsTotalRootCount?: number
   /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
-  pinnedCommentId: CommentId | null
+  pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
   /** Map of principalId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
-  /** IDs of roadmaps this post belongs to */
-  roadmapIds?: string[]
   /** AI-generated post summary */
   summaryJson?: {
     summary: string

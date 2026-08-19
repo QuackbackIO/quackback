@@ -32,7 +32,7 @@ const STATUS_OPTIONS: { id: 'draft' | 'published'; label: string }[] = [
 ]
 
 const MENU_ITEM_CLASS = cn(
-  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs',
+  'w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px]',
   'text-foreground/80 hover:bg-muted/50 transition-colors'
 )
 
@@ -60,7 +60,8 @@ export function HelpCenterActiveFiltersBar({
   const canAddCategory = !hasCategoryFilter
   const canAddAny = canAddStatus || canAddCategory
 
-  const activeCount = (hasStatusFilter ? 1 : 0) + (hasCategoryFilter ? 1 : 0) + (showDeleted ? 1 : 0)
+  const activeCount =
+    (hasStatusFilter ? 1 : 0) + (hasCategoryFilter ? 1 : 0) + (showDeleted ? 1 : 0)
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -112,7 +113,7 @@ export function HelpCenterActiveFiltersBar({
         <button
           type="button"
           onClick={onClearAll}
-          className="ml-1 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+          className="ml-1 text-[13px] text-muted-foreground hover:text-foreground underline underline-offset-2"
         >
           Clear all
         </button>
@@ -155,7 +156,7 @@ function AddFilterButton({
           type="button"
           className={cn(
             'inline-flex items-center gap-1 px-2 py-0.5',
-            'rounded-full text-xs',
+            'rounded-full text-[13px]',
             'border border-dashed border-border/50',
             'text-muted-foreground hover:text-foreground',
             'hover:border-border hover:bg-muted/30',
@@ -176,7 +177,7 @@ function AddFilterButton({
                   className={MENU_ITEM_CLASS}
                   onClick={() => setActiveMenu('status')}
                 >
-                  <TagIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  <TagIcon className="size-4 text-muted-foreground" />
                   Status
                 </button>
               )}
@@ -186,7 +187,7 @@ function AddFilterButton({
                   className={MENU_ITEM_CLASS}
                   onClick={() => setActiveMenu('category')}
                 >
-                  <FolderIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  <FolderIcon className="size-4 text-muted-foreground" />
                   Category
                 </button>
               )}

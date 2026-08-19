@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { resolveLocale, loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
+import { resolveLocale, loadPortalMessages, type SupportedLocale } from '@/lib/shared/i18n'
 
 /**
  * Resolve the portal locale from the request's Accept-Language header.
@@ -19,15 +19,17 @@ export const getPortalLocaleFn = createServerFn({ method: 'GET' }).handler(async
  * renders translated during SSR (and hydrates from the same catalog) instead
  * of flashing English until the client fetches the messages.
  *
- * `loadMessages` runs wherever the loader runs: server-side during SSR, and
- * client-side (cached, code-split chunk) on client navigation — only the small
- * locale lookup is ever an RPC.
+ * `loadPortalMessages` runs wherever the loader runs: server-side during SSR,
+ * and client-side (cached, code-split chunk) on client navigation — only the
+ * small locale lookup is ever an RPC. It returns just the portal slice of the
+ * catalog (see PORTAL_MESSAGE_PREFIXES), so the SSR HTML doesn't carry the
+ * admin/inbox strings the portal never renders.
  */
 export async function loadPortalIntl(): Promise<{
   locale: SupportedLocale
   messages: Record<string, string>
 }> {
   const locale = await getPortalLocaleFn()
-  const messages = await loadMessages(locale)
+  const messages = await loadPortalMessages(locale)
   return { locale, messages }
 }

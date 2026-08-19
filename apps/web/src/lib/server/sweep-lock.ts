@@ -11,8 +11,18 @@
  * On the next interval tick the existing row has expired, so the
  * INSERT succeeds for whoever claims it first.
  *
- * If a process dies mid-sweep, the TTL auto-releases the lock so the
- * next interval tick proceeds — no orphaned locks left behind.
+ * Two modes, selected by `opts.keepUntilExpiry`:
+ *  - Default (mutex mode): the lock row is deleted once `fn` finishes,
+ *    so it only guards against concurrent execution. If a process dies
+ *    mid-sweep, the TTL auto-releases the lock so the next interval
+ *    tick proceeds — no orphaned locks left behind.
+ *  - `keepUntilExpiry: true` (claim mode): the lock row is left in
+ *    place until its TTL lapses, so it doubles as a "ran recently"
+ *    marker. Use this for tasks that must run at most once per TTL
+ *    across all replicas (e.g. once per day), rather than merely once
+ *    at a time — tick more frequently than the TTL so another replica
+ *    picks the task up within one tick after a dead winner's claim
+ *    lapses.
  */
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
@@ -28,11 +38,15 @@ const log = logger.child({ component: 'sweep-lock' })
  * @param ttlMs  - how long the lock is held before auto-expiry. Must be
  *                 longer than the expected runtime of `fn`.
  * @param fn     - the sweeper to run. Called only when the lock was acquired.
+ * @param opts.keepUntilExpiry - skip releasing the lock after `fn` completes,
+ *                 so the row persists as a "ran recently" marker until the
+ *                 TTL lapses. See module header for mutex vs. claim mode.
  */
 export async function withSweepLock(
   name: string,
   ttlMs: number,
-  fn: () => Promise<void>
+  fn: () => Promise<void>,
+  opts?: { keepUntilExpiry?: boolean }
 ): Promise<void> {
   // INSERT ON CONFLICT DO UPDATE with setWhere: only take over an expired
   // row. The first INSERT wins; subsequent callers get zero rows returned
@@ -55,16 +69,20 @@ export async function withSweepLock(
   try {
     await fn()
   } finally {
-    // Release the lock so the next interval tick isn't blocked for the full
-    // TTL after a transient failure. Guard on acquired_at so we don't clobber
-    // a lock another instance took over after our TTL expired mid-fn.
-    try {
-      await db.execute(sql`
-        DELETE FROM sweep_lock
-        WHERE name = ${name} AND acquired_at = ${acquiredAt}
-      `)
-    } catch (err) {
-      log.error({ err, name }, 'lock release failed')
+    if (!opts?.keepUntilExpiry) {
+      // Release the lock so the next interval tick isn't blocked for the full
+      // TTL after a transient failure. Guard on acquired_at so we don't clobber
+      // a lock another instance took over after our TTL expired mid-fn.
+      try {
+        await db.execute(sql`
+          DELETE FROM sweep_lock
+          WHERE name = ${name} AND acquired_at = ${acquiredAt}
+        `)
+      } catch (err) {
+        log.error({ err, name }, 'lock release failed')
+      }
     }
+    // else: leave the row in place — it doubles as a "ran recently" marker
+    // until its TTL expires, per claim mode above.
   }
 }

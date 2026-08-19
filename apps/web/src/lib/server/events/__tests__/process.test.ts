@@ -17,18 +17,23 @@ const mockWorkerClose = vi.fn().mockResolvedValue(undefined)
 // Captured once when the Worker is constructed (module-level singleton)
 let capturedProcessor: ((job: unknown) => Promise<void>) | null = null
 let capturedFailedHandler: ((job: unknown, error: Error) => void) | null = null
+let capturedWorkerOpts: { settings?: { backoffStrategy?: (n: number) => number } } | null = null
+let capturedQueueOpts: { defaultJobOptions?: { attempts?: number } } | null = null
 
 vi.mock('bullmq', () => {
   class MockQueue {
     addBulk = mockQueueAddBulk
     close = mockQueueClose
     waitUntilReady = vi.fn().mockResolvedValue(undefined)
-    constructor() {}
+    constructor(_name: string, opts: unknown) {
+      capturedQueueOpts = opts as typeof capturedQueueOpts
+    }
   }
   class MockWorker {
     close = mockWorkerClose
-    constructor(_name: string, processor: unknown) {
+    constructor(_name: string, processor: unknown, opts: unknown) {
       capturedProcessor = processor as (job: unknown) => Promise<void>
+      capturedWorkerOpts = opts as typeof capturedWorkerOpts
     }
     on(event: string, handler: unknown) {
       if (event === 'failed') {
@@ -50,9 +55,10 @@ vi.mock('@/lib/server/config', () => ({
   config: { redisUrl: 'redis://localhost:6379' },
 }))
 
-const mockGetHookTargets = vi.fn()
-vi.mock('../targets', () => ({
-  getHookTargets: (...args: unknown[]) => mockGetHookTargets(...args),
+// EVENTING-V2: processEvent now writes to the outbox (the relay enqueues).
+const mockWriteEventToOutbox = vi.fn().mockResolvedValue(true)
+vi.mock('../outbox-dispatch', () => ({
+  writeEventToOutbox: (...args: unknown[]) => mockWriteEventToOutbox(...args),
 }))
 
 const mockGetHook = vi.fn()
@@ -61,20 +67,15 @@ vi.mock('../registry', () => ({
 }))
 
 // db mock: inline to avoid hoisting issues. Access via import for assertions.
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     update: vi.fn(() => ({
       set: vi.fn(() => ({
         where: vi.fn().mockResolvedValue(undefined),
       })),
     })),
-  },
-  webhooks: {
-    id: 'id',
-    failureCount: 'failureCount',
-    status: 'status',
-    lastTriggeredAt: 'lastTriggeredAt',
-    lastError: 'lastError',
   },
   eq: vi.fn(),
   sql: vi.fn(),
@@ -119,7 +120,7 @@ function makeJob(overrides: Record<string, unknown> = {}) {
 // Import once to initialize the module. The first processEvent call with targets
 // triggers ensureQueue() which creates the Queue and Worker singletons.
 
-import { processEvent, closeQueue } from '../process'
+import { processEvent, closeQueue, enqueueHookJobsWithIds } from '../process'
 import { db } from '@/lib/server/db'
 
 // --- Tests ---
@@ -130,56 +131,42 @@ describe('Event Processing (BullMQ)', () => {
   })
 
   describe('processEvent', () => {
-    it('does nothing when there are no targets', async () => {
-      mockGetHookTargets.mockResolvedValue([])
-
-      await processEvent(makeEvent())
-
-      expect(mockQueueAddBulk).not.toHaveBeenCalled()
-    })
-
-    it('enqueues all targets in a single addBulk call', async () => {
+    // EVENTING-V2 (WO-18): processEvent writes to the durable outbox; the relay
+    // is the sole enqueuer, so processEvent never touches the queue directly.
+    // The relay's drain→enqueue is covered by relay.test.ts.
+    it('writes the event to the outbox and does not enqueue directly', async () => {
       const event = makeEvent()
-      mockGetHookTargets.mockResolvedValue([
-        { type: 'slack', target: { channelId: 'C1' }, config: { accessToken: 'tok' } },
-        { type: 'webhook', target: { url: 'https://a.com' }, config: { secret: 's' } },
-      ])
-
       await processEvent(event)
 
-      expect(mockQueueAddBulk).toHaveBeenCalledTimes(1)
-      expect(mockQueueAddBulk).toHaveBeenCalledWith([
-        {
-          name: 'post.created:slack',
-          data: {
-            hookType: 'slack',
-            event,
-            target: { channelId: 'C1' },
-            config: { accessToken: 'tok' },
-          },
-        },
-        {
-          name: 'post.created:webhook',
-          data: {
-            hookType: 'webhook',
-            event,
-            target: { url: 'https://a.com' },
-            config: { secret: 's' },
-          },
-        },
-      ])
+      expect(mockWriteEventToOutbox).toHaveBeenCalledWith(event)
+      expect(mockQueueAddBulk).not.toHaveBeenCalled()
     })
   })
 
   describe('Worker processor', () => {
-    // The processor is captured when initializeQueue runs (first processEvent with targets).
-    // We need to ensure it's initialized before these tests run.
+    // The processor is captured when initializeQueue runs (first enqueue).
+    // Trigger init via the relay's enqueue helper (processEvent no longer
+    // enqueues — it writes the outbox).
     async function ensureInitialized() {
       if (!capturedProcessor) {
-        mockGetHookTargets.mockResolvedValue([{ type: 'test', target: {}, config: {} }])
-        await processEvent(makeEvent())
+        await enqueueHookJobsWithIds([{ name: 'init', data: makeJob().data, jobId: 'init:1' }])
       }
     }
+
+    it('keeps retrying a failed delivery roughly six hours after the first failure', async () => {
+      await ensureInitialized()
+      // Six total attempts: first try + two fast retries + three slow ones.
+      expect(capturedQueueOpts?.defaultJobOptions?.attempts).toBe(6)
+      const backoff = capturedWorkerOpts?.settings?.backoffStrategy
+      expect(backoff).toBeDefined()
+      // Fast retries clear transient blips in seconds…
+      expect(backoff!(1)).toBeLessThan(60_000)
+      expect(backoff!(2)).toBeLessThan(60_000)
+      // …and the jittered slow tail (1h/2h/4h base) keeps a retry pending
+      // past the six-hour mark even at the jitter floor.
+      const span = [1, 2, 3, 4, 5].reduce((sum, n) => sum + backoff!(n), 0)
+      expect(span).toBeGreaterThanOrEqual(6 * 3_600_000)
+    })
 
     it('succeeds silently when hook returns success', async () => {
       await ensureInitialized()
@@ -258,8 +245,7 @@ describe('Event Processing (BullMQ)', () => {
   describe('worker.on("failed")', () => {
     async function ensureInitialized() {
       if (!capturedFailedHandler) {
-        mockGetHookTargets.mockResolvedValue([{ type: 'test', target: {}, config: {} }])
-        await processEvent(makeEvent())
+        await enqueueHookJobsWithIds([{ name: 'init', data: makeJob().data, jobId: 'init:failed' }])
       }
     }
 
@@ -327,9 +313,8 @@ describe('Event Processing (BullMQ)', () => {
 
   describe('closeQueue', () => {
     it('closes worker and queue gracefully', async () => {
-      // Ensure queue is initialized first
-      mockGetHookTargets.mockResolvedValue([{ type: 'test', target: {}, config: {} }])
-      await processEvent(makeEvent())
+      // Ensure queue is initialized first (via the relay's enqueue helper).
+      await enqueueHookJobsWithIds([{ name: 'init', data: makeJob().data, jobId: 'init:close' }])
 
       await closeQueue()
 

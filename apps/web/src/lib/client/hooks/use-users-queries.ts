@@ -5,7 +5,13 @@
  * Mutations are in @/lib/client/mutations/users.
  */
 
-import { useQuery, useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'
+import {
+  useQuery,
+  useInfiniteQuery,
+  infiniteQueryOptions,
+  keepPreviousData,
+  type InfiniteData,
+} from '@tanstack/react-query'
 import type { UsersFilters } from '@/lib/shared/types'
 import type {
   PortalUserListResultView,
@@ -71,7 +77,10 @@ async function fetchPortalUsers(
       page,
       limit: 20,
       segmentIds: filters.segmentIds,
-      includeAnonymous: filters.includeAnonymous,
+      tagIds: filters.tagIds,
+      // 'companies' swaps the pane to the companies directory; the people
+      // query underneath falls back to the default users population.
+      lifecycle: filters.lifecycle === 'companies' ? undefined : filters.lifecycle,
     },
   })) as PortalUserListResultView
 }
@@ -81,39 +90,50 @@ async function fetchUserDetail(principalId: PrincipalId): Promise<PortalUserDeta
 }
 
 // ============================================================================
+// Shared Query Options (QC-1)
+// ============================================================================
+
+/**
+ * The default (unfiltered, newest-first) users filter set. The route loader
+ * warms the infinite cache with exactly this shape so the renderer's
+ * `usePortalUsers` reads the same cache entry on first paint.
+ */
+export const defaultUsersFilters: UsersFilters = { sort: 'newest' }
+
+/**
+ * ONE canonical definition of the portal-users infinite query, shared by the
+ * route loader (via `ensureInfiniteQueryData`) and the `usePortalUsers` hook
+ * (QC-1). Collapsing the old `adminQueries.portalUsers` route suspense query
+ * and this infinite query onto a single `usersKeys` tree means a segment
+ * membership change (which invalidates `usersKeys.all`) reaches the cache the
+ * Users list actually renders.
+ */
+export function portalUsersInfiniteOptions(filters: UsersFilters) {
+  return infiniteQueryOptions({
+    queryKey: usersKeys.list(filters),
+    queryFn: ({ pageParam }) => fetchPortalUsers(filters, pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
+    // Page number is trivially invertible (page - 1), unlike the keyset
+    // cursors elsewhere — admin list, so cap at 5 pages (QC-2).
+    getPreviousPageParam: (_firstPage, allPages, firstPageParam) =>
+      firstPageParam > 1 ? firstPageParam - 1 : undefined,
+    maxPages: 5,
+  })
+}
+
+// ============================================================================
 // Query Hooks
 // ============================================================================
 
 interface UsePortalUsersOptions {
   filters: UsersFilters
-  initialData?: PortalUserListResultView
 }
 
-export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) {
-  // Only use initialData when there are no active filters
-  // Otherwise React Query would use stale server-rendered data for filtered queries
-  const hasActiveFilters = !!(
-    filters.search ||
-    filters.verified !== undefined ||
-    filters.dateFrom ||
-    filters.dateTo ||
-    filters.emailDomain ||
-    filters.postCount ||
-    filters.voteCount ||
-    filters.commentCount ||
-    filters.customAttrs ||
-    filters.includeAnonymous ||
-    (filters.segmentIds && filters.segmentIds.length > 0)
-  )
-  const useInitialData = initialData && !hasActiveFilters
-
+export function usePortalUsers({ filters }: UsePortalUsersOptions) {
   return useInfiniteQuery({
-    queryKey: usersKeys.list(filters),
-    queryFn: ({ pageParam }) => fetchPortalUsers(filters, pageParam),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    initialData: useInitialData ? { pages: [initialData], pageParams: [1] } : undefined,
-    refetchOnMount: !useInitialData,
+    ...portalUsersInfiniteOptions(filters),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -131,13 +151,13 @@ export function useUserDetail({ principalId, enabled = true }: UseUserDetailOpti
   })
 }
 
-/** Total user count (unfiltered) for the "All users" sidebar label */
-export function useTotalUserCount() {
+/** Total count (unfiltered) for a lifecycle view's sidebar label. */
+export function useTotalUserCount(lifecycle: 'users' | 'leads' = 'users') {
   return useQuery({
-    queryKey: usersKeys.totalCount(),
+    queryKey: [...usersKeys.totalCount(), lifecycle],
     queryFn: async () => {
       const result = (await listPortalUsersFn({
-        data: { sort: 'newest', page: 1, limit: 1 },
+        data: { sort: 'newest', page: 1, limit: 1, lifecycle },
       })) as PortalUserListResultView
       return result.total
     },

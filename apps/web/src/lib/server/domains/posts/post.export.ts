@@ -1,23 +1,11 @@
 /**
  * Post Export Queries
  *
- * Handles exporting posts to CSV and retrieving feedback source metadata.
+ * Handles exporting posts to CSV.
  */
 
-import {
-  db,
-  posts,
-  postStatuses,
-  feedbackSuggestions,
-  rawFeedbackItems,
-  eq,
-  and,
-  inArray,
-  desc,
-  sql,
-  isNull,
-} from '@/lib/server/db'
-import { type PostId, type BoardId } from '@quackback/ids'
+import { db, posts, postStatuses, and, inArray, desc, isNull } from '@/lib/server/db'
+import { type BoardId } from '@quackback/ids'
 import type { PostForExport } from './post.types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 
@@ -116,48 +104,4 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
       statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
     })
   )
-}
-
-export interface PostFeedbackSource {
-  sourceType: string
-  authorName: string | null
-  quote: string
-  externalUrl: string | null
-  createdAt: Date
-}
-
-/**
- * Get the feedback source for a post, if it was created from a feedback suggestion.
- * Returns the original quote, source type (e.g. "slack"), and author info.
- */
-export async function getPostFeedbackSource(postId: PostId): Promise<PostFeedbackSource | null> {
-  const row = await db
-    .select({
-      sourceType: rawFeedbackItems.sourceType,
-      authorName: sql<string | null>`${rawFeedbackItems.author}->>'name'`,
-      quote: sql<string>`${rawFeedbackItems.content}->>'text'`,
-      externalUrl: rawFeedbackItems.externalUrl,
-      createdAt: rawFeedbackItems.sourceCreatedAt,
-    })
-    .from(feedbackSuggestions)
-    .innerJoin(rawFeedbackItems, eq(rawFeedbackItems.id, feedbackSuggestions.rawFeedbackItemId))
-    .where(
-      and(
-        eq(feedbackSuggestions.resultPostId, postId),
-        eq(feedbackSuggestions.status, 'accepted'),
-        eq(feedbackSuggestions.suggestionType, 'create_post')
-      )
-    )
-    .limit(1)
-    .then((rows) => rows[0] ?? null)
-
-  if (!row) return null
-
-  return {
-    sourceType: row.sourceType,
-    authorName: row.authorName,
-    quote: row.quote,
-    externalUrl: row.externalUrl,
-    createdAt: row.createdAt,
-  }
 }

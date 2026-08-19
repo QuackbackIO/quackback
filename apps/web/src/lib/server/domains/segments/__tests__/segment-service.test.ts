@@ -4,7 +4,9 @@ const mockFindFirst = vi.fn()
 const mockDeleteReturning = vi.fn()
 const mockNotifyUserSyncIntegrations = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       segments: {
@@ -26,15 +28,6 @@ vi.mock('@/lib/server/db', () => ({
     raw: vi.fn(),
     join: vi.fn(),
   }),
-  segments: {
-    id: 'id',
-    deletedAt: 'deleted_at',
-  },
-  userSegments: {
-    segmentId: 'segment_id',
-    principalId: 'principal_id',
-    addedBy: 'added_by',
-  },
 }))
 
 vi.mock('@/lib/server/integrations/user-sync-notify', () => ({

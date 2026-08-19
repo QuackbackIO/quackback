@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { withApiKeyAuth, assertApiPermissions } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import {
   successResponse,
   noContentResponse,
@@ -14,7 +15,7 @@ import {
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { PostId, StatusId, TagId, PrincipalId } from '@quackback/ids'
+import type { PostId, PostStatusId, PostTagId, PrincipalId } from '@quackback/ids'
 import type { MergedPostSummary } from '@/lib/server/domains/posts/post.types'
 
 // Input validation schema
@@ -26,6 +27,16 @@ const updatePostSchema = z.object({
   ownerPrincipalId: z.string().nullable().optional(),
 })
 
+/** Every granular permission a posts PATCH body implies; the caller must hold all of them. */
+function permissionsForPostPatch(body: z.infer<typeof updatePostSchema>): PermissionKey[] {
+  const perms: PermissionKey[] = []
+  if (body.title !== undefined || body.content !== undefined) perms.push(PERMISSIONS.POST_EDIT)
+  if (body.statusId !== undefined) perms.push(PERMISSIONS.POST_SET_STATUS)
+  if (body.tagIds !== undefined) perms.push(PERMISSIONS.POST_SET_TAGS)
+  if (body.ownerPrincipalId !== undefined) perms.push(PERMISSIONS.POST_SET_OWNER)
+  return perms
+}
+
 export const Route = createFileRoute('/api/v1/posts/$postId')({
   server: {
     handlers: {
@@ -35,7 +46,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
@@ -62,7 +73,6 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             authorEmail: realEmail(post.authorEmail),
             ownerPrincipalId: post.ownerPrincipalId,
             tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
-            roadmapIds: post.roadmapIds,
             pinnedComment: post.pinnedComment
               ? {
                   id: post.pinnedComment.id,
@@ -76,6 +86,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             canonicalPostId: post.canonicalPostId ?? null,
             mergedAt: post.mergedAt?.toISOString() ?? null,
             isCommentsLocked: post.isCommentsLocked,
+            eta: post.eta ? new Date(post.eta).toISOString() : null,
             mergedPosts: mergedPosts.map((mp: MergedPostSummary) => ({
               id: mp.id,
               title: mp.title,
@@ -99,7 +110,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const auth = await withApiKeyAuth(request)
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
@@ -112,14 +123,18 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             })
           }
 
-          const statusId = parseOptionalTypeId<StatusId>(
+          // The PATCH body can touch several permission-scoped fields; require the
+          // granular permission for each field actually present.
+          assertApiPermissions(auth, permissionsForPostPatch(parsed.data))
+
+          const statusId = parseOptionalTypeId<PostStatusId>(
             parsed.data.statusId,
-            'status',
+            'post_status',
             'status ID'
           )
           const tagIds =
             parsed.data.tagIds !== undefined
-              ? parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
+              ? parseTypeIdArray<PostTagId>(parsed.data.tagIds, 'post_tag', 'tag IDs')
               : undefined
 
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
@@ -162,7 +177,9 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          const { principalId, role } = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId, role } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.POST_DELETE,
+          })
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 

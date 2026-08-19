@@ -24,16 +24,12 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
-import {
-  allowsMissingEmail,
-  identitySourcesFor,
-  profileClaimFor,
-} from '@/lib/shared/oidc-claim-mapping'
+import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
-import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 
 const TTL_SECONDS = 600
 
@@ -43,6 +39,9 @@ type TestSession = {
   nonce: string
   /** The provider registrationId that initiated this test. */
   registrationId: string
+  /** Mirrors the provider's placeholder-address setting so the callback can
+   *  judge a missing email the same way sign-in will. */
+  allowMissingEmail: boolean
   /** Present for discovery providers; absent for manual-endpoint providers. */
   discoveryUrl?: string
   tokenEndpoint: string
@@ -56,11 +55,13 @@ type TestSession = {
   adminUserId: string
   startedAt: number
   codeVerifier: string
+  /** Scopes requested at authorize time. Replayed into the failure hint so an
+   *  invalid_scope names what was actually sent rather than a default set. */
   requestedScopes: string[]
+  /** Token-endpoint auth method, mirrored from production. */
   tokenAuth: 'basic' | 'post'
+  /** The prompt sent, replayed into a configuration-error hint. */
   requestedPrompt?: string
-  allowMissingEmail: boolean
-  identityMapping?: IdentityMapping
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -74,7 +75,7 @@ export type StartSsoTestResult =
 export const startSsoTestFn = createServerFn({ method: 'POST' })
   .validator(z.object({ registrationId: z.string().min(1) }))
   .handler(async ({ data }): Promise<StartSsoTestResult> => {
-    const { user } = await requireAuth({ roles: ['admin'] })
+    const { user } = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { listIdentityProviders, getIdentityProviderCredentials } =
       await import('@/lib/server/domains/settings/identity-providers.service')
@@ -87,7 +88,12 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // the doc), or a complete manual-endpoint set (authorization + token + JWKS
     // + issuer) for installs with no discovery document. Production registers
     // manual-endpoint providers too, so they must be testable to be enforceable.
-    const hasManualEndpoints = !!(provider.authorizationUrl && provider.tokenUrl)
+    const hasManualEndpoints = !!(
+      provider.authorizationUrl &&
+      provider.tokenUrl &&
+      provider.jwksUri &&
+      provider.issuer
+    )
     if (!provider.discoveryUrl && !hasManualEndpoints) {
       return { error: 'sso-not-configured' }
     }
@@ -131,12 +137,17 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       } catch {
         return { error: 'discovery-unreachable' }
       }
-    } else if (provider.authorizationUrl && provider.tokenUrl) {
+    } else if (
+      provider.authorizationUrl &&
+      provider.tokenUrl &&
+      provider.jwksUri &&
+      provider.issuer
+    ) {
       endpoints = {
-        issuer: provider.issuer ?? '',
+        issuer: provider.issuer,
         authorizationEndpoint: provider.authorizationUrl,
         tokenEndpoint: provider.tokenUrl,
-        jwksUri: provider.jwksUri ?? '',
+        jwksUri: provider.jwksUri,
         userinfoEndpoint: provider.userInfoUrl ?? undefined,
       }
     } else {
@@ -157,20 +168,23 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // runs with pkce: true. OAuth 2.1 IdPs reject authorize requests
     // without a code_challenge; IdPs without PKCE support ignore it.
     const codeVerifier = randomBytes(32).toString('base64url')
-    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
+    // The SAME builder production reads. Assembling a different request here is
+    // exactly how a passing test came to vouch for a sign-in that fails.
     const request = authorizeRequestFor(provider)
     const requestedScopes = request.scopes
+    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
 
     const session: TestSession = {
       testId,
       state,
       nonce,
       registrationId: data.registrationId,
+      allowMissingEmail: allowsMissingEmail(provider.claimMapping),
       discoveryUrl: provider.discoveryUrl ?? undefined,
       tokenEndpoint: endpoints.tokenEndpoint,
       jwksUri: endpoints.jwksUri,
       authorizationEndpoint: endpoints.authorizationEndpoint,
-      userinfoEndpoint: provider.userInfoUrl ?? endpoints.userinfoEndpoint,
+      userinfoEndpoint: endpoints.userinfoEndpoint,
       issuer: endpoints.issuer,
       clientId: provider.clientId,
       clientSecret: creds.clientSecret,
@@ -179,13 +193,6 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       requestedScopes,
       tokenAuth: request.tokenAuth,
       requestedPrompt: request.prompt,
-      allowMissingEmail: allowsMissingEmail(provider.claimMapping),
-      identityMapping: {
-        sources: identitySourcesFor(provider.claimMapping),
-        idClaim: profileClaimFor(provider.claimMapping, 'id'),
-        emailClaim: profileClaimFor(provider.claimMapping, 'email'),
-        nameClaim: profileClaimFor(provider.claimMapping, 'name'),
-      },
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
@@ -200,8 +207,11 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       response_type: 'code',
       client_id: provider.clientId,
       redirect_uri: redirectUri,
-      // Same builder as production registration, so a passing test exercises
-      // the request sign-in will actually make.
+      // Mirror production exactly by sharing one resolver with the registration
+      // builder. A test that sent a different scope set could pass while real
+      // sign-in requests another, letting a non-representative test unlock
+      // enforcement — which a stored blank `scopes` used to do, because the two
+      // sides disagreed on whether blank meant "defaults" or "no scopes".
       scope: requestedScopes.join(' '),
       ...(request.prompt ? { prompt: request.prompt } : {}),
       state,
@@ -265,7 +275,7 @@ export type SsoTestDiagnostic = {
 export const getSsoTestResultFn = createServerFn({ method: 'POST' })
   .validator(z.object({ testId: z.string() }))
   .handler(async ({ data }): Promise<SsoTestDiagnostic | null> => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const { cacheGet } = await import('@/lib/server/redis')
     return (await cacheGet<SsoTestDiagnostic>(ssoTestResultKey(data.testId))) ?? null
   })

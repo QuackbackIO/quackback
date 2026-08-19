@@ -13,9 +13,7 @@
 export type {
   CreateRoadmapInput,
   UpdateRoadmapInput,
-  AddPostToRoadmapInput,
-  ReorderPostsInput,
-  RoadmapPostEntry,
+  RoadmapViewPost,
   RoadmapPostsListResult,
   RoadmapPostsQueryOptions,
 } from './roadmap.types'

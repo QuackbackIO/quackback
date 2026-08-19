@@ -5,12 +5,18 @@
  * Uses the configured chat model via the configured provider or gateway endpoint.
  */
 
+import { chat } from '@tanstack/ai'
+import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { z } from 'zod'
 import { db, postSentiment, posts, eq, and, gte, lte, sql, count, isNull } from '@/lib/server/db'
 import { createId, type PostId } from '@quackback/ids'
-import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
+import { config } from '@/lib/server/config'
+import {
+  isAiClientConfigured,
+  structuredOutputProviderOptions,
+} from '@/lib/server/domains/ai/config'
+import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getChatModel } from '@/lib/server/domains/ai/models'
-import { withRetry } from '@/lib/server/domains/ai/retry'
-import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { logger } from '@/lib/server/logger'
 
@@ -51,14 +57,17 @@ const SENTIMENT_PROMPT = `Classify the sentiment of this customer feedback as po
 - neutral: Factual request, question, neutral information
 - negative: Frustrated, complaining, reporting issues
 
-Respond with only JSON: {"sentiment": "positive" | "neutral" | "negative", "confidence": 0.0-1.0}`
+Respond with ONLY a single JSON object, no preamble or code fence: {"sentiment": "positive" | "neutral" | "negative", "confidence": 0.0-1.0}
 
-const VALID_SENTIMENTS: Sentiment[] = ['positive', 'neutral', 'negative']
+Example output:
+{"sentiment": "negative", "confidence": 0.85}`
+
 const MAX_CONTENT_LENGTH = 3000
 
-function isValidSentiment(value: unknown): value is Sentiment {
-  return typeof value === 'string' && VALID_SENTIMENTS.includes(value as Sentiment)
-}
+const SentimentSchema = z.object({
+  sentiment: z.enum(['positive', 'neutral', 'negative']),
+  confidence: z.number(),
+})
 
 /**
  * Analyze sentiment using the configured chat model.
@@ -70,54 +79,47 @@ export async function analyzeSentiment(
 ): Promise<SentimentResult | null> {
   await enforceAiTokenBudget()
 
-  const openai = getOpenAI()
   const model = getChatModel('sentiment')
-  if (!openai || !model) return null
+  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return null
 
   const truncatedContent = (content || '(no content)').slice(0, MAX_CONTENT_LENGTH)
   const text = `Title: ${title}\n\nContent: ${truncatedContent}`
 
   try {
-    const response = await withUsageLogging(
-      {
-        pipelineStep: 'sentiment',
-        callType: 'chat_completion',
-        model,
-        postId,
-      },
-      () =>
-        withRetry(() =>
-          openai.chat.completions.create({
-            model,
-            max_completion_tokens: 1000,
-            messages: [
-              { role: 'system', content: SENTIMENT_PROMPT },
-              { role: 'user', content: text },
-            ],
-            response_format: { type: 'json_object' },
-          })
-        ),
-      (r) => ({
-        inputTokens: r.usage?.prompt_tokens ?? 0,
-        outputTokens: r.usage?.completion_tokens,
-        totalTokens: r.usage?.total_tokens ?? 0,
-      })
-    )
-    const parsed = JSON.parse(stripCodeFences(response.choices[0]?.message?.content || '{}'))
+    const object = await chat({
+      adapter: openaiCompatibleText(model, {
+        baseURL: config.openaiBaseUrl!,
+        apiKey: config.openaiApiKey!,
+      }),
+      systemPrompts: [SENTIMENT_PROMPT],
+      messages: [{ role: 'user', content: text }],
+      outputSchema: SentimentSchema,
+      stream: false,
+      modelOptions: { max_tokens: 1000, ...structuredOutputProviderOptions() },
+      middleware: [
+        createUsageLoggingMiddleware({
+          pipelineStep: 'sentiment',
+          model,
+          postId,
+        }),
+      ],
+    })
 
-    if (!isValidSentiment(parsed.sentiment) || typeof parsed.confidence !== 'number') {
-      log.error({ model_response_keys: Object.keys(parsed) }, 'invalid sentiment model response')
-      return null
-    }
-
+    // Per-row token counts are no longer available here: chat() with
+    // outputSchema + stream:false resolves the validated object only, and
+    // usage now flows through the middleware into ai_usage_log instead (the
+    // aggregate accounting path). inputTokens/outputTokens stay undefined —
+    // the postSentiment columns are nullable and nothing else reads them.
     return {
-      sentiment: parsed.sentiment,
-      confidence: parsed.confidence,
+      sentiment: object.sentiment,
+      confidence: object.confidence,
       model,
-      inputTokens: response.usage?.prompt_tokens,
-      outputTokens: response.usage?.completion_tokens,
     }
   } catch (error) {
+    // Covers both a malformed/non-JSON model response and a well-formed but
+    // schema-invalid one (chat() throws on either with outputSchema set) —
+    // both collapse to the same best-effort null the old parse-and-validate
+    // branch returned.
     log.error({ err: error }, 'sentiment generation failed')
     return null
   }

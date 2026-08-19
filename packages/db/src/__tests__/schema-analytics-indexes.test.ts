@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import { session } from '../schema/auth'
-import { comments } from '../schema/posts'
+import { postComments } from '../schema/posts'
 
 /**
  * Indexes that back the analytics dashboard's active-users and
@@ -21,8 +21,8 @@ describe('analytics support indexes', () => {
   })
 
   it('comments has a partial index on status_change_to_id (TTR join)', () => {
-    const cfg = getTableConfig(comments)
-    const idx = cfg.indexes.find((i) => i.config.name === 'comments_status_change_to_id_idx')
+    const cfg = getTableConfig(postComments)
+    const idx = cfg.indexes.find((i) => i.config.name === 'post_comments_status_change_to_id_idx')
     expect(idx).toBeDefined()
     const cols = (idx?.config.columns ?? []).map((c) =>
       typeof c === 'object' && c !== null && 'name' in c ? (c as { name: string }).name : ''

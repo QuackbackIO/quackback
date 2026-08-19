@@ -13,8 +13,10 @@ let selectRows: Array<{ id: string; displayName: string }> = []
 // Mock the project db facade. The real module re-exports drizzle's `inArray`
 // and the `principal` table; tests only need a chainable `db.select(...)` that
 // resolves to our prepared rows.
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   return {
+    // Spread the real db module so tables/operators stay current; override only what this suite drives.
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       select: () => ({
         from: () => ({
@@ -24,7 +26,6 @@ vi.mock('@/lib/server/db', () => {
     },
     // The real implementation imports these for typing/identity, but our
     // chainable mock ignores them. Provide stubs so the import doesn't crash.
-    principal: { id: 'id', displayName: 'displayName' },
     inArray: () => undefined,
   }
 })

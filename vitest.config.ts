@@ -18,6 +18,8 @@ export default defineConfig({
       '**/.next/**',
       '**/e2e/**',
       '**/.output/**',
+      // TanStack route for /admin/automation/test, not a Vitest suite.
+      '**/src/routes/admin/automation.test.tsx',
       // Isolated git worktrees live here; they are separate checkouts with
       // their own deps and must not be run by the parent repo's suite.
       '**/.claude/**',

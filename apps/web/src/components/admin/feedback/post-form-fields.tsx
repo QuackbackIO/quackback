@@ -13,14 +13,14 @@ import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
 import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
+import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 
 interface PostFormFieldsProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: UseFormReturn<any>
   boards: Board[]
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   contentJson: JSONContent | null
   onContentChange: (json: JSONContent, html: string, markdown: string) => void
   error?: string
@@ -66,7 +66,7 @@ export function PostFormFields({
                 </FormControl>
                 <SelectContent align="start">
                   {boards.map((board) => (
-                    <SelectItem key={board.id} value={board.id} className="text-xs py-1">
+                    <SelectItem key={board.id} value={board.id} className="py-1">
                       {board.name}
                     </SelectItem>
                   ))}
@@ -104,7 +104,7 @@ export function PostFormFields({
                 </FormControl>
                 <SelectContent align="start">
                   {statuses.map((status) => (
-                    <SelectItem key={status.id} value={status.id} className="text-xs py-1">
+                    <SelectItem key={status.id} value={status.id} className="py-1">
                       <div className="flex items-center gap-1.5">
                         <span
                           className="h-2 w-2 rounded-full"
@@ -139,6 +139,7 @@ export function PostFormFields({
                   placeholder="Add more details... Type / for commands"
                   minHeight="200px"
                   borderless
+                  toolbarPosition="bottom"
                   features={{
                     headings: true,
                     codeBlocks: true,

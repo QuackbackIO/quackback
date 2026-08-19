@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { handleDomainError } from '@/lib/server/domains/api/responses'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 import type { Actor } from '@/lib/server/policy'
 import type { SegmentId } from '@quackback/ids'
@@ -12,7 +13,7 @@ export const Route = createFileRoute('/api/v1/apps/search')({
 
       GET: async ({ request }) => {
         try {
-          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
           const url = new URL(request.url)
           const q = url.searchParams.get('q')?.trim()
           const limit = Math.min(Number(url.searchParams.get('limit')) || 10, 20)

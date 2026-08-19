@@ -6,17 +6,21 @@
  * dispatcher backed by `createSDK`, then replays anything already queued.
  *
  * The server-generated `/api/widget/sdk.js` prepends a line that sets
- * `window.__QUACKBACK_URL__`. Script-tag installs therefore omit `instanceUrl`
- * from their init options — we fold the baked URL into every init that doesn't
- * carry one of its own. If no init happens at all (a bare `<script src>` with
- * no `Quackback("init")` call), we auto-dispatch one so the widget still boots.
+ * `window.__QUACKBACK_URL__` (and `window.__QUACKBACK_CONFIG__`, the baked
+ * server config that lets the SDK skip the config fetch — see core/sdk.ts).
+ * Script-tag installs therefore omit `instanceUrl` from their init options —
+ * we fold the baked URL into every init that doesn't carry one of its own. If
+ * no init happens at all (a bare `<script src>` with no `Quackback("init")`
+ * call), we auto-dispatch one so the widget still boots.
  */
 import { createSDK } from './core/sdk'
+import type { ServerConfig } from './core/config'
 
 declare global {
   interface Window {
     Quackback?: ((...args: unknown[]) => unknown) & { q?: IArguments[] }
     __QUACKBACK_URL__?: string
+    __QUACKBACK_CONFIG__?: ServerConfig
   }
 }
 

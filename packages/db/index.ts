@@ -5,6 +5,37 @@ export type { Database, CreateDbOptions } from './src/client'
 // Schema
 export * from './src/schema'
 
+// RBAC permission catalogue (pure data; the code-authoritative contract)
+export * from './src/rbac-catalogue'
+
+// page_views partition maintenance (SQL helpers; take a Database, import no client)
+export { ensurePageViewPartitions, dropExpiredPageViewPartitions } from './src/page-view-partitions'
+
+// Visitor analytics rollup (hourly recompute of visitor_stats_daily + visitor_top_stats)
+export { refreshVisitorAnalytics, VISITOR_PERIODS } from './src/visitor-rollup'
+
+// External side-effect ledger: per-column restore policy (pure data + the
+// guard's detection helpers) and the entry point a restore path calls so
+// already-sent mail, webhooks and announcements are not sent again.
+export * from './src/side-effect-ledger'
+export {
+  settleExternalSideEffects,
+  planSideEffectSettlement,
+  RESTORE_SETTLEMENT_AUDIT_EVENT,
+  type SettlementStep,
+  type AppliedSettlementStep,
+  type SettlementReport,
+  type SettlementAction,
+  type SettleExternalSideEffectsOptions,
+} from './src/settle-external-side-effects'
+
+// Migration ledger status (bundled journal vs applied rows; readiness probe)
+export { getMigrationStatus, type MigrationStatus } from './src/migration-status'
+
+// System-data reconcile (statuses, RBAC catalogue, preset bundles, assignment
+// backfill + heal) — exported so integration tests can exercise the heal.
+export { seedSystemData } from './src/seed-system'
+
 // Types
 export * from './src/types'
 

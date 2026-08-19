@@ -17,9 +17,11 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: vi.fn(async () => ({ moderationDefault: { requireApproval: 'none' } })),
 }))
 
-vi.mock('@/lib/server/db', async () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         boards: { findFirst: (...args: unknown[]) => hoisted.mockedFindFirstBoards(...args) },
@@ -29,13 +31,6 @@ vi.mock('@/lib/server/db', async () => {
       },
       select: hoisted.mockedSelect,
     },
-    boards: { id: 'board_id' },
-    posts: { id: 'post_id', deletedAt: 'deleted_at' },
-    postStatuses: { id: 'status_id', slug: 'slug' },
-    postTags: { postId: 'post_id', tagId: 'tag_id' },
-    tags: { id: 'tag_id' },
-    votes: { id: 'votes_id' },
-    principal: { id: 'principal_id' },
     eq: vi.fn(() => 'eq-clause'),
     inArray: vi.fn(),
     sql: realSql,
@@ -62,6 +57,7 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 vi.mock('@/lib/server/markdown-tiptap', () => ({
   markdownToTiptapJson: vi.fn(() => ({})),
   contentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
+  projectContentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
 }))
 
 vi.mock('@/lib/server/content/rehost-images', () => ({

@@ -32,7 +32,9 @@ vi.mock('@/lib/server/redis', () => ({
   CACHE_KEYS: { TENANT_SETTINGS: 'settings:tenant' },
 }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       settings: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
@@ -45,8 +47,6 @@ vi.mock('@/lib/server/db', () => ({
     }),
   },
   eq: vi.fn(),
-  settings: { id: 'id' },
-  ssoVerifiedDomain: { createdAt: 'created_at' },
 }))
 
 vi.mock('@quackback/email', () => ({

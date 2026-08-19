@@ -939,7 +939,7 @@ function SegmentPicker({
           })}
         {!loading && filtered.length === 0 && (
           <Link
-            to="/admin/settings/people"
+            to="/admin/users"
             className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-3 text-xs text-foreground hover:bg-muted"
           >
             <PlusIcon className="h-3 w-3" />
@@ -961,7 +961,7 @@ function SegmentPicker({
             {selected.length}/{allSegments.length} selected
           </span>
         </span>
-        <Link to="/admin/settings/people" className="text-primary hover:underline">
+        <Link to="/admin/users" className="text-primary hover:underline">
           Manage →
         </Link>
       </div>

@@ -19,7 +19,7 @@ import {
   ValidationErrorSchema,
 } from './common'
 
-// Tag nested schema (shared between list and detail)
+// PostTag nested schema (shared between list and detail)
 const TagSchema = z.object({
   id: TypeIdSchema,
   name: z.string(),
@@ -50,7 +50,7 @@ const PostListItemSchema = z.object({
   boardName: z
     .string()
     .meta({ description: 'Name of the parent board', example: 'Feature Requests' }),
-  statusId: TypeIdSchema.nullable().meta({ example: 'status_01h455vb4pex5vsknk084sn02q' }),
+  statusId: TypeIdSchema.nullable().meta({ example: 'post_status_01h455vb4pex5vsknk084sn02q' }),
   authorName: z.string().nullable().meta({ example: 'John Doe' }),
   ownerId: z.string().nullable().meta({ description: 'Assigned team member ID' }),
   tags: z.array(TagSchema).meta({ description: 'Tags assigned to this post' }),
@@ -76,14 +76,16 @@ const PostDetailSchema = z.object({
   boardName: z
     .string()
     .meta({ description: 'Name of the parent board', example: 'Feature Requests' }),
-  statusId: TypeIdSchema.nullable().meta({ example: 'status_01h455vb4pex5vsknk084sn02q' }),
+  statusId: TypeIdSchema.nullable().meta({ example: 'post_status_01h455vb4pex5vsknk084sn02q' }),
   authorName: z.string().nullable().meta({ example: 'John Doe' }),
   authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
   ownerId: z.string().nullable().meta({ description: 'Assigned team member ID' }),
   tags: z.array(TagSchema).meta({ description: 'Tags assigned to this post' }),
-  roadmapIds: z.array(z.string()).meta({ description: 'IDs of roadmaps this post belongs to' }),
   pinnedComment: PinnedCommentSchema.meta({
     description: 'Pinned comment used as official response',
+  }),
+  eta: NullableTimestampSchema.meta({
+    description: 'Target ship date for time-based roadmaps, null if unset',
   }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
@@ -137,7 +139,7 @@ const CreatePostSchema = z
       example: 'board_01h455vb4pex5vsknk084sn02q',
     }),
     statusId: TypeIdSchema.optional().meta({ description: 'Initial status ID' }),
-    tagIds: z.array(TypeIdSchema).optional().meta({ description: 'Tag IDs to assign' }),
+    tagIds: z.array(TypeIdSchema).optional().meta({ description: 'PostTag IDs to assign' }),
   })
   .meta({ description: 'Create post request body' })
 

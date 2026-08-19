@@ -1,0 +1,282 @@
+/**
+ * Real-DB coverage for the ticket unread-receipt service (unified inbox §3.3).
+ * Runs inside the db-test-fixture rollback transaction; the global `db` is
+ * mocked to the fixture transaction so the service writes land in the
+ * rolled-back tx. Mirrors conversation.query.ts's unreadCountFor / the batched
+ * list-unread query, and conversation.service.ts's markConversationRead, but
+ * against tickets + conversation_messages WHERE ticket_id = X.
+ */
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
+import {
+  createId,
+  type PrincipalId,
+  type UserId,
+  type TicketId,
+  type TicketStatusId,
+  type ConversationMessageId,
+} from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
+import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
+
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import { tickets, ticketStatuses, conversationMessages, principal, user, eq } from '@/lib/server/db'
+import {
+  ticketUnreadMapForAgent,
+  markTicketReadForAgent,
+  markTicketUnreadFromMessage,
+} from '../ticket-unread.service'
+
+// Realtime publish (unified inbox §3.2, M3): neutralize the real Redis-backed
+// publish so these DB-fixture tests stay deterministic, and assert the mark-
+// read writes wire it.
+const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
+vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
+
+import { PERMISSIONS } from '@/lib/shared/permissions'
+
+function agentActor(overrides: Partial<Actor> = {}): Actor {
+  return {
+    principalId: createId('principal') as PrincipalId,
+    role: 'member',
+    principalType: 'user',
+    segmentIds: new Set(),
+    permissions: new Set([PERMISSIONS.TICKET_VIEW_ALL, PERMISSIONS.CONVERSATION_REPLY]),
+    ...overrides,
+  }
+}
+
+const fixture = await createDbTestFixture({
+  probe: async (db) => {
+    await db.select({ id: tickets.id }).from(tickets).limit(0)
+    await db.select({ id: conversationMessages.id }).from(conversationMessages).limit(0)
+  },
+})
+
+const suffix = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
+async function seedTicket(): Promise<TicketId> {
+  const statusId = createId('ticket_status') as TicketStatusId
+  await testDb.insert(ticketStatuses).values({ id: statusId, name: 'New', slug: `tu-${suffix()}` })
+  const ticketId = createId('ticket') as TicketId
+  await testDb.insert(tickets).values({ id: ticketId, title: 'T', statusId })
+  return ticketId
+}
+
+async function seedAgentPrincipal(): Promise<PrincipalId> {
+  const userId = createId('user') as UserId
+  const agentP = createId('principal') as PrincipalId
+  await testDb.insert(user).values({ id: userId, name: `A-${suffix()}` })
+  await testDb
+    .insert(principal)
+    .values({ id: agentP, userId, role: 'member', type: 'user', createdAt: new Date() })
+  return agentP
+}
+
+async function insertMessage(opts: {
+  ticketId: TicketId
+  senderType: 'agent' | 'visitor' | 'system'
+  isInternal?: boolean
+  principalId?: PrincipalId | null
+  createdAt?: Date
+}) {
+  const [row] = await testDb
+    .insert(conversationMessages)
+    .values({
+      ticketId: opts.ticketId,
+      principalId: opts.principalId ?? null,
+      senderType: opts.senderType,
+      content: 'hi',
+      isInternal: opts.isInternal ?? false,
+      createdAt: opts.createdAt,
+    })
+    .returning()
+  return row
+}
+
+async function ticketReadWatermarks(
+  ticketId: TicketId
+): Promise<{ requesterLastReadAt: Date | null; assigneeLastReadAt: Date | null }> {
+  const [row] = await testDb
+    .select({
+      requesterLastReadAt: tickets.requesterLastReadAt,
+      assigneeLastReadAt: tickets.assigneeLastReadAt,
+    })
+    .from(tickets)
+    .where(eq(tickets.id, ticketId))
+  return row
+}
+
+describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back)', () => {
+  beforeEach(fixture.begin)
+  beforeEach(() => realtime.publishTicketEvent.mockClear())
+  afterEach(fixture.rollback)
+  afterAll(fixture.close)
+
+  describe('ticketUnreadMapForAgent', () => {
+    it('returns a batched map of requester-authored unread counts keyed by ticket id', async () => {
+      const ticketA = await seedTicket()
+      const ticketB = await seedTicket()
+      await insertMessage({ ticketId: ticketA, senderType: 'visitor' })
+      await insertMessage({ ticketId: ticketA, senderType: 'visitor' })
+      await insertMessage({ ticketId: ticketB, senderType: 'visitor' })
+
+      const map = await ticketUnreadMapForAgent([ticketA, ticketB])
+      expect(map.get(ticketA)).toBe(2)
+      expect(map.get(ticketB)).toBe(1)
+    })
+
+    it('omits a ticket with zero unread messages from the map', async () => {
+      const ticketId = await seedTicket()
+      const agentP = await seedAgentPrincipal()
+      await insertMessage({ ticketId, senderType: 'agent', principalId: agentP })
+
+      const map = await ticketUnreadMapForAgent([ticketId])
+      expect(map.get(ticketId)).toBeUndefined()
+    })
+
+    it('respects each ticket assignee_last_read_at watermark independently', async () => {
+      const ticketA = await seedTicket()
+      const ticketB = await seedTicket()
+      await testDb
+        .update(tickets)
+        .set({ assigneeLastReadAt: new Date() })
+        .where(eq(tickets.id, ticketA))
+      await insertMessage({
+        ticketId: ticketA,
+        senderType: 'visitor',
+        createdAt: new Date(Date.now() - 60_000),
+      })
+      await insertMessage({ ticketId: ticketB, senderType: 'visitor' })
+
+      const map = await ticketUnreadMapForAgent([ticketA, ticketB])
+      expect(map.get(ticketA)).toBeUndefined()
+      expect(map.get(ticketB)).toBe(1)
+    })
+  })
+
+  describe('markTicketReadForAgent', () => {
+    it('sets assignee_last_read_at to now by default (standalone ticket)', async () => {
+      const ticketId = await seedTicket()
+      const before = await ticketReadWatermarks(ticketId)
+      expect(before.assigneeLastReadAt).toBeNull()
+
+      await markTicketReadForAgent(ticketId, agentActor())
+
+      const after = await ticketReadWatermarks(ticketId)
+      expect(after.assigneeLastReadAt).not.toBeNull()
+      expect(after.requesterLastReadAt).toBeNull()
+    })
+
+    it('publishes a ticket_read realtime event (unified inbox §3.2, M3)', async () => {
+      const ticketId = await seedTicket()
+
+      await markTicketReadForAgent(ticketId, agentActor())
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+        kind: 'ticket_read',
+        ticketId,
+        side: 'agent',
+        at: expect.any(String),
+      })
+    })
+
+    it('marking read clears the unread count for that side', async () => {
+      const ticketId = await seedTicket()
+      await insertMessage({ ticketId, senderType: 'visitor' })
+      expect((await ticketUnreadMapForAgent([ticketId])).get(ticketId)).toBe(1)
+
+      await markTicketReadForAgent(ticketId, agentActor())
+
+      expect((await ticketUnreadMapForAgent([ticketId])).get(ticketId)).toBeUndefined()
+    })
+  })
+
+  describe('markTicketUnreadFromMessage', () => {
+    it('moves assignee_last_read_at backward to just before the target message and publishes ticket_read', async () => {
+      const ticketId = await seedTicket()
+      const anchorCreatedAt = new Date(Date.now() - 60_000)
+      const anchor = await insertMessage({
+        ticketId,
+        senderType: 'visitor',
+        createdAt: anchorCreatedAt,
+      })
+      // The anchor was previously read (watermark sits after it) — marking
+      // unread from it must rewind the watermark to just before it.
+      await testDb
+        .update(tickets)
+        .set({ assigneeLastReadAt: new Date() })
+        .where(eq(tickets.id, ticketId))
+
+      await markTicketUnreadFromMessage(ticketId, anchor.id as ConversationMessageId, agentActor())
+
+      const after = await ticketReadWatermarks(ticketId)
+      const expected = new Date(anchorCreatedAt.getTime() - 1)
+      expect(after.assigneeLastReadAt?.toISOString()).toBe(expected.toISOString())
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+        kind: 'ticket_read',
+        ticketId,
+        side: 'agent',
+        at: expected.toISOString(),
+      })
+    })
+
+    it('never advances the watermark forward (backward-only, per unreadWatermarkFromAnchor)', async () => {
+      const ticketId = await seedTicket()
+      // Never read (null watermark) — already fully unread, must stay null.
+      const anchor = await insertMessage({ ticketId, senderType: 'visitor' })
+
+      await markTicketUnreadFromMessage(ticketId, anchor.id as ConversationMessageId, agentActor())
+
+      const after = await ticketReadWatermarks(ticketId)
+      expect(after.assigneeLastReadAt).toBeNull()
+    })
+
+    it('404s when the message does not belong to the ticket', async () => {
+      const ticketId = await seedTicket()
+      const other = await seedTicket()
+      const otherMessage = await insertMessage({ ticketId: other, senderType: 'visitor' })
+
+      await expect(
+        markTicketUnreadFromMessage(
+          ticketId,
+          otherMessage.id as ConversationMessageId,
+          agentActor()
+        )
+      ).rejects.toThrow(NotFoundError)
+    })
+
+    it('refuses a non-agent actor (no conversation.reply permission)', async () => {
+      const ticketId = await seedTicket()
+      const anchor = await insertMessage({ ticketId, senderType: 'visitor' })
+      const nonAgent = agentActor({
+        role: 'user',
+        permissions: new Set([PERMISSIONS.TICKET_VIEW_ALL]),
+      })
+
+      await expect(
+        markTicketUnreadFromMessage(ticketId, anchor.id as ConversationMessageId, nonAgent)
+      ).rejects.toThrow(ForbiddenError)
+    })
+
+    it('404s when the ticket is not visible to the actor (assigned elsewhere, only ticket.view)', async () => {
+      const ticketId = await seedTicket()
+      const elsewhere = await seedAgentPrincipal()
+      await testDb
+        .update(tickets)
+        .set({ assigneePrincipalId: elsewhere })
+        .where(eq(tickets.id, ticketId))
+      const anchor = await insertMessage({ ticketId, senderType: 'visitor' })
+      const scopedActor = agentActor({
+        permissions: new Set([PERMISSIONS.TICKET_VIEW, PERMISSIONS.CONVERSATION_REPLY]),
+      })
+
+      await expect(
+        markTicketUnreadFromMessage(ticketId, anchor.id as ConversationMessageId, scopedActor)
+      ).rejects.toThrow(NotFoundError)
+    })
+  })
+})

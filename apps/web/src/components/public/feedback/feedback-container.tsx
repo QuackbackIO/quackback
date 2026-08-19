@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
+import { toast } from 'sonner'
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
-import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
@@ -12,18 +13,23 @@ import {
   PublicFiltersToolbarButton,
 } from '@/components/public/feedback/public-filters-bar'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
+import { PortalModerationSection } from '@/components/public/feedback/portal-moderation-section'
 import { PostCard } from '@/components/public/post-card'
 import type { PublicBoardWithStats } from '@/lib/shared/types'
-import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
-import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
+import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import {
   flattenPublicPosts,
+  publicPostsKeys,
   usePublicPosts,
   useVotedPosts,
 } from '@/lib/client/hooks/use-portal-posts-query'
+import { useChangePostStatusId } from '@/lib/client/mutations/posts'
+import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PublicPostListItem } from '@/lib/shared/types'
 import { cn } from '@/lib/shared/utils'
+import type { PostId, PostStatusId } from '@quackback/ids'
 
 interface FeedbackContainerProps {
   workspaceName: string
@@ -31,7 +37,7 @@ interface FeedbackContainerProps {
   boards: PublicBoardWithStats[]
   posts: PublicPostListItem[]
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   hasMore: boolean
   votedPostIds: string[]
   currentBoard?: string
@@ -46,8 +52,6 @@ interface FeedbackContainerProps {
    * every card — including infinite-scroll pages — and the submit CTA.
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
-  /** Welcome card to render above the post list. Undefined / disabled = hidden. */
-  welcomeCard?: PortalWelcomeCardData
 }
 
 export function FeedbackContainer({
@@ -65,16 +69,24 @@ export function FeedbackContainer({
   defaultBoardId,
   user,
   boardPermissions,
-  welcomeCard,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
+  const queryClient = useQueryClient()
+  const { can } = usePortalPermissions()
+  const changeStatus = useChangePostStatusId()
+  // Team members with post.set_status get an inline status dropdown on the
+  // portal feed; end users and visitors keep the static badge.
+  const canSetStatus = can(PERMISSIONS.POST_SET_STATUS)
+  // Holders of post.approve get the inline moderation section (banner + pending
+  // cards).
+  const canApprove = can(PERMISSIONS.POST_APPROVE)
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
-  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}-${filters.minVotes ?? ''}-${filters.dateFrom ?? ''}-${filters.responded ?? ''}`
+  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}-${filters.minVotes ?? ''}-${filters.dateFrom ?? ''}-${filters.responded ?? ''}-${filters.owner ?? ''}-${(filters.segmentIds ?? []).join()}`
   const [listKey, setListKey] = useState(filterKey)
 
   const effectiveUser = session?.user
@@ -104,6 +116,10 @@ export function FeedbackContainer({
       minVotes: filters.minVotes,
       dateFrom: filters.dateFrom,
       responded: filters.responded,
+      // Team-only filters (owner, segments). Ignored server-side for callers
+      // without post.view_private, so passing them through is always safe.
+      owner: filters.owner,
+      segmentIds: filters.segmentIds,
     }),
     [
       activeBoard,
@@ -114,6 +130,8 @@ export function FeedbackContainer({
       filters.minVotes,
       filters.dateFrom,
       filters.responded,
+      filters.owner,
+      filters.segmentIds,
     ]
   )
 
@@ -140,6 +158,8 @@ export function FeedbackContainer({
     data: postsData,
     isFetching,
     isFetchingNextPage,
+    isPending,
+    isPlaceholderData,
     hasNextPage,
     fetchNextPage,
   } = usePublicPosts({
@@ -154,8 +174,12 @@ export function FeedbackContainer({
   })
 
   const posts = flattenPublicPosts(postsData)
-  // Show subtle loading indicator when fetching new filter results (not for pagination)
-  const isLoading = isFetching && !isFetchingNextPage
+  // Dim the list only during an actual filter transition (placeholderData is
+  // still showing the previous filter's results while the new ones load) —
+  // NOT on every background refetch (e.g. the SSE-adjacent/interval refetches
+  // that happen with fresh data already in cache), which used to dim the feed
+  // on any isFetching tick.
+  const isLoading = isFetching && isPlaceholderData && !isFetchingNextPage
 
   // Update list key only when loading completes to trigger animations
   // This ensures we animate the new data, not stale data during loading
@@ -218,12 +242,82 @@ export function FeedbackContainer({
     }, 100)
   }
 
+  // Write the new statusId straight into the feed's infinite-query cache so the
+  // badge updates immediately, no refetch flicker. Keyed by mergedFilters to
+  // match the live usePublicPosts query.
+  function patchFeedStatus(postId: PostId, statusId: PostStatusId | null): void {
+    queryClient.setQueryData<InfiniteData<{ items: PublicPostListItem[] }>>(
+      publicPostsKeys.list(mergedFilters),
+      (old) =>
+        old
+          ? {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                items: page.items.map((p) => (p.id === postId ? { ...p, statusId } : p)),
+              })),
+            }
+          : old
+    )
+  }
+
+  // Optimistically apply a status, fire the mutation, and roll back on failure.
+  // Shared by the dropdown change and the undo action (undo just targets the
+  // previous statusId). Invalidates the feed on settle to reconcile with server.
+  async function applyStatusChange(
+    postId: PostId,
+    statusId: PostStatusId,
+    previousStatusId: PostStatusId | null
+  ): Promise<void> {
+    patchFeedStatus(postId, statusId)
+    try {
+      await changeStatus.mutateAsync({ postId, statusId })
+    } catch {
+      patchFeedStatus(postId, previousStatusId)
+      toast.error(
+        intl.formatMessage({
+          id: 'portal.postCard.statusChange.error',
+          defaultMessage: 'Failed to update status',
+        })
+      )
+      return
+    } finally {
+      queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
+    }
+  }
+
+  function handleStatusChange(post: PublicPostListItem, statusId: PostStatusId): void {
+    const previousStatusId = post.statusId
+    if (previousStatusId === statusId) return
+    void applyStatusChange(post.id, statusId, previousStatusId)
+    const newStatus = statuses.find((s) => s.id === statusId)
+    toast(
+      intl.formatMessage(
+        {
+          id: 'portal.postCard.statusChange.toast',
+          defaultMessage: 'Status updated to {status}',
+        },
+        { status: newStatus?.name ?? statusId }
+      ),
+      {
+        duration: 5000,
+        action: {
+          label: intl.formatMessage({
+            id: 'portal.postCard.statusChange.undo',
+            defaultMessage: 'Undo',
+          }),
+          onClick: () => {
+            if (previousStatusId) void applyStatusChange(post.id, previousStatusId, statusId)
+          },
+        },
+      }
+    )
+  }
+
   return (
     <div className="py-6">
       <div className="flex gap-8">
         <div className="flex-1 min-w-0">
-          <PortalWelcomeCard welcomeCard={welcomeCard} />
-
           <FeedbackHeader
             workspaceName={workspaceName}
             boards={boards}
@@ -260,19 +354,36 @@ export function FeedbackContainer({
             />
           </div>
 
+          <PortalModerationSection enabled={canApprove} />
+
           <div className="mt-5">
-            {posts.length === 0 && !isLoading ? (
-              <p className="text-muted-foreground text-center py-8">
-                {activeSearch || activeFilterCount > 0
-                  ? intl.formatMessage({
-                      id: 'portal.feedback.list.noPostsFiltered',
-                      defaultMessage: 'No posts match your filters.',
-                    })
-                  : intl.formatMessage({
-                      id: 'portal.feedback.list.noPostsYet',
-                      defaultMessage: 'No posts yet.',
+            {posts.length === 0 && !isPending ? (
+              activeSearch || activeFilterCount > 0 ? (
+                <p className="text-muted-foreground text-center py-8">
+                  {intl.formatMessage({
+                    id: 'portal.feedback.list.noPostsFiltered',
+                    defaultMessage: 'No posts match your filters.',
+                  })}
+                </p>
+              ) : (
+                <div className="text-center py-10 px-4 space-y-3">
+                  <p className="text-base font-medium text-foreground">
+                    {intl.formatMessage({
+                      id: 'portal.feedback.list.noPostsYetTitle',
+                      defaultMessage: 'Got an idea? Be the first to share it',
                     })}
-              </p>
+                  </p>
+                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                    {intl.formatMessage(
+                      {
+                        id: 'portal.feedback.list.noPostsYetDescription',
+                        defaultMessage: 'The {workspace} team reads every request.',
+                      },
+                      { workspace: workspaceName }
+                    )}
+                  </p>
+                </div>
+              )
             ) : (
               <>
                 <div
@@ -297,6 +408,7 @@ export function FeedbackContainer({
                         voteCount={post.voteCount}
                         commentCount={post.commentCount}
                         authorName={post.authorName}
+                        authorPrincipalId={post.principalId}
                         createdAt={post.createdAt}
                         boardSlug={post.board?.slug || ''}
                         tags={post.tags}
@@ -304,6 +416,9 @@ export function FeedbackContainer({
                         canVote={
                           post.board ? (boardPermissions?.[post.board.id]?.canVote ?? false) : false
                         }
+                        canChangeStatus={canSetStatus}
+                        onStatusChange={(statusId) => handleStatusChange(post, statusId)}
+                        isUpdatingStatus={changeStatus.isPending}
                         showAvatar={false}
                       />
                     </div>

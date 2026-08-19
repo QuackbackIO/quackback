@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
   badRequestResponse,
@@ -22,7 +23,9 @@ export const Route = createFileRoute('/api/v1/posts/$postId/merge')({
        */
       POST: async ({ request, params }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, { role: 'admin' })
+          const { principalId } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.POST_MERGE,
+          })
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 

@@ -20,14 +20,33 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { Emoji, emojis as defaultEmojis, type EmojiItem } from '@tiptap/extension-emoji'
+import { Emoji } from '@tiptap/extension-emoji'
 import { MentionExtension } from './mention-extension'
 import { QuackbackEmbed } from './quackback-embed-extension'
+import { ConversationImage } from './conversation-image-node'
 import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
-import { common, createLowlight } from 'lowlight'
+import { createLowlight } from 'lowlight'
+import langBash from 'highlight.js/lib/languages/bash'
+import langC from 'highlight.js/lib/languages/c'
+import langCss from 'highlight.js/lib/languages/css'
+import langDiff from 'highlight.js/lib/languages/diff'
+import langGo from 'highlight.js/lib/languages/go'
+import langJava from 'highlight.js/lib/languages/java'
+import langJavascript from 'highlight.js/lib/languages/javascript'
+import langJson from 'highlight.js/lib/languages/json'
+import langPhp from 'highlight.js/lib/languages/php'
+import langPlaintext from 'highlight.js/lib/languages/plaintext'
+import langPython from 'highlight.js/lib/languages/python'
+import langRuby from 'highlight.js/lib/languages/ruby'
+import langRust from 'highlight.js/lib/languages/rust'
+import langShell from 'highlight.js/lib/languages/shell'
+import langSql from 'highlight.js/lib/languages/sql'
+import langTypescript from 'highlight.js/lib/languages/typescript'
+import langXml from 'highlight.js/lib/languages/xml'
+import langYaml from 'highlight.js/lib/languages/yaml'
 import {
   useEffect,
   useCallback,
@@ -39,15 +58,19 @@ import {
   useRef,
 } from 'react'
 import { computePosition, flip, shift, offset } from '@floating-ui/dom'
-import DOMPurify from 'dompurify'
 import { cn } from '@/lib/shared/utils'
-import {
-  escapeHtmlAttr,
-  sanitizeUrl,
-  sanitizeImageUrl,
-  safePositiveInt,
-  extractYoutubeId,
-} from '@/lib/shared/utils/sanitize'
+// The read-only JSON→HTML serializer now lives in a browser-free shared module
+// so server-side consumers (e.g. outbound conversation email) can import it
+// without pulling in React/tiptap-react. Re-exported below for existing callers.
+import { generateContentHTML } from '@/lib/shared/content-html'
+// The emoji dataset + shortcode lookup live in their own module so read-only
+// surfaces don't statically bundle it; the editor's `:` picker is fine to pay
+// the cost since the editor chunk is already lazy-loaded on compose surfaces.
+import { defaultEmojis, lookupEmoji, type EmojiItem } from '@/lib/shared/content-emoji'
+// Read-only rendering (RichTextContent / isRichTextContent) lives in a sibling
+// module with only light deps. Re-exported below for backward compatibility;
+// read-only consumers should import from '@/components/ui/rich-text-content'.
+import { RichTextContent, isRichTextContent } from './rich-text-content'
 import {
   Bold,
   Italic,
@@ -101,8 +124,42 @@ import {
 } from './context-menu'
 import { ScrollArea } from './scroll-area'
 
-// Create lowlight instance with common languages
-const lowlight = createLowlight(common)
+// Curated grammar set instead of lowlight's `common` (~37 languages): the
+// bundle cost of every registered grammar is paid by all editor surfaces,
+// including the lazy-loaded visitor composer, so registration is limited to
+// languages that actually appear in support and product content. An
+// unregistered language renders as plain text inside the code block.
+const lowlight = createLowlight({
+  bash: langBash,
+  c: langC,
+  css: langCss,
+  diff: langDiff,
+  go: langGo,
+  java: langJava,
+  javascript: langJavascript,
+  json: langJson,
+  php: langPhp,
+  plaintext: langPlaintext,
+  python: langPython,
+  ruby: langRuby,
+  rust: langRust,
+  shell: langShell,
+  sql: langSql,
+  typescript: langTypescript,
+  xml: langXml,
+  yaml: langYaml,
+})
+// Fence aliases people actually type (```js, ```html, ```sh …) — without
+// these an aliased block silently falls back to plain text.
+lowlight.registerAlias({
+  bash: ['sh', 'zsh'],
+  javascript: ['js', 'jsx', 'node'],
+  python: ['py'],
+  ruby: ['rb'],
+  typescript: ['ts', 'tsx'],
+  xml: ['html', 'svg'],
+  yaml: ['yml'],
+})
 
 // ============================================================================
 // Extension builder (exported for testing)
@@ -117,9 +174,14 @@ const lowlight = createLowlight(common)
  */
 export function buildExtensions(
   features: EditorFeatures,
-  options: { placeholder: string; onImageUpload?: (file: File) => Promise<string> }
+  options: {
+    placeholder: string
+    onImageUpload?: (file: File) => Promise<string>
+    /** When set, Enter submits (chat-send) instead of splitting the block. */
+    onSubmit?: () => void
+  }
 ) {
-  const { placeholder, onImageUpload } = options
+  const { placeholder, onImageUpload, onSubmit } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -148,6 +210,10 @@ export function buildExtensions(
     // Always register so saved embed nodes round-trip in any editor; paste rules
     // only fire when quackbackEmbeds is enabled for this editor.
     QuackbackEmbed.configure({ enablePaste: !!features.quackbackEmbeds }),
+    // Always register so legacy inline conversation images (the `chatImage` node
+    // authored by the retired hand-rolled composers) still parse in the editor
+    // schema and round-trip. New images author as resizableImage.
+    ConversationImage,
     ...(features.codeBlocks
       ? [
           CodeBlockLowlight.configure({
@@ -208,8 +274,18 @@ export function buildExtensions(
       : []),
     ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
     ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
+    // Enter-key bindings, highest precedence first. createSubmitOnEnter registers
+    // at a higher priority than createEnterAsHardBreak (see the factory below), so
+    // a consumer that passes onSubmit gets Enter-to-send even when the preset also
+    // sets enterAsHardBreak — Enter submits, Shift+Enter breaks. Both yield to an
+    // open slash/mention/emoji popover via hasActiveSuggestion.
+    ...(onSubmit ? [createSubmitOnEnter(onSubmit)] : []),
     ...(features.enterAsHardBreak ? [createEnterAsHardBreak()] : []),
-    MentionExtension,
+    // Registered unless mentions are explicitly disabled (undefined = enabled), so
+    // every existing consumer keeps the `@` menu while visitor-facing composers can
+    // drop it. Read-only surfaces render mention nodes via generateContentHTML,
+    // which doesn't go through buildExtensions.
+    ...(features.mentions !== false ? [MentionExtension] : []),
     Markdown,
   ]
 }
@@ -236,6 +312,32 @@ function createEnterAsHardBreak() {
             () => commands.setHardBreak(),
           ])
         },
+      }
+    },
+  })
+}
+
+// Enter submits (chat-send); Shift+Enter and Alt+Enter insert a line break.
+// Registered at a priority above createEnterAsHardBreak and StarterKit (default
+// 100) so, when a preset sets enterAsHardBreak while a consumer also passes
+// onSubmit, Enter still submits rather than inserting a break. TipTap tries
+// same-key bindings in descending priority order and stops at the first that
+// returns true. ProseMirror runs keymap handlers before a suggestion popover's
+// handleKeyDown, so an open slash/mention/emoji menu keeps Enter — we yield by
+// returning false.
+function createSubmitOnEnter(onSubmit: () => void) {
+  return Extension.create({
+    name: 'submitOnEnter',
+    priority: 1000,
+    addKeyboardShortcuts() {
+      return {
+        Enter: () => {
+          if (hasActiveSuggestion(this.editor)) return false
+          onSubmit()
+          return true
+        },
+        'Shift-Enter': () => this.editor.commands.setHardBreak(),
+        'Alt-Enter': () => this.editor.commands.setHardBreak(),
       }
     },
   })
@@ -308,6 +410,11 @@ export interface EditorFeatures {
    * for document-shaped ones (posts, changelog) where paragraph-per-Enter
    * is the expected affordance. */
   enterAsHardBreak?: boolean
+  /** Enable the `@` mention menu (default: true). Registered unless explicitly
+   * false, so existing consumers keep mentions and saved mention nodes still
+   * round-trip; disable for visitor-facing composers where there's nobody to
+   * mention. */
+  mentions?: boolean
 }
 
 // ============================================================================
@@ -478,6 +585,8 @@ function getSlashMenuItems(
             editor.commands.setResizableImage({ src, 'data-keep-ratio': true })
           } catch (error) {
             console.error('Failed to upload image:', error)
+            const { toast } = await import('sonner')
+            toast.error("Couldn't upload image. Try again.")
           }
         }
         input.click()
@@ -653,7 +762,7 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
           <div ref={containerRef} className="p-0.5">
             {Object.entries(groupedItems).map(([group, groupItems]) => (
               <div key={group}>
-                <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
                   {groupLabels[group] || group}
                 </div>
                 {groupItems.map((item) => {
@@ -675,7 +784,7 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
                       }}
                       onMouseDown={(e) => e.preventDefault()}
                     >
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded border bg-background text-[10px]">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded border bg-background text-xs">
                         {item.icon}
                       </span>
                       <span className="truncate font-medium">{item.title}</span>
@@ -847,10 +956,6 @@ const DEFAULT_EMOJI_SHORTCODES = [
   'rocket',
 ] as const
 
-function lookupEmoji(shortcode: string): EmojiItem | undefined {
-  return defaultEmojis.find((e) => e.emoji && e.shortcodes.includes(shortcode))
-}
-
 function filterEmojiItems(query: string): EmojiItem[] {
   const lower = query.trim().toLowerCase()
   if (!lower) {
@@ -960,7 +1065,7 @@ const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionLi
 )
 EmojiSuggestionList.displayName = 'EmojiSuggestionList'
 
-/** The `:`-triggered inline emoji picker, shared with the chat composers so
+/** The `:`-triggered inline emoji picker, shared with the conversation composers so
  *  reply + note get the same emoji UX as posts. */
 export function createEmojiExtension() {
   return Emoji.configure({
@@ -1055,6 +1160,17 @@ export function createEmojiExtension() {
   })
 }
 
+/**
+ * The imperative seam a host uses to move focus into a mounted editor —
+ * keyboard shortcuts that open a composer, "insert then keep typing" flows.
+ * Exposed through `editorRef` so callers never reach for the ProseMirror DOM
+ * node, whose class names are an editor internal.
+ */
+export interface RichTextEditorHandle {
+  /** Focus the editing surface, placing the cursor at `position` (default 'end'). */
+  focus: (position?: 'start' | 'end' | number) => void
+}
+
 interface RichTextEditorProps {
   value?: string | JSONContent
   onChange?: (json: JSONContent, html: string, markdown: string) => void
@@ -1063,7 +1179,14 @@ interface RichTextEditorProps {
   disabled?: boolean
   minHeight?: string
   borderless?: boolean
-  toolbarPosition?: 'top' | 'none'
+  /** Where the formatting toolbar sits relative to the content area.
+   * - 'top': classic bordered strip above the editor (filled, muted bg)
+   * - 'bottom': quiet ghost icon row on a transparent background, sitting
+   *   directly on the editor card below the content (no bordered strip)
+   * - 'none': no fixed toolbar (bubble + slash menus only)
+   * Defaults to 'bottom' for bordered editors and 'none' for borderless ones.
+   * Both 'top' and 'bottom' render the SAME feature-gated button set. */
+  toolbarPosition?: 'top' | 'none' | 'bottom'
   /** Where to place the cursor when the editor mounts ('end' is the common
    * choice for edit forms; default is no autofocus). */
   autofocus?: boolean | 'start' | 'end' | number
@@ -1071,6 +1194,16 @@ interface RichTextEditorProps {
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
   onImageUpload?: (file: File) => Promise<string>
+  /** When set, Enter submits (chat-send) instead of splitting the block and
+   * Shift+Enter / Alt+Enter insert a line break. Yields to an open
+   * slash/mention/emoji popover. MUST be a stable callback (wrap churning state
+   * in a ref): the keymap closure is baked in at editor creation and is NOT
+   * refreshed by setOptions, so an unstable callback leaves Enter firing the
+   * first render's stale closure forever. */
+  onSubmit?: () => void
+  /** Publishes the imperative focus seam. Mutually exclusive editors may share
+   * one ref object: whichever instance is mounted owns it. */
+  editorRef?: React.RefObject<RichTextEditorHandle | null>
 }
 
 // ============================================================================
@@ -1085,10 +1218,12 @@ function RichTextEditorBase({
   disabled = false,
   minHeight = '120px',
   borderless = false,
-  toolbarPosition = borderless ? 'none' : 'top',
+  toolbarPosition = borderless ? 'none' : 'bottom',
   autofocus = false,
   features = {},
   onImageUpload,
+  onSubmit,
+  editorRef,
 }: RichTextEditorProps) {
   // Memoize extensions keyed on individual feature flags.
   // TipTap v3's useEditor calls editor.setOptions() whenever the extensions
@@ -1096,7 +1231,7 @@ function RichTextEditorBase({
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload }),
+    () => buildExtensions(features, { placeholder, onImageUpload, onSubmit }),
 
     [
       features.headings,
@@ -1111,7 +1246,9 @@ function RichTextEditorBase({
       features.slashMenu,
       features.emojiPicker,
       features.enterAsHardBreak,
+      features.mentions,
       onImageUpload,
+      onSubmit,
       placeholder,
     ]
   )
@@ -1178,6 +1315,18 @@ function RichTextEditorBase({
     },
     editorProps,
   })
+
+  // The imperative focus seam. `withLiveEditor` guards the window where the
+  // editor is still null or already torn down, so a stale host reference can
+  // never chain off a destroyed editor.
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      focus: (position: 'start' | 'end' | number = 'end') =>
+        withLiveEditor(editor, (live) => live.commands.focus(position)),
+    }),
+    [editor]
+  )
 
   // Sync external value changes into the editor.
   // Skipped when the value is the exact object/string we just emitted via onUpdate.
@@ -1303,8 +1452,6 @@ function RichTextEditorBase({
     )
   }
 
-  const showToolbar = toolbarPosition !== 'none'
-
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild disabled={!features.images}>
@@ -1317,16 +1464,28 @@ function RichTextEditorBase({
           )}
           onContextMenu={handleContextMenu}
         >
-          {showToolbar && (
+          {toolbarPosition === 'top' && (
             <MenuBar
               editor={editor}
               disabled={disabled}
               features={features}
               onImageUpload={onImageUpload}
+              variant="top"
             />
           )}
 
           <EditorContent editor={editor} />
+
+          {toolbarPosition === 'bottom' && (
+            <MenuBar
+              editor={editor}
+              disabled={disabled}
+              features={features}
+              onImageUpload={onImageUpload}
+              variant="bottom"
+              borderless={borderless}
+            />
+          )}
         </div>
       </ContextMenuTrigger>
 
@@ -1423,12 +1582,14 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.value !== next.value ||
     prev.onChange !== next.onChange ||
     prev.onImageUpload !== next.onImageUpload ||
+    prev.onSubmit !== next.onSubmit ||
     prev.disabled !== next.disabled ||
     prev.placeholder !== next.placeholder ||
     prev.minHeight !== next.minHeight ||
     prev.borderless !== next.borderless ||
     prev.toolbarPosition !== next.toolbarPosition ||
-    prev.className !== next.className
+    prev.className !== next.className ||
+    prev.editorRef !== next.editorRef
   )
     return false
   const pf = prev.features ?? {}
@@ -1446,6 +1607,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     pf.slashMenu === nf.slashMenu &&
     pf.emojiPicker === nf.emojiPicker &&
     pf.enterAsHardBreak === nf.enterAsHardBreak &&
+    pf.mentions === nf.mentions &&
     pf.bubbleMenu === nf.bubbleMenu
   )
 })
@@ -1496,6 +1658,9 @@ function handleImageDrop(
         })
         .catch((err) => {
           console.error('[RichTextEditor] Image drop upload failed:', err)
+          void import('sonner').then(({ toast }) =>
+            toast.error("Couldn't upload image. Try again.")
+          )
         })
     })
 
@@ -1536,6 +1701,9 @@ function handleImagePaste(
         })
         .catch((err) => {
           console.error('[RichTextEditor] Image paste upload failed:', err)
+          void import('sonner').then(({ toast }) =>
+            toast.error("Couldn't upload image. Try again.")
+          )
         })
     })
 
@@ -1554,6 +1722,9 @@ interface ToolbarButtonProps {
   isActive?: boolean
   title?: string
   'aria-label'?: string
+  /** 'quiet' renders a muted ghost icon on a transparent background (for the
+   * bottom toolbar); 'default' keeps the filled active-state look. */
+  variant?: 'default' | 'quiet'
 }
 
 function ToolbarButton({
@@ -1563,13 +1734,22 @@ function ToolbarButton({
   isActive,
   title,
   'aria-label': ariaLabel,
+  variant = 'default',
 }: ToolbarButtonProps) {
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
-      className={cn('h-7 w-7 p-0', isActive && 'bg-muted')}
+      className={cn(
+        'h-7 w-7 p-0',
+        variant === 'quiet'
+          ? cn(
+              'text-muted-foreground/60 hover:text-foreground',
+              isActive && 'bg-muted/60 text-foreground'
+            )
+          : isActive && 'bg-muted'
+      )}
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -1998,9 +2178,27 @@ interface MenuBarProps {
   disabled: boolean
   features?: EditorFeatures
   onImageUpload?: (file: File) => Promise<string>
+  /** 'top' is the classic bordered strip; 'bottom' is a quiet transparent row
+   * of ghost icon buttons rendered below the content. Both render the same
+   * feature-gated button set. */
+  variant?: 'top' | 'bottom'
+  /** Only meaningful for the bottom variant: when the surrounding editor is
+   * borderless the consumer supplies its own horizontal padding, so the row
+   * drops its own px to stay flush with the content's left edge. */
+  borderless?: boolean
 }
 
-function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProps) {
+function MenuBar({
+  editor,
+  disabled,
+  features = {},
+  onImageUpload,
+  variant = 'top',
+  borderless = false,
+}: MenuBarProps) {
+  const isBottom = variant === 'bottom'
+  // Muted ghost buttons on the transparent bottom row; filled active-state on top.
+  const btn = isBottom ? ('quiet' as const) : ('default' as const)
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -2035,6 +2233,8 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
         editor.commands.setResizableImage({ src, 'data-keep-ratio': true })
       } catch (error) {
         console.error('Failed to upload image:', error)
+        const { toast } = await import('sonner')
+        toast.error("Couldn't upload image. Try again.")
       }
     }
     input.click()
@@ -2044,11 +2244,22 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
   const canRedo = editor.can().chain().focus().redo().run()
 
   return (
-    <div className="flex items-center gap-1 flex-wrap px-2 py-1.5 border-b border-input bg-muted/30">
+    <div
+      className={cn(
+        'flex items-center flex-wrap',
+        isBottom
+          ? // Quiet transparent row sitting on the editor background. Drops its
+            // own horizontal padding when borderless so the consumer's padding
+            // keeps the icons flush with the content's left edge.
+            cn('gap-0.5 pt-1', borderless ? 'px-0 pb-0' : 'px-3 pb-2')
+          : 'gap-1 px-2 py-1.5 border-b border-input bg-muted/30'
+      )}
+    >
       {/* Heading buttons */}
       {features.headings && (
         <>
           <ToolbarButton
+            variant={btn}
             icon={<Heading1 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             disabled={disabled}
@@ -2056,6 +2267,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
             title="Heading 1"
           />
           <ToolbarButton
+            variant={btn}
             icon={<Heading2 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             disabled={disabled}
@@ -2063,6 +2275,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
             title="Heading 2"
           />
           <ToolbarButton
+            variant={btn}
             icon={<Heading3 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
             disabled={disabled}
@@ -2075,6 +2288,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
 
       {/* Basic formatting */}
       <ToolbarButton
+        variant={btn}
         icon={<Bold className="size-4" />}
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
@@ -2082,6 +2296,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
         title="Bold"
       />
       <ToolbarButton
+        variant={btn}
         icon={<Italic className="size-4" />}
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
@@ -2092,6 +2307,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
 
       {/* Lists */}
       <ToolbarButton
+        variant={btn}
         icon={<ListBulletIcon className="size-4" />}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         disabled={disabled}
@@ -2099,6 +2315,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
         title="Bullet List"
       />
       <ToolbarButton
+        variant={btn}
         icon={<ListOrdered className="size-4" />}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         disabled={disabled}
@@ -2109,6 +2326,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
 
       {/* Link */}
       <ToolbarButton
+        variant={btn}
         icon={<LinkIcon className="size-4" />}
         onClick={setLink}
         disabled={disabled}
@@ -2119,6 +2337,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
       {/* Code block button */}
       {features.codeBlocks && (
         <ToolbarButton
+          variant={btn}
           icon={<Code2 className="size-4" />}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           disabled={disabled}
@@ -2130,6 +2349,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
       {/* Image button */}
       {features.images && onImageUpload && (
         <ToolbarButton
+          variant={btn}
           icon={<ImagePlus className="size-4" />}
           onClick={insertImage}
           disabled={disabled}
@@ -2137,16 +2357,20 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
         />
       )}
 
-      <div className="flex-1" />
+      {/* Push undo/redo to the trailing edge on the filled top strip; the quiet
+          bottom row flows left-to-right (and wraps) with no spacer. */}
+      {!isBottom && <div className="flex-1" />}
 
       {/* Undo/Redo */}
       <ToolbarButton
+        variant={btn}
         icon={<ArrowUturnLeftIcon className="size-4" />}
         onClick={() => editor.chain().focus().undo().run()}
         disabled={disabled || !canUndo}
         title="Undo"
       />
       <ToolbarButton
+        variant={btn}
         icon={<ArrowUturnRightIcon className="size-4" />}
         onClick={() => editor.chain().focus().redo().run()}
         disabled={disabled || !canRedo}
@@ -2157,332 +2381,15 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
 }
 
 // ============================================================================
-// Read-Only Content Renderer (SSR Compatible)
+// Read-only rendering (re-exports)
 // ============================================================================
 
-interface RichTextContentProps {
-  content: JSONContent | string
-  className?: string
-}
-
-// ============================================================================
-// HTML Sanitization Utilities (XSS Prevention)
-// ============================================================================
-
-// Sanitization utilities (escapeHtmlAttr, sanitizeUrl, sanitizeImageUrl,
-// safePositiveInt, extractYoutubeId) are imported from @/lib/shared/utils/sanitize
-
-// Generate HTML from TipTap JSON content for SSR
-export function generateContentHTML(content: JSONContent): string {
-  function extractPlainText(node: JSONContent): string {
-    if (!node) return ''
-    if (node.type === 'text') return node.text ?? ''
-    if (Array.isArray(node.content)) return node.content.map(extractPlainText).join('')
-    return ''
-  }
-
-  function slugifyHeading(text: string): string {
-    return text
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-  }
-
-  function renderNode(node: JSONContent): string {
-    if (!node) return ''
-
-    switch (node.type) {
-      case 'doc':
-        return node.content?.map(renderNode).join('') ?? ''
-
-      case 'paragraph': {
-        const pContent = node.content?.map(renderNode).join('') ?? ''
-        return pContent ? `<p>${pContent}</p>` : '<p></p>'
-      }
-
-      case 'heading': {
-        const rawLevel = Number(node.attrs?.level)
-        const level = [1, 2, 3, 4, 5, 6].includes(rawLevel) ? rawLevel : 2
-        const headingContent = node.content?.map(renderNode).join('') ?? ''
-        const id = slugifyHeading(extractPlainText(node))
-        const idAttr = id ? ` id="${escapeHtmlAttr(id)}"` : ''
-        return `<h${level}${idAttr}>${headingContent}</h${level}>`
-      }
-
-      case 'text': {
-        let text = node.text ?? ''
-        // Escape HTML entities
-        text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        // Apply marks
-        if (node.marks) {
-          for (const mark of node.marks) {
-            switch (mark.type) {
-              case 'bold':
-                text = `<strong>${text}</strong>`
-                break
-              case 'italic':
-                text = `<em>${text}</em>`
-                break
-              case 'underline':
-                text = `<u>${text}</u>`
-                break
-              case 'strike':
-                text = `<s>${text}</s>`
-                break
-              case 'code':
-                text = `<code class="bg-muted px-1 py-0.5 rounded text-sm">${text}</code>`
-                break
-              case 'link': {
-                const rawHref = mark.attrs?.href ?? ''
-                const href = escapeHtmlAttr(sanitizeUrl(rawHref))
-                // Only render link if href is valid after sanitization
-                if (href) {
-                  text = `<a href="${href}" class="text-primary underline" target="_blank" rel="noopener noreferrer">${text}</a>`
-                }
-                break
-              }
-            }
-          }
-        }
-        return text
-      }
-
-      case 'bulletList':
-        return `<ul>${node.content?.map(renderNode).join('') ?? ''}</ul>`
-
-      case 'orderedList':
-        return `<ol>${node.content?.map(renderNode).join('') ?? ''}</ol>`
-
-      case 'listItem': {
-        // Unwrap single-paragraph list items to avoid <li><p>…</p></li>
-        // which causes Tailwind prose to add large p margins inside li
-        const children = node.content ?? []
-        if (children.length === 1 && children[0].type === 'paragraph') {
-          const inlineHtml = children[0].content?.map(renderNode).join('') ?? ''
-          return `<li>${inlineHtml}</li>`
-        }
-        return `<li>${children.map(renderNode).join('')}</li>`
-      }
-
-      case 'taskList':
-        return `<ul class="not-prose list-none pl-0">${node.content?.map(renderNode).join('') ?? ''}</ul>`
-
-      case 'taskItem': {
-        const checked = node.attrs?.checked ?? false
-        const checkboxHtml = `<input type="checkbox" ${checked ? 'checked' : ''} disabled class="mr-2 mt-1" />`
-        const itemContent = node.content?.map(renderNode).join('') ?? ''
-        return `<li class="flex gap-2 items-start">${checkboxHtml}<div>${itemContent}</div></li>`
-      }
-
-      case 'blockquote':
-        return `<blockquote class="border-l-4 border-border pl-4 italic">${node.content?.map(renderNode).join('') ?? ''}</blockquote>`
-
-      case 'horizontalRule':
-        return '<hr class="my-4 border-border" />'
-
-      case 'table':
-        return `<table class="w-full border-collapse">${node.content?.map(renderNode).join('') ?? ''}</table>`
-
-      case 'tableRow':
-        return `<tr>${node.content?.map(renderNode).join('') ?? ''}</tr>`
-
-      case 'tableHeader':
-        return `<th class="border border-border bg-muted/50 p-2 text-left font-semibold">${node.content?.map(renderNode).join('') ?? ''}</th>`
-
-      case 'tableCell':
-        return `<td class="border border-border p-2">${node.content?.map(renderNode).join('') ?? ''}</td>`
-
-      case 'codeBlock': {
-        const language = escapeHtmlAttr(String(node.attrs?.language ?? ''))
-        const codeContent = node.content?.map(renderNode).join('') ?? ''
-        return `<pre class="not-prose rounded-lg bg-muted p-4 overflow-x-auto"><code class="language-${language}">${codeContent}</code></pre>`
-      }
-
-      case 'image':
-      case 'resizableImage': {
-        const rawSrc = node.attrs?.src ?? ''
-        const rawAlt = node.attrs?.alt ?? ''
-        const src = escapeHtmlAttr(sanitizeImageUrl(rawSrc))
-        const alt = escapeHtmlAttr(rawAlt)
-        // Only render image if src is valid after sanitization
-        if (!src) return ''
-        const imgWidth = node.attrs?.width !== undefined ? safePositiveInt(node.attrs.width, 0) : 0
-        // Only apply width (not height) so h-auto preserves aspect ratio
-        const style = imgWidth ? `style="width:${imgWidth}px;"` : ''
-        return `<img src="${src}" alt="${alt}" class="max-w-full h-auto rounded-lg" ${style} />`
-      }
-
-      case 'chatImage': {
-        // Inline chat image. Bounded (max-w-xs) so it sits inside a chat bubble.
-        // Renders nothing if the src is empty after sanitization.
-        const src = escapeHtmlAttr(sanitizeImageUrl(String(node.attrs?.src ?? '')))
-        const alt = escapeHtmlAttr(String(node.attrs?.alt ?? ''))
-        if (!src) return ''
-        return `<img src="${src}" alt="${alt}" class="max-w-xs rounded-md" />`
-      }
-
-      case 'youtube': {
-        const src = node.attrs?.src ?? ''
-        const width = safePositiveInt(node.attrs?.width, 640)
-        const height = safePositiveInt(node.attrs?.height, 360)
-        // Extract video ID (only allows alphanumeric, hyphens, underscores)
-        const videoId = extractYoutubeId(src)
-        if (videoId) {
-          const safeVideoId = escapeHtmlAttr(videoId)
-          return `<div class="relative aspect-video my-4 rounded-lg overflow-hidden"><iframe src="https://www.youtube-nocookie.com/embed/${safeVideoId}" width="${width}" height="${height}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="absolute inset-0 w-full h-full"></iframe></div>`
-        }
-        return ''
-      }
-
-      case 'hardBreak':
-        return '<br>'
-
-      case 'mention': {
-        // Inline leaf node. The picker stores {id: principalId, label: displayName}.
-        // We emit a chip span with both attrs so the client overlay can resolve a
-        // hover card by principalId; label is also rendered as the visible "@name".
-        // escapeHtmlAttr escapes &<>"' so it's safe for both attribute and text use.
-        const id = escapeHtmlAttr(String(node.attrs?.id ?? ''))
-        const label = escapeHtmlAttr(String(node.attrs?.label ?? ''))
-        if (!id) return ''
-        return `<span class="mention" data-principal-id="${id}" data-display-name="${label}">@${label}</span>`
-      }
-
-      case 'emoji': {
-        // @tiptap/extension-emoji persists `{ name }` only — the Unicode char
-        // is re-derived at render time from the bundled set. Sanitize-tiptap
-        // keeps `emoji` if it was supplied, so we still prefer attrs.emoji
-        // when present and HTML-escape for defence-in-depth.
-        const rawName = String(node.attrs?.name ?? '')
-        const ch = String(node.attrs?.emoji ?? lookupEmoji(rawName)?.emoji ?? '')
-        const escaped = ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        const name = escapeHtmlAttr(rawName)
-        const dataNameAttr = name ? ` data-name="${name}"` : ''
-        return `<span data-type="emoji"${dataNameAttr}>${escaped}</span>`
-      }
-
-      case 'quackbackEmbed': {
-        // Atom block. Saved content isn't rendered through a live editor on
-        // display surfaces, so we emit a static placeholder div that survives
-        // DOMPurify; EmbedHydration portals a live card into it client-side.
-        // A missing/foreign kind or id renders nothing — the embed degrades to
-        // empty rather than breaking the page.
-        const kind = String(node.attrs?.kind ?? '')
-        const id = String(node.attrs?.id ?? '')
-        if ((kind !== 'post' && kind !== 'changelog') || !id) return ''
-        return `<div data-quackback-embed="1" data-kind="${escapeHtmlAttr(kind)}" data-id="${escapeHtmlAttr(id)}" class="quackback-embed-placeholder"></div>`
-      }
-
-      default:
-        // For unknown nodes, try to render their content
-        return node.content?.map(renderNode).join('') ?? ''
-    }
-  }
-
-  return renderNode(content)
-}
-
-// DOMPurify config for sanitizing rendered TipTap HTML (defense-in-depth)
-const DOMPURIFY_CONFIG = {
-  ALLOWED_TAGS: [
-    'p',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'strong',
-    'em',
-    'u',
-    's',
-    'code',
-    'pre',
-    'a',
-    'ul',
-    'ol',
-    'li',
-    'blockquote',
-    'hr',
-    'br',
-    'img',
-    'iframe',
-    'div',
-    'table',
-    'tr',
-    'th',
-    'td',
-    'input',
-    'span',
-  ],
-  ALLOWED_ATTR: [
-    'id',
-    'href',
-    'src',
-    'alt',
-    'class',
-    'style',
-    'target',
-    'rel',
-    'width',
-    'height',
-    'frameborder',
-    'allow',
-    'allowfullscreen',
-    'type',
-    'checked',
-    'disabled',
-    'data-type',
-    'data-name',
-    'data-principal-id',
-    'data-display-name',
-    'data-quackback-embed',
-    'data-kind',
-    'data-id',
-  ],
-  ALLOW_DATA_ATTR: false,
-  ADD_TAGS: ['iframe'],
-  ADD_ATTR: ['allowfullscreen', 'frameborder', 'allow'],
-}
-
-export function RichTextContent({ content, className }: RichTextContentProps) {
-  // Generate HTML from JSON content, with DOMPurify defense-in-depth on client
-  if (typeof content === 'object' && content.type === 'doc') {
-    const rawHtml = generateContentHTML(content)
-    // DOMPurify requires a DOM — on the server, generateContentHTML already produces
-    // controlled HTML from validated JSON (content is sanitized at ingestion time)
-    const html =
-      typeof window !== 'undefined' ? DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG) : rawHtml
-    return (
-      <div
-        className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    )
-  }
-
-  // For string content (HTML or plain text)
-  if (typeof content === 'string') {
-    return (
-      <div className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}>
-        <p className="whitespace-pre-wrap">{content}</p>
-      </div>
-    )
-  }
-
-  return null
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-// Helper to check if content is TipTap JSON
-export function isRichTextContent(content: unknown): content is JSONContent {
-  return (
-    typeof content === 'object' &&
-    content !== null &&
-    'type' in content &&
-    (content as JSONContent).type === 'doc'
-  )
-}
+// The read-only renderer now lives in a sibling module with only light deps so
+// portal reading surfaces don't pull in this editor chunk. These re-exports keep
+// existing importers of this module working; NEW read-only consumers should
+// import from '@/components/ui/rich-text-content' directly.
+//
+// `generateContentHTML` (the JSON→HTML serializer) is defined in the browser-free
+// shared module `@/lib/shared/content-html`; re-exported here for existing callers.
+export { generateContentHTML }
+export { RichTextContent, isRichTextContent }

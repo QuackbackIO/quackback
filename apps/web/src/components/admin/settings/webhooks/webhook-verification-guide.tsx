@@ -12,6 +12,7 @@ import {
   PHPIcon,
 } from '@/components/admin/settings/lang-icons'
 import { cn } from '@/lib/shared/utils'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 
 // ——————————————————————————————————————————————————
 // Framework definitions
@@ -217,16 +218,14 @@ const WEBHOOK_HEADERS = [
 
 export function WebhookVerificationGuide() {
   const [selectedFramework, setSelectedFramework] = useState('node')
-  const [copiedCode, setCopiedCode] = useState(false)
+  const { copied: copiedCode, copy: copyCode } = useCopyToClipboard()
 
   const framework = FRAMEWORKS.find((f) => f.id === selectedFramework) ?? FRAMEWORKS[0]
 
   const codeOutput = useMemo(() => framework.code, [framework])
 
   async function handleCopyCode() {
-    await navigator.clipboard.writeText(codeOutput)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
+    await copyCode(codeOutput)
   }
 
   return (
@@ -258,10 +257,10 @@ export function WebhookVerificationGuide() {
               <div className="space-y-1">
                 {WEBHOOK_HEADERS.map((header) => (
                   <div key={header.name} className="flex items-baseline gap-2">
-                    <code className="text-[10px] font-mono text-foreground bg-muted/30 border border-border/50 rounded px-1.5 py-0.5 shrink-0">
+                    <code className="text-xs font-mono text-foreground bg-muted/30 border border-border/50 rounded px-1.5 py-0.5 shrink-0">
                       {header.name}
                     </code>
-                    <span className="text-[10px] text-muted-foreground">{header.desc}</span>
+                    <span className="text-xs text-muted-foreground">{header.desc}</span>
                   </div>
                 ))}
               </div>
@@ -280,7 +279,7 @@ export function WebhookVerificationGuide() {
               {WEBHOOK_EVENTS.map((event) => (
                 <span
                   key={event.id}
-                  className="text-[10px] font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
+                  className="text-xs font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
                   title={event.id}
                 >
                   {event.label}
@@ -331,13 +330,10 @@ export function WebhookVerificationGuide() {
             <span className="text-xs font-medium text-foreground">Payload format</span>
             <p className="text-[11px] text-muted-foreground">
               Deliveries are JSON with{' '}
-              <code className="text-[10px] bg-muted/50 px-1 py-0.5 rounded font-mono">id</code>,{' '}
-              <code className="text-[10px] bg-muted/50 px-1 py-0.5 rounded font-mono">type</code>,{' '}
-              <code className="text-[10px] bg-muted/50 px-1 py-0.5 rounded font-mono">
-                createdAt
-              </code>
-              , and{' '}
-              <code className="text-[10px] bg-muted/50 px-1 py-0.5 rounded font-mono">data</code>{' '}
+              <code className="text-xs bg-muted/50 px-1 py-0.5 rounded font-mono">id</code>,{' '}
+              <code className="text-xs bg-muted/50 px-1 py-0.5 rounded font-mono">type</code>,{' '}
+              <code className="text-xs bg-muted/50 px-1 py-0.5 rounded font-mono">createdAt</code>,
+              and <code className="text-xs bg-muted/50 px-1 py-0.5 rounded font-mono">data</code>{' '}
               fields. Your endpoint must respond with a 2xx status within 5 seconds.
             </p>
           </div>

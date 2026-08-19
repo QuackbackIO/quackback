@@ -9,6 +9,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PrincipalId } from '@quackback/ids'
 
 const updateUserSchema = z.object({
@@ -28,9 +29,13 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.PEOPLE_VIEW })
 
-          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
+          const principalId = parseTypeId<PrincipalId>(
+            params.principalId,
+            'principal',
+            'principal ID'
+          )
 
           const { getPortalUserDetail } = await import('@/lib/server/domains/users/user.detail')
           const { parseUserAttributes } = await import('@/lib/server/domains/users/user.attributes')
@@ -83,9 +88,13 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.PEOPLE_MANAGE })
 
-          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
+          const principalId = parseTypeId<PrincipalId>(
+            params.principalId,
+            'principal',
+            'principal ID'
+          )
 
           const body = await request.json()
           const parsed = updateUserSchema.safeParse(body)
@@ -122,9 +131,13 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.PEOPLE_MANAGE })
 
-          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
+          const principalId = parseTypeId<PrincipalId>(
+            params.principalId,
+            'principal',
+            'principal ID'
+          )
 
           const { removePortalUser } = await import('@/lib/server/domains/users/user.service')
 

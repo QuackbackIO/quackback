@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/shared/utils'
 
 export interface FilterOption {
@@ -26,6 +27,13 @@ interface FilterChipProps {
   onChange?: (newId: string) => void
   /** Dropdown options (renders a popover when provided with onChange) */
   options?: FilterOption[]
+  /**
+   * Marks the chip as an internal / team-only filter: amber-accented styling
+   * plus (when `tooltip` is set) a hover tooltip. Customers never see these.
+   */
+  internal?: boolean
+  /** Localized tooltip text; shown on hover when `internal` is set. */
+  tooltip?: string
 }
 
 export function FilterChip({
@@ -37,6 +45,8 @@ export function FilterChip({
   onRemove,
   onChange,
   options,
+  internal = false,
+  tooltip,
 }: FilterChipProps) {
   const [open, setOpen] = useState(false)
   const hasOptions = options && options.length > 0 && onChange
@@ -55,20 +65,39 @@ export function FilterChip({
           aria-hidden="true"
         />
       ) : (
-        <Icon className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+        <Icon
+          className={cn(
+            'h-3 w-3',
+            internal ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground'
+          )}
+          aria-hidden="true"
+        />
       )}
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
+      <span
+        className={cn(internal ? 'text-amber-700 dark:text-amber-500' : 'text-muted-foreground')}
+      >
+        {label}
+      </span>
+      <span
+        className={cn(
+          'font-medium',
+          internal ? 'text-amber-800 dark:text-amber-400' : 'text-foreground'
+        )}
+      >
+        {value}
+      </span>
     </>
   )
 
-  return (
+  const chip = (
     <div
       className={cn(
         'inline-flex items-center gap-1.5 px-2.5 py-0.5',
-        'rounded-full bg-muted/60 text-[13px]',
-        'border border-border/30 hover:border-border/50',
-        'transition-colors'
+        'rounded-full text-[13px]',
+        'transition-colors',
+        internal
+          ? 'bg-amber-500/10 border border-amber-500/40 hover:border-amber-500/60'
+          : 'bg-muted/60 border border-border/30 hover:border-border/50'
       )}
     >
       {hasOptions ? (
@@ -89,7 +118,7 @@ export function FilterChip({
                   type="button"
                   onClick={() => handleSelect(option.id)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs transition-colors',
+                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] transition-colors',
                     option.id === valueId ? 'bg-muted/50 font-medium' : 'hover:bg-muted/50'
                   )}
                 >
@@ -123,4 +152,15 @@ export function FilterChip({
       </button>
     </div>
   )
+
+  if (internal && tooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{chip}</TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return chip
 }

@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PrincipalId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
+import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import {
   fetchPublicBoards,
@@ -33,6 +33,8 @@ export const portalQueries = {
     minVotes?: number
     dateFrom?: string
     responded?: RespondedFilter
+    owner?: string
+    segmentIds?: string[]
   }) =>
     queryOptions({
       queryKey: [
@@ -47,6 +49,8 @@ export const portalQueries = {
         params.minVotes,
         params.dateFrom,
         params.responded,
+        params.owner,
+        params.segmentIds,
       ],
       queryFn: async () => {
         const data = await fetchPortalData({ data: params })
@@ -130,7 +134,7 @@ export const portalQueries = {
    */
   roadmapPosts: (params: {
     roadmapId: RoadmapId
-    statusId: StatusId
+    statusId: PostStatusId
     limit?: number
     offset?: number
   }) =>

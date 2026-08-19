@@ -97,7 +97,7 @@ export function OAuthProviderGrid({
                   <div className="mt-0.5">
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+                      className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
                     >
                       Not configured
                     </Badge>
@@ -120,7 +120,7 @@ export function OAuthProviderGrid({
                   {isEnabled && (
                     <Badge
                       variant="outline"
-                      className="border-green-500/30 text-green-600 text-[10px] px-1.5 py-0"
+                      className="border-green-500/30 text-green-600 text-[11px] px-1.5 py-0"
                     >
                       Enabled
                     </Badge>

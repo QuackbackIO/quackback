@@ -96,20 +96,15 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getTenantSettings: vi.fn().mockResolvedValue(null),
 }))
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real db module so tables/operators stay current; override only what this suite drives.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       user: { findFirst: hoisted.findUser },
       ssoRecoveryCode: { findMany: hoisted.findCodes },
     },
     update: (...a: unknown[]) => hoisted.updateUsedFn(...a),
-  },
-  user: { id: 'user.id', email: 'user.email' },
-  ssoRecoveryCode: {
-    id: 'rcode.id',
-    userId: 'rcode.userId',
-    codeHash: 'rcode.codeHash',
-    usedAt: 'rcode.usedAt',
   },
   eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
   and: vi.fn((...p: unknown[]) => ({ op: 'and', p })),

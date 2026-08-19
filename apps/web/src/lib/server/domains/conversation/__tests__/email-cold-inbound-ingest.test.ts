@@ -1,0 +1,339 @@
+/**
+ * Real-DB coverage for the cold-inbound ingest wiring (§4.8 Layer 2): a fresh
+ * email to an inbound route opens an email conversation via the DMARC-gated
+ * sender resolution; an email to no known route is left alone. The
+ * conversation.created emit is mocked (it dispatches events that need runtime
+ * config); the conversation/message/lead writes are real. Fixture rollback.
+ */
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
+import type { TeamId } from '@quackback/ids'
+
+// config is read lazily (getters), so seeding the required env before any config
+// access makes config.baseUrl resolve — the insert-time trusted-url gate
+// (restrictImagesToTrustedOrigins) needs it to accept the rehosted image src.
+// The harness leaves BASE_URL as a bare "/" (not a valid absolute URL), so set an
+// absolute one unconditionally for this file's config load.
+process.env.BASE_URL = 'https://quackback.test'
+process.env.SECRET_KEY ||= 'x'.repeat(32)
+process.env.REDIS_URL ||= 'redis://localhost:6379'
+
+import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
+import {
+  teams,
+  channelAccounts,
+  conversations,
+  conversationMessages,
+  principal,
+  eq,
+  sql,
+} from '@/lib/server/db'
+import type { ParsedInboundEmail } from '../conversation.email-inbound'
+
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
+}))
+// Both emits dispatch to the bus (needs runtime config); stub them. Leaving
+// emitMessageCreated real would run dispatchEvent inside the rolled-back fixture.
+vi.mock('../conversation.webhooks', async (orig) => ({
+  ...(await orig<typeof import('../conversation.webhooks')>()),
+  emitConversationCreated: vi.fn().mockResolvedValue(undefined),
+  emitMessageCreated: vi.fn().mockResolvedValue(undefined),
+}))
+// The cold-inbound throttle is a real Redis bucket keyed on the sender address,
+// which this file's fixture hardcodes. Left live, the cases below would burn a
+// shared 10-per-hour budget and start failing as 'rate_limited' on repeated
+// local runs — a red suite that points nowhere near its cause. Count the calls
+// instead; the bucket arithmetic is pinned in conversation-ratelimit.test.ts.
+vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+  incrementBucket: vi.fn().mockResolvedValue({ count: 1 }),
+  incrementBuckets: vi.fn().mockResolvedValue([1]),
+  bucketRetryAfter: vi.fn().mockResolvedValue(60),
+}))
+// Storage is mocked so media rehosting never touches real S3; the mock returns
+// own-storage URLs (config.baseUrl + /api/storage/...) so they pass the trusted-
+// url gate the direct cold-inbound insert re-applies.
+vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
+  const { config } = await import('@/lib/server/config')
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
+    isS3Configured: () => true,
+    uploadImageBuffer: async (bytes: Buffer, mime: string) => ({
+      url: `${config.baseUrl}/api/storage/chat-images/img-${bytes.length}.${mime.split('/')[1]}`,
+    }),
+    uploadObject: async (key: string) => `${config.baseUrl}/api/storage/${key}`,
+  }
+})
+
+import { ingestParsedEmail } from '../conversation.email-inbound.service'
+import { emitMessageCreated } from '../conversation.webhooks'
+import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
+
+const fixture = await createDbTestFixture({
+  probe: async (db) => {
+    await db.select({ id: channelAccounts.id }).from(channelAccounts).limit(0)
+    await db.select({ id: conversations.id }).from(conversations).limit(0)
+  },
+})
+
+const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+async function seedInboundRoute(address: string): Promise<void> {
+  const [team] = await testDb
+    .insert(teams)
+    .values({ name: `T-${suffix()}` })
+    .returning()
+  await testDb.insert(channelAccounts).values({
+    owningTeamId: team.id as TeamId,
+    role: 'inbound',
+    channel: 'email',
+    address,
+    inboundTrust: 'strict',
+  })
+}
+
+const coldEmail = (over: Partial<ParsedInboundEmail> = {}): ParsedInboundEmail => ({
+  toAddresses: ['support@quackback.io'],
+  ccAddresses: [],
+  from: 'customer@acme.com',
+  subject: 'Help with billing',
+  text: 'My invoice looks wrong.',
+  messageId: `<${suffix()}@acme.com>`,
+  emailId: null,
+  inReplyTo: null,
+  references: [],
+  autoSubmitted: null,
+  autoResponseSuppress: null,
+  precedence: null,
+  hasListHeaders: false,
+  authenticationResults: 'mx.quackback.io; spf=pass; dmarc=pass (p=reject) header.from=acme.com',
+  ...over,
+})
+
+describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)', () => {
+  beforeEach(fixture.begin)
+  // Four cases below ingest a cold email, so the emit mocks accumulate calls
+  // across them; without this reset the call-count assertions would silently
+  // depend on this file's test order. clearAllMocks keeps implementations.
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(fixture.rollback)
+  afterAll(fixture.close)
+
+  it('opens an email conversation for a fresh mail to an inbound route', async () => {
+    await seedInboundRoute('support@quackback.io')
+
+    const res = await ingestParsedEmail(coldEmail())
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const [conv] = await testDb
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, res.conversationId))
+    expect(conv.channel).toBe('email')
+    expect(conv.source).toBe('email')
+    expect(conv.channelAccountId).not.toBeNull()
+    expect(conv.waitingSince).not.toBeNull() // customer waiting on first reply
+    expect(conv.subject).toBe('Help with billing')
+
+    // The first message landed as a visitor message.
+    const msgs = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, res.conversationId))
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].senderType).toBe('visitor')
+
+    // A DMARC-pass sender with no account -> a fresh lead carries the address.
+    const [visitor] = await testDb
+      .select({ type: principal.type, contactEmail: principal.contactEmail })
+      .from(principal)
+      .where(eq(principal.id, conv.visitorPrincipalId))
+    expect(visitor.type).toBe('anonymous')
+    expect(visitor.contactEmail).toBe('customer@acme.com')
+
+    // message.created is what the team bell, message-triggered workflows and the
+    // next-response SLA clock ride. Without it an emailed-in thread notifies
+    // nobody. `true` is the first-message flag the bell's anti-spam gate reads.
+    expect(vi.mocked(emitMessageCreated)).toHaveBeenCalledTimes(1)
+    const [, , emittedMessage, emittedConversation, isFirstMessage] =
+      vi.mocked(emitMessageCreated).mock.calls[0]
+    expect(emittedMessage.id).toBe(msgs[0].id)
+    expect(emittedConversation.id).toBe(res.conversationId)
+    expect(isFirstMessage).toBe(true)
+  })
+
+  it('stores converted content + contentJson for an HTML-only cold inbound', async () => {
+    await seedInboundRoute('support@quackback.io')
+
+    const res = await ingestParsedEmail(
+      coldEmail({ text: '', html: '<div dir="ltr">Invoice looks <b>wrong</b>.</div>' })
+    )
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const [msg] = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, res.conversationId))
+    // Placeholder gone: the plaintext mirror is the converted body.
+    expect(msg.content).toBe('Invoice looks wrong.')
+    expect(msg.content).not.toContain('no plain-text body')
+    // The rich doc is persisted alongside it, formatting intact.
+    expect(msg.contentJson).not.toBeNull()
+    expect(JSON.stringify(msg.contentJson)).toContain('"bold"')
+  })
+
+  it('rehosts an inline cid image + stores a discrete attachment for cold inbound', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const png = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+      0x52,
+    ])
+    const pdf = Buffer.from('%PDF-1.4 cold invoice payload')
+
+    const res = await ingestParsedEmail(
+      coldEmail({
+        text: '',
+        html: '<div dir="ltr">See logo <img src="cid:logo@c"> and the invoice.</div>',
+        attachments: [
+          {
+            bytes: png,
+            contentType: 'image/png',
+            filename: 'logo.png',
+            contentId: 'logo@c',
+            disposition: 'inline',
+          },
+          {
+            bytes: pdf,
+            contentType: 'application/pdf',
+            filename: 'invoice.pdf',
+            contentId: null,
+            disposition: 'attachment',
+          },
+        ],
+      })
+    )
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const [msg] = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, res.conversationId))
+    // Inline image rehosted into the body: a trusted own-storage src survives the
+    // insert-time restrictImagesToTrustedOrigins sanitize; the cid ref is gone.
+    const json = JSON.stringify(msg.contentJson)
+    expect(json).toContain('/api/storage/chat-images')
+    expect(json).not.toContain('cid:')
+    // The PDF lands as a discrete attachment with its name/type/size.
+    expect(msg.attachments).toHaveLength(1)
+    expect(msg.attachments![0]).toMatchObject({
+      name: 'invoice.pdf',
+      contentType: 'application/pdf',
+      size: pdf.length,
+    })
+  })
+
+  it('leaves an email to no known route alone (no_conversation)', async () => {
+    // No inbound route seeded for this address.
+    const res = await ingestParsedEmail(coldEmail({ toAddresses: ['nobody@elsewhere.com'] }))
+    expect(res.status).toBe('no_conversation')
+  })
+
+  it('drops a hard DMARC reject without opening a conversation', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const res = await ingestParsedEmail(
+      coldEmail({ authenticationResults: 'mx; dmarc=fail (p=reject) header.from=acme.com' })
+    )
+    expect(res.status).toBe('suppressed')
+  })
+
+  // Cold inbound is the only ingress that mints a principal for an
+  // unauthenticated stranger, so the throttle has to bite BEFORE resolution —
+  // a gate placed after it has already let the row be created.
+  it('rate-limits a flooding sender without creating a principal or conversation', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const [{ count: principalsBefore }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+    // Over the 10-per-hour cold budget.
+    vi.mocked(incrementBucket).mockResolvedValueOnce({ count: 11 })
+
+    const res = await ingestParsedEmail(coldEmail())
+
+    expect(res.status).toBe('rate_limited')
+    const [{ count: principalsAfter }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+    expect(principalsAfter).toBe(principalsBefore)
+    const convs = await testDb.select({ id: conversations.id }).from(conversations)
+    expect(convs).toHaveLength(0)
+  })
+
+  // An unparseable From has no key to throttle on, and used to mint a lead with
+  // a null contact email on a thread nobody could ever reply to.
+  it('drops an unparseable From before spending a rate-limit token', async () => {
+    await seedInboundRoute('support@quackback.io')
+
+    const res = await ingestParsedEmail(coldEmail({ from: 'not an address' }))
+
+    expect(res.status).toBe('from_mismatch')
+    expect(vi.mocked(incrementBucket)).not.toHaveBeenCalled()
+  })
+
+  // Without reuse, every mail mints a fresh principal, so a block can never bite
+  // and the junk is unreclaimable (the anon sweep skips anything owning a
+  // conversation). The display-name variant pins that normalization is what
+  // makes the match work — a raw From header would key a second lead.
+  it('reuses the lead a previous mail from the same address created', async () => {
+    await seedInboundRoute('support@quackback.io')
+
+    const first = await ingestParsedEmail(coldEmail())
+    expect(first.status).toBe('ingested')
+    if (first.status !== 'ingested') return
+    const [{ count: afterFirst }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+
+    const second = await ingestParsedEmail(coldEmail({ from: '"Jane Doe" <customer@acme.com>' }))
+    expect(second.status).toBe('ingested')
+    if (second.status !== 'ingested') return
+
+    const [convA] = await testDb
+      .select({ visitor: conversations.visitorPrincipalId, email: conversations.visitorEmail })
+      .from(conversations)
+      .where(eq(conversations.id, first.conversationId))
+    const [convB] = await testDb
+      .select({ visitor: conversations.visitorPrincipalId, email: conversations.visitorEmail })
+      .from(conversations)
+      .where(eq(conversations.id, second.conversationId))
+
+    expect(convB.visitor).toBe(convA.visitor)
+    // The bare address is stored either way — never the raw header.
+    expect(convB.email).toBe('customer@acme.com')
+    const [{ count: afterSecond }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+    expect(afterSecond).toBe(afterFirst)
+  })
+
+  it('suppresses a blocked sender without opening a conversation', async () => {
+    await seedInboundRoute('support@quackback.io')
+    // A lead an earlier mail created, since blocked. createdAt is set explicitly
+    // because the column's default lives in the factory, not in the schema.
+    await testDb.insert(principal).values({
+      role: 'user',
+      type: 'anonymous',
+      contactEmail: 'customer@acme.com',
+      createdAt: new Date(),
+      blockedAt: new Date(),
+    })
+
+    const res = await ingestParsedEmail(coldEmail())
+
+    expect(res.status).toBe('suppressed')
+    const convs = await testDb.select({ id: conversations.id }).from(conversations)
+    expect(convs).toHaveLength(0)
+  })
+})

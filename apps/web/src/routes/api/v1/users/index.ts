@@ -6,6 +6,7 @@ import {
   decodeCursor,
   encodeCursor,
 } from '@/lib/server/domains/api/responses'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 export const Route = createFileRoute('/api/v1/users/')({
   server: {
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/api/v1/users/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.PEOPLE_VIEW })
 
           // Parse query params
           const url = new URL(request.url)

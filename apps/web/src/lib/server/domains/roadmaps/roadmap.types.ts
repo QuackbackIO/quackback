@@ -2,8 +2,32 @@
  * Input/Output types for RoadmapService operations
  */
 
-import type { PostRoadmap } from '@/lib/server/db'
-import type { PostId, RoadmapId, StatusId, BoardId, TagId, SegmentId } from '@quackback/ids'
+import type { Roadmap, RoadmapColumn } from '@/lib/server/db'
+import type {
+  RoadmapId,
+  RoadmapColumnId,
+  PostStatusId,
+  BoardId,
+  PostTagId,
+  SegmentId,
+} from '@quackback/ids'
+import type {
+  RoadmapBaseFilter,
+  RoadmapFrequency,
+  RoadmapType,
+  RoadmapVisibility,
+} from '@/lib/shared/roadmap-config'
+
+export interface RoadmapColumnInput {
+  id?: RoadmapColumnId
+  statusId: PostStatusId
+  name: string
+  icon?: string | null
+  color: string
+  position: number
+}
+
+export type RoadmapWithColumns = Roadmap & { columns: RoadmapColumn[] }
 
 /**
  * Input for creating a new roadmap
@@ -12,7 +36,13 @@ export interface CreateRoadmapInput {
   name: string
   slug: string
   description?: string
-  isPublic?: boolean
+  type?: RoadmapType
+  baseFilter?: RoadmapBaseFilter
+  dateSource?: 'eta' | null
+  frequency?: RoadmapFrequency | null
+  visibility?: RoadmapVisibility
+  visibleSegmentIds?: SegmentId[] | null
+  columns?: RoadmapColumnInput[]
 }
 
 /**
@@ -20,47 +50,39 @@ export interface CreateRoadmapInput {
  */
 export interface UpdateRoadmapInput {
   name?: string
-  description?: string
-  isPublic?: boolean
+  description?: string | null
+  type?: RoadmapType
+  baseFilter?: RoadmapBaseFilter
+  dateSource?: 'eta' | null
+  frequency?: RoadmapFrequency | null
+  visibility?: RoadmapVisibility
+  visibleSegmentIds?: SegmentId[] | null
+  columns?: RoadmapColumnInput[]
 }
 
 /**
- * Input for adding a post to a roadmap
+ * Post returned by a derived roadmap view.
  */
-export interface AddPostToRoadmapInput {
-  postId: PostId
-  roadmapId: RoadmapId
-}
-
-/**
- * Input for reordering posts within a roadmap
- */
-export interface ReorderPostsInput {
-  roadmapId: RoadmapId
-  postIds: PostId[]
-}
-
-/**
- * Roadmap post entry for display
- */
-export interface RoadmapPostEntry {
-  id: PostId
+export interface RoadmapViewPost {
+  id: import('@quackback/ids').PostId
   title: string
   voteCount: number
-  statusId: StatusId | null
+  commentCount: number
+  statusId: PostStatusId | null
+  /** Target ship date (time-based roadmap); serialized across the RPC boundary. */
+  eta: Date | string | null
   board: {
     id: BoardId
     name: string
     slug: string
   }
-  roadmapEntry: PostRoadmap
 }
 
 /**
- * Result for roadmap post list queries (with roadmap entry data)
+ * Result for derived roadmap post list queries.
  */
 export interface RoadmapPostsListResult {
-  items: RoadmapPostEntry[]
+  items: RoadmapViewPost[]
   total: number
   hasMore: boolean
 }
@@ -69,12 +91,29 @@ export interface RoadmapPostsListResult {
  * Query options for listing roadmap posts
  */
 export interface RoadmapPostsQueryOptions {
-  statusId?: StatusId
+  statusId?: PostStatusId
   limit?: number
   offset?: number
   search?: string
   boardIds?: BoardId[]
-  tagIds?: TagId[]
+  tagIds?: PostTagId[]
   segmentIds?: SegmentId[]
+  bucketId?: string
   sort?: 'votes' | 'newest' | 'oldest'
+}
+
+export interface CreateRoadmapColumnInput {
+  roadmapId: RoadmapId
+  statusId: PostStatusId
+  name: string
+  icon?: string | null
+  color: string
+  position?: number
+}
+
+export interface UpdateRoadmapColumnInput {
+  name?: string
+  icon?: string | null
+  color?: string
+  position?: number
 }

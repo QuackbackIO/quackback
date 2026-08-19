@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   successResponse,
   noContentResponse,
@@ -19,7 +20,7 @@ import {
 } from '@/lib/server/domains/help-center/help-center.service'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
-import type { HelpCenterArticleId, PrincipalId } from '@quackback/ids'
+import type { KbArticleId, PrincipalId } from '@quackback/ids'
 
 const updateArticleBody = z.object({
   categoryId: z.string().optional(),
@@ -73,13 +74,9 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
-          const articleId = parseTypeId<HelpCenterArticleId>(
-            params.articleId,
-            'article',
-            'article ID'
-          )
+          const articleId = parseTypeId<KbArticleId>(params.articleId, 'kb_article', 'article ID')
 
           const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
@@ -92,13 +89,9 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.HELP_CENTER_MANAGE })
 
-          const articleId = parseTypeId<HelpCenterArticleId>(
-            params.articleId,
-            'article',
-            'article ID'
-          )
+          const articleId = parseTypeId<KbArticleId>(params.articleId, 'kb_article', 'article ID')
 
           const body = await request.json()
           const parsed = updateArticleBody.safeParse(body)
@@ -150,14 +143,10 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          // Soft delete (deleteArticle sets deletedAt) — team OK.
-          await withApiKeyAuth(request, { role: 'team' })
+          // Soft delete (deleteArticle sets deletedAt).
+          await withApiKeyAuth(request, { permission: PERMISSIONS.HELP_CENTER_MANAGE })
 
-          const articleId = parseTypeId<HelpCenterArticleId>(
-            params.articleId,
-            'article',
-            'article ID'
-          )
+          const articleId = parseTypeId<KbArticleId>(params.articleId, 'kb_article', 'article ID')
 
           await deleteArticle(articleId)
           return noContentResponse()

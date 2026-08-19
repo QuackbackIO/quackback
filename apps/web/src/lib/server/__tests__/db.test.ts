@@ -57,7 +57,10 @@ describe('db module', () => {
       const query = db.query
 
       expect(mockCreateDb).toHaveBeenCalledTimes(1)
-      expect(mockCreateDb).toHaveBeenCalledWith('postgres://localhost/quackback', { max: 50 })
+      expect(mockCreateDb).toHaveBeenCalledWith('postgres://localhost/quackback', {
+        max: 10,
+        idleTimeout: 20,
+      })
       expect(query).toBeDefined()
     })
 

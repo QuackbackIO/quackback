@@ -3,7 +3,7 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { PageHeader } from '@/components/shared/page-header'
 import { ThemeSwitcher } from '@/components/theme-switcher'
-import { NotificationPreferencesForm } from '@/components/settings/notification-preferences-form'
+import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
 
 export const Route = createFileRoute('/_portal/settings/preferences')({
   component: PreferencesPage,
@@ -63,16 +63,16 @@ function PreferencesPage() {
         <h2 className="font-medium mb-1">
           <FormattedMessage
             id="portal.settings.preferences.notifications.title"
-            defaultMessage="Email Notifications"
+            defaultMessage="Notifications"
           />
         </h2>
         <p className="text-sm text-muted-foreground mb-4">
           <FormattedMessage
             id="portal.settings.preferences.notifications.description"
-            defaultMessage="Manage email notifications for posts you're subscribed to"
+            defaultMessage="Choose what you're notified about and how"
           />
         </p>
-        <NotificationPreferencesForm />
+        <NotificationMatrixForm surface="portal" />
       </div>
     </div>
   )

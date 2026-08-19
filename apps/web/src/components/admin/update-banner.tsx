@@ -1,49 +1,68 @@
 import { useState, useEffect } from 'react'
 import { XMarkIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
+import { setUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 
-const DISMISSED_VERSION_KEY = 'quackback_dismissed_version'
-const CHANGELOG_URL = 'https://feedback.quackback.io/changelog'
+// Legacy localStorage key. Dismissal now lives in a cookie (readable during
+// SSR — see update-banner-cookie.ts) so the banner renders in its final
+// expanded/collapsed state on first paint instead of flashing expanded and
+// then collapsing once client JS reads localStorage. This key is only read
+// once, client-side, to migrate returning users onto the cookie.
+const LEGACY_DISMISSED_VERSION_KEY = 'quackback_dismissed_version'
 
-function getDismissedVersion(): string | null {
+function getLegacyDismissedVersion(): string | null {
   if (typeof window === 'undefined') return null
   try {
-    return localStorage.getItem(DISMISSED_VERSION_KEY)
+    return localStorage.getItem(LEGACY_DISMISSED_VERSION_KEY)
   } catch {
     return null
   }
 }
 
-function setDismissedVersion(version: string): void {
+function clearLegacyDismissedVersion(): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem(DISMISSED_VERSION_KEY, version)
+    localStorage.removeItem(LEGACY_DISMISSED_VERSION_KEY)
   } catch {
     // Ignore storage errors
   }
 }
 
+const CHANGELOG_URL = 'https://feedback.quackback.io/changelog'
+
 interface UpdateBannerProps {
   latestVersion: LatestVersionResult | null
+  /** Version the banner was dismissed for, read from the SSR cookie
+   *  (see update-banner-cookie.ts). Drives the initial render so the banner
+   *  never flashes expanded before collapsing. */
+  dismissedVersion: string | null
 }
 
-export function UpdateBanner({ latestVersion }: UpdateBannerProps) {
-  const [open, setOpen] = useState(false)
+export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerProps) {
+  const isDismissed = Boolean(
+    latestVersion && dismissedVersion && dismissedVersion === latestVersion.version
+  )
+  const [open, setOpen] = useState(() => Boolean(latestVersion) && !isDismissed)
 
   useEffect(() => {
-    if (!latestVersion) return
-    const dismissedVersion = getDismissedVersion()
-    if (!dismissedVersion || dismissedVersion !== latestVersion.version) {
-      // Small delay so the collapsed state paints first
-      const timer = setTimeout(() => setOpen(true), 50)
-      return () => clearTimeout(timer)
+    // One-time migration for returning users who dismissed the banner before
+    // this cookie existed: treat the old localStorage key as authoritative,
+    // collapse immediately, persist it to the cookie, and clear the legacy
+    // key so this codepath doesn't keep running on every mount.
+    if (!latestVersion || isDismissed) return
+    const legacyDismissedVersion = getLegacyDismissedVersion()
+    if (legacyDismissedVersion === latestVersion.version) {
+      setUpdateBannerDismissedVersionCookie(legacyDismissedVersion)
+      clearLegacyDismissedVersion()
+      setOpen(false)
     }
-  }, [latestVersion])
+  }, [latestVersion, isDismissed])
 
   if (!latestVersion) return null
 
   const handleDismiss = () => {
-    setDismissedVersion(latestVersion.version)
+    setUpdateBannerDismissedVersionCookie(latestVersion.version)
+    clearLegacyDismissedVersion()
     setOpen(false)
   }
 

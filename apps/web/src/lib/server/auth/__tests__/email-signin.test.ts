@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
-  mockMintMagicLinkUrl: vi.fn(async () => ({
+  mockMintMagicLinkUrl: vi.fn(async (opts: { email: string }) => ({
     url: 'https://example.com/verify-magic-link?token=t',
     token: 't',
+    // The address written into the verification row. Senders mail this rather
+    // than the request string, so the mock has to carry it.
+    sealedAddress: opts.email,
   })),
   mockSendVerificationOTP: vi.fn(async () => undefined),
   mockSendMagicLinkEmail: vi.fn(async () => undefined),

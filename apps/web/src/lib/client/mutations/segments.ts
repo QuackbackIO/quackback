@@ -15,13 +15,19 @@ import {
   evaluateSegmentFn,
   evaluateAllSegmentsFn,
 } from '@/lib/server/functions/admin'
+import { usersKeys } from '@/lib/client/hooks/use-users-queries'
 
 const SEGMENTS_KEY = ['admin', 'segments']
-const USERS_KEY = ['admin', 'users']
 
+// The Users list, detail panel, and route loader now all read from a SINGLE
+// cache tree — usersKeys.all (['users', ...]) — after QC-1 collapsed the old
+// ['admin', 'users', filters] route suspense query onto the same infinite
+// definition the list renders. So one invalidation of usersKeys.all keeps the
+// visible list/detail fresh after a segment membership change (no second
+// sibling tree to hand-invalidate).
 function invalidateSegmentQueries(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
-  void queryClient.invalidateQueries({ queryKey: USERS_KEY })
+  void queryClient.invalidateQueries({ queryKey: usersKeys.all })
 }
 
 /** Create a new segment. */

@@ -289,7 +289,7 @@ export function ListItem({ left, title, meta, action, className }: ListItemProps
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium truncate">{title}</div>
         {meta && meta.length > 0 && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             {meta.map((item, i) => (
               <span key={i} className="contents">
                 {i > 0 && <span>·</span>}
@@ -328,7 +328,7 @@ export function VoteCount({ count }: VoteCountProps) {
       >
         <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
       </svg>
-      <span className="text-[10px] font-semibold tabular-nums">{count}</span>
+      <span className="text-xs font-semibold tabular-nums">{count}</span>
     </div>
   )
 }

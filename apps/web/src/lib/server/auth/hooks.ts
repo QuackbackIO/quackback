@@ -20,7 +20,8 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
-import { generateId } from '@quackback/ids'
+import type { UserId } from '@quackback/ids'
+import type { Role } from '@/lib/shared/roles'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -36,12 +37,16 @@ import {
   checkMagicLinkSendRateLimit,
   type SignInRateLimiter,
 } from './signin-rate-limit'
+import { checkAnonMintRateLimit } from './widget-rate-limit'
 import {
   computeDeviceFingerprint,
   forgetDevice,
   isDeviceUnseen,
   markDeviceSeen,
 } from './signin-device-tracker'
+import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
+import { decodeSsoClaims } from './sso-claims-decode'
+import { takeResolvedClaims } from './resolved-claims-stash'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -92,6 +97,10 @@ export function inferProvider(ctx: {
     case '/email-otp/send-verification-otp':
     case '/sign-in/email-otp':
       return 'magic-link'
+    case '/sign-in/anonymous':
+      // The widget's lazy anonymous-session mint. Carries no email, so it's
+      // rate-limited per-IP by handleSignInPreCheck, not selectSignInRateLimiter.
+      return 'anonymous'
     case '/sign-in/social': {
       const v = ctx.body?.provider
       return typeof v === 'string' ? v : null
@@ -189,9 +198,43 @@ export async function handleSignInPreCheck(ctx: {
 
   if (NO_EMAIL_BEFORE_PATHS.has(ctx.path ?? '')) return
 
+  // The anonymous mint carries no email, so it can't ride the per-email
+  // limiters below — bound it per-IP here instead. Without this, the widget's
+  // open mint endpoint is an unmetered way to flood the session table.
+  if (provider === 'anonymous') {
+    const mintIp = getClientIp(getRequestHeaders())
+    const mintResult = await checkAnonMintRateLimit(mintIp).catch((error) => {
+      log.error({ err: error }, 'anon-mint rate-limit check threw; failing open')
+      return { allowed: true as const }
+    })
+    if (!mintResult.allowed) {
+      throw new APIError(
+        'TOO_MANY_REQUESTS',
+        { code: 'rate_limited', message: AUTH_BLOCK_MESSAGES.rate_limited },
+        mintResult.retryAfter ? { 'Retry-After': String(mintResult.retryAfter) } : undefined
+      )
+    }
+    return
+  }
+
   const body = ctx.body as { email?: unknown } | undefined
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : null
   if (!email) return
+
+  // The reserved placeholder domain is never a real address: it backs the
+  // synthetic ones minted for principals that have no email. Refuse it at
+  // every email-bearing entry point so a placeholder cannot be pre-registered
+  // by whoever derives it — provider-scoped placeholders are computed from
+  // public subjects, and a squatter would permanently block the real identity
+  // from linking while being unable to verify the address either, since the
+  // transport refuses to deliver there.
+  //
+  // Checked before the tenant load and the rate limiter: it is the cheapest
+  // possible rejection and it keeps the reserved domain out of the rate-limit
+  // keyspace.
+  if (isSyntheticAnonEmail(email)) {
+    throw ctx.redirect('/?auth=signin&error=reserved_email_domain')
+  }
 
   // Rate-limit before any DB load. Generic redirect on block so the
   // response doesn't leak which dimension hit the cap. Sequential
@@ -255,7 +298,7 @@ export async function handleSignInPreCheck(ctx: {
         columns: { role: true },
       })
     : null
-  const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
+  const role = (principalRow?.role ?? 'user') as Role
 
   // Load the provider registry once: both the owning-provider resolution
   // for hard-binding and the per-method gate consult it. `registeredOidcIds`
@@ -362,10 +405,14 @@ export async function handleSsoCallbackAfter(
   const eligibleForBootstrap = shouldBootstrapPromote(email, callbackProvider)
 
   const { db, principal: principalTable, and, eq, sql } = await import('@/lib/server/db')
+  const { setPrincipalRole, updatePrincipalFields } =
+    await import('@/lib/server/domains/principals/principal.factory')
   // Cast through the typeid-branded type so Drizzle's eq() narrows.
   type UserId = `user_${string}`
   const userIdTyped = userId as UserId
 
+  // Captured inside the tx (only the role promotion busts), drained after commit.
+  let bootstrapCacheKeys: readonly string[] = []
   await db.transaction(async (tx) => {
     // Workspace-scoped advisory lock so concurrent first-SSO sign-ins
     // serialise. Hash key is stable across pods. Released on commit.
@@ -384,10 +431,10 @@ export async function handleSsoCallbackAfter(
         columns: { id: true },
       })
       if (!existingAdmin) {
-        await tx
-          .update(principalTable)
-          .set({ role: 'admin' })
-          .where(eq(principalTable.userId, userIdTyped))
+        const { cacheKeysToBust } = await setPrincipalRole({ userId: userIdTyped }, 'admin', {
+          executor: tx,
+        })
+        bootstrapCacheKeys = cacheKeysToBust
         log.info({ user_id: userId }, 'sso bootstrap admin promotion')
       }
     }
@@ -396,11 +443,17 @@ export async function handleSsoCallbackAfter(
     // Run in the same tx so the lock window covers both writes; the
     // promotion path needs the timestamp first so the same admin can
     // immediately enable enforcement.
-    await tx
-      .update(principalTable)
-      .set({ lastSsoSignInAt: new Date() })
-      .where(eq(principalTable.userId, userIdTyped))
+    await updatePrincipalFields(
+      { userId: userIdTyped },
+      { lastSsoSignInAt: new Date() },
+      { executor: tx }
+    )
   })
+
+  if (bootstrapCacheKeys.length) {
+    const { cacheDel } = await import('@/lib/server/redis')
+    await cacheDel(...bootstrapCacheKeys)
+  }
 }
 
 /**
@@ -430,11 +483,11 @@ export function shouldBootstrapPromote(
  * callbacks are likewise blocked.
  *
  * Two trust paths decide the role, each with its own scoping:
- *  - CLAIM-MATCHED: when the provider has `claimMapping.role` and a rule
+ *  - CLAIM-MATCHED: when the provider has a `claimMapping.role` and a rule
  *    matches the user's claim, the IdP is attesting THIS user's role — a
  *    per-user signal — so the role is assigned regardless of the email's
  *    domain. This is the primary path for enterprise IdPs that emit group/
- *    role claims.
+ *    role claims (mirrors how WorkOS et al. assign roles).
  *  - DEFAULT-ROLE FALLBACK: when no rule matches (or no mapping is set), the
  *    role falls back to the provider's `autoProvisionRole` (default
  *    `'member'`). That is NOT a per-user attestation, so it stays scoped to
@@ -490,6 +543,8 @@ export async function handleAutoProvisionAfter(
   if (!provider.autoCreateUsers) return
 
   const { db, principal: principalTable, user: userTable, eq } = await import('@/lib/server/db')
+  const { setPrincipalRole, ensurePrincipalForUser } =
+    await import('@/lib/server/domains/principals/principal.factory')
   type UserId = `user_${string}`
   const userIdTyped = userId as UserId
 
@@ -497,8 +552,9 @@ export async function handleAutoProvisionAfter(
   // check. An explicit claim match is the IdP attesting THIS user's role — a
   // per-user signal stronger than domain ownership — so it provisions even when
   // the email is not at one of the provider's verified domains.
-  const roleMapping = provider.claimMapping?.role
-  let claimRole: 'admin' | 'member' | 'user' | null = null
+  const { roleMappingFor } = await import('@/lib/shared/oidc-claim-mapping')
+  const roleMapping = roleMappingFor(provider.claimMapping)
+  let claimRole: Role | null = null
   if (roleMapping) {
     const claims = await readSsoClaims(userIdTyped, providerId)
     const { resolveSsoRole } = await import('./resolve-sso-role')
@@ -511,8 +567,7 @@ export async function handleAutoProvisionAfter(
   // team membership. A claim-matched role bypasses this gate.
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
-  const targetRole: 'admin' | 'member' | 'user' =
-    claimRole ?? provider.autoProvisionRole ?? 'member'
+  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? 'member'
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
@@ -539,10 +594,8 @@ export async function handleAutoProvisionAfter(
   if (currentRole === targetRole) return // no-op, save the write
 
   if (p) {
-    await db
-      .update(principalTable)
-      .set({ role: targetRole })
-      .where(eq(principalTable.userId, userIdTyped))
+    // No tx -> the factory busts PRINCIPAL_BY_USER itself.
+    await setPrincipalRole({ userId: userIdTyped }, targetRole)
   } else {
     // Recreate the soft-removed principal in-band with the provisioned role.
     // Display fields come from the auth user so the rebuilt principal matches
@@ -551,18 +604,21 @@ export async function handleAutoProvisionAfter(
       where: eq(userTable.id, userIdTyped),
       columns: { name: true, image: true },
     })
-    await db.insert(principalTable).values({
-      id: generateId('principal'),
+    // ensurePrincipalForUser wins the documented race vs getOptionalAuth's lazy
+    // 'user' create. Stamp lastSsoSignInAt on the rebuilt row — the bootstrap
+    // UPDATE ran first and missed it while the principal didn't exist.
+    const { created, principal: rebuilt } = await ensurePrincipalForUser({
       userId: userIdTyped,
       role: targetRole,
       displayName: u?.name ?? null,
       avatarUrl: u?.image ?? null,
-      // This runs in the OIDC callback, so the user is signing in via SSO right
-      // now. Stamp lastSsoSignInAt on the rebuilt row — handleSsoCallbackAfter's
-      // UPDATE ran first and missed it while the principal didn't exist.
       lastSsoSignInAt: new Date(),
-      createdAt: new Date(),
     })
+    // If a concurrent lazy create won the race it seeded role 'user'; reapply the
+    // provisioned role so the SSO attestation isn't silently dropped.
+    if (!created && rebuilt.role !== targetRole) {
+      await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    }
   }
 
   if (p?.role && p.role !== targetRole) {
@@ -597,27 +653,29 @@ async function readSsoClaims(
   providerId: string
 ): Promise<Record<string, unknown>> {
   const { db, account, and, eq, desc } = await import('@/lib/server/db')
-  const { takeResolvedClaims } = await import('./resolved-claims-stash')
   const row = await db.query.account.findFirst({
     where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
     columns: { idToken: true, accountId: true },
+    // Deterministic ordering. There is no uniqueness constraint on
+    // (user_id, provider_id), so a duplicate account row — which a change in
+    // which claim supplies the account identifier can create — would otherwise
+    // leave this reading whichever row the database happened to return, quite
+    // possibly a stale one, on every sign-in.
     orderBy: desc(account.createdAt),
   })
 
+  // Prefer what the resolver actually validated this request. The stored ID
+  // token is a fallback: a provider resolving identity from userinfo or an
+  // access token has none, and would otherwise always land on the default role
+  // however its claims are mapped.
   if (row?.accountId) {
     const fresh = takeResolvedClaims(providerId, row.accountId)
     if (fresh) return fresh
   }
 
-  if (!row?.idToken) return {}
-  const parts = row.idToken.split('.')
-  if (parts.length !== 3) return {}
-  try {
-    const payload = Buffer.from(parts[1], 'base64url').toString('utf-8')
-    return JSON.parse(payload) as Record<string, unknown>
-  } catch {
-    return {}
-  }
+  // Refuses an expired token; see sso-claims-decode.ts for why freshness is
+  // the property that matters when the signature is not verified.
+  return decodeSsoClaims(row?.idToken)
 }
 
 /**
@@ -714,7 +772,7 @@ export async function handleCallbackPolicyCleanup(
     where: eq(principalTable.userId, userId as UserId),
     columns: { role: true },
   })
-  const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
+  const role = (principalRow?.role ?? 'user') as Role
   const isTeamRole = role === 'admin' || role === 'member'
   // Team roles route to the unified login carrying a `/admin` callback
   // (the break-glass form); the error joins with `&` so it isn't lost
@@ -876,6 +934,28 @@ export async function handleTwoFactorLifecycleAudit(ctx: {
  */
 const CREDENTIAL_FAILURE_PATHS = new Set<string>(['/sign-in/email'])
 const MAGIC_LINK_FAILURE_PATHS = new Set<string>(['/magic-link/verify', '/sign-in/email-otp'])
+/** The genericOAuth callback, as a Better-Auth path TEMPLATE — the concrete
+ *  provider id lives in `ctx.params.providerId`, matching `inferProvider`.
+ *  A failure here redirects with `?error=<code>` rather than returning a body,
+ *  so the reason is read off the Location header. */
+const OIDC_CALLBACK_PATH = '/oauth2/callback/:providerId'
+
+/**
+ * Pull the IdP-reported failure code out of the callback's redirect and
+ * normalise it to a stable uppercase reason. Returns null when the response is
+ * not a redirect or carries no error, so the caller can fall back.
+ */
+function oidcFailureReason(returned: unknown): string | null {
+  if (!(returned instanceof Response)) return null
+  const location = returned.headers.get('location')
+  if (!location) return null
+  try {
+    const code = new URL(location, 'https://placeholder.invalid').searchParams.get('error')
+    return code ? code.toUpperCase().replace(/[^A-Z0-9]+/g, '_') : null
+  } catch {
+    return null
+  }
+}
 
 export async function handleSignInFailureAudit(ctx: {
   path?: string
@@ -886,27 +966,47 @@ export async function handleSignInFailureAudit(ctx: {
       user?: { id?: string; email?: string }
       session?: { token?: string }
     } | null
+    /** The Response the route produced, when the hook chain exposes it. */
+    returned?: unknown
   }
 }): Promise<void> {
   // Only fire on sign-in paths where a failure produces no newSession.
   const path = ctx.path ?? ''
   const isCredentialPath = CREDENTIAL_FAILURE_PATHS.has(path)
   const isMagicLinkPath = MAGIC_LINK_FAILURE_PATHS.has(path)
-  if (!isCredentialPath && !isMagicLinkPath) return
+  const isOidcCallback = path === OIDC_CALLBACK_PATH
+  if (!isCredentialPath && !isMagicLinkPath && !isOidcCallback) return
 
   // If a session was actually created, the success audit handles it.
   const sessionCreated =
     !!ctx.context?.newSession?.user?.id && !!ctx.context?.newSession?.session?.token
   if (sessionCreated) return
 
-  // Extract the attempted email. Never log passwords, tokens, or other
-  // credential material — only the email address + stable reason code.
-  // token? is intentionally not destructured — PII guard: never read magic-link tokens
-  const body = ctx.body as { email?: unknown; token?: unknown } | undefined
-  const attemptedEmail = typeof body?.email === 'string' ? body.email : null
+  // Each path shape contributes only its actor + reason; the emit tail below is
+  // shared so a change to it (a retry, a new field, the log level) lands once.
+  let actor: { email: string | null; type: 'user'; authMethod: 'sso' | 'magic_link' | 'password' }
+  let metadata: Record<string, unknown>
 
-  const reason = isMagicLinkPath ? 'INVALID_MAGIC_LINK' : 'INVALID_CREDENTIALS'
-  const authMethod = isMagicLinkPath ? 'magic_link' : ('password' as const)
+  if (isOidcCallback) {
+    // No email is recorded. The callback body carries no typed credential, and
+    // any address in play came from the IdP response rather than a user attempt.
+    actor = { email: null, type: 'user', authMethod: 'sso' }
+    metadata = {
+      reason: oidcFailureReason(ctx.context?.returned) ?? 'OIDC_SIGNIN_FAILED',
+      providerId: typeof ctx.params?.providerId === 'string' ? ctx.params.providerId : null,
+    }
+  } else {
+    // Never log passwords, tokens, or other credential material — only the
+    // email address + stable reason code.
+    // token? is intentionally not destructured — PII guard: never read magic-link tokens
+    const body = ctx.body as { email?: unknown; token?: unknown } | undefined
+    actor = {
+      email: typeof body?.email === 'string' ? body.email : null,
+      type: 'user',
+      authMethod: isMagicLinkPath ? 'magic_link' : 'password',
+    }
+    metadata = { reason: isMagicLinkPath ? 'INVALID_MAGIC_LINK' : 'INVALID_CREDENTIALS' }
+  }
 
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
   const { getRequestHeaders } = await import('@tanstack/react-start/server')
@@ -914,9 +1014,9 @@ export async function handleSignInFailureAudit(ctx: {
     await recordAuditEvent({
       event: 'auth.signin.failed',
       outcome: 'failure',
-      actor: { email: attemptedEmail, type: 'user', authMethod },
+      actor,
       headers: getRequestHeaders(),
-      metadata: { reason },
+      metadata,
     })
   } catch (err) {
     // Best-effort — never let an audit failure surface to the user.
@@ -1037,16 +1137,28 @@ export async function handleNewDeviceNotification(
   try {
     const { sendNewSignInEmail } = await import('@quackback/email')
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
+    const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
     const occurredAt = new Date().toISOString()
+    // Account class, and deliberately no contact-address fallback: this alert
+    // discloses IP, user agent and sign-in timing, and a contact address can be
+    // one an agent typed into the inbox. An account with no deliverable address
+    // simply does not get the alert. The audit row and markDeviceSeen still run,
+    // or every subsequent sign-in would retry a send that can never succeed.
+    const to = await resolveAccountRecipient(userId as UserId)
+    if (!to) {
+      log.warn({ user_id: userId }, 'new-device alert skipped: no deliverable account address')
+    }
     await Promise.all([
-      sendNewSignInEmail({
-        to: email,
-        workspaceName: tenant?.name,
-        occurredAt,
-        ipAddress: ip,
-        userAgent,
-        logoUrl: tenant?.brandingData?.logoUrl ?? undefined,
-      }),
+      to
+        ? sendNewSignInEmail({
+            to,
+            workspaceName: tenant?.name,
+            occurredAt,
+            ipAddress: ip,
+            userAgent,
+            logoUrl: tenant?.brandingData?.logoUrl ?? undefined,
+          })
+        : Promise.resolve(),
       recordAuditEvent({
         event: 'auth.signin.new_device',
         outcome: 'success',
@@ -1106,8 +1218,6 @@ export async function handleCountryCapture(ctx: {
  *     from the CALLBACK PROVIDER's autoProvisionRole / claimMapping
  *     config, scoped to that provider's own verified domains (brand-new
  *     sign-ins default to `role='user'`).
- *  2b. `applyClaimAttributesAfter` — copy mapped claims onto defined user
- *     attributes from the same resolved-claims stash.
  *  3. `handleCallbackPolicyCleanup` — revoke sessions that violate
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
@@ -1157,12 +1267,6 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
 
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
-    providers,
-    registeredOidcIds
-  )
-  const { applyClaimAttributesAfter } = await import('./apply-claim-attributes')
-  await applyClaimAttributesAfter(
-    ctx as Parameters<typeof applyClaimAttributesAfter>[0],
     providers,
     registeredOidcIds
   )

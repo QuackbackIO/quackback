@@ -1,6 +1,7 @@
 export type InboundMessage =
   | { type: 'quackback:init'; data?: unknown }
   | { type: 'quackback:identify'; data: unknown }
+  | { type: 'quackback:device'; data: string }
   | { type: 'quackback:metadata'; data: Record<string, string> }
   | { type: 'quackback:open'; data?: unknown }
   | { type: 'quackback:locale'; data: string }
@@ -10,9 +11,11 @@ export type OutboundMessage =
   | { type: 'quackback:ready' }
   | { type: 'quackback:close' }
   | { type: 'quackback:navigate'; url: string }
+  | { type: 'quackback:expand'; expanded: boolean }
   | { type: 'quackback:identify-result'; success: boolean; user?: unknown; error?: string }
   | { type: 'quackback:auth-change'; user: unknown }
   | { type: 'quackback:event'; name: string; payload: unknown }
+  | { type: 'quackback:unread'; count: number }
 
 export interface BridgeOptions {
   getIframe: () => HTMLIFrameElement | null

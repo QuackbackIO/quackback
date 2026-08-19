@@ -85,9 +85,9 @@ export function AuthorSelector({
     return () => clearTimeout(timer)
   }, [search])
 
-  // Server-side member search (only when popover is open)
+  // Server-side people search (only when popover is open)
   const { data: searchResults = [] } = useQuery({
-    ...adminQueries.searchMembers({ search: debouncedSearch || undefined, limit: 20 }),
+    ...adminQueries.searchPeople({ search: debouncedSearch || undefined, limit: 20 }),
     placeholderData: keepPreviousData, // Keep previous results visible while loading new search
     enabled: open,
   })
@@ -235,20 +235,20 @@ export function AuthorSelector({
           className={cn(
             'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left',
             'border border-border/50 hover:border-border hover:bg-muted/40',
-            'transition-all duration-150 text-xs'
+            'transition-all duration-150 text-[13px]'
           )}
         >
           <Avatar className="h-5 w-5 shrink-0">
             {selectedMember?.image && (
               <AvatarImage src={selectedMember.image} alt={displayName || ''} />
             )}
-            <AvatarFallback className="text-[9px]">{getInitials(displayName)}</AvatarFallback>
+            <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
           </Avatar>
           <span className="truncate font-medium text-foreground">{displayName}</span>
           {isNew && (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shrink-0"
+              className="text-[11px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shrink-0"
             >
               New
             </Badge>
@@ -267,7 +267,7 @@ export function AuthorSelector({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search members..."
-                className="flex-1 text-xs bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+                className="flex-1 text-[13px] bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               />
             </div>
             <div
@@ -287,7 +287,7 @@ export function AuthorSelector({
                       key={member.id}
                       className={cn(
                         'flex items-center gap-2 px-2 py-1.5 rounded-md',
-                        'text-xs transition-colors duration-100',
+                        'text-[13px] transition-colors duration-100',
                         isSelected
                           ? 'bg-primary/10 text-foreground'
                           : 'text-foreground/80 hover:bg-muted/60'
@@ -305,7 +305,7 @@ export function AuthorSelector({
                           {member.image && (
                             <AvatarImage src={member.image} alt={member.name || ''} />
                           )}
-                          <AvatarFallback className="text-[9px]">
+                          <AvatarFallback className="text-xs">
                             {getInitials(member.name)}
                           </AvatarFallback>
                         </Avatar>
@@ -315,7 +315,7 @@ export function AuthorSelector({
                             {memberIsNew && (
                               <Badge
                                 variant="outline"
-                                className="text-[9px] px-1 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                                className="text-xs px-1 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
                               >
                                 New
                               </Badge>
@@ -351,9 +351,9 @@ export function AuthorSelector({
                 <button
                   type="button"
                   onClick={() => setMode('create')}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                 >
-                  <PlusIcon className="h-3.5 w-3.5" />
+                  <PlusIcon className="size-4" />
                   Create new user
                 </button>
               </div>

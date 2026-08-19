@@ -21,6 +21,7 @@ vi.mock('@/lib/server/redis', () => ({
   CACHE_KEYS: {
     TENANT_SETTINGS: 'settings:tenant',
     PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
+    REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
   },
 }))
 
@@ -35,13 +36,15 @@ type CredTx = {
   update: (...args: unknown[]) => unknown
 }
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const tx: CredTx = {
     insert: (...args: unknown[]) => mockInsert(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
     update: vi.fn(() => ({ set: () => ({ where: () => Promise.resolve() }) })),
   }
   return {
+    // Spread the real db module so tables/operators stay current; override only what this suite drives.
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       insert: (...args: unknown[]) => mockInsert(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
@@ -52,10 +55,6 @@ vi.mock('@/lib/server/db', () => {
       },
       transaction: async (fn: (tx: CredTx) => unknown) => fn(tx),
     },
-    integrationPlatformCredentials: {
-      integrationType: 'integrationType',
-    },
-    settings: { authConfigVersion: 'auth_config_version' },
     eq: vi.fn(),
   }
 })
@@ -104,13 +103,21 @@ describe('platform credential cache invalidation', () => {
       principalId: 'principal_1' as PrincipalId,
     })
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'platform-cred:configured-types')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:tenant',
+      'platform-cred:configured-types',
+      'auth:registered-providers'
+    )
   })
 
   it('deletePlatformCredentials invalidates TENANT_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
     await deletePlatformCredentials('slack')
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'platform-cred:configured-types')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:tenant',
+      'platform-cred:configured-types',
+      'auth:registered-providers'
+    )
   })
 })
 

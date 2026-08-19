@@ -24,7 +24,7 @@ import { cn } from '@/lib/shared/utils'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import type { PostId, CommentId } from '@quackback/ids'
+import type { PostId, PostCommentId } from '@quackback/ids'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -44,7 +44,7 @@ export type CreateCommentMutation = UseMutationResult<
 
 interface CommentFormProps {
   postId: PostId
-  parentId?: CommentId
+  parentId?: PostCommentId
   onSuccess?: () => void
   onCancel?: () => void
   user?: { name: string | null; email: string; principalId?: string }
@@ -218,6 +218,7 @@ export function CommentForm({
                         key={editorResetKey}
                         value={field.value}
                         borderless
+                        toolbarPosition="bottom"
                         minHeight="72px"
                         disabled={isSubmitting}
                         features={COMMENT_EDITOR_FEATURES}
@@ -327,7 +328,7 @@ export function CommentForm({
                         />
                         <span className="flex-1 text-start">{status.name}</span>
                         {isCurrent && !isSelected && (
-                          <span className="text-muted-foreground text-[10px]">current</span>
+                          <span className="text-muted-foreground text-xs">current</span>
                         )}
                         {isSelected && <CheckIcon className="size-3.5 text-primary shrink-0" />}
                       </button>

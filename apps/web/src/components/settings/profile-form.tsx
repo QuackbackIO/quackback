@@ -13,6 +13,8 @@ import { updateProfileNameFn } from '@/lib/server/functions/user'
 import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PasswordForm } from '@/components/settings/password-form'
+import { getInitials } from '@/lib/shared/utils'
+import { EmailField } from '@/components/settings/email-field'
 
 interface ProfileFormProps {
   user: {
@@ -45,12 +47,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
-  const initials = name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+  const initials = getInitials(name)
 
   const avatarSrc = avatarUrl || undefined
 
@@ -242,18 +239,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium">
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  type="email"
-                  defaultValue={user.email ?? ''}
-                  disabled
-                  placeholder="No email"
-                />
-              </div>
+              <EmailField />
             </div>
             <div className="flex justify-end">
               <Button type="submit" disabled={isSubmitting}>

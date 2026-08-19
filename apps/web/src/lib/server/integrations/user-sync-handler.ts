@@ -8,7 +8,7 @@
  * Route: POST /api/integrations/:type/identify
  */
 
-import { db, integrations, userAttributeDefinitions, user, eq, and } from '@/lib/server/db'
+import { db, integrations, userAttributeDefinitions, user, eq, and, sql } from '@/lib/server/db'
 import { getIntegration } from './index'
 import { decryptSecrets } from './encryption'
 import { coerceAttributeValue } from '@/lib/server/domains/user-attributes/coerce'
@@ -17,6 +17,30 @@ import type { UserIdentifyPayload } from './user-sync-types'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'user-sync' })
+const MAX_IDENTIFY_BODY_BYTES = 1024 * 1024
+
+async function readLimitedBody(request: Request): Promise<string | Response> {
+  const declared = Number(request.headers.get('content-length') ?? 0)
+  if (declared > MAX_IDENTIFY_BODY_BYTES) {
+    return new Response('Request body too large', { status: 413 })
+  }
+  if (!request.body) return ''
+  const reader = request.body.getReader()
+  const decoder = new TextDecoder()
+  let size = 0
+  let body = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > MAX_IDENTIFY_BODY_BYTES) {
+      await reader.cancel()
+      return new Response('Request body too large', { status: 413 })
+    }
+    body += decoder.decode(value, { stream: true })
+  }
+  return body + decoder.decode()
+}
 
 /**
  * Handle an inbound user identify event from an integration.
@@ -37,7 +61,8 @@ export async function handleInboundIdentify(
     return new Response('Integration does not support user identify sync', { status: 404 })
   }
 
-  const body = await request.text()
+  const body = await readLimitedBody(request)
+  if (body instanceof Response) return body
 
   const integration = await db.query.integrations.findFirst({
     where: and(
@@ -145,26 +170,17 @@ export async function mergeUserAttributes(
 
   const userRecord = await db.query.user.findFirst({
     where: eq(user.email, email),
-    columns: { id: true, metadata: true },
+    columns: { id: true },
   })
   if (!userRecord) {
     log.debug('no user found for identify, skipping attribute merge')
     return
   }
 
-  const existing = parseMetadata(userRecord.metadata)
-
   await db
     .update(user)
-    .set({ metadata: JSON.stringify({ ...existing, ...update }) })
+    .set({
+      metadata: sql`(coalesce(nullif(${user.metadata}, ''), '{}')::jsonb || ${JSON.stringify(update)}::jsonb)::text`,
+    })
     .where(eq(user.id, userRecord.id))
-}
-
-function parseMetadata(raw: string | null): Record<string, unknown> {
-  if (!raw) return {}
-  try {
-    return JSON.parse(raw) as Record<string, unknown>
-  } catch {
-    return {}
-  }
 }

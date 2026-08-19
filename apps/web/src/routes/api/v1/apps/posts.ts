@@ -4,6 +4,7 @@ import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { BoardId, PostId } from '@quackback/ids'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
@@ -36,7 +37,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
 
       POST: async ({ request }) => {
         try {
-          const apiAuth = await withApiKeyAuth(request, { role: 'team' })
+          const apiAuth = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_CREATE })
           const { principalId } = apiAuth
 
           const body = await request.json()

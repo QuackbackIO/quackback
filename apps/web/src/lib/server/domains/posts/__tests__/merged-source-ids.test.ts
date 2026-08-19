@@ -24,17 +24,12 @@ const mockSelect = vi.fn().mockReturnValue({ from: mockFrom })
 
 const mockPostViewFilter = vi.fn((_actor: Actor) => ({ kind: 'postViewFilter' }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: (...a: unknown[]) => mockSelect(...a),
   },
-  posts: {
-    id: 'posts.id',
-    boardId: 'posts.board_id',
-    canonicalPostId: 'posts.canonical_post_id',
-    deletedAt: 'posts.deleted_at',
-  },
-  boards: { id: 'boards.id', access: 'boards.access', deletedAt: 'boards.deleted_at' },
   eq: vi.fn((col, val) => ({ eq: [col, val] })),
   and: vi.fn((...parts) => ({ and: parts })),
   isNull: vi.fn((col) => ({ isNull: col })),

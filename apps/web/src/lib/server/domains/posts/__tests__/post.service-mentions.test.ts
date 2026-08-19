@@ -8,9 +8,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
-import type { BoardId, PrincipalId, StatusId } from '@quackback/ids'
+import type { BoardId, PrincipalId, PostStatusId } from '@quackback/ids'
 
-const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTags: [] }
+const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTagAssignments: [] }
 const subscribeToPost = vi.fn()
 const syncPostMentions = vi.fn().mockResolvedValue(undefined)
 
@@ -49,7 +49,7 @@ vi.mock('@/lib/server/db', async () => {
           {
             id: 'post_new' as unknown,
             boardId: 'board_b' as unknown,
-            statusId: 'status_open' as unknown,
+            statusId: 'post_status_open' as unknown,
             title: inserted.title,
             content: 'Body',
             contentJson: inserted.contentJson,
@@ -85,7 +85,7 @@ vi.mock('@/lib/server/db', async () => {
           }),
         },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
         posts: {
           findFirst: vi.fn(async () => updatePostsFindFirstResult),
@@ -142,7 +142,7 @@ vi.mock('@/lib/server/db', async () => {
               {
                 id: 'post_update' as unknown,
                 boardId: 'board_b' as unknown,
-                statusId: 'status_open' as unknown,
+                statusId: 'post_status_open' as unknown,
                 title: updateReturningTitle,
                 content: 'Body',
                 contentJson: updateReturningContentJson,
@@ -163,9 +163,9 @@ vi.mock('@/lib/server/db', async () => {
     boards: { id: 'board_id' },
     posts: { __name: 'posts', id: 'post_id' },
     postStatuses: { id: 'status_id' },
-    postTags: { __name: 'postTags' },
+    postTagAssignments: { __name: 'postTagAssignments' },
     tags: { __name: 'tags', id: 'tag_id' },
-    votes: { __name: 'votes' },
+    postVotes: { __name: 'post_votes' },
     principal: { id: 'principal_id' },
     eq: vi.fn(),
     and: vi.fn(),
@@ -196,6 +196,7 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 vi.mock('@/lib/server/markdown-tiptap', () => ({
   markdownToTiptapJson: vi.fn(() => ({ type: 'doc', content: [] })),
   contentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
+  projectContentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
 }))
 
 vi.mock('@/lib/server/content/rehost-images', () => ({
@@ -249,7 +250,7 @@ describe('createPost mention dispatch', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
     insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     syncPostMentions.mockClear()
   })
@@ -264,7 +265,7 @@ describe('createPost mention dispatch', () => {
         title: 'New post',
         content: 'Body',
         contentJson: docWithMention() as unknown as import('@/lib/server/db').TiptapContent,
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       { principalId: authorPrincipal, email: 'author@example.com', displayName: 'Author' }
     )
@@ -295,7 +296,7 @@ describe('createPost mention dispatch', () => {
         title: 'No mentions',
         content: 'Body',
         contentJson: docWithoutMention() as unknown as import('@/lib/server/db').TiptapContent,
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       { principalId: authorPrincipal }
     )
@@ -313,7 +314,7 @@ describe('updatePost mention dispatch', () => {
       content: 'Original body',
       contentJson: null,
       boardId: 'board_b',
-      statusId: 'status_open',
+      statusId: 'post_status_open',
       principalId: 'principal_author',
       ownerPrincipalId: null,
     }

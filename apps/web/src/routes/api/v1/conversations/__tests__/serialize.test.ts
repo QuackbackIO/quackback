@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { serializeConversation, serializeMessage } from '../-serialize'
-import type { ConversationDTO, ChatMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationDTO, ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 const convBase = {
   id: 'conversation_1',
@@ -55,7 +55,7 @@ describe('serializeConversation', () => {
 describe('serializeMessage', () => {
   it('maps an agent message', () => {
     const m = {
-      id: 'chat_msg_1',
+      id: 'conversation_msg_1',
       conversationId: 'conversation_1',
       senderType: 'agent',
       content: 'hello',
@@ -66,9 +66,9 @@ describe('serializeMessage', () => {
       contentJson: null,
       viaEmail: false,
       systemEvent: null,
-    } as unknown as ChatMessageDTO
+    } as unknown as ConversationMessageDTO
     expect(serializeMessage(m)).toEqual({
-      id: 'chat_msg_1',
+      id: 'conversation_msg_1',
       conversationId: 'conversation_1',
       senderType: 'agent',
       isInternal: false,
@@ -81,10 +81,10 @@ describe('serializeMessage', () => {
 
   it('handles a system message with no author', () => {
     const m = {
-      id: 'chat_msg_2',
+      id: 'conversation_msg_2',
       conversationId: 'conversation_1',
       senderType: 'system',
-      content: 'Chat ended',
+      content: 'Conversation ended',
       createdAt: '2026-06-05T00:00:00.000Z',
       author: null,
       attachments: [],
@@ -92,7 +92,7 @@ describe('serializeMessage', () => {
       contentJson: null,
       viaEmail: false,
       systemEvent: { kind: 'chat_ended' },
-    } as unknown as ChatMessageDTO
+    } as unknown as ConversationMessageDTO
     const out = serializeMessage(m)
     expect(out.authorPrincipalId).toBeNull()
     expect(out.authorName).toBeNull()

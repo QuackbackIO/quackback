@@ -8,18 +8,12 @@
  *
  * Usage: bun get-mention-target.ts [excludeEmail]
  */
-import postgres from 'postgres'
 import { fromUuid } from '@quackback/ids'
+import { openDb } from './_lib'
 
 const excludeEmail = process.argv[2] ?? 'demo@example.com'
 
-const connectionString = process.env.DATABASE_URL
-if (!connectionString) {
-  console.error('DATABASE_URL environment variable is required')
-  process.exit(1)
-}
-
-const sql = postgres(connectionString)
+const sql = openDb()
 
 async function getTarget(): Promise<{ principalId: string; displayName: string }> {
   const rows = await sql`

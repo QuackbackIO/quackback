@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { WebhookId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/webhooks/$webhookId/rotate')({
@@ -13,7 +14,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId/rotate')({
        */
       POST: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.WEBHOOK_MANAGE })
 
           const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 

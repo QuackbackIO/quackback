@@ -1,0 +1,147 @@
+/**
+ * Key-parity guard for the conversation-inbox query factory. These keys MUST stay
+ * byte-identical to the inline keys the inbox components and SSE cache writes
+ * already use — a drift silently disables SSR hydration AND breaks
+ * invalidation/optimistic writes, with no type error to catch it.
+ */
+import { describe, it, expect, vi } from 'vitest'
+import type { ConversationTagId, SegmentId, ConversationId } from '@quackback/ids'
+
+// Stub the server fns so importing the factory doesn't pull server-only code
+// (config/env validation) into the test; we only assert on queryKey here.
+vi.mock('@/lib/server/functions/conversation', () => ({
+  listConversationsFn: vi.fn(),
+  getConversationFn: vi.fn(),
+}))
+vi.mock('@/lib/server/functions/conversation-tags', () => ({
+  fetchConversationTagsWithCountsFn: vi.fn(),
+}))
+vi.mock('@/lib/server/functions/conversation-segments', () => ({
+  fetchInboxSegmentsWithCountsFn: vi.fn(),
+}))
+vi.mock('@/lib/server/functions/conversation-views', () => ({
+  listConversationViewsFn: vi.fn(),
+}))
+
+import { conversationInboxQueries } from './conversation-inbox'
+
+const tagId = 'conversation_tag_x' as ConversationTagId
+const segId = 'segment_y' as SegmentId
+const convId = 'conversation_z' as ConversationId
+
+describe('conversationInboxQueries key parity', () => {
+  it('conversationList key matches the legacy inline list key', () => {
+    expect(
+      conversationInboxQueries.conversationList({ kind: 'view', view: 'all' }, 'open', 'all', '')
+        .queryKey
+    ).toEqual(['admin', 'inbox', 'conversations', 'view:all', 'open', 'all', ''])
+    expect(
+      conversationInboxQueries.conversationList({ kind: 'tag', tagId }, 'closed', 'high', 'refund')
+        .queryKey
+    ).toEqual(['admin', 'inbox', 'conversations', `tag:${tagId}`, 'closed', 'high', 'refund'])
+    expect(
+      conversationInboxQueries.conversationList(
+        { kind: 'segment', segmentId: segId },
+        'open',
+        'all',
+        ''
+      ).queryKey
+    ).toEqual(['admin', 'inbox', 'conversations', `segment:${segId}`, 'open', 'all', ''])
+  })
+
+  it('appends the companyId to the base key only when a company is selected', () => {
+    const base = conversationInboxQueries.conversationList(
+      { kind: 'view', view: 'all' },
+      'open',
+      'all',
+      ''
+    ).queryKey
+    expect(base).toEqual(['admin', 'inbox', 'conversations', 'view:all', 'open', 'all', ''])
+    expect(
+      conversationInboxQueries.conversationList(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        'company_z' as never
+      ).queryKey
+    ).toEqual([...base, 'company_z'])
+  })
+
+  it('appends a non-default sort before the company, and omits the default', () => {
+    const base = ['admin', 'inbox', 'conversations', 'view:all', 'open', 'all', '']
+    // Default 'recent' leaves the key byte-identical (parity preserved).
+    expect(
+      conversationInboxQueries.conversationList(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        undefined,
+        'recent'
+      ).queryKey
+    ).toEqual(base)
+    expect(
+      conversationInboxQueries.conversationList(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        undefined,
+        'waiting'
+      ).queryKey
+    ).toEqual([...base, 'sort:waiting'])
+    expect(
+      conversationInboxQueries.conversationList(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        '',
+        'company_z' as never,
+        'oldest'
+      ).queryKey
+    ).toEqual([...base, 'sort:oldest', 'company_z'])
+  })
+
+  it('keys a custom view by its id under the conversations prefix', () => {
+    expect(
+      conversationInboxQueries.conversationList(
+        { kind: 'custom', viewId: 'conversation_view_v' as never },
+        'all',
+        'all',
+        ''
+      ).queryKey
+    ).toEqual(['admin', 'inbox', 'conversations', 'custom:conversation_view_v', 'all', 'all', ''])
+  })
+
+  it('views key matches agentViews()', () => {
+    expect(conversationInboxQueries.views().queryKey).toEqual(['admin', 'inbox', 'views'])
+  })
+
+  it('thread key matches the legacy thread key', () => {
+    expect(conversationInboxQueries.thread(convId).queryKey).toEqual([
+      'admin',
+      'inbox',
+      'thread',
+      convId,
+    ])
+  })
+
+  it('tagCounts key matches CONVERSATION_TAG_COUNTS_KEY', () => {
+    expect(conversationInboxQueries.tagCounts().queryKey).toEqual([
+      'admin',
+      'inbox',
+      'conversation-tags',
+      'counts',
+    ])
+  })
+
+  it('segmentCounts key matches INBOX_SEGMENT_COUNTS_KEY', () => {
+    expect(conversationInboxQueries.segmentCounts().queryKey).toEqual([
+      'admin',
+      'inbox',
+      'segments',
+      'counts',
+    ])
+  })
+})

@@ -2,8 +2,9 @@
  * Per-workspace tier limits. Read by every enforcement seam via
  * getTierLimits(). Default (no row) is OSS_TIER_LIMITS — unlimited
  * everything, all features on. Operators can write a tighter row to
- * cap a workspace; the trusted internal endpoint at
- * /api/v1/internal/tier-limits is the canonical writer.
+ * cap a workspace; the canonical writer is the declarative config
+ * file (/etc/quackback/config.yaml), reconciled into
+ * settings.tier_limits.
  *
  * Null in any numeric field = unlimited.
  * features.* = true = feature is on.
@@ -21,12 +22,8 @@ export interface TierFeatureFlags {
   customColors: boolean
   customCss: boolean
   /** Connecting external tools (GitHub, Slack, Linear, Jira, etc.).
-   *  Pro and Scale on cloud; always on for self-hosters. */
+   *  All paid tiers on cloud; always on for self-hosters. */
   integrations: boolean
-  /** AI auto-capture: the feedback-extraction pipeline that turns
-   *  conversations from connected sources into structured feedback.
-   *  Scale-only on cloud; always on for self-hosters. */
-  aiFeedbackExtraction: boolean
 }
 
 /**
@@ -51,7 +48,16 @@ export interface PlanNotice {
 export interface TierLimits {
   maxBoards: TierLimit<number>
   maxPosts: TierLimit<number>
+  /**
+   * Cloud bills per seat rather than capping seats, so this is null on
+   * all paid cloud tiers. The seam remains for operators and the
+   * config-file channel.
+   */
   maxTeamSeats: TierLimit<number>
+  /** Active (non-deleted) status page components. */
+  maxStatusComponents: TierLimit<number>
+  /** Custom (non-system) roles. Null = unlimited, the OSS default. */
+  maxCustomRoles: TierLimit<number>
 
   /**
    * Monthly LLM token budget (input + output combined). All AI features
@@ -73,6 +79,8 @@ export const OSS_TIER_LIMITS: TierLimits = {
   maxBoards: null,
   maxPosts: null,
   maxTeamSeats: null,
+  maxStatusComponents: null,
+  maxCustomRoles: null,
 
   aiTokensPerMonth: null,
 
@@ -89,6 +97,5 @@ export const OSS_TIER_LIMITS: TierLimits = {
     customColors: true,
     customCss: true,
     integrations: true,
-    aiFeedbackExtraction: true,
   },
 }

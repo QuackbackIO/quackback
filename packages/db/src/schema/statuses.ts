@@ -8,7 +8,7 @@ export { STATUS_CATEGORIES, type StatusCategory }
 export const postStatuses = pgTable(
   'post_statuses',
   {
-    id: typeIdWithDefault('status')('id').primaryKey(),
+    id: typeIdWithDefault('post_status')('id').primaryKey(),
     name: text('name').notNull(),
     slug: text('slug').notNull().unique(),
     color: text('color').notNull().default('#6b7280'),

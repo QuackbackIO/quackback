@@ -13,6 +13,7 @@ import {
   arePlatformCredentialsManaged,
 } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import type { PlatformCredentialField } from '@/lib/server/integrations/types'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'platform-credentials' })
@@ -37,46 +38,41 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .validator(savePlatformCredentialsSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'save platform credentials')
-    try {
-      const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
-      await assertTierFeature('integrations', 'Integrations')
+    const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+    await assertTierFeature('integrations', 'Integrations')
 
-      // Validate required fields against the integration definition
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const definition = getIntegration(data.integrationType)
-      if (!definition) {
-        throw new Error(`Unknown integration type: ${data.integrationType}`)
-      }
-
-      const requiredFields = definition.platformCredentials
-      for (const field of requiredFields) {
-        if (!data.credentials[field.key]?.trim()) {
-          throw new Error(`${field.label} is required`)
-        }
-      }
-
-      // Strip any extra keys not defined in platformCredentials
-      const allowedKeys = new Set(definition.platformCredentials.map((f) => f.key))
-      const cleaned: Record<string, string> = {}
-      for (const [key, value] of Object.entries(data.credentials)) {
-        if (allowedKeys.has(key)) {
-          cleaned[key] = value.trim()
-        }
-      }
-
-      await savePlatformCredentials({
-        integrationType: data.integrationType,
-        credentials: cleaned,
-        principalId: auth.principal.id,
-      })
-
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'save platform credentials failed')
-      throw error
+    // Validate required fields against the integration definition
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const definition = getIntegration(data.integrationType)
+    if (!definition) {
+      throw new Error(`Unknown integration type: ${data.integrationType}`)
     }
+
+    const requiredFields = definition.platformCredentials
+    for (const field of requiredFields) {
+      if (!data.credentials[field.key]?.trim()) {
+        throw new Error(`${field.label} is required`)
+      }
+    }
+
+    // Strip any extra keys not defined in platformCredentials
+    const allowedKeys = new Set(definition.platformCredentials.map((f) => f.key))
+    const cleaned: Record<string, string> = {}
+    for (const [key, value] of Object.entries(data.credentials)) {
+      if (allowedKeys.has(key)) {
+        cleaned[key] = value.trim()
+      }
+    }
+
+    await savePlatformCredentials({
+      integrationType: data.integrationType,
+      credentials: cleaned,
+      principalId: auth.principal.id,
+    })
+
+    return { success: true }
   })
 
 /**
@@ -86,16 +82,11 @@ export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .validator(deletePlatformCredentialsSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'delete platform credentials')
-    try {
-      await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      await deletePlatformCredentials(data.integrationType)
+    await deletePlatformCredentials(data.integrationType)
 
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete platform credentials failed')
-      throw error
-    }
+    return { success: true }
   })
 
 /**
@@ -106,48 +97,43 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
   .validator(fetchPlatformCredentialsMaskedSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'fetch masked platform credentials')
-    try {
-      await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const definition = getIntegration(data.integrationType)
-      if (!definition) {
-        throw new Error(`Unknown integration type: ${data.integrationType}`)
-      }
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const definition = getIntegration(data.integrationType)
+    if (!definition) {
+      throw new Error(`Unknown integration type: ${data.integrationType}`)
+    }
 
-      const credentials = await getPlatformCredentials(data.integrationType)
+    const credentials = await getPlatformCredentials(data.integrationType)
 
-      if (!credentials) {
-        return {
-          configured: false as const,
-          fields: null,
-          managed: arePlatformCredentialsManaged(data.integrationType),
-        }
-      }
-
-      // Build a map of field definitions for lookup
-      const fieldDefs = new Map<string, PlatformCredentialField>(
-        definition.platformCredentials.map((f) => [f.key, f])
-      )
-
-      // Mask sensitive values, show non-sensitive in full
-      const masked: Record<string, string> = {}
-      for (const [key, value] of Object.entries(credentials)) {
-        const fieldDef = fieldDefs.get(key)
-        if (fieldDef?.sensitive) {
-          masked[key] = value.length > 8 ? '****' + value.slice(-4) : '********'
-        } else {
-          masked[key] = value
-        }
-      }
-
+    if (!credentials) {
       return {
-        configured: true as const,
-        fields: masked,
+        configured: false as const,
+        fields: null,
         managed: arePlatformCredentialsManaged(data.integrationType),
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch masked platform credentials failed')
-      throw error
+    }
+
+    // Build a map of field definitions for lookup
+    const fieldDefs = new Map<string, PlatformCredentialField>(
+      definition.platformCredentials.map((f) => [f.key, f])
+    )
+
+    // Mask sensitive values, show non-sensitive in full
+    const masked: Record<string, string> = {}
+    for (const [key, value] of Object.entries(credentials)) {
+      const fieldDef = fieldDefs.get(key)
+      if (fieldDef?.sensitive) {
+        masked[key] = value.length > 8 ? '****' + value.slice(-4) : '********'
+      } else {
+        masked[key] = value
+      }
+    }
+
+    return {
+      configured: true as const,
+      fields: masked,
+      managed: arePlatformCredentialsManaged(data.integrationType),
     }
   })

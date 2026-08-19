@@ -7,7 +7,7 @@ test.describe('Admin User Attributes Settings', () => {
   })
 
   test('page loads and shows heading', async ({ page }) => {
-    await expect(page.getByText('User Attributes').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Person attributes').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('shows page description', async ({ page }) => {

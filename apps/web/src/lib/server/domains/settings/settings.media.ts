@@ -6,6 +6,7 @@ import { logger } from '@/lib/server/logger'
 import type { BrandingConfig } from './settings.types'
 import {
   requireSettings,
+  requireSettingsCached,
   wrapDbError,
   parseJsonOrNull,
   invalidateSettingsCache,
@@ -19,7 +20,8 @@ const log = logger.child({ component: 'settings-media' })
 
 export async function getBrandingConfig(): Promise<BrandingConfig> {
   try {
-    const org = await requireSettings()
+    // Read-only + on public hot paths (config.json, portal SSR): cached row.
+    const org = await requireSettingsCached()
     return parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
   } catch (error) {
     log.error({ err: error }, 'get branding config failed')
@@ -58,7 +60,8 @@ export async function updateBrandingConfig(config: BrandingConfig): Promise<Bran
 
 export async function getCustomCss(): Promise<string> {
   try {
-    const org = await requireSettings()
+    // Read-only + on public hot paths (config.json, portal SSR): cached row.
+    const org = await requireSettingsCached()
     return org.customCss ?? ''
   } catch (error) {
     log.error({ err: error }, 'get custom css failed')
@@ -69,6 +72,9 @@ export async function getCustomCss(): Promise<string> {
 export async function updateCustomCss(css: string): Promise<string> {
   log.info('update custom css')
   try {
+    if (css.includes('<')) {
+      throw new ValidationError('INVALID_CUSTOM_CSS', 'Custom CSS cannot contain the "<" character')
+    }
     // Clearing CSS (empty string) is always allowed so a workspace whose
     // tier just stopped including custom CSS can wipe it without being
     // blocked. Anything non-empty hits the feature gate.
@@ -251,6 +257,64 @@ export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
   } catch (error) {
     log.error({ err: error }, 'delete header logo key failed')
     wrapDbError('delete header logo key', error)
+  }
+}
+
+/**
+ * Save portal OG image S3 key and delete old image if exists.
+ */
+export async function savePortalOgImageKey(key: string): Promise<{ success: true; key: string }> {
+  log.info('save portal og image key')
+  try {
+    const org = await requireSettings()
+
+    if (org.portalOgImageKey) {
+      try {
+        await deleteObject(org.portalOgImageKey)
+      } catch (err) {
+        log.warn(
+          { err, portal_og_image_key: org.portalOgImageKey },
+          'failed to delete old portal og image s3 object'
+        )
+      }
+    }
+
+    await db.update(settings).set({ portalOgImageKey: key }).where(eq(settings.id, org.id))
+    await invalidateSettingsCache()
+
+    return { success: true, key }
+  } catch (error) {
+    log.error({ err: error }, 'save portal og image key failed')
+    wrapDbError('save portal og image key', error)
+  }
+}
+
+/**
+ * Delete portal OG image from S3 and clear the key.
+ */
+export async function deletePortalOgImageKey(): Promise<{ success: true }> {
+  log.info('delete portal og image key')
+  try {
+    const org = await requireSettings()
+
+    if (org.portalOgImageKey) {
+      try {
+        await deleteObject(org.portalOgImageKey)
+      } catch (err) {
+        log.warn(
+          { err, portal_og_image_key: org.portalOgImageKey },
+          'failed to delete portal og image s3 object'
+        )
+      }
+    }
+
+    await db.update(settings).set({ portalOgImageKey: null }).where(eq(settings.id, org.id))
+    await invalidateSettingsCache()
+
+    return { success: true }
+  } catch (error) {
+    log.error({ err: error }, 'delete portal og image key failed')
+    wrapDbError('delete portal og image key', error)
   }
 }
 

@@ -9,11 +9,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EllipsisHorizontalIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { KbArticleId } from '@quackback/ids'
 import { stripMarkdownPreview } from '@/lib/shared/utils'
 
 interface HelpCenterListItemProps {
-  id: HelpCenterArticleId
+  id: KbArticleId
   title: string
   description?: string | null
   content: string
@@ -23,8 +23,8 @@ interface HelpCenterListItemProps {
   author: { id: string; name: string; avatarUrl: string | null } | null
   viewCount: number
   helpfulCount: number
-  onEdit?: (id: HelpCenterArticleId) => void
-  onDelete?: (id: HelpCenterArticleId) => void
+  onEdit?: (id: KbArticleId) => void
+  onDelete?: (id: KbArticleId) => void
 }
 
 export function HelpCenterListItem({
@@ -56,7 +56,7 @@ export function HelpCenterListItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <StatusBadge name={statusConfig.label} color={statusConfig.color} />
-          <span className="text-[10px] text-muted-foreground/50 font-medium">{category.name}</span>
+          <span className="text-xs text-muted-foreground/50 font-medium">{category.name}</span>
         </div>
 
         <h3 className="font-semibold text-base text-foreground line-clamp-1">{title}</h3>

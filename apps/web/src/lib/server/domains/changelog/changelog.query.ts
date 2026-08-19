@@ -19,13 +19,15 @@ import {
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { BoardId, ChangelogId, PrincipalId, PostId, StatusId } from '@quackback/ids'
+import type { BoardId, ChangelogId, PrincipalId, PostId, PostStatusId } from '@quackback/ids'
 import { computeStatus } from './changelog.service'
+import { getCategoriesForEntries } from './changelog-category.service'
 import type {
   ListChangelogParams,
   ChangelogEntryWithDetails,
   ChangelogListResult,
   ChangelogAuthor,
+  TopViewedChangelogEntry,
 } from './changelog.types'
 
 /**
@@ -131,23 +133,27 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   }
 
   // Get status info for all linked posts
-  const statusIds = new Set<StatusId>()
+  const statusIds = new Set<PostStatusId>()
   allLinkedPosts.forEach((lp) => {
     if (lp.post.statusId) statusIds.add(lp.post.statusId)
   })
 
-  const statusMap = new Map<StatusId, { name: string; color: string }>()
+  const statusMap = new Map<PostStatusId, { name: string; color: string }>()
   if (statusIds.size > 0) {
     const statuses = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.id, Array.from(statusIds) as StatusId[]),
+      where: inArray(postStatuses.id, Array.from(statusIds) as PostStatusId[]),
       columns: { id: true, name: true, color: true },
     })
     statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
+  // Categories (labels) for all entries.
+  const categoriesMap = await getCategoriesForEntries(entryIds)
+
   // Transform to output format
   const result: ChangelogEntryWithDetails[] = items.map((entry) => {
     const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
+    const entryCategories = categoriesMap.get(entry.id) ?? []
     return {
       id: entry.id,
       title: entry.title,
@@ -156,8 +162,11 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       principalId: entry.principalId,
       publishedAt: entry.publishedAt,
       displayDate: entry.displayDate,
+      featuredImageUrl: entry.featuredImageUrl,
+      segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
+      viewCount: entry.viewCount,
       author: entry.principalId ? (authorMap.get(entry.principalId) ?? null) : null,
       linkedPosts: entryLinkedPosts.map((lp) => ({
         id: lp.post.id,
@@ -165,6 +174,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
         voteCount: lp.post.voteCount,
         status: lp.post.statusId ? (statusMap.get(lp.post.statusId) ?? null) : null,
       })),
+      categories: entryCategories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
       status: computeStatus(entry.publishedAt),
     }
   })
@@ -243,4 +253,38 @@ export async function searchShippedPosts(params: {
     .limit(limit)
 
   return results
+}
+
+/**
+ * Rank published changelog entries by in-app view count, most-viewed first.
+ * Drafts and scheduled entries are excluded — they've never been publicly
+ * viewable, so their view_count is always zero and would only pad a ranking
+ * that's meant to surface what readers actually engaged with.
+ *
+ * @param params - Ranking parameters
+ * @returns Top entries ordered by view_count descending
+ */
+export async function listTopViewedChangelogs(
+  params: { limit?: number } = {}
+): Promise<TopViewedChangelogEntry[]> {
+  const { limit = 5 } = params
+  const now = new Date()
+
+  const entries = await db.query.changelogEntries.findMany({
+    where: and(
+      isNull(changelogEntries.deletedAt),
+      isNotNull(changelogEntries.publishedAt),
+      lte(changelogEntries.publishedAt, now)
+    ),
+    orderBy: [desc(changelogEntries.viewCount), desc(changelogEntries.id)],
+    limit,
+    columns: { id: true, title: true, viewCount: true, publishedAt: true },
+  })
+
+  return entries.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    viewCount: entry.viewCount,
+    publishedAt: entry.publishedAt as Date,
+  }))
 }

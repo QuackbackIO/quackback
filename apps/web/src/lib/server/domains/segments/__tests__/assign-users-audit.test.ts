@@ -15,7 +15,7 @@ import { generateId, type PrincipalId, type SegmentId } from '@quackback/ids'
 const mockAddMember = vi.fn()
 const mockSegmentFindFirst = vi.fn()
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   // assignUsersToSegment validates principal ids exist before looping
   // by selecting from `principal where id IN (ids)`. We can't introspect
   // the WHERE shape reliably across mock variants — just inspect what
@@ -29,7 +29,9 @@ vi.mock('@/lib/server/db', () => {
   })
   const mockFrom = vi.fn().mockReturnValue({ where: mockWhere })
   const mockSelect = vi.fn().mockReturnValue({ from: mockFrom })
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: { segments: { findFirst: (...a: unknown[]) => mockSegmentFindFirst(...a) } },
       select: mockSelect,
@@ -38,9 +40,6 @@ vi.mock('@/lib/server/db', () => {
     and: vi.fn((...parts: unknown[]) => ({ kind: 'and', parts })),
     inArray: mockInArray,
     isNull: vi.fn((col) => ({ kind: 'isNull', col })),
-    segments: { id: 'segments.id', deletedAt: 'segments.deleted_at' },
-    userSegments: {},
-    principal: { id: 'principal.id' },
   }
 })
 

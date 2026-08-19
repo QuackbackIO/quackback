@@ -12,6 +12,7 @@
 
 import { Queue, Worker, UnrecoverableError } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { shouldRunWorkers } from '@/lib/server/queue/role'
 import type { SegmentId } from '@quackback/ids'
 import type { EvaluationSchedule } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
@@ -51,7 +52,7 @@ const DEFAULT_JOB_OPTS = {
 
 let initPromise: Promise<{
   queue: Queue<SegmentEvalJobData>
-  worker: Worker<SegmentEvalJobData>
+  worker: Worker<SegmentEvalJobData> | null
 }> | null = null
 
 function ensureQueue(): Promise<Queue<SegmentEvalJobData>> {
@@ -72,35 +73,39 @@ async function initializeQueue() {
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<SegmentEvalJobData>(
-    QUEUE_NAME,
-    async (job) => {
-      const { segmentId } = job.data
-      log.debug({ segment_id: segmentId }, 'evaluating segment')
+  // Consumer side is role-gated: web-role replicas enqueue and register
+  // schedules but never construct a Worker (see queue/role.ts).
+  const worker = shouldRunWorkers()
+    ? new Worker<SegmentEvalJobData>(
+        QUEUE_NAME,
+        async (job) => {
+          const { segmentId } = job.data
+          log.debug({ segment_id: segmentId }, 'evaluating segment')
 
-      // Lazy import to avoid circular deps
-      const { evaluateDynamicSegment } =
-        await import('@/lib/server/domains/segments/segment.evaluation')
+          // Lazy import to avoid circular deps
+          const { evaluateDynamicSegment } =
+            await import('@/lib/server/domains/segments/segment.evaluation')
 
-      try {
-        const result = await evaluateDynamicSegment(segmentId as SegmentId)
-        log.info(
-          { segment_id: segmentId, added: result.added, removed: result.removed },
-          'segment evaluated'
-        )
-      } catch (error) {
-        // If segment was deleted or isn't dynamic anymore, don't retry
-        if (
-          error instanceof Error &&
-          (error.message.includes('not found') || error.message.includes('not dynamic'))
-        ) {
-          throw new UnrecoverableError(error.message)
-        }
-        throw error
-      }
-    },
-    { connection, concurrency: CONCURRENCY }
-  )
+          try {
+            const result = await evaluateDynamicSegment(segmentId as SegmentId)
+            log.info(
+              { segment_id: segmentId, added: result.added, removed: result.removed },
+              'segment evaluated'
+            )
+          } catch (error) {
+            // If segment was deleted or isn't dynamic anymore, don't retry
+            if (
+              error instanceof Error &&
+              (error.message.includes('not found') || error.message.includes('not dynamic'))
+            ) {
+              throw new UnrecoverableError(error.message)
+            }
+            throw error
+          }
+        },
+        { connection, concurrency: CONCURRENCY }
+      )
+    : null
 
   // Verify Redis is reachable
   try {
@@ -112,11 +117,11 @@ async function initializeQueue() {
     ])
   } catch (error) {
     await queue.close().catch(() => {})
-    await worker.close().catch(() => {})
+    await worker?.close().catch(() => {})
     throw error
   }
 
-  worker.on('failed', (job, error) => {
+  worker?.on('failed', (job, error) => {
     if (!job) return
     const isPermanent =
       job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
@@ -164,10 +169,7 @@ export async function upsertSegmentEvaluationSchedule(
     }
   )
 
-  log.info(
-    { segment_id: segmentId, pattern: schedule.pattern },
-    'scheduled segment evaluation'
-  )
+  log.info({ segment_id: segmentId, pattern: schedule.pattern }, 'scheduled segment evaluation')
 }
 
 /**
@@ -247,6 +249,6 @@ export async function closeSegmentScheduler(): Promise<void> {
   const { worker, queue } = await initPromise
   initPromise = null
 
-  await worker.close().catch((e) => log.error({ err: e }, 'worker close error'))
+  await worker?.close().catch((e) => log.error({ err: e }, 'worker close error'))
   await queue.close().catch((e) => log.error({ err: e }, 'queue close error'))
 }

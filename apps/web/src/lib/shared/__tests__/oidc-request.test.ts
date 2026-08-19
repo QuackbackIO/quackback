@@ -25,21 +25,19 @@ describe('authorizeRequestFor', () => {
     expect(req.tokenAuth).toBe(DEFAULT_TOKEN_AUTH_METHOD)
   })
 
-  it('defaults the prompt to login, not select_account', () => {
-    expect(DEFAULT_OIDC_PROMPT).toBe('login')
-    expect(authorizeRequestFor(row()).prompt).toBe('login')
-  })
-
   it('carries every configured value', () => {
     const req = authorizeRequestFor(
-      row({ scopes: 'openid public', prompt: 'consent', tokenEndpointAuthMethod: 'basic' })
+      row({ scopes: 'openid public', prompt: 'login', tokenEndpointAuthMethod: 'basic' })
     )
     expect(req.scopes).toEqual(['openid', 'public'])
-    expect(req.prompt).toBe('consent')
+    expect(req.prompt).toBe('login')
     expect(req.tokenAuth).toBe('basic')
   })
 
   it('omits the prompt entirely when configured to send none', () => {
+    // Distinct from prompt=none, which DEMANDS no interaction and errors when
+    // nobody is signed in. Omitting the parameter just leaves the provider to
+    // behave normally.
     const req = authorizeRequestFor(row({ prompt: 'omit' }))
     expect(req.prompt).toBeUndefined()
   })
@@ -65,6 +63,7 @@ describe('normalizePromptInput', () => {
   })
 
   it('rejects anything not a known choice', () => {
+    // A free-typed value would reach the IdP unvalidated and fail opaquely.
     expect(normalizePromptInput('nonsense')).toBeNull()
     expect(normalizePromptInput('')).toBeNull()
   })
@@ -83,8 +82,10 @@ describe('normalizeTokenAuthInput', () => {
 
 describe('supportsPrompt', () => {
   it('says nothing when the provider advertises no prompt list', () => {
-    expect(supportsPrompt('login', null)).toBe(true)
-    expect(supportsPrompt('login', [])).toBe(true)
+    // prompt_values_supported is optional metadata and almost nobody publishes
+    // it, so absent must mean unknown rather than unsupported.
+    expect(supportsPrompt('select_account', null)).toBe(true)
+    expect(supportsPrompt('select_account', [])).toBe(true)
   })
 
   it('detects an unadvertised prompt when the list exists', () => {
@@ -99,6 +100,7 @@ describe('supportsPrompt', () => {
 
 describe('choice lists', () => {
   it('offers omit and none as separate choices', () => {
+    // Collapsing them is the plausible simplification that breaks sign-in.
     const values = PROMPT_CHOICES.map((c) => c.value)
     expect(values).toContain('omit')
     expect(values).toContain('none')

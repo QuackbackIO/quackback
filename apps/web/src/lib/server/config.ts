@@ -72,6 +72,8 @@ const configSchema = z.object({
 
   // Database
   databaseUrl: z.string().min(1),
+  dbPoolMax: envInt.pipe(z.number().int().min(1).max(100)).optional(),
+  dbIdleTimeout: envInt.pipe(z.number().int().min(1).max(3600)).default(20),
 
   // Auth
   secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
@@ -81,6 +83,7 @@ const configSchema = z.object({
 
   // Redis (BullMQ background jobs)
   redisUrl: z.string().min(1),
+  trustedProxyHops: envInt.pipe(z.number().int().min(0).max(10)).default(0),
 
   // Email (all optional)
   emailFrom: z.string().optional(),
@@ -112,6 +115,13 @@ const configSchema = z.object({
   aiQualityGateModel: z.string().optional(),
   aiInterpretationModel: z.string().optional(),
   aiMergeModel: z.string().optional(),
+  aiHelpCenterModel: z.string().optional(),
+  aiHelpCenterTranslateModel: z.string().optional(),
+  aiAssistantModel: z.string().optional(),
+  aiAssistantVision: z.string().optional(),
+  aiInboxTranslationModel: z.string().optional(),
+  aiClassificationModel: z.string().optional(),
+  aiRequireParameters: envBoolean,
 
   // Telemetry (optional)
   disableTelemetry: envBoolean,
@@ -135,6 +145,8 @@ function buildConfigFromEnv(): unknown {
 
     // Database
     databaseUrl: process.env.DATABASE_URL,
+    dbPoolMax: env('DB_POOL_MAX'),
+    dbIdleTimeout: env('DB_IDLE_TIMEOUT'),
 
     // Auth
     secretKey: process.env.SECRET_KEY,
@@ -142,6 +154,7 @@ function buildConfigFromEnv(): unknown {
 
     // Redis
     redisUrl: process.env.REDIS_URL,
+    trustedProxyHops: env('TRUSTED_PROXY_HOPS'),
 
     // Email
     emailFrom: env('EMAIL_FROM'),
@@ -173,6 +186,13 @@ function buildConfigFromEnv(): unknown {
     aiQualityGateModel: env('AI_QUALITY_GATE_MODEL'),
     aiInterpretationModel: env('AI_INTERPRETATION_MODEL'),
     aiMergeModel: env('AI_MERGE_MODEL'),
+    aiHelpCenterModel: env('AI_HELP_CENTER_MODEL'),
+    aiHelpCenterTranslateModel: env('AI_HELP_CENTER_TRANSLATE_MODEL'),
+    aiAssistantModel: env('AI_ASSISTANT_MODEL'),
+    aiAssistantVision: env('AI_ASSISTANT_VISION'),
+    aiInboxTranslationModel: env('AI_INBOX_TRANSLATION_MODEL'),
+    aiClassificationModel: env('AI_CLASSIFICATION_MODEL'),
+    aiRequireParameters: env('AI_REQUIRE_PARAMETERS'),
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
@@ -186,7 +206,7 @@ function buildConfigFromEnv(): unknown {
 let _config: Config | null = null
 
 function isBuildTime(): boolean {
-  return !process.env.SECRET_KEY && process.env.NODE_ENV !== 'test'
+  return process.env.QUACKBACK_BUILD === '1'
 }
 
 function loadConfig(): Config {
@@ -238,6 +258,14 @@ export const config = {
   get databaseUrl() {
     return loadConfig().databaseUrl
   },
+  get dbPoolMax() {
+    const configured = loadConfig().dbPoolMax
+    if (configured) return configured
+    return process.env.QUACKBACK_ROLE === 'worker' ? 20 : 10
+  },
+  get dbIdleTimeout() {
+    return loadConfig().dbIdleTimeout
+  },
   get secretKey() {
     return loadConfig().secretKey
   },
@@ -248,6 +276,9 @@ export const config = {
   // Redis
   get redisUrl() {
     return loadConfig().redisUrl
+  },
+  get trustedProxyHops() {
+    return loadConfig().trustedProxyHops
   },
 
   // Email
@@ -330,6 +361,27 @@ export const config = {
   get aiMergeModel() {
     return loadConfig().aiMergeModel
   },
+  get aiHelpCenterModel() {
+    return loadConfig().aiHelpCenterModel
+  },
+  get aiHelpCenterTranslateModel() {
+    return loadConfig().aiHelpCenterTranslateModel
+  },
+  get aiAssistantModel() {
+    return loadConfig().aiAssistantModel
+  },
+  get aiAssistantVision() {
+    return loadConfig().aiAssistantVision
+  },
+  get aiInboxTranslationModel() {
+    return loadConfig().aiInboxTranslationModel
+  },
+  get aiClassificationModel() {
+    return loadConfig().aiClassificationModel
+  },
+  get aiRequireParameters() {
+    return loadConfig().aiRequireParameters
+  },
 
   // Telemetry
   get disableTelemetry() {
@@ -350,6 +402,15 @@ export const config = {
     return process.env.PLATFORM_CREDENTIALS_SOURCE === 'env' ? 'env' : 'db'
   },
 
+  // Realtime chat transport, surfaced to clients via getWidgetCapabilitiesFn.
+  //   'live' (default) — SSE stream at /api/chat/stream.
+  //   'poll' — force the widget/portal onto the polling fallback for a
+  //            deployment behind a proxy that buffers or drops event streams.
+  // Direct process.env read (like helpCenterDev) so it works without a full config load.
+  get chatTransportMode(): 'live' | 'poll' {
+    return process.env.CHAT_TRANSPORT_MODE === 'poll' ? 'poll' : 'live'
+  },
+
   // Convenience
   get isDev() {
     return this.nodeEnv === 'development'
@@ -361,6 +422,12 @@ export const config = {
     return this.nodeEnv === 'test'
   },
 } as const
+
+/** Validate every required runtime setting before traffic or workers start. */
+export function validateRuntimeConfig(): void {
+  if (isBuildTime()) return
+  loadConfig()
+}
 
 /**
  * Get base URL, returns empty string during build.

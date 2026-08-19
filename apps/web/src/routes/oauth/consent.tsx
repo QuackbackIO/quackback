@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
+import { API_KEY_SCOPES } from '@/lib/shared/api-key-scopes'
 import { ExternalLink, Globe, ShieldCheck } from 'lucide-react'
 
 const searchSchema = z.object({
@@ -51,46 +52,62 @@ interface ScopeGroup {
   write: boolean
 }
 
+/**
+ * Consent copy per scope domain (the part after the colon). The group
+ * structure itself — which domains exist and whether each has a read/write
+ * half — is derived from the shared API_KEY_SCOPES vocabulary.
+ */
+const SCOPE_DOMAIN_COPY: Record<string, { label: string; description: string }> = {
+  feedback: { label: 'Feedback', description: 'Posts, comments, boards, and roadmaps' },
+  changelog: { label: 'Changelog', description: 'Changelog entries and releases' },
+  article: { label: 'Help Center', description: 'Categories and articles' },
+  chat: { label: 'Conversations', description: 'Support inbox conversations and messages' },
+}
+
 function groupScopes(scopes: string[]): ScopeGroup[] {
   const scopeSet = new Set(scopes)
+  const vocabulary = new Set<string>(API_KEY_SCOPES)
 
-  const groups: { read?: string; write?: string; label: string; description: string }[] = [
-    {
-      read: 'read:feedback',
-      write: 'write:feedback',
-      label: 'Feedback',
-      description: 'Posts, comments, boards, and roadmaps',
-    },
-    {
-      write: 'write:changelog',
-      label: 'Changelog',
-      description: 'Changelog entries and releases',
-    },
-    {
-      read: 'read:article',
-      write: 'write:article',
-      label: 'Help Center',
-      description: 'Categories and articles',
-    },
-    {
-      read: 'read:chat',
-      write: 'write:chat',
-      label: 'Conversations',
-      description: 'Support inbox conversations and messages',
-    },
-  ]
+  // Domains in vocabulary order, deduped
+  const domains: string[] = []
+  for (const scope of API_KEY_SCOPES) {
+    const domain = scope.split(':')[1]
+    if (!domains.includes(domain)) domains.push(domain)
+  }
 
-  return groups
-    .map((g) => ({
-      label: g.label,
-      description: g.description,
-      read: g.read ? scopeSet.has(g.read) : false,
-      write: g.write ? scopeSet.has(g.write) : false,
-    }))
+  return domains
+    .map((domain) => {
+      const copy = SCOPE_DOMAIN_COPY[domain] ?? { label: domain, description: '' }
+      // A requested scope only counts when the vocabulary defines it (e.g.
+      // there is no read:changelog, so that group can never show Read).
+      const holds = (scope: string) => vocabulary.has(scope) && scopeSet.has(scope)
+      return {
+        label: copy.label,
+        description: copy.description,
+        read: holds(`read:${domain}`),
+        write: holds(`write:${domain}`),
+      }
+    })
     .filter((g) => g.read || g.write)
 }
 
-const HIDDEN_SCOPES = new Set(['openid', 'profile', 'email', 'offline_access'])
+// Identity scopes implicit in signing in. offline_access is intentionally
+// NOT hidden: it issues a refresh token, so the user must see it.
+const HIDDEN_SCOPES = new Set(['openid', 'profile', 'email'])
+
+export interface ConsentScopeView {
+  groups: ScopeGroup[]
+  /** Whether the client asked for offline_access (a refresh token). */
+  offlineAccess: boolean
+}
+
+export function buildScopeView(allScopes: string[]): ConsentScopeView {
+  const visible = allScopes.filter((s) => !HIDDEN_SCOPES.has(s))
+  return {
+    groups: groupScopes(visible),
+    offlineAccess: visible.includes('offline_access'),
+  }
+}
 
 // ============================================================================
 // Client info hook
@@ -119,8 +136,7 @@ function ConsentPage() {
   const search = Route.useSearch()
   const client = useClientInfo(search.client_id)
   const allScopes: string[] = search.scope?.split(' ').filter(Boolean) ?? []
-  const visibleScopes = allScopes.filter((s) => !HIDDEN_SCOPES.has(s))
-  const scopeGroups = groupScopes(visibleScopes)
+  const { groups: scopeGroups, offlineAccess } = buildScopeView(allScopes)
   const [submitting, setSubmitting] = useState<'accept' | 'deny' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -223,7 +239,7 @@ function ConsentPage() {
         </div>
 
         {/* Permissions */}
-        {scopeGroups.length > 0 && (
+        {(scopeGroups.length > 0 || offlineAccess) && (
           <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
             {scopeGroups.map((group, i) => (
               <div
@@ -248,6 +264,18 @@ function ConsentPage() {
                 </div>
               </div>
             ))}
+            {offlineAccess && (
+              <div
+                className={`flex items-center justify-between px-4 py-3 ${scopeGroups.length > 0 ? 'border-t border-border/30' : ''}`}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Offline access</p>
+                  <p className="text-xs text-muted-foreground">
+                    Keep access when you are offline (refresh token)
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

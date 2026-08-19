@@ -16,6 +16,9 @@ export type {
   PortalFeatures,
   PortalConfig,
   PortalAccessConfig,
+  PortalNavConfig,
+  PortalNavItemConfig,
+  PortalNavItemType,
   PortalWelcomeCard,
   HeaderDisplayMode,
   ThemeColors,
@@ -30,7 +33,12 @@ export type {
   PublicWidgetConfig,
   UpdateWidgetConfigInput,
   HelpCenterConfig,
+  HelpCenterHeaderLink,
   HelpCenterSeoConfig,
+  HelpCenterDomainConfig,
+  HelpCenterLocalesConfig,
+  HelpCenterLocaleChromeStrings,
+  HelpCenterAutoTranslateConfig,
 } from './settings.types'
 
 // Welcome card constants (no DB dependency)

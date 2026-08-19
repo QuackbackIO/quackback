@@ -1,19 +1,39 @@
-import { useEffect } from 'react'
-import { UsersIcon } from '@heroicons/react/24/solid'
+import { useCallback, useEffect, useState } from 'react'
+import { useIntl } from 'react-intl'
+import { toast } from 'sonner'
+import { PlusIcon, TagIcon, UsersIcon, ViewColumnsIcon } from '@heroicons/react/24/solid'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useAssignUsersToSegment, useRemoveUsersFromSegment } from '@/lib/client/mutations'
 import { EmptyState } from '@/components/shared/empty-state'
 import { SearchInput } from '@/components/shared/search-input'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { MENU_ICON, MENU_LABEL } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
-import { UserCard } from '@/components/admin/users/user-card'
+import {
+  UserCard,
+  METRIC_COLUMN_WIDTH,
+  EMAIL_COLUMN_WIDTH,
+  JOINED_COLUMN_WIDTH,
+  COUNTRY_COLUMN_WIDTH,
+} from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
+import { useUserTags } from '@/lib/client/hooks/use-user-tags'
+import { UsersBulkSegmentBar } from '@/components/admin/users/users-bulk-segment-bar'
 import { MobileSegmentSelector } from '@/components/admin/users/users-segment-nav'
 import type { PortalUserListItemView } from '@/lib/shared/types'
 import type { UsersFilters } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
+import type { PrincipalId, SegmentId } from '@quackback/ids'
 
 interface UsersListProps {
   users: PortalUserListItemView[]
@@ -33,31 +53,62 @@ interface UsersListProps {
   selectedSegmentIds: string[]
   onSelectSegment: (segmentId: string, shiftKey: boolean) => void
   onClearSegments: () => void
+  /** Opens the "New person" dialog; absent when the viewer can't manage people. */
+  onNewPerson?: () => void
+  /** Gates bulk-selection checkboxes and the segment action bar, matching the per-user editor's admin-only gate. */
+  canManage: boolean
 }
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
   { value: 'oldest', label: 'Oldest' },
   { value: 'most_active', label: 'Most Active' },
+  { value: 'last_active', label: 'Last Active' },
   { value: 'most_posts', label: 'Most Posts' },
   { value: 'most_comments', label: 'Most Comments' },
   { value: 'most_votes', label: 'Most Votes' },
   { value: 'name', label: 'Name A-Z' },
 ] as const
 
+const SHOW_COUNTRY_STORAGE_KEY = 'quackback:users-list:show-country'
+
+/**
+ * The Country column opt-in persists per teammate in localStorage, so the
+ * table keeps the shape each teammate picked across sessions. The initial
+ * state reads storage synchronously via a lazy initializer instead of
+ * hydrating in a mount effect.
+ */
+function useShowCountryColumn(): [boolean, (next: boolean) => void] {
+  const [showCountry, setShowCountry] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(SHOW_COUNTRY_STORAGE_KEY) === '1'
+    } catch {
+      // Unavailable storage (SSR, private browsing) — the column starts hidden.
+      return false
+    }
+  })
+  const setPersisted = useCallback((next: boolean) => {
+    setShowCountry(next)
+    try {
+      window.localStorage.setItem(SHOW_COUNTRY_STORAGE_KEY, next ? '1' : '0')
+    } catch {
+      // Storage may be unavailable — the in-memory choice still applies for
+      // this session.
+    }
+  }, [])
+  return [showCountry, setPersisted]
+}
+
 function UserListSkeleton() {
   return (
     <div className="p-3">
       <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex items-start gap-3 p-3">
-            <Skeleton className="h-10 w-10 rounded-full shrink-0" />
-            <div className="flex-1 min-w-0">
-              <Skeleton className="h-4 w-32 mb-1.5" />
-              <Skeleton className="h-3 w-48 mb-1" />
-              <Skeleton className="h-3 w-24 mb-1.5" />
-              <Skeleton className="h-3 w-20" />
-            </div>
+          <div key={i} className="flex items-center gap-3 px-3 py-2">
+            <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+            <Skeleton className="h-4 flex-1 min-w-0" />
+            <Skeleton className={cn('h-3', EMAIL_COLUMN_WIDTH)} />
+            <Skeleton className={cn('h-3', JOINED_COLUMN_WIDTH)} />
           </div>
         ))}
       </div>
@@ -101,6 +152,59 @@ function UsersEmptyState({
   )
 }
 
+/**
+ * People-list tag filter: checkbox menu over every live user tag, OR logic —
+ * a person carrying ANY selected tag matches. Renders nothing when no tags
+ * exist yet (tags are minted from the profile tag control).
+ */
+function UserTagFilterDropdown({
+  selectedTagIds,
+  onChange,
+}: {
+  selectedTagIds: string[]
+  onChange: (tagIds: string[]) => void
+}) {
+  const { data: tags } = useUserTags()
+  if (!tags || tags.length === 0) return null
+
+  const toggle = (tagId: string, checked: boolean) => {
+    onChange(checked ? [...selectedTagIds, tagId] : selectedTagIds.filter((id) => id !== tagId))
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            'h-8 text-xs gap-1.5',
+            selectedTagIds.length > 0 && 'border-primary/40 text-primary'
+          )}
+        >
+          <TagIcon className={MENU_ICON} />
+          Tags{selectedTagIds.length > 0 ? ` (${selectedTagIds.length})` : ''}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {tags.map((tag) => (
+          <DropdownMenuCheckboxItem
+            key={tag.id}
+            checked={selectedTagIds.includes(tag.id)}
+            onCheckedChange={(checked) => toggle(tag.id, checked === true)}
+          >
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: tag.color }}
+            />
+            {tag.name}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function UsersList({
   users,
   hasMore,
@@ -118,8 +222,14 @@ export function UsersList({
   selectedSegmentIds,
   onSelectSegment,
   onClearSegments,
+  onNewPerson,
+  canManage,
 }: UsersListProps) {
+  const intl = useIntl()
   const sort = filters.sort || 'newest'
+  // Column picker — extra fields a teammate can opt into per row. Starts
+  // empty so the default list stays exactly as dense as it's always been.
+  const [showCountry, setShowCountry] = useShowCountryColumn()
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
     onChange: (value) => onFiltersChange({ search: value }),
@@ -136,6 +246,88 @@ export function UsersList({
     rootMargin: '0px',
     threshold: 0.1,
   })
+
+  // Bulk segment selection — lets an admin add/remove many users to/from a
+  // manual segment in one action instead of one navigate-open-popover cycle
+  // per person.
+  const [selectedIds, setSelectedIds] = useState<Set<PrincipalId>>(new Set())
+  const assignUsers = useAssignUsersToSegment()
+  const removeUsers = useRemoveUsersFromSegment()
+  const manualSegments = (segments ?? []).filter((s) => s.type === 'manual')
+
+  // selectedIds can outlive the rows it was checked against (a filter/segment-nav
+  // change narrows `users` without clearing selection, since UsersList stays
+  // mounted across that). Re-deriving the effective selection from the
+  // currently-visible rows on every render keeps both the displayed count and
+  // any bulk action scoped to what the admin can actually see right now.
+  const visibleSelectedIds = users
+    .filter((u) => selectedIds.has(u.principalId))
+    .map((u) => u.principalId)
+  const allLoadedSelected = users.length > 0 && visibleSelectedIds.length === users.length
+  const someLoadedSelected = visibleSelectedIds.length > 0
+
+  const toggleSelect = (principalId: PrincipalId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(principalId)) {
+        next.delete(principalId)
+      } else {
+        next.add(principalId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allLoadedSelected ? new Set() : new Set(users.map((u) => u.principalId)))
+  }
+
+  const handleBulkAdd = async (segmentId: SegmentId) => {
+    const segment = manualSegments.find((s) => s.id === segmentId)
+    const principalIds = visibleSelectedIds
+    try {
+      const { assigned } = await assignUsers.mutateAsync({ segmentId, principalIds })
+      setSelectedIds(new Set())
+      toast.success(
+        `Added ${assigned} ${assigned === 1 ? 'person' : 'people'} to ${segment?.name ?? 'segment'}`
+      )
+    } catch {
+      toast.error(`Failed to add to ${segment?.name ?? 'segment'}`)
+    }
+  }
+
+  const handleBulkRemove = async (segmentId: SegmentId) => {
+    const segment = manualSegments.find((s) => s.id === segmentId)
+    const principalIds = visibleSelectedIds
+    try {
+      const { removed, removedPrincipalIds } = await removeUsers.mutateAsync({
+        segmentId,
+        principalIds,
+      })
+      setSelectedIds(new Set())
+      toast.success(
+        `Removed ${removed} ${removed === 1 ? 'person' : 'people'} from ${segment?.name ?? 'segment'}`,
+        {
+          action: {
+            label: 'Undo',
+            onClick: () =>
+              // Re-assign only the ids the server actually removed — the
+              // original selection can include users who were never members
+              // of this segment, and undo must not add them to one.
+              assignUsers.mutate(
+                { segmentId, principalIds: removedPrincipalIds },
+                {
+                  onError: () =>
+                    toast.error(`Failed to undo — ${segment?.name ?? 'segment'} was not restored`),
+                }
+              ),
+          },
+        }
+      )
+    } catch {
+      toast.error(`Failed to remove from ${segment?.name ?? 'segment'}`)
+    }
+  }
 
   // Keyboard navigation
   useEffect(() => {
@@ -214,7 +406,7 @@ export function UsersList({
               key={opt.value}
               type="button"
               className={cn(
-                'px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer whitespace-nowrap',
+                'px-2.5 py-1 rounded-full text-[13px] transition-colors cursor-pointer whitespace-nowrap',
                 sort === opt.value
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:bg-muted/50'
@@ -225,6 +417,30 @@ export function UsersList({
             </button>
           ))}
         </div>
+        <div className="flex-1" />
+        <UserTagFilterDropdown
+          selectedTagIds={filters.tagIds ?? []}
+          onChange={(tagIds) => onFiltersChange({ tagIds: tagIds.length > 0 ? tagIds : undefined })}
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <ViewColumnsIcon className={MENU_ICON} />
+              Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuCheckboxItem checked={showCountry} onCheckedChange={setShowCountry}>
+              Country
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {onNewPerson && (
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={onNewPerson}>
+            <PlusIcon className="h-3.5 w-3.5" />
+            {intl.formatMessage({ id: 'admin.people.new.trigger', defaultMessage: 'New person' })}
+          </Button>
+        )}
       </div>
 
       {/* Active Filters Bar - Always visible */}
@@ -236,16 +452,39 @@ export function UsersList({
         />
       </div>
 
-      {/* Count */}
-      <div className="mt-2 text-xs text-muted-foreground">
-        {total} {total === 1 ? 'user' : 'users'}
+      {/* Count + select all */}
+      <div className="mt-2 flex items-center gap-2">
+        {canManage && !isLoading && users.length > 0 && (
+          <Checkbox
+            checked={allLoadedSelected ? true : someLoadedSelected ? 'indeterminate' : false}
+            onCheckedChange={toggleSelectAll}
+            aria-label="Select all loaded users"
+          />
+        )}
+        <span className="text-xs text-muted-foreground">
+          {total} {total === 1 ? 'user' : 'users'}
+        </span>
       </div>
+
+      {/* Bulk segment action bar — only when one or more visible rows are checked */}
+      {canManage && visibleSelectedIds.length > 0 && (
+        <div className="mt-2">
+          <UsersBulkSegmentBar
+            selectedCount={visibleSelectedIds.length}
+            manualSegments={manualSegments}
+            onAdd={handleBulkAdd}
+            onRemove={handleBulkRemove}
+            onClear={() => setSelectedIds(new Set())}
+            isPending={assignUsers.isPending || removeUsers.isPending}
+          />
+        </div>
+      )}
     </div>
   )
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <UserListSkeleton />
       </div>
@@ -254,7 +493,7 @@ export function UsersList({
 
   if (users.length === 0) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <UsersEmptyState hasActiveFilters={hasActiveFilters} onClearFilters={onClearFilters} />
       </div>
@@ -262,25 +501,50 @@ export function UsersList({
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       {headerContent}
 
       {/* User List */}
       <div className="p-3">
-        <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
-          {users.map((user, index) => (
-            <div
-              key={user.principalId}
-              className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-              style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-            >
-              <UserCard
-                user={user}
-                isSelected={user.principalId === selectedUserId}
-                onClick={() => onSelectUser(user.principalId)}
-              />
+        <div className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50">
+          {/* Column headers — kept in sync with each row's checkbox/avatar
+              spacer and the column-width constants in `user-card.tsx` so every
+              label lands directly above the field it describes, giving the
+              list a vertical lane to scan down instead of a stacked cell. */}
+          <div className="flex items-center gap-3 border-b border-border/50 px-3 py-2">
+            {canManage && <div className="size-4 shrink-0" aria-hidden="true" />}
+            <div className="h-8 w-8 shrink-0" aria-hidden="true" />
+            <span className={cn('min-w-0 flex-1', MENU_LABEL)}>Name</span>
+            <span className={cn(EMAIL_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Email</span>
+            <span className={cn(JOINED_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Joined</span>
+            {showCountry && (
+              <span className={cn(COUNTRY_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Country</span>
+            )}
+            <div className="flex shrink-0 items-center gap-3">
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Posts</span>
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Comments</span>
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Votes</span>
             </div>
-          ))}
+          </div>
+          <div className="divide-y divide-border/50">
+            {users.map((user, index) => (
+              <div
+                key={user.principalId}
+                className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+              >
+                <UserCard
+                  user={user}
+                  isSelected={user.principalId === selectedUserId}
+                  onClick={() => onSelectUser(user.principalId)}
+                  canManage={canManage}
+                  checked={selectedIds.has(user.principalId)}
+                  onToggleCheck={() => toggleSelect(user.principalId)}
+                  showCountry={showCountry}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

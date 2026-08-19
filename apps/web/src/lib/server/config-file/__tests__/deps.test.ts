@@ -22,13 +22,14 @@ const mockValues = vi.fn((vals: Record<string, unknown>) => {
   return { onConflictDoNothing: hoisted.mockOnConflictDoNothing }
 })
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     insert: vi.fn(() => ({ values: mockValues })),
     query: { settings: { findFirst: vi.fn() } },
     transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
   },
-  settings: { id: 'settings.id' },
   eq: vi.fn(),
 }))
 

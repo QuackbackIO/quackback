@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('@/lib/server/db', () => {
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const chain = { set: () => ({ where: vi.fn() }) }
   const tx = { update: () => chain }
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         settings: {
@@ -20,8 +22,6 @@ vi.mock('@/lib/server/db', () => {
       }),
     },
     eq: vi.fn(),
-    settings: { id: 'id', authConfig: 'auth_config' },
-    ssoVerifiedDomain: { id: 'id', createdAt: 'created_at' },
   }
 })
 
@@ -38,7 +38,10 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn().mockResolvedValue({ features: { customOidcProvider: true } }),
 }))
 
-vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({ enforceFeatureGate: vi.fn() }))
+vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
+  enforceFeatureGate: vi.fn(),
+  assertTierFeature: vi.fn(),
+}))
 
 vi.mock('@/lib/server/content/ssrf-guard', () => ({
   checkUrlSafety: vi.fn().mockResolvedValue({ safe: true }),

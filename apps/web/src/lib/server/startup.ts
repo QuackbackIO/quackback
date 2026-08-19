@@ -3,6 +3,9 @@
  * Build-time constants are injected via Vite `define`; runtime info is read at call time.
  */
 import { logger } from '@/lib/server/logger'
+import { closeAllWorkers, initAllWorkers } from './queue/worker-registry'
+import { getProcessRole, shouldRunWorkers } from './queue/role'
+import { validateRuntimeConfig } from './config'
 
 const log = logger.child({ component: 'startup' })
 
@@ -39,23 +42,15 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        const closes = await Promise.allSettled([
-          import('./events/process').then(({ closeQueue }) => closeQueue()),
-          import('./events/segment-scheduler').then(({ closeSegmentScheduler }) =>
-            closeSegmentScheduler()
-          ),
-          import('./domains/feedback/queues/feedback-ai-queue').then(({ closeFeedbackAiQueue }) =>
-            closeFeedbackAiQueue()
-          ),
-          import('./domains/feedback/queues/feedback-ingest-queue').then(
-            ({ closeFeedbackIngestQueue }) => closeFeedbackIngestQueue()
-          ),
-        ])
-        for (const r of closes) {
-          if (r.status === 'rejected') log.error({ err: r.reason }, 'queue close failed')
-        }
+        // Stop the relay before closing BullMQ/Redis so a final poll cannot
+        // enqueue into a queue that is already draining.
+        await import('./events/relay').then(({ stopOutboxRelay }) => stopOutboxRelay())
 
-        // Drain the live-chat pub/sub subscriber connection before the
+        // Drain every registered queue/worker. One list drives boot and
+        // shutdown, so nothing can be booted but left undrained.
+        await closeAllWorkers()
+
+        // Drain the conversation pub/sub subscriber connection before the
         // shared client closes — it's a separate long-lived socket.
         await import('./realtime/pubsub').then(({ closeSubscriber }) => closeSubscriber())
 
@@ -78,11 +73,12 @@ function wireGracefulShutdown(): void {
 }
 
 export function logStartupBanner(): void {
-  // During Nitro's initial build evaluation, SECRET_KEY isn't available yet.
-  // Return without setting _logged so the runtime call can still execute.
-  if (!process.env.SECRET_KEY && process.env.NODE_ENV !== 'test') return
+  // Build evaluation is explicitly selected by the build script. A missing
+  // runtime secret must never be mistaken for build mode.
+  if (process.env.QUACKBACK_BUILD === '1') return
 
   if (_logged) return
+  validateRuntimeConfig()
   _logged = true
 
   const runtime =
@@ -97,6 +93,7 @@ export function logStartupBanner(): void {
       runtime,
       port,
       base_url: baseUrl,
+      role: getProcessRole(),
       built: __BUILD_TIME__,
     },
     'server started'
@@ -107,71 +104,65 @@ export function logStartupBanner(): void {
     .then(({ validateAiConfig }) => validateAiConfig())
     .catch((err) => log.error({ err }, 'ai config validation failed'))
 
+  import('@/integrations/segment/server/user-sync')
+    .then(({ warnIfSegmentInboundIsInsecure }) => warnIfSegmentInboundIsInsecure())
+    .catch((err) => log.error({ err }, 'failed to validate Segment inbound configuration'))
+
   // Wire SIGTERM/SIGINT once — the rest of this function spawns
   // long-lived workers + sweepers, so register the drain handler before
   // any of them start so a fast Ctrl-C in dev still gets a clean exit.
   wireGracefulShutdown()
 
-  // Restore any dynamic segment evaluation schedules that were persisted in the
-  // DB but may be absent from Redis (e.g. after a Redis wipe in dev). BullMQ
-  // repeatable jobs survive normal app restarts, but this is a safety net.
-  import('@/lib/server/events/segment-scheduler')
-    .then(({ restoreAllEvaluationSchedules }) => restoreAllEvaluationSchedules())
-    .catch((err) => log.error({ err }, 'failed to restore segment schedules'))
+  // One-time in-place data backfills (idempotent, advisory-locked). Runs the
+  // custom-oidc → identity_provider migration that needs SECRET_KEY to decrypt
+  // its credential and so can't live in the SQL migration bundle.
+  import('@/lib/server/auth/backfill-custom-oidc-provider')
+    .then(({ runStartupBackfills }) => runStartupBackfills())
+    .catch((err) => log.error({ err }, 'failed to run startup backfills'))
 
-  // Initialize feedback AI worker eagerly so it processes jobs from any source
-  import('./domains/feedback/queues/feedback-ai-queue')
-    .then(({ initFeedbackAiWorker }) => initFeedbackAiWorker())
-    .catch((err) => log.error({ err }, 'failed to init feedback ai worker'))
+  // Quackback config file watcher — reconciles managed fields from
+  // /etc/quackback/config.yaml on every change. No-op when the file
+  // is absent (self-host default).
+  import('@/lib/server/config-file')
+    .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
+    .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
 
-  // Initialize analytics worker (hourly stats refresh)
-  import('./domains/analytics/analytics-queue')
-    .then(({ initAnalyticsWorker }) => initAnalyticsWorker())
-    .catch((err) => log.error({ err }, 'failed to init analytics worker'))
+  // Background processing is role-gated: QUACKBACK_ROLE=web replicas serve
+  // HTTP and enqueue only, so scaling them never scales queue consumption.
+  if (shouldRunWorkers()) {
+    startBackgroundProcessing()
+  } else {
+    // Web replicas write domain events to the durable outbox but do NOT drain it
+    // — the relay runs worker-side only. Since EVENTING-V2's cutover made the
+    // outbox the SOLE delivery path, a deployment that scales web replicas MUST
+    // also run at least one worker-role (or 'all') replica, or every webhook /
+    // notification / workflow will pile up unpublished. Warn (not info) so a
+    // web-only topology is loud in the logs.
+    log.warn(
+      'QUACKBACK_ROLE=web — queue workers and the outbox relay are worker-side; ' +
+        'ensure a worker (or role=all) replica is running or events will not be delivered'
+    )
+  }
+}
 
-  // Initialize anonymous-principal sweep worker (daily; bounds anon-row bloat)
-  import('./domains/principals/anon-sweep-queue')
-    .then(({ initAnonSweepWorker }) => initAnonSweepWorker())
-    .catch((err) => log.error({ err }, 'failed to init anon-sweep worker'))
+/**
+ * Boot queue workers and periodic sweepers. Runs under QUACKBACK_ROLE=worker
+ * and the single-process default ('all') — never on web-role replicas. Every
+ * sweeper additionally holds a cross-instance sweep lock, so multiple worker
+ * replicas stay safe.
+ */
+function startBackgroundProcessing(): void {
+  // Boot every eagerly-initialized queue worker from the registry. Each init
+  // is isolated: one failure is logged without blocking the rest.
+  initAllWorkers()
 
-  // Periodic feedback maintenance (stuck-item recovery every 15min, suggestion expiry daily).
-  // Runs under a cross-instance lock so only one replica executes per tick.
-  Promise.all([
-    import('./domains/feedback/pipeline/stuck-recovery.service'),
-    import('./domains/feedback/pipeline/suggestion.service'),
-    import('@/lib/server/sweep-lock'),
-  ])
-    .then(([{ recoverStuckItems }, { expireStaleSuggestions }, { withSweepLock }]) => {
-      const ONE_HOUR = 60 * 60 * 1000
-      setTimeout(() => {
-        void withSweepLock('stuck_recovery', ONE_HOUR, () =>
-          recoverStuckItems().catch((err: unknown) =>
-            log.error({ err }, 'initial stuck-item recovery failed')
-          )
-        )
-      }, 20_000) // 20s delay
-      setInterval(
-        () => {
-          void withSweepLock('stuck_recovery', ONE_HOUR, () =>
-            recoverStuckItems().catch((err: unknown) =>
-              log.error({ err }, 'stuck-item recovery failed')
-            )
-          )
-        },
-        15 * 60 * 1000
-      ) // Every 15 minutes
-      setInterval(
-        () => {
-          void withSweepLock('suggestion_expiry', ONE_HOUR, async () => {
-            await expireStaleSuggestions().catch((err: unknown) =>
-              log.error({ err }, 'suggestion expiry failed')
-            )
-          })
-        },
-        24 * 60 * 60 * 1000
-      ) // Daily
-    })
-    .catch((err) => log.error({ err }, 'failed to init feedback maintenance'))
+  // Durable event outbox relay (EVENTING-V2 WO-3). Leader-elected, so multiple
+  // worker replicas stay safe. Post-cutover (WO-18) the outbox is the SOLE
+  // delivery path, so the relay always runs here — the only gate is
+  // QUACKBACK_ROLE (worker/all), enforced inside startOutboxRelay().
+  import('./events/relay')
+    .then(({ startOutboxRelay }) => startOutboxRelay())
+    .catch((err) => log.error({ err }, 'failed to start outbox relay'))
 
   // Audit-log retention sweep + expired portal/team invite sweep.
   // Daily maintenance runs under a cross-instance lock so only one
@@ -179,32 +170,64 @@ export function logStartupBanner(): void {
   Promise.all([
     import('@/lib/server/audit/log'),
     import('@/lib/server/audit/invite-sweep'),
+    import('./events/events-sweep'),
+    import('./domains/ai/usage-log'),
+    import('./domains/assistant/tool-audit'),
+    import('./domains/conversation/conversation-translation.service'),
     import('@/lib/server/sweep-lock'),
   ])
-    .then(([{ pruneAuditLog }, { sweepExpiredPortalInvites }, { withSweepLock }]) => {
-      const runDailyAuditMaintenance = async () => {
-        // TTL = 1 hour — each sweeper takes < 1s. Extending generously
-        // so a slow DB or large table doesn't cause premature expiry.
-        const ONE_HOUR = 60 * 60 * 1000
-        await withSweepLock('audit_prune', ONE_HOUR, async () => {
-          await pruneAuditLog().catch((err) => log.error({ err }, 'audit-log prune failed'))
-        })
-        await withSweepLock('invite_sweep', ONE_HOUR, async () => {
-          await sweepExpiredPortalInvites().catch((err) =>
-            log.error({ err }, 'invite sweep failed')
-          )
-        })
-      }
-      setTimeout(() => {
-        void runDailyAuditMaintenance()
-      }, 30_000)
-      setInterval(
-        () => {
+    .then(
+      ([
+        { pruneAuditLog },
+        { sweepExpiredPortalInvites },
+        { pruneEventsOutbox },
+        { cleanupExpiredLogs },
+        { cleanupExpiredToolCalls, cleanupExpiredAssistantEvents },
+        { cleanupExpiredMessageTranslations },
+        { withSweepLock },
+      ]) => {
+        const runDailyAuditMaintenance = async () => {
+          // TTL = 1 hour — each sweeper takes < 1s. Extending generously
+          // so a slow DB or large table doesn't cause premature expiry.
+          const ONE_HOUR = 60 * 60 * 1000
+          await withSweepLock('audit_prune', ONE_HOUR, async () => {
+            await pruneAuditLog().catch((err) => log.error({ err }, 'audit-log prune failed'))
+          })
+          await withSweepLock('invite_sweep', ONE_HOUR, async () => {
+            await sweepExpiredPortalInvites().catch((err) =>
+              log.error({ err }, 'invite sweep failed')
+            )
+          })
+          // EVENTING-V2 outbox retention (WO-20): prune published rows past the
+          // window; unpublished rows are never touched.
+          await withSweepLock('events_prune', ONE_HOUR, async () => {
+            await pruneEventsOutbox().catch((err) =>
+              log.error({ err }, 'events outbox prune failed')
+            )
+          })
+          // Log/telemetry retention: ai_usage_log + operational tables
+          // (hook deliveries, unsubscribe tokens, in-app notifications),
+          // assistant tool-audit + events, and message translations.
+          await withSweepLock('logs_retention', ONE_HOUR, async () => {
+            await Promise.all([
+              cleanupExpiredLogs(),
+              cleanupExpiredToolCalls(),
+              cleanupExpiredAssistantEvents(),
+              cleanupExpiredMessageTranslations(),
+            ]).catch((err) => log.error({ err }, 'logs retention cleanup failed'))
+          })
+        }
+        setTimeout(() => {
           void runDailyAuditMaintenance()
-        },
-        24 * 60 * 60 * 1000
-      )
-    })
+        }, 30_000)
+        setInterval(
+          () => {
+            void runDailyAuditMaintenance()
+          },
+          24 * 60 * 60 * 1000
+        )
+      }
+    )
     .catch((err) => log.error({ err }, 'failed to init audit-log maintenance'))
 
   // Start periodic summary sweep (refreshes stale/missing post summaries).
@@ -279,22 +302,38 @@ export function logStartupBanner(): void {
     })
     .catch((err) => log.error({ err }, 'failed to init changelog notify reconciler'))
 
-  // Ensure quackback feedback source exists (idempotent, creates on first startup)
-  import('./domains/feedback/sources/quackback.source')
-    .then(({ ensureQuackbackFeedbackSource }) => ensureQuackbackFeedbackSource())
-    .catch((err) => log.error({ err }, 'failed to ensure quackback feedback source'))
+  // Status page publish-notification reconciler: same shape as the changelog
+  // one above, for status_incidents.notified_at (Status Product Spec §9).
+  // Runs shortly after startup, then every 5 minutes.
+  Promise.all([import('./domains/status/status.service'), import('@/lib/server/sweep-lock')])
+    .then(([{ reconcileStatusNotifications }, { withSweepLock }]) => {
+      const TEN_MIN = 10 * 60 * 1000
+      const runReconcile = () =>
+        withSweepLock('status_notify', TEN_MIN, async () => {
+          await reconcileStatusNotifications().catch((err) =>
+            log.error({ err }, 'status notify reconcile failed')
+          )
+        })
+      setTimeout(() => void runReconcile(), 28_000) // 28s delay (stagger after changelog's 25s)
+      setInterval(() => void runReconcile(), 5 * 60 * 1000) // Every 5 minutes
+    })
+    .catch((err) => log.error({ err }, 'failed to init status notify reconciler'))
 
-  // One-time in-place data backfills (idempotent, advisory-locked). Runs the
-  // custom-oidc → identity_provider migration that needs SECRET_KEY to decrypt
-  // its credential and so can't live in the SQL migration bundle.
-  import('@/lib/server/auth/backfill-custom-oidc-provider')
-    .then(({ runStartupBackfills }) => runStartupBackfills())
-    .catch((err) => log.error({ err }, 'failed to run startup backfills'))
-
-  // Quackback config file watcher — reconciles managed fields from
-  // /etc/quackback/config.yaml on every change. No-op when the file
-  // is absent (self-host default).
-  import('@/lib/server/config-file')
-    .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
-    .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
+  // Scheduled-maintenance boot sweep: catches window start/complete
+  // transitions missed while the process was down (Status Product Spec §9).
+  // Runs shortly after startup, then every 5 minutes; each handler is
+  // idempotent so overlap with a live delayed job is harmless.
+  Promise.all([import('./domains/status/status.maintenance'), import('@/lib/server/sweep-lock')])
+    .then(([{ reconcileMaintenanceWindows }, { withSweepLock }]) => {
+      const TEN_MIN = 10 * 60 * 1000
+      const runReconcile = () =>
+        withSweepLock('status_maintenance_sweep', TEN_MIN, async () => {
+          await reconcileMaintenanceWindows().catch((err) =>
+            log.error({ err }, 'status maintenance window reconcile failed')
+          )
+        })
+      setTimeout(() => void runReconcile(), 31_000) // 31s delay (stagger after status notify's 28s)
+      setInterval(() => void runReconcile(), 5 * 60 * 1000) // Every 5 minutes
+    })
+    .catch((err) => log.error({ err }, 'failed to init status maintenance sweep'))
 }

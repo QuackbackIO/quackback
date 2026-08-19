@@ -72,10 +72,12 @@ export function NotificationFooter({
   reason,
   unsubscribeUrl,
   unsubscribeLabel = 'Unsubscribe from this post',
+  preferencesUrl,
 }: {
   reason: string
   unsubscribeUrl: string
   unsubscribeLabel?: string
+  preferencesUrl?: string
 }) {
   return (
     <Text style={typography.footer}>
@@ -84,6 +86,14 @@ export function NotificationFooter({
       <Link href={unsubscribeUrl} style={{ ...utils.link, fontSize: '13px' }}>
         {unsubscribeLabel}
       </Link>
+      {preferencesUrl ? (
+        <>
+          {' · '}
+          <Link href={preferencesUrl} style={{ ...utils.link, fontSize: '13px' }}>
+            Manage notification preferences
+          </Link>
+        </>
+      ) : null}
     </Text>
   )
 }

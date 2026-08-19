@@ -8,16 +8,17 @@ import {
   isNull,
   posts,
   boards,
-  votes,
+  postVotes,
   postSubscriptions,
 } from '@/lib/server/db'
-import { toUuid, type PostId, type StatusId, type PrincipalId } from '@quackback/ids'
+import { toUuid, type PostId, type PostStatusId, type PrincipalId } from '@quackback/ids'
+import { relatedPostIdsSql } from './post.merge-ids'
 import type { RoadmapPostListResult } from './post.types'
 import { getExecuteRows } from '@/lib/server/utils'
 import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 export async function getPublicRoadmapPostsPaginated(params: {
-  statusId: StatusId
+  statusId: PostStatusId
   page?: number
   limit?: number
   /**
@@ -75,16 +76,22 @@ export async function getPublicRoadmapPostsPaginated(params: {
 
   return {
     items,
-    total: -1,
+    total: undefined,
     hasMore,
   }
 }
 
 export async function hasUserVoted(postId: PostId, principalId: PrincipalId): Promise<boolean> {
-  const vote = await db.query.votes.findFirst({
-    where: and(eq(votes.postId, postId), eq(votes.principalId, principalId)),
-  })
-  return !!vote
+  const postUuid = toUuid(postId)
+  const principalUuid = toUuid(principalId)
+  const result = await db.execute<{ has_voted: boolean }>(sql`
+    SELECT EXISTS(
+      SELECT 1 FROM ${postVotes}
+      WHERE principal_id = ${principalUuid}::uuid
+        AND post_id IN ${relatedPostIdsSql(postUuid)}
+    ) as has_voted
+  `)
+  return getExecuteRows<{ has_voted: boolean }>(result)[0]?.has_voted ?? false
 }
 
 /**
@@ -114,18 +121,24 @@ export async function getVoteAndSubscriptionStatus(
   const result = await db.execute(sql`
     SELECT
       EXISTS(
-        SELECT 1 FROM ${votes}
-        WHERE ${votes.postId} = ${postUuid}::uuid
-        AND ${votes.principalId} = ${principalUuid}::uuid
+        SELECT 1 FROM ${postVotes}
+        WHERE ${postVotes.principalId} = ${principalUuid}::uuid
+          AND ${postVotes.postId} IN ${relatedPostIdsSql(postUuid)}
       ) as has_voted,
-      ps.post_id IS NOT NULL as subscribed,
+      ps.notify_comments IS NOT NULL as subscribed,
       ps.notify_comments,
       ps.notify_status_changes,
       ps.reason
     FROM (SELECT 1) AS dummy
-    LEFT JOIN ${postSubscriptions} ps
-      ON ps.post_id = ${postUuid}::uuid
-      AND ps.principal_id = ${principalUuid}::uuid
+    LEFT JOIN LATERAL (
+      SELECT
+        bool_or(ps.notify_comments) as notify_comments,
+        bool_or(ps.notify_status_changes) as notify_status_changes,
+        (array_agg(ps.reason ORDER BY (ps.post_id = ${postUuid}::uuid) DESC))[1] as reason
+      FROM ${postSubscriptions} ps
+      WHERE ps.principal_id = ${principalUuid}::uuid
+        AND ps.post_id IN ${relatedPostIdsSql(postUuid)}
+    ) ps ON true
   `)
 
   type ResultRow = {
@@ -166,8 +179,8 @@ export async function getUserVotedPostIds(
     return new Set()
   }
   const result = await db
-    .select({ postId: votes.postId })
-    .from(votes)
-    .where(and(inArray(votes.postId, postIds), eq(votes.principalId, principalId)))
+    .select({ postId: postVotes.postId })
+    .from(postVotes)
+    .where(and(inArray(postVotes.postId, postIds), eq(postVotes.principalId, principalId)))
   return new Set(result.map((r) => r.postId))
 }

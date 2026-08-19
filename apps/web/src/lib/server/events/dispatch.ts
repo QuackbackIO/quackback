@@ -6,16 +6,30 @@
  * Errors are caught and logged rather than propagated to the caller.
  */
 
-import type { BoardId, ChangelogId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
+import type {
+  BoardId,
+  ChangelogId,
+  PostCommentId,
+  PostId,
+  PrincipalId,
+  UserId,
+} from '@quackback/ids'
 
 import type {
+  ConversationUnresponsivePayload,
   EventActor,
   EventConversationData,
   EventConversationRef,
   EventData,
   EventMessageData,
   EventPostRef,
+  EventTicketData,
+  EventTicketMessageAttachment,
+  EventTicketRef,
+  SlaTimerPayload,
 } from './types.js'
+import type { JsonValue } from '@/lib/shared/json'
+import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 
@@ -75,7 +89,7 @@ export interface PostStatusChangedInput {
 }
 
 export interface CommentCreatedInput {
-  id: CommentId
+  id: PostCommentId
   content: string
   authorEmail?: string
   authorName?: string
@@ -139,6 +153,27 @@ export async function dispatchPostStatusChanged(
   })
 }
 
+export interface PostVotedInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+  /** Null for an anonymous voter — never the synthetic placeholder email. */
+  voterEmail: string | null
+  voterName: string | null
+  /** The post's vote_count immediately after this vote landed. */
+  voteCount: number
+}
+
+export async function dispatchPostVoted(actor: EventActor, input: PostVotedInput): Promise<void> {
+  const { voterEmail, voterName, voteCount, ...post } = input
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.voted',
+    data: { post, voterEmail, voterName, voteCount },
+  })
+}
+
 export async function dispatchCommentCreated(
   actor: EventActor,
   comment: CommentCreatedInput,
@@ -174,6 +209,33 @@ export async function dispatchPostMentioned(
       mentionedPrincipalId: input.mentionedPrincipalId,
       mentioningPrincipalId: input.mentioningPrincipalId,
       excerpt: input.excerpt,
+    },
+  })
+}
+
+export interface PostOwnerAssignedInput {
+  postId: PostId
+  postTitle: string
+  boardSlug: string
+  postUrl: string
+  ownerPrincipalId: PrincipalId
+  previousOwnerPrincipalId: PrincipalId | null
+}
+
+export async function dispatchPostOwnerAssigned(
+  actor: EventActor,
+  input: PostOwnerAssignedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.owner_assigned',
+    data: {
+      postId: input.postId,
+      postTitle: input.postTitle,
+      boardSlug: input.boardSlug,
+      postUrl: input.postUrl,
+      ownerPrincipalId: input.ownerPrincipalId,
+      previousOwnerPrincipalId: input.previousOwnerPrincipalId,
     },
   })
 }
@@ -234,7 +296,7 @@ export async function dispatchPostUnmerged(
 }
 
 export interface CommentUpdatedInput {
-  id: CommentId
+  id: PostCommentId
   content: string
   authorEmail?: string
   authorName?: string
@@ -254,7 +316,7 @@ export async function dispatchCommentUpdated(
 }
 
 export interface CommentDeletedInput {
-  id: CommentId
+  id: PostCommentId
   isPrivate?: boolean
 }
 
@@ -274,6 +336,9 @@ export interface ChangelogPublishedInput {
   id: ChangelogId
   title: string
   contentPreview: string
+  /** Full body as sanitized HTML; the email renders it inline, other target
+   *  kinds keep using the plain-text `contentPreview`. */
+  contentHtml: string
   publishedAt: Date
   linkedPostCount: number
 }
@@ -292,6 +357,7 @@ export async function dispatchChangelogPublished(
           id: changelog.id,
           title: changelog.title,
           contentPreview: changelog.contentPreview,
+          contentHtml: changelog.contentHtml,
           publishedAt: changelog.publishedAt.toISOString(),
           linkedPostCount: changelog.linkedPostCount,
         },
@@ -329,12 +395,20 @@ export async function dispatchConversationAssigned(
   actor: EventActor,
   conversation: EventConversationRef,
   assignedAgentPrincipalId: string | null,
-  previousAgentPrincipalId: string | null
+  previousAgentPrincipalId: string | null,
+  assignedTeamId: string | null,
+  previousTeamId: string | null
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'conversation.assigned',
-    data: { conversation, assignedAgentPrincipalId, previousAgentPrincipalId },
+    data: {
+      conversation,
+      assignedAgentPrincipalId,
+      previousAgentPrincipalId,
+      assignedTeamId,
+      previousTeamId,
+    },
   })
 }
 
@@ -348,6 +422,20 @@ export async function dispatchConversationPriorityChanged(
     ...eventEnvelope(actor),
     type: 'conversation.priority_changed',
     data: { conversation, previousPriority, newPriority },
+  })
+}
+
+export async function dispatchConversationAttributeChanged(
+  actor: EventActor,
+  conversation: EventConversationRef,
+  key: string,
+  value: JsonValue | null,
+  source: ConversationAttributeSource
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.attribute_changed',
+    data: { conversationId: conversation.id, conversation, key, value, source },
   })
 }
 
@@ -379,15 +467,41 @@ export async function dispatchConversationCsatCommentAdded(
   })
 }
 
+export interface ConversationNoteMentionedInput {
+  conversationId: string
+  conversationMessageId: string
+  mentionedPrincipalIds: string[]
+  authorName: string
+  preview: string
+}
+
+export async function dispatchConversationNoteMentioned(
+  actor: EventActor,
+  input: ConversationNoteMentionedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.note_mentioned',
+    data: {
+      conversationId: input.conversationId,
+      conversationMessageId: input.conversationMessageId,
+      mentionedPrincipalIds: input.mentionedPrincipalIds,
+      authorName: input.authorName,
+      preview: input.preview,
+    },
+  })
+}
+
 export async function dispatchMessageCreated(
   actor: EventActor,
   message: EventMessageData,
-  conversation: EventConversationRef
+  conversation: EventConversationRef,
+  isFirstMessage: boolean
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'message.created',
-    data: { message, conversation },
+    data: { message, conversation, isFirstMessage },
   })
 }
 
@@ -412,5 +526,218 @@ export async function dispatchMessageDeleted(
     ...eventEnvelope(actor),
     type: 'message.deleted',
     data: { message, conversation },
+  })
+}
+
+export async function dispatchTicketCreated(
+  actor: EventActor,
+  ticket: EventTicketData
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.created',
+    data: { ticket },
+  })
+}
+
+export async function dispatchTicketStatusChanged(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  previousStatus: string,
+  newStatus: string,
+  stage: string | null,
+  previousStage: string | null,
+  requesterPrincipalId: string | null,
+  title: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.status_changed',
+    data: { ticket, previousStatus, newStatus, stage, previousStage, requesterPrincipalId, title },
+  })
+}
+
+export async function dispatchTicketAssigned(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  assignedPrincipalId: string | null,
+  previousPrincipalId: string | null,
+  assignedTeamId: string | null,
+  previousTeamId: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.assigned',
+    data: { ticket, assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
+  })
+}
+
+export async function dispatchTicketReplied(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  messageId: string,
+  content: string,
+  attachments: EventTicketMessageAttachment[] | null,
+  senderType: 'agent' | 'visitor',
+  title: string,
+  authorName: string | null,
+  requesterPrincipalId: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.replied',
+    data: {
+      ticket,
+      messageId,
+      content,
+      attachments,
+      senderType,
+      title,
+      authorName,
+      requesterPrincipalId,
+    },
+  })
+}
+
+export async function dispatchTicketExternalStatusChanged(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  title: string,
+  integrationType: string,
+  externalDisplayId: string | null,
+  externalUrl: string | null,
+  externalStatus: string,
+  transition: 'closed' | 'reopened' | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.external_status_changed',
+    data: {
+      ticket,
+      title,
+      integrationType,
+      externalDisplayId,
+      externalUrl,
+      externalStatus,
+      transition,
+    },
+  })
+}
+
+export async function dispatchTicketNoteAdded(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  messageId: string,
+  content: string,
+  attachments: EventTicketMessageAttachment[] | null,
+  senderType: 'agent' | 'visitor',
+  title: string,
+  authorName: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.note_added',
+    data: { ticket, messageId, content, attachments, senderType, title, authorName },
+  })
+}
+
+export async function dispatchAssistantHandedOff(
+  actor: EventActor,
+  conversationId: string,
+  reason: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'assistant.handed_off',
+    data: { conversationId, reason },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Timer-driven workflow triggers (support platform §4.6): synthetic events
+// raised by workflow-sweep.ts's 5-minute tick or the SLA domain's deadline
+// scan, never by a human/system action. No human or service PRINCIPAL causes
+// these — the actor is a fixed, non-attributable marker, distinct from a real
+// service actor (Quinn, an integration) which always carries a principalId.
+// ---------------------------------------------------------------------------
+
+/** The fixed actor every timer-driven trigger carries — there is no
+ *  principal to attribute a scheduled sweep tick to. `actorType` reads
+ *  'service' downstream (event-trigger.ts), same as any other automated
+ *  actor, but these four trigger types opt out of the automated-actor gate
+ *  entirely (see event-trigger.ts's switch) since a workflow action can never
+ *  itself produce silence or an SLA deadline — there is no re-trigger loop to
+ *  guard against here. */
+const TIMER_TRIGGER_ACTOR: EventActor = { type: 'service', displayName: 'Scheduled sweep' }
+
+/**
+ * Envelope for a synthetic timer-driven event, with a CALLER-SUPPLIED `id`
+ * instead of eventEnvelope's random UUID. This is deliberate, not an
+ * oversight: workflow-dispatch-queue.ts keys its BullMQ job id off
+ * `event.id`, so a deterministic id (built by the caller from the trigger
+ * type + workflow + conversation + a stable anchor — see
+ * workflow-sweep.ts/sla.service.ts) is what makes repeated sweep ticks over
+ * the same still-qualifying condition dedupe at the queue instead of firing a
+ * fresh run every tick.
+ */
+function timerEventEnvelope(id: string) {
+  return { id, timestamp: new Date().toISOString(), actor: TIMER_TRIGGER_ACTOR } as const
+}
+
+/**
+ * Fire conversation.customer_unresponsive for the ONE workflow
+ * workflow-sweep.ts determined crossed its own `inactivityMinutes` threshold.
+ * `id` must be deterministic (see timerEventEnvelope) — workflow-sweep.ts
+ * derives it from (triggerType, workflowId, conversationId, sinceAt) so a
+ * later tick over the same unbroken silence period reuses the same id.
+ */
+export async function dispatchConversationCustomerUnresponsive(
+  id: string,
+  payload: ConversationUnresponsivePayload
+): Promise<void> {
+  await dispatchEvent({
+    ...timerEventEnvelope(id),
+    type: 'conversation.customer_unresponsive',
+    data: payload,
+  })
+}
+
+/** Fire conversation.teammate_unresponsive — mirrors
+ *  dispatchConversationCustomerUnresponsive; see that doc. */
+export async function dispatchConversationTeammateUnresponsive(
+  id: string,
+  payload: ConversationUnresponsivePayload
+): Promise<void> {
+  await dispatchEvent({
+    ...timerEventEnvelope(id),
+    type: 'conversation.teammate_unresponsive',
+    data: payload,
+  })
+}
+
+/**
+ * Fire sla.approaching_breach once a conversation's clock enters the lead
+ * window. Unlike the unresponsive pair above, `id` need not be reused across
+ * ticks for correctness — sla.service.ts's CAS-guarded stamp on
+ * `sla_applied` is the actual fire-once dedupe (see its module doc) — but a
+ * caller still derives a stable id (conversationId + clock + the SLA
+ * application's own `appliedAt`) so a duplicate BullMQ job is never queued
+ * for the same claim within the queue's retention window either.
+ */
+export async function dispatchSlaApproachingBreach(id: string, payload: SlaTimerPayload) {
+  await dispatchEvent({
+    ...timerEventEnvelope(id),
+    type: 'sla.approaching_breach',
+    data: payload,
+  })
+}
+
+/** Fire sla.breached once a conversation's clock passes its due date with no
+ *  settling event. Mirrors dispatchSlaApproachingBreach; see that doc. */
+export async function dispatchSlaBreached(id: string, payload: SlaTimerPayload) {
+  await dispatchEvent({
+    ...timerEventEnvelope(id),
+    type: 'sla.breached',
+    data: payload,
   })
 }

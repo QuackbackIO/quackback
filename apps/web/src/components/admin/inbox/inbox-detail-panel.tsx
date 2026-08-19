@@ -1,0 +1,852 @@
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { FormattedMessage } from 'react-intl'
+import { useQuery } from '@tanstack/react-query'
+import { Link, useRouteContext } from '@tanstack/react-router'
+import {
+  ArrowTopRightOnSquareIcon,
+  BellIcon,
+  BuildingOffice2Icon,
+  CalendarIcon,
+  CheckBadgeIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  FaceSmileIcon,
+  FlagIcon,
+  InboxArrowDownIcon,
+  PuzzlePieceIcon,
+  SparklesIcon,
+  TagIcon,
+  TicketIcon,
+  UserCircleIcon,
+} from '@heroicons/react/24/outline'
+import type { PrincipalId } from '@quackback/ids'
+import {
+  HANDOFF_REASON_LABELS,
+  CONVERSATION_END_REASON_LABELS,
+  type ConversationDTO,
+  type AssistantInvolvementOutcome,
+} from '@/lib/shared/conversation/types'
+import type { InboxItemRef } from '@/lib/shared/inbox/items'
+import type { TicketDTO } from '@/lib/server/domains/tickets'
+import {
+  listConversationsForUserFn,
+  getConversationAssistantActivityFn,
+} from '@/lib/server/functions/conversation'
+import { getPortalUserFn } from '@/lib/server/functions/admin'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
+import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
+import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
+import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
+import { PriorityControl } from '@/components/admin/conversation/priority-control'
+import { AssigneeControl } from '@/components/admin/conversation/assignee-control'
+import { ConversationTagsEditor } from '@/components/admin/conversation/conversation-tags-editor'
+import { ConversationAttributesEditor } from '@/components/admin/conversation/conversation-attributes-editor'
+import { StatusControl } from '@/components/admin/conversation/status-control'
+import { NoEmailBadge, CHANNEL_LABEL } from '@/components/admin/conversation/channel-badge'
+import { TONE_CLASSES } from '@/components/admin/conversation/sla-chip'
+import { CompanyCard } from '@/components/admin/conversation/company-card'
+import { CopilotPanel } from '@/components/admin/conversation/copilot-panel'
+import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
+import { TicketStageChip, TicketTypeBadge } from '@/components/admin/inbox/ticket-chips'
+import {
+  TicketStatusControl,
+  TicketAssigneeControl,
+  TicketPriorityControl,
+  TicketWatchControl,
+} from '@/components/admin/inbox/ticket-controls'
+import { TicketLinks } from '@/components/admin/inbox/ticket-links'
+import { TicketActivityTimeline } from '@/components/admin/inbox/ticket-activity-timeline'
+import { TicketTrackerLinks } from '@/components/admin/inbox/ticket-tracker-links'
+import { ticketQueries } from '@/lib/client/queries/inbox'
+import { Badge } from '@/components/ui/badge'
+import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { MENU_LABEL } from '@/components/ui/menu'
+import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
+import { TimeAgo } from '@/components/ui/time-ago'
+import { cn } from '@/lib/shared/utils'
+
+const RESOLVED_META = {
+  label: 'Resolved',
+  className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+}
+// Both resolution flavours (customer-confirmed + assumed-after-inactivity) read
+// as "Resolved" to the agent.
+const AI_OUTCOME_META: Record<AssistantInvolvementOutcome, { label: string; className: string }> = {
+  active: { label: 'Handling', className: 'bg-primary/10 text-primary' },
+  handed_off: {
+    label: 'Escalated',
+    className: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
+  },
+  resolved_confirmed: RESOLVED_META,
+  resolved_assumed: RESOLVED_META,
+  abandoned: { label: 'Abandoned', className: 'bg-muted text-muted-foreground' },
+}
+
+function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
+  const meta = AI_OUTCOME_META[outcome]
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+        meta.className
+      )}
+    >
+      {meta.label}
+    </span>
+  )
+}
+
+/**
+ * A ticket's `dueAt` countdown, styled like `sla-chip.tsx`'s conversation SLA
+ * chip (§2.7's "SLA due (dueAt countdown like the conversation SlaChip
+ * idiom)") but reading the ticket's own bare `dueAt`/`resolvedAt` timestamps
+ * directly — a ticket carries no policy/target metadata to drive the richer
+ * `ConversationSlaDTO` shape. Renders nothing once resolved or with no due
+ * date set, and only after mount (the label depends on "now").
+ */
+function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt: string | null }) {
+  const [now, setNow] = useState<Date | null>(null)
+  useEffect(() => {
+    setNow(new Date())
+    const id = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  if (!dueAt || resolvedAt || !now) return null
+
+  const remainingMs = new Date(dueAt).getTime() - now.getTime()
+  const tone = dueCountdownTone(remainingMs)
+  const overdue = tone === 'overdue'
+  const abs = Math.abs(remainingMs)
+
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+        TONE_CLASSES[tone]
+      )}
+      title={`Due ${formatDate(dueAt)}`}
+    >
+      <ClockIcon className="h-3 w-3" aria-hidden />
+      {overdue ? `${formatSlaCountdown(abs)} over` : formatSlaCountdown(abs)}
+    </span>
+  )
+}
+
+/**
+ * The ticket card's SLA chip (support platform §4.6's ticket-anchored TTR
+ * clock): the time-to-resolve countdown off the ticket's SLA stamp, with the
+ * same tone ladder + 30s tick as `TicketDueChip` above (which stays as-is —
+ * it reads the separate bare `dueAt` column, not the SLA stamp). Shows the
+ * paused state while the ticket sits in a pending-category status under a
+ * pauseOnPending policy (the DTO's status-derived `paused` flag), and renders
+ * nothing once the clock has settled — the first resolution settles TTR
+ * permanently, so there is no "resolved" countdown to show.
+ */
+function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
+  const [now, setNow] = useState<Date | null>(null)
+  useEffect(() => {
+    setNow(new Date())
+    const id = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  if (sla.resolvedAt || !now) return null
+
+  const remainingMs = new Date(sla.timeToResolveDueAt).getTime() - now.getTime()
+  const tone = sla.paused ? 'paused' : dueCountdownTone(remainingMs)
+  const abs = Math.abs(remainingMs)
+  const label = sla.paused
+    ? 'paused'
+    : tone === 'overdue'
+      ? `${formatSlaCountdown(abs)} over`
+      : formatSlaCountdown(abs)
+
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+        TONE_CLASSES[tone]
+      )}
+      title={`${sla.policyName} · time to resolve target`}
+    >
+      <ClockIcon className="h-3 w-3" aria-hidden />
+      {label}
+    </span>
+  )
+}
+
+/**
+ * The viewport at which this panel exists at all — bound to the `xl:` Tailwind
+ * breakpoint on the panel's own `hidden xl:flex` <aside> below. The inbox
+ * route derives `copilotAvailable` from the SAME query so the Ask Copilot
+ * affordances can never disagree with the panel actually rendering.
+ */
+export const DETAIL_PANEL_MEDIA_QUERY = '(min-width: 1280px)'
+
+export interface InboxDetailPanelProps {
+  /** The open item, discriminated by kind. */
+  item: InboxItemRef
+  /** Present for a conversation item. */
+  conversation?: ConversationDTO
+  /** The item's own ticket (a ticket item), OR the linked customer ticket of a
+   *  plain conversation (unified inbox §2.1's one-row rule) — undefined/null
+   *  when a conversation has no linked ticket. */
+  ticket?: TicketDTO | null
+  onChanged: () => void
+  /** Navigate to another item (a previous conversation from the contact card,
+   *  or the linked ticket row in Links) — a bare TypeID, either kind. */
+  onSelectItem: (id: string) => void
+  /** Open the (conversation-level) track-as-feedback dialog. Conversation-only. */
+  onTrackAsFeedback: () => void
+  /** Open the create-ticket flow, prefilled from this conversation. Shown only
+   *  on a plain conversation with no linked ticket. */
+  onCreateTicket: () => void
+  /** Insert a Copilot answer into the reply composer. */
+  onInsertFromCopilot: (text: string) => void
+  /** Bumped by the route's Ask Copilot action (the `q` shortcut / command
+   *  bar) — a change switches to the Copilot tab and focuses its ask input.
+   *  Same bump-a-counter ping as the thread's `createTicketToken`. No-op when
+   *  the tab isn't available (flag/permission off). */
+  openCopilotToken?: number
+}
+
+/**
+ * The unified inbox detail panel (UNIFIED-INBOX-SPEC.md §2.7): one panel for
+ * both a conversation and a ticket selection (a plain conversation, a
+ * conversation with a linked customer ticket, or a standalone ticket of any
+ * type), assembled from the existing per-kind pieces. Section order: Contact
+ * (requester principal, hidden for back_office/tracker), Ticket card (ticket
+ * properties + the create-ticket empty slot), Properties, Attributes
+ * (conversation-only), Links, Quinn activity (conversation-only). Details/
+ * Copilot tabs unchanged from the pre-M5 conversation-only panel.
+ */
+export const InboxDetailPanel = memo(function InboxDetailPanel({
+  item,
+  conversation,
+  ticket,
+  onChanged,
+  onSelectItem,
+  onTrackAsFeedback,
+  onCreateTicket,
+  onInsertFromCopilot,
+  openCopilotToken,
+}: InboxDetailPanelProps) {
+  const { settings } = useRouteContext({ from: '/admin' }) as {
+    settings?: { featureFlags?: FeatureFlags } | null
+  }
+  const flags = settings?.featureFlags
+  // The flag + copilot.use gate, shared with the inbox route's
+  // `copilotAvailable` so the Ask Copilot affordances can never disagree
+  // with the tab actually existing.
+  const showCopilotTab = useCopilotTabGate()
+
+  // Details|Copilot tab state is controlled (rather than Radix-internal) so
+  // the route's Ask Copilot action can switch tabs from outside via
+  // `openCopilotToken`. A bump also moves focus into the ask input — the
+  // shortcut's promise is "ready to type", and the focus ring makes the move
+  // visible. Guarded on `showCopilotTab` so a stray bump with the tab
+  // unavailable is a clean no-op.
+  const [tab, setTab] = useState('details')
+  const [activityOpen, setActivityOpen] = useState(false)
+  const askInputRef = useRef<HTMLTextAreaElement>(null)
+  // Baseline 0 (NOT the mount-time prop): the route resets the token to 0
+  // whenever the selected item changes, so a nonzero token at mount can only
+  // mean the bump targeted THIS item while the panel wasn't mounted yet (e.g.
+  // `q` pressed during the item's load window) — honor it. A stale token from
+  // a previous item can never reach here (the route-side reset guarantees it).
+  const openCopilotTokenRef = useRef(0)
+  useEffect(() => {
+    if (openCopilotToken === undefined || openCopilotToken === openCopilotTokenRef.current) return
+    openCopilotTokenRef.current = openCopilotToken
+    if (openCopilotToken === 0) return // the route-side reset, not a bump
+    if (!showCopilotTab) return
+    setTab('copilot')
+    // Focus once the (forceMount + CSS-hidden) Copilot content is un-hidden
+    // by the state commit above — rAF runs after React flushes it.
+    requestAnimationFrame(() => askInputRef.current?.focus())
+  }, [openCopilotToken, showCopilotTab])
+
+  const isTicketItem = item.kind === 'ticket'
+  // back_office/tracker tickets have no requester concept at all (§2.7) — the
+  // Contact card is hidden entirely rather than rendered empty.
+  const isBackOfficeOrTracker =
+    isTicketItem && (ticket?.type === 'back_office' || ticket?.type === 'tracker')
+
+  // The requester principal, generalized across kinds: a conversation's
+  // visitor, or a (customer) ticket's requester.
+  const principalId: PrincipalId | undefined = isTicketItem
+    ? (ticket?.requester?.principalId ?? undefined)
+    : conversation?.visitor.principalId
+  const principalName = isTicketItem
+    ? (ticket?.requester?.displayName ?? 'Requester')
+    : (conversation?.visitor.displayName ?? 'Visitor')
+  const principalAvatarUrl = isTicketItem
+    ? (ticket?.requester?.avatarUrl ?? null)
+    : (conversation?.visitor.avatarUrl ?? null)
+  const { blocked: contactBlocked } = usePersonBlockStatus(principalId)
+
+  // The panel is `hidden xl:flex`; only fetch its data when it's actually shown
+  // so smaller viewports don't pay for an invisible sidebar.
+  const isVisible = useMediaQuery(DETAIL_PANEL_MEDIA_QUERY)
+
+  const { data: detail } = useQuery({
+    queryKey: conversationKeys.agentContactDetail(principalId),
+    queryFn: () => getPortalUserFn({ data: { principalId: principalId as PrincipalId } }),
+    enabled: isVisible && !!principalId,
+    staleTime: 60_000,
+  })
+  const { data: history } = useQuery({
+    queryKey: conversationKeys.agentUserConversationsFor(principalId),
+    queryFn: () =>
+      listConversationsForUserFn({ data: { principalId: principalId as PrincipalId } }),
+    enabled: isVisible && !!principalId,
+    staleTime: 30_000,
+  })
+  const { data: aiActivity } = useQuery({
+    queryKey: conversationKeys.agentAssistantActivity(conversation?.id),
+    queryFn: () =>
+      getConversationAssistantActivityFn({ data: { conversationId: conversation!.id } }),
+    enabled: isVisible && !isTicketItem && !!conversation,
+    staleTime: 30_000,
+  })
+  // The live registry (convergence Phase 4): the ticket card joins the type's
+  // fields[] client-side to render the ticket's custom-field answers.
+  const { data: registryTypes } = useQuery({
+    ...ticketQueries.types(),
+    enabled: isVisible && !!ticket,
+  })
+  const ticketTypeFields = useMemo(() => {
+    if (!ticket?.ticketType) return []
+    const match = (registryTypes ?? []).find((t) => t.id === ticket.ticketType!.id)
+    return [...(match?.fields ?? [])].sort((a, b) => a.order - b.order)
+  }, [registryTypes, ticket?.ticketType])
+
+  const email = detail?.email ?? (isTicketItem ? null : (conversation?.visitorEmail ?? null))
+  const currentConversationId = !isTicketItem ? conversation?.id : undefined
+  const previous = useMemo(
+    () => (history?.conversations ?? []).filter((c) => c.id !== currentConversationId),
+    [history, currentConversationId]
+  )
+  // `detail` is non-null only for identified portal users, so it doubles as the
+  // identified-vs-anonymous signal (anonymous visitors aren't portal users).
+  const isIdentified = !!detail
+  const convoCount = history?.conversations.length ?? 0
+  const convoMore = history?.hasMore ?? false
+  const firstSeen = detail?.createdAt ?? conversation?.createdAt
+  const isClosedConversation = !isTicketItem && conversation?.status === 'closed'
+  const endReasonLabel =
+    !isTicketItem && conversation?.endReason
+      ? CONVERSATION_END_REASON_LABELS[conversation.endReason]
+      : null
+
+  const showTickets = flags?.supportTickets ?? false
+  // A conversation with no ticket in scope gets the create-ticket empty slot
+  // instead of the populated Ticket card.
+  const showCreateTicketSlot = !isTicketItem && !ticket && showTickets
+
+  const detailsBody = (
+    <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+      {/* Force Radix's inner viewport wrapper (display:table by default, which
+          grows to content width and defeats truncate) to block so children are
+          constrained to the panel width and long text clips with an ellipsis. */}
+      <div className="space-y-5 px-3 pb-5 pt-3">
+        {/* 1. Contact — the requester principal. Hidden entirely for
+              back_office/tracker tickets (no requester concept). */}
+        {!isBackOfficeOrTracker && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <Avatar
+                src={principalAvatarUrl}
+                name={principalName}
+                className="size-9 shrink-0 text-sm"
+              />
+              <div className="min-w-0">
+                {principalId && isIdentified ? (
+                  <Link
+                    to="/admin/users"
+                    search={{ selected: principalId }}
+                    className="flex items-center gap-1 text-sm font-medium hover:underline"
+                  >
+                    <span className="truncate">{principalName}</span>
+                    {detail?.emailVerified && (
+                      <CheckBadgeIcon
+                        className="h-3.5 w-3.5 shrink-0 text-primary"
+                        title="Verified email"
+                      />
+                    )}
+                  </Link>
+                ) : (
+                  <p className="truncate text-sm font-medium">
+                    {principalId ? principalName : 'No requester'}
+                  </p>
+                )}
+                {principalId ? (
+                  email ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {email}
+                      {!detail?.email && !isTicketItem && conversation?.visitorEmail && (
+                        <span className="ml-1 text-muted-foreground/50">(in conversation)</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      Anonymous <NoEmailBadge />
+                    </p>
+                  )
+                ) : null}
+                {contactBlocked && (
+                  <Badge variant="destructive" className="mt-1 text-[11px]">
+                    Blocked
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Segments (identified visitors only). */}
+            {detail && detail.segments.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {detail.segments.map((s) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium"
+                    style={{ backgroundColor: `${s.color}1a`, color: s.color }}
+                  >
+                    {s.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Portal activity (identified visitors only). */}
+            {detail && (
+              <div className="grid grid-cols-3 gap-1 text-center">
+                {[
+                  { label: 'Posts', value: detail.postCount },
+                  { label: 'Comments', value: detail.commentCount },
+                  { label: 'Votes', value: detail.voteCount },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-md bg-muted/40 py-1.5">
+                    <p className="text-sm font-semibold">{s.value}</p>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {principalId && (
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Conversations</span>
+                  <span className="font-medium text-foreground">
+                    {convoCount}
+                    {convoMore ? '+' : ''}
+                  </span>
+                </div>
+                {firstSeen && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">First seen</span>
+                    <span className="font-medium text-foreground">{formatDate(firstSeen)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Company context (plan / MRR); renders nothing when unset. */}
+            {principalId && <CompanyCard principalId={principalId} enabled={isVisible} />}
+
+            {/* Previous conversations (this principal's other threads). */}
+            {previous.length > 0 && (
+              <div className="space-y-1.5 border-t border-border/30 pt-3">
+                <p className="text-xs font-medium text-muted-foreground">Previous conversations</p>
+                {previous.slice(0, 8).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onSelectItem(c.id)}
+                    className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+                  >
+                    <span className="block w-full min-w-0 truncate text-xs text-foreground/90">
+                      {c.subject ?? c.lastMessagePreview ?? 'Conversation'}
+                    </span>
+                    <span className="block w-full min-w-0 truncate text-xs capitalize text-muted-foreground">
+                      {c.status} · <TimeAgo date={c.lastMessageAt} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2. Ticket card — populated when the item is or links a ticket;
+              otherwise the create-ticket empty slot. */}
+        {ticket ? (
+          <div className="space-y-3 border-t border-border/30 pt-4">
+            <div className="flex items-center justify-between">
+              <span className={MENU_LABEL}>
+                {isTicketItem ? 'Ticket details' : 'Linked ticket'}
+              </span>
+              {!isTicketItem && (
+                <button
+                  type="button"
+                  onClick={() => onSelectItem(ticket.id)}
+                  className="font-mono text-xs font-medium text-primary hover:underline"
+                >
+                  {ticket.reference}
+                </button>
+              )}
+            </div>
+            {/* The type chip leads the card (convergence Phase 4): the
+                registry type's icon + name, tinted its color. Typeless legacy
+                rows fall back to the bare category badge. */}
+            <Row label="Type">
+              {ticket.ticketType ? (
+                <span
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  style={{
+                    backgroundColor: `${ticket.ticketType.color}1f`,
+                    color: ticket.ticketType.color,
+                  }}
+                >
+                  {ticket.ticketType.icon && <span aria-hidden>{ticket.ticketType.icon}</span>}
+                  <span className="truncate">{ticket.ticketType.name}</span>
+                </span>
+              ) : (
+                <TicketTypeBadge type={ticket.type} />
+              )}
+            </Row>
+            {!isTicketItem && (
+              <>
+                <Row label="Status">
+                  <TicketStatusControl ticket={ticket} onChanged={onChanged} />
+                </Row>
+                <Row label="Stage">
+                  {ticket.stage.slot ? (
+                    <TicketStageChip stage={ticket.stage} />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Internal only</span>
+                  )}
+                </Row>
+              </>
+            )}
+            {ticket.dueAt && !ticket.resolvedAt && (
+              <Row icon={ClockIcon} label="Due">
+                <TicketDueChip dueAt={ticket.dueAt} resolvedAt={ticket.resolvedAt} />
+              </Row>
+            )}
+            {/* The SLA stamp's TTR countdown — separate from the bare `dueAt`
+                row above, which reads the ticket's own due_at column. */}
+            {ticket.sla && !ticket.sla.resolvedAt && (
+              <Row icon={ClockIcon} label="SLA">
+                <TicketSlaChip sla={ticket.sla} />
+              </Row>
+            )}
+            <Row icon={CalendarIcon} label="Opened">
+              <span className="text-sm font-medium text-foreground">
+                {formatDate(ticket.createdAt)}
+              </span>
+            </Row>
+            <Row icon={CalendarIcon} label="First response">
+              <span className="text-sm font-medium text-foreground">
+                {ticket.firstResponseAt ? formatDate(ticket.firstResponseAt) : 'Not yet'}
+              </span>
+            </Row>
+            {ticket.resolvedAt && (
+              <Row icon={CalendarIcon} label="Resolved">
+                <span className="text-sm font-medium text-foreground">
+                  {formatDate(ticket.resolvedAt)}
+                </span>
+              </Row>
+            )}
+            {/* Custom-field rows (Phase 4): the type's fields render the
+                ticket's customAttributes answers under the standard
+                properties. Orphaned answers (their field left the schema) stay
+                stored but hidden — the retype rule never rewrites them. The
+                join is against the LIVE registry: an archived type keeps its
+                chip above but its field rows return with a restore. */}
+            {ticketTypeFields.map((field) => {
+              const raw = ticket.customAttributes[field.key]
+              if (raw === undefined || raw === null || raw === '') return null
+              const display =
+                field.type === 'checkbox' ? (raw === true ? 'Yes' : 'No') : String(raw)
+              return (
+                <Row key={field.key} icon={PuzzlePieceIcon} label={field.label}>
+                  <span className="text-sm font-medium text-foreground break-words">{display}</span>
+                </Row>
+              )
+            })}
+          </div>
+        ) : (
+          showCreateTicketSlot && (
+            <div className="border-t border-border/30 pt-4">
+              <Button type="button" variant="outline" className="w-full" onClick={onCreateTicket}>
+                <TicketIcon className="h-4 w-4" /> Create ticket
+              </Button>
+            </div>
+          )
+        )}
+
+        {/* 3. Properties. Conversation rows keep today's controls; ticket
+              rows use the ticket controls. Tags are conversation-only. The
+              ticket's own status lives in the Ticket card above, so it is not
+              repeated here. */}
+        <div className="space-y-4 border-t border-border/30 pt-4">
+          <span className={MENU_LABEL}>Properties</span>
+          {!isTicketItem && conversation && (
+            <>
+              {isClosedConversation && endReasonLabel && (
+                <Row label="Ended">
+                  <span className="text-sm font-medium text-foreground">{endReasonLabel}</span>
+                </Row>
+              )}
+              <Row label="Status">
+                <StatusControl
+                  conversationId={conversation.id}
+                  status={conversation.status}
+                  snoozedUntil={conversation.snoozedUntil}
+                  endReason={conversation.endReason}
+                  onChanged={onChanged}
+                />
+              </Row>
+            </>
+          )}
+          <Row icon={FlagIcon} label="Priority">
+            {isTicketItem && ticket ? (
+              <TicketPriorityControl ticket={ticket} onChanged={onChanged} />
+            ) : (
+              conversation && (
+                <PriorityControl
+                  conversationId={conversation.id}
+                  value={conversation.priority}
+                  onChanged={onChanged}
+                />
+              )
+            )}
+          </Row>
+          <Row icon={UserCircleIcon} label="Assignee">
+            {isTicketItem && ticket ? (
+              <TicketAssigneeControl ticket={ticket} onChanged={onChanged} />
+            ) : (
+              conversation && (
+                <AssigneeControl
+                  conversationId={conversation.id}
+                  assignedAgent={conversation.assignedAgent}
+                  onChanged={onChanged}
+                />
+              )
+            )}
+          </Row>
+          {isTicketItem && ticket && (
+            <Row icon={BellIcon} label="Watchers" align="start">
+              <TicketWatchControl ticketId={ticket.id} />
+            </Row>
+          )}
+          {!isTicketItem && conversation && (
+            <Row icon={TagIcon} label="Tags" align="start">
+              <div className="flex flex-wrap justify-end gap-1">
+                <ConversationTagsEditor conversationId={conversation.id} tags={conversation.tags} />
+              </div>
+            </Row>
+          )}
+          {ticket && (
+            <Row icon={BuildingOffice2Icon} label="Ticket company">
+              <span className="truncate text-sm font-medium text-foreground">
+                {ticket.company?.name ?? 'None'}
+              </span>
+            </Row>
+          )}
+          {!isTicketItem && conversation && (
+            <Row icon={InboxArrowDownIcon} label="Channel">
+              <span className="text-sm font-medium text-foreground">
+                {CHANNEL_LABEL[conversation.channel]}
+              </span>
+            </Row>
+          )}
+          {!isTicketItem && conversation && (
+            <Row icon={CalendarIcon} label="Created">
+              <span className="text-sm font-medium text-foreground">
+                {formatDate(conversation.createdAt)}
+              </span>
+            </Row>
+          )}
+          {!isTicketItem && conversation?.csatRating != null && (
+            <Row icon={FaceSmileIcon} label="CSAT">
+              <span className="text-sm text-amber-500">
+                {'★'.repeat(conversation.csatRating)}
+                <span className="text-muted-foreground/40">
+                  {'★'.repeat(Math.max(0, 5 - conversation.csatRating))}
+                </span>
+              </span>
+            </Row>
+          )}
+        </div>
+
+        {/* 4. Attributes use one consistent section for either item kind. */}
+        {(isTicketItem ? ticket : conversation) && (
+          <ConversationAttributesEditor
+            target={isTicketItem ? { ticketId: ticket!.id } : { conversationId: conversation!.id }}
+            customAttributes={
+              isTicketItem ? ticket!.customAttributes : conversation!.customAttributes
+            }
+            onChanged={onChanged}
+            enabled={isVisible}
+          />
+        )}
+
+        {/* 5. Links. */}
+        {isTicketItem && ticket && (
+          <div className="space-y-4 border-t border-border/30 pt-4">
+            <TicketLinks ticket={ticket} onChanged={onChanged} />
+            <TicketTrackerLinks ticketId={ticket.id} onChanged={onChanged} />
+          </div>
+        )}
+        {!isTicketItem && conversation && (
+          <div className="space-y-2 border-t border-border/30 pt-4">
+            {/* Track as feedback — conversation-level (kept here per §2.7's
+                  Links section). */}
+            <Button type="button" variant="outline" className="w-full" onClick={onTrackAsFeedback}>
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" /> Track as feedback
+            </Button>
+          </div>
+        )}
+
+        {/* 6. Activity — the ticket's durable state-change timeline (created,
+              status moves incl. internal churn, assignment, priority, reopens).
+              Shown whenever a ticket is in scope: a ticket item, or a
+              conversation's linked customer ticket. */}
+        {ticket && (
+          <Collapsible
+            open={activityOpen}
+            onOpenChange={setActivityOpen}
+            className="border-t border-border/30 pt-3"
+          >
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between py-1 text-left"
+              >
+                <span className={MENU_LABEL}>
+                  <FormattedMessage id="admin.ticketActivity.title" defaultMessage="Activity" />
+                </span>
+                <ChevronDownIcon
+                  className={cn(
+                    'size-3.5 text-muted-foreground transition-transform',
+                    activityOpen && 'rotate-180'
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="pt-3">
+                <TicketActivityTimeline ticketId={ticket.id} enabled={isVisible && activityOpen} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {/* 7. Quinn AI activity — conversation-only. */}
+        {!isTicketItem && aiActivity && (
+          <div className="space-y-2.5 border-t border-border/30 pt-4">
+            <div className="flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <SparklesIcon className="h-4 w-4" /> Quinn AI
+              </p>
+              <AiOutcomePill outcome={aiActivity.outcome} />
+            </div>
+            {aiActivity.outcome === 'handed_off' && aiActivity.handoffReason && (
+              <p className="text-xs text-muted-foreground">
+                Escalated —{' '}
+                {HANDOFF_REASON_LABELS[aiActivity.handoffReason] ?? aiActivity.handoffReason}
+              </p>
+            )}
+            {aiActivity.rating != null && (
+              <Row icon={FaceSmileIcon} label="AI CSAT">
+                <span className="text-sm text-foreground">{aiActivity.rating}/5</span>
+              </Row>
+            )}
+            {aiActivity.sources.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Sources used</p>
+                {aiActivity.sources.map((s) => (
+                  <a
+                    key={s.id}
+                    href={s.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground no-underline hover:text-foreground"
+                  >
+                    <ArrowTopRightOnSquareIcon className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{s.title || s.url}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </ScrollArea>
+  )
+
+  // Flag off (or no permission): no Tabs wrapper at all — byte-identical to
+  // the pre-Copilot panel.
+  if (!showCopilotTab) {
+    return (
+      <aside
+        aria-label="Item details"
+        className="hidden h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border/50 bg-card/20 xl:flex 2xl:w-96"
+      >
+        {detailsBody}
+      </aside>
+    )
+  }
+
+  return (
+    <aside
+      aria-label="Item details"
+      className="hidden h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border/50 bg-card/20 xl:flex 2xl:w-96"
+    >
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        variant="line"
+        className="h-full min-h-0 flex-1 gap-0 overflow-hidden"
+      >
+        <TabsList className="m-3 mb-0 self-start">
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="copilot">
+            <SparklesIcon className="h-3.5 w-3.5" />
+            Copilot
+          </TabsTrigger>
+        </TabsList>
+        {/* Both tabs stay mounted (forceMount + CSS-hide instead of Radix's
+            default unmount-on-inactive) so Details keeps its scroll position
+            and the Copilot thread survives switching tabs within the same
+            item view — it only resets when the item itself changes (the
+            whole subtree remounts via `key={selectedId}`). */}
+        <TabsContent
+          value="details"
+          forceMount
+          className="min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+        >
+          {detailsBody}
+        </TabsContent>
+        <TabsContent
+          value="copilot"
+          forceMount
+          className="min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden"
+        >
+          <CopilotPanel
+            item={item}
+            flags={flags}
+            onInsert={onInsertFromCopilot}
+            askInputRef={askInputRef}
+          />
+        </TabsContent>
+      </Tabs>
+    </aside>
+  )
+})

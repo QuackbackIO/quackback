@@ -29,37 +29,73 @@ export type PostId = TypeId<'post'>
 export type BoardId = TypeId<'board'>
 
 /** Comment ID - e.g., comment_01h455vb4pex5vsknk084sn02q */
-export type CommentId = TypeId<'comment'>
+export type PostCommentId = TypeId<'post_comment'>
 
 /** Vote ID - e.g., vote_01h455vb4pex5vsknk084sn02q */
-export type VoteId = TypeId<'vote'>
+export type PostVoteId = TypeId<'post_vote'>
 
-/** Tag ID - e.g., tag_01h455vb4pex5vsknk084sn02q */
-export type TagId = TypeId<'tag'>
+/** PostTag ID - e.g., tag_01h455vb4pex5vsknk084sn02q */
+export type PostTagId = TypeId<'post_tag'>
 
-/** Post status ID - e.g., status_01h455vb4pex5vsknk084sn02q */
-export type StatusId = TypeId<'status'>
+/** Post status ID - e.g., post_status_01h455vb4pex5vsknk084sn02q */
+export type PostStatusId = TypeId<'post_status'>
 
-/** Comment reaction ID - e.g., reaction_01h455vb4pex5vsknk084sn02q */
-export type ReactionId = TypeId<'reaction'>
+/** Post comment reaction ID - e.g., post_comment_reaction_01h455vb4pex5vsknk084sn02q */
+export type PostCommentReactionId = TypeId<'post_comment_reaction'>
 
 /** Roadmap ID - e.g., roadmap_01h455vb4pex5vsknk084sn02q */
 export type RoadmapId = TypeId<'roadmap'>
 
+/** Roadmap column ID - e.g., roadmap_col_01h455vb4pex5vsknk084sn02q */
+export type RoadmapColumnId = TypeId<'roadmap_col'>
+
 /** Changelog entry ID - e.g., changelog_01h455vb4pex5vsknk084sn02q */
 export type ChangelogId = TypeId<'changelog'>
+
+/** Changelog category (label) ID - e.g., changelog_category_01h455vb4pex5vsknk084sn02q */
+export type ChangelogCategoryId = TypeId<'changelog_category'>
+
+/** Changelog subscription ID - e.g., changelog_sub_01h455vb4pex5vsknk084sn02q */
+export type ChangelogSubscriptionId = TypeId<'changelog_sub'>
+
+/** Status page component ID - e.g., status_component_01h455vb4pex5vsknk084sn02q */
+export type StatusComponentId = TypeId<'status_component'>
+
+/** Status page component group ID - e.g., status_group_01h455vb4pex5vsknk084sn02q */
+export type StatusComponentGroupId = TypeId<'status_group'>
+
+/** Status incident/maintenance ID - e.g., status_incident_01h455vb4pex5vsknk084sn02q */
+export type StatusIncidentId = TypeId<'status_incident'>
+
+/** Status incident update / component event ID - e.g., status_update_01h455vb4pex5vsknk084sn02q */
+export type StatusUpdateId = TypeId<'status_update'>
+
+/** Status page subscription ID - e.g., status_sub_01h455vb4pex5vsknk084sn02q */
+export type StatusSubscriptionId = TypeId<'status_sub'>
+
+/** Status incident template ID - e.g., status_tmpl_01h455vb4pex5vsknk084sn02q */
+export type StatusIncidentTemplateId = TypeId<'status_tmpl'>
 
 /** Support-inbox conversation ID - e.g., conversation_01h455vb4pex5vsknk084sn02q */
 export type ConversationId = TypeId<'conversation'>
 
-/** Support-inbox message ID - e.g., chat_msg_01h455vb4pex5vsknk084sn02q */
-export type ChatMessageId = TypeId<'chat_msg'>
+/** Conversation message ID - e.g., conversation_msg_01h455vb4pex5vsknk084sn02q */
+export type ConversationMessageId = TypeId<'conversation_msg'>
 
-/** Conversation tag ("label") ID - e.g., chat_tag_01h455vb4pex5vsknk084sn02q */
-export type ChatTagId = TypeId<'chat_tag'>
+/** Conversation tag ID - e.g., conversation_tag_01h455vb4pex5vsknk084sn02q */
+export type ConversationTagId = TypeId<'conversation_tag'>
 
-/** Chat-message @-mention ID - e.g., chat_msg_mention_01h455vb4pex5vsknk084sn02q */
-export type ChatMessageMentionId = TypeId<'chat_msg_mention'>
+/** Conversation message @-mention ID - e.g., conversation_msg_mention_01h455vb4pex5vsknk084sn02q */
+export type ConversationMessageMentionId = TypeId<'conversation_msg_mention'>
+
+/** Conversation message reaction ID - e.g., conversation_msg_reaction_01h455vb4pex5vsknk084sn02q */
+export type ConversationMessageReactionId = TypeId<'conversation_msg_reaction'>
+
+/** Conversation summary ID (Quinn past-conversation grounding) - e.g., conversation_summary_01h455vb4pex5vsknk084sn02q */
+export type ConversationSummaryId = TypeId<'conversation_summary'>
+
+/** Conversation message translation ID (P2-D.1 inbox translation cache) - e.g., conversation_msg_translation_01h455vb4pex5vsknk084sn02q */
+export type ConversationMessageTranslationId = TypeId<'conversation_msg_translation'>
 
 /** Integration ID - e.g., integration_01h455vb4pex5vsknk084sn02q */
 export type IntegrationId = TypeId<'integration'>
@@ -70,14 +106,20 @@ export type PlatformCredentialId = TypeId<'platform_cred'>
 /** Event mapping ID - e.g., event_mapping_01h455vb4pex5vsknk084sn02q */
 export type EventMappingId = TypeId<'event_mapping'>
 
-/** Linked entity ID - e.g., linked_entity_01h455vb4pex5vsknk084sn02q */
-export type LinkedEntityId = TypeId<'linked_entity'>
+/** Post external link ID - e.g., post_external_link_01h455vb4pex5vsknk084sn02q */
+export type PostExternalLinkId = TypeId<'post_external_link'>
 
-/** Sync log ID - e.g., sync_log_01h455vb4pex5vsknk084sn02q */
-export type SyncLogId = TypeId<'sync_log'>
+/** Ticket external link ID - e.g., ticket_external_link_01h455vb4pex5vsknk084sn02q */
+export type TicketExternalLinkId = TypeId<'ticket_external_link'>
 
 /** Slack channel monitor ID - e.g., slack_monitor_01h455vb4pex5vsknk084sn02q */
 export type SlackMonitorId = TypeId<'slack_monitor'>
+
+/** Import run ID - e.g., import_run_01h455vb4pex5vsknk084sn02q */
+export type ImportRunId = TypeId<'import_run'>
+
+/** Export run ID - e.g., export_run_01h455vb4pex5vsknk084sn02q */
+export type ExportRunId = TypeId<'export_run'>
 
 /** Post subscription ID - e.g., post_sub_01h455vb4pex5vsknk084sn02q */
 export type PostSubscriptionId = TypeId<'post_sub'>
@@ -96,20 +138,32 @@ export type PushDeviceId = TypeId<'push_device'>
 /** Post edit history ID - e.g., post_edit_01h455vb4pex5vsknk084sn02q */
 export type PostEditId = TypeId<'post_edit'>
 
-/** Comment edit history ID - e.g., comment_edit_01h455vb4pex5vsknk084sn02q */
-export type CommentEditId = TypeId<'comment_edit'>
+/** Comment edit history ID - e.g., post_comment_edit_01h455vb4pex5vsknk084sn02q */
+export type PostCommentEditId = TypeId<'post_comment_edit'>
 
 /** Post mention ID - e.g., post_mention_01h455vb4pex5vsknk084sn02q */
 export type PostMentionId = TypeId<'post_mention'>
 
-/** Internal staff note ID - e.g., note_01h455vb4pex5vsknk084sn02q */
-export type NoteId = TypeId<'note'>
+/** Internal staff note ID - e.g., post_note_01h455vb4pex5vsknk084sn02q */
+export type PostNoteId = TypeId<'post_note'>
 
 /** Segment ID - e.g., segment_01h455vb4pex5vsknk084sn02q */
 export type SegmentId = TypeId<'segment'>
 
 /** User attribute definition ID - e.g., user_attr_01h455vb4pex5vsknk084sn02q */
 export type UserAttributeId = TypeId<'user_attr'>
+
+/** User tag ID - e.g., user_tag_01h455vb4pex5vsknk084sn02q */
+export type UserTagId = TypeId<'user_tag'>
+
+/** Company attribute definition ID - e.g., company_attr_01h455vb4pex5vsknk084sn02q */
+export type CompanyAttributeId = TypeId<'company_attr'>
+
+// RBAC
+export type RoleId = TypeId<'role'>
+export type PermissionId = TypeId<'perm'>
+export type RolePermissionId = TypeId<'role_perm'>
+export type RoleAssignmentId = TypeId<'role_asgn'>
 
 // ============================================
 // AI Entity IDs
@@ -124,8 +178,104 @@ export type AiUsageLogId = TypeId<'ailog'>
 /** Pipeline audit log entry ID - e.g., plog_01h455vb4pex5vsknk084sn02q */
 export type PipelineLogId = TypeId<'plog'>
 
-/** Post activity log ID - e.g., activity_01h455vb4pex5vsknk084sn02q */
-export type ActivityId = TypeId<'activity'>
+/** Post activity log ID - e.g., post_activity_01h455vb4pex5vsknk084sn02q */
+export type PostActivityId = TypeId<'post_activity'>
+
+/** Visitor analytics pageview ID - e.g., pv_01h455vb4pex5vsknk084sn02q */
+export type PageViewId = TypeId<'pv'>
+
+/** Company (B2B customer account) ID - e.g., company_01h455vb4pex5vsknk084sn02q */
+export type CompanyId = TypeId<'company'>
+
+/** Assistant involvement ID - e.g., assistant_involvement_01h455vb4pex5vsknk084sn02q */
+export type AssistantInvolvementId = TypeId<'assistant_involvement'>
+
+/** Assistant guidance rule ID - e.g., assistant_guidance_01h455vb4pex5vsknk084sn02q */
+export type AssistantGuidanceRuleId = TypeId<'assistant_guidance'>
+
+/** Assistant pending action ID - e.g., assistant_action_01h455vb4pex5vsknk084sn02q */
+export type AssistantPendingActionId = TypeId<'assistant_action'>
+
+/** Assistant custom action definition ID - e.g., assistant_custom_action_01h455vb4pex5vsknk084sn02q */
+export type AssistantCustomActionId = TypeId<'assistant_custom_action'>
+
+/** Assistant tool-call audit ID - e.g., assistant_tool_call_01h455vb4pex5vsknk084sn02q */
+export type AssistantToolCallId = TypeId<'assistant_tool_call'>
+
+/** Assistant snippet ID - e.g., assistant_snippet_01h455vb4pex5vsknk084sn02q */
+export type AssistantSnippetId = TypeId<'assistant_snippet'>
+
+/** Assistant knowledge document ID - e.g., assistant_document_01h455vb4pex5vsknk084sn02q */
+export type AssistantDocumentId = TypeId<'assistant_document'>
+
+/** Assistant web source ID - e.g., assistant_web_source_01h455vb4pex5vsknk084sn02q */
+export type AssistantWebSourceId = TypeId<'assistant_web_source'>
+
+/** Assistant usage-event ID - e.g., assistant_event_01h455vb4pex5vsknk084sn02q */
+export type AssistantEventId = TypeId<'assistant_event'>
+
+/** Ticket ID - e.g., ticket_01h455vb4pex5vsknk084sn02q */
+export type TicketId = TypeId<'ticket'>
+
+/** Ticket status ID - e.g., ticket_status_01h455vb4pex5vsknk084sn02q */
+export type TicketStatusId = TypeId<'ticket_status'>
+
+/** Ticket type (registry) ID - e.g., ticket_type_01h455vb4pex5vsknk084sn02q */
+export type TicketTypeId = TypeId<'ticket_type'>
+
+/** Ticket activity log ID - e.g., ticket_activity_01h455vb4pex5vsknk084sn02q */
+export type TicketActivityId = TypeId<'ticket_activity'>
+
+/** Ticket summary ID (Quinn ticket-resolution grounding) - e.g., ticket_summary_01h455vb4pex5vsknk084sn02q */
+export type TicketSummaryId = TypeId<'ticket_summary'>
+
+/** Ticket subscription (watcher) ID - e.g., ticket_sub_01h455vb4pex5vsknk084sn02q */
+export type TicketSubscriptionId = TypeId<'ticket_sub'>
+
+/** Channel account ID (§4.8) - e.g., channel_account_01h455vb4pex5vsknk084sn02q */
+export type ChannelAccountId = TypeId<'channel_account'>
+
+/** Sending domain ID (§4.8) - e.g., sending_domain_01h455vb4pex5vsknk084sn02q */
+export type SendingDomainId = TypeId<'sending_domain'>
+
+/** Office-hours schedule ID (§4.6) - e.g., office_hours_01h455vb4pex5vsknk084sn02q */
+export type OfficeHoursId = TypeId<'office_hours'>
+
+/** SLA policy ID (§4.6) - e.g., sla_policy_01h455vb4pex5vsknk084sn02q */
+export type SlaPolicyId = TypeId<'sla_policy'>
+
+/** SLA event ID (§4.6) - e.g., sla_event_01h455vb4pex5vsknk084sn02q */
+export type SlaEventId = TypeId<'sla_event'>
+
+/** Conversation attribute definition ID - e.g., conv_attr_01h455vb4pex5vsknk084sn02q */
+export type ConversationAttributeId = TypeId<'conv_attr'>
+
+/** Workflow ID (§4.6) - e.g., workflow_01h455vb4pex5vsknk084sn02q */
+export type WorkflowId = TypeId<'workflow'>
+
+/** Workflow run ID (§4.6) - e.g., workflow_run_01h455vb4pex5vsknk084sn02q */
+export type WorkflowRunId = TypeId<'workflow_run'>
+
+/** Workflow run-event ID (§4.6) - e.g., workflow_run_event_01h455vb4pex5vsknk084sn02q */
+export type WorkflowRunEventId = TypeId<'workflow_run_event'>
+
+/** Workflow version (history/rollback) ID (§4.6) - e.g., workflow_version_01h455vb4pex5vsknk084sn02q */
+export type WorkflowVersionId = TypeId<'workflow_version'>
+
+/** Team ID - e.g., team_01h455vb4pex5vsknk084sn02q */
+export type TeamId = TypeId<'team'>
+
+/** Team membership ID - e.g., team_member_01h455vb4pex5vsknk084sn02q */
+export type TeamMemberId = TypeId<'team_member'>
+
+/** Macro (canned reply with actions) ID - e.g., macro_01h455vb4pex5vsknk084sn02q */
+export type MacroId = TypeId<'macro'>
+
+/** Saved inbox view ID - e.g., conversation_view_01h455vb4pex5vsknk084sn02q */
+export type ConversationViewId = TypeId<'conversation_view'>
+
+/** Saved feedback-inbox view ID - e.g., post_view_01h455vb4pex5vsknk084sn02q */
+export type PostViewId = TypeId<'post_view'>
 
 // ============================================
 // Feedback Aggregation Entity IDs
@@ -146,21 +296,30 @@ export type FeedbackSuggestionId = TypeId<'feedback_suggestion'>
 /** External user mapping ID - e.g., user_mapping_01h455vb4pex5vsknk084sn02q */
 export type ExternalUserMappingId = TypeId<'user_mapping'>
 
-/** Merge suggestion ID - e.g., merge_sug_01h455vb4pex5vsknk084sn02q */
-export type MergeSuggestionId = TypeId<'merge_sug'>
+/** Merge suggestion ID - e.g., post_merge_sug_01h455vb4pex5vsknk084sn02q */
+export type PostMergeSuggestionId = TypeId<'post_merge_sug'>
 
 // ============================================
 // Help Center Entity IDs
 // ============================================
 
-/** Help center category ID - e.g., category_01h455vb4pex5vsknk084sn02q */
-export type HelpCenterCategoryId = TypeId<'category'>
+/** Help center category ID - e.g., kb_category_01h455vb4pex5vsknk084sn02q */
+export type KbCategoryId = TypeId<'kb_category'>
 
-/** Help center article ID - e.g., article_01h455vb4pex5vsknk084sn02q */
-export type HelpCenterArticleId = TypeId<'article'>
+/** Help center article ID - e.g., kb_article_01h455vb4pex5vsknk084sn02q */
+export type KbArticleId = TypeId<'kb_article'>
 
-/** Article feedback ID - e.g., article_feedback_01h455vb4pex5vsknk084sn02q */
-export type HelpCenterFeedbackId = TypeId<'article_feedback'>
+/** Article feedback ID - e.g., kb_article_feedback_01h455vb4pex5vsknk084sn02q */
+export type KbArticleFeedbackId = TypeId<'kb_article_feedback'>
+
+/** Help center redirect rule ID - e.g., hc_redirect_rule_01h455vb4pex5vsknk084sn02q */
+export type HcRedirectRuleId = TypeId<'hc_redirect_rule'>
+
+/** Article translation ID - e.g., kb_article_translation_01h455vb4pex5vsknk084sn02q */
+export type KbArticleTranslationId = TypeId<'kb_article_translation'>
+
+/** Category translation ID - e.g., kb_category_translation_01h455vb4pex5vsknk084sn02q */
+export type KbCategoryTranslationId = TypeId<'kb_category_translation'>
 
 // ============================================
 // Auth Entity IDs (Better-auth)
@@ -212,14 +371,14 @@ export type ApiKeyId = TypeId<'api_key'>
 export type WebhookId = TypeId<'webhook'>
 
 // ============================================
-// Billing Entity IDs
+// Eventing Entity IDs (durable event spine)
 // ============================================
 
-/** Subscription ID - e.g., subscription_01h455vb4pex5vsknk084sn02q */
-export type SubscriptionId = TypeId<'subscription'>
+/** Domain event ID (events outbox row) - e.g., evt_01h455vb4pex5vsknk084sn02q */
+export type EvtId = TypeId<'evt'>
 
-/** Invoice ID - e.g., invoice_01h455vb4pex5vsknk084sn02q */
-export type InvoiceId = TypeId<'invoice'>
+/** Third-party app ID (OAuth app platform) - e.g., app_01h455vb4pex5vsknk084sn02q */
+export type AppId = TypeId<'app'>
 
 // ============================================
 // Type Utilities
@@ -236,40 +395,92 @@ export type ExtractPrefix<T extends string> = T extends `${infer P}_${string}` ?
 export interface EntityIdMap {
   post: PostId
   board: BoardId
-  comment: CommentId
-  vote: VoteId
-  tag: TagId
-  status: StatusId
-  reaction: ReactionId
+  post_comment: PostCommentId
+  post_vote: PostVoteId
+  post_tag: PostTagId
+  post_status: PostStatusId
+  post_comment_reaction: PostCommentReactionId
   post_edit: PostEditId
-  comment_edit: CommentEditId
+  post_comment_edit: PostCommentEditId
   post_mention: PostMentionId
-  note: NoteId
+  post_note: PostNoteId
   segment: SegmentId
   user_attr: UserAttributeId
+  user_tag: UserTagId
+  company_attr: CompanyAttributeId
+  role: RoleId
+  permission: PermissionId
+  role_permission: RolePermissionId
+  role_assignment: RoleAssignmentId
   sentiment: SentimentId
   ai_usage: AiUsageLogId
   pipeline_log: PipelineLogId
-  activity: ActivityId
+  post_activity: PostActivityId
+  page_view: PageViewId
+  company: CompanyId
+  assistant_involvement: AssistantInvolvementId
+  assistant_guidance: AssistantGuidanceRuleId
+  assistant_action: AssistantPendingActionId
+  assistant_custom_action: AssistantCustomActionId
+  assistant_tool_call: AssistantToolCallId
+  assistant_snippet: AssistantSnippetId
+  assistant_document: AssistantDocumentId
+  assistant_web_source: AssistantWebSourceId
+  assistant_event: AssistantEventId
+  ticket: TicketId
+  ticket_status: TicketStatusId
+  ticket_type: TicketTypeId
+  ticket_activity: TicketActivityId
+  ticket_summary: TicketSummaryId
+  ticket_sub: TicketSubscriptionId
+  channel_account: ChannelAccountId
+  sending_domain: SendingDomainId
+  office_hours: OfficeHoursId
+  sla_policy: SlaPolicyId
+  sla_event: SlaEventId
+  workflow: WorkflowId
+  workflow_run: WorkflowRunId
+  workflow_run_event: WorkflowRunEventId
+  workflow_version: WorkflowVersionId
+  team: TeamId
+  team_member: TeamMemberId
+  macro: MacroId
+  conversation_view: ConversationViewId
+  post_view: PostViewId
+  conversation_attribute: ConversationAttributeId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId
   feedback_signal: FeedbackSignalId
   feedback_suggestion: FeedbackSuggestionId
 
   user_mapping: ExternalUserMappingId
-  merge_suggestion: MergeSuggestionId
+  post_merge_suggestion: PostMergeSuggestionId
   roadmap: RoadmapId
+  roadmap_column: RoadmapColumnId
   changelog: ChangelogId
+  changelog_category: ChangelogCategoryId
+  changelog_sub: ChangelogSubscriptionId
+  status_component: StatusComponentId
+  status_group: StatusComponentGroupId
+  status_incident: StatusIncidentId
+  status_update: StatusUpdateId
+  status_sub: StatusSubscriptionId
+  status_tmpl: StatusIncidentTemplateId
   conversation: ConversationId
-  chat_message: ChatMessageId
-  chat_tag: ChatTagId
-  chat_message_mention: ChatMessageMentionId
+  conversation_message: ConversationMessageId
+  conversation_tag: ConversationTagId
+  conversation_message_mention: ConversationMessageMentionId
+  conversation_message_reaction: ConversationMessageReactionId
+  conversation_summary: ConversationSummaryId
+  conversation_message_translation: ConversationMessageTranslationId
   integration: IntegrationId
   platform_cred: PlatformCredentialId
   event_mapping: EventMappingId
-  linked_entity: LinkedEntityId
-  sync_log: SyncLogId
+  post_external_link: PostExternalLinkId
+  ticket_external_link: TicketExternalLinkId
   slack_monitor: SlackMonitorId
+  import_run: ImportRunId
+  export_run: ExportRunId
   post_subscription: PostSubscriptionId
   notif_pref: NotifPrefId
   unsub_token: UnsubTokenId
@@ -290,11 +501,14 @@ export interface EntityIdMap {
   identity_provider: IdentityProviderId
   api_key: ApiKeyId
   webhook: WebhookId
-  subscription: SubscriptionId
-  invoice: InvoiceId
-  category: HelpCenterCategoryId
-  article: HelpCenterArticleId
-  article_feedback: HelpCenterFeedbackId
+  event: EvtId
+  app: AppId
+  kb_category: KbCategoryId
+  kb_article: KbArticleId
+  kb_article_feedback: KbArticleFeedbackId
+  hc_redirect_rule: HcRedirectRuleId
+  kb_article_translation: KbArticleTranslationId
+  kb_category_translation: KbCategoryTranslationId
 }
 
 /**

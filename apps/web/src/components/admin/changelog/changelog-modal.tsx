@@ -21,7 +21,12 @@ import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import { toPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
 import { Route } from '@/routes/admin/changelog'
-import { type ChangelogId, type PostId } from '@quackback/ids'
+import {
+  type ChangelogId,
+  type PostId,
+  type ChangelogCategoryId,
+  type SegmentId,
+} from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 
 interface ChangelogModalProps {
@@ -36,9 +41,15 @@ interface ChangelogModalContentProps {
 function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps) {
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
+  const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
+  const [notify, setNotify] = useState(true)
+  const [segmentIds, setSegmentIds] = useState<SegmentId[]>([])
+  const [segmentIdsTouched, setSegmentIdsTouched] = useState(false)
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [displayDateTouched, setDisplayDateTouched] = useState(false)
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
+  const [featuredImageTouched, setFeaturedImageTouched] = useState(false)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
 
@@ -67,9 +78,14 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
       form.setValue('content', entry.content)
       setContentJson(entry.contentJson as JSONContent | null)
       setLinkedPostIds(entry.linkedPosts.map((p) => p.id))
+      setCategoryIds(entry.categories.map((c) => c.id))
       setPublishState(toPublishState(entry.status, entry.publishedAt))
       setDisplayDateOverride(entry.displayDate ? new Date(entry.displayDate) : undefined)
       setDisplayDateTouched(false)
+      setFeaturedImageUrl(entry.featuredImageUrl)
+      setFeaturedImageTouched(false)
+      setSegmentIds((entry.segmentIds ?? []) as SegmentId[])
+      setSegmentIdsTouched(false)
       setHasInitialized(true)
     }
   }, [entry, form, hasInitialized])
@@ -94,6 +110,16 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
     setDisplayDateTouched(true)
   }
 
+  function handleFeaturedImageChange(url: string | null) {
+    setFeaturedImageUrl(url)
+    setFeaturedImageTouched(true)
+  }
+
+  function handleSegmentIdsChange(ids: SegmentId[]) {
+    setSegmentIds(ids)
+    setSegmentIdsTouched(true)
+  }
+
   const handleSubmit = form.handleSubmit((data) => {
     const displayDatePayload = displayDateTouched
       ? displayDateOverride === undefined
@@ -108,8 +134,17 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
+        categoryIds,
         publishState,
+        notify,
         ...(displayDatePayload !== undefined && { displayDate: displayDatePayload }),
+        // Only send when the admin changed it, so an untouched value isn't
+        // round-tripped and a cleared one is (null clears).
+        ...(featuredImageTouched && { featuredImageUrl }),
+        // Same touched-gate as featuredImageUrl: an untouched targeting list
+        // isn't round-tripped; an edited one (including cleared to [])
+        // replaces the stored list wholesale.
+        ...(segmentIdsTouched && { segmentIds }),
       },
       {
         onSuccess: () => {
@@ -174,11 +209,19 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
             onPublishStateChange={setPublishState}
             linkedPostIds={linkedPostIds}
             onLinkedPostsChange={setLinkedPostIds}
+            categoryIds={categoryIds}
+            onCategoriesChange={setCategoryIds}
+            notify={notify}
+            onNotifyChange={setNotify}
+            segmentIds={segmentIds}
+            onSegmentIdsChange={handleSegmentIdsChange}
             authorName={entry?.author?.name}
             publishedAt={entry?.publishedAt}
             displayDateValue={displayDateOverride}
             onDisplayDateChange={handleDisplayDateChange}
             onDisplayDateClear={handleDisplayDateClear}
+            featuredImageUrl={featuredImageUrl}
+            onFeaturedImageChange={handleFeaturedImageChange}
           />
         </div>
 
@@ -206,11 +249,19 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
                   onPublishStateChange={setPublishState}
                   linkedPostIds={linkedPostIds}
                   onLinkedPostsChange={setLinkedPostIds}
+                  categoryIds={categoryIds}
+                  onCategoriesChange={setCategoryIds}
+                  notify={notify}
+                  onNotifyChange={setNotify}
+                  segmentIds={segmentIds}
+                  onSegmentIdsChange={handleSegmentIdsChange}
                   authorName={entry?.author?.name}
                   publishedAt={entry?.publishedAt}
                   displayDateValue={displayDateOverride}
                   onDisplayDateChange={handleDisplayDateChange}
                   onDisplayDateClear={handleDisplayDateClear}
+                  featuredImageUrl={featuredImageUrl}
+                  onFeaturedImageChange={handleFeaturedImageChange}
                 />
               </div>
             </SheetContent>

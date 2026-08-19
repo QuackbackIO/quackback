@@ -4,16 +4,19 @@
  * Query key factories and query options for help center data.
  */
 
-import { queryOptions, infiniteQueryOptions } from '@tanstack/react-query'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import { queryOptions, infiniteQueryOptions, keepPreviousData } from '@tanstack/react-query'
+import type { KbArticleId } from '@quackback/ids'
 import {
   listCategoriesFn,
   listPublicCategoriesFn,
   listArticlesFn,
+  listArticlePerformanceFn,
+  listSearchTermsFn,
   listPublicArticlesFn,
   listPublicArticlesForCategoryFn,
   getArticleFn,
   getPublicArticleBySlugFn,
+  listArticleFeedbackReasonsFn,
 } from '@/lib/server/functions/help-center'
 
 const STALE_TIME_SHORT = 30 * 1000
@@ -33,8 +36,12 @@ export const helpCenterKeys = {
     sort?: string
     showDeleted?: boolean
   }) => [...helpCenterKeys.articleLists(), filters] as const,
+  articlePerformance: () => [...helpCenterKeys.articles(), 'performance'] as const,
+  searchTerms: () => [...helpCenterKeys.all, 'search-terms'] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
-  articleDetail: (id: HelpCenterArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
+  articleDetail: (id: KbArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
+  articleFeedbackReasons: (id: KbArticleId) =>
+    [...helpCenterKeys.articleDetail(id), 'feedback-reasons'] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,
   publicArticleList: (categoryId?: string) =>
     [...helpCenterKeys.public(), 'list', categoryId] as const,
@@ -76,13 +83,37 @@ export const helpCenterQueries = {
         }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      // NOTE (QC-2): no `maxPages` — one-directional keyset cursor, no reverse
+      // cursor available server-side (see help-center.article.query.ts).
       staleTime: STALE_TIME_SHORT,
+      placeholderData: keepPreviousData,
     }),
 
-  articleDetail: (id: HelpCenterArticleId) =>
+  articlePerformance: () =>
+    queryOptions({
+      queryKey: helpCenterKeys.articlePerformance(),
+      queryFn: () => listArticlePerformanceFn({ data: {} }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  searchTerms: () =>
+    queryOptions({
+      queryKey: helpCenterKeys.searchTerms(),
+      queryFn: () => listSearchTermsFn({ data: {} }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  articleDetail: (id: KbArticleId) =>
     queryOptions({
       queryKey: helpCenterKeys.articleDetail(id),
       queryFn: () => getArticleFn({ data: { id } }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  articleFeedbackReasons: (id: KbArticleId) =>
+    queryOptions({
+      queryKey: helpCenterKeys.articleFeedbackReasons(id),
+      queryFn: () => listArticleFeedbackReasonsFn({ data: { articleId: id } }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

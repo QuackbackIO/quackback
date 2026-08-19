@@ -8,7 +8,7 @@
  * Both types share the same userSegments join table — dynamic segments
  * are treated as a cached result set, evaluated periodically and synced.
  */
-import { pgTable, text, timestamp, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, index, uniqueIndex, jsonb, check } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -47,13 +47,21 @@ export type SegmentRuleAttribute =
   | 'last_active_days_ago'
   | 'signup_source'
   | 'principal_type'
+  // Company predicates (§K3): resolved through principal.company_id -> companies,
+  // so segments stay the single targeting primitive for company-scoped audiences.
+  | 'company_plan'
+  | 'company_mrr'
+  | 'company_size'
+  | 'company_industry'
+  | 'company_attr'
 
 export interface SegmentCondition {
   attribute: SegmentRuleAttribute
   operator: SegmentRuleOperator
   /** Required for value-based operators; omit for is_set / is_not_set. Array for 'in' operator. */
   value?: string | number | boolean | (string | number)[]
-  /** For metadata_key attribute: the key to look up in user.metadata JSON */
+  /** For metadata_key attribute: the key to look up in user.metadata JSON.
+   *  For company_attr: the key to look up in companies.custom_attributes. */
   metadataKey?: string
 }
 
@@ -182,8 +190,12 @@ export const userSegments = pgTable(
   },
   (table) => [
     uniqueIndex('user_segments_pk').on(table.principalId, table.segmentId),
-    index('user_segments_principal_id_idx').on(table.principalId),
     index('user_segments_segment_id_idx').on(table.segmentId),
+    // DB-level backstop for the enum above, created by the SQL migration.
+    check(
+      'user_segments_added_by_check',
+      sql`added_by = ANY (ARRAY['manual'::text, 'dynamic'::text, 'sso'::text, 'widget'::text, 'api'::text])`
+    ),
   ]
 )
 

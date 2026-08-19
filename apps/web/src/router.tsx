@@ -3,6 +3,7 @@ import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { routeTree } from './routeTree.gen'
 import { DefaultErrorPage, NotFoundPage } from '@/components/shared/error-page'
+import { RoutePendingComponent } from '@/components/shared/route-pending'
 
 export function getRouter() {
   const queryClient = new QueryClient({
@@ -16,10 +17,12 @@ export function getRouter() {
 
   const router = createRouter({
     routeTree,
-    defaultPreload: false,
+    defaultPreload: 'intent',
+    defaultPreloadStaleTime: 30_000,
     scrollRestoration: true,
-    defaultPendingMs: 1000,
-    defaultPendingMinMs: 0,
+    defaultPendingMs: 300,
+    defaultPendingMinMs: 200,
+    defaultPendingComponent: RoutePendingComponent,
     context: {
       queryClient,
     },

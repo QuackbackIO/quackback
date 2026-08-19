@@ -7,6 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 // Input validation schema — `audience` and `access` are intentionally
 // excluded, matching the strip on PATCH /api/v1/boards/:boardId. Visibility
 // is a policy-level setting changed only via updateBoardAccessFn (admin-only,
@@ -34,7 +35,7 @@ export const Route = createFileRoute('/api/v1/boards/')({
        */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
           // Import service function
           const { listBoardsWithDetails, accessToAudience } =
@@ -66,7 +67,7 @@ export const Route = createFileRoute('/api/v1/boards/')({
        */
       POST: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.BOARD_MANAGE })
 
           // Parse and validate body
           const body = await request.json()

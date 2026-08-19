@@ -6,6 +6,7 @@
 
 import { z } from 'zod'
 import { tiptapContentSchema } from './posts'
+import { SUPPORTED_LOCALES } from '../i18n'
 
 // ============================================================================
 // Category Schemas
@@ -20,6 +21,7 @@ export const createCategorySchema = z.object({
   slug: z.string().max(200).optional(),
   description: z.string().max(2000).optional(),
   isPublic: z.boolean().optional(),
+  segmentIds: z.array(z.string()).max(100).optional(),
   position: z.number().int().min(0).optional(),
   parentId: z.string().nullable().optional(),
   icon: z.string().max(50).nullable().optional(),
@@ -31,6 +33,7 @@ export const updateCategorySchema = z.object({
   slug: z.string().max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   isPublic: z.boolean().optional(),
+  segmentIds: z.array(z.string()).max(100).optional(),
   position: z.number().int().min(0).optional(),
   parentId: z.string().nullable().optional(),
   icon: z.string().max(50).nullable().optional(),
@@ -56,6 +59,7 @@ export const createArticleSchema = z.object({
   slug: z.string().max(200).optional(),
   position: z.number().int().optional(),
   description: z.string().max(300).optional(),
+  segmentIds: z.array(z.string()).max(100).optional(),
 })
 
 export const updateArticleSchema = z.object({
@@ -67,6 +71,7 @@ export const updateArticleSchema = z.object({
   slug: z.string().max(200).optional(),
   position: z.number().int().optional(),
   description: z.string().max(300).optional(),
+  segmentIds: z.array(z.string()).max(100).optional(),
 })
 
 export const getArticleSchema = z.object({
@@ -94,6 +99,15 @@ export const listPublicArticlesSchema = z.object({
   limit: z.number().int().positive().max(100).optional(),
 })
 
+export const listArticlePerformanceSchema = z.object({
+  limit: z.number().int().positive().max(200).optional(),
+})
+
+export const listSearchTermsSchema = z.object({
+  days: z.number().int().positive().max(365).optional(),
+  limit: z.number().int().positive().max(200).optional(),
+})
+
 export const publishArticleSchema = z.object({
   id: z.string().min(1),
 })
@@ -103,12 +117,33 @@ export const articleFeedbackSchema = z.object({
   helpful: z.boolean(),
 })
 
+/** Longest reason accepted from a visitor, in characters. */
+export const ARTICLE_FEEDBACK_REASON_MAX_LENGTH = 1000
+
+/**
+ * A visitor explaining the unhelpful vote identified by `feedbackId`. The id is
+ * the handle on their own vote: an anonymous visitor has no principal the
+ * server could look the row back up by.
+ */
+export const articleFeedbackReasonSchema = z.object({
+  feedbackId: z.string().min(1),
+  reason: z.string().trim().min(1).max(ARTICLE_FEEDBACK_REASON_MAX_LENGTH),
+})
+
+export const listArticleFeedbackReasonsSchema = z.object({
+  articleId: z.string().min(1),
+  limit: z.number().int().positive().max(100).optional(),
+})
+
 export const getCategoryBySlugSchema = z.object({
   slug: z.string().min(1),
+  /** Omitted/undefined = the default locale (domains/languages §2). */
+  locale: z.string().optional(),
 })
 
 export const getArticleBySlugSchema = z.object({
   slug: z.string().min(1),
+  locale: z.string().optional(),
 })
 
 export const unpublishArticleSchema = z.object({
@@ -127,16 +162,144 @@ export const restoreArticleSchema = z.object({
 // Help Center Config Schemas
 // ============================================================================
 
+/** A header link URL: an absolute http(s) URL or a root-relative path. */
+const helpCenterHeaderLinkUrl = z
+  .string()
+  .min(1)
+  .max(500)
+  .refine((v) => v.startsWith('/') || /^https?:\/\//i.test(v), {
+    message: 'URL must be an absolute http(s) URL or start with /',
+  })
+
+export const helpCenterHeaderLinkSchema = z.object({
+  label: z.string().trim().min(1, 'Label is required').max(60),
+  url: helpCenterHeaderLinkUrl,
+})
+
 export const updateHelpCenterConfigSchema = z.object({
   enabled: z.boolean().optional(),
   homepageTitle: z.string().min(1).max(200).optional(),
   homepageDescription: z.string().max(500).optional(),
+  /** Wholesale replacement — the header renders at most 3 links. */
+  headerLinks: z.array(helpCenterHeaderLinkSchema).max(3).optional(),
 })
 
 export const updateHelpCenterSeoSchema = z.object({
   metaDescription: z.string().max(500).optional(),
   sitemapEnabled: z.boolean().optional(),
   structuredDataEnabled: z.boolean().optional(),
+  indexable: z.boolean().optional(),
+})
+
+// ============================================================================
+// Auto-translate Schema (domains/languages §H3)
+// ============================================================================
+
+export const updateHelpCenterAutoTranslateSchema = z.object({
+  enabled: z.boolean().optional(),
+  protectedTerms: z.array(z.string().min(1).max(100)).max(100).optional(),
+})
+
+// ============================================================================
+// Domain Schemas (domains/languages §1)
+// ============================================================================
+
+/** Setting the domain to null clears it (and any verification). */
+export const updateHelpCenterDomainSchema = z.object({
+  domain: z.string().max(253).nullable(),
+})
+
+// ============================================================================
+// Locale Schemas (domains/languages §2)
+// ============================================================================
+
+const supportedLocaleSchema = z.enum(SUPPORTED_LOCALES)
+
+export const helpCenterLocaleChromeSchema = z.object({
+  homepageTitle: z.string().max(200),
+  homepageDescription: z.string().max(500),
+  searchPlaceholder: z.string().max(200),
+})
+
+/** Enabling requires the full chrome bundle -- a non-empty title is enforced server-side. */
+export const enableHelpCenterLocaleSchema = z.object({
+  locale: supportedLocaleSchema,
+  chrome: helpCenterLocaleChromeSchema,
+})
+
+export const disableHelpCenterLocaleSchema = z.object({
+  locale: supportedLocaleSchema,
+})
+
+export const updateHelpCenterLocaleChromeSchema = z.object({
+  locale: supportedLocaleSchema,
+  chrome: helpCenterLocaleChromeSchema.partial(),
+})
+
+// ============================================================================
+// Translation Schemas (domains/languages §2)
+// ============================================================================
+
+export const getArticleTranslationSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+})
+
+export const upsertArticleTranslationSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+  title: z.string().max(200),
+  description: z.string().max(300).optional(),
+  content: z.string(),
+  contentJson: tiptapContentSchema.nullable().optional(),
+})
+
+export const setArticleTranslationStatusSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+  status: z.enum(['draft', 'published']),
+})
+
+export const deleteArticleTranslationSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+})
+
+export const getCategoryTranslationSchema = z.object({
+  categoryId: z.string().min(1),
+  locale: supportedLocaleSchema,
+})
+
+export const upsertCategoryTranslationSchema = z.object({
+  categoryId: z.string().min(1),
+  locale: supportedLocaleSchema,
+  name: z.string().max(200),
+  description: z.string().max(2000).optional(),
+})
+
+export const deleteCategoryTranslationSchema = z.object({
+  categoryId: z.string().min(1),
+  locale: supportedLocaleSchema,
+})
+
+// ============================================================================
+// Redirect Rule Schemas (domains/languages §2)
+// ============================================================================
+
+const redirectRulePath = z
+  .string()
+  .min(1, 'Path is required')
+  .max(500)
+  .refine((v) => v.startsWith('/'), 'Path must start with /')
+
+export const createRedirectRuleSchema = z.object({
+  path: redirectRulePath,
+  targetType: z.enum(['article', 'category']),
+  targetId: z.string().min(1),
+})
+
+export const deleteRedirectRuleSchema = z.object({
+  id: z.string().min(1),
 })
 
 // ============================================================================

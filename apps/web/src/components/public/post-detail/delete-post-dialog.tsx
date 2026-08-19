@@ -10,7 +10,8 @@ import {
   getIntegrationActionVerb,
   getIntegrationDisplayName,
   getIntegrationItemNoun,
-} from '@/lib/shared/integrations'
+  formatExternalId,
+} from '@/components/admin/settings/integrations/integration-ui'
 
 // ============================================================================
 // Types
@@ -34,12 +35,6 @@ export interface CascadeChoice {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/** Format an external ID for display (e.g., "#142") */
-function formatExternalId(integrationType: string, externalId: string): string {
-  if (integrationType === 'github') return `#${externalId}`
-  return externalId
-}
 
 /** Get the best display ID available */
 function getDisplayId(link: ExternalLinkInfo): string {

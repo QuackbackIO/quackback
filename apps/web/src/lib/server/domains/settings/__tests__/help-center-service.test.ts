@@ -25,6 +25,7 @@ vi.mock('@/lib/server/redis', () => ({
     INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
     SLACK_CHANNELS: 'slack:channels',
+    REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
   },
 }))
 
@@ -35,7 +36,9 @@ const mockSet = vi.fn()
 const mockWhere = vi.fn()
 const mockReturning = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real db module so tables/operators stay current; override only what this suite drives.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       settings: {
@@ -51,9 +54,6 @@ vi.mock('@/lib/server/db', () => ({
     }),
   },
   eq: vi.fn(),
-  settings: { id: 'id' },
-  ssoVerifiedDomain: { id: 'id', createdAt: 'created_at' },
-  identityProvider: { id: 'id', createdAt: 'created_at' },
 }))
 
 // --- S3 mock ---
@@ -105,8 +105,14 @@ function makeSettingsRow(overrides: Record<string, unknown> = {}) {
 }
 
 // Import after mocks
-const { getHelpCenterConfig, updateHelpCenterConfig, getTenantSettings } =
-  await import('../settings.service')
+const {
+  getHelpCenterConfig,
+  updateHelpCenterConfig,
+  getTenantSettings,
+  enableHelpCenterLocale,
+  disableHelpCenterLocale,
+  updateHelpCenterLocaleChrome,
+} = await import('../settings.service')
 const { DEFAULT_HELP_CENTER_CONFIG, DEFAULT_HELP_CENTER_SEO_CONFIG } =
   await import('../settings.types')
 
@@ -219,7 +225,7 @@ describe('updateHelpCenterConfig', () => {
 
     await updateHelpCenterConfig({ enabled: true })
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('can update nested seo config', async () => {
@@ -231,6 +237,7 @@ describe('updateHelpCenterConfig', () => {
         sitemapEnabled: false,
         structuredDataEnabled: true,
         ogImageKey: null,
+        indexable: true,
       },
     })
 
@@ -269,5 +276,114 @@ describe('getTenantSettings includes helpCenterConfig', () => {
     expect(result!.helpCenterConfig.homepageTitle).toBe('Help')
     // Defaults merged
     expect(result!.helpCenterConfig.seo).toEqual(DEFAULT_HELP_CENTER_SEO_CONFIG)
+  })
+})
+
+// ============================================================================
+// Locales (domains/languages §2)
+// ============================================================================
+
+describe('enableHelpCenterLocale', () => {
+  it('rejects an empty homepage title', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: null }))
+
+    await expect(
+      enableHelpCenterLocale({
+        locale: 'de',
+        chrome: { homepageTitle: '   ', homepageDescription: '', searchPlaceholder: '' },
+      })
+    ).rejects.toThrow(/title/i)
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects enabling the default locale', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: null }))
+
+    await expect(
+      enableHelpCenterLocale({
+        locale: 'en',
+        chrome: { homepageTitle: 'Hi', homepageDescription: '', searchPlaceholder: '' },
+      })
+    ).rejects.toThrow(/default/i)
+  })
+
+  it('adds the locale to additional and stores its chrome', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: null }))
+
+    const result = await enableHelpCenterLocale({
+      locale: 'de',
+      chrome: {
+        homepageTitle: 'Wie können wir helfen?',
+        homepageDescription: '',
+        searchPlaceholder: '',
+      },
+    })
+
+    expect(result.additional).toEqual(['de'])
+    expect(result.chrome.de.homepageTitle).toBe('Wie können wir helfen?')
+  })
+
+  it('is idempotent when re-enabling an already-enabled locale', async () => {
+    const stored = JSON.stringify({
+      locales: { default: 'en', additional: ['de'], chrome: { de: { homepageTitle: 'Old' } } },
+    })
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: stored }))
+
+    const result = await enableHelpCenterLocale({
+      locale: 'de',
+      chrome: { homepageTitle: 'New title', homepageDescription: '', searchPlaceholder: '' },
+    })
+
+    expect(result.additional).toEqual(['de'])
+    expect(result.chrome.de.homepageTitle).toBe('New title')
+  })
+})
+
+describe('disableHelpCenterLocale', () => {
+  it('removes the locale from additional, keeping chrome around', async () => {
+    const stored = JSON.stringify({
+      locales: {
+        default: 'en',
+        additional: ['de', 'fr'],
+        chrome: { de: { homepageTitle: 'Hallo' }, fr: { homepageTitle: 'Bonjour' } },
+      },
+    })
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: stored }))
+
+    const result = await disableHelpCenterLocale('de')
+
+    expect(result.additional).toEqual(['fr'])
+    expect(result.chrome.de.homepageTitle).toBe('Hallo')
+  })
+})
+
+describe('updateHelpCenterLocaleChrome', () => {
+  it('rejects a locale that is not enabled', async () => {
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: null }))
+
+    await expect(
+      updateHelpCenterLocaleChrome({ locale: 'de', chrome: { homepageTitle: 'Hallo' } })
+    ).rejects.toThrow(/not enabled/i)
+  })
+
+  it('merges partial chrome updates for an enabled locale', async () => {
+    const stored = JSON.stringify({
+      locales: {
+        default: 'en',
+        additional: ['de'],
+        chrome: {
+          de: { homepageTitle: 'Hallo', homepageDescription: 'x', searchPlaceholder: 'y' },
+        },
+      },
+    })
+    mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: stored }))
+
+    const result = await updateHelpCenterLocaleChrome({
+      locale: 'de',
+      chrome: { searchPlaceholder: 'Suchen...' },
+    })
+
+    expect(result.chrome.de.searchPlaceholder).toBe('Suchen...')
+    expect(result.chrome.de.homepageTitle).toBe('Hallo')
   })
 })

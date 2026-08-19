@@ -8,7 +8,8 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
-import type { StatusId } from '@quackback/ids'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { PostStatusId } from '@quackback/ids'
 
 // Input validation schema - matches UpdateStatusInput from service
 const updateStatusSchema = z.object({
@@ -30,9 +31,9 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request)
 
-          const statusId = parseTypeId<StatusId>(params.statusId, 'status', 'status ID')
+          const statusId = parseTypeId<PostStatusId>(params.statusId, 'post_status', 'status ID')
 
           const { getStatusById } = await import('@/lib/server/domains/statuses/status.service')
 
@@ -60,9 +61,9 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_MANAGE })
 
-          const statusId = parseTypeId<StatusId>(params.statusId, 'status', 'status ID')
+          const statusId = parseTypeId<PostStatusId>(params.statusId, 'post_status', 'status ID')
 
           const body = await request.json()
           const parsed = updateStatusSchema.safeParse(body)
@@ -104,9 +105,9 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.STATUS_MANAGE })
 
-          const statusId = parseTypeId<StatusId>(params.statusId, 'status', 'status ID')
+          const statusId = parseTypeId<PostStatusId>(params.statusId, 'post_status', 'status ID')
 
           const { deleteStatus } = await import('@/lib/server/domains/statuses/status.service')
 

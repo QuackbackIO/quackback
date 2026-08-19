@@ -70,6 +70,28 @@ describe('handleRequestWithContext', () => {
     expect(completed.request_id).toBeDefined()
   })
 
+  it('survives a context with no response attached yet', async () => {
+    // A failing server function resolves the middleware chain without a
+    // response: the error is carried as a value and serialized after this
+    // boundary returns. Dereferencing it here threw a TypeError out of the
+    // middleware, and the framework reported that to the client as an
+    // unhandled 500 instead of the serialized error it had already built.
+    const cap = capture()
+    const request = new Request('http://localhost/_serverFn/abc')
+
+    const result = await handleRequestWithContext({
+      request,
+      log: cap.log,
+      next: async () => ({}) as { response?: Response },
+    })
+
+    expect(result).toEqual({})
+    const completed = cap.records().find((r) => r.msg === 'request completed')
+    expect(completed).toBeDefined()
+    expect(completed.status).toBeUndefined()
+    expect(cap.records().some((r) => r.msg === 'request failed')).toBe(false)
+  })
+
   it('does NOT log completion for a healthy /api/health probe', async () => {
     const cap = capture()
     const request = new Request('http://localhost/api/health')

@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
 /**
- * Backfill AI features (sentiment analysis and embeddings) for existing posts.
+ * Backfill AI features: post sentiment, post embeddings, and help-center
+ * article embeddings.
  *
  * Usage:
- *   bun scripts/backfill-ai.ts              # Process all posts
+ *   bun scripts/backfill-ai.ts              # Process everything
  *   bun scripts/backfill-ai.ts --dry-run    # Preview without processing
  *   bun scripts/backfill-ai.ts --sentiment  # Only process sentiment
- *   bun scripts/backfill-ai.ts --embeddings # Only process embeddings
- *   bun scripts/backfill-ai.ts --limit=100  # Limit number of posts
+ *   bun scripts/backfill-ai.ts --embeddings # Only process embeddings (posts + articles)
+ *   bun scripts/backfill-ai.ts --limit=100  # Limit items per phase
  *
  * Environment: runs against the app's environment (load the app .env or run
  * where the app env is present). AI follows the app's central config:
@@ -30,9 +31,16 @@ try {
 
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { eq, and, isNull, sql, count } from 'drizzle-orm'
-import { posts, postSentiment, postTags, tags } from '@quackback/db/schema'
-import { generateId, type PostId } from '@quackback/ids'
+import { eq, and, inArray, isNull, sql, count } from 'drizzle-orm'
+import {
+  posts,
+  postSentiment,
+  postTagAssignments,
+  postTags,
+  helpCenterArticles,
+  helpCenterCategories,
+} from '@quackback/db/schema'
+import { generateId, type PostId, type KbArticleId } from '@quackback/ids'
 import { getOpenAI } from '../src/lib/server/domains/ai/config'
 import { getChatModel, getEmbeddingModel } from '../src/lib/server/domains/ai/models'
 
@@ -43,9 +51,10 @@ const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 1000
 const MAX_FAIL_ATTEMPTS = 3 // Skip posts that fail this many times
 
-// Track failed posts to avoid infinite retry loops
+// Track failed items to avoid infinite retry loops
 const failedSentimentPosts = new Map<string, number>() // postId -> fail count
 const failedEmbeddingPosts = new Map<string, number>() // postId -> fail count
+const failedEmbeddingArticles = new Map<string, number>() // articleId -> fail count
 
 // Parse CLI arguments
 const args = process.argv.slice(2)
@@ -189,19 +198,28 @@ function formatPostText(title: string, content: string, tagNames: string[]): str
 }
 
 /**
- * Fetch tag names for a post.
+ * Fetch tag names for a whole batch of posts in one query. Missing ids simply
+ * have no entry; tags are additive embedding context, so failures degrade to
+ * "no tags" rather than aborting the batch.
  */
-async function getPostTagNames(postId: PostId): Promise<string[]> {
+async function getPostTagNames(postIds: PostId[]): Promise<Map<string, string[]>> {
+  const byPost = new Map<string, string[]>()
+  if (postIds.length === 0) return byPost
   try {
-    const result = await db
-      .select({ name: tags.name })
-      .from(postTags)
-      .innerJoin(tags, eq(postTags.tagId, tags.id))
-      .where(eq(postTags.postId, postId))
-    return result.map((r) => r.name)
+    const rows = await db
+      .select({ postId: postTagAssignments.postId, name: postTags.name })
+      .from(postTagAssignments)
+      .innerJoin(postTags, eq(postTagAssignments.tagId, postTags.id))
+      .where(inArray(postTagAssignments.postId, postIds))
+    for (const row of rows) {
+      const names = byPost.get(row.postId) ?? []
+      names.push(row.name)
+      byPost.set(row.postId, names)
+    }
   } catch {
-    return []
+    // Fall through with whatever was collected (usually nothing).
   }
+  return byPost
 }
 
 // Query helpers
@@ -288,10 +306,59 @@ async function saveEmbedding(postId: PostId, embedding: number[]): Promise<void>
     .update(posts)
     .set({
       embedding: sql<number[]>`${vectorStr}::vector`,
-      embeddingModel: EMBEDDING_MODEL,
+      embeddingModel: embeddingModel!,
       embeddingUpdatedAt: new Date(),
     })
     .where(eq(posts.id, postId))
+}
+
+// ============================================================================
+// Knowledge-base article embeddings
+// ============================================================================
+
+/**
+ * Mirror of the app's formatArticleText: title repeated for weight, category
+ * appended for context, capped at the embedding input budget.
+ */
+function formatKbArticleText(title: string, content: string, categoryName?: string): string {
+  const parts = [title, title, content || '']
+  if (categoryName) parts.push(`Category: ${categoryName}`)
+  return parts.join('\n\n').slice(0, 8000)
+}
+
+async function getArticlesWithoutEmbeddings(batchLimit: number) {
+  return db
+    .select({
+      id: helpCenterArticles.id,
+      title: helpCenterArticles.title,
+      content: helpCenterArticles.content,
+      categoryName: helpCenterCategories.name,
+    })
+    .from(helpCenterArticles)
+    .leftJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
+    .where(and(sql`${helpCenterArticles.embedding} IS NULL`, isNull(helpCenterArticles.deletedAt)))
+    .limit(batchLimit)
+}
+
+async function countArticlesWithoutEmbeddings(): Promise<number> {
+  const result = await db
+    .select({ count: count() })
+    .from(helpCenterArticles)
+    .where(and(sql`${helpCenterArticles.embedding} IS NULL`, isNull(helpCenterArticles.deletedAt)))
+  return Number(result[0].count)
+}
+
+async function saveArticleEmbedding(articleId: KbArticleId, embedding: number[]): Promise<void> {
+  const vectorStr = `[${embedding.join(',')}]`
+
+  await db
+    .update(helpCenterArticles)
+    .set({
+      embedding: sql<number[]>`${vectorStr}::vector`,
+      embeddingModel: embeddingModel!,
+      embeddingUpdatedAt: new Date(),
+    })
+    .where(eq(helpCenterArticles.id, articleId))
 }
 
 // Main backfill functions
@@ -300,6 +367,15 @@ async function backfillSentiment(
 ): Promise<{ processed: number; failed: number; skipped: number }> {
   const totalToProcess = totalLimit ?? (await countPostsWithoutSentiment())
   console.log(`\n📊 Processing sentiment for ${totalToProcess} posts...`)
+
+  // Dry run: count and report. The loop below re-queries "posts without
+  // sentiment" each pass, and a dry run writes nothing, so it would fetch the
+  // same batch forever.
+  if (dryRun) {
+    const pending = Math.min(totalLimit ?? Infinity, await countPostsWithoutSentiment())
+    console.log(`  [DRY RUN] Would analyze sentiment for ${pending} posts.`)
+    return { processed: pending, failed: 0, skipped: 0 }
+  }
 
   let processed = 0
   let failed = 0
@@ -334,32 +410,27 @@ async function backfillSentiment(
     consecutiveSkips = 0
 
     for (const post of postsToProcess) {
-      if (dryRun) {
-        console.log(`  [DRY RUN] Would analyze sentiment: ${post.title.substring(0, 50)}...`)
+      const result = await analyzeSentiment(post.title, post.content || '')
+      if (result) {
+        await saveSentiment(post.id, result)
+        console.log(
+          `  ✅ ${post.title.substring(0, 40)}... → ${result.sentiment} (${(result.confidence * 100).toFixed(0)}%)`
+        )
         processed++
+        // Clear from failed map on success
+        failedSentimentPosts.delete(post.id)
       } else {
-        const result = await analyzeSentiment(post.title, post.content || '')
-        if (result) {
-          await saveSentiment(post.id, result)
-          console.log(
-            `  ✅ ${post.title.substring(0, 40)}... → ${result.sentiment} (${(result.confidence * 100).toFixed(0)}%)`
-          )
-          processed++
-          // Clear from failed map on success
-          failedSentimentPosts.delete(post.id)
+        const failCount = (failedSentimentPosts.get(post.id) || 0) + 1
+        failedSentimentPosts.set(post.id, failCount)
+        if (failCount >= MAX_FAIL_ATTEMPTS) {
+          console.log(`  ⏭️  ${post.title.substring(0, 40)}... → skipping (failed ${failCount}x)`)
+          skipped++
         } else {
-          const failCount = (failedSentimentPosts.get(post.id) || 0) + 1
-          failedSentimentPosts.set(post.id, failCount)
-          if (failCount >= MAX_FAIL_ATTEMPTS) {
-            console.log(`  ⏭️  ${post.title.substring(0, 40)}... → skipping (failed ${failCount}x)`)
-            skipped++
-          } else {
-            console.log(
-              `  ❌ ${post.title.substring(0, 40)}... → failed (attempt ${failCount}/${MAX_FAIL_ATTEMPTS})`
-            )
-          }
-          failed++
+          console.log(
+            `  ❌ ${post.title.substring(0, 40)}... → failed (attempt ${failCount}/${MAX_FAIL_ATTEMPTS})`
+          )
         }
+        failed++
       }
     }
 
@@ -369,9 +440,7 @@ async function backfillSentiment(
     console.log(`  Progress: ${processed} processed, ${failed} failed, ${skipped} skipped`)
 
     // Rate limit delay
-    if (!dryRun) {
-      await sleep(RATE_LIMIT_DELAY_MS)
-    }
+    await sleep(RATE_LIMIT_DELAY_MS)
   }
 
   return { processed, failed, skipped }
@@ -382,6 +451,13 @@ async function backfillEmbeddings(
 ): Promise<{ processed: number; failed: number; skipped: number }> {
   const totalToProcess = totalLimit ?? (await countPostsWithoutEmbeddings())
   console.log(`\n🔢 Processing embeddings for ${totalToProcess} posts...`)
+
+  // Dry run: count and report (see backfillSentiment; same forever-batch trap).
+  if (dryRun) {
+    const pending = Math.min(totalLimit ?? Infinity, await countPostsWithoutEmbeddings())
+    console.log(`  [DRY RUN] Would generate embeddings for ${pending} posts.`)
+    return { processed: pending, failed: 0, skipped: 0 }
+  }
 
   let processed = 0
   let failed = 0
@@ -415,34 +491,31 @@ async function backfillEmbeddings(
     }
     consecutiveSkips = 0
 
+    // One tag lookup for the whole batch; tags enrich the embedding text.
+    const tagNamesByPost = await getPostTagNames(postsToProcess.map((p) => p.id))
+
     for (const post of postsToProcess) {
-      if (dryRun) {
-        console.log(`  [DRY RUN] Would generate embedding: ${post.title.substring(0, 50)}...`)
+      const tagNames = tagNamesByPost.get(post.id) ?? []
+      const text = formatPostText(post.title, post.content || '', tagNames)
+      const embedding = await generateEmbedding(text)
+      if (embedding) {
+        await saveEmbedding(post.id, embedding)
+        const tagInfo = tagNames.length > 0 ? ` [${tagNames.join(', ')}]` : ''
+        console.log(`  ✅ ${post.title.substring(0, 50)}...${tagInfo}`)
         processed++
+        failedEmbeddingPosts.delete(post.id)
       } else {
-        // Fetch tags for this post to include in embedding
-        const tagNames = await getPostTagNames(post.id)
-        const text = formatPostText(post.title, post.content || '', tagNames)
-        const embedding = await generateEmbedding(text)
-        if (embedding) {
-          await saveEmbedding(post.id, embedding)
-          const tagInfo = tagNames.length > 0 ? ` [${tagNames.join(', ')}]` : ''
-          console.log(`  ✅ ${post.title.substring(0, 50)}...${tagInfo}`)
-          processed++
-          failedEmbeddingPosts.delete(post.id)
+        const failCount = (failedEmbeddingPosts.get(post.id) || 0) + 1
+        failedEmbeddingPosts.set(post.id, failCount)
+        if (failCount >= MAX_FAIL_ATTEMPTS) {
+          console.log(`  ⏭️  ${post.title.substring(0, 50)}... → skipping (failed ${failCount}x)`)
+          skipped++
         } else {
-          const failCount = (failedEmbeddingPosts.get(post.id) || 0) + 1
-          failedEmbeddingPosts.set(post.id, failCount)
-          if (failCount >= MAX_FAIL_ATTEMPTS) {
-            console.log(`  ⏭️  ${post.title.substring(0, 50)}... → skipping (failed ${failCount}x)`)
-            skipped++
-          } else {
-            console.log(
-              `  ❌ ${post.title.substring(0, 50)}... → failed (attempt ${failCount}/${MAX_FAIL_ATTEMPTS})`
-            )
-          }
-          failed++
+          console.log(
+            `  ❌ ${post.title.substring(0, 50)}... → failed (attempt ${failCount}/${MAX_FAIL_ATTEMPTS})`
+          )
         }
+        failed++
       }
     }
 
@@ -452,9 +525,89 @@ async function backfillEmbeddings(
     console.log(`  Progress: ${processed} processed, ${failed} failed, ${skipped} skipped`)
 
     // Rate limit delay
-    if (!dryRun) {
-      await sleep(RATE_LIMIT_DELAY_MS)
+    await sleep(RATE_LIMIT_DELAY_MS)
+  }
+
+  return { processed, failed, skipped }
+}
+
+async function backfillArticleEmbeddings(
+  totalLimit?: number
+): Promise<{ processed: number; failed: number; skipped: number }> {
+  const totalToProcess = totalLimit ?? (await countArticlesWithoutEmbeddings())
+  console.log(`\n📚 Processing embeddings for ${totalToProcess} help-center articles...`)
+
+  // Dry run: count and report (see backfillSentiment; same forever-batch trap).
+  if (dryRun) {
+    const pending = Math.min(totalLimit ?? Infinity, await countArticlesWithoutEmbeddings())
+    console.log(`  [DRY RUN] Would generate embeddings for ${pending} articles.`)
+    return { processed: pending, failed: 0, skipped: 0 }
+  }
+
+  let processed = 0
+  let failed = 0
+  let skipped = 0
+  let consecutiveSkips = 0
+
+  while (true) {
+    const batch = await getArticlesWithoutEmbeddings(BATCH_SIZE)
+
+    if (batch.length === 0) break
+
+    const articlesToProcess = batch.filter((article) => {
+      const failCount = failedEmbeddingArticles.get(article.id) || 0
+      if (failCount >= MAX_FAIL_ATTEMPTS) {
+        skipped++
+        return false
+      }
+      return true
+    })
+
+    if (articlesToProcess.length === 0) {
+      consecutiveSkips++
+      if (consecutiveSkips > 5) {
+        console.log(`  ⚠️ All remaining articles have failed too many times, stopping.`)
+        break
+      }
+      await sleep(100)
+      continue
     }
+    consecutiveSkips = 0
+
+    for (const article of articlesToProcess) {
+      const text = formatKbArticleText(
+        article.title,
+        article.content || '',
+        article.categoryName ?? undefined
+      )
+      const embedding = await generateEmbedding(text)
+      if (embedding) {
+        await saveArticleEmbedding(article.id, embedding)
+        console.log(`  ✅ ${article.title.substring(0, 50)}...`)
+        processed++
+        failedEmbeddingArticles.delete(article.id)
+      } else {
+        const failCount = (failedEmbeddingArticles.get(article.id) || 0) + 1
+        failedEmbeddingArticles.set(article.id, failCount)
+        if (failCount >= MAX_FAIL_ATTEMPTS) {
+          console.log(
+            `  ⏭️  ${article.title.substring(0, 50)}... → skipping (failed ${failCount}x)`
+          )
+          skipped++
+        } else {
+          console.log(
+            `  ❌ ${article.title.substring(0, 50)}... → failed (attempt ${failCount}/${MAX_FAIL_ATTEMPTS})`
+          )
+        }
+        failed++
+      }
+    }
+
+    const total = processed + skipped
+    if (totalLimit && total >= totalLimit) break
+    console.log(`  Progress: ${processed} processed, ${failed} failed, ${skipped} skipped`)
+
+    await sleep(RATE_LIMIT_DELAY_MS)
   }
 
   return { processed, failed, skipped }
@@ -481,6 +634,7 @@ async function main() {
   const results: {
     sentiment?: { processed: number; failed: number; skipped: number }
     embeddings?: { processed: number; failed: number; skipped: number }
+    articleEmbeddings?: { processed: number; failed: number; skipped: number }
   } = {}
 
   // Process sentiment
@@ -488,9 +642,10 @@ async function main() {
     results.sentiment = await backfillSentiment(limit)
   }
 
-  // Process embeddings
+  // Process embeddings (posts, then help-center articles)
   if (runEmbeddings) {
     results.embeddings = await backfillEmbeddings(limit)
+    results.articleEmbeddings = await backfillArticleEmbeddings(limit)
   }
 
   // Summary
@@ -502,14 +657,22 @@ async function main() {
   }
   if (results.embeddings) {
     console.log(
-      `Embeddings: ${results.embeddings.processed} processed, ${results.embeddings.failed} failed, ${results.embeddings.skipped} skipped`
+      `Post embeddings: ${results.embeddings.processed} processed, ${results.embeddings.failed} failed, ${results.embeddings.skipped} skipped`
+    )
+  }
+  if (results.articleEmbeddings) {
+    console.log(
+      `Article embeddings: ${results.articleEmbeddings.processed} processed, ${results.articleEmbeddings.failed} failed, ${results.articleEmbeddings.skipped} skipped`
     )
   }
 
-  const totalSkipped = (results.sentiment?.skipped ?? 0) + (results.embeddings?.skipped ?? 0)
+  const totalSkipped =
+    (results.sentiment?.skipped ?? 0) +
+    (results.embeddings?.skipped ?? 0) +
+    (results.articleEmbeddings?.skipped ?? 0)
   if (totalSkipped > 0) {
     console.log(
-      `\n⚠️  ${totalSkipped} posts were skipped after failing ${MAX_FAIL_ATTEMPTS} times.`
+      `\n⚠️  ${totalSkipped} items were skipped after failing ${MAX_FAIL_ATTEMPTS} times.`
     )
   }
   console.log('\n✅ Backfill complete!')

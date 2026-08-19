@@ -16,9 +16,11 @@ import {
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { ChangelogId, StatusId } from '@quackback/ids'
+import type { ChangelogId, PostStatusId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
+import { getCategoriesForEntries, categoryGateAllows } from './changelog-category.service'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 
 const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
@@ -63,9 +65,13 @@ export async function getPublicChangelogMetaById(
  * Get a published changelog entry by ID for public view
  *
  * @param id - Changelog entry ID
+ * @param actor - Viewer, for the category segment gate (defaults anonymous)
  * @returns Public changelog entry
  */
-export async function getPublicChangelogById(id: ChangelogId): Promise<PublicChangelogEntry> {
+export async function getPublicChangelogById(
+  id: ChangelogId,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<PublicChangelogEntry> {
   const now = new Date()
 
   const entry = await db.query.changelogEntries.findFirst({
@@ -73,6 +79,17 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
   })
 
   if (!entry || !entry.publishedAt) {
+    throw new NotFoundError(
+      'CHANGELOG_NOT_FOUND',
+      `Published changelog entry with ID ${id} not found`
+    )
+  }
+
+  // Category segment gate: same NotFoundError shape as a genuinely missing
+  // entry, so a gated entry can't be distinguished from one that doesn't exist.
+  const categoriesMap = await getCategoriesForEntries([id])
+  const categories = categoriesMap.get(id) ?? []
+  if (!categoryGateAllows(categories, actor)) {
     throw new NotFoundError(
       'CHANGELOG_NOT_FOUND',
       `Published changelog entry with ID ${id} not found`
@@ -121,15 +138,15 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     )
 
   // Get status info for linked posts
-  const statusIds = new Set<StatusId>()
+  const statusIds = new Set<PostStatusId>()
   linkedPostRows.forEach((lp) => {
     if (lp.postStatusId) statusIds.add(lp.postStatusId)
   })
 
-  const statusMap = new Map<StatusId, { name: string; color: string }>()
+  const statusMap = new Map<PostStatusId, { name: string; color: string }>()
   if (statusIds.size > 0) {
     const statuses = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.id, Array.from(statusIds) as StatusId[]),
+      where: inArray(postStatuses.id, Array.from(statusIds) as PostStatusId[]),
       columns: { id: true, name: true, color: true },
     })
     statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))
@@ -141,6 +158,8 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     content: entry.content,
     contentJson: entry.contentJson,
     publishedAt: entry.displayDate ?? entry.publishedAt,
+    featuredImageUrl: entry.featuredImageUrl,
+    categories: categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
     linkedPosts: linkedPostRows.map((lp) => ({
       id: lp.postId,
       title: lp.postTitle,
@@ -155,12 +174,16 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
  * List published changelog entries for public view
  *
  * @param params - List parameters
+ * @param actor - Viewer, for the category segment gate (defaults anonymous)
  * @returns Paginated list of public changelog entries
  */
-export async function listPublicChangelogs(params: {
-  cursor?: string
-  limit?: number
-}): Promise<PublicChangelogListResult> {
+export async function listPublicChangelogs(
+  params: {
+    cursor?: string
+    limit?: number
+  },
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<PublicChangelogListResult> {
   const { cursor, limit = 20 } = params
   const now = new Date()
 
@@ -242,31 +265,41 @@ export async function listPublicChangelogs(params: {
   }
 
   // Get status info for all linked posts
-  const publicStatusIds = new Set<StatusId>()
+  const publicStatusIds = new Set<PostStatusId>()
   allLinkedPosts.forEach((lp) => {
     if (lp.postStatusId) publicStatusIds.add(lp.postStatusId)
   })
 
-  const publicStatusMap = new Map<StatusId, { name: string; color: string }>()
+  const publicStatusMap = new Map<PostStatusId, { name: string; color: string }>()
   if (publicStatusIds.size > 0) {
     const statuses = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.id, Array.from(publicStatusIds) as StatusId[]),
+      where: inArray(postStatuses.id, Array.from(publicStatusIds) as PostStatusId[]),
       columns: { id: true, name: true, color: true },
     })
     statuses.forEach((s) => publicStatusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
+  // Category segment gate. Applied as a display-time filter over the
+  // already-paginated page (not a SQL predicate) — cheap given a workspace's
+  // changelog volume, and it keeps the cursor anchored on the underlying
+  // publish ordering rather than reshuffling pagination around a rare gate.
+  const categoriesByEntry = await getCategoriesForEntries(entryIds)
+
   // Transform to output format (no author info for public view)
   const result: PublicChangelogEntry[] = items
     .filter((entry) => entry.publishedAt !== null)
+    .filter((entry) => categoryGateAllows(categoriesByEntry.get(entry.id) ?? [], actor))
     .map((entry) => {
       const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
+      const entryCategories = categoriesByEntry.get(entry.id) ?? []
       return {
         id: entry.id,
         title: entry.title,
         content: entry.content,
         contentJson: entry.contentJson,
         publishedAt: entry.displayDate ?? entry.publishedAt!,
+        featuredImageUrl: entry.featuredImageUrl,
+        categories: entryCategories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
         linkedPosts: entryLinkedPosts.map((lp) => ({
           id: lp.postId,
           title: lp.postTitle,

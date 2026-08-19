@@ -6,16 +6,41 @@ import { Avatar } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { VotersModal } from '@/components/admin/feedback/voters-modal'
 import { adminQueries } from '@/lib/client/queries/admin'
+import type { VotersQuerySource } from '@/lib/client/queries/post-voters'
 import { useProxyVote } from '@/lib/client/mutations/posts'
 import { useCreatePortalUser } from '@/lib/client/mutations/users'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, PrincipalId } from '@quackback/ids'
+
+export type { VotersQuerySource }
 
 interface VotersAvatarStackProps {
   postId: PostId
   voteCount: number
   votersAdditionalPostIds?: PostId[]
   votersReadonly?: boolean
+  /**
+   * Where the voters list is read from. Defaults to the admin (post.view_private)
+   * query; the portal passes its post.vote_on_behalf-gated source.
+   */
+  votersQuery?: VotersQuerySource
+  /**
+   * Whether the add-voter member search is available. The search fn gates on
+   * people.view, so a vote manager who lacks it hides the whole add-voter
+   * affordance rather than 403-ing. Defaults true (admin presets hold it).
+   */
+  canAddVoter?: boolean
+  /**
+   * Whether the "create new user" branch of the add-voter flow is available.
+   * That fn gates on people.manage. Defaults true (admin presets hold it).
+   */
+  canCreateUser?: boolean
+  /**
+   * Extra invalidation to run after a proxy vote lands, so a source other than
+   * the admin cache (which the mutation already refreshes) can refetch — e.g.
+   * the portal voters query + the portal detail vote count.
+   */
+  onVotersInvalidate?: () => void
 }
 
 export function VotersAvatarStack({
@@ -23,6 +48,10 @@ export function VotersAvatarStack({
   voteCount,
   votersAdditionalPostIds,
   votersReadonly = false,
+  votersQuery,
+  canAddVoter = true,
+  canCreateUser = true,
+  onVotersInvalidate,
 }: VotersAvatarStackProps) {
   const [votersOpen, setVotersOpen] = useState(false)
   const [addVoterOpen, setAddVoterOpen] = useState(false)
@@ -36,7 +65,7 @@ export function VotersAvatarStack({
   const nameInputRef = useRef<HTMLInputElement>(null)
 
   const { data: voters } = useQuery({
-    ...adminQueries.postVoters(postId),
+    ...(votersQuery ?? adminQueries.postVoters(postId)),
   })
 
   const proxyVote = useProxyVote(postId)
@@ -67,9 +96,9 @@ export function VotersAvatarStack({
   }, [addVoterOpen, mode])
 
   const { data: searchResults = [] } = useQuery({
-    ...adminQueries.searchMembers({ search: debouncedSearch || undefined, limit: 20 }),
+    ...adminQueries.searchPeople({ search: debouncedSearch || undefined, limit: 20 }),
     placeholderData: keepPreviousData,
-    enabled: addVoterOpen,
+    enabled: addVoterOpen && canAddVoter,
   })
 
   const displayVoters = voters?.slice(0, 5) ?? []
@@ -90,6 +119,7 @@ export function VotersAvatarStack({
         if (!data.voted) {
           toast.info('This user has already voted')
         }
+        onVotersInvalidate?.()
         setAddVoterOpen(false)
       },
     })
@@ -128,13 +158,13 @@ export function VotersAvatarStack({
               key={voter.principalId}
               src={voter.avatarUrl}
               name={voter.displayName}
-              className="h-6 w-6 text-[9px] ring-2 ring-background"
+              className="h-6 w-6 text-xs ring-2 ring-background"
               style={{ zIndex: i + 1 }}
             />
           ))}
           {remainingCount > 0 && (
             <span
-              className="relative flex items-center justify-center h-6 min-w-6 px-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background"
+              className="relative flex items-center justify-center h-6 min-w-6 px-1 rounded-full bg-muted text-[11px] font-medium text-muted-foreground ring-2 ring-background"
               style={{ zIndex: displayVoters.length + 1 }}
             >
               +{remainingCount}
@@ -152,145 +182,151 @@ export function VotersAvatarStack({
         onOpenChange={setVotersOpen}
         additionalPostIds={votersAdditionalPostIds}
         readonly={votersReadonly}
+        votersQuery={votersQuery}
+        onVotersInvalidate={onVotersInvalidate}
       />
 
-      <Popover open={addVoterOpen} onOpenChange={setAddVoterOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className={cn(
-              'inline-flex items-center gap-1 text-xs',
-              'text-muted-foreground/60 hover:text-muted-foreground',
-              'transition-colors duration-150'
-            )}
-          >
-            <PlusIcon className="h-3 w-3" />
-            <span>Add voter</span>
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="end" sideOffset={4}>
-          {mode === 'list' ? (
-            <>
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30">
-                <MagnifyingGlassIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search members..."
-                  className="flex-1 text-xs bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
-                />
-              </div>
-              <div
-                className="max-h-56 overflow-y-auto p-1 scrollbar-thin"
-                onWheel={(e) => e.stopPropagation()}
-              >
-                {filteredSearchResults.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/60 text-center py-4">
-                    No members found
-                  </p>
-                ) : (
-                  filteredSearchResults.map((member) => (
-                    <button
-                      key={member.id}
-                      type="button"
-                      onClick={() => handleProxyVote(member.id)}
-                      disabled={proxyVote.isPending}
-                      className={cn(
-                        'w-full flex items-center gap-2 px-2 py-1.5 rounded-md',
-                        'text-xs text-foreground/80 hover:bg-muted/60 hover:text-foreground',
-                        'transition-colors duration-100 text-left',
-                        'disabled:opacity-50'
-                      )}
-                    >
-                      <Avatar
-                        src={member.image}
-                        name={member.name}
-                        className="h-5 w-5 text-[9px] shrink-0"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{member.name || 'Unnamed'}</div>
-                        {member.email && (
-                          <div className="text-muted-foreground/60 truncate">{member.email}</div>
+      {canAddVoter && (
+        <Popover open={addVoterOpen} onOpenChange={setAddVoterOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'inline-flex items-center gap-1 text-[13px]',
+                'text-muted-foreground/60 hover:text-muted-foreground',
+                'transition-colors duration-150'
+              )}
+            >
+              <PlusIcon className="h-3 w-3" />
+              <span>Add voter</span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-0" align="end" sideOffset={4}>
+            {mode === 'list' ? (
+              <>
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30">
+                  <MagnifyingGlassIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search members..."
+                    className="flex-1 text-[13px] bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+                  />
+                </div>
+                <div
+                  className="max-h-56 overflow-y-auto p-1 scrollbar-thin"
+                  onWheel={(e) => e.stopPropagation()}
+                >
+                  {filteredSearchResults.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/60 text-center py-4">
+                      No members found
+                    </p>
+                  ) : (
+                    filteredSearchResults.map((member) => (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onClick={() => handleProxyVote(member.id)}
+                        disabled={proxyVote.isPending}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2 py-1.5 rounded-md',
+                          'text-[13px] text-foreground/80 hover:bg-muted/60 hover:text-foreground',
+                          'transition-colors duration-100 text-left',
+                          'disabled:opacity-50'
                         )}
-                      </div>
+                      >
+                        <Avatar
+                          src={member.image}
+                          name={member.name}
+                          className="h-5 w-5 text-xs shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate">{member.name || 'Unnamed'}</div>
+                          {member.email && (
+                            <div className="text-muted-foreground/60 truncate">{member.email}</div>
+                          )}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+                {canCreateUser && (
+                  <div className="border-t border-border/30 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setMode('create')}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                    >
+                      <PlusIcon className="size-4" />
+                      Create new user
                     </button>
-                  ))
+                  </div>
                 )}
-              </div>
-              <div className="border-t border-border/30 p-1">
+              </>
+            ) : (
+              <div className="p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('list')
+                      setFormError(null)
+                    }}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ArrowLeftIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="text-xs font-medium">New user</span>
+                </div>
+                <div className="space-y-2">
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Name"
+                    className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border/50 bg-transparent outline-none placeholder:text-muted-foreground/50 focus:border-border"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleCreateAndVote()
+                      }
+                    }}
+                  />
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="Email (optional)"
+                    className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border/50 bg-transparent outline-none placeholder:text-muted-foreground/50 focus:border-border"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleCreateAndVote()
+                      }
+                    }}
+                  />
+                </div>
+                {formError && <p className="text-[11px] text-destructive">{formError}</p>}
                 <button
                   type="button"
-                  onClick={() => setMode('create')}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                  onClick={handleCreateAndVote}
+                  disabled={!newName.trim() || createUser.isPending || proxyVote.isPending}
+                  className={cn(
+                    'w-full text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors',
+                    'bg-primary text-primary-foreground hover:bg-primary/90',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
                 >
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Create new user
+                  {createUser.isPending ? 'Creating...' : 'Create & add vote'}
                 </button>
               </div>
-            </>
-          ) : (
-            <div className="p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('list')
-                    setFormError(null)
-                  }}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ArrowLeftIcon className="h-3.5 w-3.5" />
-                </button>
-                <span className="text-xs font-medium">New user</span>
-              </div>
-              <div className="space-y-2">
-                <input
-                  ref={nameInputRef}
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Name"
-                  className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border/50 bg-transparent outline-none placeholder:text-muted-foreground/50 focus:border-border"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleCreateAndVote()
-                    }
-                  }}
-                />
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="Email (optional)"
-                  className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border/50 bg-transparent outline-none placeholder:text-muted-foreground/50 focus:border-border"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleCreateAndVote()
-                    }
-                  }}
-                />
-              </div>
-              {formError && <p className="text-[11px] text-destructive">{formError}</p>}
-              <button
-                type="button"
-                onClick={handleCreateAndVote}
-                disabled={!newName.trim() || createUser.isPending || proxyVote.isPending}
-                className={cn(
-                  'w-full text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors',
-                  'bg-primary text-primary-foreground hover:bg-primary/90',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
-                )}
-              >
-                {createUser.isPending ? 'Creating...' : 'Create & add vote'}
-              </button>
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   )
 }

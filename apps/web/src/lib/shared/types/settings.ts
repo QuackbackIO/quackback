@@ -11,21 +11,45 @@
 
 export type {
   PortalConfig,
+  PortalNavConfig,
+  PortalNavItemConfig,
+  PortalNavItemType,
   PortalWelcomeCard,
+  HeaderDisplayMode,
   TenantSettings,
   HelpCenterConfig,
+  HelpCenterHeaderLink,
+  HelpCenterDomainConfig,
+  HelpCenterSeoConfig,
+  HelpCenterLocalesConfig,
+  HelpCenterLocaleChromeStrings,
+  HelpCenterAutoTranslateConfig,
   AuthConfig,
   VerifiedDomain,
 } from '@/lib/server/domains/settings'
 
 // FeatureFlags and FEATURE_FLAG_REGISTRY live only in settings.types (not barrel-exported)
-export type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
+export type {
+  FeatureFlags,
+  ProductId,
+  WidgetHomeCard,
+  WidgetHomeCardType,
+  WidgetCardAudience,
+  WidgetHomeConfig,
+  WidgetHeroPatternId,
+} from '@/lib/server/domains/settings/settings.types'
 
 // Runtime constants — safe because settings.types has no DB dependencies
 export {
+  DEFAULT_FEATURE_FLAGS,
   FEATURE_FLAG_REGISTRY,
   LAB_SECTIONS,
+  PRODUCT_DEFINITIONS,
+  getFirstEnabledAdminProductPath,
+  getProductFlagUpdate,
+  isProductEnabled,
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
+  DEFAULT_WIDGET_HOME_CARDS,
   PORTAL_WELCOME_CARD_TITLE_MAX,
 } from '@/lib/server/domains/settings/settings.types'

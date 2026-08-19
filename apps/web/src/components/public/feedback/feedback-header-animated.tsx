@@ -22,6 +22,9 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
+import { BoardCustomFields } from '@/components/public/feedback/board-custom-fields'
+import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
+import type { BoardSettings } from '@/lib/shared/db-types'
 import { signOut } from '@/lib/client/auth-client'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import type { JSONContent } from '@tiptap/react'
@@ -30,6 +33,7 @@ interface BoardOption {
   id: string
   name: string
   slug: string
+  settings?: BoardSettings
 }
 
 export interface FeedbackHeaderProps {
@@ -103,7 +107,13 @@ export function FeedbackHeaderAnimated({
   const [title, setTitle] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [contentMarkdown, setContentMarkdown] = useState('')
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({})
   const titleInputRef = useRef<HTMLInputElement>(null)
+
+  // The selected board's declared intake fields; answers validate against
+  // these client-side (same rules the server enforces on write).
+  const selectedBoard = boards.find((b) => b.id === selectedBoardId)
+  const boardCustomFields = selectedBoard?.settings?.customFields ?? []
 
   // Focus title input when form expands
   useEffect(() => {
@@ -168,6 +178,14 @@ export function FeedbackHeaderAnimated({
       return
     }
 
+    if (boardCustomFields.length > 0) {
+      const parsed = validatePostCustomFieldValues(boardCustomFields, customFieldValues)
+      if (!parsed.ok) {
+        setError(parsed.errors[0].message)
+        return
+      }
+    }
+
     try {
       if (!effectiveUser && canPostAnonymously) {
         const ok = await ensureAnonSession()
@@ -187,6 +205,7 @@ export function FeedbackHeaderAnimated({
         title: title.trim(),
         content: contentMarkdown,
         contentJson,
+        ...(boardCustomFields.length > 0 ? { customFields: customFieldValues } : {}),
       })
 
       resetForm()
@@ -225,6 +244,7 @@ export function FeedbackHeaderAnimated({
     setTitle('')
     setContentJson(null)
     setContentMarkdown('')
+    setCustomFieldValues({})
     setError('')
   }
 
@@ -264,7 +284,15 @@ export function FeedbackHeaderAnimated({
                   defaultMessage="Posting to"
                 />
               </span>
-              <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
+              <Select
+                value={selectedBoardId}
+                onValueChange={(id) => {
+                  setSelectedBoardId(id)
+                  // Answers are per-board: switching boards drops the previous
+                  // board's field values rather than smuggling them across.
+                  setCustomFieldValues({})
+                }}
+              >
                 <SelectTrigger
                   size="xs"
                   className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
@@ -278,7 +306,7 @@ export function FeedbackHeaderAnimated({
                 </SelectTrigger>
                 <SelectContent align="start">
                   {boards.map((board) => (
-                    <SelectItem key={board.id} value={board.id} className="text-xs py-1">
+                    <SelectItem key={board.id} value={board.id} className="py-1">
                       {board.name}
                     </SelectItem>
                   ))}
@@ -315,12 +343,16 @@ export function FeedbackHeaderAnimated({
             defaultMessage: "What's your idea?",
           })}
           value={title}
+          aria-label={intl.formatMessage({
+            id: 'portal.feedback.header.titleLabel',
+            defaultMessage: 'Feedback title',
+          })}
           onChange={(e) => {
             setTitle(e.target.value)
             if (!expanded) setExpanded(true)
           }}
           onFocus={() => !expanded && setExpanded(true)}
-          className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary"
+          className="flex-1 bg-transparent border-0 outline-none text-foreground font-semibold placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary focus-visible:ring-2 focus-visible:ring-ring/50"
           initial={false}
           animate={{
             fontSize: expanded ? '1.25rem' : '1rem',
@@ -368,14 +400,33 @@ export function FeedbackHeaderAnimated({
                 onChange={handleContentChange}
                 placeholder={intl.formatMessage({
                   id: 'portal.feedback.header.detailsPlaceholder',
-                  defaultMessage: 'Add more details...',
+                  defaultMessage: 'Add more details... Type / for commands',
                 })}
                 minHeight="150px"
                 borderless
+                toolbarPosition="bottom"
                 features={{ images: canUploadImages, quackbackEmbeds: true }}
                 onImageUpload={canUploadImages ? uploadImage : undefined}
               />
             </motion.div>
+
+            {/* Board-configured custom intake fields */}
+            {boardCustomFields.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, delay: 0.15 }}
+                className="px-4 sm:px-5 pb-4"
+              >
+                <BoardCustomFields
+                  fields={boardCustomFields}
+                  values={customFieldValues}
+                  onChange={(key, value) =>
+                    setCustomFieldValues((prev) => ({ ...prev, [key]: value }))
+                  }
+                />
+              </motion.div>
+            )}
 
             {/* Similar posts card - shown above footer as pre-submit prompt */}
             <SimilarPostsCard

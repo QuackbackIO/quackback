@@ -1,55 +1,72 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
 import { useIntl, FormattedMessage } from 'react-intl'
-import { BellIcon, InboxIcon, CheckIcon } from '@heroicons/react/24/outline'
+import {
+  BellIcon,
+  InboxIcon,
+  CheckIcon,
+  CheckCircleIcon,
+  EllipsisHorizontalIcon,
+  ExclamationTriangleIcon,
+} from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
-import { formatDistanceToNow, isToday, isYesterday, format } from 'date-fns'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/shared/utils'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  useNotifications,
-  type SerializedNotification,
-} from '@/lib/client/hooks/use-notifications-queries'
-import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
-import { getNotificationTypeConfig } from '@/components/notifications/notification-type-config'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useInfiniteNotifications } from '@/lib/client/hooks/use-notifications-queries'
+import {
+  useMarkNotificationAsRead,
+  useMarkAllNotificationsAsRead,
+  useArchiveNotification,
+  useArchiveAllReadNotifications,
+} from '@/lib/client/mutations'
+import { NotificationItem } from '@/components/notifications/notification-item'
+import { groupNotificationsByDate } from '@/components/notifications/group-by-date'
+
+interface NotificationsSearch {
+  filter?: 'unread'
+}
 
 export const Route = createFileRoute('/_portal/notifications')({
+  // Only the literal 'unread' is accepted — anything else falls back to the
+  // default All tab rather than surfacing a broken filter state.
+  validateSearch: (search: Record<string, unknown>): NotificationsSearch => ({
+    filter: search.filter === 'unread' ? 'unread' : undefined,
+  }),
   component: NotificationsPage,
 })
 
-/** Group notifications by time period for better scannability */
-function groupNotificationsByDate(notifications: SerializedNotification[]) {
-  const groups: { label: string; notifications: SerializedNotification[] }[] = []
-  const today: SerializedNotification[] = []
-  const yesterday: SerializedNotification[] = []
-  const earlier: SerializedNotification[] = []
-
-  for (const notification of notifications) {
-    const date = new Date(notification.createdAt)
-    if (isToday(date)) {
-      today.push(notification)
-    } else if (isYesterday(date)) {
-      yesterday.push(notification)
-    } else {
-      earlier.push(notification)
-    }
-  }
-
-  if (today.length > 0) groups.push({ label: 'today', notifications: today })
-  if (yesterday.length > 0) groups.push({ label: 'yesterday', notifications: yesterday })
-  if (earlier.length > 0) groups.push({ label: 'earlier', notifications: earlier })
-
-  return groups
-}
-
 function NotificationsPage() {
   const intl = useIntl()
-  const { data, isLoading } = useNotifications({ limit: 50 })
+  const navigate = Route.useNavigate()
+  const { filter } = Route.useSearch()
+  const unreadOnly = filter === 'unread'
+  const [archiveAllReadOpen, setArchiveAllReadOpen] = useState(false)
+  const { data, isLoading, isError, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useInfiniteNotifications({ unreadOnly })
   const markAsRead = useMarkNotificationAsRead()
   const markAllAsRead = useMarkAllNotificationsAsRead()
+  const archiveNotification = useArchiveNotification()
+  const archiveAllRead = useArchiveAllReadNotifications()
 
-  const notifications = data?.notifications ?? []
-  const unreadCount = data?.unreadCount ?? 0
+  const notifications = data?.pages.flatMap((page) => page.notifications) ?? []
+  const unreadCount = data?.pages[0]?.unreadCount ?? 0
   const groups = groupNotificationsByDate(notifications)
 
   const groupLabels: Record<string, string> = {
@@ -90,33 +107,142 @@ function NotificationsPage() {
               </p>
             </div>
           </div>
-          {unreadCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => markAllAsRead.mutate()}
-              disabled={markAllAsRead.isPending}
-              className="shrink-0 gap-1.5"
+          <div className="flex shrink-0 items-center gap-3">
+            <Tabs
+              value={unreadOnly ? 'unread' : 'all'}
+              onValueChange={(value) => {
+                void navigate({
+                  search: (prev) => ({
+                    ...prev,
+                    filter: value === 'unread' ? 'unread' : undefined,
+                  }),
+                  replace: true,
+                })
+              }}
             >
-              <CheckIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                <FormattedMessage
-                  id="portal.notifications.markAllRead"
-                  defaultMessage="Mark all read"
-                />
-              </span>
-              <span className="sm:hidden">
-                <FormattedMessage id="portal.notifications.readAll" defaultMessage="Read all" />
-              </span>
-            </Button>
-          )}
+              <TabsList>
+                <TabsTrigger value="all">
+                  <FormattedMessage id="portal.notifications.tabAll" defaultMessage="All" />
+                </TabsTrigger>
+                <TabsTrigger value="unread">
+                  <FormattedMessage id="portal.notifications.tabUnread" defaultMessage="Unread" />
+                  {unreadCount > 0 && (
+                    <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold">
+                      {unreadCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {unreadCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => markAllAsRead.mutate()}
+                disabled={markAllAsRead.isPending}
+                className="gap-1.5"
+              >
+                <CheckIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  <FormattedMessage
+                    id="portal.notifications.markAllRead"
+                    defaultMessage="Mark all read"
+                  />
+                </span>
+                <span className="sm:hidden">
+                  <FormattedMessage id="portal.notifications.readAll" defaultMessage="Read all" />
+                </span>
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={intl.formatMessage({
+                    id: 'portal.notifications.moreActions',
+                    defaultMessage: 'More notification actions',
+                  })}
+                >
+                  <EllipsisHorizontalIcon className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setArchiveAllReadOpen(true)}>
+                  <FormattedMessage
+                    id="portal.notifications.archiveAllRead"
+                    defaultMessage="Archive all read"
+                  />
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
+
+      <AlertDialog open={archiveAllReadOpen} onOpenChange={setArchiveAllReadOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              <FormattedMessage
+                id="portal.notifications.archiveDialog.title"
+                defaultMessage="Archive all read notifications?"
+              />
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <FormattedMessage
+                id="portal.notifications.archiveDialog.description"
+                defaultMessage="Read notifications will be removed from your list. This can't be undone."
+              />
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiveAllRead.isPending}>
+              <FormattedMessage
+                id="portal.notifications.archiveDialog.cancel"
+                defaultMessage="Cancel"
+              />
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => archiveAllRead.mutate()}
+              disabled={archiveAllRead.isPending}
+            >
+              <FormattedMessage
+                id="portal.notifications.archiveDialog.confirm"
+                defaultMessage="Archive"
+              />
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
           <Spinner size="xl" className="border-primary" />
+        </div>
+      ) : isError ? (
+        <div
+          className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in duration-200 fill-mode-backwards"
+          style={{ animationDelay: '75ms' }}
+        >
+          <EmptyState
+            icon={ExclamationTriangleIcon}
+            title={intl.formatMessage({
+              id: 'portal.notifications.error.title',
+              defaultMessage: 'Failed to load',
+            })}
+            description={intl.formatMessage({
+              id: 'portal.notifications.error.description',
+              defaultMessage: "We couldn't load your notifications. Please try again.",
+            })}
+            action={
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                <FormattedMessage id="portal.notifications.error.retry" defaultMessage="Retry" />
+              </Button>
+            }
+            className="py-20 px-6"
+          />
         </div>
       ) : notifications.length > 0 ? (
         <div className="space-y-6">
@@ -132,10 +258,13 @@ function NotificationsPage() {
               <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
                 <div className="divide-y divide-border/40">
                   {group.notifications.map((notification, index) => (
-                    <NotificationRow
+                    <NotificationItem
                       key={notification.id}
                       notification={notification}
+                      variant="full"
                       onMarkAsRead={(id) => markAsRead.mutate(id)}
+                      onArchive={(id) => archiveNotification.mutate(id)}
+                      className="animate-in fade-in-0 fill-mode-both"
                       style={{
                         animationDelay: `${groupIndex * 100 + index * 50}ms`,
                       }}
@@ -145,6 +274,38 @@ function NotificationsPage() {
               </div>
             </section>
           ))}
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="gap-1.5"
+              >
+                {isFetchingNextPage && <Spinner size="sm" />}
+                <FormattedMessage id="portal.notifications.loadMore" defaultMessage="Load more" />
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : unreadOnly ? (
+        <div
+          className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in duration-200 fill-mode-backwards"
+          style={{ animationDelay: '75ms' }}
+        >
+          <EmptyState
+            icon={CheckCircleIcon}
+            title={intl.formatMessage({
+              id: 'portal.notifications.unreadEmpty.title',
+              defaultMessage: 'All caught up',
+            })}
+            description={intl.formatMessage({
+              id: 'portal.notifications.unreadEmpty.description',
+              defaultMessage: 'No unread notifications.',
+            })}
+            className="py-20 px-6"
+          />
         </div>
       ) : (
         <div
@@ -166,111 +327,6 @@ function NotificationsPage() {
           />
         </div>
       )}
-    </div>
-  )
-}
-
-interface NotificationRowProps {
-  notification: SerializedNotification
-  onMarkAsRead: (id: SerializedNotification['id']) => void
-  style?: React.CSSProperties
-}
-
-function NotificationRow({ notification, onMarkAsRead, style }: NotificationRowProps) {
-  const config = getNotificationTypeConfig(notification.type)
-  const Icon = config.icon
-  const isUnread = !notification.readAt
-  const createdAt = new Date(notification.createdAt)
-
-  function handleClick(): void {
-    if (isUnread) {
-      onMarkAsRead(notification.id)
-    }
-  }
-
-  const content = (
-    <div
-      className={cn(
-        'group relative flex items-start gap-4 px-4 sm:px-5 py-4 transition-all duration-200',
-        'hover:bg-muted/40',
-        'animate-in fade-in-0 fill-mode-both',
-        isUnread && 'bg-primary/[0.02]'
-      )}
-      style={style}
-    >
-      {/* Unread accent bar */}
-      {isUnread && (
-        <div className="absolute start-0 top-3 bottom-3 w-0.5 rounded-full bg-primary" />
-      )}
-
-      {/* Icon */}
-      <div
-        className={cn(
-          'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
-          config.bgClass
-        )}
-      >
-        <Icon className={cn('h-5 w-5', config.iconClass)} />
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0 py-0.5">
-        <p
-          className={cn(
-            'text-sm leading-snug',
-            isUnread ? 'font-medium text-foreground' : 'text-foreground/90'
-          )}
-        >
-          {notification.title}
-        </p>
-        {notification.body && (
-          <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-            {notification.body}
-          </p>
-        )}
-        <div className="flex items-center gap-2 mt-2">
-          {notification.post && (
-            <>
-              <span className="text-xs text-muted-foreground/70 truncate max-w-[200px]">
-                {notification.post.title}
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-            </>
-          )}
-          <time
-            className="text-xs text-muted-foreground/70 whitespace-nowrap"
-            dateTime={createdAt.toISOString()}
-          >
-            {isToday(createdAt)
-              ? formatDistanceToNow(createdAt, { addSuffix: true })
-              : format(createdAt, 'MMM d, h:mm a')}
-          </time>
-        </div>
-      </div>
-
-      {/* Unread dot */}
-      {isUnread && (
-        <div className="flex-shrink-0 w-2.5 h-2.5 rounded-full bg-primary mt-2 ring-4 ring-primary/10" />
-      )}
-    </div>
-  )
-
-  if (notification.post && notification.postId) {
-    return (
-      <Link
-        to="/b/$slug/posts/$postId"
-        params={{ slug: notification.post.boardSlug, postId: notification.postId }}
-        onClick={handleClick}
-        className="block"
-      >
-        {content}
-      </Link>
-    )
-  }
-
-  return (
-    <div onClick={handleClick} className="cursor-default">
-      {content}
     </div>
   )
 }

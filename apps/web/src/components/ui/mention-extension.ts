@@ -109,5 +109,5 @@ function buildMentionExtension(scope: MentionScope) {
 /** Default: any mentionable user (admin/member/user). Used by comments. */
 export const MentionExtension = buildMentionExtension(undefined)
 
-/** Team-only: admin/member, for team-internal contexts like agent chat notes. */
+/** Team-only: admin/member, for team-internal contexts like agent conversation notes. */
 export const TeamMentionExtension = buildMentionExtension('team')

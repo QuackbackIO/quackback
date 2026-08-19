@@ -8,6 +8,7 @@ import {
   useSaveAuthProviderCredentials,
   useDeleteAuthProviderCredentials,
 } from '@/lib/client/mutations'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,12 +38,10 @@ interface AuthProviderCredentialsFormProps {
 const ADVANCED_FIELD_KEYS = new Set(['authorizationUrl', 'tokenUrl', 'scopes'])
 
 function CopyableField({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard()
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(value)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    await copy(value)
   }
 
   return (
@@ -215,12 +214,12 @@ export function AuthProviderCredentialsForm({
               }
             }}
           >
-            <SelectTrigger className="h-8 w-48 text-xs">
+            <SelectTrigger size="sm" className="w-48">
               <SelectValue placeholder="Pick a preset…" />
             </SelectTrigger>
             <SelectContent>
               {OIDC_PRESETS.map((p) => (
-                <SelectItem key={p.id} value={p.id} className="text-xs">
+                <SelectItem key={p.id} value={p.id}>
                   {p.label}
                 </SelectItem>
               ))}

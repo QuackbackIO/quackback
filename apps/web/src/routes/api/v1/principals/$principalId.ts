@@ -9,12 +9,19 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { NotFoundError } from '@/lib/shared/errors'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
-import type { PrincipalId } from '@quackback/ids'
+import { isValidTypeId } from '@quackback/ids'
+import type { PrincipalId, RoleId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 // Input validation schema for updating member role
 const updateMemberSchema = z.object({
   role: z.enum(['admin', 'member']),
+  /** Custom-role grant; rides role='member'. Validated in the service. */
+  roleId: z
+    .string()
+    .refine((v) => isValidTypeId(v, 'role'), 'Invalid role id')
+    .optional(),
 })
 
 /** Fetch a team member with user details, or throw NotFoundError. */
@@ -54,9 +61,13 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
        */
       GET: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          await withApiKeyAuth(request, { permission: PERMISSIONS.MEMBER_VIEW })
 
-          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
+          const principalId = parseTypeId<PrincipalId>(
+            params.principalId,
+            'principal',
+            'principal ID'
+          )
 
           const result = await fetchTeamMemberWithUser(principalId)
 
@@ -72,9 +83,16 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          const { principalId: actingPrincipalId } = await withApiKeyAuth(request, { role: 'admin' })
+          const auth = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.MEMBER_MANAGE,
+          })
+          const actingPrincipalId = auth.principalId
 
-          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
+          const principalId = parseTypeId<PrincipalId>(
+            params.principalId,
+            'principal',
+            'principal ID'
+          )
 
           const body = await request.json()
           const parsed = updateMemberSchema.safeParse(body)
@@ -88,7 +106,20 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
           const { updateMemberRole } =
             await import('@/lib/server/domains/principals/principal.service')
 
-          await updateMemberRole(principalId, parsed.data.role, actingPrincipalId)
+          const { resolveActorPermissions } = await import('@/lib/server/policy/permissions')
+          await updateMemberRole(
+            principalId,
+            parsed.data.role,
+            actingPrincipalId,
+            null,
+            undefined,
+            {
+              assignRoleId: parsed.data.roleId as RoleId | undefined,
+              // API keys carry the owner-preset authority model; the ceiling for
+              // an assignment grant is the key owner's resolved set.
+              granterPermissions: [...resolveActorPermissions(auth.role)],
+            }
+          )
 
           const result = await fetchTeamMemberWithUser(principalId)
 
@@ -104,9 +135,15 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          const { principalId: actingPrincipalId } = await withApiKeyAuth(request, { role: 'admin' })
+          const { principalId: actingPrincipalId } = await withApiKeyAuth(request, {
+            permission: PERMISSIONS.MEMBER_MANAGE,
+          })
 
-          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
+          const principalId = parseTypeId<PrincipalId>(
+            params.principalId,
+            'principal',
+            'principal ID'
+          )
 
           const { removeTeamMember } =
             await import('@/lib/server/domains/principals/principal.service')

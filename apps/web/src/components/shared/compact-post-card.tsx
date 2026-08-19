@@ -63,12 +63,12 @@ export function CompactPostCard({
         {(label || statusName) && (
           <div className="flex items-center gap-1.5 mb-0.5">
             {label && (
-              <span className="text-[10px] font-medium px-1.5 py-0 rounded-sm bg-muted text-muted-foreground/70">
+              <span className="text-[11px] font-medium px-1.5 py-0 rounded-sm bg-muted text-muted-foreground/70">
                 {label}
               </span>
             )}
             {statusName && (
-              <StatusBadge name={statusName} color={statusColor ?? ''} className="text-[10px]" />
+              <StatusBadge name={statusName} color={statusColor ?? ''} className="text-[11px]" />
             )}
           </div>
         )}

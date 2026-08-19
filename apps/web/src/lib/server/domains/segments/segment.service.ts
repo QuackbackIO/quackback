@@ -315,7 +315,7 @@ export async function removeUsersFromSegment(
   principalIds: PrincipalId[],
   actor: AuditActor | null = null,
   headers?: Headers
-): Promise<{ removed: number }> {
+): Promise<{ removed: number; removedPrincipalIds: PrincipalId[] }> {
   const segment = await getSegment(segmentId)
   if (!segment) {
     throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
@@ -326,7 +326,7 @@ export async function removeUsersFromSegment(
       'Cannot manually remove users from a dynamic segment'
     )
   }
-  if (principalIds.length === 0) return { removed: 0 }
+  if (principalIds.length === 0) return { removed: 0, removedPrincipalIds: [] }
 
   // The previous implementation skipped removeMember for the bulk path
   // and went straight to a single DELETE — which meant every admin
@@ -352,7 +352,10 @@ export async function removeUsersFromSegment(
       })
     }
   }
-  return { removed: removedRows.length }
+  return {
+    removed: removedRows.length,
+    removedPrincipalIds: removedRows.map((row) => row.principalId as PrincipalId),
+  }
 }
 
 // ============================================

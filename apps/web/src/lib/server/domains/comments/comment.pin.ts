@@ -5,12 +5,13 @@
  * Only accessible to team members.
  */
 
-import { db, eq, and, sql, comments, posts } from '@/lib/server/db'
-import { type CommentId, type PostId, type PrincipalId } from '@quackback/ids'
+import { db, eq, and, sql, postComments, posts } from '@/lib/server/db'
+import { type PostCommentId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
+import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 
 const log = logger.child({ component: 'comment-pin' })
 
@@ -22,8 +23,8 @@ const log = logger.child({ component: 'comment-pin' })
  * @param actor - Actor information with principalId and role
  */
 export async function restoreComment(
-  commentId: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  commentId: PostCommentId,
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<void> {
   log.info({ comment_id: commentId }, 'restore comment')
 
@@ -31,8 +32,8 @@ export async function restoreComment(
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can restore comments')
   }
 
-  const comment = await db.query.comments.findFirst({
-    where: eq(comments.id, commentId),
+  const comment = await db.query.postComments.findFirst({
+    where: eq(postComments.id, commentId),
     with: { post: true },
   })
 
@@ -47,22 +48,23 @@ export async function restoreComment(
   // Atomic transaction: restore comment + re-increment comment count
   const wasRestored = await db.transaction(async (tx) => {
     const [updatedComment] = await tx
-      .update(comments)
+      .update(postComments)
       .set({
         deletedAt: null,
         deletedByPrincipalId: null,
       })
-      .where(and(eq(comments.id, commentId), sql`${comments.deletedAt} IS NOT NULL`))
+      .where(and(eq(postComments.id, commentId), sql`${postComments.deletedAt} IS NOT NULL`))
       .returning()
 
     if (!updatedComment) return false
 
     // Re-increment comment count (only for public comments)
-    if (!comment.isPrivate) {
+    if (!comment.isPrivate && updatedComment.moderationState !== 'pending') {
       await tx
         .update(posts)
         .set({ commentCount: sql`${posts.commentCount} + 1` })
         .where(eq(posts.id, comment.postId))
+      await adjustCanonicalCommentCount(comment.postId, 1, tx)
     }
 
     return true
@@ -96,13 +98,13 @@ export async function restoreComment(
  * @param commentId - Comment ID to check
  * @returns Whether the comment can be pinned
  */
-export async function canPinComment(commentId: CommentId): Promise<{
+export async function canPinComment(commentId: PostCommentId): Promise<{
   canPin: boolean
   reason?: string
 }> {
   log.debug({ comment_id: commentId }, 'can pin comment check')
-  const comment = await db.query.comments.findFirst({
-    where: eq(comments.id, commentId),
+  const comment = await db.query.postComments.findFirst({
+    where: eq(postComments.id, commentId),
   })
 
   if (!comment) {
@@ -140,8 +142,8 @@ export async function canPinComment(commentId: CommentId): Promise<{
  * @returns The updated post ID
  */
 export async function pinComment(
-  commentId: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  commentId: PostCommentId,
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<{ postId: PostId }> {
   log.info({ comment_id: commentId }, 'pin comment')
   // Only team members can pin comments
@@ -156,8 +158,8 @@ export async function pinComment(
   }
 
   // Get the comment to find its post
-  const comment = await db.query.comments.findFirst({
-    where: eq(comments.id, commentId),
+  const comment = await db.query.postComments.findFirst({
+    where: eq(postComments.id, commentId),
     with: {
       post: {
         with: { board: true },
@@ -183,7 +185,7 @@ export async function pinComment(
  */
 export async function unpinComment(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<void> {
   log.info({ post_id: postId }, 'unpin comment')
   // Only team members can unpin comments

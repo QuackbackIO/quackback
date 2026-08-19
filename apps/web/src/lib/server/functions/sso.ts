@@ -26,6 +26,8 @@ import type { IdentityProviderId } from '@quackback/ids'
 import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
 import { requireAuth } from './auth-helpers'
 
 const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${string}`>
@@ -36,7 +38,7 @@ const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${str
  * on the next request because no secret is available.
  */
 export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const auth = await requireAuth({ roles: ['admin'] })
+  const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
   return withAuditEvent(
     {
@@ -121,7 +123,7 @@ const removeVerifiedDomainInput = z.object({ id: verifiedDomainId })
 export const removeVerifiedDomainFn = createServerFn({ method: 'POST' })
   .validator(removeVerifiedDomainInput)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const { removeVerifiedDomain } = await import('@/lib/server/domains/settings/settings.service')
     await removeVerifiedDomain(data.id)
     return { success: true }
@@ -133,7 +135,7 @@ export type VerifyDomainResult =
 
 /** Read-only listing of the workspace's verified-domain rows. */
 export const getVerifiedDomainsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ roles: ['admin'] })
+  await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
   const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
   const tenant = await getTenantSettings()
   return tenant?.verifiedDomains ?? []
@@ -153,7 +155,7 @@ const identityProviderId = z.string().regex(/^idp_/) as z.ZodType<IdentityProvid
 
 const idpRole = z.enum(['admin', 'member', 'user'])
 
-/** Claim-to-role mapping — the `role` section of `claim_mapping`. */
+/** Mirror of `IdentityProviderClaimMapping`, section by section. */
 const claimRoleSchema = z.object({
   claimPath: z.string(),
   rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
@@ -179,7 +181,6 @@ const claimMappingSchema = z.object({
     .object({
       map: z.array(z.object({ claimPath: z.string(), attributeKey: z.string() })).optional(),
       overrideExisting: z.boolean().optional(),
-      syncOnSignIn: z.boolean().optional(),
     })
     .optional(),
 })
@@ -226,7 +227,7 @@ const upsertIdentityProviderInput = z.object({
 
 /** Read-only listing of every identity provider with its linked domains. */
 export const listIdentityProvidersFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ roles: ['admin'] })
+  await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
   const { listIdentityProviders } =
     await import('@/lib/server/domains/settings/identity-providers.service')
   return listIdentityProviders()
@@ -241,7 +242,7 @@ export const listIdentityProvidersFn = createServerFn({ method: 'GET' }).handler
 export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
   .validator(upsertIdentityProviderInput)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { listIdentityProviders, upsertIdentityProvider } =
       await import('@/lib/server/domains/settings/identity-providers.service')
@@ -263,17 +264,19 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
       }
     }
 
+    // Field-level diff over the whole DTO. Recording only label + enabled left
+    // every field that decides identity resolution — the endpoints, clientId,
+    // scopes, the attribute mapping — with no trace, so repointing a claim and
+    // then repointing it back produced two identical rows.
+    const { before, after } = diffProviderAudit(prior ?? null, data)
+
     return withAuditEvent(
       {
         event: prior ? 'idp.updated' : 'idp.created',
         actor: actorFromAuth(auth),
         target: { type: 'identity_provider', id: prior?.id ?? data.registrationId },
-        before: prior ? { label: prior.label, enabled: prior.enabled } : null,
-        after: {
-          registrationId: data.registrationId,
-          label: data.label,
-          enabled: data.enabled ?? false,
-        },
+        before,
+        after,
         headers: getRequestHeaders(),
       },
       async () => upsertIdentityProvider(data)
@@ -290,7 +293,7 @@ const deleteIdentityProviderInput = z.object({ id: identityProviderId })
 export const deleteIdentityProviderFn = createServerFn({ method: 'POST' })
   .validator(deleteIdentityProviderInput)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     // Refuse to remove the workspace's only working sign-in method — doing so
     // would lock everyone out. Mirrors the UI's disabled Remove button.
@@ -336,7 +339,7 @@ const setProviderCredentialsInput = z.object({
 export const setProviderCredentialsFn = createServerFn({ method: 'POST' })
   .validator(setProviderCredentialsInput)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { listIdentityProviders, stampDetailsChanged } =
       await import('@/lib/server/domains/settings/identity-providers.service')
@@ -382,7 +385,7 @@ const addProviderDomainInput = z.object({
 export const addProviderDomainFn = createServerFn({ method: 'POST' })
   .validator(addProviderDomainInput)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { verifiableDomain } = await import('@/lib/server/auth/normalize-domain')
     const parsed = verifiableDomain.safeParse(data.name)
@@ -411,7 +414,7 @@ const verifyProviderDomainInput = z.object({
 export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
   .validator(verifyProviderDomainInput)
   .handler(async ({ data }): Promise<VerifyDomainResult> => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { getTenantSettings, stampVerifiedDomain } =
       await import('@/lib/server/domains/settings/settings.service')
@@ -476,7 +479,7 @@ const setDomainEnforcedInput = z.object({
 export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
   .validator(setDomainEnforcedInput)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { listIdentityProviders } =
       await import('@/lib/server/domains/settings/identity-providers.service')
@@ -528,13 +531,66 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
             )
           }
 
-          const { hasActiveRecoveryCodes } = await import('@/lib/server/auth/recovery-codes-status')
-          if (!(await hasActiveRecoveryCodes())) {
-            throw new ForbiddenError('RECOVERY_CODES_REQUIRED', 'recovery_codes_required')
-          }
+          const { assertBreakGlassAvailable } =
+            await import('@/lib/server/auth/sign-in-method-availability')
+          await assertBreakGlassAvailable()
         }
 
         return setVerifiedDomainEnforced(data.id, data.enforced)
       }
     )
+  })
+
+/**
+ * Read `scopes_supported` from a provider's discovery document.
+ *
+ * Backs the editor's inline scope validation — the check that would have caught
+ * the reported failure at configuration time instead of as an opaque
+ * `invalid_scope` after a round trip to the IdP.
+ *
+ * Returns null when the document is unreachable or omits the field, which the
+ * caller must treat as "unknown" rather than "nothing supported": the field is
+ * RECOMMENDED, not required.
+ */
+export const fetchDiscoveryScopesFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ discoveryUrl: httpsUrl }))
+  .handler(async ({ data }): Promise<{ scopesSupported: string[] | null }> => {
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    try {
+      // Same SSRF guard the connection test uses: validated, IP-pinned, no
+      // redirects, so an admin-supplied URL cannot probe the internal network.
+      const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+      const res = await safeFetch(data.discoveryUrl, { timeoutMs: 5000 })
+      if (!res.ok) return { scopesSupported: null }
+      const doc = (await res.json()) as { scopes_supported?: unknown }
+      if (!Array.isArray(doc.scopes_supported)) return { scopesSupported: null }
+      return {
+        scopesSupported: doc.scopes_supported.filter((s): s is string => typeof s === 'string'),
+      }
+    } catch {
+      // Unreachable is not an error the admin needs to act on here; the
+      // connection test is where a broken discovery URL gets reported.
+      return { scopesSupported: null }
+    }
+  })
+
+/**
+ * Declared LAST deliberately. `sso-domain-guards.test.ts` resolves these
+ * handlers by declaration order (`ssoHandlers[9]`), so inserting a function
+ * mid-file silently repoints every later index at the wrong handler — the
+ * failure reads as a function returning someone else's shape, not as an
+ * ordering problem. Append here; do not insert above.
+ */
+/**
+ * How many identities sign in through this provider. `deleteIdentityProviderFn`
+ * refuses while any exist (removal would orphan them), so the Remove control
+ * states the count up front instead of surfacing it as a failed delete.
+ */
+export const getProviderAccountCountFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ id: identityProviderId }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { countProviderAccounts } =
+      await import('@/lib/server/domains/settings/identity-provider-accounts')
+    return { count: await countProviderAccounts(data.id) }
   })

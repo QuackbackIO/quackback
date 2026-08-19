@@ -34,17 +34,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ChannelBadge } from '@/components/admin/chat/channel-badge'
-import { NewConversationDialog } from '@/components/admin/chat/new-conversation-dialog'
-import { realEmail } from '@/lib/shared/anonymous-email'
+import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
+import { NewConversationDialog } from '@/components/admin/conversation/new-conversation-dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/shared/types'
-import type { ConversationDTO, ConversationStatus } from '@/lib/shared/chat/types'
+import type { ConversationDTO, ConversationStatus } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { UserSegmentBadges } from '@/components/admin/users/user-segments'
+import { UserTagControl } from '@/components/admin/users/user-tag-control'
+import { UserCompanyControl } from '@/components/admin/users/user-company-control'
+import {
+  BlockPersonControl,
+  usePersonBlockStatus,
+} from '@/components/admin/users/block-person-control'
+import { ChangelogSubscriptionControl } from '@/components/admin/users/changelog-subscription-control'
+import { DuplicateUsersWarning } from '@/components/admin/users/duplicate-users-warning'
+import { MergeLeadControl } from '@/components/admin/users/merge-lead-control'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
-import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/chat'
+import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
 
 interface UserDetailProps {
@@ -110,7 +118,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
     <div className="flex items-center gap-1">
       {types.includes('authored') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-primary/10 text-primary"
           title="Authored this post"
         >
           <PencilSquareIcon className="h-2.5 w-2.5" />
@@ -118,7 +126,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
       )}
       {types.includes('commented') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400"
           title="Commented on this post"
         >
           <ChatBubbleLeftIcon className="h-2.5 w-2.5" />
@@ -126,7 +134,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
       )}
       {types.includes('voted') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400"
           title="Voted on this post"
         >
           <HandThumbUpIcon className="h-2.5 w-2.5" />
@@ -177,7 +185,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
           </div>
           <Badge
             variant="secondary"
-            className="text-[10px] font-normal bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
+            className="text-[11px] font-normal bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
           >
             <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
             {post.boardName}
@@ -192,7 +200,7 @@ type StatusFilter = ConversationStatus | 'all'
 
 const STATUS_STYLE: Record<ConversationStatus, string> = {
   open: 'bg-emerald-500/10 text-emerald-600',
-  pending: 'bg-amber-500/10 text-amber-600',
+  snoozed: 'bg-amber-500/10 text-amber-600',
   closed: 'bg-muted text-muted-foreground',
 }
 
@@ -265,14 +273,14 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
             <button
               type="button"
               className={cn(
-                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
                 status !== 'all'
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted'
               )}
             >
               <span className="capitalize">{status === 'all' ? 'Status' : status}</span>
-              <ChevronDownIcon className="h-3 w-3" />
+              <ChevronDownIcon className="size-3.5" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -281,18 +289,17 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                 setStatus('all')
                 setExpandedId(null)
               }}
-              className="text-xs"
             >
               All statuses
             </DropdownMenuItem>
-            {(['open', 'pending', 'closed'] as const).map((s) => (
+            {(['open', 'snoozed', 'closed'] as const).map((s) => (
               <DropdownMenuItem
                 key={s}
                 onClick={() => {
                   setStatus(s)
                   setExpandedId(null)
                 }}
-                className="text-xs capitalize"
+                className="capitalize"
               >
                 {s}
               </DropdownMenuItem>
@@ -326,7 +333,7 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                       </span>
                       <span
                         className={cn(
-                          'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                          'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium capitalize',
                           STATUS_STYLE[c.status]
                         )}
                       >
@@ -342,7 +349,7 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                           <Avatar
                             src={c.assignedAgent.avatarUrl}
                             name={c.assignedAgent.displayName ?? 'Agent'}
-                            className="size-4 text-[8px]"
+                            className="size-4 text-xs"
                           />
                           {c.assignedAgent.displayName ?? 'Agent'}
                         </span>
@@ -416,6 +423,10 @@ export function UserDetail({
   isRemovePending,
   currentMemberRole,
 }: UserDetailProps) {
+  // The account address, or a lead's captured contact address. Both are
+  // sanitised in the DTO (`user.detail.ts`), so a placeholder is already null
+  // and reads here as "no address" rather than as something writable.
+  const displayEmail = user?.email ?? user?.contactEmail ?? null
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -427,11 +438,14 @@ export function UserDetail({
     (settings?.featureFlags as FeatureFlags | undefined)?.supportInbox ?? false
   // Check if current user can manage portal users
   const canManageUsers = currentMemberRole === 'admin'
+  const { blocked } = usePersonBlockStatus(user?.principalId as PrincipalId | undefined)
 
   const startEditing = () => {
     if (!user) return
     setEditName(user.name || '')
-    setEditEmail(user.email || '')
+    // A lead's editable address is the captured contact email; the account
+    // email behind it is a synthetic placeholder.
+    setEditEmail(user.email ?? user.contactEmail ?? '')
     setIsEditing(true)
   }
 
@@ -450,8 +464,9 @@ export function UserDetail({
     if (trimmedName && trimmedName !== (user.name || '')) {
       updates.name = trimmedName
     }
+    const currentEmail = user.email ?? user.contactEmail ?? null
     const newEmail = trimmedEmail || null
-    if (newEmail !== (user.email || null)) {
+    if (newEmail !== currentEmail) {
       updates.email = newEmail
     }
 
@@ -482,7 +497,7 @@ export function UserDetail({
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {backHeader}
         <DetailSkeleton />
       </div>
@@ -494,7 +509,7 @@ export function UserDetail({
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       {backHeader}
       <div className="p-4 space-y-6">
         {/* Profile Header */}
@@ -543,6 +558,8 @@ export function UserDetail({
                   {user.emailVerified && (
                     <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />
                   )}
+                  {/* For a lead the form edits the captured contact email,
+                      never the placeholder account address. */}
                   {canManageUsers && (
                     <button
                       type="button"
@@ -554,14 +571,23 @@ export function UserDetail({
                     </button>
                   )}
                 </div>
-                {user.email ? (
-                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                {displayEmail ? (
+                  <p className="text-sm text-muted-foreground truncate">{displayEmail}</p>
                 ) : (
-                  <p className="text-sm text-muted-foreground/50 italic">No email</p>
+                  <p className="text-sm text-muted-foreground/50 italic">
+                    No email &middot; cannot receive notifications
+                  </p>
                 )}
-                <Badge variant="secondary" className="mt-2 text-xs">
-                  Portal User
-                </Badge>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <Badge variant="secondary" className="text-xs">
+                    {user.isLead ? 'Lead' : 'User'}
+                  </Badge>
+                  {blocked && (
+                    <Badge variant="destructive" className="text-xs">
+                      Blocked
+                    </Badge>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -570,11 +596,9 @@ export function UserDetail({
               size="sm"
               variant="outline"
               onClick={() => setComposeOpen(true)}
-              disabled={!realEmail(user.email)}
+              disabled={!displayEmail}
               title={
-                realEmail(user.email)
-                  ? undefined
-                  : 'This user has no email address to deliver a message to'
+                displayEmail ? undefined : 'This user has no email address to deliver a message to'
               }
             >
               <ChatBubbleLeftIcon className="me-1.5 h-4 w-4" />
@@ -589,9 +613,18 @@ export function UserDetail({
             initialTarget={{
               principalId: user.principalId,
               name: user.name,
-              email: user.email,
+              email: displayEmail,
               image: user.image,
             }}
+          />
+        )}
+
+        {/* Possible duplicates — renders nothing when the lookup is clean. */}
+        {!isEditing && (
+          <DuplicateUsersWarning
+            principalId={user.principalId as PrincipalId}
+            currentName={user.name}
+            canManage={canManageUsers}
           />
         )}
 
@@ -663,6 +696,32 @@ export function UserDetail({
           </div>
         )}
 
+        {/* Tags */}
+        <div className="border-t border-border/50 pt-4">
+          <h3 className="text-sm font-medium mb-3">Tags</h3>
+          <UserTagControl
+            principalId={user.principalId as PrincipalId}
+            canManage={canManageUsers}
+          />
+        </div>
+
+        {/* Company */}
+        <div className="border-t border-border/50 pt-4">
+          <h3 className="text-sm font-medium mb-3">Company</h3>
+          <UserCompanyControl
+            principalId={user.principalId as PrincipalId}
+            canManage={canManageUsers}
+          />
+        </div>
+
+        {/* Changelog emails */}
+        {canManageUsers && (
+          <div className="border-t border-border/50 pt-4">
+            <h3 className="text-sm font-medium mb-3">Notifications</h3>
+            <ChangelogSubscriptionControl principalId={user.principalId as PrincipalId} />
+          </div>
+        )}
+
         {/* Support conversations */}
         <UserConversations principalId={user.principalId as PrincipalId} />
 
@@ -700,6 +759,24 @@ export function UserDetail({
           <div className="border-t border-border/50 pt-4 space-y-3">
             <h3 className="text-sm font-medium">Actions</h3>
 
+            {/* Block / Unblock — rejects future messages and re-registration. */}
+            <BlockPersonControl
+              principalId={user.principalId as PrincipalId}
+              personName={user.name}
+              className="w-full"
+            />
+
+            {/* Merge — leads only: fold the lead's activity into an identified
+                user and retire the anonymous identity. */}
+            {user.isLead && (
+              <MergeLeadControl
+                principalId={user.principalId as PrincipalId}
+                leadName={user.name}
+                onMerged={onClose}
+                className="w-full"
+              />
+            )}
+
             {/* Remove User */}
             <Button
               variant="destructive"
@@ -719,7 +796,7 @@ export function UserDetail({
               open={removeDialogOpen}
               onOpenChange={setRemoveDialogOpen}
               title={`Remove ${user.name || 'this user'}?`}
-              description="This will remove the user from your portal. They will lose access to vote and comment but their existing activity will remain. Their global account is preserved and they can sign up again."
+              description="This will remove the user from your portal. They lose access to vote and comment, and their votes are withdrawn. Their posts, comments and conversations stay, reattributed to “Deleted user”. Their global account is preserved and they can sign up again."
               confirmLabel="Remove"
               variant="destructive"
               isPending={isRemovePending}

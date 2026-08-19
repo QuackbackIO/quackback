@@ -42,6 +42,7 @@ const mockUserRows = [
     postCount: 3,
     commentCount: 5,
     voteCount: 10,
+    country: 'US',
   },
 ]
 
@@ -68,6 +69,9 @@ function createChain(resolveValue: unknown = []) {
     postCount: 'post_count',
     commentCount: 'comment_count',
     voteCount: 'vote_count',
+    userId: 'mock_user_col',
+    lastSessionAt: 'last_session_at',
+    lastDeviceAt: 'last_device_at',
   })
   chain.then = (resolve: (v: unknown) => void) => {
     resolve(resolveValue)
@@ -76,14 +80,16 @@ function createChain(resolveValue: unknown = []) {
   return chain
 }
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real module first so every table the users domain transitively
+// pulls in stays defined, then override the handful this suite asserts on.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: vi.fn(() => {
       selectCallCount.count++
       const c = selectCallCount.count
-      if (c <= 3) return createChain([]) // subqueries
-      if (c === 4) return createChain(mockUserRows) // main query
-      if (c === 5) return createChain(mockCountResult) // count query
+      if (c === 1) return createChain(mockUserRows) // main query
+      if (c === 2) return createChain(mockCountResult) // count query
       return createChain([]) // segment/other queries
     }),
     query: {
@@ -106,6 +112,8 @@ vi.mock('@/lib/server/db', () => ({
     id: 'principal.id',
     userId: 'principal.user_id',
     role: 'principal.role',
+    type: 'principal.type',
+    contactEmail: 'principal.contact_email',
     createdAt: 'principal.created_at',
   },
   user: {
@@ -117,10 +125,16 @@ vi.mock('@/lib/server/db', () => ({
     metadata: 'user.metadata',
     createdAt: 'user.created_at',
     updatedAt: 'user.updated_at',
+    country: 'user.country',
   },
   posts: { principalId: 'posts.principal_id', deletedAt: 'posts.deleted_at' },
-  comments: { principalId: 'comments.principal_id', deletedAt: 'comments.deleted_at' },
-  votes: { principalId: 'votes.principal_id' },
+  postComments: {
+    principalId: 'post_comments.principal_id',
+    deletedAt: 'post_comments.deleted_at',
+  },
+  postVotes: { principalId: 'post_votes.principal_id' },
+  postCommentReactions: { principalId: 'post_comment_reactions.principal_id' },
+  conversationMessages: { principalId: 'conversation_messages.principal_id' },
   postStatuses: {},
   boards: {},
   userSegments: {
@@ -135,9 +149,16 @@ vi.mock('@/lib/server/db', () => ({
     deletedAt: 'segments.deleted_at',
   },
   userAttributeDefinitions: 'user_attribute_definitions',
+  session: { userId: 'session.user_id', updatedAt: 'session.updated_at' },
+  visitorDevices: {
+    principalId: 'visitor_devices.principal_id',
+    lastSeenAt: 'visitor_devices.last_seen_at',
+  },
+  isNotNull: () => 'is_not_null_result',
 }))
 
-vi.mock('@quackback/ids', () => ({
+vi.mock('@quackback/ids', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@quackback/ids')>()),
   generateId: vi.fn((p: string) => `${p}_generated123`),
 }))
 
@@ -175,9 +196,8 @@ describe('listPortalUsers', () => {
     vi.mocked(db.select).mockImplementation(() => {
       selectCallCount.count++
       const c = selectCallCount.count
-      if (c <= 3) return createChain([]) as never
-      if (c === 4) return createChain(mockUserRows) as never
-      if (c === 5) return createChain(mockCountResult) as never
+      if (c === 1) return createChain(mockUserRows) as never
+      if (c === 2) return createChain(mockCountResult) as never
       return createChain([]) as never
     })
   })
@@ -201,6 +221,13 @@ describe('listPortalUsers', () => {
     expect(typeof item.postCount).toBe('number')
     expect(typeof item.commentCount).toBe('number')
     expect(typeof item.voteCount).toBe('number')
+  })
+
+  it('should include country in results', async () => {
+    const { listPortalUsers } = await import('../user.service')
+    const result = await listPortalUsers()
+
+    expect(result.items[0]?.country).toBe('US')
   })
 
   it('should include segments array in results', async () => {
@@ -360,5 +387,55 @@ describe('listPortalUsers', () => {
 
     expect(result.total).toBe(1)
     expect(result.items).toHaveLength(1)
+  })
+})
+
+describe('listPortalUsers lifecycle filter', () => {
+  beforeEach(() => {
+    selectCallCount.count = 0
+    mockEq.mockClear()
+  })
+
+  it('defaults to identified users (type=user)', async () => {
+    const { listPortalUsers } = await import('../user.service')
+    await listPortalUsers({})
+    expect(mockEq).toHaveBeenCalledWith('principal.type', 'user')
+    expect(mockEq).not.toHaveBeenCalledWith('principal.type', 'anonymous')
+  })
+
+  it('selects engaged anonymous principals for leads', async () => {
+    const { listPortalUsers } = await import('../user.service')
+    await listPortalUsers({ lifecycle: 'leads' })
+    expect(mockEq).toHaveBeenCalledWith('principal.type', 'anonymous')
+    expect(mockEq).not.toHaveBeenCalledWith('principal.type', 'user')
+  })
+
+  // A lead is engaged, not merely anonymous: the leads view must carry the
+  // engagement predicate (authored content or a volunteered contact email)
+  // so idle minted sessions (visitors) never appear in the directory.
+  // The tagged-template mock receives (strings, ...values); collect the
+  // literal SQL skeletons so assertions can probe for the predicate shape.
+  function sqlSkeletons(): string[] {
+    return (mockSql.mock.calls as unknown as unknown[][])
+      .map((call) => (Array.isArray(call[0]) ? (call[0] as string[]).join('') : ''))
+      .filter((skeleton) => skeleton.includes('EXISTS (SELECT 1 FROM'))
+  }
+
+  it('gates the leads view on engagement, not mere anonymity', async () => {
+    mockSql.mockClear()
+    const { listPortalUsers } = await import('../user.service')
+    await listPortalUsers({ lifecycle: 'leads' })
+    const skeletons = sqlSkeletons()
+    expect(skeletons).toHaveLength(1)
+    expect(skeletons[0]).toContain('IS NOT NULL')
+    // one probe per authored-content table: messages, posts, votes, comments, reactions
+    expect(skeletons[0].match(/EXISTS \(SELECT 1 FROM/g)).toHaveLength(5)
+  })
+
+  it('does not apply the engagement predicate to the users view', async () => {
+    mockSql.mockClear()
+    const { listPortalUsers } = await import('../user.service')
+    await listPortalUsers({})
+    expect(sqlSkeletons()).toHaveLength(0)
   })
 })

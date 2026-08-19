@@ -13,9 +13,15 @@ export interface RetryOptions {
   maxRetries?: number
   baseDelayMs?: number
   maxDelayMs?: number
+  /**
+   * Optional abort signal. When it fires during a backoff sleep the sleep
+   * rejects promptly (carrying the accumulated retryCount) and no further dial
+   * is attempted — an aborted caller never waits out a backoff or re-dials.
+   */
+  signal?: AbortSignal
 }
 
-const DEFAULT_OPTIONS: Required<RetryOptions> = {
+const DEFAULT_OPTIONS: Required<Omit<RetryOptions, 'signal'>> = {
   maxRetries: 3,
   baseDelayMs: 1000,
   maxDelayMs: 30000,
@@ -26,6 +32,7 @@ export async function withRetry<T>(
   options: RetryOptions = {}
 ): Promise<{ result: T; retryCount: number }> {
   const { maxRetries, baseDelayMs, maxDelayMs } = { ...DEFAULT_OPTIONS, ...options }
+  const signal = options.signal
 
   let lastError: Error = new Error('No attempts made')
   let retryCount = 0
@@ -57,7 +64,15 @@ export async function withRetry<T>(
         'retrying ai call'
       )
 
-      await sleep(delay)
+      try {
+        await sleep(delay, signal)
+      } catch (abortErr) {
+        // Aborted mid-backoff: surface the abort, not the transient error, and
+        // stop — never re-dial. Preserve the retry count already accumulated.
+        const err = abortErr instanceof Error ? abortErr : new Error(String(abortErr))
+        ;(err as Error & { retryCount?: number }).retryCount = retryCount
+        throw err
+      }
     }
   }
 
@@ -78,6 +93,30 @@ export function isRetryableError(error: Error): boolean {
   return RETRYABLE_ERROR_PATTERN.test(error.message)
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signalReason(signal))
+      return
+    }
+    const timer = setTimeout(() => {
+      cleanup()
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      cleanup()
+      reject(signalReason(signal!))
+    }
+    const cleanup = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+function signalReason(signal: AbortSignal): Error {
+  const reason = (signal as AbortSignal & { reason?: unknown }).reason
+  if (reason instanceof Error) return reason
+  return new Error(typeof reason === 'string' && reason ? reason : 'aborted')
 }

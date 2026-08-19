@@ -1,0 +1,512 @@
+/**
+ * Tests for approveAssistantActionFn / rejectAssistantActionFn.
+ *
+ * Orchestration only: the fns resolve the tool spec, gate on the approver
+ * holding every permission the tool declares, decide, and (on approve) run
+ * the same execute-approved pipeline seam autonomous mode uses. Domain
+ * services are mocked at their module boundary; `can` runs for real against a
+ * constructed actor so the permission gate is meaningfully exercised.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { z } from 'zod'
+import { fakePendingActionRow } from '@/lib/server/domains/assistant/__tests__/assistant-tool-fixtures'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { NotFoundError } from '@/lib/shared/errors'
+
+// createServerFn → directly-callable fns (mirrors conversation-bulk.test.ts).
+vi.mock('@tanstack/react-start', () => ({
+  createServerFn: () => {
+    let _handler: ((args: { data: unknown }) => Promise<unknown>) | null = null
+    const fn = (args: { data: unknown }) => {
+      if (!_handler) throw new Error('handler not registered')
+      return _handler(args)
+    }
+    fn.validator = () => fn
+    fn.handler = (h: (args: { data: unknown }) => Promise<unknown>) => {
+      _handler = h
+      return fn
+    }
+    return fn
+  },
+}))
+
+const hoisted = vi.hoisted(() => ({
+  requireAuth: vi.fn(),
+  policyActorFromAuth: vi.fn(),
+  getPendingActionById: vi.fn(),
+  decidePendingAction: vi.fn(),
+  markPendingActionExecuted: vi.fn(),
+  markPendingActionFailed: vi.fn(),
+  resolveToolSpecs: vi.fn(),
+  getActionSpecByToolName: vi.fn(),
+  getAssistantRuntimeConfig: vi.fn(),
+  executeApprovedPendingAction: vi.fn(),
+  ensureAssistantPrincipal: vi.fn(),
+  assertConversationViewable: vi.fn(),
+  assertTicketVisible: vi.fn(),
+  log: {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/server/logger', () => {
+  const child = () => ({ ...hoisted.log, child })
+  return { logger: { ...hoisted.log, child }, createLogger: () => ({ ...hoisted.log, child }) }
+})
+
+vi.mock('@/lib/server/db', () => ({ db: {} }))
+
+vi.mock('@/lib/server/functions/auth-helpers', () => ({
+  requireAuth: hoisted.requireAuth,
+  policyActorFromAuth: hoisted.policyActorFromAuth,
+}))
+
+vi.mock('@/lib/server/domains/assistant/pending-actions.service', () => ({
+  getPendingActionById: hoisted.getPendingActionById,
+  decidePendingAction: hoisted.decidePendingAction,
+  markPendingActionExecuted: hoisted.markPendingActionExecuted,
+  markPendingActionFailed: hoisted.markPendingActionFailed,
+}))
+
+vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
+  // Static lookup over the test-controlled built-in registry fixture.
+  getToolSpecByName: (name: string) => {
+    const specs = (hoisted.resolveToolSpecs() ?? []) as Array<{ name: string }>
+    return specs.find((s) => s.name === name) ?? null
+  },
+  // Faithful pure replica of the real factory (the module is fully mocked to
+  // keep its heavy import graph out of this test).
+  makeAssistantToolContext: (init: Record<string, unknown>) => ({
+    db: init.db,
+    assistantPrincipalId: init.assistantPrincipalId,
+    assistantName: init.assistantName,
+    role: init.role,
+    audience: init.audience,
+    conversationId: init.conversationId,
+    ticketId: init.ticketId ?? null,
+    sources: new Map(),
+    toolCalls: [],
+    handoffRequest: null,
+    inabilityReport: null,
+    proposedActions: [],
+    toolOutcomes: [],
+    searchCalls: 0,
+    simulate: init.simulate ?? init.conversationId === null,
+    involvementId: init.involvementId ?? null,
+    latestCustomerMessageId: init.latestCustomerMessageId ?? null,
+    actor: init.actor ?? {
+      principalId: init.assistantPrincipalId,
+      role: 'admin',
+      principalType: 'service',
+      segmentIds: new Set(),
+      permissions: new Set(),
+    },
+  }),
+}))
+
+vi.mock('@/lib/server/domains/assistant/assistant.tools', () => ({
+  executeApprovedPendingAction: hoisted.executeApprovedPendingAction,
+}))
+
+vi.mock('@/lib/server/domains/assistant/custom-actions.service', () => ({
+  getActionSpecByToolName: hoisted.getActionSpecByToolName,
+}))
+
+vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
+  getAssistantRuntimeConfig: hoisted.getAssistantRuntimeConfig,
+}))
+
+vi.mock('@/lib/server/domains/assistant/assistant.principal', () => ({
+  ensureAssistantPrincipal: hoisted.ensureAssistantPrincipal,
+}))
+
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  assertConversationViewable: hoisted.assertConversationViewable,
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  assertTicketVisible: hoisted.assertTicketVisible,
+}))
+
+import { approveAssistantActionFn, rejectAssistantActionFn } from '../assistant-actions'
+import type { AssistantPendingActionDTO } from '../assistant-actions'
+
+const AUTH = {
+  user: { id: 'user_1', email: 'agent@x', name: 'Agent', image: null },
+  principal: { id: 'principal_agent1', role: 'member' as const, type: 'user' },
+  settings: { id: 'ws_1', slug: 'x', name: 'X', logoKey: null },
+}
+
+const CLOSE_SPEC = {
+  name: 'close_conversation',
+  label: 'Close conversation',
+  description: 'Close the conversation.',
+  risk: 'write' as const,
+  parents: ['conversation', 'ticket'] as const,
+  permissions: [PERMISSIONS.CONVERSATION_SET_STATUS],
+  definition: { inputSchema: z.object({ reason: z.string() }) } as never,
+  execute: vi.fn(),
+  summarize: () => 'Close conversation',
+}
+
+function actorWith(permissions: string[]) {
+  return { principalId: 'principal_agent1', role: 'member', permissions: new Set(permissions) }
+}
+
+const pendingRow = (overrides: Partial<Record<string, unknown>> = {}) =>
+  fakePendingActionRow({ originRole: 'customer_support', ...overrides })
+
+/** DTO shape assertion helper — approve/reject return the JSON-serializable
+ *  DTO (toDTO), not the raw row with Date fields, so expectations compare
+ *  against this instead of the mocked row objects directly. */
+function expectDTOFrom(row: Record<string, unknown>): Partial<AssistantPendingActionDTO> {
+  const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v ?? null))
+  return {
+    id: row.id as string,
+    conversationId: row.conversationId as string,
+    involvementId: row.involvementId as string | null,
+    toolName: row.toolName as string,
+    originRole: row.originRole as AssistantPendingActionDTO['originRole'],
+    status: row.status as string,
+    proposedAt: iso(row.proposedAt) as string,
+    decidedById: (row.decidedById as string | null) ?? null,
+    decidedAt: iso(row.decidedAt) as string | null,
+    executedAt: iso(row.executedAt) as string | null,
+    result: (row.result as AssistantPendingActionDTO['result']) ?? null,
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const approve = (data: any) => approveAssistantActionFn({ data })
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const reject = (data: any) => rejectAssistantActionFn({ data })
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  hoisted.requireAuth.mockResolvedValue(AUTH)
+  hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_SET_STATUS]))
+  hoisted.resolveToolSpecs.mockReturnValue([CLOSE_SPEC])
+  // Custom-action resolver defaults: no dynamic spec, flag on. Built-in tests
+  // (toolName without an `action_` prefix) never touch either.
+  hoisted.getActionSpecByToolName.mockResolvedValue(null)
+  hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: true })
+  hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
+  hoisted.assertConversationViewable.mockResolvedValue(undefined)
+  hoisted.assertTicketVisible.mockResolvedValue(undefined)
+})
+
+describe('approveAssistantActionFn', () => {
+  it('executes via the same pipeline seam, links the audit row, and settles the row', async () => {
+    const pending = pendingRow()
+    const approver = actorWith([PERMISSIONS.CONVERSATION_SET_STATUS])
+    hoisted.policyActorFromAuth.mockResolvedValue(approver)
+    hoisted.getPendingActionById.mockResolvedValue(pending)
+    const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
+    hoisted.decidePendingAction.mockResolvedValue(decided)
+    hoisted.executeApprovedPendingAction.mockResolvedValue({
+      status: 'executed',
+      result: { closed: true },
+    })
+    const settled = { ...decided, status: 'executed', result: { closed: true } }
+    hoisted.markPendingActionExecuted.mockResolvedValue(settled)
+
+    const out = await approve({ pendingActionId: 'assistant_action_1' })
+
+    expect(hoisted.decidePendingAction).toHaveBeenCalledWith(
+      'assistant_action_1',
+      'approved',
+      'principal_agent1'
+    )
+    expect(hoisted.executeApprovedPendingAction).toHaveBeenCalledWith(
+      CLOSE_SPEC,
+      decided,
+      expect.objectContaining({
+        assistantPrincipalId: 'principal_quinn',
+        role: 'customer_support',
+        conversationId: 'conversation_1',
+        involvementId: 'assistant_involvement_1',
+        simulate: false,
+        actor: approver,
+      })
+    )
+    expect(hoisted.markPendingActionExecuted).toHaveBeenCalledWith('assistant_action_1', {
+      closed: true,
+    })
+    expect(hoisted.markPendingActionFailed).not.toHaveBeenCalled()
+    expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
+  })
+
+  it('threads the ticket parent onto the execution context for a ticket-scoped pending action (unified inbox §2.9)', async () => {
+    const pending = pendingRow({ conversationId: null, ticketId: 'ticket_1' })
+    hoisted.getPendingActionById.mockResolvedValue(pending)
+    const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
+    hoisted.decidePendingAction.mockResolvedValue(decided)
+    hoisted.executeApprovedPendingAction.mockResolvedValue({
+      status: 'executed',
+      result: { created: true },
+    })
+    hoisted.markPendingActionExecuted.mockResolvedValue({
+      ...decided,
+      status: 'executed',
+      result: { created: true },
+    })
+
+    await approve({ pendingActionId: 'assistant_action_1' })
+
+    expect(hoisted.executeApprovedPendingAction).toHaveBeenCalledWith(
+      CLOSE_SPEC,
+      decided,
+      expect.objectContaining({
+        conversationId: null,
+        ticketId: 'ticket_1',
+      })
+    )
+  })
+
+  it('settles failed when execution fails, without throwing', async () => {
+    const pending = pendingRow()
+    hoisted.getPendingActionById.mockResolvedValue(pending)
+    const decided = { ...pending, status: 'approved' }
+    hoisted.decidePendingAction.mockResolvedValue(decided)
+    hoisted.executeApprovedPendingAction.mockResolvedValue({
+      status: 'failed',
+      error: 'boom',
+    })
+    const settled = { ...decided, status: 'failed', result: { error: 'boom' } }
+    hoisted.markPendingActionFailed.mockResolvedValue(settled)
+
+    const out = await approve({ pendingActionId: 'assistant_action_1' })
+
+    expect(hoisted.markPendingActionFailed).toHaveBeenCalledWith('assistant_action_1', 'boom')
+    expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
+  })
+
+  it('rejects with no execution unless the approver holds every permission the tool declares', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow())
+    hoisted.resolveToolSpecs.mockReturnValue([
+      {
+        ...CLOSE_SPEC,
+        permissions: [PERMISSIONS.CONVERSATION_SET_STATUS, PERMISSIONS.CONVERSATION_REPLY],
+      },
+    ])
+    hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_SET_STATUS]))
+
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toThrow(
+      /conversation\.reply/
+    )
+
+    expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+  })
+
+  it('rejects when the current tool spec is read-only', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow())
+    hoisted.resolveToolSpecs.mockReturnValue([{ ...CLOSE_SPEC, risk: 'read' }])
+
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+      statusCode: 409,
+    })
+    expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+  })
+
+  it('rejects when the current tool spec does not support the stored parent', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow())
+    hoisted.resolveToolSpecs.mockReturnValue([{ ...CLOSE_SPEC, parents: ['ticket'] }])
+
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+      statusCode: 409,
+    })
+    expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+  })
+
+  it('rejects when the stored args no longer pass the current input schema', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow({ args: {} }))
+
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+      statusCode: 409,
+    })
+    expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+  })
+
+  it('conflicts when the proposal was already decided or has expired', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow())
+    hoisted.decidePendingAction.mockResolvedValue(null)
+
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toThrow(
+      /already decided or has expired/
+    )
+    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+  })
+
+  it('rejects with a 410-style error when the tool spec no longer exists in the catalogue', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(pendingRow({ toolName: 'vanished_tool' }))
+    hoisted.resolveToolSpecs.mockReturnValue([])
+
+    await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+      statusCode: 410,
+    })
+    expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+  })
+
+  it('404s when the pending action does not exist', async () => {
+    hoisted.getPendingActionById.mockResolvedValue(null)
+
+    await expect(approve({ pendingActionId: 'nope' })).rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  describe('custom actions (Phase 5)', () => {
+    it('410s and never decides when the custom action was deleted since the proposal', async () => {
+      // A persisted `action_<slug>` toolName whose definition is gone resolves
+      // to NOTHING (built-in registry misses it, and the dynamic resolver
+      // returns null) — the approve path surfaces it as gone, same as a stale
+      // built-in, and executes nothing.
+      hoisted.getPendingActionById.mockResolvedValue(pendingRow({ toolName: 'action_deleted' }))
+      hoisted.resolveToolSpecs.mockReturnValue([])
+      hoisted.getActionSpecByToolName.mockResolvedValue(null)
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        statusCode: 410,
+      })
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+
+    it('settles failed (never executing) when the custom-actions flag is off — the in-flight kill switch', async () => {
+      const pending = pendingRow({ toolName: 'action_lookup_order' })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: false })
+      const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
+      hoisted.decidePendingAction.mockResolvedValue(decided)
+      const settled = {
+        ...decided,
+        status: 'failed',
+        result: { error: 'Custom actions are disabled.' },
+      }
+      hoisted.markPendingActionFailed.mockResolvedValue(settled)
+
+      const out = await approve({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.markPendingActionFailed).toHaveBeenCalledWith(
+        'assistant_action_1',
+        'Custom actions are disabled.'
+      )
+      // Short-circuits before ever resolving or executing the spec.
+      expect(hoisted.getActionSpecByToolName).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+      expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
+    })
+
+    it('conflicts (never executing) when a flag-off custom action was already decided', async () => {
+      hoisted.getPendingActionById.mockResolvedValue(
+        pendingRow({ toolName: 'action_lookup_order' })
+      )
+      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: false })
+      hoisted.decidePendingAction.mockResolvedValue(null)
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toThrow(
+        /already decided or has expired/
+      )
+      expect(hoisted.markPendingActionFailed).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('row-level parent authz (unified inbox §3.3)', () => {
+    it('authorizes against the conversation the pending action is scoped to, before deciding', async () => {
+      const pending = pendingRow({ conversationId: 'conversation_1', ticketId: null })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.decidePendingAction.mockResolvedValue({ ...pending, status: 'approved' })
+      hoisted.executeApprovedPendingAction.mockResolvedValue({
+        status: 'executed',
+        result: { closed: true },
+      })
+      hoisted.markPendingActionExecuted.mockResolvedValue({ ...pending, status: 'executed' })
+
+      await approve({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(
+        'conversation_1',
+        expect.objectContaining({ principalId: 'principal_agent1' })
+      )
+      expect(hoisted.assertTicketVisible).not.toHaveBeenCalled()
+    })
+
+    it('authorizes against the ticket the pending action is scoped to, before deciding', async () => {
+      const pending = pendingRow({ conversationId: null, ticketId: 'ticket_1' })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.decidePendingAction.mockResolvedValue({ ...pending, status: 'approved' })
+      hoisted.executeApprovedPendingAction.mockResolvedValue({
+        status: 'executed',
+        result: { created: true },
+      })
+      hoisted.markPendingActionExecuted.mockResolvedValue({ ...pending, status: 'executed' })
+
+      await approve({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.assertTicketVisible).toHaveBeenCalledWith(
+        'ticket_1',
+        expect.objectContaining({ principalId: 'principal_agent1' })
+      )
+      expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+    })
+
+    it('404s (never executing or deciding) when the approver holds conversation.view but cannot see this ticket-scoped row', async () => {
+      const pending = pendingRow({ conversationId: null, ticketId: 'ticket_1' })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.assertTicketVisible.mockRejectedValue(
+        new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+      )
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        statusCode: 404,
+      })
+
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+
+    it('404s (never executing or deciding) when the approver cannot view the conversation this row is scoped to', async () => {
+      const pending = pendingRow({ conversationId: 'conversation_1', ticketId: null })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.assertConversationViewable.mockRejectedValue(
+        new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+      )
+
+      await expect(reject({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        statusCode: 404,
+      })
+
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe('rejectAssistantActionFn', () => {
+  it('decides rejected without a live tool spec or write permission and never executes', async () => {
+    const pending = pendingRow({ toolName: 'vanished_tool' })
+    hoisted.getPendingActionById.mockResolvedValue(pending)
+    hoisted.resolveToolSpecs.mockReturnValue([])
+    hoisted.policyActorFromAuth.mockResolvedValue(actorWith([]))
+    const rejected = { ...pending, status: 'rejected', decidedById: 'principal_agent1' }
+    hoisted.decidePendingAction.mockResolvedValue(rejected)
+
+    const out = await reject({ pendingActionId: 'assistant_action_1' })
+
+    expect(hoisted.decidePendingAction).toHaveBeenCalledWith(
+      'assistant_action_1',
+      'rejected',
+      'principal_agent1'
+    )
+    expect(hoisted.requireAuth).toHaveBeenCalledWith()
+    expect(hoisted.resolveToolSpecs).not.toHaveBeenCalled()
+    expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    expect(out).toEqual(expect.objectContaining(expectDTOFrom(rejected)))
+  })
+})

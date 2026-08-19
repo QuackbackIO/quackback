@@ -43,8 +43,10 @@ export function usePublicFilters() {
       lastRouterSearchRef.current.minVotes !== routerSearch.minVotes ||
       lastRouterSearchRef.current.dateFrom !== routerSearch.dateFrom ||
       lastRouterSearchRef.current.responded !== routerSearch.responded ||
+      lastRouterSearchRef.current.owner !== routerSearch.owner ||
       lastRouterSearchRef.current.status?.join() !== routerSearch.status?.join() ||
-      lastRouterSearchRef.current.tagIds?.join() !== routerSearch.tagIds?.join())
+      lastRouterSearchRef.current.tagIds?.join() !== routerSearch.tagIds?.join() ||
+      lastRouterSearchRef.current.segmentIds?.join() !== routerSearch.segmentIds?.join())
   ) {
     setOptimistic(null)
   }
@@ -61,6 +63,8 @@ export function usePublicFilters() {
       minVotes: routerSearch.minVotes,
       dateFrom: routerSearch.dateFrom,
       responded: routerSearch.responded,
+      owner: routerSearch.owner,
+      segmentIds: routerSearch.segmentIds?.length ? routerSearch.segmentIds : undefined,
     }
   }, [optimistic, routerSearch])
 
@@ -80,6 +84,8 @@ export function usePublicFilters() {
           minVotes: newFilters.minVotes,
           dateFrom: newFilters.dateFrom,
           responded: newFilters.responded,
+          owner: newFilters.owner,
+          segmentIds: newFilters.segmentIds,
         },
         replace: true,
       })
@@ -96,6 +102,8 @@ export function usePublicFilters() {
       minVotes: undefined,
       dateFrom: undefined,
       responded: undefined,
+      owner: undefined,
+      segmentIds: undefined,
     })
   }, [setFilters])
 
@@ -106,8 +114,18 @@ export function usePublicFilters() {
     if (filters.minVotes) count += 1
     if (filters.dateFrom) count += 1
     if (filters.responded) count += 1
+    if (filters.owner) count += 1
+    if (filters.segmentIds?.length) count += filters.segmentIds.length
     return count
-  }, [filters.status, filters.tagIds, filters.minVotes, filters.dateFrom, filters.responded])
+  }, [
+    filters.status,
+    filters.tagIds,
+    filters.minVotes,
+    filters.dateFrom,
+    filters.responded,
+    filters.owner,
+    filters.segmentIds,
+  ])
 
   const hasActiveFilters = activeFilterCount > 0
 

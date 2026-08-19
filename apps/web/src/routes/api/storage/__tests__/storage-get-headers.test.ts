@@ -17,6 +17,11 @@ const getS3Object = vi.fn(async (_key: string) => ({
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Configured: vi.fn(() => true),
+  getS3Config: vi.fn(() => ({ secretAccessKey: 'test-secret' })),
+  isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
+  verifyStorageReadToken: vi.fn(
+    (_secret: string, _key: string, sig: string | null) => sig === 'ok'
+  ),
   getS3Object,
   generatePresignedGetUrl: vi.fn(async () => 'https://s3.example.com/presigned'),
 }))
@@ -34,28 +39,41 @@ beforeEach(() => {
 describe('handleStorageGet — proxy response headers', () => {
   it('sends nosniff on proxied responses (S3_PROXY=true)', async () => {
     mockConfig.s3Proxy = true
-    const res = await get('/api/storage/widget-images/fresh-proxy.gif')
+    const res = await get('/api/storage/logos/fresh-proxy.gif')
     expect(res.status).toBe(200)
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
 
   it('sends nosniff on the in-memory cache hit', async () => {
     mockConfig.s3Proxy = true
-    await get('/api/storage/widget-images/cached.gif')
-    const res = await get('/api/storage/widget-images/cached.gif')
+    await get('/api/storage/logos/cached.gif')
+    const res = await get('/api/storage/logos/cached.gif')
     expect(getS3Object).toHaveBeenCalledTimes(1)
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
 
   it('sends nosniff on the ?email=1 forced-proxy path even without S3_PROXY', async () => {
-    const res = await get('/api/storage/widget-images/email-embed.gif?email=1')
+    const res = await get('/api/storage/logos/email-embed.gif?email=1')
     expect(res.status).toBe(200)
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
 
   it('still redirects to the presigned URL when not proxying', async () => {
-    const res = await get('/api/storage/widget-images/redirect.gif')
+    const res = await get('/api/storage/logos/redirect.gif')
     expect(res.status).toBe(302)
     expect(res.headers.get('Location')).toBe('https://s3.example.com/presigned')
+  })
+
+  it('rejects a private object when only its key is known', async () => {
+    const res = await get('/api/storage/chat-images/private.gif')
+    expect(res.status).toBe(403)
+    expect(getS3Object).not.toHaveBeenCalled()
+  })
+
+  it('serves a private object carrying a valid read capability', async () => {
+    mockConfig.s3Proxy = true
+    const res = await get('/api/storage/chat-images/private.gif?read=ok')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toContain('private')
   })
 })

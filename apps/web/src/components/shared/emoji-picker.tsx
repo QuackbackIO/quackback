@@ -3,7 +3,7 @@ import { FaceSmileIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/shared/utils'
 
-// A small curated set keeps this dependency-free; covers the common chat range.
+// A small curated set keeps this dependency-free; covers the common conversation range.
 const EMOJIS = [
   '😀',
   '😁',

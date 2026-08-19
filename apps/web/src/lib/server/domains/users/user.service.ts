@@ -14,6 +14,7 @@ import {
   db,
   eq,
   and,
+  ne,
   or,
   ilike,
   inArray,
@@ -26,12 +27,20 @@ import {
   session,
   conversations,
   posts,
-  comments,
-  votes,
+  postComments,
+  postCommentReactions,
+  postVotes,
+  conversationMessages,
   userSegments,
   segments,
+  userTagAssignments,
+  visitorDevices,
 } from '@/lib/server/db'
-import type { PrincipalId, SegmentId } from '@quackback/ids'
+import type { PrincipalId, SegmentId, UserTagId } from '@quackback/ids'
+import {
+  DELETED_USER_PRINCIPAL_ID,
+  reattributeAuthoredContent,
+} from '@/lib/server/domains/principals/principal-reattribute'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
@@ -84,6 +93,26 @@ async function fetchSegmentsForPrincipals(
 }
 
 /**
+ * The canonical lead definition. A lead is an ENGAGED anonymous principal:
+ * they authored something (message, post, vote, comment, reaction) or
+ * volunteered a contact email. A minted-but-idle anonymous session is a
+ * visitor, not a lead, and never appears in the directory (the analytics
+ * Visitors section covers that tier). Receiving an agent-started conversation
+ * does not qualify either: the visitor becomes a lead when they reply. All
+ * the EXISTS probes run on indexed principal_id columns.
+ */
+export function leadEngagementWhere() {
+  return sql`(
+    ${principal.contactEmail} IS NOT NULL
+    OR EXISTS (SELECT 1 FROM ${conversationMessages} WHERE ${conversationMessages.principalId} = ${principal.id})
+    OR EXISTS (SELECT 1 FROM ${posts} WHERE ${posts.principalId} = ${principal.id})
+    OR EXISTS (SELECT 1 FROM ${postVotes} WHERE ${postVotes.principalId} = ${principal.id})
+    OR EXISTS (SELECT 1 FROM ${postComments} WHERE ${postComments.principalId} = ${principal.id})
+    OR EXISTS (SELECT 1 FROM ${postCommentReactions} WHERE ${postCommentReactions.principalId} = ${principal.id})
+  )`
+}
+
+/**
  * Build a SQL comparison for activity count filters.
  */
 function buildCountCondition(countExpr: ReturnType<typeof sql>, op: string, value: number) {
@@ -107,8 +136,8 @@ function buildCountCondition(countExpr: ReturnType<typeof sql>, op: string, valu
  * List portal users for an organization with activity counts
  *
  * Queries principal table for role='user'.
- * Activity counts are computed via efficient LEFT JOINs with pre-aggregated subqueries,
- * using the indexed principal_id columns on posts, comments, and votes tables.
+ * Activity counts use indexed correlated probes so a page does not aggregate
+ * the complete posts, comments, votes, sessions, and devices tables.
  *
  * Supports optional filtering by segment IDs (OR logic — users in ANY selected segment).
  */
@@ -130,51 +159,52 @@ export async function listPortalUsers(
       page = 1,
       limit = 20,
       segmentIds,
-      includeAnonymous = false,
+      tagIds,
+      lifecycle = 'users',
     } = params
 
-    // Pre-aggregate activity counts in subqueries (executed once, not per-row)
-    // These use the indexed principal_id columns for efficient lookups
-    // Each count column has a unique name to avoid ambiguity in the final SELECT
-    const postCounts = db
-      .select({
-        principalId: posts.principalId,
-        postCount: sql<number>`count(*)::int`.as('post_count'),
-      })
-      .from(posts)
-      .where(isNull(posts.deletedAt))
-      .groupBy(posts.principalId)
-      .as('post_counts')
-
-    const commentCounts = db
-      .select({
-        principalId: comments.principalId,
-        commentCount: sql<number>`count(*)::int`.as('comment_count'),
-      })
-      .from(comments)
-      .where(isNull(comments.deletedAt))
-      .groupBy(comments.principalId)
-      .as('comment_counts')
-
-    const voteCounts = db
-      .select({
-        principalId: votes.principalId,
-        voteCount: sql<number>`count(*)::int`.as('vote_count'),
-      })
-      .from(votes)
-      .groupBy(votes.principalId)
-      .as('vote_counts')
+    // Correlated index probes keep the common page query bounded to the
+    // filtered principals instead of grouping every row in five whole tables.
+    const postCountExpr = sql<number>`(
+      SELECT count(*)::int FROM ${posts} activity_posts
+      WHERE activity_posts.principal_id = ${principal.id}
+        AND activity_posts.deleted_at IS NULL
+    )`
+    const commentCountExpr = sql<number>`(
+      SELECT count(*)::int FROM ${postComments} activity_comments
+      WHERE activity_comments.principal_id = ${principal.id}
+        AND activity_comments.deleted_at IS NULL
+    )`
+    const voteCountExpr = sql<number>`(
+      SELECT count(*)::int FROM ${postVotes} activity_votes
+      WHERE activity_votes.principal_id = ${principal.id}
+    )`
+    const lastSeenExpr = sql<Date | null>`greatest(
+      (SELECT max(activity_sessions.updated_at) FROM ${session} activity_sessions
+       WHERE activity_sessions.user_id = ${user.id}),
+      (SELECT max(activity_devices.last_seen_at) FROM ${visitorDevices} activity_devices
+       WHERE activity_devices.principal_id = ${principal.id})
+    )`
 
     // Build conditions array - filter for role='user' (portal users only)
     const conditions = [eq(principal.role, 'user')]
 
-    // Exclude anonymous users by default (principal.type='anonymous')
-    if (!includeAnonymous) {
-      conditions.push(eq(principal.type, 'user'))
+    // Lifecycle view: identified users by default, engaged anonymous
+    // principals (leads) on request. The two views never mix.
+    conditions.push(eq(principal.type, lifecycle === 'leads' ? 'anonymous' : 'user'))
+
+    if (lifecycle === 'leads') {
+      conditions.push(leadEngagementWhere())
     }
 
     if (search) {
-      conditions.push(or(ilike(user.name, `%${search}%`), ilike(user.email, `%${search}%`))!)
+      conditions.push(
+        or(
+          ilike(user.name, `%${search}%`),
+          ilike(user.email, `%${search}%`),
+          ilike(principal.contactEmail, `%${search}%`)
+        )!
+      )
     }
 
     if (verified !== undefined) {
@@ -194,18 +224,15 @@ export async function listPortalUsers(
 
     if (postCountFilter) {
       const { op, value } = postCountFilter
-      const countExpr = sql`COALESCE(${postCounts.postCount}, 0)`
-      conditions.push(buildCountCondition(countExpr, op, value))
+      conditions.push(buildCountCondition(postCountExpr, op, value))
     }
     if (voteCountFilter) {
       const { op, value } = voteCountFilter
-      const countExpr = sql`COALESCE(${voteCounts.voteCount}, 0)`
-      conditions.push(buildCountCondition(countExpr, op, value))
+      conditions.push(buildCountCondition(voteCountExpr, op, value))
     }
     if (commentCountFilter) {
       const { op, value } = commentCountFilter
-      const countExpr = sql`COALESCE(${commentCounts.commentCount}, 0)`
-      conditions.push(buildCountCondition(countExpr, op, value))
+      conditions.push(buildCountCondition(commentCountExpr, op, value))
     }
 
     // Custom attribute filters (metadata JSON fields)
@@ -263,6 +290,19 @@ export async function listPortalUsers(
       )
     }
 
+    // Tag filter — OR logic: users carrying ANY of the selected tags
+    if (tagIds && tagIds.length > 0) {
+      conditions.push(
+        inArray(
+          principal.id,
+          db
+            .select({ principalId: userTagAssignments.principalId })
+            .from(userTagAssignments)
+            .where(inArray(userTagAssignments.tagId, tagIds as UserTagId[]))
+        )
+      )
+    }
+
     const whereClause = and(...conditions)
 
     // Build sort order
@@ -272,18 +312,19 @@ export async function listPortalUsers(
         orderBy = asc(principal.createdAt)
         break
       case 'most_active':
-        orderBy = desc(
-          sql`COALESCE(${postCounts.postCount}, 0) + COALESCE(${commentCounts.commentCount}, 0) + COALESCE(${voteCounts.voteCount}, 0)`
-        )
+        orderBy = desc(sql`${postCountExpr} + ${commentCountExpr} + ${voteCountExpr}`)
         break
       case 'most_posts':
-        orderBy = desc(sql`COALESCE(${postCounts.postCount}, 0)`)
+        orderBy = desc(postCountExpr)
         break
       case 'most_comments':
-        orderBy = desc(sql`COALESCE(${commentCounts.commentCount}, 0)`)
+        orderBy = desc(commentCountExpr)
         break
       case 'most_votes':
-        orderBy = desc(sql`COALESCE(${voteCounts.voteCount}, 0)`)
+        orderBy = desc(voteCountExpr)
+        break
+      case 'last_active':
+        orderBy = sql`${lastSeenExpr} DESC NULLS LAST`
         break
       case 'name':
         orderBy = asc(user.name)
@@ -293,7 +334,7 @@ export async function listPortalUsers(
         orderBy = desc(principal.createdAt)
     }
 
-    // Main query with LEFT JOINs to pre-aggregated counts
+    // Main query plus a matching filtered count.
     const [usersResult, countResult] = await Promise.all([
       db
         .select({
@@ -304,35 +345,26 @@ export async function listPortalUsers(
           image: user.image,
           emailVerified: user.emailVerified,
           metadata: user.metadata,
+          principalType: principal.type,
+          contactEmail: principal.contactEmail,
+          country: user.country,
           joinedAt: principal.createdAt,
-          postCount: sql<number>`COALESCE(${postCounts.postCount}, 0)`,
-          commentCount: sql<number>`COALESCE(${commentCounts.commentCount}, 0)`,
-          voteCount: sql<number>`COALESCE(${voteCounts.voteCount}, 0)`,
+          postCount: postCountExpr,
+          commentCount: commentCountExpr,
+          voteCount: voteCountExpr,
+          lastSeenAt: lastSeenExpr,
         })
         .from(principal)
         .innerJoin(user, eq(principal.userId, user.id))
-        .leftJoin(postCounts, eq(postCounts.principalId, principal.id))
-        .leftJoin(commentCounts, eq(commentCounts.principalId, principal.id))
-        .leftJoin(voteCounts, eq(voteCounts.principalId, principal.id))
         .where(whereClause)
         .orderBy(orderBy)
         .limit(limit)
         .offset((page - 1) * limit),
-      // Count query needs the same JOINs when activity count filters are used
-      postCountFilter || voteCountFilter || commentCountFilter
-        ? db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(principal)
-            .innerJoin(user, eq(principal.userId, user.id))
-            .leftJoin(postCounts, eq(postCounts.principalId, principal.id))
-            .leftJoin(commentCounts, eq(commentCounts.principalId, principal.id))
-            .leftJoin(voteCounts, eq(voteCounts.principalId, principal.id))
-            .where(whereClause)
-        : db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(principal)
-            .innerJoin(user, eq(principal.userId, user.id))
-            .where(whereClause),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(principal)
+        .innerJoin(user, eq(principal.userId, user.id))
+        .where(whereClause),
     ])
 
     const total = Number(countResult[0]?.count ?? 0)
@@ -344,12 +376,17 @@ export async function listPortalUsers(
       principalId: row.principalId,
       userId: row.userId,
       name: row.name,
-      // Anonymous rows (shown only with "Include Anonymous") must render no email.
+      // Lead rows carry a synthetic account email that must never render;
+      // their real identity signal is the captured contactEmail, if any.
       email: realEmail(row.email),
       image: row.image,
       emailVerified: row.emailVerified,
       metadata: row.metadata,
+      isLead: row.principalType === 'anonymous',
+      contactEmail: realEmail(row.contactEmail),
+      country: row.country,
       joinedAt: row.joinedAt,
+      lastSeenAt: row.lastSeenAt ? new Date(row.lastSeenAt) : null,
       postCount: Number(row.postCount),
       commentCount: Number(row.commentCount),
       voteCount: Number(row.voteCount),
@@ -370,16 +407,37 @@ export async function listPortalUsers(
 /**
  * Remove a portal user from the portal (soft removal).
  *
- * Detaches the `principal` from its Better-Auth `user` instead of deleting
- * the row: chat/posts/comments RESTRICT principal deletes. Sessions are
- * revoked in the same transaction so getOptionalAuth cannot immediately
- * provision a replacement principal for a still-cookied user. The user
- * row is kept so a later sign-in provisions a fresh principal.
+ * Deletes the `principal` record (role='user') only — the Better-Auth `user`
+ * and `account` rows are intentionally retained so we still recognize the
+ * person if they return (and their re-join shows distinct "joined" vs
+ * "account created" dates). The FK is `principal.userId -> user` with
+ * onDelete cascade, so deleting the principal does NOT remove the user; a
+ * returning sign-in re-provisions a principal via the SSO hooks or lazily.
+ *
+ * Their authored content — posts, comments, conversation threads — is
+ * re-attributed to the deleted-user placeholder first, in the same
+ * transaction: those FKs are ON DELETE RESTRICT, so the delete cannot proceed
+ * while the person still owns a row, and discarding the content would tear
+ * discussions other people are part of out of context. Everything the schema
+ * declares CASCADE or SET NULL (votes, subscriptions, moderation stamps) is
+ * left to Postgres. See principals/principal-reattribute.ts for the registry
+ * and the audit that keeps it complete.
+ *
+ * Sessions are revoked and visitor email is cleared in the same transaction
+ * so a still-cookied user cannot immediately provision a replacement
+ * principal, and inbound mail stops addressing the removed person.
  */
 export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {
     const existingPrincipal = await db.query.principal.findFirst({
-      where: and(eq(principal.id, principalId), eq(principal.role, 'user')),
+      where: and(
+        eq(principal.id, principalId),
+        eq(principal.role, 'user'),
+        // The placeholder shares role='user' but is not a person. Removing it
+        // would re-attribute its content to itself and then strand every
+        // earlier removal's content on a deleted row.
+        ne(principal.id, DELETED_USER_PRINCIPAL_ID)
+      ),
     })
 
     if (!existingPrincipal) {
@@ -392,26 +450,17 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
     const userId = existingPrincipal.userId
 
     await db.transaction(async (tx) => {
-      await tx
-        .update(principal)
-        .set({
-          userId: null,
-          type: 'anonymous',
-          displayName: 'Removed user',
-          avatarUrl: null,
-          avatarKey: null,
-          contactEmail: null,
-        })
-        .where(eq(principal.id, principalId))
-
+      await reattributeAuthoredContent(tx, principalId)
       await tx
         .update(conversations)
         .set({ visitorEmail: null })
         .where(eq(conversations.visitorPrincipalId, principalId))
-
       if (userId) {
         await tx.delete(session).where(eq(session.userId, userId))
       }
+      // Delete principal record (user record is retained; the FK cascades the
+      // other way, from user to principal)
+      await tx.delete(principal).where(eq(principal.id, principalId))
     })
 
     if (userId) {
@@ -427,7 +476,7 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
     }
   } catch (error) {
     if (error instanceof NotFoundError) throw error
-    log.error({ err: error }, 'failed to remove portal user')
+    log.error({ err: error, principalId }, 'failed to remove portal user')
     throw new InternalError('DATABASE_ERROR', 'Failed to remove portal user', error)
   }
 }
