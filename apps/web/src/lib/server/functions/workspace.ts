@@ -1,8 +1,15 @@
 /**
- * Server functions for workspace data fetching.
+ * Workspace data reads.
+ *
+ * These are plain async functions, not `createServerFn` handlers, because
+ * every caller is server-side (route loaders' server functions, API route
+ * handlers). A `createServerFn` that no client module references never lands
+ * in the server-function manifest, so its server-side callers resolve an RPC
+ * stub whose ID the manifest cannot resolve — a runtime crash in production
+ * builds. Keep anything called only from the server a plain function; the
+ * build guard in `scripts/check-server-fn-manifest.ts` enforces this.
  */
 
-import { createServerFn } from '@tanstack/react-start'
 import type { Role } from '@/lib/shared/roles'
 import { db, principal, eq } from '@/lib/server/db'
 import { getSession } from '@/lib/server/auth/session'
@@ -18,40 +25,38 @@ const log = logger.child({ component: 'workspace' })
  * reads use the settings domain service (getTenantSettings / isFeatureEnabled)
  * instead of casting a column off this row.
  */
-export const getSettings = createServerFn({ method: 'GET' }).handler(async () => {
+export async function getSettings() {
   const org = await db.query.settings.findFirst()
   return org ?? null
-})
+}
 
 /**
  * Get current user's role if logged in
  */
-export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<Role | null> => {
-    log.debug('get current user role')
-    const session = await getSession()
-    if (!session?.user) {
-      log.debug('no session')
-      return null
-    }
-
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, session.user.id),
-    })
-
-    if (!principalRecord) {
-      log.debug('no principal')
-      return null
-    }
-    log.debug({ role: principalRecord.role }, 'current user role')
-    return principalRecord.role as Role
+export async function getCurrentUserRole(): Promise<Role | null> {
+  log.debug('get current user role')
+  const session = await getSession()
+  if (!session?.user) {
+    log.debug('no session')
+    return null
   }
-)
+
+  const principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.userId, session.user.id),
+  })
+
+  if (!principalRecord) {
+    log.debug('no principal')
+    return null
+  }
+  log.debug({ role: principalRecord.role }, 'current user role')
+  return principalRecord.role as Role
+}
 
 /**
  * Validate API workspace access
  */
-export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).handler(async () => {
+export async function validateApiWorkspaceAccess() {
   const session = await getSession()
   if (!session?.user) {
     return { success: false as const, error: 'Unauthorized', status: 401 as const }
@@ -78,6 +83,6 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
     principal: principalRecord,
     user: session.user,
   }
-})
+}
 
 export type ApiWorkspaceResult = Awaited<ReturnType<typeof validateApiWorkspaceAccess>>
