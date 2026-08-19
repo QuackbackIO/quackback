@@ -90,8 +90,16 @@ export async function recalculateCanonicalVoteCount(
   options?: { resetMergeCheck?: boolean },
   tx?: TransactionalDb
 ): Promise<number> {
-  const conn = tx ?? db
+  if (!tx) {
+    return db.transaction((inner) => recalculateCanonicalVoteCount(canonicalPostId, options, inner))
+  }
+  const conn = tx
   const canonicalUuid = toUuid(canonicalPostId)
+  // Hold the canonical row across the aggregate + write so a concurrent
+  // comment increment cannot land between the snapshot and this assignment.
+  await conn.execute(sql`
+    SELECT id FROM ${posts} WHERE id = ${canonicalUuid}::uuid FOR UPDATE
+  `)
   const result = await conn.execute<{ unique_voters: number; visible_comments: number }>(sql`
     WITH related_post_ids AS (
       SELECT ${canonicalUuid}::uuid AS post_id
