@@ -87,19 +87,22 @@ export async function listPostVoters(
         WHERE p2.id = ${postVotes.addedByPrincipalId}
       )`.as('added_by_name'),
       createdAt: postVotes.createdAt,
-      notifyComments: postSubscriptions.notifyComments,
-      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
+      notifyComments: sql<boolean | null>`(
+        SELECT bool_or(s.notify_comments)
+        FROM ${postSubscriptions} s
+        WHERE s.principal_id = ${postVotes.principalId}
+          AND s.post_id IN ${relatedPostIdsSql(toUuid(postId))}
+      )`.as('notify_comments'),
+      notifyStatusChanges: sql<boolean | null>`(
+        SELECT bool_or(s.notify_status_changes)
+        FROM ${postSubscriptions} s
+        WHERE s.principal_id = ${postVotes.principalId}
+          AND s.post_id IN ${relatedPostIdsSql(toUuid(postId))}
+      )`.as('notify_status_changes'),
     })
     .from(postVotes)
     .innerJoin(principal, eq(principal.id, postVotes.principalId))
     .leftJoin(user, eq(user.id, principal.userId))
-    .leftJoin(
-      postSubscriptions,
-      and(
-        eq(postSubscriptions.postId, postVotes.postId),
-        eq(postSubscriptions.principalId, postVotes.principalId)
-      )
-    )
     .where(and(...conditions))
     .orderBy(desc(postVotes.createdAt), desc(postVotes.id))
     .$dynamic()

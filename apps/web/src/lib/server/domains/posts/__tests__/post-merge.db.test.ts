@@ -512,4 +512,40 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     expect((await getSubscriptionStatus(voter, canonical)).subscribed).toBe(false)
     expect((await getSubscriptionStatus(voter, source)).subscribed).toBe(false)
   })
+
+  it('shows the thread subscription level on the voter list even when the newest vote is on the other post', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter', 'voter3@example.com')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 1,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 1,
+      commentCount: 0,
+    })
+    const t1 = new Date('2026-01-01T00:00:00.000Z')
+    const t2 = new Date('2026-01-02T00:00:00.000Z')
+    await seedVote(canonical, voter, t1)
+    await seedVote(source, voter, t2)
+    await testDb.insert(postSubscriptions).values({
+      postId: canonical,
+      principalId: voter,
+      reason: 'vote',
+      notifyComments: true,
+      notifyStatusChanges: true,
+    })
+    await mergePost(source, canonical, actor)
+
+    const voters = await getPostVoters(canonical)
+    expect(voters).toHaveLength(1)
+    expect(voters[0]?.subscriptionLevel).toBe('all')
+  })
 })
