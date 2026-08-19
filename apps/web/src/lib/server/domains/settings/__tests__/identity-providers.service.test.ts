@@ -53,6 +53,34 @@ describe('connectionAffectingChange', () => {
       )
     ).toBe(false)
   })
+
+  it('is true when claimMapping.profile changes', () => {
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { profile: { allowMissingEmail: true } } },
+        { ...existing, claimMapping: null }
+      )
+    ).toBe(true)
+  })
+
+  it('is false when only claimMapping.role or attributes change', () => {
+    expect(
+      connectionAffectingChange(
+        { claimMapping: { role: { claimPath: 'groups', rules: [] } } },
+        { ...existing, claimMapping: null }
+      )
+    ).toBe(false)
+    expect(
+      connectionAffectingChange(
+        {
+          claimMapping: {
+            attributes: { map: [{ claimPath: 'dept', attributeKey: 'department' }] },
+          },
+        },
+        { ...existing, claimMapping: null }
+      )
+    ).toBe(false)
+  })
 })
 
 describe('identity providers visibility', () => {

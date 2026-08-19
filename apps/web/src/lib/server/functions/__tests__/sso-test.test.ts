@@ -238,7 +238,9 @@ describe('startSsoTestFn', () => {
     expect(session.discoveryUrl).toBeUndefined()
   })
 
-  it('rejects a manual-endpoint provider missing jwks/issuer as not configured', async () => {
+  it('starts a test for a manual-endpoint provider without JWKS/issuer', async () => {
+    // Access-token-only providers have authorization + token and never return
+    // an id_token, so JWKS/issuer are not required to start the test.
     hoisted.listIdentityProviders.mockResolvedValue([
       {
         id: 'idp_partial',
@@ -246,8 +248,31 @@ describe('startSsoTestFn', () => {
         discoveryUrl: null,
         authorizationUrl: 'https://idp/auth',
         tokenUrl: 'https://idp/token',
-        jwksUri: null, // incomplete — can't verify the ID token
+        jwksUri: null,
         issuer: null,
+        clientId: 'c',
+        domains: [],
+      },
+    ])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+    hoisted.cacheSet.mockResolvedValue(undefined)
+
+    const result = (await startSsoTest({ data: { registrationId: 'oidc_partial' } })) as {
+      testId: string
+      authorizeUrl: string
+    }
+    expect(result.testId).toMatch(/^ssotest_/)
+    expect(result.authorizeUrl).toMatch(/^https:\/\/idp\/auth\?/)
+  })
+
+  it('rejects a manual-endpoint provider missing authorization or token as not configured', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([
+      {
+        id: 'idp_partial',
+        registrationId: 'oidc_partial',
+        discoveryUrl: null,
+        authorizationUrl: 'https://idp/auth',
+        tokenUrl: null,
         clientId: 'c',
         domains: [],
       },

@@ -28,8 +28,13 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
-import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
+import {
+  allowsMissingEmail,
+  identitySourcesFor,
+  profileClaimFor,
+} from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
+import type { IdentityMapping } from '@/lib/server/auth/resolve-identity'
 
 const TTL_SECONDS = 600
 
@@ -62,6 +67,8 @@ type TestSession = {
   tokenAuth: 'basic' | 'post'
   /** The prompt sent, replayed into a configuration-error hint. */
   requestedPrompt?: string
+  /** Identity sources and claim paths — the same mapping production uses. */
+  identityMapping?: IdentityMapping
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -85,15 +92,11 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       return { error: 'sso-not-configured' }
     }
     // A provider is testable two ways: a discovery URL (endpoints resolved from
-    // the doc), or a complete manual-endpoint set (authorization + token + JWKS
-    // + issuer) for installs with no discovery document. Production registers
-    // manual-endpoint providers too, so they must be testable to be enforceable.
-    const hasManualEndpoints = !!(
-      provider.authorizationUrl &&
-      provider.tokenUrl &&
-      provider.jwksUri &&
-      provider.issuer
-    )
+    // the doc), or authorization + token for installs with no discovery document.
+    // Access-token-only providers never return an id_token, so JWKS/issuer are
+    // not required to start the test. Production registers those too, so they
+    // must be testable to be enforceable.
+    const hasManualEndpoints = !!(provider.authorizationUrl && provider.tokenUrl)
     if (!provider.discoveryUrl && !hasManualEndpoints) {
       return { error: 'sso-not-configured' }
     }
@@ -137,17 +140,12 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       } catch {
         return { error: 'discovery-unreachable' }
       }
-    } else if (
-      provider.authorizationUrl &&
-      provider.tokenUrl &&
-      provider.jwksUri &&
-      provider.issuer
-    ) {
+    } else if (provider.authorizationUrl && provider.tokenUrl) {
       endpoints = {
-        issuer: provider.issuer,
+        issuer: provider.issuer ?? '',
         authorizationEndpoint: provider.authorizationUrl,
         tokenEndpoint: provider.tokenUrl,
-        jwksUri: provider.jwksUri,
+        jwksUri: provider.jwksUri ?? '',
         userinfoEndpoint: provider.userInfoUrl ?? undefined,
       }
     } else {
@@ -184,7 +182,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       tokenEndpoint: endpoints.tokenEndpoint,
       jwksUri: endpoints.jwksUri,
       authorizationEndpoint: endpoints.authorizationEndpoint,
-      userinfoEndpoint: endpoints.userinfoEndpoint,
+      userinfoEndpoint: provider.userInfoUrl ?? endpoints.userinfoEndpoint,
       issuer: endpoints.issuer,
       clientId: provider.clientId,
       clientSecret: creds.clientSecret,
@@ -193,6 +191,12 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       requestedScopes,
       tokenAuth: request.tokenAuth,
       requestedPrompt: request.prompt,
+      identityMapping: {
+        sources: identitySourcesFor(provider.claimMapping),
+        idClaim: profileClaimFor(provider.claimMapping, 'id'),
+        emailClaim: profileClaimFor(provider.claimMapping, 'email'),
+        nameClaim: profileClaimFor(provider.claimMapping, 'name'),
+      },
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
@@ -251,9 +255,15 @@ export type SsoTestDiagnostic = {
           hasRefreshToken: boolean
           expiresIn?: number
         }
-        /** Full decoded ID-token payload as the IdP returned it (groups, roles,
-         *  and any other non-standard claims), for claim-mapping debugging. */
+        /** Merged claims the resolver saw (earlier source wins). */
         allClaims?: Record<string, JsonValue>
+        /** Resolved identity + per-field provenance for the outcome preview. */
+        identity?: {
+          id: string
+          email?: string
+          name?: string
+          sources: Partial<Record<'id' | 'email' | 'name', string>>
+        }
       }
     | {
         ok: false

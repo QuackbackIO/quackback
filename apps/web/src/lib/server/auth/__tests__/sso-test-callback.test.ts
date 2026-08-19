@@ -316,8 +316,15 @@ describe('handleSsoTestCallback', () => {
       errorDescription: null,
     })
 
-    expect(hoisted.markTestSucceeded).toHaveBeenCalledWith('idp_sso')
     expect(hoisted.markTestSucceeded).toHaveBeenCalledTimes(1)
+    expect(hoisted.markTestSucceeded.mock.calls[0]![0]).toBe('idp_sso')
+    const capture = hoisted.markTestSucceeded.mock.calls[0]![1] as {
+      registrationId: string
+      identity: { id: string }
+      claims: Record<string, unknown>
+    }
+    expect(capture.registrationId).toBe('sso')
+    expect(capture.identity.id).toBe('u1')
     // Legacy blob stamp MUST fire for 'sso'.
     expect(hoisted.markSsoTestSucceeded).toHaveBeenCalledTimes(1)
   })
@@ -357,6 +364,53 @@ describe('handleSsoTestCallback', () => {
     expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
   })
 
+  it('persists the captured identity and claims as the admin saw them', async () => {
+    hoisted.cacheGet.mockResolvedValueOnce(validSession)
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+    ])
+    hoisted.runHandshake.mockResolvedValueOnce({
+      ok: true,
+      steps: [],
+      claims: {
+        iss: 'https://idp',
+        sub: 'u1',
+        aud: 'cid',
+        email: 'jane@acme.com',
+        name: 'Jane Diaz',
+      },
+      allClaims: {
+        sub: 'u1',
+        email: 'jane@acme.com',
+        name: 'Jane Diaz',
+        groups: ['feedback-admins', 'eng'],
+      },
+      identity: {
+        id: 'u1',
+        email: 'jane@acme.com',
+        name: 'Jane Diaz',
+        sources: { id: 'idToken', email: 'idToken', name: 'userinfo' },
+      },
+      tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+    })
+
+    await handleSsoTestCallback({
+      state: 'state-xyz',
+      code: 'authcode',
+      error: null,
+      errorDescription: null,
+    })
+
+    const capture = hoisted.markTestSucceeded.mock.calls[0]![1] as {
+      identity: { email?: string; name?: string }
+      claims: Record<string, unknown>
+    }
+    expect(capture.identity.email).toBe('jane@acme.com')
+    expect(capture.identity.name).toBe('Jane Diaz')
+    expect(capture.claims.groups).toEqual(['feedback-admins', 'eng'])
+    expect(capture.claims.email).toBe('jane@acme.com')
+  })
+
   it('stamps only the provider row (not the legacy blob) for a non-sso registrationId', async () => {
     // Per-provider test: only the row stamp fires; the legacy blob stamp
     // must NOT fire (it belongs to the 'sso' registrationId only).
@@ -380,8 +434,8 @@ describe('handleSsoTestCallback', () => {
     })
 
     // Only the custom provider's row is stamped.
-    expect(hoisted.markTestSucceeded).toHaveBeenCalledWith('idp_custom')
     expect(hoisted.markTestSucceeded).toHaveBeenCalledTimes(1)
+    expect(hoisted.markTestSucceeded.mock.calls[0]![0]).toBe('idp_custom')
     // Legacy blob stamp must NOT fire for a non-sso provider.
     expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
   })

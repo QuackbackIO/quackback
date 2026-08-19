@@ -7,22 +7,35 @@
  * config work?" check, not a precondition for an action).
  */
 
+import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { useSsoTestSignIn } from './use-sso-test-sign-in'
 
 export function TestSignInButton({
   registrationId,
   disabled,
+  size = 'sm',
+  variant = 'outline',
+  children = 'Test sign-in',
 }: {
   /** The provider's registrationId — forwarded to `startSsoTestFn` so the
    *  test exercises THIS provider's credentials and stamps its own gate. */
   registrationId: string
   disabled?: boolean
+  size?: 'sm' | 'default'
+  variant?: 'outline' | 'link' | 'ghost'
+  children?: ReactNode
 }) {
   const { open } = useSsoTestSignIn()
   return (
-    <Button onClick={() => open({ registrationId })} disabled={disabled} variant="outline">
-      Test sign-in
+    <Button
+      type="button"
+      onClick={() => open({ registrationId })}
+      disabled={disabled}
+      variant={variant}
+      size={size}
+    >
+      {children}
     </Button>
   )
 }
