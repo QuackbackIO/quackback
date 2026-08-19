@@ -191,11 +191,11 @@ const VECTOR = {
   mailSlug: 'ws-t1',
   /** `Subject: \xff\xfe\x80\xe9\r\n\r\nA` — 18 bytes, four of them illegal UTF-8. */
   body: Uint8Array.from(Buffer.from('5375626a6563743a20fffe80e90d0a0d0a41', 'hex')),
-  signature: 'ef90676f1d9a36d5338e95ad74d39cfc9bae2c612e059630ac6b1e23ed1074a7',
+  signature: '9c8c8a0aedbba0ebfae028c8fe48a431660313e40f66e0a6c65600b58e61916f',
   /** What hashing the body as a decoded string produces: 26 bytes, not 18. */
-  signatureOverDecodedBody: 'be1ad00395e6e912c7b40cbd773b3ee64bc5bff38f68f02a843acb6871ea659d',
+  signatureOverDecodedBody: 'e0381799a16ad67e2ade3151cc00c0a8a780ebc518823db39574335a89c86e01',
   /** The same body signed for `ws-t2`: what a re-aimed capture would need. */
-  signatureUnderOtherSlug: 'b35dde39260d106e8959a7fe6845b3c12cfb5b8a71b744c9912661e92a380d72',
+  signatureUnderOtherSlug: 'cf13024213845a58892cc66b887b040c52b2a8c8a6e99e27db3471753d31ed43',
 } as const
 
 /** A real message whose `To:` is the CUSTOMER's own address: the envelope is the
