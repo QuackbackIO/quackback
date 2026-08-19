@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/err
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
+import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 
 const log = logger.child({ component: 'comment-pin' })
 
@@ -63,6 +64,7 @@ export async function restoreComment(
         .update(posts)
         .set({ commentCount: sql`${posts.commentCount} + 1` })
         .where(eq(posts.id, comment.postId))
+      await adjustCanonicalCommentCount(comment.postId, 1, tx)
     }
 
     return true

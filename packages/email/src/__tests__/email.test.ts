@@ -11,6 +11,7 @@ import {
   sendRawEmail,
   sendCsatRequestEmail,
 } from '../index'
+import { sealed } from './seal'
 
 /** Save and restore env vars around each test. */
 function withCleanEnv() {
@@ -85,7 +86,7 @@ describe('console mode returns { sent: false }', () => {
 
   it('sendInvitationEmail returns { sent: false }', async () => {
     const result = await sendInvitationEmail({
-      to: 'test@example.com',
+      to: sealed('test@example.com'),
       invitedByName: 'Admin',
       workspaceName: 'TestWorkspace',
       inviteLink: 'https://example.com/invite',
@@ -105,7 +106,7 @@ describe('console mode returns { sent: false }', () => {
 
   it('sendMagicLinkEmail returns { sent: false }', async () => {
     const result = await sendMagicLinkEmail({
-      to: 'test@example.com',
+      to: sealed('test@example.com'),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
@@ -141,7 +142,7 @@ describe('console mode returns { sent: false }', () => {
 
   it('sendPasswordResetEmail returns { sent: false }', async () => {
     const result = await sendPasswordResetEmail({
-      to: 'test@example.com',
+      to: sealed('test@example.com'),
       resetLink: 'https://example.com/auth/reset-password?token=abc',
     })
     expect(result).toEqual({ sent: false })
