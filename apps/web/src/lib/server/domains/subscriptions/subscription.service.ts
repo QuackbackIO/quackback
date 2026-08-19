@@ -104,7 +104,10 @@ export async function unsubscribeFromPost(principalId: PrincipalId, postId: Post
   await db
     .delete(postSubscriptions)
     .where(
-      and(eq(postSubscriptions.principalId, principalId), eq(postSubscriptions.postId, postId))
+      and(
+        eq(postSubscriptions.principalId, principalId),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`
+      )
     )
 }
 
@@ -125,7 +128,7 @@ export async function updateSubscriptionLevel(
   const notifyComments = level === 'all'
   const notifyStatusChanges = true // Both 'all' and 'status_only' get status changes
 
-  await db
+  const updated = await db
     .update(postSubscriptions)
     .set({
       notifyComments,
@@ -133,8 +136,15 @@ export async function updateSubscriptionLevel(
       updatedAt: new Date(),
     })
     .where(
-      and(eq(postSubscriptions.principalId, principalId), eq(postSubscriptions.postId, postId))
+      and(
+        eq(postSubscriptions.principalId, principalId),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`
+      )
     )
+    .returning({ id: postSubscriptions.id })
+  if (updated.length === 0) {
+    await subscribeToPost(principalId, postId, 'manual', { level })
+  }
 }
 
 /**
@@ -151,12 +161,16 @@ export async function getSubscriptionStatus(
   level: SubscriptionLevel
 }> {
   log.debug({ post_id: postId, principal_id: principalId }, 'get subscription status')
-  const subscription = await db.query.postSubscriptions.findFirst({
-    where: and(
-      eq(postSubscriptions.principalId, principalId),
-      eq(postSubscriptions.postId, postId)
-    ),
-  })
+  const rows = await db
+    .select()
+    .from(postSubscriptions)
+    .where(
+      and(
+        eq(postSubscriptions.principalId, principalId),
+        sql`${postSubscriptions.postId} IN ${relatedPostIdsSql(toUuid(postId))}`
+      )
+    )
+  const subscription = rows.find((row) => row.postId === postId) ?? rows[0]
 
   if (!subscription) {
     return {

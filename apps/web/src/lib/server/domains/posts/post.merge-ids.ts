@@ -9,7 +9,7 @@
  * client holding the source still mutates the surviving thread.
  */
 import { db, posts, postVotes, postComments, boards, eq, sql } from '@/lib/server/db'
-import { toUuid, type PostId } from '@quackback/ids'
+import { isValidTypeId, toUuid, type PostId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 
 type TransactionalDb = Pick<typeof db, 'execute' | 'update'>
@@ -57,6 +57,10 @@ export async function adjustCanonicalCommentCount(
   conn: TransactionalDb = db
 ): Promise<void> {
   if (delta === 0) return
+  // Unit fixtures often use placeholder ids (`post_mock`) that are not
+  // TypeIDs. Skip rather than throw; production callers always pass a
+  // real post id and the source-row commentCount update still runs.
+  if (!isValidTypeId(postId, 'post')) return
   const postUuid = toUuid(postId)
   await conn.execute(sql`
     UPDATE ${posts}

@@ -40,7 +40,11 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 }))
 
 import { mergePost, unmergePost, getMergedPosts } from '../post.merge'
-import { getSubscribersForEvent } from '../../subscriptions/subscription.service'
+import {
+  getSubscribersForEvent,
+  getSubscriptionStatus,
+  unsubscribeFromPost,
+} from '../../subscriptions/subscription.service'
 import { getCommentsWithReplies } from '../post.query'
 import { hasUserVoted, getVoteAndSubscriptionStatus } from '../post.public.utils'
 import { getPostVoters, listPostVoters } from '../post.voters'
@@ -466,5 +470,42 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     expect(subscribers.map((s) => s.principalId)).toEqual([voter])
     expect(subscribers[0]?.notifyComments).toBe(true)
     expect(subscribers[0]?.notifyStatusChanges).toBe(true)
+  })
+
+  it('reads and unsubscribes a source-only subscription via the canonical', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter', 'voter2@example.com')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    await testDb.insert(postSubscriptions).values({
+      postId: source,
+      principalId: voter,
+      reason: 'vote',
+      notifyComments: true,
+      notifyStatusChanges: true,
+    })
+    await mergePost(source, canonical, actor)
+
+    const status = await getSubscriptionStatus(voter, canonical)
+    expect(status.subscribed).toBe(true)
+    expect(status.level).toBe('all')
+
+    await unsubscribeFromPost(voter, canonical)
+
+    expect((await getSubscriptionStatus(voter, canonical)).subscribed).toBe(false)
+    expect((await getSubscriptionStatus(voter, source)).subscribed).toBe(false)
   })
 })

@@ -15,7 +15,7 @@ import {
   sql,
   eq,
 } from '@/lib/server/db'
-import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import { createId, fromUuid, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { relatedPostIdsSql } from './post.merge-ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -25,6 +25,15 @@ import { dispatchPostVoted } from '@/lib/server/events/dispatch'
 import type { VoteResult } from './post.types'
 
 const log = logger.child({ component: 'post-voting' })
+
+function resolveVotedPostId(resolvedUuid: string | null | undefined, fallback: PostId): PostId {
+  if (!resolvedUuid) return fallback
+  try {
+    return fromUuid('post', resolvedUuid)
+  } catch {
+    return fallback
+  }
+}
 
 /**
  * Emit the post.voted event for a freshly cast vote: one indexed lookup for
@@ -170,7 +179,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       EXISTS(SELECT 1 FROM post_check) as post_exists,
       EXISTS(SELECT 1 FROM board_check) as board_exists,
       EXISTS(SELECT 1 FROM inserted) as newly_voted,
-      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count
+      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count,
+      (SELECT id FROM post_check) as resolved_post_id
   `)
 
   type VoteResultRow = {
@@ -178,6 +188,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     board_exists: boolean
     newly_voted: boolean
     vote_count: number
+    resolved_post_id: string | null
   }
   const rows = getExecuteRows<VoteResultRow>(result)
   const row = rows[0]
@@ -194,11 +205,12 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
   // newly_voted = false means we deleted a vote (user no longer has vote)
   const voted = row.newly_voted
   const voteCount = row.vote_count ?? 0
+  const eventPostId = resolveVotedPostId(row.resolved_post_id, postId)
 
   // post.voted fires only on the insert half of the toggle — an unvote is
   // not a "vote cast" and must not notify subscribed endpoints.
   if (voted) {
-    await emitPostVotedEvent(postId, principalId, voteCount)
+    await emitPostVotedEvent(eventPostId, principalId, voteCount)
   }
 
   return { voted, voteCount }
