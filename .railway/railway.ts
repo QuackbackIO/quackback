@@ -64,13 +64,10 @@ import { bucket, defineRailway, image, preserve, project, service, volume } from
  * drizzle SQL, and `fleet-migrator.mjs`. That last one is why one artifact is
  * enough for every role the rollout touches.
  */
-// WARNING: this digest is the last GHCR publish and still only accepts
-// neon+role database secret refs. Live app services were railway-up'd
-// from saas-merge (sealed+aead / Railway Postgres). Do not `apply` this
-// pin until a neon-free GHCR digest replaces it — apply would roll the
-// fleet back to an image that refuses every workspace registry row.
+// Neon-free saas publish (2026-08-19). sealed+aead / Railway Postgres.
+// List others with `bun .railway/list-ghcr.ts`.
 const APP_IMAGE =
-  'ghcr.io/quackbackio/quackback@sha256:54f4c14152f4b9bae3629de4be1ad330f484888ff4fa6235c579b25c961fcc29'
+  'ghcr.io/quackbackio/quackback@sha256:5a14a7d9258c51fa59a1225a22fc9d9ed26f137ab42dc9e8eca0da3e55668a6a'
 
 /** Virginia. Declared intent only — `plan` never diffs placement and `apply`
  * never writes it, so it must be verified directly after every deploy. */
