@@ -37,21 +37,17 @@ import type { LatestVersionResult } from '@/lib/server/functions/version'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { setAgentAvailabilityFn } from '@/lib/server/functions/conversation'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { listOwnerWorkspacesFn, openOwnerWorkspaceFn } from '@/lib/server/functions/owner-workspaces'
 import {
-  friendlySiblingAddress,
-  WorkspaceSwitcher,
-} from '@/components/admin/workspace-switcher'
+  listOwnerWorkspacesFn,
+  openOwnerWorkspaceFn,
+} from '@/lib/server/functions/owner-workspaces'
+import { friendlySiblingAddress, WorkspaceSwitcher } from '@/components/admin/workspace-switcher'
 import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
 import { useIntl } from 'react-intl'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import {
-  getFirstEnabledAdminProductPath,
-  isProductEnabled,
-  type FeatureFlags,
-  type ProductId,
-} from '@/lib/shared/types/settings'
+import { isProductEnabled, type FeatureFlags, type ProductId } from '@/lib/shared/types/settings'
+import { resolveAdminHomePath } from '@/lib/shared/admin-home'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
@@ -216,7 +212,11 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
     if (item.href === '/admin/automation/agent') return canOpenAutomation
     return true
   })
-  const homePath = getFirstEnabledAdminProductPath(flags)
+  const homePath = resolveAdminHomePath({
+    isAdmin,
+    launchResolved: Boolean(launchSummary?.resolved),
+    flags,
+  })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const user = session?.user
@@ -281,6 +281,15 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
             {/* Main Navigation */}
             <nav className="flex flex-col items-center gap-2.5">
+              {showLaunchNav && (
+                <NavItem
+                  href="/admin/getting-started"
+                  icon={RocketLaunchIcon}
+                  label={launchPlanLabel}
+                  isActive={isNavActive(pathname, '/admin/getting-started')}
+                  badge={launchRemaining}
+                />
+              )}
               {filteredNavItems.map((item) => (
                 <NavItem
                   key={item.href}
@@ -297,17 +306,6 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
             {/* Bottom Section */}
             <div className="flex flex-col items-center gap-2.5">
-              {/* Launch plan — first-run path; hide when all tasks are resolved. */}
-              {showLaunchNav && (
-                <NavItem
-                  href="/admin/getting-started"
-                  icon={RocketLaunchIcon}
-                  label={launchPlanLabel}
-                  isActive={isNavActive(pathname, '/admin/getting-started')}
-                  badge={launchRemaining}
-                />
-              )}
-
               {/* Settings (admin-only) */}
               {isAdmin && (
                 <NavItem
@@ -472,6 +470,21 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
               </SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-1.5 px-4 py-3">
+              {showLaunchNav && (
+                <Link
+                  to="/admin/getting-started"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
+                    'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
+                    isNavActive(pathname, '/admin/getting-started') &&
+                      'bg-muted/80 text-foreground font-medium'
+                  )}
+                >
+                  <RocketLaunchIcon className="h-5 w-5" />
+                  {launchPlanLabel}
+                </Link>
+              )}
               {filteredNavItems.map((item) => {
                 const isActive = isNavActive(pathname, item.href)
                 const Icon = item.icon
@@ -492,21 +505,6 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 )
               })}
               <div className="h-px bg-border/40 my-4" />
-              {showLaunchNav && (
-                <Link
-                  to="/admin/getting-started"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                    'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                    isNavActive(pathname, '/admin/getting-started') &&
-                      'bg-muted/80 text-foreground font-medium'
-                  )}
-                >
-                  <RocketLaunchIcon className="h-5 w-5" />
-                  {launchPlanLabel}
-                </Link>
-              )}
               {isAdmin && (
                 <Link
                   to="/admin/settings"

@@ -234,7 +234,7 @@ each disambiguation case is a named test, not an assumption.
   default on a populated table, which fails outright rather than silently
   breaking old code) is out of scope. This linter is about _cross-version
   compatibility_, not whether a migration succeeds against real data —
-  that's what running it against a Neon branch pre-flight (§10.8) is for.
+  that's what running it against a catalog clone pre-flight (§10.8) is for.
 
 ## Comments and string literals
 

@@ -216,7 +216,7 @@ export function resolveOnboardingHandoffCtas(input: Omit<ActivationActionContext
       outcome,
       label: 'Go to your workspace',
       kind: 'link',
-      destination: '/admin',
+      destination: '/admin/getting-started',
     },
     share: null,
   }

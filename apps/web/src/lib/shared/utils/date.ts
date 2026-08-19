@@ -4,7 +4,7 @@
 
 /**
  * Safely convert a date value to ISO string.
- * Handles both Date objects and ISO strings (Neon HTTP driver returns strings).
+ * Handles both Date objects and ISO strings (some HTTP drivers return strings).
  */
 export function toIsoString(value: Date | string): string {
   if (typeof value === 'string') {

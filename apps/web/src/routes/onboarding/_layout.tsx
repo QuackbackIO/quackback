@@ -1,5 +1,10 @@
 import { createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
-import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
+import {
+  getSetupState,
+  isOnboardingComplete,
+  needsActivationHandoff,
+  needsCloudOnboardingWizard,
+} from '@/lib/shared/db-types'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ALL_ONBOARDING_STEPS } from './-onboarding-steps'
@@ -21,11 +26,11 @@ export const Route = createFileRoute('/onboarding/_layout')({
       return
     }
     const setupState = getSetupState(context.settings?.settings?.setupState ?? null)
-    if (isOnboardingComplete(setupState)) {
-      if (!setupState?.activationHandoffSeenAt && location.pathname !== '/onboarding/complete') {
+    if (isOnboardingComplete(setupState) && !needsCloudOnboardingWizard(setupState)) {
+      if (needsActivationHandoff(setupState) && location.pathname !== '/onboarding/complete') {
         throw redirect({ to: '/onboarding/complete' })
       }
-      if (setupState?.activationHandoffSeenAt) throw redirect({ to: '/admin' })
+      if (setupState?.activationHandoffSeenAt) throw redirect({ to: '/admin/getting-started' })
     }
   },
   component: OnboardingLayout,

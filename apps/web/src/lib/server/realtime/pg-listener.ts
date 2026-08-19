@@ -3,7 +3,7 @@
  * session-mode connection.
  *
  * The discipline here is `jobs/wake.ts`'s, and the reason is the same
- * measurement: through Neon's transaction-mode pooler a notify **never
+ * measurement: through a transaction-mode pooler a notify **never
  * arrives, at any concurrency — including a single client**, while
  * `pg_listening_channels()` reports the registration as held the whole time
  * (SAAS-HOSTING-STACK.md §7.3, measured 2026-08-08). So:

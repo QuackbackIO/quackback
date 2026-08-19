@@ -3,7 +3,7 @@
  *
  * Under pooled tenancy every scheduled sweep funnels through `withSweepLock`,
  * which fans the tick out across the fleet — so the interval is the rate at
- * which every suspended Neon compute is woken. That is why `startup.ts` starts
+ * which every suspended workspace database is woken. That is why `startup.ts` starts
  * no sweep timers on a pooled worker and the cron services own them instead.
  *
  * The hazard that creates is drift: a sweep added to `startup.ts`'s schedule but

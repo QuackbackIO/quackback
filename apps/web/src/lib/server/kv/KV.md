@@ -89,7 +89,7 @@ correctness bug across every one of these stores.
 ## 5. `LISTEN` must be direct, and is only ever verified by delivery
 
 Through a transaction-mode pooler a notify **never arrives — at one idle client,
-not just under contention.** Measured by delivery on two Neon projects: 0/1
+not just under contention.** Measured by delivery on two workspace databases: 0/1
 pooled across 16 runs, 0/6, 0/10; direct 1/1, 6/6, 10/10.
 
 `pg_listening_channels()` is the **inverted** instrument: it reads `true` on the
@@ -120,7 +120,7 @@ Two instruments, because one of them cannot resolve what the other can.
    old code issued against a real Redis, and the exact statement the new one
    issues against a real Postgres, from one process. 400 iterations, 20 warm-up
    calls discarded.
-2. **Paired against `SELECT 1` on a real Neon compute**, `aws-us-east-1`, on a
+2. **Paired against `SELECT 1` on a real workspace database**, `aws-us-east-1`, on a
    **throwaway project nobody else was on** (`gauntlet-p8-bench`, created and torn
    down for the measurement — a shared workspace compute has other pieces' pollers on
    it and its numbers cannot be trusted). Every sample is
@@ -148,7 +148,7 @@ threshold to pass.
 Round trips are **1 in both** — Redis pipelined; Postgres uses one statement.
 
 The loopback Postgres figure is dominated by a WAL fsync to a Docker volume, and
-that is **not** what a Neon workspace pays. On the dedicated Neon compute, paired
+that is **not** what a workspace database pays. On the dedicated compute, paired
 against `SELECT 1` on the same connection:
 
 |                             | delta over `SELECT 1`, p50   | p95      |
@@ -161,7 +161,7 @@ away: **0.019 ms/op** for the bucket upsert against **0.0009 ms/op** for
 `PERFORM 1`.
 
 **So the statement is essentially free and the whole cost is the round trip.**
-On the deployed pairing (Railway `us-east4` ↔ Neon `us-east-1`, measured at 0–3 ms
+On the deployed pairing (Railway `us-east4` ↔ the workspace database `us-east-1`, measured at 0–3 ms
 RTT with a 7 ms tail over 217 samples), a rate-checked request pays roughly
 **1–4 ms p50** where a Railway-private Redis would have paid a few hundred
 microseconds. **Net: about 1–3 ms p50 added to the sign-in and widget hot paths,
@@ -178,7 +178,7 @@ unauthenticated entry points, not on ordinary page renders.
 | heartbeat, per live stream per 20 s | 0.190 ms p50     | 3.287 ms p50        | **3 → 1**   |
 | `listOnlineAgentIds` (routing)      | 0.141 ms p50     | 0.236 ms p50        | **2 → 1**   |
 
-On the dedicated Neon compute: heartbeat **+0.584 ms** over `SELECT 1` (p50),
+On the dedicated compute: heartbeat **+0.584 ms** over `SELECT 1` (p50),
 routing read **+0.251 ms**; 0.015 and 0.049 ms/op server-side.
 
 **§7.4 over-rated this one, and the reason is structural.** The Lua script and the

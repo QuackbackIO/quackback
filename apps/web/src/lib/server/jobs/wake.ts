@@ -3,7 +3,7 @@
  *
  * ## This connection must not be pooled, and the reason is measured
  *
- * `LISTEN` needs a session-mode connection. Through Neon's transaction-mode
+ * `LISTEN` needs a session-mode connection. Through a transaction-mode
  * pooler a notify **never arrives, at any concurrency — including a single
  * client** (measured twice with two instruments, 2026-08-08). Worse,
  * `pg_listening_channels()` reports the registration as present the whole time,

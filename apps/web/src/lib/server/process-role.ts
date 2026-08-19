@@ -20,7 +20,7 @@
  *                        a DIRECT session-mode connection per workspace it is
  *                        working, which is the one thing that must never share
  *                        a process with the serving tier, because holding a
- *                        connection open is exactly what stops a Neon compute
+ *                        connection open is exactly what stops a workspace database
  *                        suspending.
  *
  * Read directly from process.env (not the zod config) so the check works in

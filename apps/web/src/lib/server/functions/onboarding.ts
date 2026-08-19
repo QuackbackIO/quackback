@@ -34,7 +34,7 @@ import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
-import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
+import { applyDeferredLaunchStartingPoint, mutateSetupStateAtomic } from '@/lib/server/setup-state'
 import { parseIdentityProjection } from '@/lib/server/domains/settings/cloud/identity-projection'
 
 const log = logger.child({ component: 'onboarding' })
@@ -247,9 +247,10 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
       let result: SaveWorkspaceAndGoalResult
       if (!existingSettings) {
         const initialState: SetupState = {
-          ...DEFAULT_SETUP_STATE,
-          steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true },
-          useCase: data.useCase,
+          ...applyDeferredLaunchStartingPoint(
+            { ...DEFAULT_SETUP_STATE, steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true } },
+            data.useCase
+          ),
         }
         const [created] = await db
           .insert(settings)
@@ -303,11 +304,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
             .returning()
           const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
           return {
-            state: {
-              ...current,
-              steps: { ...current.steps, workspace: true },
-              useCase: goal,
-            },
+            state: applyDeferredLaunchStartingPoint(current, goal),
             value: {
               updated,
               goal,
@@ -361,11 +358,7 @@ export const saveCloudOnboardingGoalFn = createServerFn({ method: 'POST' })
         throw new Error('Set your workspace name and URL first')
       }
       return {
-        state: {
-          ...current,
-          steps: { ...current.steps, workspace: true },
-          useCase: data.useCase,
-        },
+        state: applyDeferredLaunchStartingPoint(current, data.useCase),
         value: undefined,
       }
     })

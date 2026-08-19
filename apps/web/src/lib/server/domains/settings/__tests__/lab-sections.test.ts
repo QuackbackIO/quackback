@@ -74,6 +74,10 @@ describe('feature flag settings layout', () => {
       statusPage: false,
     }
     expect(getFirstEnabledAdminProductPath({ ...allOff, changelog: true })).toBe('/admin/changelog')
+    expect(getFirstEnabledAdminProductPath({ ...allOff, supportInbox: true })).toBe('/admin/inbox')
+    expect(getFirstEnabledAdminProductPath({ ...allOff, feedback: true, supportInbox: true })).toBe(
+      '/admin/feedback'
+    )
     expect(getFirstEnabledAdminProductPath(allOff)).toBe('/admin/analytics')
   })
 

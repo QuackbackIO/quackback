@@ -126,7 +126,7 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/usecase')
   })
 
-  it('routes a provisioned owner with details and an outcome to the starter', () => {
+  it('routes a provisioned owner with details and an outcome to the ready step', () => {
     expect(
       pickOnboardingStep({
         session: { userId: 'u_owner' },
@@ -140,7 +140,7 @@ describe('pickOnboardingStep V2', () => {
           principalRecord: { id: 'p_owner', role: 'admin' },
         },
       })
-    ).toBe('/onboarding/boards')
+    ).toBe('/onboarding/complete')
   })
 
   it('does not let a pre-seeded outcome skip cloud workspace details', () => {
@@ -155,6 +155,36 @@ describe('pickOnboardingStep V2', () => {
         },
       })
     ).toBe('/onboarding/workspace')
+  })
+
+  it('does not let a provision stamp skip the goal or starter steps', () => {
+    const stamped = state({
+      workspaceDetailsSeenAt: '2026-08-14T10:00:00.000Z',
+      useCase: 'product_feedback',
+      completionSource: 'managed',
+      steps: {
+        core: true,
+        workspace: true,
+        startingPoint: {
+          outcome: 'product_feedback',
+          resourceType: 'none',
+          source: 'managed',
+          resolution: 'configured',
+          completedAt: '2026-08-14T10:00:00.000Z',
+        },
+      },
+    })
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u_owner' },
+        state: {
+          setupClaimedByOther: false,
+          setupOpenToClaim: false,
+          setupState: stamped,
+          principalRecord: { id: 'p_owner', role: 'admin' },
+        },
+      })
+    ).toBe('/onboarding/usecase')
   })
 
   // The workspace step is where a workspace is claimed, and the declarative
@@ -202,7 +232,7 @@ describe('pickOnboardingStep V2', () => {
     ).toBe('/onboarding/workspace')
   })
 
-  it('routes configured workspace and goal to the starting point', () => {
+  it('routes configured workspace and goal to the ready step', () => {
     expect(
       pickOnboardingStep({
         session: { userId: 'u1' },
@@ -214,7 +244,7 @@ describe('pickOnboardingStep V2', () => {
           principalRecord,
         },
       })
-    ).toBe('/onboarding/boards')
+    ).toBe('/onboarding/complete')
   })
 
   it('shows the bridge until it is acknowledged', () => {
@@ -248,7 +278,7 @@ describe('pickOnboardingStep V2', () => {
           principalRecord,
         },
       })
-    ).toBe('/admin')
+    ).toBe('/admin/getting-started')
   })
 })
 

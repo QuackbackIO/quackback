@@ -202,7 +202,7 @@ describe('the schedule tick', () => {
     // The defect this pins: a module-scope `seen` map keyed on the schedule name
     // alone is shared by every workspace loop in the process, so whichever workspace
     // reached a slot first advanced a counter the rest read as "already done".
-    // Measured live on two Neon workspaces before the fix: each minute's sweep
+    // Measured live on two workspaces before the fix: each minute's sweep
     // landed on exactly one workspace, never both.
     const q = queue('sched-two-workspaces')
     __setJobDefinitionsForTests([

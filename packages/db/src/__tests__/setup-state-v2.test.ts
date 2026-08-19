@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   getSetupState,
   isOnboardingComplete,
+  needsActivationHandoff,
+  needsCloudOnboardingWizard,
   normalizeOnboardingOutcome,
   normalizeSetupStateV2,
 } from '../types'
@@ -41,6 +43,51 @@ describe('SetupState V2 normalization', () => {
       activationHandoffSeenAt: '2026-01-02T03:04:05.000Z',
     })
     expect(isOnboardingComplete(normalized)).toBe(true)
+    expect(needsActivationHandoff(normalized)).toBe(false)
+  })
+
+  it('sends a provisioned workspace through the wizard, not the handoff', () => {
+    const managed = normalizeSetupStateV2({
+      version: 2,
+      steps: {
+        core: true,
+        workspace: true,
+        startingPoint: {
+          outcome: 'product_feedback',
+          resourceType: 'none',
+          source: 'managed',
+          resolution: 'configured',
+          completedAt: '2026-08-18T07:45:03.644Z',
+        },
+      },
+      useCase: 'product_feedback',
+      completedAt: '2026-08-18T07:45:03.644Z',
+      completionSource: 'managed',
+    })
+    expect(isOnboardingComplete(managed)).toBe(true)
+    expect(needsCloudOnboardingWizard(managed)).toBe(true)
+    expect(needsCloudOnboardingWizard(null)).toBe(false)
+    expect(
+      needsCloudOnboardingWizard({
+        ...managed!,
+        workspaceDetailsSeenAt: '2026-08-18T08:00:00.000Z',
+        steps: {
+          ...managed!.steps,
+          startingPoint: {
+            ...managed!.steps.startingPoint!,
+            source: 'wizard',
+          },
+        },
+      })
+    ).toBe(false)
+    expect(needsActivationHandoff(managed)).toBe(true)
+    expect(
+      needsActivationHandoff({
+        ...managed!,
+        activationHandoffSeenAt: '2026-08-18T08:00:00.000Z',
+      })
+    ).toBe(false)
+    expect(needsActivationHandoff(null)).toBe(false)
   })
 
   it('preserves known completion provenance from an older record', () => {

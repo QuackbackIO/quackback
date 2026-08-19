@@ -11,8 +11,8 @@
  * Under pooled tenancy every one of these sweeps funnels through
  * `withSweepLock`, which fans the tick out across the **whole fleet** — one
  * connection to every workspace database per tick. So the interval is not a
- * scheduling preference, it is the floor on how often every suspended Neon
- * compute is woken:
+ * scheduling preference, it is the floor on how often every suspended
+ * workspace database is woken:
  *
  * | Timer in `startup.ts` | Fan-out interval | Against a 300 s suspend timeout |
  * | --- | --- | --- |

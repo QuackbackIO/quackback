@@ -1,67 +1,56 @@
 import { useState } from 'react'
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
-import {
-  ArrowPathIcon,
-  ArrowRightIcon,
-  BookOpenIcon,
-  ChatBubbleLeftRightIcon,
-  LinkIcon,
-  LockClosedIcon,
-} from '@heroicons/react/24/outline'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { ArrowPathIcon, ArrowRightIcon, CheckIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
-import { ActivationActionButton } from '@/components/admin/activation-action-button'
-import { checkOnboardingState } from '@/lib/server/functions/admin'
+import { checkOnboardingState, fetchOnboardingStatus } from '@/lib/server/functions/admin'
 import {
   acknowledgeActivationHandoffFn,
   getActivationBridgeContextFn,
 } from '@/lib/server/functions/activation'
 import { pickOnboardingStep } from './-onboarding-step'
-import type { StartingPointState } from '@/lib/shared/db-types'
-import { resolveOnboardingHandoffCtas } from '@/lib/shared/activation-action'
+import { displayWorkspaceName } from './-ready-copy'
+import {
+  buildLaunchTasks,
+  OUTCOME_TAB_LABEL,
+  type LaunchStatus,
+  type LaunchTask,
+} from '@/lib/shared/launch-checklist'
+import { cn } from '@/lib/shared/utils'
 
 export const Route = createFileRoute('/onboarding/_layout/complete')({
   loader: async ({ context }) => {
     const { session } = context
     if (!session?.user) throw redirect({ to: '/onboarding/account' })
     const state = await checkOnboardingState()
-    // One check for every reason this is not the caller's step: an earlier step
-    // is still open, the handoff is already acknowledged, they have yet to claim
-    // the workspace at all, or setup belongs to somebody else.
     const target = pickOnboardingStep({ session: { userId: session.user.id }, state })
     if (target !== '/onboarding/complete') throw redirect({ to: target })
-    return getActivationBridgeContextFn()
+    const [bridge, status] = await Promise.all([
+      getActivationBridgeContextFn(),
+      fetchOnboardingStatus(),
+    ])
+    return { ...bridge, status }
   },
-  component: ActivationBridge,
+  component: ReadyStep,
 })
 
-function ActivationBridge() {
+function ReadyStep() {
   const intl = useIntl()
-  const navigate = useNavigate()
-  const { workspaceName, startingPoint, resourceLabel, starterBoard } = Route.useLoaderData()
+  const { workspaceName, startingPoint, status } = Route.useLoaderData()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const { primary, share } = resolveOnboardingHandoffCtas({
-    startingPoint,
-    status: {
-      hasBoards: Boolean(starterBoard),
-      hasPublicBoard: Boolean(starterBoard),
-      publicBoardId: starterBoard?.id,
-      publicBoardSlug: starterBoard?.slug,
-      publicBoardPath: starterBoard?.publicPath,
-      memberCount: 1,
-      hasBranding: false,
-      hasWidgetEnabled: startingPoint.resourceType === 'messenger',
-      useCase: startingPoint.outcome,
-    },
-  })
+  const outcome = startingPoint.outcome
+  const tasks = buildLaunchTasks(status as LaunchStatus, outcome)
+    .filter((task) => task.classification !== 'polish')
+    .slice(0, 4)
+  const named = displayWorkspaceName(workspaceName)
 
-  async function continueToAction() {
+  async function openWorkspace() {
     setIsLoading(true)
     setError('')
     try {
       await acknowledgeActivationHandoffFn()
-      window.location.assign(primary.destination)
+      window.location.assign('/admin/getting-started')
     } catch (err) {
       setError(
         err instanceof Error
@@ -76,160 +65,100 @@ function ActivationBridge() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-8 text-center">
-      <header>
-        <p className="text-sm font-medium text-primary">
-          <FormattedMessage id="onboarding.bridge.eyebrow" defaultMessage="Workspace ready" />
-        </p>
-        <h1 className="mt-2 text-3xl font-bold">
-          <FormattedMessage
-            id="onboarding.bridge.title"
-            defaultMessage="{workspaceName} is ready for the next step"
-            values={{ workspaceName }}
-          />
-        </h1>
-        <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
-          {startingPoint.resolution === 'deferred' ? (
-            <FormattedMessage
-              id="onboarding.bridge.deferred"
-              defaultMessage="No problem — we’ve saved this step for later. You’ll find it in your launch plan."
-            />
-          ) : startingPoint.resolution === 'unavailable' ? (
-            <FormattedMessage
-              id="onboarding.bridge.unavailable"
-              defaultMessage="We couldn’t finish this step yet. Your launch plan will show what needs attention and who can help."
-            />
-          ) : (
-            <FormattedMessage
-              id="onboarding.bridge.description"
-              defaultMessage="Your starting point is ready. Take one more step to begin seeing results."
-            />
-          )}
-        </p>
-      </header>
+    <div className="mx-auto flex w-full max-w-sm flex-col items-center text-center">
+      <span
+        aria-hidden
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground"
+      >
+        <CheckIcon className="h-6 w-6" />
+      </span>
 
-      <BridgeArtifact
-        startingPoint={startingPoint}
-        workspaceName={workspaceName}
-        resourceLabel={resourceLabel}
-        publicBoardPath={starterBoard?.publicPath ?? null}
-      />
+      <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+        <FormattedMessage id="onboarding.bridge.eyebrow" defaultMessage="Ready" />
+      </p>
+      <h1 className="mt-2 text-balance text-3xl font-semibold tracking-tight sm:text-[2.15rem]">
+        <FormattedMessage id="onboarding.bridge.title" defaultMessage="Your workspace is ready" />
+      </h1>
+      {named ? <p className="mt-2 text-sm font-medium text-foreground/80">{named}</p> : null}
+      <p className="mt-2 max-w-sm text-balance text-sm text-muted-foreground">
+        <FormattedMessage
+          id="onboarding.bridge.description"
+          defaultMessage="Here’s what we’ll help you do first for {goal}."
+          values={{ goal: OUTCOME_TAB_LABEL[outcome] }}
+        />
+      </p>
 
-      <div aria-live="polite">
-        {error && (
+      {tasks.length > 0 ? <LaunchPreview tasks={tasks} /> : null}
+
+      <div aria-live="polite" className="mt-4 w-full">
+        {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
-        )}
-      </div>
-
-      <div className="flex flex-col items-center gap-2">
-        <Button onClick={continueToAction} disabled={isLoading} className="h-11 min-w-56">
-          {isLoading ? (
-            <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <>
-              {primary.label}
-              <ArrowRightIcon className="h-4 w-4" />
-            </>
-          )}
-        </Button>
-        {share ? (
-          <ActivationActionButton
-            action={share}
-            surface="onboarding_handoff"
-            variant="ghost"
-            className="h-11 min-w-56"
-            onCompleted={async () => {
-              await acknowledgeActivationHandoffFn()
-              await navigate({ to: '/admin/feedback' })
-            }}
-          />
         ) : null}
       </div>
+
+      <Button onClick={openWorkspace} disabled={isLoading} className="mt-6 h-11 w-full">
+        {isLoading ? (
+          <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+        ) : (
+          <>
+            <FormattedMessage
+              id="onboarding.bridge.continue"
+              defaultMessage="Open your workspace"
+            />
+            <ArrowRightIcon className="h-4 w-4" />
+          </>
+        )}
+      </Button>
     </div>
   )
 }
 
-function BridgeArtifact({
-  startingPoint,
-  workspaceName,
-  resourceLabel,
-  publicBoardPath,
-}: {
-  startingPoint: StartingPointState
-  workspaceName: string
-  resourceLabel: string | null
-  publicBoardPath: string | null
-}) {
-  const outcome = startingPoint.outcome
-  const Icon =
-    outcome === 'customer_support'
-      ? ChatBubbleLeftRightIcon
-      : outcome === 'help_center'
-        ? BookOpenIcon
-        : outcome === 'internal'
-          ? LockClosedIcon
-          : LinkIcon
-  const title =
-    startingPoint.resolution === 'deferred'
-      ? 'Ready when you are'
-      : startingPoint.resolution === 'unavailable'
-        ? 'Needs attention'
-        : (resourceLabel ??
-          (outcome === 'customer_support'
-            ? `${workspaceName} Messenger`
-            : outcome === 'help_center'
-              ? 'Getting started article'
-              : outcome === 'internal'
-                ? 'Team feedback'
-                : 'Product feedback'))
-  const detail =
-    startingPoint.resolution === 'deferred'
-      ? 'Saved in your launch plan'
-      : startingPoint.resolution === 'unavailable'
-        ? 'Your launch plan shows what needs attention'
-        : outcome === 'customer_support'
-          ? 'Messenger is ready to install'
-          : outcome === 'help_center'
-            ? 'Ready to continue'
-            : outcome === 'internal'
-              ? 'Private board'
-              : (publicBoardPath ?? 'Public feedback board')
+function LaunchPreview({ tasks }: { tasks: LaunchTask[] }) {
+  const firstOpen = tasks.findIndex((task) => !task.isCompleted)
   return (
-    <div className="mx-auto flex max-w-lg items-center gap-4 rounded-2xl border bg-card p-6 text-left">
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <Icon className="h-6 w-6" />
-      </div>
-      <div className="min-w-0">
-        <p className="font-semibold">
-          {resourceLabel &&
-          startingPoint.resolution !== 'deferred' &&
-          startingPoint.resolution !== 'unavailable' ? (
-            resourceLabel
-          ) : (
-            <FormattedMessage
-              id={`onboarding.bridge.artifact.${
-                startingPoint.resolution === 'deferred' ||
-                startingPoint.resolution === 'unavailable'
-                  ? startingPoint.resolution
-                  : outcome
-              }.title`}
-              defaultMessage={title}
-            />
-          )}
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          <FormattedMessage
-            id={`onboarding.bridge.artifact.${
-              startingPoint.resolution === 'deferred' || startingPoint.resolution === 'unavailable'
-                ? startingPoint.resolution
-                : outcome
-            }.detail`}
-            defaultMessage={detail}
-          />
-        </p>
-      </div>
-    </div>
+    <ol className="mt-8 w-full divide-y divide-border/70 rounded-2xl border bg-card/60 px-1 text-left">
+      {tasks.map((task, index) => {
+        const status = task.isCompleted ? 'done' : index === firstOpen ? 'current' : 'pending'
+        return (
+          <li key={task.id} className="flex items-center gap-3 px-4 py-3.5">
+            <PreviewMark status={status} />
+            <span
+              className={cn(
+                'text-[15px] leading-snug',
+                status === 'done' && 'text-muted-foreground',
+                status === 'current' && 'font-medium text-foreground',
+                status === 'pending' && 'text-muted-foreground/60'
+              )}
+            >
+              {task.title}
+            </span>
+          </li>
+        )
+      })}
+    </ol>
   )
+}
+
+function PreviewMark({ status }: { status: 'done' | 'current' | 'pending' }) {
+  if (status === 'done') {
+    return (
+      <span
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+        aria-label="Done"
+      >
+        <CheckIcon className="h-3 w-3" />
+      </span>
+    )
+  }
+  if (status === 'current') {
+    return (
+      <span
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary/10"
+        aria-label="Up next"
+      />
+    )
+  }
+  return <span className="h-5 w-5 shrink-0 rounded-full border border-border" aria-label="Later" />
 }

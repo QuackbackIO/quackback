@@ -49,6 +49,8 @@ import * as schema from './schema'
  * on whichever backend happened to serve the statement, which is not a lock.
  */
 export const MIGRATION_LOCK_KEY = 4_820_231_099
+/** 32-bit namespace for the two-key lock (per-database via hashtext). */
+export const MIGRATION_LOCK_NS = 48_202
 
 /** Extensions the bundled schema depends on. `vector` is load-bearing from `0000_initial`. */
 export const REQUIRED_EXTENSIONS = ['vector', 'pg_trgm'] as const
@@ -386,40 +388,30 @@ export async function verifySchemaPostconditions(sql: postgres.Sql): Promise<Pos
   }
 
   const violations: PostconditionViolation[] = [
-    ...invalidIndexes.map(
-      (i): PostconditionViolation => ({
-        kind: 'invalid_index',
-        detail: `${i.schema}.${i.name} on ${i.table} is INVALID (indisready=${i.isReady}${
-          i.constraintBacked ? ', constraint-backed' : ''
-        })`,
-      })
-    ),
-    ...missingIndexes.map(
-      (name): PostconditionViolation => ({
-        kind: 'missing_index',
-        detail: `${name} does not exist`,
-      })
-    ),
-    ...missingExtensions.map(
-      (name): PostconditionViolation => ({
-        kind: 'missing_extension',
-        detail: `extension ${name} is not installed`,
-      })
-    ),
-    ...missingTables.map(
-      (name): PostconditionViolation => ({
-        kind: 'missing_table',
-        detail: `table ${name} is declared by this build and does not exist`,
-      })
-    ),
-    ...missingColumns.map(
-      (name): PostconditionViolation => ({
-        kind: 'missing_column',
-        detail:
-          `column ${name} is declared by this build and does not exist; every query this ` +
-          'build issues against that table names it explicitly and will throw',
-      })
-    ),
+    ...invalidIndexes.map((i): PostconditionViolation => ({
+      kind: 'invalid_index',
+      detail: `${i.schema}.${i.name} on ${i.table} is INVALID (indisready=${i.isReady}${
+        i.constraintBacked ? ', constraint-backed' : ''
+      })`,
+    })),
+    ...missingIndexes.map((name): PostconditionViolation => ({
+      kind: 'missing_index',
+      detail: `${name} does not exist`,
+    })),
+    ...missingExtensions.map((name): PostconditionViolation => ({
+      kind: 'missing_extension',
+      detail: `extension ${name} is not installed`,
+    })),
+    ...missingTables.map((name): PostconditionViolation => ({
+      kind: 'missing_table',
+      detail: `table ${name} is declared by this build and does not exist`,
+    })),
+    ...missingColumns.map((name): PostconditionViolation => ({
+      kind: 'missing_column',
+      detail:
+        `column ${name} is declared by this build and does not exist; every query this ` +
+        'build issues against that table names it explicitly and will throw',
+    })),
   ]
 
   return {

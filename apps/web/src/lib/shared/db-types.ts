@@ -13,6 +13,8 @@
 import {
   getSetupState as getSetupStateFromDb,
   isOnboardingComplete as isOnboardingCompleteFromDb,
+  needsActivationHandoff as needsActivationHandoffFromDb,
+  needsCloudOnboardingWizard as needsCloudOnboardingWizardFromDb,
   normalizeOnboardingOutcome as normalizeOnboardingOutcomeFromDb,
   type SetupState,
   type UseCaseType,
@@ -96,6 +98,14 @@ export function getSetupState(setupStateJson: string | null): SetupState | null 
 
 export function isOnboardingComplete(setupState: SetupState | null): boolean {
   return isOnboardingCompleteFromDb(setupState)
+}
+
+export function needsActivationHandoff(setupState: SetupState | null): boolean {
+  return needsActivationHandoffFromDb(setupState)
+}
+
+export function needsCloudOnboardingWizard(setupState: SetupState | null): boolean {
+  return needsCloudOnboardingWizardFromDb(setupState)
 }
 
 /**

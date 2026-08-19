@@ -10,7 +10,12 @@ import {
   redirect,
   useRouterState,
 } from '@tanstack/react-router'
-import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
+import {
+  getSetupState,
+  isOnboardingComplete,
+  needsCloudOnboardingWizard,
+} from '@/lib/shared/db-types'
+import { isAdmin } from '@/lib/shared/roles'
 import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { WorkspaceSettings } from '@/lib/shared/types/settings'
@@ -77,6 +82,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     if (!isOnboardingExempt(location.pathname)) {
       const setupState = getSetupState(settings?.settings?.setupState ?? null)
       if (!isOnboardingComplete(setupState)) {
+        throw redirect({ to: '/onboarding' })
+      }
+      // A provisioned workspace can look complete while the owner has not
+      // chosen a name, URL, or goal. Visitors stay on the portal; only a
+      // signed-in admin is sent into the wizard.
+      if (session?.user && isAdmin(userRole) && needsCloudOnboardingWizard(setupState)) {
         throw redirect({ to: '/onboarding' })
       }
     }

@@ -134,6 +134,22 @@ describe('AdminSidebar — workspace switcher', () => {
   })
 })
 
+describe('AdminSidebar — Getting Started placement', () => {
+  afterEach(() => cleanup())
+
+  it('puts the rocket first in the main list for an admin with launch work left', () => {
+    renderSidebar('admin')
+    const nav = document.querySelector('aside nav')
+    const first = nav?.querySelector('a')
+    expect(first?.getAttribute('href')).toBe('/admin/getting-started')
+  })
+
+  it('hides Getting Started from non-admin team members', () => {
+    const { container } = renderSidebar('member')
+    expect(container.querySelectorAll('a[href="/admin/getting-started"]').length).toBe(0)
+  })
+})
+
 describe('AdminSidebar — settings cog visibility', () => {
   afterEach(() => cleanup())
 

@@ -288,7 +288,7 @@ function WorkspaceAndGoalStep() {
         data: { workspaceName: workspaceName.trim(), useCase },
       })
       localStorage.removeItem(DRAFT_KEY)
-      await navigate({ to: '/onboarding/boards' })
+      await navigate({ to: '/onboarding/complete' })
     } catch (err) {
       setError(
         err instanceof Error

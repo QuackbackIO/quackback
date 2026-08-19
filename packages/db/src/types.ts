@@ -550,6 +550,27 @@ export function isOnboardingComplete(setupState: SetupState | null): boolean {
   )
 }
 
+/**
+ * A managed/provisioned workspace can satisfy {@link isOnboardingComplete}
+ * without the owner ever seeing the "ready — here's what to do next" screen.
+ * The public portal stays open for visitors; this is the admin-only last hop.
+ */
+export function needsActivationHandoff(setupState: SetupState | null): boolean {
+  return isOnboardingComplete(setupState) && !setupState?.activationHandoffSeenAt
+}
+
+/**
+ * Provision can stamp the wizard complete so a public board exists, but the
+ * owner still has to set the workspace name and URL and pick a first goal.
+ * Until they do, send them through the wizard — not the empty board, and not
+ * the "you're ready" handoff.
+ */
+export function needsCloudOnboardingWizard(setupState: SetupState | null): boolean {
+  if (!setupState || setupState.completionSource !== 'managed') return false
+  if (!setupState.workspaceDetailsSeenAt) return true
+  return setupState.steps.startingPoint?.source === 'managed'
+}
+
 // Helper to get typed board settings
 export function getBoardSettings(board: Board): BoardSettings {
   const settings = (board.settings || {}) as BoardSettings

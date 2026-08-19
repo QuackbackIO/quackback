@@ -58,8 +58,8 @@ async function checkDb(): Promise<void> {
   // Under pooled workspaces the probe carries no workspace, so there is no "the"
   // database to ping. What the fleet's readiness actually depends on is the
   // control store — without it no hostname resolves at all. Probing a workspace
-  // would also be actively harmful: it would wake a suspended Neon compute
-  // every few seconds, defeating the idle-cost model the pooling exists for.
+  // would also be actively harmful: it would wake a suspended workspace
+  // database every few seconds, defeating the idle-cost model the pooling exists for.
   //
   // The control store now has exactly the same problem, and it used to have it
   // from this line. `SELECT 1` on every poll is a client connected every few

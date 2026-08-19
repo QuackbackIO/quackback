@@ -20,7 +20,11 @@ import {
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { mutateSetupStateAtomic, acknowledgeActivationHandoff } from '@/lib/server/setup-state'
+import {
+  mutateSetupStateAtomic,
+  acknowledgeActivationHandoff,
+  applyDeferredLaunchStartingPoint,
+} from '@/lib/server/setup-state'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import {
@@ -132,9 +136,20 @@ export const getStartingPointContextFn = createServerFn({ method: 'GET' }).handl
 /** Resolve the exact artifact shown on the one-time setup handoff. */
 export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-  const row = await db.query.settings.findFirst()
+  let row = await db.query.settings.findFirst()
   if (!row) throw new Error('Workspace is not set up yet')
-  const state = getSetupState(row.setupState)
+  let state = getSetupState(row.setupState)
+  if (
+    state?.useCase &&
+    (!state.steps.startingPoint || state.steps.startingPoint.source === 'managed')
+  ) {
+    const { state: next } = await mutateSetupStateAtomic((current) => ({
+      state: applyDeferredLaunchStartingPoint(current, current.useCase ?? state!.useCase!),
+      value: undefined,
+    }))
+    state = next
+    row = (await db.query.settings.findFirst()) ?? row
+  }
   const startingPoint = state?.steps.startingPoint
   if (!startingPoint) throw new Error('Choose a starting point first')
 

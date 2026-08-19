@@ -21,9 +21,8 @@ interface PickStepInput {
 /** Step targets the onboarding flow can route to. Pure string union so
  *  the loader can swap between server-fn redirects and tests can assert. */
 export type OnboardingStep =
-  | '/admin'
+  | '/admin/getting-started'
   | '/onboarding/account'
-  | '/onboarding/boards'
   | '/onboarding/complete'
   | '/onboarding/no-access'
   | '/onboarding/usecase'
@@ -101,11 +100,13 @@ export function pickOnboardingStep({ session, state }: PickStepInput): Onboardin
   // case.
   if (state.setupOpenToClaim === false) {
     if (!state.setupState?.workspaceDetailsSeenAt) return '/onboarding/workspace'
-    if (!state.setupState.useCase) return '/onboarding/usecase'
+    // A provision stamp may pre-fill a goal. The owner still chooses one.
+    if (!state.setupState.useCase || state.setupState.steps.startingPoint?.source === 'managed') {
+      return '/onboarding/usecase'
+    }
   } else if (!state.setupState?.useCase || !state.setupState.steps.workspace) {
     return '/onboarding/workspace'
   }
-  if (!state.setupState.steps.startingPoint) return '/onboarding/boards'
   if (!state.setupState.activationHandoffSeenAt) return '/onboarding/complete'
-  return '/admin'
+  return '/admin/getting-started'
 }

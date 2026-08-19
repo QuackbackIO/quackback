@@ -466,7 +466,7 @@ function cronFor(pattern: string): ParsedCron {
  * one loop per workspace; a `Map` keyed on the schedule name alone is shared by all
  * of them, so whichever workspace's loop reached a slot first advanced a counter
  * every other workspace then read as "already done" — and the rest silently never
- * enqueued that slot. Measured live on two Neon workspaces: each minute's sweep
+ * enqueued that slot. Measured live on two workspaces: each minute's sweep
  * landed on one workspace, never both. It affected all seven sweeps.
  *
  * That is the §4.1 process-global-state hazard, introduced by the piece meant to

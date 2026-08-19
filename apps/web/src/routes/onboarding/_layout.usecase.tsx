@@ -38,7 +38,7 @@ export function CloudUseCaseStep() {
       existingUseCase={existingUseCase}
       onSave={async (useCase) => {
         await saveCloudOnboardingGoalFn({ data: { useCase } })
-        await navigate({ to: '/onboarding/boards' })
+        await navigate({ to: '/onboarding/complete' })
       }}
     />
   )
@@ -70,7 +70,7 @@ export function CloudUseCaseForm(props: {
       <header className="text-center">
         <h1 className="text-2xl font-bold">What would you like to accomplish first?</h1>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-          We’ll prepare a useful starting point around this outcome.
+          We’ll personalize your launch plan around this outcome.
         </p>
       </header>
 
