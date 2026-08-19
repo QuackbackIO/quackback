@@ -176,9 +176,7 @@ async function setup(): Promise<void> {
       storage jsonb NOT NULL,
       email_from text NOT NULL,
       ai_enabled boolean NOT NULL DEFAULT false,
-      revision bigint NOT NULL DEFAULT 1,
-      neon_project_id text,
-      neon_branch_id text
+      revision bigint NOT NULL DEFAULT 1
     )`
   await ctl`
     CREATE TABLE cp_tenant_hostnames (

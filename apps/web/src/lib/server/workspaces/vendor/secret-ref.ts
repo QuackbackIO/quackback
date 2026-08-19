@@ -9,15 +9,12 @@
  *
  * Schemes:
  *
- *   neon+role://<proj>/<br>/<role> the password Neon already holds, revealed
- *                                  through the Management API. This is why the
- *                                  record carries `dbRole`: a rotation lands
- *                                  under a live pool, so the pool cache must be
- *                                  able to re-resolve and reconnect (§6).
+ *   sealed+aead://v<g>/<t>/db/<b>  the serving Postgres password, sealed under
+ *                                  the fleet root. We issue the password
+ *                                  (`CREATE ROLE … PASSWORD`) so it is a value
+ *                                  we chose, and the blob rides in the same
+ *                                  registry row as the DSN.
  *   derived+hkdf://v<g>/<t>/<p>    derived from the fleet root — nothing stored.
- *   sealed+aead://v<g>/<t>/<p>/<b> sealed under the fleet root — the blob is the
- *                                  reference, so it is read atomically with the
- *                                  DSN rather than fetched afterwards.
  *   env://<VAR>                    a fleet-level environment variable.
  *
  * `env://` exists because a small operator-managed fleet can genuinely deliver
@@ -53,7 +50,6 @@
 export type SecretRef = string
 
 export const SECRET_REF_SCHEMES = [
-  'neon+role',
   'derived+hkdf',
   'sealed+aead',
   'env',
@@ -62,7 +58,6 @@ export const SECRET_REF_SCHEMES = [
 export type SecretRefScheme = (typeof SECRET_REF_SCHEMES)[number]
 
 export type ParsedSecretRef =
-  | { scheme: 'neon+role'; projectId: string; branchId: string; role: string }
   | { scheme: 'derived+hkdf'; generation: number; workspaceKey: string; purpose: string }
   | {
       scheme: 'sealed+aead'
@@ -82,10 +77,9 @@ export type ParsedSecretRef =
 export type SecretRefField = 'database' | 'appSecrets' | 'storage'
 
 const FIELD_POLICY: Record<SecretRefField, readonly SecretRefScheme[]> = {
-  // A serving Postgres password. `derived+hkdf` and `sealed+aead` are absent
-  // deliberately: a database password is issued by a provider, never chosen by
-  // us, and a scheme the resolver refuses must not be committable in the column.
-  database: ['neon+role', 'env'],
+  // We issue the serving password (`CREATE ROLE`), so `sealed+aead` is the
+  // production scheme. `env://` is the small-operator path.
+  database: ['sealed+aead', 'env'],
   // SECRET_KEY and the app-internal bearer tokens. `derived+hkdf` is the default:
   // these are values we choose, so nothing has to carry them.
   appSecrets: ['derived+hkdf', 'env'],
@@ -110,7 +104,12 @@ export function isSecretRefAllowedFor(field: SecretRefField, ref: unknown): ref 
   } catch {
     return false
   }
-  return FIELD_POLICY[field].includes(parsed.scheme)
+  if (!FIELD_POLICY[field].includes(parsed.scheme)) return false
+  if (parsed.scheme === 'sealed+aead') {
+    if (field === 'database' && parsed.purpose !== 'db') return false
+    if (field === 'storage' && parsed.purpose !== 'storage') return false
+  }
+  return true
 }
 
 export class SecretRefError extends Error {
@@ -154,16 +153,6 @@ const DERIVED_REF_RE = /^v([1-9][0-9]{0,3})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})\
 const SEALED_REF_RE =
   /^v([1-9][0-9]{0,3})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})\/([a-z][a-z-]{0,31})\/([A-Za-z0-9_-]{16,4096})$/
 
-/**
- * `neon+role://<projectId>/<branchId>/<role>`.
- *
- * Strict, because this ref is dereferenced against the Neon Management API with
- * an organisation-wide key: every component is interpolated into a URL path, so
- * anything looser is a request-forgery primitive rather than a reference. Neon's
- * own id shapes are narrow, so nothing is given up by pinning them.
- */
-const NEON_ROLE_REF_RE = /^([a-z0-9][a-z0-9-]{0,62})\/(br-[a-z0-9-]{1,62})\/([a-zA-Z_][a-zA-Z0-9_$]{0,62})$/
-
 export function parseSecretRef(ref: SecretRef): ParsedSecretRef {
   const idx = ref.indexOf('://')
   if (idx < 0) throw new SecretRefError(`secret ref has no scheme: ${redactRef(ref)}`)
@@ -190,11 +179,6 @@ export function parseSecretRef(ref: SecretRef): ParsedSecretRef {
         purpose: m[3]!,
         blob: m[4]!,
       }
-    }
-    case 'neon+role': {
-      const m = NEON_ROLE_REF_RE.exec(rest)
-      if (!m) throw new SecretRefError(`not a Neon role reference: ${rest}`)
-      return { scheme, projectId: m[1]!, branchId: m[2]!, role: m[3]! }
     }
     case 'env':
       if (!ENV_REF_NAME_RE.test(rest)) {
@@ -237,23 +221,6 @@ export function sealedSecretRef(
   return ref
 }
 
-/**
- * Build a Neon role reference.
- *
- * Neon holds the role password (`store_passwords`) and exposes it through
- * `reveal_password`, so the control plane can name the credential without ever
- * storing it — which is what a reference is supposed to mean. It also exposes
- * `reset_password`, so this scheme has a rotation story rather than a promise of
- * one.
- */
-export function neonRoleRef(projectId: string, branchId: string, role: string): SecretRef {
-  const ref = `${projectId}/${branchId}/${role}`
-  if (!NEON_ROLE_REF_RE.test(ref)) {
-    throw new SecretRefError(`not a Neon role reference: ${ref}`)
-  }
-  return `neon+role://${ref}`
-}
-
 /** Build an env ref. The variable name must be in the reserved namespace. */
 export function envRef(variable: string): SecretRef {
   if (!ENV_REF_NAME_RE.test(variable)) {
@@ -268,41 +235,47 @@ export function envRef(variable: string): SecretRef {
  * Deliberately narrow: it resolves DB credentials and nothing else, so a ref
  * pointing at the app-secret bundle cannot be dereferenced through this path.
  *
- * `readStaticCreds` is injected rather than imported so this stays testable
- * without a Neon client, and so callers outside the control plane (scripts) can
- * supply their own.
+ * `openSealedDbPassword` is injected rather than imported so this stays
+ * testable without the fleet-root reader, and so callers outside the control
+ * plane (scripts) can supply their own.
  */
 export async function resolveDbCredential(
   ref: SecretRef,
   deps: {
     /**
-     * Reveal the password Neon holds for a role. Injected rather than imported
-     * so this module stays free of the Neon client, and so a process that never
-     * serves Neon workspaces never needs an API key.
+     * Open a sealed database password. Injected so this module stays free of
+     * the fleet-root reader.
      */
-    readNeonRolePassword?: (target: {
-      projectId: string
-      branchId: string
-      role: string
+    openSealedDbPassword?: (target: {
+      generation: number
+      workspaceKey: string
+      purpose: string
+      blob: string
     }) => Promise<string>
     env?: Record<string, string | undefined>
   },
 ): Promise<{ username: string; password: string }> {
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
-    case 'neon+role': {
-      if (!deps.readNeonRolePassword) {
+    case 'sealed+aead': {
+      if (parsed.purpose !== 'db') {
         throw new SecretRefError(
-          `${redactRef(ref)} needs a Neon reader; this process has none configured`,
+          `${redactRef(ref)} is sealed for '${parsed.purpose}', not a database password`,
         )
       }
-      const password = await deps.readNeonRolePassword({
-        projectId: parsed.projectId,
-        branchId: parsed.branchId,
-        role: parsed.role,
+      if (!deps.openSealedDbPassword) {
+        throw new SecretRefError(
+          `${redactRef(ref)} needs a sealed-password opener; this process has none configured`,
+        )
+      }
+      const password = await deps.openSealedDbPassword({
+        generation: parsed.generation,
+        workspaceKey: parsed.workspaceKey,
+        purpose: parsed.purpose,
+        blob: parsed.blob,
       })
       if (!password) throw new SecretRefError(`no password at ${redactRef(ref)}`)
-      return { username: parsed.role, password }
+      return { username: '', password }
     }
     case 'env': {
       const source = deps.env ?? process.env
@@ -312,10 +285,6 @@ export async function resolveDbCredential(
       return { username: '', password }
     }
     case 'derived+hkdf':
-    case 'sealed+aead':
-      // Every one of these names an application secret. Refusing by name rather
-      // than falling through keeps the two custody stories separate: a database
-      // password is issued by a provider or a vault, never chosen by us.
       throw new SecretRefError(
         `${parsed.scheme}:// refs hold application secrets, not database credentials`,
       )

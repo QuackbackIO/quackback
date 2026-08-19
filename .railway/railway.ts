@@ -21,26 +21,24 @@
  * `QUACKBACK_ROLE=all` + `QUACKBACK_WAKE_MODE=scheduler`. The dedicated
  * worker replica has been removed.
  *
- * No database appears here. Workspace databases are Neon, one project each, and
- * the control-plane registry is a Neon project too — see the note in the body
- * for why §9's "Railway Postgres for the control plane" did not survive contact
- * with region placement.
+ * Workspace databases and the control-plane registry live on the Railway
+ * Postgres service in this project (one always-on instance, one database +
+ * LOGIN role per workspace, plus `quackback_cp`). Object storage is the
+ * project bucket `storage`.
  *
  * ## This file describes the whole environment, and `apply` is live
  *
- * It did not always. The control-plane service, the Redis database, the
- * `qb-cp-*` buckets and four secrets were created through the API and never
- * declared, and absent means *deleted*: a plan proposed destroying all of them,
- * including the two per-workspace `SECRET_KEY`s. The buckets turned out to hold
- * only provisioning probes and were removed in 2026-08; the rest are declared
- * now, `plan` reports no changes, and `apply` has been run.
+ * It did not always. Services and secrets created through the API and never
+ * declared are treated as deleted: a plan proposed destroying them. The rest
+ * are declared now. Run `plan` before `apply`, every time, and read the
+ * destroy list rather than the count.
  *
  * What that costs is a standing obligation. Anything the control plane creates
  * through the API — a workspace bucket, a per-workspace secret — has to be added
  * here, or the next `apply` removes it. Run `plan` before `apply`, every time,
  * and read the destroy list rather than the count.
  */
-import { bucket, defineRailway, image, preserve, project, redis, service } from 'railway/iac'
+import { bucket, defineRailway, image, preserve, project, service, volume } from 'railway/iac'
 
 /**
  * The one image, by digest.
@@ -66,44 +64,26 @@ import { bucket, defineRailway, image, preserve, project, redis, service } from 
  * drizzle SQL, and `fleet-migrator.mjs`. That last one is why one artifact is
  * enough for every role the rollout touches.
  */
+// WARNING: this digest is the last GHCR publish and still only accepts
+// neon+role database secret refs. Live app services were railway-up'd
+// from saas-merge (sealed+aead / Railway Postgres). Do not `apply` this
+// pin until a neon-free GHCR digest replaces it — apply would roll the
+// fleet back to an image that refuses every workspace registry row.
 const APP_IMAGE =
   'ghcr.io/quackbackio/quackback@sha256:54f4c14152f4b9bae3629de4be1ad330f484888ff4fa6235c579b25c961fcc29'
 
-/** Virginia, same metro as the Neon `us-east-1` projects. See the README: this
- * is declared intent only — `plan` never diffs placement and `apply` never
- * writes it, so it must be verified directly after every deploy. */
+/** Virginia. Declared intent only — `plan` never diffs placement and `apply`
+ * never writes it, so it must be verified directly after every deploy. */
 const REGION = 'us-east4-eqdc4a'
 
 export default defineRailway(() => {
-  // NOTE ON THE CONTROL DATABASE — §9 says Railway Postgres is "still the right
-  // answer" for it: always active, small, co-located on the private network. It
-  // was built that way here and then moved to Neon `us-east-1`, because Railway
-  // Postgres could not be placed in this fleet's region through any documented
-  // path:
-  //
-  //   * `postgres(name, { region })` is not applied. The service and its volume
-  //     were both created in `sfo` — the same class of gap the README already
-  //     records for `replicas` on a normal service.
-  //   * A volume's region is fixed at creation. Repointing the *service* to
-  //     `us-east4-eqdc4a` leaves the volume in `sfo`, and the deployment then
-  //     cannot schedule at all.
-  //   * `volumeDelete` returns `true` and **soft-deletes with a two-day
-  //     window**, during which `volumeCreate` refuses ("a service can only have
-  //     one volume"). So the volume cannot be re-created in the right region
-  //     either, for two days.
-  //
-  // 3,900 km between the control database and the tier that reads it on the
-  // request path is worse than the tradeoff Neon brings, which is that the
-  // control compute also scales to zero: on a fully idle fleet the first request
-  // pays a control-plane wake *before* the workspace wake. That is a real cost and
-  // it is stated rather than hidden.
-  const uploads = bucket('quackback-gauntlet', { region: 'iad' })
+  // Control database and every workspace database sit on the Postgres service
+  // declared below (`postgres.railway.internal`). The volume is
+  // `postgres-volume-Snwn` in us-east4-eqdc4a.
+  const uploads = bucket('storage', { region: 'iad' })
 
-  // There are no per-workspace buckets. The five the control plane once
-  // created through the API (qb-neon-t1/t2/t4, qb-cp-t1/t2crit) were deleted
-  // on 2026-08-14: every registry row names the fleet bucket, none named
-  // them, and their contents were provisioning probes (<=1.3 KB), not
-  // workspace data. The standing obligation still holds for anything the
+  // There are no per-workspace buckets. Every registry row names the fleet
+  // bucket `storage`. The standing obligation still holds for anything the
   // control plane creates through the API in future: it has to be added
   // here, or the next `apply` removes it.
 
@@ -123,8 +103,8 @@ export default defineRailway(() => {
     QUACKBACK_SAAS_FALLBACK_ORIGIN: preserve(),
     QUACKBACK_SAAS_RAILWAY_ORIGIN: preserve(),
     QUACKBACK_SAAS_EDGE_SECRET: preserve(),
-    // The Neon control project (see the note above). A secret, so it is set out
-    // of band and preserved here rather than written into source.
+    // Railway Postgres `quackback_cp` on the private network. A secret, so it
+    // is set out of band and preserved here rather than written into source.
     QUACKBACK_CONTROL_DATABASE_URL: preserve(),
 
     // Mail, inbound. The domain is the apex, already onboarded at the edge for
@@ -175,9 +155,8 @@ export default defineRailway(() => {
     // `quackback.co.uk` identities are verified in.
     EMAIL_SES_REGION: 'us-east-1',
 
-    // Below both Neon's suspend timeout (300 s documented, 337 s measured) and
-    // Railway's 600 s sleep window. This is the number the idle-cost model
-    // rests on — see `tenancy/pool-cache.ts`.
+    // Below Railway's 600 s sleep window. This is the number the idle-cost
+    // model rests on — see `tenancy/pool-cache.ts`.
     WORKSPACE_POOL_IDLE_SECONDS: '45',
 
     // The entrypoint would otherwise migrate on every boot. Under pooled
@@ -207,7 +186,6 @@ export default defineRailway(() => {
 
     // Fleet-level secrets, set out of band and never written to source.
     SECRET_KEY: preserve(),
-    NEON_API_KEY: preserve(),
 
     // The one root every tenant's SECRET_KEY derives from and every tenant
     // storage credential is sealed under (`derived+hkdf://`, `sealed+aead://`).
@@ -239,25 +217,6 @@ export default defineRailway(() => {
     OPENAI_BASE_URL: 'https://openrouter.ai/api/v1',
     AI_CHAT_MODEL: 'openai/gpt-4o-mini',
     AI_EMBEDDING_MODEL: 'openai/text-embedding-3-small',
-
-    // Redis is no longer read by the app, but the variable and the database
-    // both still exist, and anything absent from this file is a deletion.
-    // Preserved rather than removed so that retiring Redis stays a deliberate
-    // act instead of a side effect of the next apply.
-    REDIS_URL: preserve(),
-
-    // Per-workspace `SECRET_KEY`s, under the `env://QUACKBACK_TENANT_SECRET_*`
-    // scheme. The comment above says the derived scheme means "a tenant costs
-    // no fleet variable" — true for workspaces provisioned that way, and these
-    // two predate it. They are enumerated for exactly the reason the workspace
-    // buckets are: undeclared, `apply` deletes them, and a workspace whose
-    // SECRET_KEY is gone refuses every request with `app_secret_unresolvable`.
-    //
-    // The variable NAME still says `TENANT` because it is a wire name: it is
-    // quoted verbatim in each registry record's `app_secrets_ref` and pinned by
-    // a CHECK constraint. Renaming it is a migration, not a rename.
-    QUACKBACK_TENANT_SECRET_INST_GAUNTLET_NEON_T1_D7D62CFD_APP: preserve(),
-    QUACKBACK_TENANT_SECRET_INST_GAUNTLET_NEON_T2_24488091_APP: preserve(),
 
     // A real fleet hostname, never `https://${{RAILWAY_PUBLIC_DOMAIN}}`: with a
     // wildcard custom domain attached that variable is the literal string
@@ -447,10 +406,9 @@ export default defineRailway(() => {
       CP_ROLE: preserve(),
       EMAIL_FROM: preserve(),
       DATABASE_URL: preserve(),
-      NEON_API_KEY: preserve(),
-      NEON_ORG_ID: preserve(),
-      NEON_PROJECT_PREFIX: preserve(),
-      NEON_REGION_ID: preserve(),
+      QUACKBACK_FLEET_PG_ADMIN_URL: preserve(),
+      QUACKBACK_FLEET_PG_HOST: preserve(),
+      QUACKBACK_FLEET_PG_PORT: preserve(),
       NODE_ENV: preserve(),
       PORT: preserve(),
       // Shared with the inbound Email Worker, which presents it to resolve a
@@ -475,7 +433,6 @@ export default defineRailway(() => {
       QUACKBACK_MIGRATOR_COMMAND: preserve(),
       QUACKBACK_MIGRATOR_TIMEOUT_MS: preserve(),
       RAILWAY_DOCKERFILE_PATH: preserve(),
-      REDIS_URL: preserve(),
       // Outbound mail. Named apart from the object-storage credentials above
       // and from the SDK's own default-chain names, because either collision
       // would let an unrelated credential in the environment read as "mail is
@@ -497,11 +454,31 @@ export default defineRailway(() => {
     },
   })
 
-  // Retained, not used. The app removed its Redis dependency, but the database
-  // still exists and deleting it is a decision rather than a consequence.
-  const cache = redis('Redis')
+  // Fleet workspace Postgres: one always-on Railway database, CREATE DATABASE
+  // per workspace. Volume is `postgres-volume-Snwn` in us-east4-eqdc4a. The
+  // official database image (postgres-ssl:18) loads `vector` and `pg_trgm`.
+  const fleetPg = service('Postgres', {
+    source: image('ghcr.io/railwayapp-templates/postgres-ssl:18'),
+    replicas: { [REGION]: 1 },
+    volumeMounts: {
+      '/var/lib/postgresql/data': volume('postgres-volume-Snwn'),
+    },
+    env: {
+      POSTGRES_USER: 'postgres',
+      POSTGRES_DB: 'railway',
+      POSTGRES_PASSWORD: preserve(),
+      PGUSER: preserve(),
+      PGPASSWORD: preserve(),
+      PGDATABASE: preserve(),
+      PGHOST: preserve(),
+      PGPORT: preserve(),
+      PGDATA: preserve(),
+      DATABASE_URL: preserve(),
+      SSL_CERT_DAYS: preserve(),
+    },
+  })
 
-  return project('quackback-pooled-gauntlet', {
-    resources: [web, migrator, cronDaily, cronHourly, controlPlane, cache, uploads],
+  return project('Quackback Cloud', {
+    resources: [web, migrator, cronDaily, cronHourly, controlPlane, fleetPg, uploads],
   })
 })

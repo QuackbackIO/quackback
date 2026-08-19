@@ -255,7 +255,7 @@ It was written that way first and the falsification pass caught it.
 
 ## 5. The evidence
 
-Everything below was run against live Neon databases, not reasoned about.
+Everything below was run against live workspace databases, not reasoned about.
 
 ### `IF NOT EXISTS` certifies an invalid index
 
@@ -279,7 +279,7 @@ Verified afterwards by `indisvalid`, not by a name list: 7 HNSW and 8 GIN
 indexes present, `indisvalid = t` on every one, zero invalid indexes anywhere in
 any user schema, both extensions installed, 228 ledger rows.
 
-### A killed `CREATE INDEX CONCURRENTLY`, on Neon
+### A killed `CREATE INDEX CONCURRENTLY`
 
 The blocking transaction is the instrument, not the point: `CREATE INDEX
 CONCURRENTLY` commits its catalogue entry (`indisvalid = false`) and _then_ waits
@@ -313,7 +313,7 @@ THE CATALOGUE SAYS:  ok=false
   … 5 more
 ```
 
-And the control that shows why re-running is not a repair — on the live Neon
+And the control that shows why re-running is not a repair — on the live workspace
 database, not a local one:
 
 ```
@@ -417,12 +417,12 @@ genuinely old lineage, not a doctored ledger.
 
 ```
 MIN_SCHEMA_VERSION unset
-  p10-old2 -> 200   neon-t1 -> 200   neon-t4 -> 200
+  p10-old2 -> 200   ws-t1 -> 200   ws-t4 -> 200
 
 MIN_SCHEMA_VERSION=0251
   p10-old2 -> 503 retry-after=30  "This workspace is being updated…"
-  neon-t1  -> 200
-  neon-t4  -> 200      <- carries 0252, which this build has never heard of
+  ws-t1  -> 200
+  ws-t4  -> 200      <- carries 0252, which this build has never heard of
 ```
 
 (An earlier `p10-old` played this role and was destroyed by a later
@@ -459,10 +459,10 @@ It covers all four things a replay of `0251` could plausibly disturb: the row
 data, the column's shape, the column's comment and the stamp itself.
 
 ```
-BEFORE   digest D0                     stamp = inst_gauntlet_neon_t1
+BEFORE   digest D0                     stamp = inst_gauntlet_ws_t1
 psql -f 0251_settings_cloud_tenant_id.sql
          NOTICE: column "cloud_workspace_key" of relation "settings" already exists, skipping
-AFTER    digest D0   ← unchanged       stamp = inst_gauntlet_neon_t1
+AFTER    digest D0   ← unchanged       stamp = inst_gauntlet_ws_t1
 ```
 
 With the controls that make "unchanged" mean something:
@@ -555,7 +555,7 @@ caches the module-evaluation error, and every route 500s forever —
 `/api/health/live` included, so a supervisor watching liveness sees a process
 that is up and answering. Measured in that state: the process kept its socket
 open and made **7,417 connection attempts** to the database it had just declared
-itself unfit to serve. On a pooled fleet each of those wakes a workspace's Neon
+itself unfit to serve. On a pooled fleet each of those wakes a workspace
 compute, so one mistyped variable becomes a fleet-wide cost problem.
 
 Measured after the change, with the good-config row as the control:
@@ -593,7 +593,7 @@ The migrator builds its own connection from the workspace record's **`directUrl`
 and refuses a DSN whose host looks like a transaction-mode pooler.
 
 **The usual justification for that is wrong, and the real one is worse.**
-Measured through Neon's pooled endpoint:
+Measured through the pooled endpoint:
 
 |                                                  | pooled                              | direct |
 | ------------------------------------------------ | ----------------------------------- | ------ |
@@ -637,7 +637,7 @@ been stamped for yet. A migrator that could only run against already-stamped
 databases could not do the job provisioning needs it for.
 
 **A migrator holds a direct session-mode connection for the duration of a
-workspace's migration, which keeps that workspace's Neon compute awake.** That is
+workspace's migration, which keeps that workspace's compute awake.** That is
 unavoidable and bounded; it is also why the migrator is a separate role from the
 pooled web tier, whose whole cost model depends on going silent.
 
@@ -697,7 +697,7 @@ Three deliberate choices:
 
 ### Sizing the lease
 
-The lease must outlive the slowest workspace migration. Measured on a 0.25 CU Neon
+The lease must outlive the slowest workspace migration. Measured on a 0.25 CU
 compute, a fresh database:
 
 | step                                      | elapsed    |
@@ -813,7 +813,7 @@ attempts = 0 WHERE workspace_key = ...` — status and version together, because
   `CHECK` couples them. Making that a first-class command belongs with the CP
   work that owns the table.
 
-- **Neon-branch preflight (§10.8) is not built.** `plan` reports the replay set
+- **Catalog-clone preflight (§10.8) is not built.** `plan` reports the replay set
   and its verdicts against the live database, which is the cheap half; dry-running
   a release against a branch of the largest and oldest workspace is not.
 - **`required` vs `deferred` migration classes (§10.7) are not built.** Every

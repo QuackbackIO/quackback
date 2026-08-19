@@ -45,7 +45,7 @@ export interface FleetPassResult {
  * Run `body` once per active workspace, each inside its own workspace scope.
  *
  * Serial on purpose. These are periodic sweeps against per-workspace databases;
- * running them concurrently would wake every suspended Neon compute at once,
+ * running them concurrently would wake every suspended workspace database at once,
  * which is the exact cost the architecture exists to avoid.
  */
 export async function runFleetPass(

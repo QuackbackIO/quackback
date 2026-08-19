@@ -2,9 +2,9 @@
 /**
  * Database Connection Benchmark
  *
- * Tests latency of different connection methods to Neon PostgreSQL:
- * 1. Neon serverless HTTP driver (@neondatabase/serverless)
- * 2. postgres.js with direct connection
+ * Tests latency of postgres.js against PostgreSQL:
+ * 1. A new connection per query
+ * 2. A reused pooled connection
  *
  * Usage:
  *   bun run scripts/benchmark-db.ts
@@ -12,8 +12,6 @@
  * Requires CLOUD_CATALOG_DATABASE_URL in environment
  */
 
-import { neon } from '@neondatabase/serverless'
-import { drizzle as drizzleNeonHttp } from 'drizzle-orm/neon-http'
 import postgres from 'postgres'
 import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js'
 import { sql } from 'drizzle-orm'
@@ -42,43 +40,6 @@ function percentile(arr: number[], p: number): number {
   const sorted = [...arr].sort((a, b) => a - b)
   const idx = Math.ceil((p / 100) * sorted.length) - 1
   return sorted[Math.max(0, idx)]
-}
-
-async function benchmarkNeonHttp(): Promise<BenchmarkResult> {
-  const times: number[] = []
-  let coldStartMs = 0
-
-  console.log('\n📊 Benchmarking Neon HTTP driver...')
-
-  for (let i = 0; i < WARMUP_ITERATIONS + ITERATIONS; i++) {
-    // Create fresh connection each time (simulates serverless cold start)
-    const sqlClient = neon(DATABASE_URL!)
-    const db = drizzleNeonHttp(sqlClient)
-
-    const start = performance.now()
-    await db.execute(sql`SELECT 1 as test`)
-    const elapsed = performance.now() - start
-
-    if (i < WARMUP_ITERATIONS) {
-      if (i === 0) coldStartMs = elapsed
-      process.stdout.write(`  Warmup ${i + 1}/${WARMUP_ITERATIONS}: ${elapsed.toFixed(1)}ms\n`)
-    } else {
-      times.push(elapsed)
-      process.stdout.write(
-        `  Run ${i - WARMUP_ITERATIONS + 1}/${ITERATIONS}: ${elapsed.toFixed(1)}ms\n`
-      )
-    }
-  }
-
-  return {
-    name: 'Neon HTTP (@neondatabase/serverless)',
-    coldStartMs,
-    avgMs: times.reduce((a, b) => a + b, 0) / times.length,
-    minMs: Math.min(...times),
-    maxMs: Math.max(...times),
-    p50Ms: percentile(times, 50),
-    p95Ms: percentile(times, 95),
-  }
 }
 
 async function benchmarkPostgresJs(): Promise<BenchmarkResult> {
@@ -172,17 +133,23 @@ async function benchmarkRealisticQuery(): Promise<BenchmarkResult> {
   const times: number[] = []
   let coldStartMs = 0
 
-  console.log('\n📊 Benchmarking realistic query (workspace lookup via Neon HTTP)...')
+  console.log('\n📊 Benchmarking realistic query (workspace lookup via postgres.js)...')
 
   for (let i = 0; i < WARMUP_ITERATIONS + ITERATIONS; i++) {
-    // Create fresh connection each time (simulates serverless)
-    const sqlClient = neon(DATABASE_URL!)
-    const db = drizzleNeonHttp(sqlClient)
+    // Create fresh connection each time (simulates a cold start)
+    const sqlClient = postgres(DATABASE_URL!, {
+      max: 1,
+      fetch_types: false,
+      idle_timeout: 0,
+      connect_timeout: 30,
+    })
+    const db = drizzlePostgres(sqlClient)
 
     const start = performance.now()
     // Simulate the workspace lookup query from resolver
     await db.execute(sql`SELECT * FROM workspace WHERE slug = 'nonexistent-test-slug' LIMIT 1`)
     const elapsed = performance.now() - start
+    await sqlClient.end()
 
     if (i < WARMUP_ITERATIONS) {
       if (i === 0) coldStartMs = elapsed
@@ -196,7 +163,7 @@ async function benchmarkRealisticQuery(): Promise<BenchmarkResult> {
   }
 
   return {
-    name: 'Realistic query (Neon HTTP)',
+    name: 'Realistic query (postgres.js)',
     coldStartMs,
     avgMs: times.reduce((a, b) => a + b, 0) / times.length,
     minMs: Math.min(...times),
@@ -238,10 +205,8 @@ function printResults(results: BenchmarkResult[]) {
 
   console.log('\n📝 Notes:')
   console.log('   - Cold start: First connection (includes TLS handshake, auth)')
-  console.log('   - Neon HTTP: Uses HTTP/2 fetch, stateless (no persistent TCP)')
   console.log('   - postgres.js new conn: New TCP+TLS connection each query')
   console.log('   - postgres.js pooled: Reuses TCP connections (best case)')
-  console.log('   - Hyperdrive pools connections at the edge, reducing cold start')
 }
 
 async function main() {
@@ -252,7 +217,6 @@ async function main() {
 
   const results: BenchmarkResult[] = []
 
-  results.push(await benchmarkNeonHttp())
   results.push(await benchmarkPostgresJs())
   results.push(await benchmarkPostgresJsPooled())
   results.push(await benchmarkRealisticQuery())

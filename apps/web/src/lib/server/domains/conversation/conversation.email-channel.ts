@@ -604,7 +604,7 @@ export type InboundAddressWorkspace = { kind: 'slug'; slug: string } | { kind: '
  * The two halves of the `at <= 0` guard are not equally load-bearing, and the
  * suite says which is which rather than implying both. `at === -1` IS: without
  * it `slice(0, -1)` would read a value with no `@` as its own local part minus
- * the last character, so `neon-t1x` would answer `neon-t1` and a bare word would
+ * the last character, so `ws-t1x` would answer `ws-t1` and a bare word would
  * name a workspace. `at === 0` is belt and braces: an empty local part is
  * already outside the slug vocabulary, so removing that half changes no answer,
  * and what pins it is the vocabulary test rather than a case here.

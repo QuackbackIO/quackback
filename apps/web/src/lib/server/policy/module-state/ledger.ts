@@ -253,15 +253,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       "another workspace's messages on a bus with no authorization layer of its own.",
   },
   {
-    file: 'apps/web/src/lib/server/workspaces/neon-credentials.ts',
-    name: 'cache',
-    category: 'workspace-scoped-key',
-    keyedBy: 'cacheKey',
-    reason:
-      "Memoized role passwords keyed by project + branch + role, which identify one workspace's " +
-      'database physically.',
-  },
-  {
     file: 'apps/web/src/lib/server/workspaces/pool-cache.ts',
     name: 'pools',
     category: 'workspace-scoped-key',

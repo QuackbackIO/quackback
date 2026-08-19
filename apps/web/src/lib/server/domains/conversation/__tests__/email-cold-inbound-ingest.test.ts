@@ -660,7 +660,7 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
   // every neighbour's mail.
   it('leaves a neighbouring workspace’s reply address alone', async () => {
     await seedInboundRoute('support@quackback.io')
-    const neighbours = inboundReplyToAddress(createId('conversation') as ConversationId, 'neon-t2')!
+    const neighbours = inboundReplyToAddress(createId('conversation') as ConversationId, 'ws-t2')!
     expect(neighbours).not.toBeNull()
 
     const res = await ingestParsedEmail(parseRawEmail(loopingMail(neighbours)))

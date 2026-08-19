@@ -7,7 +7,7 @@
  * producer function**, so what is exercised is the code the app calls.
  *
  * Every handler is wrapped rather than replaced: the wrapper records
- * `getCurrentWorkspace()`, `current_database()` and `neon.branch_id` into a
+ * `getCurrentWorkspace()` and `current_database()` into a
  * scratch table **in whichever database `db` actually resolved to**, and then
  * calls the real handler. A cross-workspace execution is observable two
  * independent ways, neither needing the other to be trusted:
@@ -116,7 +116,7 @@ function instrumentedDefinitions(marker: string): JobDefinition[] {
             (job_id, queue, enqueued_for, scope_workspace_key, db_name, branch_id)
           SELECT ${job.jobId}, ${job.queue},
                  ${String((job.payload as { enqueuedFor?: string }).enqueuedFor ?? marker)},
-                 ${scope}, current_database(), current_setting('neon.branch_id', true)
+                 ${scope}, current_database(), current_database()
         `)
         // Then the real handler. Most of these have no fixture in a bare workspace
         // database and will throw; the row above is written first precisely so

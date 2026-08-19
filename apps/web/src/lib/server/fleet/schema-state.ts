@@ -23,7 +23,7 @@
  * halfway through a workspace has already spent an attempt, so a workspace whose
  * migration reliably kills the process cannot loop — it exhausts `max_attempts`
  * and goes terminal with a diagnosis. Without that, a poisonous workspace would
- * wake its Neon compute forever, which is the exact cost the architecture exists
+ * wake its workspace database forever, which is the exact cost the architecture exists
  * to avoid.
  *
  * ## The connection
@@ -31,7 +31,7 @@
  * The control database is reached through `getControlSql()`, the same tiny,
  * long-lived, non-workspace connection the registry reader uses. It is a direct
  * connection by construction: the control plane is a single always-warm
- * Postgres, not a per-workspace Neon compute behind a transaction pooler.
+ * Postgres, not a per-workspace compute behind a transaction pooler.
  */
 import { sql } from 'drizzle-orm'
 import { createDbFromSql, type Database } from '@quackback/db/client'
@@ -110,7 +110,7 @@ export interface ClaimWorkspacesInput {
  * whose `current_version` already meets `target_version` is not claimable, so a
  * reconciler pass over an already-reconciled fleet costs one query and wakes no
  * workspace computes. That matters — §10.7's whole point is that eagerly migrating
- * the fleet wakes every suspended Neon compute.
+ * the fleet wakes every suspended workspace database.
  */
 export async function claimWorkspaces(input: ClaimWorkspacesInput): Promise<ClaimedWorkspace[]> {
   if (input.limit < 1) return []

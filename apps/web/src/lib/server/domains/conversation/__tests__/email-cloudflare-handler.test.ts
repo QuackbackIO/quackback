@@ -170,8 +170,8 @@ const ADDRESS_SECRET = 'whsec_dGVzdHNlY3JldA=='
 const DOMAIN = 'quackback.co.uk'
 /** A domain this install still RECEIVES on and no longer mints addresses on. */
 const RETIRED_DOMAIN = 'mail.retired.test'
-const SLUG = mailSlugFor('neon-t1')
-const OTHER_SLUG = mailSlugFor('neon-t2')
+const SLUG = mailSlugFor('ws-t1')
+const OTHER_SLUG = mailSlugFor('ws-t2')
 
 /**
  * THE SHARED VECTOR. This constant is reproduced in the control-plane repo,
@@ -188,13 +188,13 @@ const OTHER_SLUG = mailSlugFor('neon-t2')
 const VECTOR = {
   secret: 's3cr3t-key',
   timestamp: 1_754_870_400,
-  mailSlug: 'neon-t1',
+  mailSlug: 'ws-t1',
   /** `Subject: \xff\xfe\x80\xe9\r\n\r\nA` — 18 bytes, four of them illegal UTF-8. */
   body: Uint8Array.from(Buffer.from('5375626a6563743a20fffe80e90d0a0d0a41', 'hex')),
   signature: 'ef90676f1d9a36d5338e95ad74d39cfc9bae2c612e059630ac6b1e23ed1074a7',
   /** What hashing the body as a decoded string produces: 26 bytes, not 18. */
   signatureOverDecodedBody: 'be1ad00395e6e912c7b40cbd773b3ee64bc5bff38f68f02a843acb6871ea659d',
-  /** The same body signed for `neon-t2`: what a re-aimed capture would need. */
+  /** The same body signed for `ws-t2`: what a re-aimed capture would need. */
   signatureUnderOtherSlug: 'b35dde39260d106e8959a7fe6845b3c12cfb5b8a71b744c9912661e92a380d72',
 } as const
 
@@ -265,7 +265,7 @@ function inboundRequest(
   if (opts.transportMessageId !== undefined) {
     headers.set('x-qb-transport-message-id', opts.transportMessageId)
   }
-  return new Request('http://neon-t1.example.com/api/chat/email/inbound', {
+  return new Request('http://ws-t1.example.com/api/chat/email/inbound', {
     method: 'POST',
     headers,
     // Through a Blob, so the request carries the exact bytes: a string body
@@ -276,7 +276,7 @@ function inboundRequest(
 }
 
 /** Deliver as the workspace the request was routed to. */
-function post(request: Request, workspaceKey = 'neon-t1'): Promise<Response> {
+function post(request: Request, workspaceKey = 'ws-t1'): Promise<Response> {
   return withWorkspace(workspaceKey, () => handleCloudflareInboundEmail(request))
 }
 
@@ -429,7 +429,7 @@ describe('the signed wire contract', () => {
 
       const res = await post(
         inboundRequest({ mailSlug: OTHER_SLUG, signedSlug: SLUG, envelopeTo }),
-        'neon-t2'
+        'ws-t2'
       )
 
       expect(res.status, envelopeTo).toBe(401)

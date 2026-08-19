@@ -14,7 +14,7 @@
  * - The invalid index is produced by flipping `pg_index.indisvalid`, which is a
  *   catalogue-level stand-in for an interrupted build. Its **fidelity is
  *   established elsewhere**: `FLEET-MIGRATIONS.md` records a real
- *   `CREATE INDEX CONCURRENTLY` killed mid-flight on Neon producing exactly this
+ *   `CREATE INDEX CONCURRENTLY` killed mid-flight producing exactly this
  *   catalogue state. A unit test that had to race a real build would be timing
  *   dependent; the live kill is the evidence, this is the regression net.
  * - Each run gets its own scratch database, so nothing depends on the shared

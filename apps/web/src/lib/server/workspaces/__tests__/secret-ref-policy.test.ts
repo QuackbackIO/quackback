@@ -42,10 +42,10 @@ describe('the openbao schemes are gone, not merely confined', () => {
   })
 
   it('refuses even the shape that used to be in policy', () => {
-    expect(isValidSecretRef('openbao+kv://apps/neon-t1')).toBe(false)
-    expect(isValidSecretRef('openbao+kv://apps/inst_gauntlet_alpha')).toBe(false)
+    expect(isValidSecretRef('openbao+kv://apps/ws-t1')).toBe(false)
+    expect(isValidSecretRef('openbao+kv://apps/inst_cloud_alpha')).toBe(false)
     expect(isValidSecretRef('openbao+static-role://qb_role')).toBe(false)
-    expect(() => parseSecretRef('openbao+kv://apps/neon-t1')).toThrow()
+    expect(() => parseSecretRef('openbao+kv://apps/ws-t1')).toThrow()
   })
 
   it('allows no field to name one', () => {
@@ -59,7 +59,7 @@ describe('the openbao schemes are gone, not merely confined', () => {
 describe('env refs stay inside the reserved namespace', () => {
   it('refuses a control-plane credential', () => {
     expect(isValidSecretRef('env://STRIPE_SECRET_KEY')).toBe(false)
-    expect(isValidSecretRef('env://NEON_API_KEY')).toBe(false)
+    expect(isValidSecretRef('env://AWS_SECRET_ACCESS_KEY')).toBe(false)
   })
   it('accepts the reserved namespace', () => {
     expect(isValidSecretRef('env://QUACKBACK_TENANT_SECRET_X')).toBe(true)
@@ -110,11 +110,11 @@ describe('per-field policy', () => {
   const cases: Array<[SecretRefField, string, boolean]> = [
     // A database credential is issued by a provider or a vault. It is never a
     // value this system chooses, so nothing derivable belongs here.
-    ['database', 'neon+role://proj-1/br-abc/qb_role', true],
     ['database', 'openbao+static-role://qb_role', false],
     ['database', 'env://QUACKBACK_TENANT_SECRET_DB', true],
     ['database', 'openbao+kv://apps/workspace', false],
     ['database', 'derived+hkdf://v1/t/app-secrets', false],
+    ['database', 'sealed+aead://v1/t/db/' + 'A'.repeat(20), true],
     ['database', 'sealed+aead://v1/t/storage/' + 'A'.repeat(20), false],
 
     ['appSecrets', 'derived+hkdf://v1/t/app-secrets', true],
@@ -122,7 +122,7 @@ describe('per-field policy', () => {
     ['appSecrets', 'env://QUACKBACK_TENANT_SECRET_APP', true],
     // Names a Postgres role, which is not an app-secret bundle.
     ['appSecrets', 'openbao+static-role://qb_role', false],
-    ['appSecrets', 'neon+role://proj-1/br-abc/qb_role', false],
+    ['appSecrets', 'sealed+aead://v1/t/db/' + 'A'.repeat(20), false],
 
     ['storage', 'sealed+aead://v1/t/storage/' + 'A'.repeat(20), true],
     ['storage', 'openbao+kv://apps/workspace', false],
@@ -130,7 +130,7 @@ describe('per-field policy', () => {
     // A scheme that would silently invent a plausible-looking key pair for a
     // real bucket is worse than one that refuses.
     ['storage', 'derived+hkdf://v1/t/storage', false],
-    ['storage', 'neon+role://proj-1/br-abc/qb_role', false],
+    ['storage', 'derived+hkdf://v1/t/app-secrets', false],
   ]
 
   it.each(cases)('%s may name %s → %s', (field, ref, allowed) => {
@@ -143,7 +143,7 @@ describe('per-field policy', () => {
   })
 
   it('states the policy as data, so the three enforcement points cannot drift', () => {
-    expect(allowedSchemesFor('database')).toEqual(['neon+role', 'env'])
+    expect(allowedSchemesFor('database')).toEqual(['sealed+aead', 'env'])
     expect(allowedSchemesFor('appSecrets')).toEqual(['derived+hkdf', 'env'])
     expect(allowedSchemesFor('storage')).toEqual(['sealed+aead', 'env'])
   })

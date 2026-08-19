@@ -103,12 +103,12 @@ const configSchema = z
     controlDatabaseUrl: z.string().min(1).optional(),
     /**
      * Connections per workspace pool. Small on purpose: a pooled instance holds N
-     * workspace pools, and the Neon pooler multiplexes anyway.
+     * workspace pools, and the fleet pooler multiplexes anyway.
      */
     workspacePoolMax: envInt.pipe(z.number().int().min(1).max(20)).default(3),
     /**
      * Seconds a workspace pool may sit idle before it is closed. Must stay below
-     * BOTH Neon's suspend timeout (300s default) and Railway's 10-minute
+     * BOTH the database suspend timeout (300s default) and Railway's 10-minute
      * outbound-traffic sleep window, or an idle workspace costs compute forever.
      */
     workspacePoolIdleSeconds: envInt.pipe(z.number().int().min(5).max(600)).default(45),
@@ -116,8 +116,6 @@ const configSchema = z
     workspacePoolMaxEntries: envInt.pipe(z.number().int().min(1).max(500)).default(50),
     /** TTL for the in-process hostname → workspace record cache, milliseconds. */
     workspaceRegistryTtlMs: envInt.pipe(z.number().int().min(0).max(600_000)).default(30_000),
-    /** Neon API key used to dereference `neon+role://` credential refs. */
-    neonApiKey: z.string().optional(),
     /**
      * The fleet root from which every workspace's `SECRET_KEY` is derived and every
      * workspace's storage credential is sealed (`tenancy/vendor/fleet-secrets.ts`).
@@ -275,7 +273,6 @@ function buildConfigFromEnv(): unknown {
     workspacePoolIdleSeconds: env('WORKSPACE_POOL_IDLE_SECONDS'),
     workspacePoolMaxEntries: env('WORKSPACE_POOL_MAX_ENTRIES'),
     workspaceRegistryTtlMs: env('WORKSPACE_REGISTRY_TTL_MS'),
-    neonApiKey: env('NEON_API_KEY'),
     fleetRootKey: env('QUACKBACK_FLEET_ROOT_KEY'),
 
     // Auth
@@ -443,9 +440,6 @@ export const config = {
   },
   get workspaceRegistryTtlMs() {
     return loadConfig().workspaceRegistryTtlMs
-  },
-  get neonApiKey() {
-    return loadConfig().neonApiKey
   },
   get fleetRootKey() {
     return loadConfig().fleetRootKey

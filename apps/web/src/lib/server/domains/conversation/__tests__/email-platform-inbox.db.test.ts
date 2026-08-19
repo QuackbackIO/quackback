@@ -309,7 +309,7 @@ describe.skipIf(!fixture.available)('the platform inbox (real DB, rolled back)',
       // domain are both fleet-wide, so the label is the whole of what separates
       // two workspaces; reading this as ours writes a stranger's mail into this
       // database.
-      'neon-t2@tenaevexeo.resend.app',
+      'ws-t2@tenaevexeo.resend.app',
       // Our label at somebody else's domain.
       `${SLUG}@evil.test`,
     ]) {

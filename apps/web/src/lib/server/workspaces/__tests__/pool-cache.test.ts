@@ -3,11 +3,11 @@
  *
  * The driver and the fingerprint reader are stubbed here so the cache's own
  * decisions are what is under test — the real fingerprint behaviour is proven
- * against live Neon databases, and re-proving it here would only test the stub.
+ * against live workspace databases, and re-proving it here would only test the stub.
  *
  * Eviction is the piece that most deserves a test, for an unusual reason: it
  * has **no functional symptom**. A cache that never evicts serves every request
- * correctly and silently holds every workspace's Neon compute awake forever. The
+ * correctly and silently holds every workspace's compute awake forever. The
  * only observable is the counter, so the counter is asserted, not just the
  * behaviour.
  */
@@ -91,7 +91,7 @@ function descriptor(id: string, revision = 1) {
     storage: { credentialRef: `env://${STORAGE_ENV_VAR}` },
     email: { from: '' },
     features: { aiEnabled: false },
-    physical: { neonProjectId: null, neonBranchId: null },
+    physical: { catalogName: null, catalogOid: null, clusterId: null },
   } as never
 }
 
@@ -117,7 +117,10 @@ describe('workspace pool cache', () => {
       workspaceId: 'w',
       stamp: null,
       settingsRowCount: 1,
-      physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null },
+      physical: {
+        currentDatabase: null,
+        catalogOid: null,
+      },
       stampSource: 'none',
       stampSourceConflict: null,
       secretCanary: null,

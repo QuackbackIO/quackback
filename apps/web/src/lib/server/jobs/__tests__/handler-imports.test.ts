@@ -17,7 +17,7 @@
  * This was real rather than theoretical. Three of the seven handler modules
  * deferred their sweep modules to call time, and a top-level probe in
  * `sla.sweep.ts` read `(module not imported)` after priming and
- * `inst_gauntlet_alpha` after the tier ran the sweep — the module's top level
+ * `inst_cloud_alpha` after the tier ran the sweep — the module's top level
  * executed under a workspace scope, with no warning possible.
  *
  * Deepening it was measured and rejected rather than skipped. The modules these

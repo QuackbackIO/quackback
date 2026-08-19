@@ -18,8 +18,8 @@
  * supervisor watching liveness sees a process that is up and answering. It also
  * does not stop: measured, a process in that state kept its socket open and
  * made **7,417 connection attempts** to the database it had just declared
- * itself unfit to serve. On a pooled fleet each of those wakes a workspace's Neon
- * compute, so a single mistyped variable becomes a fleet-wide cost and
+ * itself unfit to serve. On a pooled fleet each of those wakes a workspace
+ * database, so a single mistyped variable becomes a fleet-wide cost and
  * availability problem rather than one dead replica.
  *
  * A non-zero exit is the correct failure for bad configuration. A supervisor

@@ -11,7 +11,7 @@
  *     QUACKBACK_TENANCY=pooled \
  *     QUACKBACK_CONTROL_DATABASE_URL=… \
  *     QUACKBACK_FLEET_ROOT_KEY=… \
- *     NEON_API_KEY=… SECRET_KEY=… BASE_URL=… \
+ *     SECRET_KEY=… BASE_URL=… \
  *     bun run apps/web/scripts/verify-workspace-secrets.ts a.example b.example
  *
  * Nothing workspace-specific is present. If the workspace's `SECRET_KEY` and storage
@@ -25,9 +25,9 @@
 import { createHash } from 'node:crypto'
 import postgres from 'postgres'
 import { resolveWorkspaceByHostname } from '@/lib/server/workspaces/registry'
+import { resolveWorkspacePassword } from '@/lib/server/workspaces/pool-cache'
 import { resolveWorkspaceSecrets } from '@/lib/server/workspaces/workspace-secrets'
-import { readNeonRolePassword } from '@/lib/server/workspaces/neon-credentials'
-import { parseSecretRef, redactRef, withPassword } from '@/lib/server/workspaces/vendor/secret-ref'
+import { redactRef, withPassword } from '@/lib/server/workspaces/vendor/secret-ref'
 import { verifySecretKeyCanary } from '@/lib/server/workspaces/vendor/fleet-secrets'
 
 /** A stable, non-reversible tag. Two processes agreeing on it agree on the key. */
@@ -77,13 +77,15 @@ for (const hostname of hostnames) {
 
   // The canary the control plane wrote is the only thing that says this key is
   // the key this database's ciphertext was written under.
-  const parsed = parseSecretRef(workspace.database.credentialRef)
-  const password =
-    parsed.scheme === 'neon+role'
-      ? await readNeonRolePassword(parsed)
-      : parsed.scheme === 'env'
-        ? (process.env[parsed.variable] ?? '')
-        : ''
+  let password = ''
+  try {
+    password = await resolveWorkspacePassword(workspace)
+  } catch (err) {
+    console.log(
+      `  canary          skipped — ${(err as Error).message || 'no database credential resolver for this ref'}`
+    )
+    continue
+  }
   if (!password) {
     console.log('  canary          skipped — no database credential resolver for this ref')
     continue

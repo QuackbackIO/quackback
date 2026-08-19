@@ -74,10 +74,15 @@ export type WorkspaceStorage = {
   region: string
   forcePathStyle: boolean
   /**
-   * Pinned system-host storage origin (`https://<systemHost>/api/storage`).
-   * Persist stores host-independent `/api/storage/<key>` refs; email, widget,
-   * and OG absolutize from this pin at send/render. It is never derived from
-   * the friendly platform URL or the request Host, and a rename must not move it.
+   * The origin public asset URLs are built from. Pinned at provisioning and
+   * never changed while content exists: contentJson stores absolute image URLs,
+   * so moving the origin rewrites historical post, changelog and article
+   * content.
+   *
+   * Explicit rather than derived. The app's `buildPublicUrl` falls back to
+   * `${config.baseUrl}/api/storage/<key>` when S3_PUBLIC_URL is unset, and
+   * under pooling `baseUrl` is per-request — which would make a workspace's asset
+   * origin follow whichever hostname the visitor happened to use.
    */
   publicUrl: string
   /**
@@ -144,10 +149,10 @@ export type WorkspaceRecord = {
     /** Transaction-mode pooled endpoint. The web tier. Password-less. */
     pooledUrl: string
     /**
-     * Session-mode direct endpoint. The job-tier doorbell and the
+     * Session-mode direct endpoint. The outbox relay, the queue poller and the
      * migrator (§7.3): LISTEN registration is silently lost through a
-     * transaction pooler, and CREATE INDEX CONCURRENTLY cannot run through
-     * one. Password-less.
+     * transaction pooler, and pg_advisory_lock / CREATE INDEX CONCURRENTLY
+     * cannot run through one. Password-less.
      */
     directUrl: string
     name: string
@@ -262,10 +267,9 @@ export const secretRefSchema = z
  * The same parser, plus the per-field scheme policy.
  *
  * A scheme being implementable is not the same as it being appropriate here.
- * a derived or sealed ref holds an application secret and the database resolver has
- * always refused it, so it must not be committable in `db_credential_ref`; a
- * scheme that cannot carry a provider-issued key pair must not be committable in
- * the storage credential. Stating that once, in `secret-ref.ts`, keeps the
+ * a sealed ref with purpose `db` is the serving Postgres password; a scheme that
+ * cannot carry a provider-issued key pair must not be committable in the
+ * storage credential. Stating that once, in `secret-ref.ts`, keeps the
  * schema, the database CHECK and the resolver from drifting into three opinions.
  */
 export function fieldRefSchema(field: SecretRefField) {
@@ -334,7 +338,7 @@ export const workspaceRecordSchema = z.object({
 function workspaceNamedBySecretRef(
   ref: SecretRef,
   workspaceKey: string,
-  purpose: 'app-secrets' | 'storage',
+  purpose: 'app-secrets' | 'storage' | 'db',
 ): string | null {
   let parsed: ParsedSecretRef
   try {
@@ -390,6 +394,7 @@ export function checkWorkspaceRecordInvariants(record: WorkspaceRecord): string[
   for (const [label, ref, purpose] of [
     ['app secrets', record.secrets.appSecretsRef, 'app-secrets'],
     ['storage credential', record.storage.credentialRef, 'storage'],
+    ['database credential', record.database.credentialRef, 'db'],
   ] as const) {
     // Absent is not unnamed. A fleet-bucket workspace carries no storage ref at
     // all, and asking "does this ref name its workspace?" of a ref that does not

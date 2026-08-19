@@ -13,7 +13,7 @@ import { NotFoundError } from '@/lib/shared/errors'
 process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
 process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
 // Every inbound address names the workspace it belongs to, so the fixtures do too.
-const SLUG = 'neon-t1'
+const SLUG = 'ws-t1'
 const REPLY_TO = inboundReplyToAddress('conversation_abc', SLUG)!
 
 const sendVisitorMessage = vi.fn()

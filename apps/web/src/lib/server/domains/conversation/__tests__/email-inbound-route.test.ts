@@ -39,7 +39,7 @@ const post = (
 ).handlers.POST
 
 function request(contentType: string, body: string): Request {
-  return new Request('http://neon-t1.example.com/api/chat/email/inbound', {
+  return new Request('http://ws-t1.example.com/api/chat/email/inbound', {
     method: 'POST',
     headers: { 'content-type': contentType },
     body,

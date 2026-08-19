@@ -208,15 +208,13 @@ describe('the send guard reads the minting domain, not the accept-set', () => {
 
   const permitted = (from: string): Promise<string | null> => {
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value)
-    // `neon-t1` reduces to the mail slug `neon-t1`, which is the label these
+    // `ws-t1` reduces to the mail slug `ws-t1`, which is the label these
     // addresses carry.
-    return withWorkspace('neon-t1', () => permittedSendingIdentity(from))
+    return withWorkspace('ws-t1', () => permittedSendingIdentity(from))
   }
 
   it('permits this workspace’s label on the minting domain', async () => {
-    await expect(permitted('neon-t1@mail.platform.test')).resolves.toBe(
-      'neon-t1@mail.platform.test'
-    )
+    await expect(permitted('ws-t1@mail.platform.test')).resolves.toBe('ws-t1@mail.platform.test')
   })
 
   it('refuses it on a domain the fleet only RECEIVES on', async () => {
@@ -224,11 +222,11 @@ describe('the send guard reads the minting domain, not the accept-set', () => {
     // would then be rejected by the provider, which holds no verified identity
     // for a domain retired from minting. Refused here, the caller falls back to
     // the platform sender and the mail goes out.
-    await expect(permitted('neon-t1@old.platform.test')).resolves.toBeNull()
+    await expect(permitted('ws-t1@old.platform.test')).resolves.toBeNull()
   })
 
   it('refuses another workspace’s label on either of them', async () => {
-    await expect(permitted('neon-t2@mail.platform.test')).resolves.toBeNull()
-    await expect(permitted('neon-t2@old.platform.test')).resolves.toBeNull()
+    await expect(permitted('ws-t2@mail.platform.test')).resolves.toBeNull()
+    await expect(permitted('ws-t2@old.platform.test')).resolves.toBeNull()
   })
 })

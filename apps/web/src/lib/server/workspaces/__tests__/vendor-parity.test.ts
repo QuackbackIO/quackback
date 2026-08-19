@@ -35,20 +35,20 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': '5e24c330a471ab6535f6698b49f9baa5d96e8699cb9a0522400ef755cf25b372',
+  'contract.ts': '84b46f322c054b884838376d54b884e84b14acfdcf587ab274b0ecb077992d68',
   // The mail slug vocabulary, which `contract.ts` imports and re-exports. It is
   // a separate module on the control plane so the edge mail Worker can apply the
   // same rule without pulling zod and the record schema into a workerd bundle;
   // it is vendored here because `contract.ts` does not compile without it.
   'mail-slug-pattern.ts': 'f64fdfdcc164bae1a58656e8335042a9620c85d802e5bc8c7018fbfe5e2fb310',
-  'secret-ref.ts': 'cf001176eafcbe9838ad5d86ba7d6cd30e338d4a6b0cb3439d6de7884045bc99',
+  'secret-ref.ts': '4f4cba2a5fdc4d3d690bd655367fab31a5fb5daad4a5791931edaa674fa1b902',
   // Sealing and derivation, vendored for a sharper reason than the others: the
   // control plane seals a value and a fleet replica opens it. Drift here is not
   // a wrong answer, it is ciphertext nobody can open — and for SECRET_KEY that
   // means integration tokens, webhook secrets and custom-action headers are
   // permanently unrecoverable. The digest is the only thing standing between a
   // one-line "tidy-up" in one repo and data loss in the other.
-  'fleet-secrets.ts': '79546d6d139ee4f76dfee7d62c413b6f19acf6e23bd7e44e5962bbde0a4f40fc',
+  'fleet-secrets.ts': '8c2337ea138a5185fac7244829220360000bd6df12d53ddc1f7502be97505e4a',
   'workspace-secret-resolution.ts':
     'd02b7e7033437226506c107b28937378ca9bcc84f37ec2738ccc2066d25c74c0',
 } as const
@@ -109,10 +109,13 @@ describe('the vendored predicate is the one that runs', () => {
     const direct = vendored.evaluateFingerprint(expected, observed)
     const throughApp = app.evaluateWorkspaceIdentity(
       expected,
-      { neonProjectId: null, neonBranchId: null },
+      { catalogName: null, catalogOid: null, clusterId: null },
       {
         ...observed,
-        physical: { neonProjectId: null, neonBranchId: null, neonEndpointId: null },
+        physical: {
+          currentDatabase: null,
+          catalogOid: null,
+        },
         stampSource: 'metadata',
         stampSourceConflict: null,
         secretCanary: null,

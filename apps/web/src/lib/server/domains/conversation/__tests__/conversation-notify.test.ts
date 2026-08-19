@@ -529,10 +529,10 @@ describe('notifyAgentReply', () => {
       process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
       process.env.QUACKBACK_TENANCY = 'pooled'
 
-      const replyTo = await replyToOf((fn) => withWorkspace('neon-t2', fn))
+      const replyTo = await replyToOf((fn) => withWorkspace('ws-t2', fn))
 
       expect(replyTo).toMatch(
-        new RegExp(`^${mailSlugFor('neon-t2')}\\+c1\\.[A-Za-z0-9_-]{22}@tenaevexeo\\.resend\\.app$`)
+        new RegExp(`^${mailSlugFor('ws-t2')}\\+c1\\.[A-Za-z0-9_-]{22}@tenaevexeo\\.resend\\.app$`)
       )
       // The address is not merely slug-shaped: it verifies back to this
       // conversation, which is the whole point of advertising it.

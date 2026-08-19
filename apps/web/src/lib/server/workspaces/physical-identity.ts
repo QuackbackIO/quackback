@@ -1,101 +1,75 @@
 /**
- * The half of the fingerprint a copy-on-write branch cannot forge.
+ * The half of the fingerprint a copy of the database cannot forge.
  *
  * `evaluateFingerprint` (vendor/contract.ts) compares two facts that live *in*
  * the workspace database: `settings.id` and the control plane's stamp. Both are
- * data, and Neon branching copies data — so a branch of a workspace's database
- * satisfies both halves and is served as the real thing:
+ * data, and `pg_dump`/`CREATE DATABASE … TEMPLATE` copy data — so a clone of a
+ * workspace's database satisfies both halves and is served as the real thing
+ * unless something that is a property of the *catalog* is compared too.
  *
- *   REAL   ws=019fde94-…  stamp workspaceKey=inst_gauntlet_alpha   verdict {"ok":true}
- *   BRANCH ws=019fde94-…  stamp workspaceKey=inst_gauntlet_alpha   verdict {"ok":true}
+ * On the fleet Postgres that comparison is `current_database()` plus
+ * `pg_database.oid`, recorded at provision, plus the cluster id the registry
+ * named. A restore into a new database keeps the stamp and `settings.id` and
+ * gets a new oid. A `TEMPLATE` clone does the same. Refusing an oid mismatch is
+ * the anti-clone half.
  *
- * That matters more than it first looks, because branching is exactly what
- * SAAS-HOSTING-STACK.md §10.8 recommends for migration preflight and what makes
- * Neon attractive: **the most likely operational mistake is the one the content
- * fingerprint cannot catch.** A record accidentally repointed at a restore, a
- * PITR branch or a staging branch reads as valid all the way down.
+ * A record that claims no catalog oid (self-host) skips this check.
  *
- * The fix is to compare something that is a property of the *compute* rather
- * than of the data. Neon publishes exactly that as GUCs, and they are visible
- * through the pooled endpoint as well as the direct one (verified 2026-08-08 on
- * a live project, both endpoints, identical values):
- *
- *   neon.project_id   tiny-credit-36813255
- *   neon.branch_id    br-weathered-lake-aupi87in
- *   neon.endpoint_id  ep-tiny-poetry-auqd4saj
- *
- * A branch of that database reports a different `neon.branch_id` while carrying
- * a byte-identical stamp, which is the whole point.
- *
- * Read with `current_setting(name, true)` so a plain Postgres (self-hosted, or
- * the docker-compose dev database) returns NULL instead of erroring.
+ * Catalog fields are read with ordinary SQL so a self-hosted database answers
+ * them.
  */
 
 /** Where the registry says the workspace physically lives. */
 export type PhysicalExpectation = {
-  /** Neon project id, or null when the workspace is not on Neon. */
-  neonProjectId: string | null
-  /** Neon branch id (`br-…`), or null when the workspace is not on Neon. */
-  neonBranchId: string | null
+  /** Expected `current_database()`, or null when not recorded. */
+  catalogName: string | null
+  /** Expected `pg_database.oid` as decimal text, or null when not recorded. */
+  catalogOid: string | null
+  /** Fleet catalog cluster id, or null when not recorded. */
+  clusterId: string | null
 }
 
 /** What the connected database says about itself. */
 export type ObservedPhysicalIdentity = {
-  neonProjectId: string | null
-  neonBranchId: string | null
-  neonEndpointId: string | null
+  currentDatabase: string | null
+  catalogOid: string | null
 }
 
-export type PhysicalFailure =
-  | 'neon_identity_unavailable'
-  | 'neon_project_mismatch'
-  | 'neon_branch_mismatch'
+export type PhysicalFailure = 'catalog_name_mismatch' | 'catalog_oid_mismatch'
 
 export type PhysicalVerdict = { ok: true } | { ok: false; code: PhysicalFailure; detail: string }
 
 /**
- * Assert the connected compute is the one the registry named.
+ * Assert the connected catalog is the one the registry named.
  *
- * Fails closed in the direction that matters: a record that *claims* a Neon
- * branch and reaches a database that cannot name one is refused, because that
- * is what a proxy, a tunnel, or a restore into ordinary Postgres looks like.
- * A record claiming no Neon placement (a self-hosted workspace) skips the check
- * entirely — there is nothing to compare, and inventing a comparison would only
- * produce false refusals.
+ * Fleet-PG placement is the catalog name + oid. A record claiming neither
+ * skips the check — that is self-host. `clusterId` is carried on the
+ * expectation so the descriptor names the cluster; it is not a property the
+ * connected database can report.
  */
 export function evaluatePhysicalIdentity(
   expected: PhysicalExpectation,
   observed: ObservedPhysicalIdentity
 ): PhysicalVerdict {
-  const expectsNeon = expected.neonProjectId !== null || expected.neonBranchId !== null
-  if (!expectsNeon) return { ok: true }
+  const expectsCatalog = expected.catalogName !== null || expected.catalogOid !== null
+  if (!expectsCatalog) return { ok: true }
 
-  if (observed.neonProjectId === null && observed.neonBranchId === null) {
+  if (expected.catalogName !== null && observed.currentDatabase !== expected.catalogName) {
     return {
       ok: false,
-      code: 'neon_identity_unavailable',
-      detail:
-        'registry places this workspace on Neon but the connected database reports no ' +
-        'neon.project_id/neon.branch_id — it is not the compute the record names',
+      code: 'catalog_name_mismatch',
+      detail: `current_database() is ${observed.currentDatabase ?? 'null'}, expected ${expected.catalogName}`,
     }
   }
 
-  if (expected.neonProjectId !== null && observed.neonProjectId !== expected.neonProjectId) {
+  if (expected.catalogOid !== null && observed.catalogOid !== expected.catalogOid) {
     return {
       ok: false,
-      code: 'neon_project_mismatch',
-      detail: `neon.project_id is ${observed.neonProjectId ?? 'null'}, expected ${expected.neonProjectId}`,
-    }
-  }
-
-  if (expected.neonBranchId !== null && observed.neonBranchId !== expected.neonBranchId) {
-    return {
-      ok: false,
-      code: 'neon_branch_mismatch',
+      code: 'catalog_oid_mismatch',
       detail:
-        `neon.branch_id is ${observed.neonBranchId ?? 'null'}, expected ${expected.neonBranchId} — ` +
-        'this is a branch of the workspace database, not the workspace database. Branching copies both ' +
-        'halves of the content fingerprint, so this check is the only one that can see it',
+        `pg_database.oid is ${observed.catalogOid ?? 'null'}, expected ${expected.catalogOid} — ` +
+        'this is a dump/restore or TEMPLATE clone of the workspace database, not the catalog the ' +
+        'registry named. Cloning copies both halves of the content fingerprint',
     }
   }
 

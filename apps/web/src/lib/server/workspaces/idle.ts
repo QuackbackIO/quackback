@@ -4,8 +4,8 @@
  *
  * ## The measurement this exists for
  *
- * Neon bills a compute for as long as **any** client is connected, and suspends
- * it once none is. `pool-cache.ts` already states that for the request path and
+ * The fleet bills a compute for as long as **any** client is connected, and
+ * suspends it once none is. `pool-cache.ts` already states that for the request path and
  * names the hazard it could not fix from there:
  *
  * > eviction is **necessary but not sufficient** … a permanently attached
@@ -65,7 +65,7 @@
  * ## Why these numbers
  *
  * **`detachAfterMs` (60s).** Time to suspend is `detachAfterMs` plus the
- * platform's own timer (Neon's `suspend_timeout_seconds`, 300s by default), so
+ * platform's own timer (`suspend_timeout_seconds`, 300s by default), so
  * the only thing this number buys is not thrashing: a workspace that goes quiet for
  * forty seconds between two clicks should not pay a reconnect and a fingerprint
  * round trip. Sixty seconds is a fifth of the platform timer, and sixty times
@@ -78,7 +78,7 @@
  * latency, and the arithmetic is worth stating because an operator will want to
  * move it. Each rescan connects, so the platform restarts its suspend timer
  * afterwards: a *fully* idle workspace is awake for roughly
- * `suspendTimeout / rescanIntervalMs` of the time — about 33% at Neon's default
+ * `suspendTimeout / rescanIntervalMs` of the time — about 33% at the default
  * 300s and fifteen minutes, against 100% today. The suspend timeout is the
  * fleet's own setting, so the same policy costs about 7% on a project configured
  * to suspend after 60s; lowering it is strictly better than lengthening this.

@@ -1,6 +1,6 @@
 /**
  * Evidence harness for the queue's workspace boundary, run against a real pooled
- * fleet (`QUACKBACK_TENANCY=pooled`, a real control-plane registry, one Neon
+ * fleet (`QUACKBACK_TENANCY=pooled`, a real control-plane registry, one
  * database per workspace).
  *
  * The queue is per-workspace by construction — the table lives in the workspace's own
@@ -13,7 +13,7 @@
  * `db` actually resolved to**:
  *
  *   - the workspace id the scope claimed  (`getCurrentWorkspace()`)
- *   - `current_database()` and `neon.branch_id` of the database written to
+ *   - `current_database()` of the database written to
  *
  * A cross-workspace execution is then observable two independent ways, and neither
  * requires trusting the other:
@@ -130,7 +130,7 @@ async function run(): Promise<void> {
             (job_id, queue, enqueued_for, scope_workspace_key, db_name, branch_id)
           SELECT ${job.jobId}, ${job.queue},
                  ${String((job.payload as { enqueuedFor?: string }).enqueuedFor ?? '?')},
-                 ${scope}, current_database(), current_setting('neon.branch_id', true)
+                 ${scope}, current_database(), current_database()
         `)
       },
     },
@@ -176,7 +176,7 @@ async function run(): Promise<void> {
               (job_id, queue, enqueued_for, scope_workspace_key, db_name, branch_id)
             SELECT ${job.jobId}, ${job.queue},
                    ${String((job.payload as { enqueuedFor?: string }).enqueuedFor ?? '?')},
-                   ${scope}, current_database(), current_setting('neon.branch_id', true)
+                   ${scope}, current_database(), current_database()
           `)
         },
       },
@@ -191,7 +191,7 @@ async function run(): Promise<void> {
           INSERT INTO gauntlet_workspace_effects
             (job_id, queue, enqueued_for, scope_workspace_key, db_name, branch_id)
           SELECT ${job.jobId}, ${job.queue}, 'PLANTED', ${scope},
-                 current_database(), current_setting('neon.branch_id', true)
+                 current_database(), current_database()
         `)
       },
     },
@@ -230,7 +230,7 @@ async function run(): Promise<void> {
             (job_id, queue, enqueued_for, scope_workspace_key, db_name, branch_id)
           SELECT ${job.jobId}, ${job.queue},
                  ${String((job.payload as { scheduledFor?: string }).scheduledFor ?? 'CRON')},
-                 ${scope}, current_database(), current_setting('neon.branch_id', true)
+                 ${scope}, current_database(), current_database()
         `)
       },
     },
@@ -331,7 +331,7 @@ async function run(): Promise<void> {
 
 /**
  * The §7.3 re-check, for this queue's own channel: does `LISTEN` on the queue
- * wake channel actually deliver through Neon's pooled endpoint?
+ * wake channel actually deliver through the pooled endpoint?
  *
  * Measured by sending a NOTIFY and waiting for it. Never by asking
  * `pg_listening_channels()`, which reports the registration as present on a

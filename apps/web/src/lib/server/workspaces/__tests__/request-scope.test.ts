@@ -273,8 +273,8 @@ describe('resolveWorkspaceAndContinue', () => {
     acquireScopeForHost.mockResolvedValue({
       kind: 'refused',
       workspaceKey: 'inst_a',
-      code: 'neon_branch_mismatch',
-      detail: 'branch br-x, expected br-y',
+      code: 'catalog_oid_mismatch',
+      detail: 'pg_database.oid is 9999, expected 4242',
     })
     const res = (await serve('t1.localhost')) as Response
     expect(res.status).toBe(503)

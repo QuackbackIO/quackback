@@ -1,20 +1,20 @@
 /**
  * The workspace-keyed connection-pool cache (SAAS-HOSTING-STACK.md §6).
  *
- * One process, many workspaces, one Neon database each. This is the LRU that turns
+ * One process, many workspaces, one database each. This is the LRU that turns
  * a resolved workspace record into a live `postgres.js` pool, and it is where the
  * §3 fingerprint assertion is enforced — once per pool, not once per request.
  *
  * ## Eviction is the cost model, not memory hygiene
  *
- * Neon suspends a compute when **no client is connected**. An open pool holds
+ * The fleet suspends a compute when **no client is connected**. An open pool holds
  * the database awake, so eviction is the single thing that makes an idle workspace
- * cost storage only (~$0.02/month) instead of running compute indefinitely. The
+ * cost storage only instead of running compute indefinitely. The
  * same silence is what lets a Railway `role=web` service sleep, since Railway's
  * rule triggers on ten minutes without an *outbound* packet.
  *
- * So `workspacePoolIdleSeconds` must sit comfortably below **both** Neon's
- * `suspend_timeout_seconds` (300s by default) and Railway's 600s window. Get it
+ * So `workspacePoolIdleSeconds` must sit comfortably below **both** the
+ * database `suspend_timeout_seconds` (300s by default) and Railway's 600s window. Get it
  * wrong and every workspace ever routed to an instance stays awake forever —
  * silently, with no functional signal that the cost model has stopped working.
  * That is why `poolsEvicted` is a first-class counter here rather than a debug
@@ -48,7 +48,7 @@ import {
   observeWorkspaceIdentity,
   WorkspaceFingerprintRefusal,
 } from './fingerprint'
-import { readNeonRolePassword, invalidateNeonRolePassword } from './neon-credentials'
+import { openWorkspaceSecret } from './vendor/fleet-secrets'
 import type { WorkspaceDescriptor } from './registry'
 import { clearWorkspaceSecretsCache, resolveWorkspaceSecrets } from './workspace-secrets'
 import { parseSecretRef, redactRef } from './vendor/secret-ref'
@@ -170,17 +170,17 @@ export async function acquireWorkspacePool(workspace: WorkspaceDescriptor): Prom
 
 function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
   const sql = postgres(workspace.database.pooledUrl, {
-    // Small on purpose. One instance holds N workspace pools, and the Neon pooler
-    // multiplexes to a much smaller number of backends anyway; 10 per workspace
-    // would be N×10 sockets for no throughput.
+    // Small on purpose. One instance holds N workspace pools, and the fleet
+    // pooler multiplexes to a much smaller number of backends anyway; 10 per
+    // workspace would be N×10 sockets for no throughput.
     max: config.workspacePoolMax,
-    // Keep protocol-level prepared statements. Verified safe through the Neon
-    // pooler under real backend reassignment; the boundary is that Drizzle emits
-    // explicit column lists, so a hand-written `SELECT *` in a migration-adjacent
-    // path would break it.
+    // Keep protocol-level prepared statements. Verified safe through the
+    // transaction-mode pooler under real backend reassignment; the boundary is
+    // that Drizzle emits explicit column lists, so a hand-written `SELECT *` in
+    // a migration-adjacent path would break it.
     prepare: true,
-    // Below Neon's suspend timeout AND Railway's sleep window. This is the
-    // number the cost model rests on.
+    // Below the database suspend timeout AND Railway's sleep window. This is
+    // the number the cost model rests on.
     idle_timeout: config.workspacePoolIdleSeconds,
     connect_timeout: 15,
     password: () => resolvePassword(workspace),
@@ -220,12 +220,26 @@ async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> 
   const ref = workspace.database.credentialRef
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
-    case 'neon+role':
-      return readNeonRolePassword({
-        projectId: parsed.projectId,
-        branchId: parsed.branchId,
-        role: parsed.role,
-      })
+    case 'sealed+aead': {
+      if (parsed.purpose !== 'db') {
+        throw new Error(
+          `${redactRef(ref)} is sealed for '${parsed.purpose}', not a database password`
+        )
+      }
+      const root = config.fleetRootKey
+      if (!root) {
+        throw new Error(`${redactRef(ref)} needs QUACKBACK_FLEET_ROOT_KEY`)
+      }
+      return openWorkspaceSecret(
+        root,
+        {
+          generation: parsed.generation,
+          workspaceKey: parsed.workspaceKey,
+          purpose: 'db',
+        },
+        parsed.blob
+      )
+    }
     case 'env': {
       const value = process.env[parsed.variable]
       if (!value) {
@@ -234,10 +248,6 @@ async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> 
       return value
     }
     case 'derived+hkdf':
-    case 'sealed+aead':
-      // Both name an APPLICATION secret. A database password is issued by a
-      // provider or a vault and is never a value this system chooses, so a
-      // derived one would be a plausible-looking string that no server accepts.
       throw new Error(`${parsed.scheme}:// refs hold application secrets, not database credentials`)
   }
 }
@@ -298,7 +308,8 @@ async function verifyWorkspaceDatabase(
         workspaceKey: workspace.workspaceKey,
         selfReportedWorkspaceId: observed.selfReportedWorkspaceId,
         stampSource: observed.stampSource,
-        neonBranchId: observed.physical.neonBranchId,
+        catalogName: observed.physical.currentDatabase,
+        catalogOid: observed.physical.catalogOid,
         storageResolved: secrets.storage !== null,
         // Which of the four evidence states the key check cleared on. A fleet
         // where this reads `absent` everywhere is a fleet where the canary is
@@ -311,8 +322,6 @@ async function verifyWorkspaceDatabase(
     return secrets
   }
 
-  const parsed = parseSecretRef(workspace.database.credentialRef)
-  if (parsed.scheme === 'neon+role') invalidateNeonRolePassword(parsed)
   // A refused pool must not leave a resolved bundle memoised: the commonest
   // recoverable cause is a rotation mid-flight, and the retry has to re-resolve
   // rather than re-fail on the value that was already wrong.
@@ -324,8 +333,10 @@ async function verifyWorkspaceDatabase(
       code: keyVerdict.code,
       detail: keyVerdict.detail,
       observedSelfReportedWorkspaceId: observed.selfReportedWorkspaceId,
-      observedBranchId: observed.physical.neonBranchId,
-      expectedBranchId: workspace.physical.neonBranchId,
+      observedCatalogName: observed.physical.currentDatabase,
+      expectedCatalogName: workspace.physical.catalogName,
+      observedCatalogOid: observed.physical.catalogOid,
+      expectedCatalogOid: workspace.physical.catalogOid,
     },
     'workspace database fingerprint REFUSED'
   )
@@ -425,7 +436,7 @@ export async function evict(workspaceKey: string, reason: EvictionReason): Promi
  * Close pools that have been idle past the threshold.
  *
  * `postgres.js` already closes idle *sockets* after `idle_timeout`, which is
- * what actually lets Neon suspend. This sweep additionally drops the pool
+ * what actually lets the compute suspend. This sweep additionally drops the pool
  * object, which is what stops a workspace that was routed here once from holding a
  * slot in the LRU forever, and what makes the eviction counter meaningful.
  */

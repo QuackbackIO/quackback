@@ -120,7 +120,7 @@ Checked once per pool, cached per pool, never per request.
 | ------------------------- | ------------------------------- | ---------------------- |
 | `settings.id`             | nobody — it is a primary key    | a copy of the database |
 | the control plane's stamp | the control plane, deliberately | a copy of the database |
-| `neon.branch_id` (a GUC)  | the platform, per compute       | nothing we can reach   |
+| `pg_database.oid`         | the catalog, per database       | nothing we can reach   |
 
 `settings` is exactly one row per database — the app's own `requireSettings()` is
 a `findFirst()` with no `WHERE` clause — which is what makes the database the
@@ -136,29 +136,28 @@ the copy with a committed digest (always runs) _and_ a direct comparison against
 the control-plane checkout (runs when one is present — a skipped check reports
 success, which is why it is not the only check).
 
-**The third fact exists because a Neon branch is indistinguishable from its
-parent by the first two.** Branching is copy-on-write, so a branch carries a
-byte-identical `settings.id` and a byte-identical stamp. That matters more than
-it first appears: branching is exactly what §10.8 recommends for migration
-preflight, so _the most likely operational mistake is the one the content
-fingerprint cannot catch._ Neon publishes `neon.project_id`, `neon.branch_id` and
-`neon.endpoint_id` as GUCs — properties of the compute, not of the data —
-readable identically through the pooled and direct endpoints. Read with
-`current_setting(name, true)` so plain Postgres yields NULL instead of raising.
-A record that _claims_ a Neon branch and reaches a database that cannot name one
-is refused; a record claiming no Neon placement skips the check.
+**The third fact exists because a dump/restore or `TEMPLATE` clone is
+indistinguishable from its parent by the first two.** Cloning copies data, so a
+clone carries a byte-identical `settings.id` and a byte-identical stamp. That
+matters more than it first appears: cloning is exactly what §10.8 recommends
+for migration preflight, so _the most likely operational mistake is the one the
+content fingerprint cannot catch._ Fleet Postgres records `current_database()`
+and `pg_database.oid` at provision — properties of the catalog, not of the
+data. A restore into a new database keeps the stamp and gets a new oid. A
+record that _claims_ a catalog oid and reaches a database with a different one
+is refused; a record claiming no catalog placement skips the check.
 
 Demonstrated live, 2026-08-08, against the gauntlet workspaces:
 
 ```
 t1 record → t2's database    HTTP 503   REFUSED [self_reported_workspace_id_mismatch]
                                         settings.id is 019fe1d3-…, expected 019fe1ca-…
-t1 record → a BRANCH of t1   HTTP 503   REFUSED [neon_branch_mismatch]
-                                        neon.branch_id is br-tiny-bird-…, expected br-weathered-lake-…
+t1 record → a CLONE of t1    HTTP 503   REFUSED [catalog_oid_mismatch]
+                                        pg_database.oid is 9999, expected 4242
 t1 record → t1              HTTP 200
 ```
 
-The branch case is the one that used to pass.
+The clone case is the one that used to pass.
 
 ### Where the stamp is read from
 
@@ -191,31 +190,30 @@ code that reads it) is respected by not creating the dependency at all.
 
 An LRU of `postgres()` pools keyed by workspace id.
 
-| Knob                          | Default | Why                                                                                                                                   |
-| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `WORKSPACE_POOL_MAX`          | 3       | One instance holds N workspace pools and the Neon pooler multiplexes anyway; 10 per workspace would be N×10 sockets for no throughput |
-| `WORKSPACE_POOL_MAX_ENTRIES`  | 50      | LRU cap per instance                                                                                                                  |
-| `WORKSPACE_POOL_IDLE_SECONDS` | 45      | See below — this is the number the cost model rests on                                                                                |
-| `WORKSPACE_REGISTRY_TTL_MS`   | 30 000  | Hostname → record cache; `revision` invalidates within the window                                                                     |
+| Knob                          | Default | Why                                                                                                                                    |
+| ----------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `WORKSPACE_POOL_MAX`          | 3       | One instance holds N workspace pools and the fleet pooler multiplexes anyway; 10 per workspace would be N×10 sockets for no throughput |
+| `WORKSPACE_POOL_MAX_ENTRIES`  | 50      | LRU cap per instance                                                                                                                   |
+| `WORKSPACE_POOL_IDLE_SECONDS` | 45      | See below — this is the number the cost model rests on                                                                                 |
+| `WORKSPACE_REGISTRY_TTL_MS`   | 30 000  | Hostname → record cache; `revision` invalidates within the window                                                                      |
 
 Pools terminate at the **pooled** (transaction-mode) endpoint. The direct
 endpoint is reserved for session-mode consumers — `LISTEN`, `pg_advisory_lock`,
 `CREATE INDEX CONCURRENTLY` — which is why the record carries both.
 
 `prepare: true` is kept. Protocol-level prepared statements are verified safe
-through the Neon pooler under real backend reassignment. The boundary is that
-Drizzle emits explicit column lists; hand-written `SELECT *` in a
-migration-adjacent path would break it.
+through the transaction-mode pooler under real backend reassignment. The
+boundary is that Drizzle emits explicit column lists; hand-written `SELECT *`
+in a migration-adjacent path would break it.
 
 ### Credential rotation
 
 `postgres.js` accepts a **function** for `password` and calls it on every new
 connection, so a rotated credential is picked up by reconnecting rather than by
 wedging: existing sockets keep working, the next one resolves fresh. `dbRole` is
-a first-class field on the record for exactly this reason. `neon+role://` refs
-are dereferenced through Neon's `reveal_password` with a 60-second memo — long
-enough that a burst of pool creations does not fan out into N management-API
-calls, short enough that a rotation is picked up without an operator action.
+a first-class field on the record for exactly this reason. `sealed+aead://`
+database refs are opened under the fleet root — the password is a value we
+issued, and the blob rides in the same registry row as the DSN.
 
 The credential is additionally resolved **once, eagerly, before the first
 connection** — not for caching, but for the error. A password provider that
@@ -224,14 +222,14 @@ seconds later, which is both slow and names the wrong cause.
 
 ### Eviction is the cost model, not memory hygiene
 
-Neon suspends a compute when **no client is connected**. An open pool holds the
+The fleet suspends a compute when **no client is connected**. An open pool holds the
 database awake, so eviction is the single thing that makes an idle workspace cost
-storage only (~$0.02/month) instead of running compute indefinitely. The same
+storage only instead of running compute indefinitely. The same
 silence is what lets a Railway `role=web` service sleep, since Railway's rule
 triggers on ten minutes without an _outbound_ packet.
 
-So `WORKSPACE_POOL_IDLE_SECONDS` must sit comfortably below **both** Neon's
-`suspend_timeout_seconds` (300 s default, and not editable on every plan) and
+So `WORKSPACE_POOL_IDLE_SECONDS` must sit comfortably below **both** the
+database `suspend_timeout_seconds` (300 s default) and
 Railway's 600 s window. 45 s is the default; the gauntlet measurement ran at 20 s.
 
 Two layers do the work. `postgres.js` closes idle _sockets_ after `idle_timeout`,
@@ -257,14 +255,14 @@ optional scale-out, not the precondition for idle saving.
 #### Measured, 2026-08-08
 
 Local pooled fleet, `QUACKBACK_ROLE=web`, `WORKSPACE_POOL_IDLE_SECONDS=20`, against
-`gauntlet-neon-t3` (its own Neon project, 0.25 CU, default 300 s suspend). The
-method polls the Neon API for `current_state = idle` **before** the trial: a
+`gauntlet-ws-t3` (its own catalog, default 300 s suspend). The
+method polls the compute for `current_state = idle` **before** the trial: a
 suspend/wake measurement without a verified pre-state measures nothing.
 
 | Step                                                              | Observed                                                                                       |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | verified pre-state                                                | `idle`                                                                                         |
-| cold request (`GET /api/widget/config.json`, Host `t3.localhost`) | HTTP **200 in 3 s** — Neon wake + first pool build + fingerprint + render, all cold            |
+| cold request (`GET /api/widget/config.json`, Host `t3.localhost`) | HTTP **200 in 3 s** — compute wake + first pool build + fingerprint + render, all cold         |
 | state immediately after                                           | `active`                                                                                       |
 | pool evicted                                                      | **+25.2 s** after last use, `reason: idle`, socket closed (20 s threshold, swept every ~6.7 s) |
 | compute returned to `idle`                                        | **+337 s** after last traffic, polled every 15 s                                               |
@@ -276,8 +274,8 @@ time-to-suspend measured independently elsewhere in this run, and it confirms th
 causal claim rather than merely the correlation: **the compute suspends because
 the pool let go.**
 
-Open question 2 of `SAAS-HOSTING-STACK.md` ("does pool eviction actually let Neon
-suspend?") is answered yes under a process that holds no idle tenant sockets.
+Open question 2 of `SAAS-HOSTING-STACK.md` ("does pool eviction actually let the
+compute suspend?") is answered yes under a process that holds no idle tenant sockets.
 That is `ROLE=web`, or `ROLE=all` with the connectionless scheduler. It is not
 true of a listener-mode `ROLE=all` that keeps LISTEN attached.
 
@@ -620,7 +618,6 @@ fire — but the swallow is worth narrowing.
 | `QUACKBACK_TENANCY`                                     | `single` (default) or `pooled`                                                                             |
 | `QUACKBACK_CONTROL_DATABASE_URL`                        | Control-plane Postgres holding `cp_workspace_registry` / `cp_workspace_hostnames`. Required under `pooled` |
 | `DATABASE_URL`                                          | Required under `single`. **Refused under `pooled`**                                                        |
-| `NEON_API_KEY`                                          | Dereferences `neon+role://` credential refs                                                                |
 | `WORKSPACE_POOL_MAX` / `_MAX_ENTRIES` / `_IDLE_SECONDS` | See §4                                                                                                     |
 | `WORKSPACE_REGISTRY_TTL_MS`                             | Hostname cache TTL                                                                                         |
 

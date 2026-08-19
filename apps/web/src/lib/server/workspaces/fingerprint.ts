@@ -13,7 +13,7 @@
  * | --- | --- | --- |
  * | `settings.id` | nobody — it is a primary key | a copy of the database |
  * | the control plane's stamp | the CP, deliberately | a copy of the database |
- * | `neon.branch_id` (GUC) | the platform, per compute | nothing we can reach |
+ * | `pg_database.oid` | the catalog, per database | nothing we can reach |
  *
  * The verdict for the first two is `evaluateFingerprint`, vendored byte-for-byte
  * from the control plane so both sides run the same predicate rather than two
@@ -117,9 +117,8 @@ const IDENTITY_FAILURE_SUBJECT = {
   stamp_missing: 'database',
   stamp_workspace_key_mismatch: 'database',
   self_reported_workspace_id_mismatch: 'database',
-  neon_identity_unavailable: 'database',
-  neon_project_mismatch: 'database',
-  neon_branch_mismatch: 'database',
+  catalog_name_mismatch: 'database',
+  catalog_oid_mismatch: 'database',
   stamp_source_conflict: 'database',
   secret_key_canary_missing: 'key',
   secret_key_canary_mismatch: 'key',
@@ -185,9 +184,8 @@ const IDENTITY_FAILURE_RETRYABILITY = {
   stamp_missing: 'terminal',
   stamp_workspace_key_mismatch: 'terminal',
   self_reported_workspace_id_mismatch: 'terminal',
-  neon_identity_unavailable: 'terminal',
-  neon_project_mismatch: 'terminal',
-  neon_branch_mismatch: 'terminal',
+  catalog_name_mismatch: 'terminal',
+  catalog_oid_mismatch: 'terminal',
   stamp_source_conflict: 'terminal',
   secret_key_canary_missing: 'terminal',
   secret_key_canary_mismatch: 'terminal',
@@ -467,25 +465,22 @@ export function evaluateSecretKeyCanary(
 }
 
 /**
- * Neon's own identity GUCs. Verified present through both the direct and the
- * pooled endpoint. `current_setting(name, true)` yields NULL instead of raising
- * on a plain Postgres, which is what a self-hosted workspace looks like.
+ * Catalog identity: `current_database()` and `pg_database.oid`. A dump/restore
+ * or `TEMPLATE` clone keeps the content fingerprint and gets a new oid, which
+ * is the anti-clone half.
  */
 export async function observePhysicalIdentity(sql: Sql): Promise<ObservedPhysicalIdentity> {
   const rows = (await sql`
-    SELECT current_setting('neon.project_id', true)  AS project_id,
-           current_setting('neon.branch_id', true)   AS branch_id,
-           current_setting('neon.endpoint_id', true) AS endpoint_id
+    SELECT current_database() AS catalog_name,
+           (SELECT oid::text FROM pg_database WHERE datname = current_database()) AS catalog_oid
   `) as unknown as Array<{
-    project_id: string | null
-    branch_id: string | null
-    endpoint_id: string | null
+    catalog_name: string | null
+    catalog_oid: string | null
   }>
   const row = rows[0]
   return {
-    neonProjectId: normalise(row?.project_id ?? null),
-    neonBranchId: normalise(row?.branch_id ?? null),
-    neonEndpointId: normalise(row?.endpoint_id ?? null),
+    currentDatabase: normalise(row?.catalog_name ?? null),
+    catalogOid: normalise(row?.catalog_oid ?? null),
   }
 }
 

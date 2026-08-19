@@ -31,44 +31,42 @@ const ROW: {
   mail_slug: string
   ai_enabled: boolean
   revision: string | number
-  neon_project_id: string | null
-  neon_branch_id: string | null
+  pg_database_oid: string | number | null
+  pg_cluster_id: string | null
   hostnames: string[]
   requested_kind?: string
   redirect_to_hostname?: string | null
 } = {
-  workspace_key: 'inst_gauntlet_neon_t1',
+  workspace_key: 'inst_cloud_ws_t1',
   contract_version: 1,
   state: 'active',
   state_reason: null,
-  primary_hostname: 'neon-t1.quackback.co.uk',
-  base_url: 'https://neon-t1.quackback.co.uk',
-  db_pooled_url:
-    'postgresql://qb_neon_t1@ep-tiny-poetry-auqd4saj-pooler.c-10.us-east-1.aws.neon.tech/qb_neon_t1?sslmode=require',
-  db_direct_url:
-    'postgresql://qb_neon_t1@ep-tiny-poetry-auqd4saj.c-10.us-east-1.aws.neon.tech/qb_neon_t1?sslmode=require',
-  db_name: 'qb_neon_t1',
-  db_role: 'qb_neon_t1',
-  db_credential_ref: 'neon+role://tiny-credit-36813255/br-weathered-lake-aupi87in/qb_neon_t1',
-  app_secrets_ref: 'derived+hkdf://v1/inst_gauntlet_neon_t1/app-secrets',
+  primary_hostname: 'ws-t1.quackback.co.uk',
+  base_url: 'https://ws-t1.quackback.co.uk',
+  db_pooled_url: 'postgresql://qb_ws_t1@db-pooler.example.com/qb_ws_t1?sslmode=require',
+  db_direct_url: 'postgresql://qb_ws_t1@db.example.com/qb_ws_t1?sslmode=require',
+  db_name: 'qb_ws_t1',
+  db_role: 'qb_ws_t1',
+  db_credential_ref: 'sealed+aead://v1/inst_cloud_ws_t1/db/AAAAAAAAAAAAAAAA',
+  app_secrets_ref: 'derived+hkdf://v1/inst_cloud_ws_t1/app-secrets',
   workspace_id: '019fe1ca-596e-7ff7-9edf-feecc2ce41b8',
   fingerprint_stamped_at: '2026-08-08T14:32:43.928Z',
   storage: {
     provider: 'r2',
-    bucket: 'qb-neon-t1',
-    endpoint: 'https://gauntlet-account.r2.cloudflarestorage.com',
+    bucket: 'qb-ws-t1',
+    endpoint: 'https://cloud-account.r2.cloudflarestorage.com',
     region: 'auto',
     forcePathStyle: false,
-    publicUrl: 'https://neon-t1.quackback.co.uk/api/storage',
-    credentialRef: 'env://QUACKBACK_TENANT_SECRET_INST_GAUNTLET_NEON_T1_STORAGE',
+    publicUrl: 'https://ws-t1.quackback.co.uk/api/storage',
+    credentialRef: 'env://QUACKBACK_TENANT_SECRET_INST_GAUNTLET_WS_T1_STORAGE',
   },
   email_from: 'Quackback Cloud <noreply@notifications.quackback.io>',
-  mail_slug: 'neon-t1',
+  mail_slug: 'ws-t1',
   ai_enabled: false,
   revision: 2,
-  neon_project_id: 'tiny-credit-36813255',
-  neon_branch_id: 'br-weathered-lake-aupi87in',
-  hostnames: ['neon-t1.quackback.co.uk', 't1.localhost'],
+  pg_database_oid: 4242,
+  pg_cluster_id: 'fleet-a',
+  hostnames: ['ws-t1.quackback.co.uk', 't1.localhost'],
 }
 
 type Row = typeof ROW
@@ -81,8 +79,8 @@ function row(over: Partial<Row> = {}): Row {
 function assertCarriesNoDsn(value: unknown): void {
   const serialised = JSON.stringify(value)
   expect(serialised).not.toContain('postgres')
-  expect(serialised).not.toContain('neon+role')
-  expect(serialised).not.toContain('aws.neon.tech')
+  expect(serialised).not.toContain('sealed+aead')
+  expect(serialised).not.toContain('db.example.com')
 }
 
 describe('interpretRow', () => {
@@ -96,7 +94,7 @@ describe('interpretRow', () => {
     )
     expect(result).toEqual({
       kind: 'redirect',
-      workspaceKey: 'inst_gauntlet_neon_t1',
+      workspaceKey: 'inst_cloud_ws_t1',
       hostname: 'old-name.quackback.co.uk',
       location: 'https://new-name.quackback.co.uk',
     })
@@ -132,13 +130,15 @@ describe('interpretRow', () => {
     const result = interpretRow(row(), 't1.localhost')
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(result.workspace.workspaceKey).toBe('inst_gauntlet_neon_t1')
+    expect(result.workspace.workspaceKey).toBe('inst_cloud_ws_t1')
     expect(result.workspace.database.pooledUrl).toContain('-pooler.')
-    // The branch id is not part of contract v1's WorkspaceRecord, so it has to be
-    // carried alongside — and without it the branch check has nothing to compare.
+    // Catalog identity is not part of contract v1's WorkspaceRecord, so it has
+    // to be carried alongside — and without it the clone check has nothing to
+    // compare.
     expect(result.workspace.physical).toEqual({
-      neonProjectId: 'tiny-credit-36813255',
-      neonBranchId: 'br-weathered-lake-aupi87in',
+      catalogName: 'qb_ws_t1',
+      catalogOid: '4242',
+      clusterId: 'fleet-a',
     })
   })
 
@@ -192,8 +192,7 @@ describe('interpretRow', () => {
     // contention, so this fails silently under load rather than at deploy.
     const result = interpretRow(
       row({
-        db_direct_url:
-          'postgresql://qb_neon_t1@ep-tiny-poetry-auqd4saj-pooler.c-10.us-east-1.aws.neon.tech/qb_neon_t1',
+        db_direct_url: 'postgresql://qb_ws_t1@db-pooler.example.com/qb_ws_t1',
       }),
       't1.localhost'
     )
@@ -205,8 +204,7 @@ describe('interpretRow', () => {
   it('refuses a DSN carrying a password', () => {
     const result = interpretRow(
       row({
-        db_pooled_url:
-          'postgresql://qb_neon_t1:hunter2@ep-tiny-poetry-auqd4saj-pooler.c-10.us-east-1.aws.neon.tech/qb_neon_t1',
+        db_pooled_url: 'postgresql://qb_ws_t1:hunter2@db-pooler.example.com/qb_ws_t1',
       }),
       't1.localhost'
     )
@@ -243,7 +241,7 @@ describe('interpretRow', () => {
     const result = interpretRow(row(), 't1.localhost')
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(result.workspace.email.mailSlug).toBe('neon-t1')
+    expect(result.workspace.email.mailSlug).toBe('ws-t1')
   })
 
   it('refuses a row with no mail slug rather than reading one as undefined', () => {
@@ -264,7 +262,7 @@ describe('interpretRow', () => {
     // not get to assume it ran: an over-length or upper-case slug produces a
     // local part a receiving MTA rejects, i.e. mail that silently stops
     // arriving, attributed to anything but the address that caused it.
-    for (const slug of ['NEON-T1', 'neon_t1', 'fourteen-chars', '']) {
+    for (const slug of ['WS-T1', 'ws_t1', 'fourteen-chars', '']) {
       expect(interpretRow(row({ mail_slug: slug }), 't1.localhost').kind).toBe('invalid')
     }
   })
@@ -292,8 +290,8 @@ describe('the projection', () => {
 
 describe('normalizeHostHeader', () => {
   it.each([
-    ['neon-t1.quackback.co.uk', 'neon-t1.quackback.co.uk'],
-    ['Neon-T1.Quackback.Co.Uk', 'neon-t1.quackback.co.uk'],
+    ['ws-t1.quackback.co.uk', 'ws-t1.quackback.co.uk'],
+    ['Ws-T1.Quackback.Co.Uk', 'ws-t1.quackback.co.uk'],
     ['t1.localhost:3000', 't1.localhost'],
     ['t1.localhost.', 't1.localhost'],
     ['  t1.localhost  ', 't1.localhost'],

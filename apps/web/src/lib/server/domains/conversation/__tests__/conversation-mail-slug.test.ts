@@ -39,8 +39,8 @@ afterEach(() => {
 describe('currentMailSlug', () => {
   it('is the registry record’s slug inside a workspace scope', () => {
     vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
-    expect(withWorkspace('neon-t1', () => currentMailSlug())).toBe(mailSlugFor('neon-t1'))
-    expect(withWorkspace('neon-t2', () => currentMailSlug())).toBe(mailSlugFor('neon-t2'))
+    expect(withWorkspace('ws-t1', () => currentMailSlug())).toBe(mailSlugFor('ws-t1'))
+    expect(withWorkspace('ws-t2', () => currentMailSlug())).toBe(mailSlugFor('ws-t2'))
   })
 
   it('is the self-hosted label with no scope on a single-workspace process', () => {
@@ -62,20 +62,20 @@ describe('currentMailSlug', () => {
 describe('minting from a workspace scope', () => {
   it('carries the scope’s slug into a conversation address that verifies back', () => {
     vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
-    const address = withWorkspace('neon-t1', () =>
+    const address = withWorkspace('ws-t1', () =>
       inboundReplyToAddress(CONVERSATION_ID, currentMailSlug(), ENV)
     )
     expect(address).not.toBeNull()
     expect(workspaceSlugFromInboundAddress(address!)).toEqual({
       kind: 'slug',
-      slug: mailSlugFor('neon-t1'),
+      slug: mailSlugFor('ws-t1'),
     })
     expect(conversationIdFromInboundAddress(address!, ENV)).toBe(CONVERSATION_ID)
   })
 
   it('carries it into a ticket address too', () => {
     vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
-    const address = withWorkspace('neon-t1', () =>
+    const address = withWorkspace('ws-t1', () =>
       inboundTicketReplyToAddress(TICKET_ID, currentMailSlug(), ENV)
     )
     expect(address).not.toBeNull()
@@ -86,15 +86,15 @@ describe('minting from a workspace scope', () => {
     // The isolation the slug exists for: the tag covers the pair, so one
     // workspace's reply address cannot be re-slugged into another's.
     vi.stubEnv('QUACKBACK_TENANCY', 'pooled')
-    const one = withWorkspace('neon-t1', () =>
+    const one = withWorkspace('ws-t1', () =>
       inboundReplyToAddress(CONVERSATION_ID, currentMailSlug(), ENV)
     )
-    const two = withWorkspace('neon-t2', () =>
+    const two = withWorkspace('ws-t2', () =>
       inboundReplyToAddress(CONVERSATION_ID, currentMailSlug(), ENV)
     )
     expect(one).not.toBe(two)
 
-    const reslugged = one!.replace(mailSlugFor('neon-t1'), mailSlugFor('neon-t2'))
+    const reslugged = one!.replace(mailSlugFor('ws-t1'), mailSlugFor('ws-t2'))
     expect(conversationIdFromInboundAddress(reslugged, ENV)).toBeNull()
   })
 })

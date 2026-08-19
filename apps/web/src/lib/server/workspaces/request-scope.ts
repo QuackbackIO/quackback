@@ -60,10 +60,10 @@ function refusal(status: number, body: string, extra?: Record<string, string>): 
  *
  * The platform hits these every couple of seconds, and on a wildcard domain
  * they arrive on a workspace hostname like everything else. Resolving a workspace for
- * them would open a pool — and therefore **wake a suspended Neon compute** —
- * once per probe, forever, which silently destroys the idle-cost model the
- * pooling exists for. Readiness under pooled tenancy asserts only that the
- * process can reach the control store, so it needs no workspace either.
+ * them would open a pool — and therefore **wake a suspended workspace
+ * database** — once per probe, forever, which silently destroys the idle-cost
+ * model the pooling exists for. Readiness under pooled tenancy asserts only that
+ * the process can reach the control store, so it needs no workspace either.
  */
 const FLEET_PATHS = ['/api/health', '/api/health/ready']
 

@@ -63,9 +63,9 @@ describe('parseInboundEmail', () => {
     expect(
       parseInboundEmail({
         to: 'support@tenaevexeo.resend.app',
-        headers: [{ name: 'Reply-To', value: 'Acme <neon-t1+cabc.sig@tenaevexeo.resend.app>' }],
+        headers: [{ name: 'Reply-To', value: 'Acme <ws-t1+cabc.sig@tenaevexeo.resend.app>' }],
       }).replyToAddresses
-    ).toEqual(['Acme <neon-t1+cabc.sig@tenaevexeo.resend.app>'])
+    ).toEqual(['Acme <ws-t1+cabc.sig@tenaevexeo.resend.app>'])
     expect(
       parseInboundEmail({ to: 'support@tenaevexeo.resend.app', reply_to: 'ops@acme.example' })
         .replyToAddresses
@@ -90,9 +90,9 @@ describe('parseInboundEmail', () => {
     expect(
       parseInboundEmail({
         to: 'support@tenaevexeo.resend.app',
-        reply_to: ['Acme <neon-t1+cabc.sig@tenaevexeo.resend.app>', 'ops@acme.example'],
+        reply_to: ['Acme <ws-t1+cabc.sig@tenaevexeo.resend.app>', 'ops@acme.example'],
       }).replyToAddresses
-    ).toEqual(['Acme <neon-t1+cabc.sig@tenaevexeo.resend.app>', 'ops@acme.example'])
+    ).toEqual(['Acme <ws-t1+cabc.sig@tenaevexeo.resend.app>', 'ops@acme.example'])
   })
 
   it('reads EVERY Reply-To header, and reads the same ones the raw front door does', () => {
@@ -102,7 +102,7 @@ describe('parseInboundEmail', () => {
     // which door a message came through is a guard with a second, undocumented
     // rule. Both read all of them, which is also the reading that cannot be
     // evaded by prepending a decoy.
-    const ours = 'Acme <neon-t1+cabc.sig@tenaevexeo.resend.app>'
+    const ours = 'Acme <ws-t1+cabc.sig@tenaevexeo.resend.app>'
     const headers = [
       { name: 'Reply-To', value: 'Decoy <decoy@example.com>' },
       { name: 'Reply-To', value: ours },
@@ -289,12 +289,12 @@ describe('parseRawEmail', () => {
     const raw = [
       'From: Support <noreply@acme.example>',
       'To: Jane <jane@example.com>',
-      'Reply-To: Acme Support <neon-t1+cabc.sig@tenaevexeo.resend.app>, ops@acme.example',
+      'Reply-To: Acme Support <ws-t1+cabc.sig@tenaevexeo.resend.app>, ops@acme.example',
       '',
       'body',
     ].join('\r\n')
     expect(parseRawEmail(raw).replyToAddresses).toEqual([
-      'Acme Support <neon-t1+cabc.sig@tenaevexeo.resend.app>',
+      'Acme Support <ws-t1+cabc.sig@tenaevexeo.resend.app>',
       'ops@acme.example',
     ])
     // Absent is empty, never a one-element list holding nothing: the loop guard
@@ -733,7 +733,7 @@ describe('mailLoopSignal', () => {
     EMAIL_INBOUND_DOMAIN: 'tenaevexeo.resend.app',
     EMAIL_INBOUND_SIGNING_SECRET: 'whsec_dGVzdHNlY3JldA==',
   }
-  const SLUG = 'neon-t1'
+  const SLUG = 'ws-t1'
   const CONVERSATION_ID = 'conversation_01kw8qxn1eeh4t2rek7varh032' as ConversationId
   /** The addresses this install mints and puts on its own outbound mail. */
   const OUR_REPLY_TO = inboundReplyToAddress(CONVERSATION_ID, SLUG, ENV)!
@@ -835,7 +835,7 @@ describe('mailLoopSignal', () => {
   })
 
   it('does not accept a neighbouring workspace’s reply address on the same fleet', () => {
-    const neighbour = inboundReplyToAddress(CONVERSATION_ID, 'neon-t2', ENV)!
+    const neighbour = inboundReplyToAddress(CONVERSATION_ID, 'ws-t2', ENV)!
     expect(mailLoopSignal(message({ replyToAddresses: [neighbour] }), OUR_DOMAINS, ours)).toBeNull()
   })
 

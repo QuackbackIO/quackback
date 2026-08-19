@@ -1,6 +1,6 @@
 /**
  * Safely extract rows from db.execute() result.
- * Handles both postgres-js (array directly) and neon-http ({ rows: [...] }) formats.
+ * Handles both postgres-js (array directly) and some HTTP drivers that return `{ rows }`.
  */
 export function getExecuteRows<T>(result: unknown): T[] {
   if (

@@ -109,7 +109,7 @@ structure is not trusted on its own:
 
 Demonstrated on a live two-workspace fleet with a database per workspace
 (`scripts/job-workspace-proof.ts run`): jobs enqueued for each workspace executed only
-against that workspace's own database (confirmed by `neon.branch_id`, not by name),
+against that workspace's own database (confirmed by `current_database()`, not by name),
 zero cross-workspace observations in both orderings, and a row planted in one
 workspace's queue but stamped for the other was refused:
 
@@ -125,7 +125,7 @@ now. A listener on a session-mode connection wakes in milliseconds instead of
 waiting out the poll interval.
 
 **`LISTEN` does not survive a transaction-mode pooler, and the obvious health
-check lies about it.** Measured on Neon for this channel, on two workspaces:
+check lies about it.** Measured on the fleet for this channel, on two workspaces:
 
 | endpoint | notify actually delivered | `pg_listening_channels()` says |
 | -------- | ------------------------- | ------------------------------ |
@@ -184,7 +184,7 @@ scheduler should be able to have.
 module-scope `Map` keyed on the schedule name, and that is a cross-workspace defect:
 one process runs one loop per workspace, so whichever workspace reached a slot first
 advanced a counter every other workspace then read as "already done". Measured live
-on two Neon workspaces, each minute's sweep landed on exactly one of them. It
+on two workspaces, each minute's sweep landed on exactly one of them. It
 affected every scheduled sweep, and only `page-view-partitions` had a backstop.
 
 Keying the map by workspace would have fixed the instance. Making the state a

@@ -209,8 +209,12 @@ answered it (yes, in seven seconds, no registry credential), carried no
 traffic, and was deleted on 2026-08-14.)
 
 `DATABASE_URL` is deliberately absent from every one of them: pooled mode
-refuses to boot with a fleet-wide DSN. The control-plane registry lives in its
-own Neon project and arrives as `QUACKBACK_CONTROL_DATABASE_URL`.
+refuses to boot with a fleet-wide DSN. The control-plane registry is the
+Railway Postgres database `quackback_cp` and arrives as
+`QUACKBACK_CONTROL_DATABASE_URL`.
+
+Published images: `bun .railway/list-ghcr.ts`. Pin `APP_IMAGE` in
+`railway.ts` to a digest from that list, never a moving tag.
 
 ### Two more things `plan` cannot see
 

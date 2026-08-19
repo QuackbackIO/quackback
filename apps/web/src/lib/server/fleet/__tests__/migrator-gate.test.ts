@@ -293,7 +293,7 @@ describe('replayGateVerdict', () => {
   })
 
   it('this fleet’s actual drift — a ledger at 0248 carrying everything since — no longer heals for free', () => {
-    // Five live gauntlet workspace databases are in exactly this state, because
+    // Five live fleet workspace databases are in exactly this state, because
     // every builder applied with `psql -f`, which never writes the ledger. The
     // window grows with every migration the branch adds, and it is listed
     // rather than derived on purpose: if one of these ever stops being

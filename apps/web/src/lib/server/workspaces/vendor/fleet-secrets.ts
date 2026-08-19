@@ -17,7 +17,7 @@
  * fleet root with the workspace id as domain separation and every replica computes
  * the same answer with no network hop, no store and no handoff. Custody stops
  * being a delivery problem, which is exactly the failure mode that shipped once
- * already on the database credential (`docs/neon-workspace-provisioning.md` §5).
+ * already on the database credential.
  *
  * S3 credentials are a value **a provider chose**. Cloudflare mints the key pair
  * for a bucket; no amount of HKDF produces it. So it has to be carried, and the
@@ -84,7 +84,7 @@ export class FleetSecretError extends Error {
  * fail, and "silently a different key" is the one outcome this whole module
  * exists to prevent.
  */
-export const FLEET_SECRET_PURPOSES = ['app-secrets', 'storage'] as const
+export const FLEET_SECRET_PURPOSES = ['app-secrets', 'storage', 'db'] as const
 export type FleetSecretPurpose = (typeof FLEET_SECRET_PURPOSES)[number]
 
 export interface FleetSecretTarget {

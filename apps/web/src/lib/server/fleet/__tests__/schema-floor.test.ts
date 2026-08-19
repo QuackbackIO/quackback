@@ -66,7 +66,7 @@ describe('evaluateSchemaFloor', () => {
 
   it('refuses a GAP below the floor even when the high-water mark clears it', () => {
     // The defect a `max(created_at) >= floor` check has, and the state five live
-    // gauntlet databases were actually in: a ledger whose newest row is above
+    // fleet databases were actually in: a ledger whose newest row is above
     // the floor while an older one is missing.
     const upToFloor = allWhens.filter((w) => w <= floor)
     const gapped = upToFloor.filter((w) => w !== upToFloor[upToFloor.length - 3])

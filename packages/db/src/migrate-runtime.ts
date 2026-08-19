@@ -34,7 +34,7 @@
  *
  * ## Session mode, and what actually breaks
  *
- * Measured through Neon's pooled endpoint rather than assumed, and the answer is
+ * Measured through a transaction-mode pooler rather than assumed, and the answer is
  * not the one usually given:
  *
  * - **`CREATE INDEX CONCURRENTLY` works through the pooler.** It is one
@@ -67,7 +67,7 @@ import postgres from 'postgres'
 import * as schema from './schema'
 import { seedSystemData } from './seed-system'
 import {
-  MIGRATION_LOCK_KEY,
+  MIGRATION_LOCK_NS,
   dropInvalidIndexes,
   ensureConcurrentIndexes,
   ensureExtensions,
@@ -161,7 +161,7 @@ export class PooledDsnRefused extends Error {
     super(
       `refusing to migrate through what looks like a transaction-mode pooler (${host}). ` +
         'The migration advisory lock is session-scoped, and a pooled session outlives the ' +
-        'client: measured on Neon, the lock survives disconnect, does not exclude a second ' +
+        'client: measured through a transaction-mode pooler, the lock survives disconnect, does not exclude a second ' +
         'pooled client, and then BLOCKS the direct endpoint until the stranded backend is ' +
         "terminated by hand. Use the workspace record's directUrl."
     )
@@ -172,7 +172,7 @@ export class PooledDsnRefused extends Error {
 /**
  * Refuse a pooled endpoint before it half-works.
  *
- * Neon's pooled endpoint host carries a `-pooler` suffix, and the same
+ * A transaction-mode pooler host often carries a `-pooler` suffix, and the same
  * signal is what the control plane's own `cp_workspace_registry_direct_not_pooler_ck`
  * constraint checks — so a record that passed the CP's write gate cannot fail
  * this one, and a hand-edited DSN cannot silently strand a lock.
@@ -236,7 +236,7 @@ export async function runMigrations(
   try {
     if (lock) {
       onStep('lock')
-      await sql`SELECT pg_advisory_lock(${MIGRATION_LOCK_KEY}::bigint)`
+      await sql`SELECT pg_advisory_lock(${MIGRATION_LOCK_NS}, hashtext(current_database()))`
       locked = true
     }
 
@@ -280,7 +280,9 @@ export async function runMigrations(
     return { healed: healed.dropped, unhealable: healed.skipped, postconditions }
   } finally {
     if (locked) {
-      await sql`SELECT pg_advisory_unlock(${MIGRATION_LOCK_KEY}::bigint)`.catch(() => {})
+      await sql`SELECT pg_advisory_unlock(${MIGRATION_LOCK_NS}, hashtext(current_database()))`.catch(
+        () => {}
+      )
     }
     await sql.end()
   }

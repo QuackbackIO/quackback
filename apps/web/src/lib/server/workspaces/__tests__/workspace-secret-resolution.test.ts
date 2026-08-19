@@ -105,14 +105,14 @@ describe('SECRET_KEY failures refuse the workspace', () => {
     // A scheme that PARSES but has no app-secret resolver. It used to be
     // `openbao+kv://`, which 0051 removed from the vocabulary altogether — so
     // that ref now dies one layer earlier, in the parser, and would no longer
-    // exercise this path at all. `neon+role://` is well-formed and legal in the
-    // database column, which is exactly the mistake worth refusing by name.
-    expect(() => resolve({ appSecretsRef: 'neon+role://proj-1/br-abc/qb_role' })).toThrow(
-      WorkspaceSecretResolutionError
-    )
-    expect(() => resolve({ appSecretsRef: 'neon+role://proj-1/br-abc/qb_role' })).toThrow(
-      /no resolver for 'neon\+role:\/\/' app secrets/
-    )
+    // exercise this path at all. `sealed+aead://` is well-formed and legal in
+    // the database column, which is exactly the mistake worth refusing by name.
+    expect(() =>
+      resolve({ appSecretsRef: 'sealed+aead://v1/inst_alpha/db/' + 'A'.repeat(20) })
+    ).toThrow(WorkspaceSecretResolutionError)
+    expect(() =>
+      resolve({ appSecretsRef: 'sealed+aead://v1/inst_alpha/db/' + 'A'.repeat(20) })
+    ).toThrow(/no resolver for 'sealed\+aead:\/\/' app secrets/)
   })
 
   it('refuses when the fleet root key is absent', () => {

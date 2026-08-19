@@ -45,7 +45,7 @@ const OTHER_ENV = { ...ENV, EMAIL_INBOUND_SIGNING_SECRET: 'whsec_b3RoZXJzZWNyZXQ
 const ID = 'conversation_abc' as ConversationId
 const REAL_ID = 'conversation_01kw8qxn1eeh4t2rek7varh032' as ConversationId
 const TICKET_ID = 'ticket_01h455vb4pex5vsknk084sn02q' as TicketId
-const SLUG = 'neon-t1'
+const SLUG = 'ws-t1'
 
 const localPartOf = (address: string) => address.slice(0, address.indexOf('@'))
 
@@ -257,10 +257,10 @@ describe('minting an inbound address', () => {
 
   it('builds a signed plus-address carrying the slug and the family marker', () => {
     expect(inboundReplyToAddress(REAL_ID, SLUG, ENV)).toMatch(
-      /^neon-t1\+c01kw8qxn1eeh4t2rek7varh032\.[A-Za-z0-9_-]{22}@tenaevexeo\.resend\.app$/
+      /^ws-t1\+c01kw8qxn1eeh4t2rek7varh032\.[A-Za-z0-9_-]{22}@tenaevexeo\.resend\.app$/
     )
     expect(inboundTicketReplyToAddress(TICKET_ID, SLUG, ENV)).toMatch(
-      /^neon-t1\+t01h455vb4pex5vsknk084sn02q\.[A-Za-z0-9_-]{22}@tenaevexeo\.resend\.app$/
+      /^ws-t1\+t01h455vb4pex5vsknk084sn02q\.[A-Za-z0-9_-]{22}@tenaevexeo\.resend\.app$/
     )
   })
 
@@ -299,9 +299,7 @@ describe('reading an inbound address back', () => {
 
   it('reads a slug back case-insensitively, as a receiving server may fold it', () => {
     const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
-    expect(conversationIdFromInboundAddress(conv.replace('neon-t1+', 'Neon-T1+'), ENV)).toBe(
-      REAL_ID
-    )
+    expect(conversationIdFromInboundAddress(conv.replace('ws-t1+', 'Ws-T1+'), ENV)).toBe(REAL_ID)
   })
 
   it('rejects a tampered tag', () => {
@@ -326,14 +324,12 @@ describe('reading an inbound address back', () => {
   })
 
   it('rejects an unsigned plus-address', () => {
-    expect(
-      conversationIdFromInboundAddress('neon-t1+c01kw8qxn1eeh4t2rek7varh032@x', ENV)
-    ).toBeNull()
+    expect(conversationIdFromInboundAddress('ws-t1+c01kw8qxn1eeh4t2rek7varh032@x', ENV)).toBeNull()
   })
 
   it('returns null for a non-plus-addressed recipient', () => {
     expect(conversationIdFromInboundAddress('bob@example.com', ENV)).toBeNull()
-    expect(conversationIdFromInboundAddress('neon-t1@tenaevexeo.resend.app', ENV)).toBeNull()
+    expect(conversationIdFromInboundAddress('ws-t1@tenaevexeo.resend.app', ENV)).toBeNull()
   })
 
   it('keeps the two families disjoint', () => {
@@ -353,23 +349,21 @@ describe('reading an inbound address back', () => {
 describe('the tag binds the slug, not just the id', () => {
   it('does not verify once the slug beside a genuine tag is rewritten', () => {
     const conv = inboundReplyToAddress(REAL_ID, SLUG, ENV)!
-    const reslugged = conv.replace('neon-t1+', 'neon-t2+')
+    const reslugged = conv.replace('ws-t1+', 'ws-t2+')
     expect(conversationIdFromInboundAddress(reslugged, ENV)).toBeNull()
     // ...and the address that WOULD be right for that workspace has a different
     // tag, so the two are not interchangeable in either direction.
-    expect(reslugged).not.toBe(inboundReplyToAddress(REAL_ID, 'neon-t2', ENV))
+    expect(reslugged).not.toBe(inboundReplyToAddress(REAL_ID, 'ws-t2', ENV))
 
     const ticket = inboundTicketReplyToAddress(TICKET_ID, SLUG, ENV)!
-    expect(ticketIdFromInboundAddress(ticket.replace('neon-t1+', 'neon-t2+'), ENV)).toBeNull()
+    expect(ticketIdFromInboundAddress(ticket.replace('ws-t1+', 'ws-t2+'), ENV)).toBeNull()
   })
 
   it('signs the same id to a different tag under a different slug', () => {
-    expect(signConversationId(REAL_ID, 'neon-t1', ENV)).not.toBe(
-      signConversationId(REAL_ID, 'neon-t2', ENV)
+    expect(signConversationId(REAL_ID, 'ws-t1', ENV)).not.toBe(
+      signConversationId(REAL_ID, 'ws-t2', ENV)
     )
-    expect(signTicketId(TICKET_ID, 'neon-t1', ENV)).not.toBe(
-      signTicketId(TICKET_ID, 'neon-t2', ENV)
-    )
+    expect(signTicketId(TICKET_ID, 'ws-t1', ENV)).not.toBe(signTicketId(TICKET_ID, 'ws-t2', ENV))
   })
 
   it('gives a local part that is not a usable slug no reading at all', () => {
@@ -417,7 +411,7 @@ describe('the pre-slug grammar is not recognised', () => {
     // The pre-#293 form carried `conversation_<suffix>` in the local part.
     expect(
       conversationIdFromInboundAddress(
-        `neon-t1+c${REAL_ID}.${signConversationId(REAL_ID, SLUG, ENV)}@tenaevexeo.resend.app`,
+        `ws-t1+c${REAL_ID}.${signConversationId(REAL_ID, SLUG, ENV)}@tenaevexeo.resend.app`,
         ENV
       )
     ).toBeNull()
@@ -455,11 +449,11 @@ describe('the local-part budget', () => {
   })
 
   it('refuses a slug that is not lower-case, digits and hyphen', () => {
-    for (const slug of ['Neon-T1', 'neon_t1', 'neon t1', 'neon.t1', 'neon+t1', '']) {
+    for (const slug of ['Ws-T1', 'ws_t1', 'ws t1', 'ws.t1', 'ws+t1', '']) {
       expect(isValidMailSlug(slug)).toBe(false)
       expect(() => inboundReplyToAddress(REAL_ID, slug, ENV)).toThrow(InvalidMailSlugError)
     }
-    for (const slug of ['a', 'neon-t1', '0', 'a'.repeat(MAX_MAIL_SLUG_LENGTH)]) {
+    for (const slug of ['a', 'ws-t1', '0', 'a'.repeat(MAX_MAIL_SLUG_LENGTH)]) {
       expect(isValidMailSlug(slug)).toBe(true)
     }
   })
@@ -502,14 +496,14 @@ describe('workspaceSlugFromInboundAddress', () => {
   it('reads a bare support address as the workspace it names', () => {
     // `<slug>@<domain>` is the cold-inbound row of the grammar, so the whole
     // local part is the label.
-    expect(workspaceSlugFromInboundAddress('neon-t1@in.example')).toEqual({
+    expect(workspaceSlugFromInboundAddress('ws-t1@in.example')).toEqual({
       kind: 'slug',
       slug: SLUG,
     })
   })
 
   it('folds case, as a receiving server may', () => {
-    expect(workspaceSlugFromInboundAddress('Neon-T1+c01kw.sig@in.example')).toEqual({
+    expect(workspaceSlugFromInboundAddress('Ws-T1+c01kw.sig@in.example')).toEqual({
       kind: 'slug',
       slug: SLUG,
     })
@@ -521,16 +515,16 @@ describe('workspaceSlugFromInboundAddress', () => {
     // to accept the delivery. The two readings have to be the same reading, so
     // the whitespace and the last-`@` rules are pinned here rather than left to
     // whichever caller happens to depend on them.
-    expect(workspaceSlugFromInboundAddress('  neon-t1  @in.example')).toEqual({
+    expect(workspaceSlugFromInboundAddress('  ws-t1  @in.example')).toEqual({
       kind: 'slug',
       slug: SLUG,
     })
-    expect(workspaceSlugFromInboundAddress('neon-t1+@in.example')).toEqual({
+    expect(workspaceSlugFromInboundAddress('ws-t1+@in.example')).toEqual({
       kind: 'slug',
       slug: SLUG,
     })
     // Split on the FIRST `@` and this reads as ours. It is not ours.
-    expect(workspaceSlugFromInboundAddress('neon-t1@evil.test@in.example')).toEqual({
+    expect(workspaceSlugFromInboundAddress('ws-t1@evil.test@in.example')).toEqual({
       kind: 'unreadable',
     })
   })
@@ -541,11 +535,11 @@ describe('workspaceSlugFromInboundAddress', () => {
       'a.very.long.customer.local.part@example.com',
       'not-an-address-at-all',
       // A value with no `@` at all whose last character is what stands between
-      // it and a legal label. Reading it as a local part would answer `neon-t1`
+      // it and a legal label. Reading it as a local part would answer `ws-t1`
       // — one character off a real workspace — so this is the case that pins the
       // no-`@` guard rather than leaning on the vocabulary to catch it.
-      'neon-t1x',
-      'neon-t1',
+      'ws-t1x',
+      'ws-t1',
       // An empty local part, which the vocabulary refuses on its own (see the
       // slug tests): the guard above it is redundant here, deliberately, and
       // this case does not pretend to pin it.
@@ -553,8 +547,8 @@ describe('workspaceSlugFromInboundAddress', () => {
       '',
       // One address, never a header: a value carrying several is not an
       // envelope, and the one that routed the mail is not identifiable in it.
-      'stranger@example.com, neon-t1@in.example',
-      '<neon-t1@in.example>',
+      'stranger@example.com, ws-t1@in.example',
+      '<ws-t1@in.example>',
     ]) {
       expect(workspaceSlugFromInboundAddress(address), address).toEqual({ kind: 'unreadable' })
     }
@@ -652,7 +646,7 @@ describe('the platform inbox', () => {
     // The same forms for a neighbour stay refused: the reading widens what is
     // PARSED, never what matches.
     expect(
-      isPlatformInboxRecipient('"Acme Support" <neon-t2@tenaevexeo.resend.app>', SLUG, ENV)
+      isPlatformInboxRecipient('"Acme Support" <ws-t2@tenaevexeo.resend.app>', SLUG, ENV)
     ).toBe(false)
     expect(isPlatformInboxRecipient(`Support <${SLUG}@evil.test>`, SLUG, ENV)).toBe(false)
   })
@@ -669,7 +663,7 @@ describe('the platform inbox', () => {
     // The signing secret and the inbound domain are both fleet-wide, so the
     // label is the whole of what separates two workspaces. Reading a
     // neighbour's mail as ours writes a stranger's message into this database.
-    expect(isPlatformInboxRecipient('neon-t2@tenaevexeo.resend.app', SLUG, ENV)).toBe(false)
+    expect(isPlatformInboxRecipient('ws-t2@tenaevexeo.resend.app', SLUG, ENV)).toBe(false)
     expect(isPlatformInboxRecipient(`${SLUG}@evil.test`, SLUG, ENV)).toBe(false)
     // A subdomain of an accepted domain is a different zone, and the label is
     // unique only inside the zone it was minted under.
@@ -695,13 +689,13 @@ describe('bearsTicketMarker', () => {
     // Same shape, wrong tag: still ticket-destined, so still dropped rather than
     // reinterpreted as a conversation reply or opened as cold inbound.
     expect(
-      bearsTicketMarker('neon-t1+t01h455vb4pex5vsknk084sn02q.AAAAAAAAAAAAAAAAAAAAAA@in.example')
+      bearsTicketMarker('ws-t1+t01h455vb4pex5vsknk084sn02q.AAAAAAAAAAAAAAAAAAAAAA@in.example')
     ).toBe(true)
   })
 
   it('does not claim a conversation address or a bare support address', () => {
     expect(bearsTicketMarker(inboundReplyToAddress(REAL_ID, SLUG, ENV)!)).toBe(false)
-    expect(bearsTicketMarker('neon-t1@in.example')).toBe(false)
+    expect(bearsTicketMarker('ws-t1@in.example')).toBe(false)
   })
 
   // A customer plus-addressing for their own filing is the common case, and
@@ -710,13 +704,13 @@ describe('bearsTicketMarker', () => {
   // enough, and per-site filing conventions produce them constantly.
   it('does not claim ordinary sub-addressing that merely starts with the marker', () => {
     for (const address of [
-      'neon-t1+tuesday@in.example',
-      'neon-t1+twitter.com@in.example',
+      'ws-t1+tuesday@in.example',
+      'ws-t1+twitter.com@in.example',
       'me+twitter.com@gmail.com',
       'colleague+twitter.com@gmail.com',
-      'neon-t1+t.a@in.example',
+      'ws-t1+t.a@in.example',
       // Right lengths, wrong places: a 22-char suffix and a 26-char tag.
-      'neon-t1+tAAAAAAAAAAAAAAAAAAAAAA.01h455vb4pex5vsknk084sn02q@in.example',
+      'ws-t1+tAAAAAAAAAAAAAAAAAAAAAA.01h455vb4pex5vsknk084sn02q@in.example',
     ]) {
       expect(bearsTicketMarker(address)).toBe(false)
     }
@@ -776,7 +770,7 @@ describe('isOwnInboundAddress', () => {
     // genuinely well-formed and genuinely verifies — it just is not OURS, and a
     // guard that only asked "does the tag check out" would call a neighbour's
     // mail our own and hard-drop it.
-    const neighbour = inboundReplyToAddress(REAL_ID, 'neon-t2', ENV)!
+    const neighbour = inboundReplyToAddress(REAL_ID, 'ws-t2', ENV)!
     expect(conversationIdFromInboundAddress(neighbour, ENV)).toBe(REAL_ID)
     expect(isOwnInboundAddress(neighbour, SLUG, ENV)).toBe(false)
   })
@@ -797,8 +791,8 @@ describe('isOwnInboundAddress', () => {
 
   it('refuses ordinary sub-addressing and a bare support address', () => {
     for (const address of [
-      'neon-t1@tenaevexeo.resend.app',
-      'neon-t1+tuesday@tenaevexeo.resend.app',
+      'ws-t1@tenaevexeo.resend.app',
+      'ws-t1+tuesday@tenaevexeo.resend.app',
       'jane@example.com',
       'me+twitter.com@gmail.com',
     ]) {
