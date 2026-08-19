@@ -57,6 +57,11 @@ vi.mock('@/lib/server/db', () => ({
   postVotes: { id: 'id', postId: 'postId', principalId: 'principalId' },
   eq: vi.fn(),
   and: vi.fn(),
+  inArray: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/posts/post.merge-ids', () => ({
+  relatedPostIdsSubquery: vi.fn(() => 'related-post-ids'),
 }))
 
 // --- Handler setup ---
@@ -102,7 +107,7 @@ describe('adminUpdateVoterSubscriptionFn', () => {
   it('passes the requested level to subscribeToPost to avoid intermediate state', async () => {
     mockRequireAuth.mockResolvedValue({ principalId: 'admin_principal' })
     // Vote exists
-    mockLimit.mockResolvedValue([{ id: 'vote_1' }])
+    mockLimit.mockResolvedValue([{ id: 'vote_1', postId: 'post_abc123' }])
 
     await handler({ data: validData })
 
@@ -114,7 +119,7 @@ describe('adminUpdateVoterSubscriptionFn', () => {
 
   it('calls unsubscribeFromPost for level "none" when voter exists', async () => {
     mockRequireAuth.mockResolvedValue({ principalId: 'admin_principal' })
-    mockLimit.mockResolvedValue([{ id: 'vote_1' }])
+    mockLimit.mockResolvedValue([{ id: 'vote_1', postId: 'post_abc123' }])
 
     await handler({ data: { ...validData, level: 'none' } })
 
@@ -124,7 +129,7 @@ describe('adminUpdateVoterSubscriptionFn', () => {
 
   it('calls both subscribeToPost and updateSubscriptionLevel for non-none levels', async () => {
     mockRequireAuth.mockResolvedValue({ principalId: 'admin_principal' })
-    mockLimit.mockResolvedValue([{ id: 'vote_1' }])
+    mockLimit.mockResolvedValue([{ id: 'vote_1', postId: 'post_abc123' }])
 
     await handler({ data: { ...validData, level: 'all' } })
 
@@ -138,9 +143,25 @@ describe('adminUpdateVoterSubscriptionFn', () => {
     )
   })
 
+  it('writes the subscription on the vote post when the voter is only on a merged source', async () => {
+    mockRequireAuth.mockResolvedValue({ principalId: 'admin_principal' })
+    mockLimit.mockResolvedValue([{ id: 'vote_1', postId: 'post_source' }])
+
+    await handler({ data: validData })
+
+    expect(mockSubscribeToPost).toHaveBeenCalledWith('principal_xyz456', 'post_source', 'manual', {
+      level: 'status_only',
+    })
+    expect(mockUpdateSubscriptionLevel).toHaveBeenCalledWith(
+      'principal_xyz456',
+      'post_source',
+      'status_only'
+    )
+  })
+
   it('returns the updated subscription data on success', async () => {
     mockRequireAuth.mockResolvedValue({ principalId: 'admin_principal' })
-    mockLimit.mockResolvedValue([{ id: 'vote_1' }])
+    mockLimit.mockResolvedValue([{ id: 'vote_1', postId: 'post_abc123' }])
 
     const result = await handler({ data: validData })
 

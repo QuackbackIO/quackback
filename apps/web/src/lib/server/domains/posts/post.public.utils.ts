@@ -12,6 +12,7 @@ import {
   postSubscriptions,
 } from '@/lib/server/db'
 import { toUuid, type PostId, type PostStatusId, type PrincipalId } from '@quackback/ids'
+import { relatedPostIdsSql } from './post.merge-ids'
 import type { RoadmapPostListResult } from './post.types'
 import { getExecuteRows } from '@/lib/server/utils'
 import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
@@ -81,10 +82,16 @@ export async function getPublicRoadmapPostsPaginated(params: {
 }
 
 export async function hasUserVoted(postId: PostId, principalId: PrincipalId): Promise<boolean> {
-  const vote = await db.query.postVotes.findFirst({
-    where: and(eq(postVotes.postId, postId), eq(postVotes.principalId, principalId)),
-  })
-  return !!vote
+  const postUuid = toUuid(postId)
+  const principalUuid = toUuid(principalId)
+  const result = await db.execute<{ has_voted: boolean }>(sql`
+    SELECT EXISTS(
+      SELECT 1 FROM ${postVotes}
+      WHERE principal_id = ${principalUuid}::uuid
+        AND post_id IN ${relatedPostIdsSql(postUuid)}
+    ) as has_voted
+  `)
+  return getExecuteRows<{ has_voted: boolean }>(result)[0]?.has_voted ?? false
 }
 
 /**
@@ -115,17 +122,23 @@ export async function getVoteAndSubscriptionStatus(
     SELECT
       EXISTS(
         SELECT 1 FROM ${postVotes}
-        WHERE ${postVotes.postId} = ${postUuid}::uuid
-        AND ${postVotes.principalId} = ${principalUuid}::uuid
+        WHERE ${postVotes.principalId} = ${principalUuid}::uuid
+          AND ${postVotes.postId} IN ${relatedPostIdsSql(postUuid)}
       ) as has_voted,
-      ps.post_id IS NOT NULL as subscribed,
+      ps.notify_comments IS NOT NULL as subscribed,
       ps.notify_comments,
       ps.notify_status_changes,
       ps.reason
     FROM (SELECT 1) AS dummy
-    LEFT JOIN ${postSubscriptions} ps
-      ON ps.post_id = ${postUuid}::uuid
-      AND ps.principal_id = ${principalUuid}::uuid
+    LEFT JOIN LATERAL (
+      SELECT
+        bool_or(ps.notify_comments) as notify_comments,
+        bool_or(ps.notify_status_changes) as notify_status_changes,
+        (array_agg(ps.reason ORDER BY (ps.post_id = ${postUuid}::uuid) DESC))[1] as reason
+      FROM ${postSubscriptions} ps
+      WHERE ps.principal_id = ${principalUuid}::uuid
+        AND ps.post_id IN ${relatedPostIdsSql(postUuid)}
+    ) ps ON true
   `)
 
   type ResultRow = {

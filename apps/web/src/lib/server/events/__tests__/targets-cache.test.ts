@@ -248,7 +248,8 @@ describe('integration hook config', () => {
   }
 
   async function targetsFor(row: Record<string, unknown>) {
-    mockCacheGet.mockResolvedValueOnce([row]).mockResolvedValueOnce([])
+    // Key-based mock — sinks resolve concurrently, so Once-order is a race.
+    cacheByKey({ mappings: [row], webhooks: [] })
     return getHookTargets(makePostCreatedEvent())
   }
 
@@ -277,8 +278,8 @@ describe('integration hook config', () => {
   })
 
   it('forwards organizationName, apiKey, and teamId from stored config', async () => {
-    mockCacheGet
-      .mockResolvedValueOnce([
+    cacheByKey({
+      mappings: [
         mapping({
           integrationType: 'azure_devops',
           integrationConfig: { organizationName: 'acme' },
@@ -294,8 +295,9 @@ describe('integration hook config', () => {
           integrationConfig: { teamId: 'team-1' },
           actionConfig: { channelId: 'ch-1' },
         }),
-      ])
-      .mockResolvedValueOnce([])
+      ],
+      webhooks: [],
+    })
 
     const targets = await getHookTargets(makePostCreatedEvent())
     expect(targets.find((t) => t.type === 'azure_devops')?.config).toMatchObject({

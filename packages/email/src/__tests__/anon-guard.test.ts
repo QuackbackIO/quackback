@@ -12,6 +12,7 @@ vi.mock('resend', () => ({
 }))
 
 import { sendMagicLinkEmail } from '../index'
+import { sealed } from './seal'
 
 /**
  * The synthetic anonymous placeholder domain (temp-<id>@anon.quackback.io) is
@@ -48,7 +49,7 @@ describe('sendEmail anon-domain delivery guard', () => {
 
   it('does not deliver to a synthetic anonymous address', async () => {
     const result = await sendMagicLinkEmail({
-      to: `temp-ni7j5mnendrdtsjwbesk4mubz4jzszhj@${ANON_EMAIL_DOMAIN}`,
+      to: sealed(`temp-ni7j5mnendrdtsjwbesk4mubz4jzszhj@${ANON_EMAIL_DOMAIN}`),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
@@ -59,7 +60,7 @@ describe('sendEmail anon-domain delivery guard', () => {
 
   it('matches the anon domain case-insensitively', async () => {
     const result = await sendMagicLinkEmail({
-      to: 'temp-abc@ANON.QUACKBACK.IO',
+      to: sealed('temp-abc@ANON.QUACKBACK.IO'),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
@@ -70,7 +71,7 @@ describe('sendEmail anon-domain delivery guard', () => {
 
   it('still delivers to a real address (guard is domain-specific)', async () => {
     const result = await sendMagicLinkEmail({
-      to: 'jane@example.com',
+      to: sealed('jane@example.com'),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })

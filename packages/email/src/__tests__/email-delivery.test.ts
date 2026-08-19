@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { sendInvitationEmail, sendRawEmail } from '../index'
+import { sealed } from './seal'
 import {
   clearMailbox,
   getHeaders,
@@ -32,7 +33,7 @@ describe.skipIf(!mailpitAvailable)('email delivery (real SMTP via mailpit)', () 
 
   it('delivers a branded template as a real MIME message', async () => {
     const result = await sendInvitationEmail({
-      to: 'invitee@example.test',
+      to: sealed('invitee@example.test'),
       invitedByName: 'Ada Lovelace',
       workspaceName: 'Acme Corp',
       inviteLink: 'https://acme.test/invite/abc123',

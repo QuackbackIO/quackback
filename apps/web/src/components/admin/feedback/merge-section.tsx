@@ -26,11 +26,114 @@ import {
 } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { useMergePost } from '@/lib/client/mutations/post-merge'
+import { useMergePost, useUnmergePost } from '@/lib/client/mutations/post-merge'
 import { findSimilarPostsFn, type SimilarPost } from '@/lib/server/functions/public-posts'
+import { getMergedPostsFn } from '@/lib/server/functions/post-merge'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostId } from '@quackback/ids'
+import type { MergedPostItem } from '@/lib/shared/types/inbox'
+
+// ============================================================================
+// Merged Posts List (shown on canonical posts)
+// ============================================================================
+
+interface MergedPostsListProps {
+  postId: PostId
+  mergedPosts?: MergedPostItem[]
+}
+
+export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: MergedPostsListProps) {
+  const queryClient = useQueryClient()
+  const unmerge = useUnmergePost()
+  const [confirmUnmergeId, setConfirmUnmergeId] = useState<PostId | null>(null)
+
+  const { data: mergedPosts } = useQuery({
+    queryKey: ['merged-posts', postId],
+    queryFn: async () => {
+      const result = await getMergedPostsFn({ data: { canonicalPostId: postId } })
+      return result as MergedPostItem[]
+    },
+    initialData: initialMergedPosts,
+    staleTime: 30_000,
+  })
+  const confirmTarget = mergedPosts?.find((p) => p.id === confirmUnmergeId)
+
+  if (!mergedPosts || mergedPosts.length === 0) return null
+
+  const handleUnmerge = async () => {
+    if (!confirmUnmergeId) return
+    try {
+      await unmerge.mutateAsync(confirmUnmergeId)
+      queryClient.invalidateQueries({ queryKey: ['merged-posts', postId] })
+      toast.success('Post unmerged successfully')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to unmerge post')
+    } finally {
+      setConfirmUnmergeId(null)
+    }
+  }
+
+  return (
+    <div className="border-t border-border/40 px-6 py-4">
+      <h3 className="text-sm font-medium text-foreground mb-3">
+        Merged Feedback ({mergedPosts.length})
+      </h3>
+      <div className="space-y-2">
+        {mergedPosts.map((merged) => (
+          <div
+            key={merged.id}
+            className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/30 border border-border/30"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{merged.title}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {merged.voteCount} vote{merged.voteCount !== 1 ? 's' : ''}
+                {merged.authorName ? ` · by ${merged.authorName}` : ''}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmUnmergeId(merged.id)}
+              disabled={unmerge.isPending}
+              className="shrink-0"
+            >
+              Unmerge
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      <AlertDialog
+        open={!!confirmUnmergeId}
+        onOpenChange={(open) => !open && setConfirmUnmergeId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unmerge this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmTarget ? (
+                <>
+                  <span className="font-medium text-foreground">{confirmTarget.title}</span> will be
+                  restored as independent feedback. Its votes will no longer count toward this post.
+                </>
+              ) : (
+                'This post will be restored as independent feedback.'
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unmerge.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUnmerge} disabled={unmerge.isPending}>
+              {unmerge.isPending ? 'Unmerging...' : 'Unmerge'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
 
 // ============================================================================
 // Merge Into Dialog (shown when admin wants to merge current post into another)
@@ -512,6 +615,7 @@ interface MergeActionsProps {
   postId: PostId
   postTitle: string
   canonicalPostId?: PostId | null
+  mergedPosts?: MergedPostItem[]
   /** Controlled dialog state (optional — falls back to internal state) */
   showDialog?: boolean
   onShowDialogChange?: (show: boolean) => void
@@ -521,6 +625,7 @@ export function MergeActions({
   postId,
   postTitle,
   canonicalPostId,
+  mergedPosts,
   showDialog,
   onShowDialogChange,
 }: MergeActionsProps) {
@@ -528,8 +633,12 @@ export function MergeActions({
   const isDialogOpen = showDialog ?? internalShowDialog
   const setDialogOpen = onShowDialogChange ?? setInternalShowDialog
 
+  const hasMergedPosts = mergedPosts && mergedPosts.length > 0
+
   return (
     <>
+      {hasMergedPosts && <MergedPostsList postId={postId} mergedPosts={mergedPosts} />}
+
       {!canonicalPostId && (
         <MergeIntoDialog
           postId={postId}

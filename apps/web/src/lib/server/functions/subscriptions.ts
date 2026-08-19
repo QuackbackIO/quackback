@@ -8,7 +8,8 @@ import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { SubscriptionLevel } from '@/lib/server/domains/subscriptions/subscription.service'
-import { db, postVotes, eq, and } from '@/lib/server/db'
+import { db, postVotes, eq, and, inArray } from '@/lib/server/db'
+import { relatedPostIdsSubquery } from '@/lib/server/domains/posts/post.merge-ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'subscriptions' })
@@ -151,27 +152,31 @@ export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
     const { unsubscribeFromPost, subscribeToPost, updateSubscriptionLevel } =
       await import('@/lib/server/domains/subscriptions/subscription.service')
 
-    // Verify the principal actually has a vote on this post
+    // Verify the principal has a vote on this thread (canonical or a
+    // merged source). Subscription writes go to the vote's post so a
+    // source-only voter is not rejected as "does not have a vote".
     const [vote] = await db
-      .select({ id: postVotes.id })
+      .select({ id: postVotes.id, postId: postVotes.postId })
       .from(postVotes)
-      .where(and(eq(postVotes.postId, targetPostId), eq(postVotes.principalId, targetPrincipalId)))
+      .where(
+        and(
+          inArray(postVotes.postId, relatedPostIdsSubquery(targetPostId)),
+          eq(postVotes.principalId, targetPrincipalId)
+        )
+      )
       .limit(1)
     if (!vote) {
       throw new Error('Principal does not have a vote on this post')
     }
+    const votePostId = vote.postId
     if (data.level === 'none') {
-      await unsubscribeFromPost(targetPrincipalId, targetPostId)
+      await unsubscribeFromPost(targetPrincipalId, votePostId)
     } else {
       // Pass level directly to avoid intermediate over-subscribed state
-      await subscribeToPost(targetPrincipalId, targetPostId, 'manual', {
+      await subscribeToPost(targetPrincipalId, votePostId, 'manual', {
         level: data.level as SubscriptionLevel,
       })
-      await updateSubscriptionLevel(
-        targetPrincipalId,
-        targetPostId,
-        data.level as SubscriptionLevel
-      )
+      await updateSubscriptionLevel(targetPrincipalId, votePostId, data.level as SubscriptionLevel)
     }
 
     log.info({ post_id: data.postId }, 'voter subscription updated')
