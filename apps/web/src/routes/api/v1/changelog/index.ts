@@ -10,6 +10,7 @@ import {
 import { createChangelog } from '@/lib/server/domains/changelog/changelog.service'
 import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
 import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
+import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { db, principal, eq } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostId } from '@quackback/ids'
@@ -98,7 +99,11 @@ export const Route = createFileRoute('/api/v1/changelog/')({
               title: parsed.data.title,
               content: parsed.data.content,
               publishState,
-              linkedPostIds: parsed.data.linkedPostIds as PostId[] | undefined,
+              linkedPostIds: parseTypeIdArray<PostId>(
+                parsed.data.linkedPostIds,
+                'post',
+                'linked post IDs'
+              ),
             },
             {
               principalId: authResult.principalId,

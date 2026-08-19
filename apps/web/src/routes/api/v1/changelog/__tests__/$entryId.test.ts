@@ -180,4 +180,24 @@ describe('PATCH /api/v1/changelog/:entryId — linkedPostIds', () => {
       linkedPost(POST_B, 'Theme picker'),
     ])
   })
+
+  it('rejects a malformed linkedPostId without calling updateChangelog', async () => {
+    const res = await PATCH({
+      request: patchRequest({ linkedPostIds: ['not-a-post'] }),
+      params: { entryId: ENTRY_ID },
+    })
+
+    expect(res.status).toBe(400)
+    expect(mockUpdateChangelog).not.toHaveBeenCalled()
+  })
+
+  it('rejects a wrong-prefix TypeID without calling updateChangelog', async () => {
+    const res = await PATCH({
+      request: patchRequest({ linkedPostIds: [ENTRY_ID] }),
+      params: { entryId: ENTRY_ID },
+    })
+
+    expect(res.status).toBe(400)
+    expect(mockUpdateChangelog).not.toHaveBeenCalled()
+  })
 })

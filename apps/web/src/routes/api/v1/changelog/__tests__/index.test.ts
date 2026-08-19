@@ -123,4 +123,17 @@ describe('POST /api/v1/changelog — linked posts', () => {
     const json = await res.json()
     expect(json.data.linkedPosts).toEqual([LINKED_POST])
   })
+
+  it('rejects a malformed linkedPostId without calling createChangelog', async () => {
+    const res = await POST({
+      request: postRequest({
+        title: 'Dark mode',
+        content: 'We shipped dark mode.',
+        linkedPostIds: ['not-a-post'],
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(mockCreateChangelog).not.toHaveBeenCalled()
+  })
 })
