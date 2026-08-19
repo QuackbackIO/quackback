@@ -77,7 +77,7 @@ export function makeReconcileDeps(): ReconcileDeps {
           managedFieldPaths: insert.managedFieldPaths,
           authConfigVersion: 1,
           featureFlags: JSON.stringify(
-            featureFlagsForUseCase(getSetupState(insert.setupState)?.useCase)
+            featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase)
           ),
         })
         .onConflictDoNothing({ target: settings.slug })

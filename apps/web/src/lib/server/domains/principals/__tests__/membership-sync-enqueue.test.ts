@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, UserId } from '@quackback/ids'
 
 const hoisted = vi.hoisted(() => ({
-  enqueueMembershipSync: vi.fn(async () => {}),
+  enqueueMembershipSync: vi.fn(async (..._args: unknown[]) => {}),
   mockExecute: vi.fn(),
   mockFindFirst: vi.fn(),
   mockSelectWhere: vi.fn(),

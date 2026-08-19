@@ -5,7 +5,7 @@
  * visitors or service principals. This fixture is built to discriminate:
  * dropping any clause of the predicate returns a different set.
  */
-import { afterAll, afterEach, beforeEach, describe, expect, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { principal, user } from '@/lib/server/db'

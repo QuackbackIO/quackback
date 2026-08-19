@@ -45,7 +45,7 @@ const hoisted = vi.hoisted(() => ({
   checkVerificationOTP: vi.fn().mockResolvedValue({ success: true }),
   deleteVerificationByIdentifier: vi.fn().mockResolvedValue(undefined),
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
-  enqueueMembershipSync: vi.fn(async () => {}),
+  enqueueMembershipSync: vi.fn(async (..._args: unknown[]) => {}),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({

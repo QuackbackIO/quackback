@@ -1,6 +1,7 @@
 import './index'
 import { z } from 'zod'
-import { isChannel, type Channel } from './registry'
+import type { Channel } from '@/lib/shared/conversation/types'
+import { isChannel } from './registry'
 
 /**
  * Inbox list `channel` filter. Options and accepted values come from the

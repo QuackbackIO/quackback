@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   emails: [] as Array<{ email: string | null }>,
-  pushWorkspaceMembership: vi.fn(async () => {}),
+  pushWorkspaceMembership: vi.fn(async (..._args: unknown[]) => {}),
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => {

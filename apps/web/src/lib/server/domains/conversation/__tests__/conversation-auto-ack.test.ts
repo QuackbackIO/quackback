@@ -5,10 +5,13 @@ import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const hoisted = vi.hoisted(() => ({
   getEmailAutoAck: vi.fn(async () => ({ enabled: true })),
-  incrementBucket: vi.fn(async () => ({ count: 1 })),
+  incrementBucket: vi.fn(async (..._args: unknown[]) => ({ count: 1 })),
   enforceEmailBudget: vi.fn(async () => undefined),
-  sendConversationAutoAckEmail: vi.fn(async () => ({ sent: true, messageId: 'ack@x' })),
-  recordOutboundEmail: vi.fn(async () => undefined),
+  sendConversationAutoAckEmail: vi.fn(async (_opts?: unknown) => ({
+    sent: true,
+    messageId: 'ack@x',
+  })),
+  recordOutboundEmail: vi.fn(async (..._args: unknown[]) => undefined),
   requireSettings: vi.fn(async () => ({ name: 'Acme' })),
   inboundReplyToAddress: vi.fn(() => 'reply+c1@mail.example'),
   mintOutboundMessageId: vi.fn(() => 'c.1.ack@mail.example'),

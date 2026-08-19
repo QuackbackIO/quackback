@@ -71,7 +71,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { hostname } from 'node:os'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -164,9 +164,17 @@ export interface EnqueueJobInput {
   executor?: JobSqlExecutor
 }
 
-/** Narrow enough for `db` and a drizzle transaction. */
+/**
+ * Narrow enough for `db` and a drizzle transaction.
+ *
+ * The parameter is `SQL` rather than `unknown` on purpose: parameters are
+ * contravariant, so an `unknown` parameter demands a handler that accepts
+ * *anything*, which drizzle's `execute` (`string | SQLWrapper`) is not. Every
+ * call here passes a `sql` template, so `SQL` is both the honest type and the
+ * one that lets a real transaction satisfy this.
+ */
 export type JobSqlExecutor = {
-  execute: (query: unknown) => Promise<unknown>
+  execute: (query: SQL) => Promise<unknown>
 }
 
 export interface EnqueueJobResult {

@@ -34,9 +34,9 @@ import type { ChannelAdapter } from '../types'
 import { resolveInboundConversation } from '@/lib/server/domains/conversation/conversation.inbound-resolve'
 
 const hoisted = vi.hoisted(() => ({
-  deliverAgentMessage: vi.fn(async () => {}),
+  deliverAgentMessage: vi.fn(async (_opts: unknown) => {}),
   deliverLifecycleEvent: vi.fn(async () => {}),
-  deliverCsatRequest: vi.fn(async () => {}),
+  deliverCsatRequest: vi.fn(async (_opts: unknown) => {}),
   buildHookContext: vi.fn(async () => ({
     workspaceName: 'Acme',
     portalBaseUrl: 'https://acme.example.com',
