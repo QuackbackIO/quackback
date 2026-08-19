@@ -40,6 +40,7 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 }))
 
 import { mergePost, unmergePost, getMergedPosts } from '../post.merge'
+import { getSubscribersForEvent } from '../../subscriptions/subscription.service'
 import { getCommentsWithReplies } from '../post.query'
 import { hasUserVoted, getVoteAndSubscriptionStatus } from '../post.public.utils'
 import { getPostVoters, listPostVoters } from '../post.voters'
@@ -55,10 +56,10 @@ const fixture = await createDbTestFixture({
 
 const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
-async function seedPrincipal(name: string): Promise<PrincipalId> {
+async function seedPrincipal(name: string, email?: string): Promise<PrincipalId> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
-  await testDb.insert(user).values({ id: userId, name })
+  await testDb.insert(user).values({ id: userId, name, ...(email && { email }) })
   await testDb.insert(principal).values({
     id: principalId,
     userId,
@@ -393,5 +394,77 @@ describe.skipIf(!fixture.available)('post merge aggregation (real DB)', () => {
     const ids = await getVotedPostIdsByUserId(voterRow.userId!)
     expect(ids.has(canonical)).toBe(true)
     expect(ids.has(source)).toBe(true)
+  })
+
+  it('lists live source vote rows on merged posts, not the stale stored count', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 1,
+      commentCount: 0,
+    })
+    await seedVote(source, voter)
+    await mergePost(source, canonical, actor)
+
+    expect((await getMergedPosts(canonical))[0]?.voteCount).toBe(1)
+
+    await voteOnPost(canonical, voter)
+
+    expect((await getMergedPosts(canonical))[0]?.voteCount).toBe(0)
+    const [sourceRow] = await testDb.select().from(posts).where(eq(posts.id, source))
+    expect(sourceRow.voteCount).toBe(1)
+  })
+
+  it('fans out one subscriber when they subscribed on both the source and the canonical', async () => {
+    const actor = await seedPrincipal('Admin')
+    const voter = await seedPrincipal('Voter', 'voter@example.com')
+    const boardId = await seedBoard()
+    const canonical = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Canonical',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    const source = await seedPost({
+      boardId,
+      principalId: actor,
+      title: 'Source',
+      voteCount: 0,
+      commentCount: 0,
+    })
+    await testDb.insert(postSubscriptions).values([
+      {
+        postId: canonical,
+        principalId: voter,
+        reason: 'manual',
+        notifyComments: true,
+        notifyStatusChanges: true,
+      },
+      {
+        postId: source,
+        principalId: voter,
+        reason: 'vote',
+        notifyComments: true,
+        notifyStatusChanges: false,
+      },
+    ])
+    await mergePost(source, canonical, actor)
+
+    const subscribers = await getSubscribersForEvent(canonical, 'comment')
+    expect(subscribers.map((s) => s.principalId)).toEqual([voter])
+    expect(subscribers[0]?.notifyComments).toBe(true)
+    expect(subscribers[0]?.notifyStatusChanges).toBe(true)
   })
 })

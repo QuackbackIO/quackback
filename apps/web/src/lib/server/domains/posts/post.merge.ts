@@ -363,7 +363,12 @@ export async function getMergedPosts(canonicalPostId: PostId): Promise<MergedPos
     .select({
       id: posts.id,
       title: posts.title,
-      voteCount: posts.voteCount,
+      // Stored source.voteCount is not maintained while merged (vote
+      // mutations update the canonical). Count the source's live vote
+      // rows so Merged Feedback does not show a pre-merge snapshot.
+      voteCount: sql<number>`(
+        SELECT COUNT(*)::int FROM ${postVotes} v WHERE v.post_id = posts.id
+      )`.as('vote_count'),
       createdAt: posts.createdAt,
       mergedAt: posts.mergedAt,
       authorName: sql<string | null>`(
@@ -378,7 +383,7 @@ export async function getMergedPosts(canonicalPostId: PostId): Promise<MergedPos
   return mergedPosts.map((p) => ({
     id: p.id,
     title: p.title,
-    voteCount: p.voteCount,
+    voteCount: Number(p.voteCount),
     authorName: p.authorName,
     createdAt: p.createdAt,
     mergedAt: p.mergedAt!,

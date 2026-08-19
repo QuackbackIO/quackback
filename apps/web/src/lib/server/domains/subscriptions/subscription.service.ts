@@ -222,18 +222,29 @@ export async function getSubscribersForEvent(
       )
     )
 
-  return rows
-    .filter((row): row is typeof row & { email: string } => row.email !== null)
-    .map((row) => ({
-      principalId: row.principalId,
-      userId: row.userId!, // INNER JOIN on user guarantees non-null
-      email: row.email,
-      contactEmail: row.contactEmail,
-      name: row.name,
-      reason: row.reason as SubscriptionReason,
-      notifyComments: row.notifyComments,
-      notifyStatusChanges: row.notifyStatusChanges,
-    }))
+  // Same principal can have a row on the canonical and a merged source.
+  // Fan-out is per principal, so collapse before returning.
+  const unique = new Map<string, Subscriber>()
+  for (const row of rows) {
+    if (!row.email) continue
+    const existing = unique.get(row.principalId)
+    if (!existing) {
+      unique.set(row.principalId, {
+        principalId: row.principalId,
+        userId: row.userId!, // INNER JOIN on user guarantees non-null
+        email: row.email,
+        contactEmail: row.contactEmail,
+        name: row.name,
+        reason: row.reason as SubscriptionReason,
+        notifyComments: row.notifyComments,
+        notifyStatusChanges: row.notifyStatusChanges,
+      })
+      continue
+    }
+    existing.notifyComments = existing.notifyComments || row.notifyComments
+    existing.notifyStatusChanges = existing.notifyStatusChanges || row.notifyStatusChanges
+  }
+  return [...unique.values()]
 }
 
 /**
