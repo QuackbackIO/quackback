@@ -54,6 +54,6 @@ export function clearCookie(name: string, isSecure: boolean): string {
  * Validate that a domain is a valid return domain.
  * For self-hosted, all domains are considered valid.
  */
-export function isValidTenantDomain(_domain: string): boolean {
+export function isValidWorkspaceDomain(_domain: string): boolean {
   return true
 }

@@ -1306,8 +1306,14 @@ async function requesterFacingConfig(
     await import('@/lib/server/domains/channel-accounts/channel-account.service')
   const { inboundTicketReplyToAddress } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
+  const { currentMailSlug } =
+    await import('@/lib/server/domains/conversation/conversation.mail-slug')
   const from = (await resolveSendingAddress(params.assignedTeamId, 'support')) ?? undefined
-  const replyTo = inboundTicketReplyToAddress(params.ticketId) ?? undefined
+  // The mail slug names this workspace in the address, which is what lets a
+  // shared inbound domain route the reply back. With none to mint under there is
+  // no routable address: the ticket email then carries no Reply-To and its
+  // footer points at the portal thread.
+  const replyTo = inboundTicketReplyToAddress(params.ticketId, currentMailSlug()) ?? undefined
   return { ...baseTicketConfig(params), from, replyTo }
 }
 

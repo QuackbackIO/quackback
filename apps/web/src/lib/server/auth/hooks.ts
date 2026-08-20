@@ -229,7 +229,7 @@ export async function handleSignInPreCheck(ctx: {
   // from linking while being unable to verify the address either, since the
   // transport refuses to deliver there.
   //
-  // Checked before the tenant load and the rate limiter: it is the cheapest
+  // Checked before the workspace load and the rate limiter: it is the cheapest
   // possible rejection and it keeps the reserved domain out of the rate-limit
   // keyspace.
   if (isSyntheticAnonEmail(email)) {
@@ -238,7 +238,7 @@ export async function handleSignInPreCheck(ctx: {
 
   // Rate-limit before any DB load. Generic redirect on block so the
   // response doesn't leak which dimension hit the cap. Sequential
-  // with the tenant fetch so a DB hiccup can't mask a 429 with a 500.
+  // with the workspace fetch so a DB hiccup can't mask a 429 with a 500.
   const headers = getRequestHeaders()
   const ip = getClientIp(headers)
   const rateLimiter = selectSignInRateLimiter(provider)
@@ -276,8 +276,8 @@ export async function handleSignInPreCheck(ctx: {
     )
   }
 
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const tenant = await getTenantSettings()
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const workspace = await getWorkspaceSettings()
 
   const { isHardBound, isAuthMethodAllowed } = await import('./auth-restrictions')
 
@@ -321,7 +321,7 @@ export async function handleSignInPreCheck(ctx: {
 
   if (!principalRow) return
 
-  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, tenant)
+  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, workspace)
   if (!result.allowed) {
     const isTeamRole = role === 'admin' || role === 'member'
     const errorCode = result.error ?? 'auth_method_blocked'
@@ -733,8 +733,8 @@ export async function handleCallbackPolicyCleanup(
     redirect: (url: string) => Error
     setCookie?: (name: string, value: string, opts?: Record<string, unknown>) => string
   },
-  tenant: Awaited<
-    ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getTenantSettings>
+  workspace: Awaited<
+    ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getWorkspaceSettings>
   >,
   /** Identity providers + their verified domains (from listIdentityProviders). */
   providers: Awaited<
@@ -841,7 +841,7 @@ export async function handleCallbackPolicyCleanup(
 
   if (!principalRow) return
 
-  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, tenant)
+  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, workspace)
   if (result.allowed) return
 
   await blockSignIn(result.error ?? 'auth_method_blocked')
@@ -1114,8 +1114,8 @@ export async function handleNewDeviceNotification(
       } | null
     }
   },
-  tenant: Awaited<
-    ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getTenantSettings>
+  workspace: Awaited<
+    ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getWorkspaceSettings>
   >
 ): Promise<void> {
   const userId = ctx.context?.newSession?.user?.id
@@ -1152,11 +1152,11 @@ export async function handleNewDeviceNotification(
       to
         ? sendNewSignInEmail({
             to,
-            workspaceName: tenant?.name,
+            workspaceName: workspace?.name,
             occurredAt,
             ipAddress: ip,
             userAgent,
-            logoUrl: tenant?.brandingData?.logoUrl ?? undefined,
+            logoUrl: workspace?.brandingData?.logoUrl ?? undefined,
           })
         : Promise.resolve(),
       recordAuditEvent({
@@ -1262,8 +1262,8 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
 
   // One settings fetch shared across all helpers below so we don't
   // make 2-3 sequential cache round-trips per sign-in.
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const tenant = await getTenantSettings()
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const workspace = await getWorkspaceSettings()
 
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
@@ -1272,7 +1272,7 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   )
   await handleCallbackPolicyCleanup(
     ctx as Parameters<typeof handleCallbackPolicyCleanup>[0],
-    tenant,
+    workspace,
     providers,
     registeredOidcIds
   )
@@ -1289,6 +1289,6 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   // is observed; default-on but workspace can opt out.
   await handleNewDeviceNotification(
     ctx as Parameters<typeof handleNewDeviceNotification>[0],
-    tenant
+    workspace
   )
 })

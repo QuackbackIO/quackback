@@ -23,7 +23,7 @@
  * open.
  */
 
-import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
+import { getWorkspaceSettings } from '@/lib/server/domains/settings/settings.service'
 import { isSignInMethodEnabled, normalizeMethodKey } from '@/lib/shared/signin-methods'
 import {
   findProviderForDomainEmail,
@@ -66,11 +66,11 @@ export async function isAuthMethodAllowed(
   provider: AuthProvider,
   _role: Role,
   registeredOidcProviderIds: Set<string>,
-  /** Optional pre-fetched tenant settings to skip the cache hit. Used
+  /** Optional pre-fetched workspace settings to skip the cache hit. Used
    *  by hooks.ts where the same settings already drove a hard-binding
    *  check earlier in the request — passing it through avoids a
-   *  redundant cache round-trip per sign-in attempt. */
-  tenantSettings?: Awaited<ReturnType<typeof getTenantSettings>>
+   *  redundant Redis round-trip per sign-in attempt. */
+  workspaceSettings?: Awaited<ReturnType<typeof getWorkspaceSettings>>
 ): Promise<AuthMethodResult> {
   // Any registered OIDC provider is a method for every role; role governs
   // authorization, not whether the method exists. Portal-side eligibility
@@ -78,8 +78,8 @@ export async function isAuthMethodAllowed(
   // see `isSsoBlockedForRole` / `handleCallbackPolicyCleanup`.
   if (isRegisteredOidcProvider(provider, registeredOidcProviderIds)) return { allowed: true }
 
-  const tenant = tenantSettings ?? (await getTenantSettings())
-  const oauth = tenant?.authConfig?.oauth
+  const workspace = workspaceSettings ?? (await getWorkspaceSettings())
+  const oauth = workspace?.authConfig?.oauth
   const key = normalizeMethodKey(provider)
 
   if (key === 'password') {

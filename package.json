@@ -73,7 +73,7 @@
     "import": "bun scripts/import/cli.ts",
     "ai:backfill": "bun apps/web/scripts/backfill-ai.ts",
     "merge:backfill": "bun apps/web/scripts/backfill-merge-suggestions.ts",
-    "typecheck": "tsc --noEmit -p apps/web/tsconfig.json",
+    "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/web/workspace-probe/tsconfig.json",
     "prepare": "husky",
     "evals": "bun --env-file=.env vitest run --config apps/web/evals/vitest.config.ts",
     "typecheck:evals": "tsc -p apps/web/evals/tsconfig.json --noEmit"

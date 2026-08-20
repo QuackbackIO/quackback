@@ -4,6 +4,7 @@
 import type { ConversationStatus } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
+import type { Channel } from '@/lib/shared/channels'
 
 /**
  * Timer-driven workflow triggers (support platform §4.6): synthetic events
@@ -74,6 +75,7 @@ export const EVENT_TYPES = [
   // the inbound integration webhook path, independent of any status mapping).
   'ticket.external_status_changed',
   'assistant.handed_off',
+  'assistant.resolved',
   // Timer-driven triggers (see TIMER_DRIVEN_EVENT_TYPES above for the rationale).
   ...TIMER_DRIVEN_EVENT_TYPES,
 ] as const
@@ -281,7 +283,7 @@ export interface StatusComponentChangedPayload {
 export interface EventConversationRef {
   id: string
   status: ConversationStatus
-  channel: 'messenger' | 'email'
+  channel: Channel
   priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'
   /** The assigned team (§4.12), when set. Optional so pre-teams payloads and
    *  refs that don't carry assignment stay unchanged. */
@@ -535,6 +537,11 @@ export interface AssistantHandedOffPayload {
   reason: string
 }
 
+export interface AssistantResolvedPayload {
+  conversationId: string
+  outcome: string
+}
+
 /**
  * Payload shared by conversation.customer_unresponsive / teammate_unresponsive
  * (support platform §4.6, timer-driven triggers). `workflowId` targets the ONE
@@ -724,6 +731,10 @@ export interface AssistantHandedOffEvent extends EventBase<'assistant.handed_off
   data: AssistantHandedOffPayload
 }
 
+export interface AssistantResolvedEvent extends EventBase<'assistant.resolved'> {
+  data: AssistantResolvedPayload
+}
+
 export interface ConversationCustomerUnresponsiveEvent extends EventBase<'conversation.customer_unresponsive'> {
   data: ConversationUnresponsivePayload
 }
@@ -785,6 +796,7 @@ export type EventData =
   | TicketNoteAddedEvent
   | TicketExternalStatusChangedEvent
   | AssistantHandedOffEvent
+  | AssistantResolvedEvent
   | ConversationCustomerUnresponsiveEvent
   | ConversationTeammateUnresponsiveEvent
   | SlaApproachingBreachEvent

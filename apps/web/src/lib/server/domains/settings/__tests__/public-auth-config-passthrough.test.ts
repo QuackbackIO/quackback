@@ -27,7 +27,7 @@ vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn().mockResolvedValue(null),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),
-  CACHE_KEYS: { TENANT_SETTINGS: 'settings:tenant' },
+  CACHE_KEYS: { WORKSPACE_SETTINGS: 'settings:workspace' },
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({

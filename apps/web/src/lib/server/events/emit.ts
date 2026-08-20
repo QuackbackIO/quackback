@@ -90,6 +90,7 @@ export async function emit<P>(
     maxAttempts: 10,
     executor: tx,
   })
+
   return eventId
 }
 

@@ -4,7 +4,7 @@ import { getThemeCookie, parsePrefersColorScheme, type Theme } from '@/lib/share
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
-import type { TenantSettings } from '@/lib/server/domains/settings'
+import type { WorkspaceSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
@@ -13,7 +13,7 @@ const log = logger.child({ component: 'bootstrap' })
 export interface BootstrapData {
   baseUrl: string
   session: Session | null
-  settings: TenantSettings | null
+  settings: WorkspaceSettings | null
   userRole: Role | null
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
@@ -126,7 +126,7 @@ let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
   const [
-    { getTenantSettings },
+    { getWorkspaceSettings },
     { getRegisteredAuthProviders },
     { config },
     { getRequestHeaders, setResponseHeader },
@@ -143,7 +143,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // run in parallel with the settings fetch.
   const [{ session, role: userRole }, settings, registeredAuthProviders] = await Promise.all([
     getSessionAndRole(),
-    getTenantSettings(),
+    getWorkspaceSettings(),
     getRegisteredAuthProviders(),
   ])
 

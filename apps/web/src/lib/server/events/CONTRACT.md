@@ -16,7 +16,7 @@ checklist.
   - generic lifecycle: `created` · `updated` · `deleted` · `restored` · `archived`
   - semantic (curated): `status_changed`, `assigned`, `owner_assigned`,
     `priority_changed`, `merged`, `unmerged`, `mentioned`, `published`,
-    `replied`, `handed_off`, `csat_submitted`, `breached`, `voted`,
+    `replied`, `handed_off`, `resolved`, `csat_submitted`, `breached`, `voted`,
     `external_status_changed` (a linked tracker issue moved upstream), …
     (add new ones to the list _on purpose_).
 - A new verb is a deliberate decision, not a drive-by string. Adding one and
@@ -83,8 +83,8 @@ downstream surface from one declaration:
 
 `emit(tx, def, …)` inside the mutation's transaction (atomic with the write), or
 `emitBestEffort(def, …)` for services with no surrounding tx (opens a short one,
-never throws). Never enqueue `{event-hooks}` directly — the relay is the sole
-enqueuer (CI-enforced by the enqueue gate).
+never throws). Never enqueue onto the `events` queue directly — the relay is the
+sole enqueuer (CI-enforced by the enqueue gate).
 
 ## 7. Sinks (a.k.a. "hooks") — one contract, one registration
 

@@ -13,6 +13,7 @@
 import { createStart, createCsrfMiddleware } from '@tanstack/react-start'
 import { requestContextMiddleware } from '@/lib/server/middleware/request-context'
 import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
+import { workspaceContextMiddleware } from '@/lib/server/middleware/workspace-context'
 
 /**
  * Same-origin protection for server functions, matching the framework default.
@@ -30,8 +31,11 @@ const csrfMiddleware = createCsrfMiddleware({
 export const startInstance = createStart(() => {
   return {
     // Request-context/logging first so even CSRF-rejected requests get a
-    // request_id and an access log; CSRF second.
-    requestMiddleware: [requestContextMiddleware, csrfMiddleware],
+    // request_id and an access log. Workspace resolution second — before CSRF and
+    // before auth, because auth is full of `db` queries and cannot run until the
+    // database has been chosen (SAAS-HOSTING-STACK.md §6). Under
+    // QUACKBACK_TENANCY=single it is a pass-through.
+    requestMiddleware: [requestContextMiddleware, workspaceContextMiddleware, csrfMiddleware],
     // Server-function failures never reach the request middleware's error
     // branch (see server-fn-log.ts), so they are logged here instead. Unlike
     // `requestMiddleware` above, this list replaces no framework default.

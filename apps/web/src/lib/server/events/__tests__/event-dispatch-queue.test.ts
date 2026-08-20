@@ -33,7 +33,7 @@ function job(eventId: string, attempts = 1): ClaimedJob {
     queue: 'event-dispatch',
     dedupeKey: `event-dispatch:${eventId}`,
     payload: { eventId },
-    tenantId: null,
+    workspaceKey: null,
     attempts,
     maxAttempts: 10,
     leaseToken: 'test',
@@ -88,7 +88,7 @@ describe('runEventDispatch', () => {
         readFileSync(
           path.resolve(
             __dirname,
-            '../../../../../../../packages/db/drizzle/0253_event_dispatch_owner.sql'
+            '../../../../../../../packages/db/drizzle/0269_event_dispatch_owner.sql'
           ),
           'utf8'
         )
@@ -97,7 +97,7 @@ describe('runEventDispatch', () => {
         readFileSync(
           path.resolve(
             __dirname,
-            '../../../../../../../packages/db/drizzle/0254_event_dispatch_owner_default_job.sql'
+            '../../../../../../../packages/db/drizzle/0270_event_dispatch_owner_default_job.sql'
           ),
           'utf8'
         )

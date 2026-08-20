@@ -2,8 +2,8 @@
  * The cache helpers, against a real server.
  *
  * Successor to `redis-cache.test.ts`, which asserted the wire key handed to a
- * fake ioredis (`t:tenant-alpha:settings:tenant`). There is no wire key now —
- * the discriminator is `kv_store.tenant_id` — so this asserts the row that
+ * fake ioredis (`t:workspace-alpha:settings:workspace`). There is no wire key now —
+ * the discriminator is `kv_store.workspace_key` — so this asserts the row that
  * actually lands, including for the keys built by concatenation at the call
  * site, which is the case the old comment on `CACHE_KEYS` singled out as the
  * one a string-prefix scheme could lose.
@@ -15,29 +15,29 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
   ensureKvSchema,
-  withRealTenant,
-  tenantPair,
+  withRealWorkspace,
+  workspacePair,
   uniqueKey,
-  cleanupTenants,
+  cleanupWorkspaces,
   closeHarness,
   testSql,
 } from '@/lib/server/kv/__tests__/harness'
 import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '../cache'
 
-const [A, B] = tenantPair()
+const [A, B] = workspacePair()
 
 beforeAll(async () => {
   await ensureKvSchema()
 })
 
 afterAll(async () => {
-  await cleanupTenants(A, B)
+  await cleanupWorkspaces(A, B)
   await closeHarness()
 })
 
 describe('CACHE_KEYS', () => {
   it('exports the expected cache key constants', () => {
-    expect(CACHE_KEYS.TENANT_SETTINGS).toBe('settings:tenant')
+    expect(CACHE_KEYS.WORKSPACE_SETTINGS).toBe('settings:workspace')
     expect(CACHE_KEYS.INTEGRATION_MAPPINGS).toBe('hooks:integration-mappings')
     expect(CACHE_KEYS.ACTIVE_WEBHOOKS).toBe('hooks:webhooks-active:v2')
     expect(CACHE_KEYS.SLACK_CHANNELS).toBe('slack:channels')
@@ -49,45 +49,47 @@ describe('CACHE_KEYS', () => {
 
 describe('round trip', () => {
   it('stores and reads a structured value', async () => {
-    await withRealTenant(A, () => cacheSet(CACHE_KEYS.TENANT_SETTINGS, { name: 'alpha' }, 60))
-    expect(await withRealTenant(A, () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))).toEqual({
+    await withRealWorkspace(A, () => cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, { name: 'alpha' }, 60))
+    expect(await withRealWorkspace(A, () => cacheGet(CACHE_KEYS.WORKSPACE_SETTINGS))).toEqual({
       name: 'alpha',
     })
   })
 
   it('returns null for a key that was never written', async () => {
-    expect(await withRealTenant(A, () => cacheGet(uniqueKey('absent')))).toBeNull()
+    expect(await withRealWorkspace(A, () => cacheGet(uniqueKey('absent')))).toBeNull()
   })
 
   it('deletes several keys at once', async () => {
-    await withRealTenant(A, () => cacheSet(CACHE_KEYS.SLACK_CHANNELS, ['a'], 60))
-    await withRealTenant(A, () => cacheSet(CACHE_KEYS.ACTIVE_WEBHOOKS, ['b'], 60))
-    await withRealTenant(A, () => cacheDel(CACHE_KEYS.SLACK_CHANNELS, CACHE_KEYS.ACTIVE_WEBHOOKS))
-    expect(await withRealTenant(A, () => cacheGet(CACHE_KEYS.SLACK_CHANNELS))).toBeNull()
-    expect(await withRealTenant(A, () => cacheGet(CACHE_KEYS.ACTIVE_WEBHOOKS))).toBeNull()
+    await withRealWorkspace(A, () => cacheSet(CACHE_KEYS.SLACK_CHANNELS, ['a'], 60))
+    await withRealWorkspace(A, () => cacheSet(CACHE_KEYS.ACTIVE_WEBHOOKS, ['b'], 60))
+    await withRealWorkspace(A, () =>
+      cacheDel(CACHE_KEYS.SLACK_CHANNELS, CACHE_KEYS.ACTIVE_WEBHOOKS)
+    )
+    expect(await withRealWorkspace(A, () => cacheGet(CACHE_KEYS.SLACK_CHANNELS))).toBeNull()
+    expect(await withRealWorkspace(A, () => cacheGet(CACHE_KEYS.ACTIVE_WEBHOOKS))).toBeNull()
   })
 })
 
-describe('the tenant discriminator', () => {
-  it('a key written under one tenant is not readable under the other', async () => {
-    await withRealTenant(A, () => cacheSet(CACHE_KEYS.TENANT_SETTINGS, { name: 'alpha' }, 60))
-    await withRealTenant(B, () => cacheSet(CACHE_KEYS.TENANT_SETTINGS, { name: 'bravo' }, 60))
+describe('the workspace discriminator', () => {
+  it('a key written under one workspace is not readable under the other', async () => {
+    await withRealWorkspace(A, () => cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, { name: 'alpha' }, 60))
+    await withRealWorkspace(B, () => cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, { name: 'bravo' }, 60))
 
-    expect(await withRealTenant(A, () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))).toEqual({
+    expect(await withRealWorkspace(A, () => cacheGet(CACHE_KEYS.WORKSPACE_SETTINGS))).toEqual({
       name: 'alpha',
     })
-    expect(await withRealTenant(B, () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))).toEqual({
+    expect(await withRealWorkspace(B, () => cacheGet(CACHE_KEYS.WORKSPACE_SETTINGS))).toEqual({
       name: 'bravo',
     })
   })
 
-  it("deleting one tenant's key leaves the other's standing", async () => {
-    await withRealTenant(A, () => cacheSet(CACHE_KEYS.TENANT_SETTINGS, { name: 'alpha' }, 60))
-    await withRealTenant(B, () => cacheSet(CACHE_KEYS.TENANT_SETTINGS, { name: 'bravo' }, 60))
-    await withRealTenant(A, () => cacheDel(CACHE_KEYS.TENANT_SETTINGS))
+  it("deleting one workspace's key leaves the other's standing", async () => {
+    await withRealWorkspace(A, () => cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, { name: 'alpha' }, 60))
+    await withRealWorkspace(B, () => cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, { name: 'bravo' }, 60))
+    await withRealWorkspace(A, () => cacheDel(CACHE_KEYS.WORKSPACE_SETTINGS))
 
-    expect(await withRealTenant(A, () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))).toBeNull()
-    expect(await withRealTenant(B, () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))).toEqual({
+    expect(await withRealWorkspace(A, () => cacheGet(CACHE_KEYS.WORKSPACE_SETTINGS))).toBeNull()
+    expect(await withRealWorkspace(B, () => cacheGet(CACHE_KEYS.WORKSPACE_SETTINGS))).toEqual({
       name: 'bravo',
     })
   })
@@ -97,12 +99,12 @@ describe('the tenant discriminator', () => {
     // assembled by the caller, so a scheme that applied the namespace at the key
     // table would be one `${…}:extra` away from being bypassed.
     const key = CACHE_KEYS.PRINCIPAL_BY_USER('user_collision')
-    await withRealTenant(A, () => cacheSet(key, { role: 'admin' }, 60))
-    expect(await withRealTenant(B, () => cacheGet(key))).toBeNull()
+    await withRealWorkspace(A, () => cacheSet(key, { role: 'admin' }, 60))
+    expect(await withRealWorkspace(B, () => cacheGet(key))).toBeNull()
 
-    const rows = await testSql()<{ tenant_id: string; key: string }[]>`
-      SELECT tenant_id, key FROM kv_store WHERE key = ${key} ORDER BY tenant_id
+    const rows = await testSql()<{ workspace_key: string; key: string }[]>`
+      SELECT workspace_key, key FROM kv_store WHERE key = ${key} ORDER BY workspace_key
     `
-    expect(rows).toEqual([{ tenant_id: A, key: 'principal:user:user_collision' }])
+    expect(rows).toEqual([{ workspace_key: A, key: 'principal:user:user_collision' }])
   })
 })

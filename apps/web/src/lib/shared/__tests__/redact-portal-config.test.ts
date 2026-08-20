@@ -164,13 +164,13 @@ describe('redactSettingsForClient — server-only settings columns', () => {
     expect(result.name).toBe('Acme')
   })
 
-  it('redacts the raw row riding on a TenantSettings-shaped `.settings` property', () => {
-    const tenantShaped = {
+  it('redacts the raw row riding on a WorkspaceSettings-shaped `.settings` property', () => {
+    const workspaceShaped = {
       name: 'Acme',
       portalConfig: FULL_PORTAL_CONFIG,
       settings: { ...RAW_ROW },
     }
-    const result = redactSettingsForClient(tenantShaped)
+    const result = redactSettingsForClient(workspaceShaped)
 
     expect(result.settings).not.toHaveProperty('widgetSecret')
     expect(result.portalConfig.access).toEqual({ visibility: 'private' })
@@ -181,12 +181,12 @@ describe('redactSettingsForClient — server-only settings columns', () => {
   })
 
   it('never leaks a wgt_ secret into the serialized payload', () => {
-    const tenantShaped = {
+    const workspaceShaped = {
       name: 'Acme',
       portalConfig: FULL_PORTAL_CONFIG,
       settings: { ...RAW_ROW },
     }
-    const payload = JSON.stringify(redactSettingsForClient(tenantShaped))
+    const payload = JSON.stringify(redactSettingsForClient(workspaceShaped))
 
     expect(payload).not.toContain('wgt_')
     expect(payload).not.toContain('widgetSecret')

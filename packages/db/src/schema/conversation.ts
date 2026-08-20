@@ -45,7 +45,7 @@ const tsvector = customType<{ data: string }>({
 /**
  * Support-inbox conversations — one thread between a visitor (anonymous or
  * identified) and the team, arriving via any channel (messenger, email, ...).
- * Scoped to the tenant by the database connection (database-per-tenant); no
+ * Scoped to the workspace by the database connection (database-per-workspace); no
  * workspace column.
  */
 export const conversations = pgTable(

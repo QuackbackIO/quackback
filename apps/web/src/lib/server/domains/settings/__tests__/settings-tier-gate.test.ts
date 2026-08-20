@@ -51,7 +51,7 @@ vi.mock('../settings.helpers', () => ({
 }))
 
 // updateAuthConfig runs assertNotManaged() at its head; the gate
-// dynamic-imports getTenantSettings, which would crash without this
+// dynamic-imports getWorkspaceSettings, which would crash without this
 // stub. The tier gate is the unit under test, so let every path through.
 vi.mock('@/lib/server/config-file/managed-guard', () => ({
   assertNotManaged: vi.fn(async () => {}),

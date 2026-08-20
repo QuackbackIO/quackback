@@ -3,12 +3,12 @@
  *
  * `handler-imports.test.ts` is a source scan: it proves the handler modules
  * *can* be loaded statically. It says nothing about whether anything loads them
- * before a tenant scope opens — and that gap is not hypothetical. With
+ * before a workspace scope opens — and that gap is not hypothetical. With
  * `primeJobHandlers()` gutted to a no-op the whole suite stayed green, because
  * `resolveHandler` would simply import the wrapper at first-job time instead,
- * inside the per-pass tenant scope. The static hoist makes that *worse*, not
+ * inside the per-pass workspace scope. The static hoist makes that *worse*, not
  * better: the entire 190-file handler graph would then load under whichever
- * tenant's job ran first.
+ * workspace's job ran first.
  *
  * Same shape as the `attempted` counter one layer up — a property everything
  * agreed about and nothing pinned. So this file counts loads.
@@ -29,9 +29,10 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-let currentTenantId: string | null = null
-vi.mock('@/lib/server/tenancy/tenant-context', () => ({
-  getCurrentTenant: () => (currentTenantId === null ? null : { tenantId: currentTenantId }),
+let currentWorkspaceKey: string | null = null
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () =>
+    currentWorkspaceKey === null ? null : { workspaceKey: currentWorkspaceKey },
 }))
 
 // The in-scope warning is a diagnostic, and a diagnostic nothing reads is a
@@ -83,7 +84,7 @@ beforeAll(async () => {
 })
 
 afterEach(() => {
-  currentTenantId = null
+  currentWorkspaceKey = null
   __setJobDefinitionsForTests(null)
   resetJobHandlers()
   warnings.length = 0
@@ -115,17 +116,17 @@ describe('primeJobHandlers', () => {
     expect(loads).toEqual([a])
   })
 
-  it('refuses to prime inside a tenant scope, and says so', async () => {
+  it('refuses to prime inside a workspace scope, and says so', async () => {
     // Priming under a scope would defeat its own purpose silently — the modules
-    // would load under that tenant, which is the thing being prevented.
+    // would load under that workspace, which is the thing being prevented.
     const a = queue('prime-scoped')
     const { loads } = countingDefs([a])
-    currentTenantId = 'inst_alpha'
+    currentWorkspaceKey = 'inst_alpha'
 
     await primeJobHandlers()
 
     expect(loads).toEqual([])
-    expect(errors.flat().join(' ')).toMatch(/inside a tenant scope/)
+    expect(errors.flat().join(' ')).toMatch(/inside a workspace scope/)
   })
 })
 
@@ -145,21 +146,21 @@ describe('running a job does not import anything', () => {
     expect(loads).toEqual([q])
   })
 
-  it('warns when it has to load a handler under a tenant scope', async () => {
+  it('warns when it has to load a handler under a workspace scope', async () => {
     // The fallback path. It must work — a direct `runJob` in a test has never
     // primed — but in a running tier it means a module is being imported under
-    // a tenant's connection, so it must not be silent.
+    // a workspace's connection, so it must not be silent.
     const q = queue('prime-miss')
     const { loads } = countingDefs([q])
 
-    // Stamp and claim under the same tenant, or the claim's own tenant
+    // Stamp and claim under the same workspace, or the claim's own workspace
     // assertion refuses the row and the handler is never reached — a fixture
     // that never arrives at the branch it asserts about. The guard below is for
     // DIAGNOSIS, not detection: `runJob(undefined)` throws either way, so the
     // broken fixture fails regardless. What the guard buys is that it fails as
     // a named fixture fault rather than as a TypeError a future reader would
     // plausibly "fix" with an optional chain.
-    currentTenantId = 'inst_alpha'
+    currentWorkspaceKey = 'inst_alpha'
     await enqueueJob({ queue: q, maxAttempts: 1 })
     const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
     expect(
@@ -169,7 +170,7 @@ describe('running a job does not import anything', () => {
     expect(await runJob(job)).toBe('succeeded')
 
     expect(loads).toEqual([q])
-    expect(warnings.flat().join(' ')).toMatch(/imported inside a tenant scope/)
+    expect(warnings.flat().join(' ')).toMatch(/imported inside a workspace scope/)
   })
 
   it('does not warn when there is no scope to capture', async () => {
@@ -178,6 +179,6 @@ describe('running a job does not import anything', () => {
     await enqueueJob({ queue: q, maxAttempts: 1 })
     const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: 30_000 }] })
     await runJob(job)
-    expect(warnings.flat().join(' ')).not.toMatch(/imported inside a tenant scope/)
+    expect(warnings.flat().join(' ')).not.toMatch(/imported inside a workspace scope/)
   })
 })

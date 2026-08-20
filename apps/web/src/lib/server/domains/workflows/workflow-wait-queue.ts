@@ -19,7 +19,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import type { WorkflowRun, WorkflowBlockKind } from '@/lib/server/db'
 // Statically imported, not deferred: a call-time import inside the tier would
-// execute this module's graph under whichever tenant reached it first. The
+// execute this module's graph under whichever workspace reached it first. The
 // engine imports back into this module, so the two form a cycle — safe because
 // neither touches the other at module top level, only inside a function.
 import { resumeWorkflowRun } from './workflow.engine'

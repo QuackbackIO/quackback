@@ -13,14 +13,14 @@ export async function handleWidgetUpload({ request }: { request: Request }): Pro
   if (!sessionData?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  // Key the tenant bucket on the resolved workspace, not the `Host` header:
+  // Key the workspace bucket on the resolved workspace, not the `Host` header:
   // the header is caller-controlled, so varying it would let an attacker
-  // spin up a fresh per-tenant bucket on every request.
+  // spin up a fresh per-workspace bucket on every request.
   const settings = await getSettings()
   if (!settings) return widgetJsonError(503, 'WORKSPACE_UNAVAILABLE', 'Workspace unavailable')
   const limited = await enforceWidgetQuota(request, {
     keyPrefix: 'widget-upload',
-    tenantId: settings.id,
+    workspaceKey: settings.id,
     limit: 20,
     windowSeconds: 60,
     message: 'Too many uploads, slow down',

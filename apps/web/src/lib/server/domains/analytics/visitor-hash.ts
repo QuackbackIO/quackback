@@ -9,7 +9,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { kvGetOrCreate } from '@/lib/server/kv/pg-kv'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { logger } from '@/lib/server/logger'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
@@ -26,12 +26,12 @@ export function utcDateKey(now: Date = new Date()): string {
 // process memory; the database is only consulted on each pod's first beacon of
 // a day.
 //
-// Per tenant, in both the heap and the store. A shared salt would hash the same
+// Per workspace, in both the heap and the store. A shared salt would hash the same
 // visitor to the same key in every workspace, so the layer-1 key becomes a
 // fleet-wide visitor identifier — exactly the cross-site correlation the daily
-// rotation exists to make impossible, reintroduced across tenants instead of
+// rotation exists to make impossible, reintroduced across workspaces instead of
 // across days.
-const cachedSalts = new TenantKeyedCache<string>()
+const cachedSalts = new WorkspaceKeyedCache<string>()
 
 /**
  * Get-or-create the salt for the given UTC day. Race-safe across pods: the

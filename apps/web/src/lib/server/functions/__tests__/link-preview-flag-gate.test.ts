@@ -5,7 +5,7 @@
  * for every URL and link previews never rendered, flag on or off.
  *
  * This pins the gate's behavior at the handler boundary: with the
- * tenant flag enabled the handler unfurls; with it disabled it returns
+ * workspace flag enabled the handler unfurls; with it disabled it returns
  * null without fetching.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'

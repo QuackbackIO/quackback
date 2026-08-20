@@ -13,7 +13,7 @@ import {
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
-import type { TenantSettings } from '@/lib/shared/types/settings'
+import type { WorkspaceSettings } from '@/lib/shared/types/settings'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveDocumentTheme } from '@/lib/shared/theme'
@@ -28,7 +28,7 @@ export interface RouterContext {
   queryClient: QueryClient
   baseUrl?: string
   session?: BootstrapData['session']
-  settings?: TenantSettings | null
+  settings?: WorkspaceSettings | null
   userRole?: Role | null
   themeCookie?: BootstrapData['themeCookie']
   prefersColorScheme?: BootstrapData['prefersColorScheme']
@@ -82,18 +82,18 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     // redactSettingsForClient strips the widgetSecret/tier/setup columns from
     // the raw row and the access policy fields (allowedDomains, widgetSignIn,
     // allowedSegmentIds) from portalConfig, recursively covering both the
-    // parsed TenantSettings shape and the raw DB row riding on `.settings`.
+    // parsed WorkspaceSettings shape and the raw DB row riding on `.settings`.
     // Nothing on the client legitimately reads any of it — the admin
     // Security → Portal tab fetches the full config via its own
     // settingsQueries.portalConfig() query, which is unaffected, and the
     // domain gate runs server-side via evaluateMyPortalAccessFn.
-    const redactedSettings: TenantSettings | null = settings
-      ? (redactSettingsForClient(settings) as TenantSettings)
+    const redactedSettings: WorkspaceSettings | null = settings
+      ? (redactSettingsForClient(settings) as WorkspaceSettings)
       : settings
 
     // Drop the raw DB row entirely from the client-bound context. Redaction
     // already stripped its secrets, but the row is a full duplicate of the
-    // parsed TenantSettings fields (name, slug, portalConfig, brandingConfig,
+    // parsed WorkspaceSettings fields (name, slug, portalConfig, brandingConfig,
     // …) that no client code reads — every consumer reads the parsed top-level
     // fields instead. Emptying it removes one whole settings copy per SSR
     // document. The only server-side readers of `settings.settings.*` are the

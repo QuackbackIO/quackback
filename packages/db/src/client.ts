@@ -29,7 +29,7 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
 /**
  * Wrap an existing postgres.js handle.
  *
- * A pooled multi-tenant process cannot use {@link createDb}: a tenant pool needs
+ * A pooled multi-workspace process cannot use {@link createDb}: a workspace pool needs
  * options a connection string cannot carry — chiefly a `password` *function*, so
  * a rotated credential is picked up on the next connection rather than wedging
  * the pool. Building the handle at the call site and wrapping it here keeps the

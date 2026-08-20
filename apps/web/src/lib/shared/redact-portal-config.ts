@@ -51,8 +51,8 @@ function stripServerOnlyKeys<T extends object>(row: T): T {
  *   of `portalConfig`, keeping only access.visibility (already public via
  *   publicPortalConfig.portalAccess).
  *
- * Accepts either the parsed TenantSettings shape or the raw DB row. When the
- * input carries the raw row as a nested `settings` property (TenantSettings
+ * Accepts either the parsed WorkspaceSettings shape or the raw DB row. When the
+ * input carries the raw row as a nested `settings` property (WorkspaceSettings
  * does), the row is redacted recursively, so one call at any exit point
  * covers both levels. `portalConfig` may be a parsed object or a JSON-string
  * column. When nothing needs redaction the input is returned by reference.
@@ -62,7 +62,7 @@ export function redactSettingsForClient<T extends { portalConfig?: PortalConfig 
 ): T {
   let result = stripServerOnlyKeys(row)
 
-  // TenantSettings shape: the raw DB row rides along as `.settings`.
+  // WorkspaceSettings shape: the raw DB row rides along as `.settings`.
   const nested = (result as Record<string, unknown>).settings
   if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
     const redactedNested = redactSettingsForClient(
@@ -78,7 +78,7 @@ export function redactSettingsForClient<T extends { portalConfig?: PortalConfig 
 
   if (!portalConfig) return result
 
-  // Parsed object form (TenantSettings.portalConfig)
+  // Parsed object form (WorkspaceSettings.portalConfig)
   if (typeof portalConfig === 'object') {
     if (!portalConfig.access) return result
     // Cast: the shape is identical at runtime; only the access sub-keys differ.

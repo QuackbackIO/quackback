@@ -4,21 +4,21 @@
  * **Read the title literally — it is one level deep, and it used to overclaim.**
  * This scan reads exactly the seven wrapper files named by `JOB_DEFINITIONS`. A
  * call-time `import()` one level below, inside `sla.sweep.ts`, kept this file
- * green while that module's top level ran under a tenant scope on the pooled
+ * green while that module's top level ran under a workspace scope on the pooled
  * fleet.
  *
  * `primeJobHandlers()` imports each handler module once at tier start, before
- * any tenant scope is open, so no module executes its top level under one
- * tenant's connection. That guarantee reaches exactly as far as the *static*
+ * any workspace scope is open, so no module executes its top level under one
+ * workspace's connection. That guarantee reaches exactly as far as the *static*
  * import graph: a `await import(...)` inside a handler body runs at call time,
- * which is inside the per-pass tenant scope, and `resolveHandler`'s warning
+ * which is inside the per-pass workspace scope, and `resolveHandler`'s warning
  * cannot see it because it only guards the outer import.
  *
  * This was real rather than theoretical. Three of the seven handler modules
  * deferred their sweep modules to call time, and a top-level probe in
  * `sla.sweep.ts` read `(module not imported)` after priming and
- * `inst_gauntlet_alpha` after the tier ran the sweep — the module's top level
- * executed under a tenant scope, with no warning possible.
+ * `inst_cloud_alpha` after the tier ran the sweep — the module's top level
+ * executed under a workspace scope, with no warning possible.
  *
  * Deepening it was measured and rejected rather than skipped. The modules these
  * seven statically import include `conversation.service` (6 call-time imports),
@@ -31,7 +31,7 @@
  * handler wrappers and their static graph are loaded before any scope opens.**
  * It does not, and cannot, guarantee that about the whole application's lazy
  * graph: a module imported at call time runs under whatever scope its caller
- * has, which for a request is the *correct* tenant. That only becomes a hazard
+ * has, which for a request is the *correct* workspace. That only becomes a hazard
  * when such a module captures scope-dependent state at its top level, and is
  * then shared process-wide.
  *
@@ -108,8 +108,8 @@ describe('registered handler modules defer nothing to call time', () => {
     expect(
       dynamic.length,
       `${path.relative(SERVER_ROOT, file)} defers a module to call time. The tier opens a ` +
-        `tenant scope around every pass, so that module's top level would run under ` +
-        `whichever tenant reached it first. Import it statically.`
+        `workspace scope around every pass, so that module's top level would run under ` +
+        `whichever workspace reached it first. Import it statically.`
     ).toBe(0)
   })
 })

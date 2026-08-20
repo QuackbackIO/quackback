@@ -107,7 +107,7 @@ async function createAuth() {
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders } = await import('./auth-providers')
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { listIdentityProviders, getIdentityProviderCredentials } =
     await import('@/lib/server/domains/settings/identity-providers.service')
   const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
@@ -138,7 +138,7 @@ async function createAuth() {
   // together to avoid stacking cache round-trips on every auth-instance
   // rebuild. tenantSettings still drives the social-provider surface
   // filter below; OIDC config now comes from the identity_provider list.
-  const [tierLimits, tenantSettings] = await Promise.all([getTierLimits(), getTenantSettings()])
+  const [tierLimits, tenantSettings] = await Promise.all([getTierLimits(), getWorkspaceSettings()])
 
   // OIDC providers (single sign-on + portal custom OIDC) are registered
   // from the identity_provider list — the single source of truth. Each
@@ -768,8 +768,8 @@ export async function getAuth(): Promise<AuthInstance> {
   // Skip the version check when no instance is cached yet — the build
   // path below records the version after creation.
   if (_auth && _authConfigVersion !== null) {
-    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-    const t = await getTenantSettings()
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const t = await getWorkspaceSettings()
     const current = t?.settings?.authConfigVersion
     if (typeof current === 'number' && current !== _authConfigVersion) {
       _auth = null

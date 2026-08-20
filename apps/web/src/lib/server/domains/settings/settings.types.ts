@@ -116,7 +116,7 @@ export interface AuthConfig {
    * guarantee when those methods are also enabled.
    *
    * Default `undefined` is treated as `required=false` (off) so
-   * existing tenants pre-migration aren't suddenly locked out.
+   * existing workspaces pre-migration aren't suddenly locked out.
    */
   twoFactor?: { required: boolean }
 }
@@ -158,7 +158,7 @@ export interface VerifiedDomain {
  *
  * `password: true` matches the prior hardcoded behaviour in v0.9.9 and
  * earlier, where team password sign-in was always allowed regardless
- * of any stored config. Pre-upgrade tenants whose `authConfig.oauth`
+ * of any stored config. Pre-upgrade workspaces whose `authConfig.oauth`
  * has no `password` key also fall back to this default via the
  * `?? true` check in `isAuthMethodAllowed`, so upgrading from v0.9.9
  * doesn't lock admins out of their team surface.
@@ -345,7 +345,7 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
  * (un-merged) `settings.portalConfig`. Only an explicitly-enabled flag permits
  * anonymous vote / comment / submit; a missing flag DENIES — the security gate
  * must not inherit `getPortalConfig`'s permissive merged default. Existing
- * tenants carry an explicit value from migration 0084, and the per-board tier
+ * workspaces carry an explicit value from migration 0084, and the per-board tier
  * is the inner gate. This is the single source of truth for every anonymous
  * write/read gate so they cannot drift.
  */
@@ -659,7 +659,7 @@ export interface WidgetConfig {
 }
 
 /**
- * Public subset of widget config — safe to include in TenantSettings / bootstrap data
+ * Public subset of widget config — safe to include in WorkspaceSettings / bootstrap data
  * Does NOT include identifyVerification (admin-only concern)
  */
 export type PublicWidgetConfig = Pick<
@@ -950,14 +950,14 @@ export interface SettingsBrandingData {
 }
 
 // =============================================================================
-// Tenant Settings (consolidated settings object)
+// Workspace Settings (consolidated settings object)
 // =============================================================================
 
 /**
- * Consolidated tenant settings, parsed from the database settings row.
+ * Consolidated workspace settings, parsed from the database settings row.
  * This interface is client-safe (no DB types) and can be imported from the barrel.
  */
-export interface TenantSettings {
+export interface WorkspaceSettings {
   /** Raw settings record from database (opaque on client, typed on server) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   settings: Record<string, any>
@@ -1050,7 +1050,7 @@ export interface FeatureFlags {
 /**
  * Pre-consolidation flag keys that may still appear in stored
  * `settings.feature_flags` JSON. Each maps to the umbrella flag that
- * absorbed it; `resolveFeatureFlags` ORs them in at read time so tenants
+ * absorbed it; `resolveFeatureFlags` ORs them in at read time so workspaces
  * who enabled a feature before the consolidation keep it without a
  * migration. `linkPreviews` is absent deliberately: it folded into
  * `supportInbox` (default on), and a stored `linkPreviews: true` must not
@@ -1097,7 +1097,7 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
  * model and/or a privacy review (visitor analytics ships before its consent
  * gate, so it must not start collecting on upgrade).
  *
- * Existing tenants with an explicit `featureFlags` JSON row keep stored
+ * Existing workspaces with an explicit `featureFlags` JSON row keep stored
  * values; only missing keys and null rows pick up these defaults (merged in
  * settings.service).
  */

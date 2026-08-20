@@ -17,8 +17,9 @@ export const Route = createFileRoute('/sitemap.xml')({
         const baseUrl = config.baseUrl
 
         // Private portals must not expose URLs to search engines.
-        const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-        const tenant = await getTenantSettings()
+        const { getWorkspaceSettings } =
+          await import('@/lib/server/domains/settings/settings.service')
+        const tenant = await getWorkspaceSettings()
         if (tenant?.portalConfig?.access?.visibility === 'private') {
           return new Response(renderSitemap([], baseUrl, null) ?? '', {
             headers: {

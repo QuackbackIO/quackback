@@ -223,11 +223,11 @@ describe('POST /api/widget/kb-ask', () => {
     expect(mockRetrieve).not.toHaveBeenCalled()
   })
 
-  it('keys the tenant bucket off the resolved workspace id, not a caller-supplied header', async () => {
+  it('keys the workspace bucket off the resolved workspace id, not a caller-supplied header', async () => {
     mockGetSettings.mockResolvedValue({ id: 'settings_evade_test' })
     await handleKbAsk({ request: makePost('hello') })
     const keys = mockIncrementBucket.mock.calls.map(([spec]) => spec.key)
-    expect(keys).toContain('kbask:tenant:settings_evade_test')
+    expect(keys).toContain('kbask:workspace:settings_evade_test')
   })
 
   it('fails open when Redis is down', async () => {

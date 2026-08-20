@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Public Post List', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to the public portal (tenant subdomain)
+    // Navigate to the public portal (workspace subdomain)
     await page.goto('/')
   })
 

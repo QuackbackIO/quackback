@@ -17,7 +17,7 @@
  *   AI_EMBEDDING_MODEL                 - embedding model (off → skipped).
  *   DATABASE_URL                       - PostgreSQL connection string.
  *
- * Managed cloud: run from a checkout against the tenant DATABASE_URL (the slim
+ * Managed cloud: run from a checkout against the workspace DATABASE_URL (the slim
  * runtime image ships only the bundled app, not scripts/src).
  */
 

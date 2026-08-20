@@ -10,7 +10,7 @@
  *     the request automatically carries request_id + route,
  *   - logs request completion with status + duration, or failure on throw.
  *
- * Downstream code enriches the context with tenant_id / user_id via
+ * Downstream code enriches the context with workspace_key / user_id via
  * setLogContext() once auth resolves.
  */
 import type { AppLogger } from '@quackback/logger'
@@ -20,7 +20,7 @@ import { runWithLogContext } from '@/lib/server/log-context'
 
 /**
  * k8s liveness/readiness probe path. Hit every ~2s per pod, so a successful
- * probe is pure access-log noise (~40k lines/day/tenant). We skip the
+ * probe is pure access-log noise (~40k lines/day/workspace). We skip the
  * completion line for healthy probes only — an unhealthy probe (status >= 400)
  * or a thrown error is still logged, since those are the signal we care about.
  */

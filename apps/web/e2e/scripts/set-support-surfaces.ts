@@ -12,12 +12,12 @@
  * master switch is left alone so unrelated widget specs are not disturbed).
  *
  * The settings JSON columns are *text*, so we read -> patch -> write, then
- * drop the Redis-cached tenant settings (settings:tenant) so the running dev
+ * drop the Redis-cached workspace settings (settings:workspace) so the running dev
  * server sees the change immediately instead of after the 1h cache TTL.
  *
  * Usage: bun set-support-surfaces.ts <on|off>
  */
-import { openDb, bustTenantSettings, parseJson } from './_lib'
+import { openDb, bustWorkspaceSettings, parseJson } from './_lib'
 
 const mode = (process.argv[2] || 'on').toLowerCase()
 if (mode !== 'on' && mode !== 'off') {
@@ -52,8 +52,8 @@ try {
         portal_config = ${JSON.stringify(portal)}
     WHERE id = ${id}`
 
-  // Bust the tenant-settings cache so the change is visible on the next request.
-  await bustTenantSettings(sql)
+  // Bust the workspace-settings cache so the change is visible on the next request.
+  await bustWorkspaceSettings(sql)
 
   console.log(JSON.stringify({ supportSurfaces: mode }))
   await sql.end()

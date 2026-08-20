@@ -261,7 +261,7 @@ interface AssistantTurnCommonInput {
    * teammate), so the metadata carries no `principalId` key in that case.
    */
   actorPrincipalId?: PrincipalId | null
-  /** Tenant db handle for the tools; defaults to the app db. */
+  /** Workspace db handle for the tools; defaults to the app db. */
   db?: Executor
   /** Aborts the in-flight provider call. */
   signal?: AbortSignal

@@ -25,7 +25,7 @@ function encodeBody(body: string): { gzip: Uint8Array; br: Uint8Array } {
       params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 9 },
     }),
   }
-  // The body varies only with the tenant's base URL + widget config; a tiny
+  // The body varies only with the workspace's base URL + widget config; a tiny
   // cap guards against unbounded growth if that assumption ever breaks.
   if (encodedCache.size > 8) encodedCache.clear()
   encodedCache.set(body, encoded)
@@ -66,7 +66,7 @@ export const Route = createFileRoute('/api/widget/sdk.js')({
             acceptEncoding
           )
         }
-        // Prepend the tenant URL and the public server config. The bundle
+        // Prepend the workspace URL and the public server config. The bundle
         // reads window.__QUACKBACK_URL__ during browser-queue init to
         // auto-fire Quackback.init when the script loads via a raw
         // <script src="/api/widget/sdk.js"> tag; window.__QUACKBACK_CONFIG__

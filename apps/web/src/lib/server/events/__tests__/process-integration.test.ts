@@ -44,8 +44,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   ),
 }))
 
-vi.mock('@/lib/server/tenancy/tenant-context', () => ({
-  getCurrentTenant: () => null,
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () => null,
 }))
 
 // Passthrough mock — ensures Vitest resolves hook-utils through its mock

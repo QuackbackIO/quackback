@@ -25,6 +25,12 @@ vi.mock('@/lib/server/utils/execute-rows', () => ({
   getExecuteRows: () => mockExecuteRows,
 }))
 
+// `withSweepLock` asks whether tenancy is pooled: under pooled tenancy a sweeper
+// tick has no workspace, so the tick fans out across the fleet instead of running
+// once. Pin the mode rather than inheriting whatever the runner happens to have,
+// so this suite tests the single-workspace path deliberately.
+vi.stubEnv('QUACKBACK_TENANCY', 'single')
+
 // ---------------------------------------------------------------------------
 // Module under test — import AFTER mocks
 // ---------------------------------------------------------------------------

@@ -2,8 +2,8 @@
  * Settings service caching tests.
  *
  * Verifies:
- * - getTenantSettings() returns cached result on hit
- * - getTenantSettings() queries DB and populates cache on miss
+ * - getWorkspaceSettings() returns cached result on hit
+ * - getWorkspaceSettings() queries DB and populates cache on miss
  * - All write functions invalidate the cache
  */
 
@@ -19,7 +19,7 @@ vi.mock('@/lib/server/cache', () => ({
   cacheSet: (...args: unknown[]) => mockCacheSet(...args),
   cacheDel: (...args: unknown[]) => mockCacheDel(...args),
   CACHE_KEYS: {
-    TENANT_SETTINGS: 'settings:tenant',
+    WORKSPACE_SETTINGS: 'settings:workspace',
     INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
     SLACK_CHANNELS: 'slack:channels',
@@ -121,7 +121,7 @@ function makeSettingsRow(overrides: Record<string, unknown> = {}) {
 }
 
 // Import after mocks
-const { getTenantSettings, updateAuthConfig, updatePortalConfig, updateDeveloperConfig } =
+const { getWorkspaceSettings, updateAuthConfig, updatePortalConfig, updateDeveloperConfig } =
   await import('../settings.service')
 const { invalidateSettingsCache } = await import('../settings.helpers')
 const {
@@ -152,10 +152,10 @@ beforeEach(() => {
 })
 
 // ============================================================================
-// getTenantSettings caching
+// getWorkspaceSettings caching
 // ============================================================================
 
-describe('getTenantSettings', () => {
+describe('getWorkspaceSettings', () => {
   it('returns cached result on cache hit without querying DB', async () => {
     const cached = {
       name: 'Cached Workspace',
@@ -164,10 +164,10 @@ describe('getTenantSettings', () => {
     }
     mockCacheGet.mockResolvedValue(cached)
 
-    const result = await getTenantSettings()
+    const result = await getWorkspaceSettings()
 
     expect(result).toEqual(cached)
-    expect(mockCacheGet).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheGet).toHaveBeenCalledWith('settings:workspace')
     expect(mockFindFirst).not.toHaveBeenCalled()
   })
 
@@ -175,12 +175,12 @@ describe('getTenantSettings', () => {
     mockCacheGet.mockResolvedValue(null)
     mockFindFirst.mockResolvedValue(makeSettingsRow())
 
-    const result = await getTenantSettings()
+    const result = await getWorkspaceSettings()
 
     expect(result).not.toBeNull()
     expect(mockFindFirst).toHaveBeenCalled()
     expect(mockCacheSet).toHaveBeenCalledWith(
-      'settings:tenant',
+      'settings:workspace',
       expect.objectContaining({ name: 'Test Workspace' }),
       3600
     )
@@ -190,7 +190,7 @@ describe('getTenantSettings', () => {
     mockCacheGet.mockResolvedValue(null)
     mockFindFirst.mockResolvedValue(null)
 
-    const result = await getTenantSettings()
+    const result = await getWorkspaceSettings()
 
     expect(result).toBeNull()
     expect(mockCacheSet).not.toHaveBeenCalled()
@@ -202,10 +202,10 @@ describe('getTenantSettings', () => {
 // ============================================================================
 
 describe('invalidateSettingsCache', () => {
-  it('deletes the tenant settings cache key', async () => {
+  it('deletes the workspace settings cache key', async () => {
     await invalidateSettingsCache()
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 })
 
@@ -221,81 +221,81 @@ describe('settings write functions invalidate cache', () => {
 
   it('updateAuthConfig invalidates cache', async () => {
     await updateAuthConfig({ oauth: { password: true } })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updatePortalConfig invalidates cache', async () => {
     await updatePortalConfig({ features: {} })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updateBrandingConfig invalidates cache', async () => {
     await updateBrandingConfig({ preset: 'custom' })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updateCustomCss invalidates cache', async () => {
     await updateCustomCss('.test { color: red; }')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updateDeveloperConfig invalidates cache', async () => {
     await updateDeveloperConfig({ mcpEnabled: true })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updateWidgetConfig invalidates cache', async () => {
     await updateWidgetConfig({ enabled: true })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updateWorkspaceName invalidates cache', async () => {
     await updateWorkspaceName('New Name')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updateHeaderDisplayMode invalidates cache', async () => {
     await updateHeaderDisplayMode('logo_only')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('updateHeaderDisplayName invalidates cache', async () => {
     await updateHeaderDisplayName('Custom Name')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('saveLogoKey invalidates cache', async () => {
     await saveLogoKey('logos/new.png')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('deleteLogoKey invalidates cache', async () => {
     await deleteLogoKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('saveFaviconKey invalidates cache', async () => {
     await saveFaviconKey('favicons/new.ico')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('deleteFaviconKey invalidates cache', async () => {
     await deleteFaviconKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('saveHeaderLogoKey invalidates cache', async () => {
     await saveHeaderLogoKey('headers/new.png')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('deleteHeaderLogoKey invalidates cache', async () => {
     await deleteHeaderLogoKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 
   it('regenerateWidgetSecret invalidates cache', async () => {
     await regenerateWidgetSecret()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:workspace', 'auth:registered-providers')
   })
 })

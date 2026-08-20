@@ -18,11 +18,11 @@ import type { ClaimedJob } from './job-queue'
 export type JobHandler = (job: ClaimedJob) => Promise<void>
 
 /**
- * A schedule this queue derives from the tenant's own database at tick time.
+ * A schedule this queue derives from the workspace's own database at tick time.
  *
  * `segment-evaluation` is the case that needs it: a workspace's dynamic
  * segments each carry their own cron pattern in a `segments` row, so the set of
- * schedules is per tenant and changes while the process runs. Under BullMQ that
+ * schedules is per workspace and changes while the process runs. Under BullMQ that
  * was a repeatable job registered into Redis, which then had to be *restored*
  * at boot because Redis could have been cleared. Deriving it per tick removes
  * the restore step and the class of bug it existed for: there is no scheduler
@@ -89,11 +89,11 @@ export interface JobDefinition {
    * handler returning early, which would fill the table with no-ops.
    *
    * Resolve it through the same module the handler comes from: priming has
-   * already imported that module outside any tenant scope, so the `import()`
-   * here is a registry hit rather than a module executing under one tenant.
+   * already imported that module outside any workspace scope, so the `import()`
+   * here is a registry hit rather than a module executing under one workspace.
    */
   cronEnabled?: () => Promise<boolean>
-  /** Schedules read from the tenant's database at tick time. */
+  /** Schedules read from the workspace's database at tick time. */
   dynamicSchedules?: () => Promise<readonly DynamicSchedule[]>
   /**
    * Called after a failed attempt, with whether that failure was final.
@@ -171,7 +171,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
   {
     // The cron stays per-minute and the gate is what changed, which is the whole
     // point: an SLA breach is still noticed within a minute of falling due, and
-    // a tenant with no running clock no longer wakes its compute 1,440 times a
+    // a workspace with no running clock no longer wakes its compute 1,440 times a
     // day to be told so. `deadlines.ts` explains why an interval was the wrong
     // knob and why this one cannot make anything later than it is today.
     name: 'sla-breach-sweep',
@@ -220,12 +220,38 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     // cascades across a conversation's whole child graph, so it is the last
     // thing that should run concurrently with anon-sweep, which contends for
     // the same rows from the other direction.
+    name: 'email-log-retention',
+    cron: '0 6 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/email/email-log.retention').then((m) => m.runEmailLogRetention),
+  },
+  {
     name: 'spam-retention',
     cron: '0 5 * * *',
     maxAttempts: 3,
     handler: () =>
       import('@/lib/server/domains/conversation/spam-retention-queue').then(
         (m) => m.runSpamRetention
+      ),
+  },
+  {
+    // Verification is a claim about the present that only a schedule can keep
+    // making. A customer's ownership record, DKIM CNAMEs or MAIL FROM MX can
+    // disappear at any time, and every one of those failures is silent at the
+    // provider: mail keeps leaving, less and less able to prove who sent it.
+    // This demotes the row, which drops the workspace back to the platform
+    // sender rather than letting it keep signing on one leg.
+    //
+    // Daily, and offset from the other daily sweeps: it is bounded by outbound
+    // DNS and provider calls rather than by rows, so it should not share a
+    // minute with the passes that are bounded by the database.
+    name: 'sending-domain-recheck',
+    cron: '20 6 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/channel-accounts/sending-domain-recheck-queue').then(
+        (m) => m.runSendingDomainRecheck
       ),
   },
   {
@@ -264,7 +290,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/event-dispatch-queue').then((m) => m.runEventDispatch),
   },
   {
-    // Was `{segment-evaluation}`. Its schedules are rows in the tenant's own
+    // Was `{segment-evaluation}`. Its schedules are rows in the workspace's own
     // `segments` table, so they are derived per tick rather than registered.
     name: 'segment-evaluation',
     concurrency: 2,

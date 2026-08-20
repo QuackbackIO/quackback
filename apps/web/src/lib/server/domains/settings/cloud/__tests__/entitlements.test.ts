@@ -19,7 +19,7 @@ import { buildRefusal, isEntitled } from '../entitlements'
 const hoisted = vi.hoisted(() => ({ mockGetWorkspaceSettings: vi.fn() }))
 
 vi.mock('../../settings.service', () => ({
-  getTenantSettings: hoisted.mockGetWorkspaceSettings,
+  getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
 }))
 
 function cloud(overrides: Partial<CloudConfig>): CloudConfig {

@@ -2,7 +2,7 @@
  * The rate-bucket wrapper's contract with its callers: pass counts through, and
  * **fail open** when the store is unreachable.
  *
- * The window arithmetic, the atomicity of the increment and the tenant
+ * The window arithmetic, the atomicity of the increment and the workspace
  * discriminator are properties of the statement, and live in
  * `kv/__tests__/pg-kv-semantics.db.test.ts` against a real server. What this
  * file pins is the wrapper — specifically the direction of its failure, because

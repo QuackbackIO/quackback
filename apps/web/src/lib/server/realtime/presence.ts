@@ -1,6 +1,6 @@
 /**
- * Conversation presence, backed by the tenant's Postgres database so it works
- * across replicas.
+ * Conversation presence, backed by the workspace's Postgres database so it works
+ * across replicas (SAAS-HOSTING-STACK.md §7.4).
  *
  * Used to gate offline notifications and offline re-queue: a principal is online
  * while any of their SSE streams is live. Each stream is a row scored by its
@@ -25,24 +25,24 @@
  *
  * ## Cost
  *
- * The migration's expected cost here was a write per live stream every 20s,
+ * This is §7.4's second named regression: a write per live stream every 20s,
  * which Redis absorbed for free. It is now ONE statement per heartbeat where
  * Redis issued three commands (ZADD, EXPIRE, ZADD). The measurement is in
  * `lib/server/kv/KV.md`.
  *
- * ## Tenant isolation
+ * ## Workspace isolation
  *
  * `listOnlineAgentIds()` feeds conversation routing, so a foreign principal id
  * in its result would assign a conversation to someone who cannot see it. That
  * cannot happen here for two independent reasons: under pooled tenancy the rows
- * live in the tenant's own database, and every statement below additionally
- * filters `tenant_id = currentTenantNamespace()` — the same value that formed
+ * live in the workspace's own database, and every statement below additionally
+ * filters `workspace_key = currentWorkspaceNamespace()` — the same value that formed
  * the Redis key prefix.
  */
 import { sql } from 'drizzle-orm'
 import { db, principal, eq, and, inArray } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
-import { currentTenantNamespace } from '@/lib/server/tenancy/tenant-keyed'
+import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
 import type { PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
@@ -63,14 +63,14 @@ async function writePresent(
   await db.execute(sql`
     WITH pruned AS (
       DELETE FROM presence_stream
-      WHERE tenant_id = ${currentTenantNamespace()}
+      WHERE workspace_key = ${currentWorkspaceNamespace()}
         AND principal_id = ${principalId}
         AND stream_id <> ${streamId}
         AND heartbeat_at <= now() - make_interval(secs => ${PRESENCE_TTL_SECONDS})
     )
-    INSERT INTO presence_stream (tenant_id, principal_id, stream_id, is_agent, heartbeat_at)
-    VALUES (${currentTenantNamespace()}, ${principalId}, ${streamId}, ${isAgent}, now())
-    ON CONFLICT (tenant_id, principal_id, stream_id) DO UPDATE
+    INSERT INTO presence_stream (workspace_key, principal_id, stream_id, is_agent, heartbeat_at)
+    VALUES (${currentWorkspaceNamespace()}, ${principalId}, ${streamId}, ${isAgent}, now())
+    ON CONFLICT (workspace_key, principal_id, stream_id) DO UPDATE
       SET heartbeat_at = now(), is_agent = EXCLUDED.is_agent
   `)
 }
@@ -120,7 +120,7 @@ export async function refreshPresence(
  * been re-queued, silently, and only under load.
  *
  * The fix is the thing Redis was giving away for free: serialization. A
- * transaction-scoped advisory lock keyed on (tenant, principal) makes the
+ * transaction-scoped advisory lock keyed on (workspace, principal) makes the
  * concurrent teardowns queue, and because READ COMMITTED takes a **fresh
  * snapshot per statement**, the count that follows the lock sees the
  * predecessors' committed deletes. Exactly one caller finds nothing left.
@@ -146,10 +146,10 @@ export async function clearPresence(
   // callers pair it with markPresent/refreshPresence and dropping it there would
   // be a wider change than this piece owns.
   void isAgent
-  const namespace = currentTenantNamespace()
+  const namespace = currentWorkspaceNamespace()
   try {
     return await db.transaction(async (tx) => {
-      // Keyed on tenant AND principal: two workspaces closing a stream for
+      // Keyed on workspace AND principal: two workspaces closing a stream for
       // coincidentally-equal principal ids must not serialize against each
       // other. A hash collision costs only extra queueing.
       await tx.execute(sql`
@@ -159,7 +159,7 @@ export async function clearPresence(
       `)
       await tx.execute(sql`
         DELETE FROM presence_stream
-        WHERE tenant_id = ${namespace}
+        WHERE workspace_key = ${namespace}
           AND principal_id = ${principalId}
           AND (
             stream_id = ${streamId}
@@ -169,7 +169,7 @@ export async function clearPresence(
       const result = await tx.execute(sql`
         SELECT NOT EXISTS (
           SELECT 1 FROM presence_stream
-          WHERE tenant_id = ${namespace}
+          WHERE workspace_key = ${namespace}
             AND principal_id = ${principalId}
             AND heartbeat_at > now() - make_interval(secs => ${PRESENCE_TTL_SECONDS})
         ) AS went_offline
@@ -188,7 +188,7 @@ export async function isPrincipalOnline(principalId: PrincipalId): Promise<boole
     const result = await db.execute(sql`
       SELECT EXISTS (
         SELECT 1 FROM presence_stream
-        WHERE tenant_id = ${currentTenantNamespace()}
+        WHERE workspace_key = ${currentWorkspaceNamespace()}
           AND principal_id = ${principalId}
           AND heartbeat_at > now() - make_interval(secs => ${PRESENCE_TTL_SECONDS})
       ) AS online
@@ -209,7 +209,7 @@ export async function isAnyAgentOnline(): Promise<boolean> {
     const result = await db.execute(sql`
       SELECT EXISTS (
         SELECT 1 FROM presence_stream
-        WHERE tenant_id = ${currentTenantNamespace()}
+        WHERE workspace_key = ${currentWorkspaceNamespace()}
           AND is_agent
           AND heartbeat_at > now() - make_interval(secs => ${PRESENCE_TTL_SECONDS})
       ) AS online
@@ -230,7 +230,7 @@ export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
   try {
     const result = await db.execute(sql`
       SELECT DISTINCT principal_id FROM presence_stream
-      WHERE tenant_id = ${currentTenantNamespace()}
+      WHERE workspace_key = ${currentWorkspaceNamespace()}
         AND is_agent
         AND heartbeat_at > now() - make_interval(secs => ${PRESENCE_TTL_SECONDS})
     `)

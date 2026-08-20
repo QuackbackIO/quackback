@@ -38,18 +38,19 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-// The tenant assertion reads the ambient scope. A settable stub lets a test
+// The workspace assertion reads the ambient scope. A settable stub lets a test
 // stand a row's stamp and the scope's identity against each other, which is the
 // only way to exercise the refusal.
-let currentTenantId: string | null = null
-vi.mock('@/lib/server/tenancy/tenant-context', () => ({
-  getCurrentTenant: () => (currentTenantId === null ? null : { tenantId: currentTenantId }),
+let currentWorkspaceKey: string | null = null
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () =>
+    currentWorkspaceKey === null ? null : { workspaceKey: currentWorkspaceKey },
 }))
 
 import {
   __resetAfterCommitForTests,
   onDurableWorkCommitted,
-} from '@/lib/server/tenancy/after-commit'
+} from '@/lib/server/workspaces/after-commit'
 
 import {
   cancelJob,
@@ -86,7 +87,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  currentTenantId = null
+  currentWorkspaceKey = null
   unsubCommit?.()
   __resetAfterCommitForTests()
 })
@@ -101,9 +102,11 @@ const LEASE = 30_000
 describe('enqueue', () => {
   it('writes a runnable row', async () => {
     const q = queue('enqueue')
+    currentWorkspaceKey = 'ws_enqueue'
     const { jobId, inserted } = await enqueueJob({ queue: q, payload: { hello: 'world' } })
     expect(inserted).toBe(true)
     expect(jobId).toMatch(/^job_/)
+    expect(signaled).toEqual(['ws_enqueue'])
 
     const rows = await rowsFor(q)
     expect(rows).toHaveLength(1)
@@ -357,44 +360,44 @@ describe('the fencing token', () => {
   })
 })
 
-describe('the tenant assertion', () => {
-  it('stamps the enqueueing tenant and accepts a matching claim', async () => {
-    const q = queue('tenant-match')
-    currentTenantId = 'inst_alpha'
+describe('the workspace assertion', () => {
+  it('stamps the enqueueing workspace and accepts a matching claim', async () => {
+    const q = queue('workspace-match')
+    currentWorkspaceKey = 'inst_alpha'
     await enqueueJob({ queue: q })
-    expect((await rowsFor(q))[0].tenant_id).toBe('inst_alpha')
+    expect((await rowsFor(q))[0].workspace_key).toBe('inst_alpha')
 
     const claimed = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
     expect(claimed).toHaveLength(1)
-    expect(claimed[0].tenantId).toBe('inst_alpha')
+    expect(claimed[0].workspaceKey).toBe('inst_alpha')
   })
 
-  it('refuses a row stamped for another tenant, terminally, without returning it', async () => {
-    const q = queue('tenant-mismatch')
-    currentTenantId = 'inst_alpha'
+  it('refuses a row stamped for another workspace, terminally, without returning it', async () => {
+    const q = queue('workspace-mismatch')
+    currentWorkspaceKey = 'inst_alpha'
     await enqueueJob({ queue: q })
 
     // The row is now in THIS database claiming to belong to somebody else — the
     // shape a mis-routed write or a restored dump produces. Running it would be
-    // a cross-tenant execution.
-    await testSql()`UPDATE job_queue SET tenant_id = 'inst_bravo' WHERE queue = ${q}`
+    // a cross-workspace execution.
+    await testSql()`UPDATE job_queue SET workspace_key = 'inst_bravo' WHERE queue = ${q}`
 
     const claimed = await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })
     expect(claimed).toHaveLength(0)
 
     const [row] = await rowsFor(q)
     expect(row.status).toBe('failed')
-    expect(row.last_error).toMatch(/tenant mismatch/)
+    expect(row.last_error).toMatch(/workspace mismatch/)
     // It stays refused rather than becoming claimable on the next pass.
     expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
   })
 
-  it('refuses a tenant-stamped row when no tenant scope is open', async () => {
-    const q = queue('tenant-unscoped')
-    currentTenantId = 'inst_alpha'
+  it('refuses a workspace-stamped row when no workspace scope is open', async () => {
+    const q = queue('workspace-unscoped')
+    currentWorkspaceKey = 'inst_alpha'
     await enqueueJob({ queue: q })
 
-    currentTenantId = null
+    currentWorkspaceKey = null
     expect(await claimJobs({ specs: [{ queue: q, limit: 5, leaseMs: LEASE }] })).toHaveLength(0)
     expect((await rowsFor(q))[0].status).toBe('failed')
   })
@@ -652,6 +655,18 @@ describe('cancel and lookup', () => {
     expect(await cancelJob(q, 'r')).toBe(0)
     expect((await rowsFor(q))[0].status).toBe('running')
   })
+
+  it('can restrict cancel to terminal rows so an in-flight job is left alone', async () => {
+    const q = queue('cancel-terminal-only')
+    await enqueueJob({ queue: q, dedupeKey: 'k' })
+    expect(await cancelJob(q, 'k', { terminalOnly: true })).toBe(0)
+    expect((await rowsFor(q))[0].status).toBe('pending')
+
+    const [job] = await claimJobs({ specs: [{ queue: q, limit: 1, leaseMs: LEASE }] })
+    await completeJob(job)
+    expect(await cancelJob(q, 'k', { terminalOnly: true })).toBe(1)
+    expect(await rowsFor(q)).toHaveLength(0)
+  })
 })
 
 describe('per-queue retention', () => {
@@ -683,8 +698,8 @@ describe('per-queue retention', () => {
 describe('transactional enqueue', () => {
   it('commits the job with the caller transaction and signals only after commit', async () => {
     const q = queue('tx-commit')
-    currentTenantId = 'tenant-tx'
-    const { wrapDbTransaction } = await import('@/lib/server/tenancy/after-commit')
+    currentWorkspaceKey = 'ws-tx'
+    const { wrapDbTransaction } = await import('@/lib/server/workspaces/after-commit')
     const transaction = wrapDbTransaction(testDb().transaction.bind(testDb()))
     await transaction(async (tx) => {
       const { inserted } = await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
@@ -692,7 +707,7 @@ describe('transactional enqueue', () => {
       expect(signaled).toEqual([])
     })
     expect((await rowsFor(q)).length).toBe(1)
-    expect(signaled).toEqual(['tenant-tx'])
+    expect(signaled).toEqual(['ws-tx'])
   })
 
   it('leaves no row when the caller transaction rolls back', async () => {

@@ -1,11 +1,21 @@
 /**
  * The lease primitive itself, with the table it operates on as a parameter.
  *
- * `job-queue.ts` is the consumer today, against the tenant's own `job_queue`
- * table. The statements live here, keyed by table, so a second queue-shaped
- * consumer shares them rather than reimplementing them. Two consumers could
- * never share a *function* — they would run against different databases with
- * different row shapes. They can share the statements, and the statements
+ * `SAAS-HOSTING-STACK.md` §7.2 describes one primitive and §10.3 names its
+ * second consumer explicitly: *"Claiming: `FOR UPDATE SKIP LOCKED` + lease —
+ * the same primitive §7.2 already requires. Fleet migration is its second
+ * consumer, not a new subsystem."* This module is what makes that literally
+ * true rather than aspirationally true.
+ *
+ * Two consumers today:
+ *
+ * | Consumer | Table | Database |
+ * | --- | --- | --- |
+ * | `job-queue.ts` | `job_queue` | the workspace's own |
+ * | `fleet/schema-state.ts` | `cp_workspace_schema_state` | the control plane's |
+ *
+ * They cannot share a *function*, because they run against different databases
+ * with different row shapes. They can share the statements, and the statements
  * are where every load-bearing property lives:
  *
  * 1. **`attempts` is incremented by the CLAIM**, never by completion. A row
@@ -18,12 +28,12 @@
  *    that stalls past its lease, is reaped, then resumes and reports success
  *    updates zero rows and is told its lease was lost.
  *
- * Those three were proved on `job_queue` in a one-off kill-matrix run — 70
- * SIGKILLs at uniformly random instants and 4 concurrent reapers against 4
- * concurrent drainers, zero double executions, with a positive control
- * (`maxAttempts: 3`) establishing that the harness could see a double when
- * there is one. **Because the statements now live here, that proof covers this
- * module**, and breaking anything below turns `__tests__/job-queue.test.ts`
+ * Those three were proved on `job_queue` — 70 SIGKILLs at uniformly random
+ * instants and 4 concurrent reapers against 4 concurrent drainers, zero double
+ * executions, with a positive control (`maxAttempts: 3`) establishing that the
+ * harness can see a double when there is one. **Because the statements now live
+ * here, that proof covers this module**, and breaking anything below turns
+ * `__tests__/job-queue.test.ts` and `scripts/job-lease-proof.ts kill-matrix`
  * red. A second implementation would have inherited none of it.
  *
  * ## What a consumer must provide
@@ -45,6 +55,24 @@ import { sql, type SQL } from 'drizzle-orm'
 /** Reason text the reaper writes, so both consumers say the same thing. */
 export const REAP_REQUEUED_REASON = 'lease expired; requeued (attempt '
 export const REAP_TERMINAL_REASON = 'lease expired with no attempts remaining; not retried'
+
+export interface LeaseClaimInput {
+  /** Table holding the leased rows. A module constant, never input. */
+  table: string
+  /**
+   * Extra predicate ANDed onto the three universal ones. The fleet migrator
+   * narrows by cohort and by whether the workspace's recorded version already
+   * matches its target.
+   */
+  where?: SQL
+  limit: number
+  /** How long the claim holds the row before the reaper may take it back. */
+  leaseMs: number
+  /** Stable per-process identity, written to `locked_by`. */
+  workerId: string
+  /** Columns to return, qualified with the `j` alias. */
+  returning: SQL
+}
 
 export interface LeaseClaimGroupInput {
   /** Table holding the leased rows. A module constant, never input. */
@@ -100,6 +128,36 @@ function leaseStamp(table: string, lockedUntil: SQL, workerId: string, returning
     FROM claimable c
     WHERE j.id = c.id
     RETURNING ${returning}
+  `
+}
+
+/**
+ * Claim up to `limit` runnable rows, in one short transaction.
+ *
+ * `FOR UPDATE SKIP LOCKED` inside the CTE is what makes two claimers take
+ * disjoint sets rather than one blocking on the other; the row lock is released
+ * the instant this statement's transaction commits, which is exactly why the
+ * `locked_until` lease exists on top of it.
+ */
+export function leaseClaimSql(input: LeaseClaimInput): SQL {
+  const table = sql.identifier(input.table)
+  const extra = input.where ? sql` AND (${input.where})` : sql``
+  return sql`
+    WITH claimable AS (
+      SELECT id
+      FROM ${table}
+      WHERE ${CLAIMABLE}
+        ${extra}
+      ORDER BY run_at, id
+      FOR UPDATE SKIP LOCKED
+      LIMIT ${input.limit}
+    )
+    ${leaseStamp(
+      input.table,
+      sql`now() + make_interval(secs => ${input.leaseMs / 1000})`,
+      input.workerId,
+      input.returning
+    )}
   `
 }
 
@@ -263,7 +321,7 @@ export function leaseTerminateSql(table: string, handle: LeaseHandle, reason: st
  * `max_attempts = 1` row that was claimed has `attempts = 1`, so it lands in
  * the terminal branch and is never handed back — which is what stops a process
  * death from turning an at-most-once import into a double import, or a
- * half-finished tenant migration into an unbounded retry loop.
+ * half-finished workspace migration into an unbounded retry loop.
  *
  * `RETURNING` names the columns both consumers log. `extraReturning` appends a
  * consumer's own columns — widening the one reaper rather than writing a
@@ -276,7 +334,7 @@ export function leaseReapSql(table: string, extraReturning?: SQL): SQL {
   // `locked_by` is read in a CTE rather than from `RETURNING`, because
   // `RETURNING` reports POST-update values and this statement sets `locked_by`
   // to NULL — so the log line naming who lost the lease always said `null`.
-  // Measured on a real reaped tenant, not inferred. The outer WHERE repeats the
+  // Measured on a real reaped workspace, not inferred. The outer WHERE repeats the
   // predicate so the CTE's snapshot cannot let a second reaper act on a row the
   // first has already adjudicated.
   return sql`

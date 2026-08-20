@@ -123,7 +123,7 @@ export const Route = createFileRoute('/widget/')({
     // parallel batch — document TTFB is the slowest branch, not the sum.
     //
     // SSR-complete Home: seed everything its sections read so the first paint
-    // never pops content in after render. All of these are public/tenant-global
+    // never pops content in after render. All of these are public/workspace-global
     // except the conversation summary, which is correct for cookie-authed
     // visitors here; Bearer-token visitors refetch it client-side on mount.
     const emptyPortalData = {
@@ -134,7 +134,7 @@ export const Route = createFileRoute('/widget/')({
       boardPermissions: {} as Record<string, { canSubmit: boolean; canVote: boolean }>,
     }
     let topArticles: { slug: string; title: string }[] = []
-    // Teammate-avatar cluster for the Home header. Tenant-global and public-safe
+    // Teammate-avatar cluster for the Home header. Workspace-global and public-safe
     // (name + image only), so the anonymous SSR baseline is correct for everyone.
     let team: { name: string; avatarUrl: string | null }[] = []
     const [portalData, { getBaseUrl }] = await Promise.all([
@@ -148,7 +148,7 @@ export const Route = createFileRoute('/widget/')({
           )
         : Promise.resolve(emptyPortalData),
       import('@/lib/server/config'),
-      // Presence is tenant-global (not visitor-specific), so the anonymous SSR
+      // Presence is workspace-global (not visitor-specific), so the anonymous SSR
       // baseline value is exactly correct for every visitor — seed the shared
       // presence query so the Messenger online/offline strip paints right
       // immediately instead of flashing "away" until the first client poll.

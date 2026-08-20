@@ -17,7 +17,7 @@
  * including a worker process that has not loaded the full application config.
  */
 import { logger } from '@/lib/server/logger'
-import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import {
   claimJobs,
   completeJob,
@@ -128,7 +128,7 @@ export function runnerConfig(): RunnerConfig {
 const handlerMemo = new Map<string, JobHandler>()
 
 export async function primeJobHandlers(): Promise<void> {
-  if (getCurrentTenant()) {
+  if (getCurrentWorkspace()) {
     // Priming is the thing that must happen OUTSIDE a scope. If a caller has one
     // open, priming here would defeat its own purpose silently.
     log.error(
@@ -157,7 +157,7 @@ export function resetJobHandlers(): void {
 async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
   const memo = handlerMemo.get(def.name)
   if (memo) return memo
-  if (getCurrentTenant()) {
+  if (getCurrentWorkspace()) {
     log.warn(
       { queue: def.name },
       'job handler module imported inside a tenant scope — prime handlers at tier start'

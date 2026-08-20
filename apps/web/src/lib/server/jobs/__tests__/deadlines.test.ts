@@ -1,19 +1,26 @@
 /**
  * The deadline gate, and the two ways it can be wrong.
  *
- * It gates `* * * * *` on two sweeps, so it carries the whole risk of that
- * change: too lazy and an SLA breach goes unnoticed, which is worse than the
- * no-op ticks it saves. Both directions are asserted here.
+ * It replaced `* * * * *` on two sweeps, so it carries the whole risk of that
+ * change: too eager and the compute never suspends (which is the defect it
+ * exists to remove), too lazy and an SLA breach goes unnoticed (which is worse
+ * than the defect). Both directions are asserted here.
+ *
+ * The rounding case is the one that was found by measurement rather than by
+ * reading. A tier woken at the exact deadline finds the cron slot bracketing
+ * that instant already spent, enqueues nothing, and recomputes a deadline now in
+ * the past — a reconnect loop that no enqueue counter can see.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  __resetTenantDeadlinesForTests,
+  __resetWorkspaceDeadlinesForTests,
   dueWithin,
+  earliestWorkspaceDeadline,
   queueDeadline,
-  registerTenantDeadline,
+  registerWorkspaceDeadline,
 } from '../deadlines'
 
-afterEach(() => __resetTenantDeadlinesForTests())
+afterEach(() => __resetWorkspaceDeadlinesForTests())
 
 const at = (iso: string) => new Date(iso)
 
@@ -27,32 +34,60 @@ describe('the cron gate', () => {
 
   it('suppresses a tick only when nothing is due inside the slot', async () => {
     const now = at('2026-08-10T12:00:00.000Z').getTime()
-    registerTenantDeadline('q', async () => at('2026-08-10T12:00:30.000Z'))
+    registerWorkspaceDeadline('q', async () => at('2026-08-10T12:00:30.000Z'))
     expect(await dueWithin('q', 60_000, now)).toBe(true)
 
-    __resetTenantDeadlinesForTests()
-    registerTenantDeadline('q', async () => at('2026-08-10T12:05:00.000Z'))
+    __resetWorkspaceDeadlinesForTests()
+    registerWorkspaceDeadline('q', async () => at('2026-08-10T12:05:00.000Z'))
     expect(await dueWithin('q', 60_000, now)).toBe(false)
   })
 
   it('runs a queue whose deadline has already passed', async () => {
     const now = at('2026-08-10T12:00:00.000Z').getTime()
-    registerTenantDeadline('q', async () => at('2026-08-10T11:00:00.000Z'))
+    registerWorkspaceDeadline('q', async () => at('2026-08-10T11:00:00.000Z'))
     expect(await dueWithin('q', 60_000, now)).toBe(true)
   })
 
   it('treats a provider that throws as due now, never as nothing to do', async () => {
     // The asymmetry that matters: a broken provider must cost a wasted tick, not
     // a breach nobody records.
-    registerTenantDeadline('q', async () => {
+    registerWorkspaceDeadline('q', async () => {
       throw new Error('index missing')
     })
     expect(await dueWithin('q', 60_000)).toBe(true)
   })
 
-  it('reports nothing due when a tenant has no clock running', async () => {
-    registerTenantDeadline('q', async () => null)
+  it('reports nothing due when a workspace has no clock running', async () => {
+    registerWorkspaceDeadline('q', async () => null)
     expect(await dueWithin('q', 60_000)).toBe(false)
+    expect(await earliestWorkspaceDeadline()).toBeNull()
+  })
+})
+
+describe('the wake instant a detaching tier records', () => {
+  it('rounds a deadline up to a slot the schedule can actually spend', async () => {
+    // 12:00:30 is inside the 12:00 slot, which the tick that ran at 12:00:00
+    // already spent. Waking at 12:00:30 would find nothing to enqueue and go
+    // straight back to sleep on a deadline now in the past.
+    registerWorkspaceDeadline('q', async () => at('2026-08-10T12:00:30.000Z'))
+    const wake = await earliestWorkspaceDeadline(at('2026-08-10T12:00:05.000Z').getTime())
+    expect(wake?.toISOString()).toBe('2026-08-10T12:01:00.000Z')
+  })
+
+  it('never returns an instant in the past, however stale the deadline', async () => {
+    registerWorkspaceDeadline('q', async () => at('2026-08-10T09:00:00.000Z'))
+    const now = at('2026-08-10T12:00:05.000Z').getTime()
+    const wake = await earliestWorkspaceDeadline(now)
+    expect(wake!.getTime()).toBeGreaterThan(now)
+    expect(wake?.toISOString()).toBe('2026-08-10T12:01:00.000Z')
+  })
+
+  it('takes the earliest across every queue, not the first registered', async () => {
+    registerWorkspaceDeadline('late', async () => at('2026-08-10T18:00:00.000Z'))
+    registerWorkspaceDeadline('early', async () => at('2026-08-10T13:00:00.000Z'))
+    registerWorkspaceDeadline('none', async () => null)
+    const wake = await earliestWorkspaceDeadline(at('2026-08-10T12:00:00.000Z').getTime())
+    expect(wake?.toISOString()).toBe('2026-08-10T13:01:00.000Z')
   })
 })
 
@@ -66,7 +101,7 @@ describe('the cron gate', () => {
  * because a schedule with no memory is a schedule that has never run.
  *
  * Harmless while a gate flipped for a minute at a time. Fatal once a gate can
- * stay shut for hours: measured against a real tenant, a snooze due in ninety
+ * stay shut for hours: measured against a real workspace, a snooze due in ninety
  * seconds was never swept at all, because every wake was a first pass.
  */
 describe('a gated-off schedule keeps its slot memory', () => {

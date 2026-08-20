@@ -981,7 +981,7 @@ export const INTEGRATION_SETTINGS: Record<string, IntegrationSettingsEntry> = {
         'Connect Microsoft Teams to receive notifications when users submit feedback, when statuses change, and when comments are added.',
       steps: [
         <p key="1">
-          Register Quackback in your Azure AD tenant and add the Teams bot permissions.
+          Register Quackback in your Azure AD workspace and add the Teams bot permissions.
         </p>,
         <p key="2">
           Click <span className="font-medium text-foreground">Connect</span> to authorize Quackback

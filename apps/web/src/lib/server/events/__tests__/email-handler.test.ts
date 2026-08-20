@@ -10,11 +10,32 @@ vi.mock('@quackback/email', () => ({
   sendNoteMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
+/**
+ * The sending-identity guard, re-asked at SEND time.
+ *
+ * The target builder resolved a From when the event was enqueued; this hook
+ * runs after the queue, which can be minutes later and is certainly after a
+ * scheduled re-check could have un-verified the domain. Mocked here so this
+ * suite can pin THAT the guard runs and that its answer is what goes out — the
+ * rule it applies has its own tests.
+ */
+const permittedSendingIdentity = vi.fn<(from: string | null) => Promise<string | null>>(
+  async (from) => from
+)
+vi.mock('@/lib/server/domains/channel-accounts/outbound-identity', () => ({
+  permittedSendingIdentity: (from: string | null) => permittedSendingIdentity(from),
+}))
+
 // Threading helpers are pure but read env-derived domains; force a known domain
 // so the created-root Message-ID assertion is deterministic.
 vi.stubEnv('EMAIL_FROM', 'Support <support@acme.test>')
 
 import { emailHook } from '../handlers/email'
+// The real error class, from the transport module rather than the mocked
+// package entry: a hand-written stand-in for it stops tracking the shape the
+// moment the shape changes, which is how the classification regression this
+// guards against went unnoticed.
+import { SesEmailError } from '@quackback/email/ses'
 import {
   sendStatusChangeEmail,
   sendNewCommentEmail,
@@ -182,8 +203,21 @@ describe('emailHook', () => {
   })
 
   describe('error handling', () => {
+    /**
+     * The error the transport really throws, not an approximation of it. A
+     * connection that is refused reaches the send path already wrapped: the
+     * socket code survives on `code`, there is no HTTP status, and the wrapper
+     * declares itself retryable. This hook reads `code`, so a transport that
+     * dropped it in favour of the SDK's generic error name would make a network
+     * blip look like a permanent failure and kill the job.
+     */
     it('returns failure with shouldRetry for network errors', async () => {
-      const error = Object.assign(new Error('Connection refused'), { code: 'ECONNREFUSED' })
+      const error = new SesEmailError(
+        'SES email send failed: connect ECONNREFUSED 127.0.0.1:443',
+        null,
+        'ECONNREFUSED',
+        true
+      )
       mockStatusChangeEmail.mockRejectedValue(error)
 
       const result = await emailHook.run(statusChangedEvent, baseTarget, {
@@ -193,8 +227,28 @@ describe('emailHook', () => {
       })
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('Connection refused')
+      expect(result.error).toBe('SES email send failed: connect ECONNREFUSED 127.0.0.1:443')
       expect(result.shouldRetry).toBe(true)
+    })
+
+    /**
+     * The same failure as it arrives if the transport keeps only the SDK's
+     * error name. Nothing downstream can tell this from a rejected message, so
+     * the job dies on the first blip — which is what this hook must never do
+     * with a recoverable one.
+     */
+    it('would not retry the same failure stripped of its socket code', async () => {
+      mockStatusChangeEmail.mockRejectedValue(
+        new SesEmailError('SES email send failed: connect ECONNREFUSED', null, 'Error', false)
+      )
+
+      const result = await emailHook.run(statusChangedEvent, baseTarget, {
+        ...baseConfig,
+        previousStatus: 'open',
+        newStatus: 'closed',
+      })
+
+      expect(result.shouldRetry).toBe(false)
     })
 
     it('returns failure without retry for non-retryable errors', async () => {
@@ -305,6 +359,7 @@ describe('emailHook — ticket + SLA lifecycle', () => {
   beforeEach(() => {
     mockTicketEventEmail.mockClear()
     mockTicketEventEmail.mockResolvedValue({ sent: true })
+    permittedSendingIdentity.mockReset().mockImplementation(async (from) => from)
   })
 
   it.each([
@@ -359,6 +414,34 @@ describe('emailHook — ticket + SLA lifecycle', () => {
     expect(args.messageId).toBeUndefined()
     expect(args.inReplyTo).toBeUndefined()
     expect(args.references).toBeUndefined()
+  })
+
+  it('re-asks the guard at send time, and sends as the answer it gives', async () => {
+    // Not the address the payload carried. Between enqueue and send, a domain
+    // can stop being verified — the scheduled re-check demotes one whose
+    // records have gone — and the send is the moment the claim is made.
+    permittedSendingIdentity.mockResolvedValue('support@tenant-a.example')
+    await emailHook.run(
+      evt('ticket.created'),
+      baseTarget,
+      ticketConfig({ kind: 'created', from: 'stale@tenant-a.example' })
+    )
+    expect(permittedSendingIdentity).toHaveBeenCalledWith('stale@tenant-a.example')
+    expect(mockTicketEventEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'support@tenant-a.example' })
+    )
+  })
+
+  it('falls back to the platform sender when the guard refuses', async () => {
+    // A refusal is a fallback, not a dropped mail: the message still goes, from
+    // an address that is honestly ours.
+    permittedSendingIdentity.mockResolvedValue(null)
+    await emailHook.run(
+      evt('ticket.created'),
+      baseTarget,
+      ticketConfig({ kind: 'created', from: 'support@tenant-a.example' })
+    )
+    expect(mockTicketEventEmail).toHaveBeenCalledWith(expect.objectContaining({ from: undefined }))
   })
 
   it('still rejects a genuinely unsupported type', async () => {

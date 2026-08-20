@@ -10,6 +10,7 @@ import { z } from 'zod'
 // emit.ts itself only imports table objects + `sql` from here (it takes the tx
 // as a parameter), so those still come through from the original module.
 vi.mock('@/lib/server/db', async (importOriginal) => {
+  // oxlint-disable-next-line no-restricted-imports -- sanctioned test fixture, same as db-test-fixture.ts
   const { createDb } = await import('@quackback/db/client')
   const url =
     process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
@@ -18,6 +19,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     db: createDb(url, { max: 5, prepare: false }),
   }
 })
+
+vi.mock('@/lib/server/workspaces/workspace-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/workspaces/workspace-context')>()),
+  getCurrentWorkspace: () => ({ workspaceKey: 'ws_emit' }),
+}))
 
 import { db, events, auditLog, eq, and, sql } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
@@ -65,7 +71,7 @@ describe('emit()', () => {
         readFileSync(
           path.resolve(
             __dirname,
-            '../../../../../../../packages/db/drizzle/0253_event_dispatch_owner.sql'
+            '../../../../../../../packages/db/drizzle/0269_event_dispatch_owner.sql'
           ),
           'utf8'
         )
@@ -74,7 +80,7 @@ describe('emit()', () => {
         readFileSync(
           path.resolve(
             __dirname,
-            '../../../../../../../packages/db/drizzle/0254_event_dispatch_owner_default_job.sql'
+            '../../../../../../../packages/db/drizzle/0270_event_dispatch_owner_default_job.sql'
           ),
           'utf8'
         )

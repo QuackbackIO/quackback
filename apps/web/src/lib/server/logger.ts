@@ -5,7 +5,7 @@
  * trace-context mixin, and the AsyncLocalStorage request context). This wrapper
  * only fixes the service identity to "quackback-web"; because the context lives
  * in the shared package, logs from @quackback/db and @quackback/email emitted
- * within a request inherit the same request_id/tenant_id automatically.
+ * within a request inherit the same request_id/workspace_key automatically.
  *
  * Server-only: the Vite config aliases this module to logger.client-stub.ts for
  * the client environment so pino + node:async_hooks never enter the browser.

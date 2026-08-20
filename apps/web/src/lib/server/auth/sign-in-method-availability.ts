@@ -152,10 +152,10 @@ export async function checkIsOnlyWorkingSignInMethod(
    *  (e.g. the upsert path), avoiding a second `listIdentityProviders()`. */
   knownProviders?: IdentityProvider[]
 ): Promise<boolean> {
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const tenant = await getTenantSettings()
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const workspace = await getWorkspaceSettings()
   const inputs = await gatherWorkingMethodInputs(
-    (tenant?.authConfig?.oauth ?? {}) as Record<string, boolean | undefined>,
+    (workspace?.authConfig?.oauth ?? {}) as Record<string, boolean | undefined>,
     knownProviders
   )
   return isOnlyWorkingSignInMethod({ ...inputs, targetIdpId })
