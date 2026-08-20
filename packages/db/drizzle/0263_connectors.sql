@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS "connectors" (
   CONSTRAINT "connectors_status_check" CHECK ("status" IN ('connected', 'error', 'disabled'))
 );
 --> statement-breakpoint
+-- @replay: guarded-by IF NOT EXISTS on pg_constraint.conname = 'connectors_created_by_principal_id_principal_id_fk'; the block's
+-- only action is adding that constraint, so a second run does nothing.
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -61,6 +63,8 @@ CREATE TABLE IF NOT EXISTS "agent_skills" (
   CONSTRAINT "agent_skills_instructions_length_check" CHECK (char_length("instructions") BETWEEN 1 AND 8000)
 );
 --> statement-breakpoint
+-- @replay: guarded-by IF NOT EXISTS on pg_constraint.conname = 'agent_skills_created_by_principal_id_principal_id_fk'; the block's
+-- only action is adding that constraint, so a second run does nothing.
 DO $$
 BEGIN
   IF NOT EXISTS (

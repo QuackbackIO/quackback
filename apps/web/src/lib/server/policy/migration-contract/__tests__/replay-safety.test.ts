@@ -253,10 +253,28 @@ describe('the real corpus', () => {
     // The annotation is an escape hatch, so how many statements are through it
     // is a number worth watching. A second one is not forbidden — it just has
     // to be noticed and argued for here rather than accumulating quietly.
+    //
+    // 0263 (two blocks) and 0269 (one) are argued for on the same grounds as
+    // 0258: each is a `DO $$` whose body is guarded by
+    // `IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '<name>')`,
+    // and whose only action is adding the constraint of that exact name. The
+    // guard and the action name the same object, so a second run does nothing.
+    // A DO block is the only shape the scanner will accept a claim for, because
+    // it is the only one whose body it cannot read — the claim is about the
+    // guard, not a request to be trusted about a statement.
+    //
+    // They are annotated rather than left refused because their verdicts sit
+    // inside the fleet's gap-heal window: while they read as `mutates`, a heal
+    // of any hole below them is refused, which is the capability
+    // `migrator-gap-heal.test.ts` exercises.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
-    expect(vouching).toEqual(['0258_workspace_key_columns.sql'])
+    expect(vouching).toEqual([
+      '0258_workspace_key_columns.sql',
+      '0263_connectors.sql',
+      '0269_event_dispatch_owner.sql',
+    ])
   })
 
   it('0006 — a CTE INSERT — is caught as mutating', () => {

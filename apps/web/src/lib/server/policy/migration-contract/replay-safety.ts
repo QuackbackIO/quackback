@@ -305,6 +305,31 @@ const SAFE_SHAPES: { re: RegExp; why: string }[] = [
     re: /^ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?[^;]*?\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b/i,
     why: 'ADD COLUMN IF NOT EXISTS',
   },
+  {
+    // The constraint sibling of `DROP ... IF EXISTS` above, which cannot match
+    // it because this one starts with ALTER.
+    //
+    // Single-action only: the table name is followed immediately by the action
+    // and the statement ends there, so a compound
+    // `ALTER TABLE t DROP CONSTRAINT IF EXISTS a, ADD CONSTRAINT b ...` cannot
+    // be waved through on the strength of its safe half. Being too strict here
+    // costs a refusal, which is the safe direction; being too loose costs a
+    // replay against a live workspace.
+    re: /^ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?[^\s,;]+\s+DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+[^\s,;]+\s*;?$/i,
+    why: 'DROP CONSTRAINT IF EXISTS',
+  },
+  {
+    // A total overwrite in the same sense as COMMENT ON: the second run writes
+    // the value the first one left, so the catalogue does not move. Single
+    // action, and no comma after the value, for the reason given above — a
+    // default that genuinely contains one is refused rather than guessed at.
+    //
+    // The value itself is optional in the pattern because this runs on
+    // noise-stripped text, where a string literal has already been blanked:
+    // `SET DEFAULT 'job'` arrives here as `SET DEFAULT`.
+    re: /^ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?[^\s,;]+\s+ALTER\s+COLUMN\s+[^\s,;]+\s+SET\s+DEFAULT\b[^;,]*;?$/i,
+    why: 'ALTER COLUMN ... SET DEFAULT is a total overwrite',
+  },
   { re: /^COMMENT\s+ON\b/i, why: 'COMMENT ON is a total overwrite' },
   { re: /^SET\s+\w/i, why: 'SET has no persistent effect' },
   { re: /^SELECT\b(?![\s\S]*\bINTO\b)/i, why: 'read-only SELECT' },
