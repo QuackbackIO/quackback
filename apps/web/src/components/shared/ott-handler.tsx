@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import { authClient } from '@/lib/client/auth-client'
+import { recordPlgEvent } from '@/lib/client/plg-events'
 
 /**
  * Handles one-time token (OTT) session transfer from the widget to the portal.
@@ -11,12 +12,19 @@ import { authClient } from '@/lib/client/auth-client'
  * one-time token and appends it as `?ott=<token>` to the portal URL. This
  * component detects the param, verifies the token (which sets the session cookie),
  * strips the param from the URL, and reloads to pick up the new session.
+ * Dedicated `/auth/*` consume routes own their token; do not race them.
  */
+export function isPortalOttPath(pathname: string): boolean {
+  return !pathname.startsWith('/auth/')
+}
+
 export function OttHandler() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const searchStr = useRouterState({ select: (s) => s.location.searchStr })
   const processedRef = useRef<string | null>(null)
 
   useEffect(() => {
+    if (!isPortalOttPath(pathname)) return
     const params = new URLSearchParams(searchStr)
     const ott = params.get('ott')
     if (!ott || processedRef.current === ott) return
@@ -28,14 +36,15 @@ export function OttHandler() {
       const cleanUrl = window.location.pathname + (cleanSearch ? `?${cleanSearch}` : '')
 
       if (error) {
-        window.history.replaceState({}, '', cleanUrl)
+        window.location.replace('/admin/login?error=handoff_failed')
         return
       }
 
+      recordPlgEvent({ name: 'saas_handoff_consumed' })
       // Full reload to pick up the new session cookie in SSR
       window.location.replace(cleanUrl)
     })
-  }, [searchStr])
+  }, [pathname, searchStr])
 
   return null
 }

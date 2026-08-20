@@ -47,12 +47,13 @@ export function PlanNoticeBanner({ notice }: PlanNoticeBannerProps) {
       {view.actionUrl && (
         <a
           href={view.actionUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          {...(view.actionUrl.startsWith('/')
+            ? {}
+            : { target: '_blank', rel: 'noopener noreferrer' })}
           className="shrink-0 inline-flex items-center gap-1 text-primary font-medium hover:underline"
         >
           {view.actionLabel ?? 'Manage'}
-          <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+          {!view.actionUrl.startsWith('/') && <ArrowTopRightOnSquareIcon className="h-3 w-3" />}
         </a>
       )}
     </div>
