@@ -236,6 +236,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-settings.ts`::updateAssistantAgentKnowledgeFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantCopilotKnowledgeFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantCopilotCapabilitiesFn | assistant.manage |
+| `lib/server/functions/assistant-settings.ts`::updateAssistantToolRulesFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateWidgetAssistantDeploymentFn | assistant.manage |
 | `lib/server/functions/assistant-skills.ts`::listSkillsFn | assistant.manage |
 | `lib/server/functions/assistant-skills.ts`::createSkillFn | assistant.manage |
@@ -978,7 +979,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-190 of 969 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+191 of 971 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1069,6 +1070,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/settings.ts`::fetchPublicAuthConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchPublicPortalConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchUserProfile | server-fn |
+| `lib/server/functions/sso-entitlement.ts`::hasSsoEntitlementFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusIncidentPublicFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
