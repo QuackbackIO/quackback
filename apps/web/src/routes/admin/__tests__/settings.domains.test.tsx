@@ -55,8 +55,8 @@ describe('domains card', () => {
       />
     )
     expect(screen.getAllByText('feedback.acme.test').length).toBeGreaterThan(0)
-    expect(screen.getByText(/customers.quackback.co.uk/)).toBeInTheDocument()
-    expect(screen.getByText(/_cf-custom-hostname.feedback.acme.test/)).toBeInTheDocument()
+    expect(screen.getByText(/customers\.quackback\.co\.uk/)).toBeInTheDocument()
+    expect(screen.getByText(/_cf-custom-hostname\.feedback\.acme\.test/)).toBeInTheDocument()
     expect(screen.queryByText(/ch_/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     expect(refresh).toHaveBeenCalledWith('feedback.acme.test')
