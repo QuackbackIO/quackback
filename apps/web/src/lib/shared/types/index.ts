@@ -68,6 +68,7 @@ export {
   LAB_SECTIONS,
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
+  getProductAlwaysOnReason,
   getProductFlagUpdate,
   isProductEnabled,
 } from './settings'

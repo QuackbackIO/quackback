@@ -46,6 +46,7 @@ export {
   LAB_SECTIONS,
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
+  getProductAlwaysOnReason,
   getProductFlagUpdate,
   isProductEnabled,
   DEFAULT_AUTH_CONFIG,
