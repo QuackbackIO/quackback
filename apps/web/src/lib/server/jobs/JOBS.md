@@ -394,6 +394,7 @@ went stale the moment a queue moved.
 | `spam-retention`        | `0 5 * * *`   | 1           | 3           | 60s   |
 | `analytics`             | `0 * * * *`   | 1           | 3           | 60s   |
 | `events`                | —             | 5           | 6           | 60s   |
+| `event-dispatch`        | —             | 5           | 10          | 60s   |
 | `segment-evaluation`    | dynamic       | 2           | 3           | 60s   |
 | `help-center-translate` | —             | 1           | 3           | 120s  |
 | `email-imap`            | `* * * * *`   | 1           | 1           | 60s   |
