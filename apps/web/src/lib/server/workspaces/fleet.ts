@@ -1,7 +1,7 @@
 /**
  * Running background work for every workspace.
  *
- * Roughly 25–35 files across ~15 background
+ * SAAS-HOSTING-STACK.md §5, caveat 3: roughly 25–35 files across ~15 background
  * subsystems run with no request scope at all — sweeps, queues, the relay,
  * migrations, CLI backfills, the readiness probe. Each needs a workspace scope, and
  * each needs a per-subsystem answer to one question: *iterate all workspaces per
@@ -42,15 +42,12 @@ export interface FleetPassResult {
 }
 
 /**
- * How many workspaces one fleet pass works on at once.
+ * Run `body` once per active workspace, each inside its own workspace scope.
  *
- * Bounded so a pass cannot open a connection burst proportional to fleet size
- * against the shared server; concurrent so a pass's wall time is not N times
- * the slowest workspace.
+ * Serial on purpose. These are periodic sweeps against per-workspace databases;
+ * running them concurrently would wake every suspended workspace database at once,
+ * which is the exact cost the architecture exists to avoid.
  */
-const FLEET_PASS_CONCURRENCY = 6
-
-/** Run `body` once per active workspace, each inside its own workspace scope. */
 export async function runFleetPass(
   origin: WorkspaceScopeOrigin,
   body: (workspace: WorkspaceDescriptor | null) => Promise<void>
@@ -67,7 +64,7 @@ export async function runFleetPass(
 
   const result: FleetPassResult = { succeeded: 0, failed: 0, skipped: refused.length }
 
-  const runOne = async (workspace: WorkspaceDescriptor): Promise<void> => {
+  for (const workspace of workspaces) {
     const acquisition = await acquireWorkspaceScope(workspace, origin)
     if (acquisition.kind !== 'ok') {
       result.skipped += 1
@@ -75,29 +72,19 @@ export async function runFleetPass(
         { workspaceKey: workspace.workspaceKey, kind: acquisition.kind },
         'fleet pass could not scope workspace'
       )
-      return
+      continue
     }
     try {
       await runWithWorkspaceScope(acquisition.scope, () => body(workspace))
       result.succeeded += 1
     } catch (err) {
       result.failed += 1
-      log.error({ err, workspaceKey: workspace.workspaceKey }, 'fleet pass body failed for workspace')
+      log.error(
+        { err, workspaceKey: workspace.workspaceKey },
+        'fleet pass body failed for workspace'
+      )
     }
   }
-
-  let next = 0
-  const workers = Array.from(
-    { length: Math.min(FLEET_PASS_CONCURRENCY, workspaces.length) },
-    async () => {
-      while (next < workspaces.length) {
-        const workspace = workspaces[next]!
-        next += 1
-        await runOne(workspace)
-      }
-    }
-  )
-  await Promise.all(workers)
 
   return result
 }
@@ -160,3 +147,6 @@ export async function withWorkspaceScopeById<T>(
   }
   return runWithWorkspaceScope(acquisition.scope, body)
 }
+
+/** Alias kept for the barrel's naming symmetry with `runFleetPass`. */
+export const withScopedWorkspaces = runFleetPass

@@ -1,35 +1,35 @@
 /**
  * Asking a workspace database who it belongs to, and deciding whether to believe it.
  *
- * Stated plainly: if workspace resolution returns the
+ * SAAS-HOSTING-STACK.md §3, stated plainly: if workspace resolution returns the
  * wrong pool, every RBAC and permission check still passes, because that
  * database's own `settings`, `principal` and `roles` rows are entirely
  * self-consistent. It does not error. It looks correct. There is no second gate,
  * so this is the gate.
  *
- * Two independent facts are checked, and each covers a hole in the other:
+ * Three independent facts are checked, and each covers a hole in the others:
  *
  * | Fact | Written by | Beaten by |
  * | --- | --- | --- |
  * | `settings.id` | nobody — it is a primary key | a copy of the database |
  * | the control plane's stamp | the CP, deliberately | a copy of the database |
+ * | `pg_database.oid` | the catalog, per database | nothing we can reach |
  *
- * The verdict is `evaluateFingerprint`, vendored byte-for-byte from the control
- * plane so both sides run the same predicate rather than two prose readings of
- * it. A deliberately restored copy of a workspace database carries both facts and
- * passes; that is an operator action, and repointing a record at a restore is
- * the operator's call to make.
+ * The verdict for the first two is `evaluateFingerprint`, vendored byte-for-byte
+ * from the control plane so both sides run the same predicate rather than two
+ * prose readings of it. The third is `evaluatePhysicalIdentity`, which exists
+ * because branching copies data and therefore copies both of the first two.
  *
  * ## Where the stamp is read from
  *
- * Preferentially from `settings.cloud_workspace_id`, a dedicated column
+ * Preferentially from `settings.cloud_workspace_key`, a dedicated column
  * (migration 0251). The stamp's original home is the `settings.metadata` JSON
  * bag, and `telemetry/instance-id.ts` performs an unlocked, unattended **hourly**
  * read-modify-write of that same bag which never invalidates the settings cache —
  * so it can interleave with a stamp write and drop it. A column removes the whole
  * class rather than narrowing the window.
  *
- * The column is read through `to_jsonb(s) ->> 'cloud_workspace_id'` rather than by
+ * The column is read through `to_jsonb(s) ->> 'cloud_workspace_key'` rather than by
  * name, so this query still runs against a database that predates 0251 and
  * simply reports the column as absent. That matters because the fingerprint is
  * the *first* thing a pooled process does with a workspace database — refusing to
@@ -42,7 +42,7 @@
  */
 import type { Sql } from 'postgres'
 import {
-  TENANT_FINGERPRINT_METADATA_KEY,
+  WORKSPACE_FINGERPRINT_METADATA_KEY,
   evaluateFingerprint,
   workspaceFingerprintStampSchema,
   type FingerprintFailure,
@@ -50,6 +50,12 @@ import {
   type WorkspaceFingerprintExpectation,
   type WorkspaceFingerprintStamp,
 } from './vendor/contract'
+import {
+  evaluatePhysicalIdentity,
+  type ObservedPhysicalIdentity,
+  type PhysicalExpectation,
+  type PhysicalFailure,
+} from './physical-identity'
 import { verifySecretKeyCanary } from './vendor/fleet-secrets'
 import { probeStoredCiphertext, type StoredCiphertextProbe } from './stored-ciphertext'
 
@@ -57,6 +63,7 @@ import { probeStoredCiphertext, type StoredCiphertextProbe } from './stored-ciph
 export type StampSource = 'column' | 'metadata' | 'none'
 
 export interface WorkspaceIdentityObservation extends ObservedFingerprint {
+  physical: ObservedPhysicalIdentity
   stampSource: StampSource
   /** Both sources present and naming different workspaces. */
   stampSourceConflict: { column: string; metadata: string } | null
@@ -79,6 +86,7 @@ export interface WorkspaceIdentityObservation extends ObservedFingerprint {
 
 export type IdentityFailure =
   | FingerprintFailure
+  | PhysicalFailure
   | 'stamp_source_conflict'
   | 'secret_key_canary_missing'
   | 'secret_key_canary_mismatch'
@@ -86,13 +94,71 @@ export type IdentityFailure =
   | 'secret_key_custody_unproven'
 
 /**
- * Two subjects run through these codes, and the refusal details keep them
- * apart on purpose: the `settings_*`/`stamp_*`/`workspace_*` codes mean the
- * row in front of us belongs to someone else, while the `secret_key_*` codes
- * mean the row may be exactly right and the key we would encrypt under is not
- * the one its stored ciphertext was written with. The operator fix for the two
- * is nothing alike, so a message must never report one as the other.
+ * What each refusal code is actually an accusation about.
+ *
+ * `acquireWorkspaceScope` funnels EVERY exception from pool checkout into one
+ * `refused` variant with a `code`, and the caller used to treat that variant as
+ * synonymous with a fingerprint refusal. It is not: a missing credential, an
+ * unreachable compute or a misconfigured `MIN_SCHEMA_VERSION` all arrive there
+ * too, and reporting one of those as a fingerprint failure pulls the alarm
+ * reserved for a cross-workspace near-miss — the one an operator is trained to
+ * read as a workspaces breach.
+ *
+ * Two subjects, not one. `database` codes mean the row in front of us belongs
+ * to someone else; `key` codes mean the row may be exactly right while the key
+ * we would encrypt under is not the one its stored ciphertext was written with.
+ * `evaluateSecretKeyCanary` keeps that distinction deliberately, on the grounds
+ * that the operator fix for the two is nothing alike, and collapsing them here
+ * would undo it at the only place an operator reads.
  */
+const IDENTITY_FAILURE_SUBJECT = {
+  settings_row_missing: 'database',
+  settings_not_singleton: 'database',
+  stamp_missing: 'database',
+  stamp_workspace_key_mismatch: 'database',
+  self_reported_workspace_id_mismatch: 'database',
+  catalog_name_mismatch: 'database',
+  catalog_oid_mismatch: 'database',
+  stamp_source_conflict: 'database',
+  secret_key_canary_missing: 'key',
+  secret_key_canary_mismatch: 'key',
+  secret_key_stored_ciphertext_mismatch: 'key',
+  secret_key_custody_unproven: 'key',
+} as const satisfies Record<IdentityFailure, 'database' | 'key'>
+
+/**
+ * The codes that mean "this is the wrong database", derived rather than
+ * restated so the two lists cannot drift apart.
+ *
+ * `Record<IdentityFailure, …>` above is the compile-time gate: a new failure
+ * code fails to compile until it is classified, and it cannot be classified
+ * without someone deciding which alarm it belongs to. That is the property
+ * worth keeping. A hand-maintained second list would let a new code be added
+ * to the union and silently default to neither.
+ */
+export const IDENTITY_FAILURE_CODES = Object.keys(IDENTITY_FAILURE_SUBJECT).filter(
+  (code) => IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'database'
+) as readonly IdentityFailure[]
+
+/** The codes that mean "the key and the database do not belong to each other". */
+export const KEY_CUSTODY_FAILURE_CODES = Object.keys(IDENTITY_FAILURE_SUBJECT).filter(
+  (code) => IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'key'
+) as readonly IdentityFailure[]
+
+/** True when a refusal code means the database failed its identity check. */
+export function isIdentityFailureCode(code: string): code is IdentityFailure {
+  return IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'database'
+}
+
+/**
+ * True when a refusal code means the key and the database do not belong to each
+ * other. Distinct from {@link isIdentityFailureCode} because the cross-workspace
+ * alarm is trained on the other one, and the repair is a custody script rather
+ * than a registry correction.
+ */
+export function isKeyCustodyFailureCode(code: string): code is IdentityFailure {
+  return IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'key'
+}
 
 /**
  * The second question about a refusal: can retrying ever fix it?
@@ -116,8 +182,10 @@ const IDENTITY_FAILURE_RETRYABILITY = {
   settings_row_missing: 'terminal',
   settings_not_singleton: 'terminal',
   stamp_missing: 'terminal',
-  stamp_workspace_mismatch: 'terminal',
-  workspace_id_mismatch: 'terminal',
+  stamp_workspace_key_mismatch: 'terminal',
+  self_reported_workspace_id_mismatch: 'terminal',
+  catalog_name_mismatch: 'terminal',
+  catalog_oid_mismatch: 'terminal',
   stamp_source_conflict: 'terminal',
   secret_key_canary_missing: 'terminal',
   secret_key_canary_mismatch: 'terminal',
@@ -154,7 +222,7 @@ export class WorkspaceFingerprintRefusal extends Error {
 interface SettingsIdentityRow {
   id: string
   metadata: string | null
-  cloud_workspace_id: string | null
+  cloud_workspace_key: string | null
   cloud_secret_canary: string | null
   stored_ciphertext: string | null
 }
@@ -187,7 +255,7 @@ async function readSettingsIdentity(sql: Sql): Promise<SettingsIdentityRow[]> {
     return (await sql`
       SELECT s.id::text AS id,
              s.metadata,
-             (to_jsonb(s) ->> 'cloud_workspace_id')     AS cloud_workspace_id,
+             (to_jsonb(s) ->> 'cloud_workspace_key')     AS cloud_workspace_key,
              (to_jsonb(s) ->> 'cloud_secret_canary') AS cloud_secret_canary,
              (SELECT j.private_key
                 FROM jwks j
@@ -201,7 +269,7 @@ async function readSettingsIdentity(sql: Sql): Promise<SettingsIdentityRow[]> {
     const rows = (await sql`
       SELECT s.id::text AS id,
              s.metadata,
-             (to_jsonb(s) ->> 'cloud_workspace_id')     AS cloud_workspace_id,
+             (to_jsonb(s) ->> 'cloud_workspace_key')     AS cloud_workspace_key,
              (to_jsonb(s) ->> 'cloud_secret_canary') AS cloud_secret_canary
         FROM settings s
        LIMIT 2
@@ -225,11 +293,14 @@ export async function observeWorkspaceIdentity(
 ): Promise<WorkspaceIdentityObservation> {
   const rows = await readSettingsIdentity(sql)
 
+  const physical = await observePhysicalIdentity(sql)
+
   if (rows.length !== 1) {
     return {
-      workspaceId: null,
+      selfReportedWorkspaceId: null,
       stamp: null,
       settingsRowCount: rows.length,
+      physical,
       stampSource: 'none',
       stampSourceConflict: null,
       secretCanary: null,
@@ -244,7 +315,7 @@ export async function observeWorkspaceIdentity(
 
   const row = rows[0]!
   const fromMetadata = parseStamp(row.metadata)
-  const column = normalise(row.cloud_workspace_id)
+  const column = normalise(row.cloud_workspace_key)
 
   let stamp: WorkspaceFingerprintStamp | null = fromMetadata
   let stampSource: StampSource = fromMetadata ? 'metadata' : 'none'
@@ -262,9 +333,10 @@ export async function observeWorkspaceIdentity(
   }
 
   return {
-    workspaceId: row.id,
+    selfReportedWorkspaceId: row.id,
     stamp,
     settingsRowCount: 1,
+    physical,
     stampSource,
     stampSourceConflict: conflict,
     secretCanary: normalise(row.cloud_secret_canary),
@@ -293,7 +365,7 @@ const CUSTODY_REPAIR_ADVICE =
   `for a workspace already on derived+hkdf://: it computes a derived ref and replaces whatever ` +
   `the record named, so running it against an env:// or openbao+kv:// workspace points the ` +
   `record at a THIRD key and stamps a canary under it.\n` +
-  `  bun run src/scripts/establish-workspace-secrets.ts --workspace-id <id>   # derived+hkdf:// only\n` +
+  `  bun run src/scripts/establish-workspace-secrets.ts --workspace-key <id>   # derived+hkdf:// only\n` +
   `Provisioning will not do it either: it returns early on an already-registered workspace, ` +
   `before the custody step.`
 
@@ -392,9 +464,36 @@ export function evaluateSecretKeyCanary(
   }
 }
 
-/** The whole verdict, in the order that produces the most useful refusal. */
+/**
+ * Catalog identity: `current_database()` and `pg_database.oid`. A dump/restore
+ * or `TEMPLATE` clone keeps the content fingerprint and gets a new oid, which
+ * is the anti-clone half.
+ */
+export async function observePhysicalIdentity(sql: Sql): Promise<ObservedPhysicalIdentity> {
+  const rows = (await sql`
+    SELECT current_database() AS catalog_name,
+           (SELECT oid::text FROM pg_database WHERE datname = current_database()) AS catalog_oid
+  `) as unknown as Array<{
+    catalog_name: string | null
+    catalog_oid: string | null
+  }>
+  const row = rows[0]
+  return {
+    currentDatabase: normalise(row?.catalog_name ?? null),
+    catalogOid: normalise(row?.catalog_oid ?? null),
+  }
+}
+
+/**
+ * The whole verdict, in the order that produces the most useful refusal.
+ *
+ * Content first (is this a Quackback database, and whose?), placement second
+ * (is it the *copy* the registry named?). A wrong-database mix-up should not
+ * report as a branch problem.
+ */
 export function evaluateWorkspaceIdentity(
   expected: WorkspaceFingerprintExpectation,
+  physicalExpected: PhysicalExpectation,
   observed: WorkspaceIdentityObservation
 ): IdentityVerdict {
   const content = evaluateFingerprint(expected, observed)
@@ -405,13 +504,13 @@ export function evaluateWorkspaceIdentity(
       ok: false,
       code: 'stamp_source_conflict',
       detail:
-        `settings.cloud_workspace_id says ${observed.stampSourceConflict.column} but ` +
-        `settings.metadata.${TENANT_FINGERPRINT_METADATA_KEY} says ` +
+        `settings.cloud_workspace_key says ${observed.stampSourceConflict.column} but ` +
+        `settings.metadata.${WORKSPACE_FINGERPRINT_METADATA_KEY} says ` +
         `${observed.stampSourceConflict.metadata} — two writers, two owners`,
     }
   }
 
-  return { ok: true }
+  return evaluatePhysicalIdentity(physicalExpected, observed.physical)
 }
 
 /** Pull the stamp out of the settings metadata bag. Never throws. */
@@ -424,7 +523,7 @@ export function parseStamp(metadata: string | null): WorkspaceFingerprintStamp |
     return null
   }
   if (typeof bag !== 'object' || bag === null) return null
-  const raw = (bag as Record<string, unknown>)[TENANT_FINGERPRINT_METADATA_KEY]
+  const raw = (bag as Record<string, unknown>)[WORKSPACE_FINGERPRINT_METADATA_KEY]
   if (raw === undefined) return null
   const parsed = workspaceFingerprintStampSchema.safeParse(raw)
   return parsed.success ? (parsed.data as WorkspaceFingerprintStamp) : null

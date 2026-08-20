@@ -50,7 +50,7 @@
  *
  * Second: a ledger row is written by drizzle *after it executed the statements*.
  * Nothing here ever inserts one. A workspace whose ledger is behind its own schema
- * — which is the state five live gauntlet databases are in, because they were
+ * — which is the state five live fleet databases are in, because they were
  * migrated with `psql -f` — is healed by replaying the SQL, not by asserting
  * that it ran. A wrong ledger row is worse than a missing one.
  *
@@ -419,7 +419,7 @@ export function replayGateVerdict(
       'change data if this database has already had them applied outside the ledger. ' +
       mutating.map((m) => `${m.tag} (${m.mutating[0]?.reason ?? 'writes on replay'})`).join('; ') +
       `. This database's ledger records ${before.count} migrations up to ${before.max}. ` +
-      'Establish whether those migrations already ran — a Neon branch dry-run is the cheap way ' +
+      'Establish whether those migrations already ran — a catalog clone dry-run is the cheap way ' +
       '(SAAS-HOSTING-STACK.md §10.8) — then re-run with allowMutatingReplay once the ledger is ' +
       'known honest. Do not insert ledger rows by hand: a wrong row is worse than a missing one.',
   }

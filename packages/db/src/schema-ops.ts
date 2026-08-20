@@ -49,6 +49,8 @@ import * as schema from './schema'
  * on whichever backend happened to serve the statement, which is not a lock.
  */
 export const MIGRATION_LOCK_KEY = 4_820_231_099
+/** 32-bit namespace for the two-key lock (per-database via hashtext). */
+export const MIGRATION_LOCK_NS = 48_202
 
 /** Extensions the bundled schema depends on. `vector` is load-bearing from `0000_initial`. */
 export const REQUIRED_EXTENSIONS = ['vector', 'pg_trgm'] as const

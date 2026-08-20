@@ -93,7 +93,7 @@ export interface WorkspaceSecretResolutionInput {
  * derivation.
  */
 export function resolveWorkspaceSecretsFromRefs(
-  input: WorkspaceSecretResolutionInput
+  input: WorkspaceSecretResolutionInput,
 ): ResolvedWorkspaceSecrets {
   const app = resolveAppSecretKey(input)
   const storage = resolveStorageCredentials(input)
@@ -150,14 +150,14 @@ function resolveAppSecretKey(input: WorkspaceSecretResolutionInput): {
           'ref_workspace_key_mismatch',
           `${redactRef(ref)} names ${parsed.variable}, but workspace ${input.workspaceKey}'s app secret ` +
             `must be held in ${expected}. An env ref carries no workspace of its own, so the ` +
-            `variable name is the only thing that can bind it to one.`
+            `variable name is the only thing that can bind it to one.`,
         )
       }
       const value = (input.env ?? process.env)[parsed.variable]
       if (!value) {
         throw new WorkspaceSecretResolutionError(
           'app_secret_unresolvable',
-          `${redactRef(ref)} names ${parsed.variable}, which is unset`
+          `${redactRef(ref)} names ${parsed.variable}, which is unset`,
         )
       }
       return {
@@ -172,15 +172,14 @@ function resolveAppSecretKey(input: WorkspaceSecretResolutionInput): {
       throw new WorkspaceSecretResolutionError(
         'app_secret_no_resolver',
         `this process has no resolver for '${parsed.scheme}://' app secrets ` +
-          `(workspace ${input.workspaceKey}). Re-point the record at a scheme this fleet implements.`
+          `(workspace ${input.workspaceKey}). Re-point the record at a scheme this fleet implements.`,
       )
   }
 }
 
-function resolveStorageCredentials(input: WorkspaceSecretResolutionInput): {
-  value: WorkspaceStorageCredentials | null
-  problem: string | null
-} {
+function resolveStorageCredentials(
+  input: WorkspaceSecretResolutionInput,
+): { value: WorkspaceStorageCredentials | null; problem: string | null } {
   const ref = input.storageCredentialRef
   // No ref is not a failed resolution. Returning a problem here would be
   // indistinguishable from a ref that exists and cannot be dereferenced, and the
@@ -197,7 +196,7 @@ function resolveStorageCredentials(input: WorkspaceSecretResolutionInput): {
         const opened = openWorkspaceSecret(
           rootKey,
           { generation: parsed.generation, workspaceKey: parsed.workspaceKey, purpose: 'storage' },
-          parsed.blob
+          parsed.blob,
         )
         return { value: parseStorageCredentials(opened, ref), problem: null }
       }
@@ -206,7 +205,7 @@ function resolveStorageCredentials(input: WorkspaceSecretResolutionInput): {
         if (!raw) {
           throw new WorkspaceSecretResolutionError(
             'storage_unresolvable',
-            `${redactRef(ref)} names ${parsed.variable}, which is unset`
+            `${redactRef(ref)} names ${parsed.variable}, which is unset`,
           )
         }
         return { value: parseStorageCredentials(raw, ref), problem: null }
@@ -214,7 +213,7 @@ function resolveStorageCredentials(input: WorkspaceSecretResolutionInput): {
       default:
         throw new WorkspaceSecretResolutionError(
           'storage_no_resolver',
-          `this process has no resolver for '${parsed.scheme}://' storage credentials`
+          `this process has no resolver for '${parsed.scheme}://' storage credentials`,
         )
     }
   } catch (err) {
@@ -236,20 +235,20 @@ function parseStorageCredentials(raw: string, ref: SecretRef): WorkspaceStorageC
   } catch {
     throw new WorkspaceSecretResolutionError(
       'storage_malformed',
-      `${redactRef(ref)} did not contain a JSON credential object`
+      `${redactRef(ref)} did not contain a JSON credential object`,
     )
   }
   const obj = parsed as { accessKeyId?: unknown; secretAccessKey?: unknown }
   if (typeof obj?.accessKeyId !== 'string' || obj.accessKeyId === '') {
     throw new WorkspaceSecretResolutionError(
       'storage_malformed',
-      `${redactRef(ref)} has no accessKeyId`
+      `${redactRef(ref)} has no accessKeyId`,
     )
   }
   if (typeof obj?.secretAccessKey !== 'string' || obj.secretAccessKey === '') {
     throw new WorkspaceSecretResolutionError(
       'storage_malformed',
-      `${redactRef(ref)} has no secretAccessKey`
+      `${redactRef(ref)} has no secretAccessKey`,
     )
   }
   return { accessKeyId: obj.accessKeyId, secretAccessKey: obj.secretAccessKey }
@@ -268,14 +267,11 @@ function parseStorageCredentials(raw: string, ref: SecretRef): WorkspaceStorageC
  * which does the same job for the database credential.
  */
 export function workspaceAppSecretVariable(workspaceKey: string): string {
-  const suffix = workspaceKey
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+  const suffix = workspaceKey.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
   if (!suffix) {
     throw new WorkspaceSecretResolutionError(
       'bad_workspace',
-      `cannot derive an app-secret variable name from '${workspaceKey}'`
+      `cannot derive an app-secret variable name from '${workspaceKey}'`,
     )
   }
   const digest = createHash('sha256').update(workspaceKey).digest('hex').slice(0, 8).toUpperCase()
@@ -290,15 +286,11 @@ export function encodeStorageCredentials(creds: WorkspaceStorageCredentials): st
   })
 }
 
-function assertRefNamesWorkspace(
-  refWorkspaceKey: string,
-  recordWorkspaceKey: string,
-  ref: SecretRef
-): void {
+function assertRefNamesWorkspace(refWorkspaceKey: string, recordWorkspaceKey: string, ref: SecretRef): void {
   if (refWorkspaceKey !== recordWorkspaceKey) {
     throw new WorkspaceSecretResolutionError(
       'ref_workspace_key_mismatch',
-      `${redactRef(ref)} names workspace ${refWorkspaceKey} but sits on the record for ${recordWorkspaceKey}`
+      `${redactRef(ref)} names workspace ${refWorkspaceKey} but sits on the record for ${recordWorkspaceKey}`,
     )
   }
 }
@@ -307,7 +299,7 @@ function assertPurpose(purpose: string, expected: FleetSecretPurpose, ref: Secre
   if (purpose !== expected) {
     throw new WorkspaceSecretResolutionError(
       'ref_purpose_mismatch',
-      `${redactRef(ref)} has purpose '${purpose}' where '${expected}' was required`
+      `${redactRef(ref)} has purpose '${purpose}' where '${expected}' was required`,
     )
   }
 }
@@ -316,7 +308,7 @@ function requireRootKey(ref: SecretRef, rootKey: string | null): string {
   if (!rootKey) {
     throw new WorkspaceSecretResolutionError(
       'root_key_missing',
-      `${redactRef(ref)} needs the fleet root key; QUACKBACK_FLEET_ROOT_KEY is unset in this process`
+      `${redactRef(ref)} needs the fleet root key; QUACKBACK_FLEET_ROOT_KEY is unset in this process`,
     )
   }
   return rootKey
@@ -329,6 +321,6 @@ function asResolutionError(err: unknown, ref: SecretRef): WorkspaceSecretResolut
   if (err instanceof WorkspaceSecretResolutionError) return err
   return new WorkspaceSecretResolutionError(
     'unresolvable',
-    `${redactRef(ref)}: ${err instanceof Error ? err.message : String(err)}`
+    `${redactRef(ref)}: ${err instanceof Error ? err.message : String(err)}`,
   )
 }

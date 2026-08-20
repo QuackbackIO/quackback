@@ -1,14 +1,30 @@
 /**
- * The workspace-keyed connection-pool cache.
+ * The workspace-keyed connection-pool cache (SAAS-HOSTING-STACK.md §6).
  *
- * One process, many workspaces, one database each. This is the LRU that turns a
- * resolved workspace record into a live `postgres.js` pool, and it is where the
- * fingerprint assertion is enforced — once per pool, not once per request.
+ * One process, many workspaces, one database each. This is the LRU that turns
+ * a resolved workspace record into a live `postgres.js` pool, and it is where the
+ * §3 fingerprint assertion is enforced — once per pool, not once per request.
  *
- * Eviction here is plain hygiene: an idle workspace's pool object and sockets are
- * bounded resources on a process serving many workspaces, nothing more. The LRU
- * cap bounds how many pools exist at once; the idle sweep drops pools nothing
- * has touched for a while.
+ * ## Eviction is the cost model, not memory hygiene
+ *
+ * The fleet suspends a compute when **no client is connected**. An open pool holds
+ * the database awake, so eviction is the single thing that makes an idle workspace
+ * cost storage only instead of running compute indefinitely. The
+ * same silence is what lets a Railway `role=web` service sleep, since Railway's
+ * rule triggers on ten minutes without an *outbound* packet.
+ *
+ * So `workspacePoolIdleSeconds` must sit comfortably below **both** the
+ * database `suspend_timeout_seconds` (300s by default) and Railway's 600s window. Get it
+ * wrong and every workspace ever routed to an instance stays awake forever —
+ * silently, with no functional signal that the cost model has stopped working.
+ * That is why `poolsEvicted` is a first-class counter here rather than a debug
+ * log: it is the only observable that distinguishes "working" from "quietly
+ * costing money".
+ *
+ * Measured caveat, and it is not optional: eviction is **necessary but not
+ * sufficient**. Under `QUACKBACK_ROLE=all` the outbox relay polls the workspace
+ * database once per second forever, so the compute never suspends whatever this
+ * cache does. Idle saving requires `QUACKBACK_ROLE=web`.
  *
  * ## Credential rotation
  *
@@ -31,9 +47,9 @@ import {
   observeWorkspaceIdentity,
   WorkspaceFingerprintRefusal,
 } from './fingerprint'
+import { openWorkspaceSecret } from './vendor/fleet-secrets'
 import type { WorkspaceDescriptor } from './registry'
 import { clearWorkspaceSecretsCache, resolveWorkspaceSecrets } from './workspace-secrets'
-import { openWorkspaceSecret } from './vendor/fleet-secrets'
 import { parseSecretRef, redactRef } from './vendor/secret-ref'
 import type { ResolvedWorkspaceSecrets } from './vendor/workspace-secret-resolution'
 
@@ -67,6 +83,7 @@ const stats = {
   evicted: 0,
   evictedByReason: {} as Record<EvictionReason, number>,
   refusals: 0,
+  firstCreatedAt: 0,
 }
 
 export interface PoolCacheStats {
@@ -75,15 +92,25 @@ export interface PoolCacheStats {
   evicted: number
   evictedByReason: Record<string, number>
   refusals: number
+  /** The §6 metric: pools evicted per hour since the first pool was created. */
+  evictionsPerHour: number
+  uptimeSeconds: number
 }
 
 export function getPoolCacheStats(): PoolCacheStats {
+  const rawUptimeMs = stats.firstCreatedAt ? Date.now() - stats.firstCreatedAt : 0
+  // Floor the window at one second. A rate over a sub-millisecond window is
+  // either infinity or zero depending on clock granularity, and neither is a
+  // number anyone should page on.
+  const windowMs = Math.max(1_000, rawUptimeMs)
   return {
     live: pools.size,
     created: stats.created,
     evicted: stats.evicted,
     evictedByReason: { ...stats.evictedByReason },
     refusals: stats.refusals,
+    evictionsPerHour: stats.firstCreatedAt ? (stats.evicted * 3_600_000) / windowMs : 0,
+    uptimeSeconds: Math.round(rawUptimeMs / 1000),
   }
 }
 
@@ -117,6 +144,7 @@ export async function acquireWorkspacePool(workspace: WorkspaceDescriptor): Prom
     entry = createEntry(workspace)
     pools.set(workspace.workspaceKey, entry)
     stats.created += 1
+    if (!stats.firstCreatedAt) stats.firstCreatedAt = Date.now()
     ensureSweeper()
     await enforceCap(workspace.workspaceKey)
   } else {
@@ -141,15 +169,17 @@ export async function acquireWorkspacePool(workspace: WorkspaceDescriptor): Prom
 
 function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
   const sql = postgres(workspace.database.pooledUrl, {
-    // Small on purpose. One instance holds N workspace pools, so per-workspace
-    // socket counts multiply across the fleet against one server's (or one
-    // pooler's) connection budget.
+    // Small on purpose. One instance holds N workspace pools, and the fleet
+    // pooler multiplexes to a much smaller number of backends anyway; 10 per
+    // workspace would be N×10 sockets for no throughput.
     max: config.workspacePoolMax,
-    // Keep protocol-level prepared statements. Through transaction-mode
-    // pgbouncer this requires `max_prepared_statements` (pgbouncer 1.21+); the
-    // escape hatch for older poolers is the `prepare` option in
-    // @quackback/db/client.
+    // Keep protocol-level prepared statements. Verified safe through the
+    // transaction-mode pooler under real backend reassignment; the boundary is
+    // that Drizzle emits explicit column lists, so a hand-written `SELECT *` in
+    // a migration-adjacent path would break it.
     prepare: true,
+    // Below the database suspend timeout AND Railway's sleep window. This is
+    // the number the cost model rests on.
     idle_timeout: config.workspacePoolIdleSeconds,
     connect_timeout: 15,
     password: () => resolvePassword(workspace),
@@ -176,25 +206,13 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
 /**
  * Dereference a workspace's database credential.
  *
- * Exported because the realtime listener's `LISTEN` connection terminates at
- * the **direct** endpoint rather than at the pooled one, so it is built outside
- * this cache and still needs the same credential — resolved by the same
- * function so a rotation cannot be picked up by one path and missed by the
- * other.
+ * Exported because the queue tier's `LISTEN` connections terminate at the
+ * **direct** endpoint rather than at the pooled one, so they are built outside
+ * this cache and still need the same credential — resolved by the same function
+ * so a rotation cannot be picked up by one path and missed by the other.
  */
 export async function resolveWorkspacePassword(workspace: WorkspaceDescriptor): Promise<string> {
   return resolvePassword(workspace)
-}
-
-/** A database-credential refusal that carries its quarantine code. */
-class DbCredentialError extends Error {
-  constructor(
-    readonly code: string,
-    message: string
-  ) {
-    super(message)
-    this.name = 'DbCredentialError'
-  }
 }
 
 async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> {
@@ -202,30 +220,22 @@ async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> 
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
     case 'sealed+aead': {
-      // The control plane issues the role password (`CREATE ROLE … PASSWORD`)
-      // and seals it under the fleet root, in the same registry row as the DSN.
       if (parsed.purpose !== 'db') {
-        throw new DbCredentialError(
-          'ref_purpose_mismatch',
+        throw new Error(
           `${redactRef(ref)} is sealed for '${parsed.purpose}', not a database password`
         )
       }
-      if (parsed.workspaceKey !== workspace.workspaceKey) {
-        throw new DbCredentialError(
-          'ref_workspace_mismatch',
-          `${redactRef(ref)} is sealed for ${parsed.workspaceKey} but sits on ${workspace.workspaceKey}`
-        )
-      }
-      const rootKey = config.fleetRootKey
-      if (!rootKey) {
-        throw new DbCredentialError(
-          'root_key_missing',
-          `${redactRef(ref)} needs QUACKBACK_FLEET_ROOT_KEY to open, and it is unset`
-        )
+      const root = config.fleetRootKey
+      if (!root) {
+        throw new Error(`${redactRef(ref)} needs QUACKBACK_FLEET_ROOT_KEY`)
       }
       return openWorkspaceSecret(
-        rootKey,
-        { generation: parsed.generation, workspaceKey: parsed.workspaceKey, purpose: 'db' },
+        root,
+        {
+          generation: parsed.generation,
+          workspaceKey: parsed.workspaceKey,
+          purpose: 'db',
+        },
         parsed.blob
       )
     }
@@ -236,14 +246,8 @@ async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> 
       }
       return value
     }
-    default:
-      // The contract parses this scheme, but not as a DATABASE credential.
-      // Refusing by name keeps the failure terminal (quarantine, not a
-      // reconnect loop) and honest about the cause.
-      throw new DbCredentialError(
-        'db_credential_no_resolver',
-        `${redactRef(ref)}: no database-credential resolver for ${parsed.scheme}:// in this build`
-      )
+    case 'derived+hkdf':
+      throw new Error(`${parsed.scheme}:// refs hold application secrets, not database credentials`)
   }
 }
 
@@ -255,10 +259,10 @@ async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> 
  * stale password memoised would make the retry fail for a second, unrelated
  * reason.
  *
- * Shared by the request pool cache and by `assertWorkspaceDirectDatabase` below,
- * so the pooled and direct paths cannot disagree about whether a database
- * really is the workspace the registry named. A second copy of a fail-closed
- * identity check is a second copy that can drift open.
+ * Shared by the request pool cache and by `openWorkspaceDirectPool` below, so the
+ * pooled and direct paths cannot disagree about whether a database really is the
+ * workspace the registry named. A second copy of a fail-closed identity check is a
+ * second copy that can drift open.
  */
 async function verifyWorkspaceDatabase(
   workspace: WorkspaceDescriptor,
@@ -282,7 +286,7 @@ async function verifyWorkspaceDatabase(
   // whether this key opens ciphertext the database is already holding, and that
   // has to be answered from a sample rather than from the minted canary alone.
   const observed = await observeWorkspaceIdentity(sql, secrets.secretKey)
-  const verdict = evaluateWorkspaceIdentity(workspace.fingerprint, observed)
+  const verdict = evaluateWorkspaceIdentity(workspace.fingerprint, workspace.physical, observed)
   const keyVerdict = verdict.ok
     ? evaluateSecretKeyCanary(
         workspace.workspaceKey,
@@ -301,8 +305,10 @@ async function verifyWorkspaceDatabase(
     log.info(
       {
         workspaceKey: workspace.workspaceKey,
-        workspaceId: observed.workspaceId,
+        selfReportedWorkspaceId: observed.selfReportedWorkspaceId,
         stampSource: observed.stampSource,
+        catalogName: observed.physical.currentDatabase,
+        catalogOid: observed.physical.catalogOid,
         storageResolved: secrets.storage !== null,
         // Which of the four evidence states the key check cleared on. A fleet
         // where this reads `absent` everywhere is a fleet where the canary is
@@ -325,21 +331,25 @@ async function verifyWorkspaceDatabase(
       workspaceKey: workspace.workspaceKey,
       code: keyVerdict.code,
       detail: keyVerdict.detail,
-      observedWorkspaceId: observed.workspaceId,
+      observedSelfReportedWorkspaceId: observed.selfReportedWorkspaceId,
+      observedCatalogName: observed.physical.currentDatabase,
+      expectedCatalogName: workspace.physical.catalogName,
+      observedCatalogOid: observed.physical.catalogOid,
+      expectedCatalogOid: workspace.physical.catalogOid,
     },
     'workspace database fingerprint REFUSED'
   )
   throw new WorkspaceFingerprintRefusal(workspace.workspaceKey, keyVerdict.code, keyVerdict.detail)
 }
 
-async function enforceCap(keepWorkspaceId: string): Promise<void> {
+async function enforceCap(keepWorkspaceKey: string): Promise<void> {
   const cap = config.workspacePoolMaxEntries
   while (pools.size > cap) {
     // Map iteration is insertion order, so the first key is the least recently
     // used. Never evict the workspace we are about to serve.
     let victim: string | null = null
     for (const key of pools.keys()) {
-      if (key !== keepWorkspaceId) {
+      if (key !== keepWorkspaceKey) {
         victim = key
         break
       }
@@ -350,26 +360,64 @@ async function enforceCap(keepWorkspaceId: string): Promise<void> {
 }
 
 /**
- * The same fail-closed identity assertion, for a connection built OUTSIDE this
- * cache.
+ * A workspace's own **direct** (session-mode) pool, outside this cache.
  *
- * A `LISTEN`-holding consumer (the realtime bus) needs the *direct* endpoint
- * (a transaction pooler accepts a `LISTEN` and delivers nothing), a connection
- * that is never evicted by request-traffic LRU pressure, and a lifetime it
- * controls — so it owns its connection. But the identity question is the same
- * one this cache answers before serving a pool, and it must be the *same*
- * assertion: a listener on a mispointed `directUrl` would read another
- * workspace's `realtime_overflow` rows and deliver them to this workspace's streams,
- * fail-open. A second copy of a fail-closed identity check is a second copy
- * that can drift open, so this is a window onto the one implementation.
+ * The outbox relay tier needs three things this cache cannot give it: the
+ * *direct* endpoint (a transaction pooler accepts a `LISTEN` and delivers
+ * nothing, and a session advisory lock is worse than useless through one), a
+ * connection that is never evicted by request-traffic LRU pressure, and a
+ * lifetime it controls. So it opens its own — but through this module, because
+ * this is the layer that builds `Database` handles and, more importantly,
+ * because the §3 assertion must be the *same* assertion. A second copy of a
+ * fail-closed identity check is a second copy that can drift open.
  *
- * Throws on refusal, exactly as `acquireWorkspacePool` does.
+ * Deliberately NOT registered in `pools`: this handle is not a request pool, it
+ * must not be handed to a request, and it must not be counted in the eviction
+ * metric that measures whether idle workspaces can suspend. §6's corollary is that
+ * the tier holding it must never share a compute with workspaces you expect to
+ * suspend, and keeping it out of that counter is what keeps the counter honest.
+ *
+ * Throws on refusal, exactly as `acquireWorkspacePool` does. The caller decides
+ * what a refused workspace costs; for the relay tier it costs that workspace its relay
+ * and nothing else.
  */
-export async function assertWorkspaceDirectDatabase(
-  workspace: WorkspaceDescriptor,
+export interface DirectWorkspacePool {
   sql: postgres.Sql
-): Promise<void> {
-  await verifyWorkspaceDatabase(workspace, sql)
+  db: Database
+  secrets: ResolvedWorkspaceSecrets
+  close(): Promise<void>
+}
+
+export async function openWorkspaceDirectPool(
+  workspace: WorkspaceDescriptor,
+  opts: { max?: number } = {}
+): Promise<DirectWorkspacePool> {
+  const sql = postgres(workspace.database.directUrl, {
+    max: opts.max ?? 1,
+    // An always-warm tier: letting the connection lapse would pay a reconnect on
+    // every wake, and the whole point of the doorbell is that work starts now.
+    idle_timeout: 0,
+    connect_timeout: 15,
+    prepare: true,
+    password: () => resolvePassword(workspace),
+    onnotice: () => {},
+  })
+  try {
+    const secrets = await verifyWorkspaceDatabase(workspace, sql)
+    return {
+      sql,
+      db: createDbFromSql(sql),
+      secrets,
+      close: () =>
+        sql
+          .end({ timeout: 5 })
+          .then(() => undefined)
+          .catch(() => undefined),
+    }
+  } catch (err) {
+    await sql.end({ timeout: 5 }).catch(() => {})
+    throw err
+  }
 }
 
 /** Close and forget a workspace's pool. Idempotent. */
@@ -389,9 +437,10 @@ export async function evict(workspaceKey: string, reason: EvictionReason): Promi
 /**
  * Close pools that have been idle past the threshold.
  *
- * `postgres.js` already closes idle *sockets* after `idle_timeout`. This sweep
- * additionally drops the pool object, which is what stops a workspace that was
- * routed here once from holding a slot in the LRU forever.
+ * `postgres.js` already closes idle *sockets* after `idle_timeout`, which is
+ * what actually lets the compute suspend. This sweep additionally drops the pool
+ * object, which is what stops a workspace that was routed here once from holding a
+ * slot in the LRU forever, and what makes the eviction counter meaningful.
  */
 export async function sweepIdlePools(now = Date.now()): Promise<number> {
   const thresholdMs = config.workspacePoolIdleSeconds * 1000
@@ -412,11 +461,13 @@ function ensureSweeper(): void {
     // eviction for the life of the process would then be stamped with one
     // long-finished request's id and route. A log line that names a request
     // which did not cause it is worse than one with no request at all.
-    void runWithLogContext({ request_id: crypto.randomUUID(), route: 'sweep:workspace-pools' }, () =>
-      sweepIdlePools().catch((err) => log.warn({ err }, 'idle pool sweep failed'))
+    void runWithLogContext(
+      { request_id: crypto.randomUUID(), route: 'sweep:workspace-pools' },
+      () => sweepIdlePools().catch((err) => log.warn({ err }, 'idle pool sweep failed'))
     )
   }, periodMs)
-  // Never hold the process open.
+  // Never hold the process open. An eviction sweeper that prevented exit would
+  // be the same class of bug as a pool that prevents suspend.
   sweeper.unref?.()
 }
 
@@ -427,4 +478,14 @@ export async function closeAllWorkspacePools(): Promise<void> {
   }
   const ids = [...pools.keys()]
   for (const id of ids) await evict(id, 'shutdown')
+}
+
+/** Test seam: forget everything, including counters. */
+export async function __resetPoolCacheForTests(): Promise<void> {
+  await closeAllWorkspacePools()
+  stats.created = 0
+  stats.evicted = 0
+  stats.evictedByReason = {} as Record<EvictionReason, number>
+  stats.refusals = 0
+  stats.firstCreatedAt = 0
 }

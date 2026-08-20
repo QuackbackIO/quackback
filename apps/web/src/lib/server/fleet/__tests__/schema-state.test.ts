@@ -269,7 +269,7 @@ describe('the reaper', () => {
     expect(byId.retry!.status).toBe('pending')
     expect(byId.spent!.status).toBe('failed')
     // A poisonous workspace that kills its migrator every time must stop being
-    // claimed, or it wakes its Neon compute forever.
+    // claimed, or it wakes its workspace database forever.
     expect(byId.spent!.lastError).toContain('no attempts remaining')
   })
 

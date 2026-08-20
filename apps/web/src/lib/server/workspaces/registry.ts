@@ -19,16 +19,17 @@
  * so the two repos cannot drift into two readings of the same record. A reader
  * that trusts the writer is one migration away from serving the wrong workspace.
  *
- * **`neon_project_id` / `neon_branch_id` are read here even though contract v1
- * does not carry them in `WorkspaceRecord`.** They are real columns on
- * `cp_workspace_registry`, and they are the only defence against a database
- * *branch* — see `physical-identity.ts`. They are attached alongside the
- * validated record rather than smuggled into it, so the vendored schema stays
- * byte-identical to the control plane's.
+ * **Catalog identity (`pg_database_oid` / `pg_cluster_id` / `db_name`) is read
+ * here even though contract v1 does not carry it in `WorkspaceRecord`.** Those
+ * columns are the anti-clone half of the fingerprint — see
+ * `physical-identity.ts`. They are attached alongside the validated record
+ * rather than smuggled into it, so the vendored schema stays byte-identical to
+ * the control plane's.
  */
 import postgres from 'postgres'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import type { PhysicalExpectation } from './physical-identity'
 import {
   validateWorkspaceRecord,
   type WorkspaceRecord,
@@ -43,7 +44,9 @@ const log = logger.child({ component: 'workspace-registry' })
  * Structurally a `WorkspaceRecord`, so everything typed against the contract keeps
  * working; `physical` is additive.
  */
-export interface WorkspaceDescriptor extends WorkspaceRecord {}
+export interface WorkspaceDescriptor extends WorkspaceRecord {
+  readonly physical: PhysicalExpectation
+}
 
 export type WorkspaceLookup =
   | { kind: 'ok'; workspace: WorkspaceDescriptor }
@@ -68,8 +71,8 @@ interface RegistryRow {
   email_from: string
   ai_enabled: boolean
   revision: string | number
-  neon_project_id: string | null
-  neon_branch_id: string | null
+  pg_database_oid: string | number | null
+  pg_cluster_id: string | null
   hostnames: string[]
 }
 
@@ -205,7 +208,7 @@ const SELECT_COLUMNS = `
   r.app_secrets_ref,
   r.workspace_id, r.fingerprint_stamped_at,
   r.storage, r.email_from, r.ai_enabled, r.revision,
-  r.neon_project_id, r.neon_branch_id,
+  r.pg_database_oid, r.pg_cluster_id,
   COALESCE(
     (SELECT array_agg(h2.hostname ORDER BY h2.hostname)
        FROM cp_workspace_hostnames h2
@@ -349,8 +352,21 @@ export function interpretRow(row: RegistryRow, hostname: string): WorkspaceLooku
 
   return {
     kind: 'ok',
-    workspace: result.record,
+    workspace: {
+      ...result.record,
+      physical: {
+        catalogName: emptyToNull(row.pg_database_oid != null ? row.db_name : null),
+        catalogOid: emptyToNull(row.pg_database_oid == null ? null : String(row.pg_database_oid)),
+        clusterId: emptyToNull(row.pg_cluster_id),
+      },
+    },
   }
+}
+
+function emptyToNull(value: string | null): string | null {
+  if (value === null) return null
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
 }
 
 /**

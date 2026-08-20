@@ -106,7 +106,7 @@ export function makeWorkspaceDescriptor(
     },
     email: { from: `support@${host}` },
     features: { aiEnabled: true },
-    physical: { neonProjectId: null, neonBranchId: null },
+    physical: { catalogName: null, catalogOid: null, clusterId: null },
   }
 }
 

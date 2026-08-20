@@ -14,14 +14,15 @@ import {
 } from '../fingerprint'
 
 const EXPECTED = {
-  expectedWorkspaceKey: 'inst_gauntlet_neon_t1',
+  expectedWorkspaceKey: 'inst_cloud_ws_t1',
   expectedSelfReportedWorkspaceId: '019fe1ca-596e-7ff7-9edf-feecc2ce41b8',
   stampedAt: '2026-08-08T14:32:43.928Z',
 }
 
 const PHYSICAL = {
-  neonProjectId: 'tiny-credit-36813255',
-  neonBranchId: 'br-weathered-lake-aupi87in',
+  catalogName: 'qb_ws_t1',
+  catalogOid: '4242',
+  clusterId: 'fleet-a',
 }
 
 function observation(
@@ -32,9 +33,8 @@ function observation(
     stamp: { v: 1, workspaceKey: EXPECTED.expectedWorkspaceKey, stampedAt: EXPECTED.stampedAt },
     settingsRowCount: 1,
     physical: {
-      neonProjectId: PHYSICAL.neonProjectId,
-      neonBranchId: PHYSICAL.neonBranchId,
-      neonEndpointId: 'ep-tiny-poetry-auqd4saj',
+      currentDatabase: PHYSICAL.catalogName,
+      catalogOid: PHYSICAL.catalogOid,
     },
     stampSource: 'column',
     stampSourceConflict: null,
@@ -98,43 +98,41 @@ describe('evaluateWorkspaceIdentity', () => {
       PHYSICAL,
       observation({
         stampSourceConflict: {
-          column: 'inst_gauntlet_neon_t1',
-          metadata: 'inst_gauntlet_neon_t2',
+          column: 'inst_cloud_ws_t1',
+          metadata: 'inst_cloud_ws_t2',
         },
       })
     )
     expect(verdict).toMatchObject({ ok: false, code: 'stamp_source_conflict' })
   })
 
-  it('refuses a branch even though every content fact matches', () => {
+  it('refuses a clone even though every content fact matches', () => {
     // The observation here is byte-identical to a healthy one except for the
-    // branch id — which is precisely the shape a Neon clone produces.
+    // catalog oid — which is precisely the shape a dump/restore produces.
     const verdict = evaluateWorkspaceIdentity(
       EXPECTED,
       PHYSICAL,
       observation({
         physical: {
-          neonProjectId: PHYSICAL.neonProjectId,
-          neonBranchId: 'br-a-restore-of-t1',
-          neonEndpointId: 'ep-elsewhere',
+          currentDatabase: PHYSICAL.catalogName,
+          catalogOid: '9999',
         },
       })
     )
-    expect(verdict).toMatchObject({ ok: false, code: 'neon_branch_mismatch' })
+    expect(verdict).toMatchObject({ ok: false, code: 'catalog_oid_mismatch' })
   })
 
   it('reports a content mix-up as a content problem, not a placement one', () => {
     // Ordering matters for the operator: a wrong-database mix-up must not
-    // surface as "branch mismatch" just because both are wrong at once.
+    // surface as "catalog oid mismatch" just because both are wrong at once.
     const verdict = evaluateWorkspaceIdentity(
       EXPECTED,
       PHYSICAL,
       observation({
         selfReportedWorkspaceId: '019fe1d3-b692-7eeb-ab34-9a1d81f5b4f0',
         physical: {
-          neonProjectId: 'withered-paper-68223777',
-          neonBranchId: 'br-blue-unit-awbih7mt',
-          neonEndpointId: 'ep-round-mud-aw950r34',
+          currentDatabase: 'qb_other',
+          catalogOid: '8888',
         },
       })
     )

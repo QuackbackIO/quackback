@@ -14,7 +14,7 @@
  * in the database, so a custody change that stamps a fresh canary certifies the
  * new key over stored data the new key cannot open.
  *
- * That is not hypothetical. It is the state `inst_gauntlet_neon_t2` was in on
+ * That is not hypothetical. It is the state `inst_cloud_ws_t2` was in on
  * 2026-08-09:
  *
  * | 12:21 | registry row created, no canary, no custody established |
@@ -62,7 +62,7 @@ import {
 import { probeStoredCiphertext } from '../stored-ciphertext'
 import { sealSecretKeyCanary } from '../vendor/fleet-secrets'
 
-const WORKSPACE = 'inst_gauntlet_neon_t2'
+const WORKSPACE = 'inst_cloud_ws_t2'
 
 /**
  * The key in force when the workspace's stored ciphertext was written, and the key
@@ -229,7 +229,7 @@ describe('what observeWorkspaceIdentity reads', () => {
     const stored = await sealAuthSigningKey(KEY_AT_WRITE_TIME, JWK)
     const { sql, statements } = fakeSql([
       [{ ...SETTINGS_ROW, stored_ciphertext: stored }],
-      [{ project_id: null, branch_id: null, endpoint_id: null }],
+      [{ catalog_name: null, catalog_oid: null }],
     ])
 
     const observed = await observeWorkspaceIdentity(sql as never, KEY_AT_WRITE_TIME)
@@ -241,7 +241,7 @@ describe('what observeWorkspaceIdentity reads', () => {
     // under whatever key is in force, so a fleet holding the wrong one would
     // mint a fresh row it can open and the check would congratulate itself.
     expect(statements[0]).toMatch(/ORDER BY\s+j\.created_at ASC/)
-    // Two: the settings read and the Neon GUC read, exactly as before.
+    // Two: the settings read and the catalog identity read, exactly as before.
     expect(statements).toHaveLength(2)
   })
 
@@ -249,7 +249,7 @@ describe('what observeWorkspaceIdentity reads', () => {
     const stored = await sealAuthSigningKey(KEY_AT_WRITE_TIME, JWK)
     const { sql } = fakeSql([
       [{ ...SETTINGS_ROW, stored_ciphertext: stored }],
-      [{ project_id: null, branch_id: null, endpoint_id: null }],
+      [{ catalog_name: null, catalog_oid: null }],
     ])
 
     const observed = await observeWorkspaceIdentity(sql as never, KEY_AFTER_CUSTODY_CHANGE)
@@ -271,7 +271,7 @@ describe('what observeWorkspaceIdentity reads', () => {
         throw undefinedTable()
       },
       [{ ...SETTINGS_ROW }],
-      [{ project_id: null, branch_id: null, endpoint_id: null }],
+      [{ catalog_name: null, catalog_oid: null }],
     ])
 
     const observed = await observeWorkspaceIdentity(sql as never, KEY_AT_WRITE_TIME)

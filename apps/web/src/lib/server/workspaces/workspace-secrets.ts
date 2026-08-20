@@ -45,8 +45,8 @@
  * ## The seam
  *
  * {@link setWorkspaceSecretsResolver} exists so an operator can point this at an
- * external custodian without the app growing a vault client — the same shape
- * `readNeonRolePassword` already has. The built-in resolver needs no client at
+ * external custodian without the app growing a vault client. The built-in
+ * resolver needs no client at
  * all: `derived+hkdf://` is local HKDF and `sealed+aead://` is local AEAD over a
  * blob that arrived in the record. A process serving no cloud workspace therefore
  * needs no extra credentials of any kind, which is the property the seam was

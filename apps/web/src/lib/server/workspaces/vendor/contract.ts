@@ -222,10 +222,9 @@ export const secretRefSchema = z
  * The same parser, plus the per-field scheme policy.
  *
  * A scheme being implementable is not the same as it being appropriate here.
- * a derived or sealed ref holds an application secret and the database resolver has
- * always refused it, so it must not be committable in `db_credential_ref`; a
- * scheme that cannot carry a provider-issued key pair must not be committable in
- * the storage credential. Stating that once, in `secret-ref.ts`, keeps the
+ * a sealed ref with purpose `db` is the serving Postgres password; a scheme that
+ * cannot carry a provider-issued key pair must not be committable in the
+ * storage credential. Stating that once, in `secret-ref.ts`, keeps the
  * schema, the database CHECK and the resolver from drifting into three opinions.
  */
 export function fieldRefSchema(field: SecretRefField) {
@@ -300,7 +299,7 @@ export const workspaceRecordSchema = z.object({
 function workspaceNamedBySecretRef(
   ref: SecretRef,
   workspaceKey: string,
-  purpose: 'app-secrets' | 'storage'
+  purpose: 'app-secrets' | 'storage' | 'db'
 ): string | null {
   let parsed: ParsedSecretRef
   try {
@@ -356,6 +355,7 @@ export function checkWorkspaceRecordInvariants(record: WorkspaceRecord): string[
   for (const [label, ref, purpose] of [
     ['app secrets', record.secrets.appSecretsRef, 'app-secrets'],
     ['storage credential', record.storage.credentialRef, 'storage'],
+    ['database credential', record.database.credentialRef, 'db'],
   ] as const) {
     // Absent is not unnamed. A fleet-bucket workspace carries no storage ref at
     // all, and asking "does this ref name its workspace?" of a ref that does not

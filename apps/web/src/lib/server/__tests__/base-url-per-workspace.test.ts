@@ -60,11 +60,11 @@ describe('config.baseUrl', () => {
     const { config } = await import('@/lib/server/config')
     const { runWithWorkspaceScope } = await import('@/lib/server/workspaces/workspace-context')
 
-    runWithWorkspaceScope(scopeFor('inst_t1', 'neon-t1.quackback.co.uk'), () => {
-      expect(config.baseUrl).toBe('https://neon-t1.quackback.co.uk')
+    runWithWorkspaceScope(scopeFor('inst_t1', 'ws-t1.quackback.co.uk'), () => {
+      expect(config.baseUrl).toBe('https://ws-t1.quackback.co.uk')
     })
-    runWithWorkspaceScope(scopeFor('inst_t2', 'neon-t2.quackback.co.uk'), () => {
-      expect(config.baseUrl).toBe('https://neon-t2.quackback.co.uk')
+    runWithWorkspaceScope(scopeFor('inst_t2', 'ws-t2.quackback.co.uk'), () => {
+      expect(config.baseUrl).toBe('https://ws-t2.quackback.co.uk')
     })
   })
 

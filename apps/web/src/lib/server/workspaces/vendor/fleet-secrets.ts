@@ -17,7 +17,7 @@
  * fleet root with the workspace id as domain separation and every replica computes
  * the same answer with no network hop, no store and no handoff. Custody stops
  * being a delivery problem, which is exactly the failure mode that shipped once
- * already on the database credential (`docs/neon-workspace-provisioning.md` §5).
+ * already on the database credential.
  *
  * S3 credentials are a value **a provider chose**. Cloudflare mints the key pair
  * for a bucket; no amount of HKDF produces it. So it has to be carried, and the
@@ -47,13 +47,7 @@
  * rewrite — but nothing here forecloses it, which is the property a scheme has
  * to have *before* it holds anything.
  */
-import {
-  createCipheriv,
-  createDecipheriv,
-  hkdfSync,
-  randomBytes,
-  timingSafeEqual,
-} from 'node:crypto'
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto'
 
 /**
  * The lowest root-key length this will accept.
@@ -90,7 +84,7 @@ export class FleetSecretError extends Error {
  * fail, and "silently a different key" is the one outcome this whole module
  * exists to prevent.
  */
-export const FLEET_SECRET_PURPOSES = ['app-secrets', 'storage'] as const
+export const FLEET_SECRET_PURPOSES = ['app-secrets', 'storage', 'db'] as const
 export type FleetSecretPurpose = (typeof FLEET_SECRET_PURPOSES)[number]
 
 export interface FleetSecretTarget {
@@ -106,7 +100,7 @@ function assertRootKey(rootKey: string): void {
     throw new FleetSecretError(
       'root_key_unusable',
       `the fleet root key must be at least ${FLEET_ROOT_KEY_MIN_LENGTH} characters; ` +
-        'a short root is stretched by HKDF into something that looks like a real key'
+        'a short root is stretched by HKDF into something that looks like a real key',
     )
   }
 }
@@ -158,7 +152,7 @@ export function deriveWorkspaceSecret(rootKey: string, target: FleetSecretTarget
 export function sealWorkspaceSecret(
   rootKey: string,
   target: FleetSecretTarget,
-  plaintext: string
+  plaintext: string,
 ): string {
   assertRootKey(rootKey)
   assertTarget(target)
@@ -182,7 +176,7 @@ export function sealWorkspaceSecret(
 export function openWorkspaceSecret(
   rootKey: string,
   target: FleetSecretTarget,
-  blob: string
+  blob: string,
 ): string {
   assertRootKey(rootKey)
   assertTarget(target)
@@ -193,10 +187,7 @@ export function openWorkspaceSecret(
     throw new FleetSecretError('sealed_unreadable', 'sealed secret is not valid base64url')
   }
   if (raw.length < IV_LENGTH + AUTH_TAG_LENGTH + 1) {
-    throw new FleetSecretError(
-      'sealed_unreadable',
-      'sealed secret is too short to be a sealed value'
-    )
+    throw new FleetSecretError('sealed_unreadable', 'sealed secret is too short to be a sealed value')
   }
   const iv = raw.subarray(0, IV_LENGTH)
   const tag = raw.subarray(raw.length - AUTH_TAG_LENGTH)
@@ -212,7 +203,7 @@ export function openWorkspaceSecret(
     throw new FleetSecretError(
       'sealed_unopenable',
       `sealed secret for ${target.workspaceKey}/${target.purpose} (generation ${target.generation}) ` +
-        'did not open: wrong root key, wrong generation, or a blob sealed for another workspace'
+        'did not open: wrong root key, wrong generation, or a blob sealed for another workspace',
     )
   }
 }
@@ -264,7 +255,10 @@ export function sealSecretKeyCanary(secretKey: string, workspaceKey: string): st
     authTagLength: AUTH_TAG_LENGTH,
   })
   cipher.setAAD(Buffer.from(`canary|${workspaceKey}`, 'utf8'))
-  const body = Buffer.concat([cipher.update(SECRET_KEY_CANARY_PLAINTEXT, 'utf8'), cipher.final()])
+  const body = Buffer.concat([
+    cipher.update(SECRET_KEY_CANARY_PLAINTEXT, 'utf8'),
+    cipher.final(),
+  ])
   return Buffer.concat([iv, body, cipher.getAuthTag()]).toString('base64url')
 }
 
@@ -272,7 +266,7 @@ export function sealSecretKeyCanary(secretKey: string, workspaceKey: string): st
 export function verifySecretKeyCanary(
   secretKey: string,
   workspaceKey: string,
-  canary: string
+  canary: string,
 ): boolean {
   if (typeof secretKey !== 'string' || secretKey === '') return false
   if (typeof canary !== 'string' || canary === '') return false
@@ -284,9 +278,12 @@ export function verifySecretKeyCanary(
   }
   if (raw.length < IV_LENGTH + AUTH_TAG_LENGTH + 1) return false
   try {
-    const decipher = createDecipheriv(ALGORITHM, canaryKey(secretKey), raw.subarray(0, IV_LENGTH), {
-      authTagLength: AUTH_TAG_LENGTH,
-    })
+    const decipher = createDecipheriv(
+      ALGORITHM,
+      canaryKey(secretKey),
+      raw.subarray(0, IV_LENGTH),
+      { authTagLength: AUTH_TAG_LENGTH },
+    )
     decipher.setAAD(Buffer.from(`canary|${workspaceKey}`, 'utf8'))
     decipher.setAuthTag(raw.subarray(raw.length - AUTH_TAG_LENGTH))
     const opened = Buffer.concat([
@@ -302,7 +299,7 @@ export function verifySecretKeyCanary(
 
 function canaryKey(secretKey: string): Buffer {
   return Buffer.from(
-    hkdfSync('sha256', secretKey, HKDF_SALT, 'quackback:fleet:canary:v1', KEY_LENGTH)
+    hkdfSync('sha256', secretKey, HKDF_SALT, 'quackback:fleet:canary:v1', KEY_LENGTH),
   )
 }
 
@@ -354,7 +351,7 @@ export type SecretStampProvenance = {
 export function secretMaterialFingerprint(material: string): string {
   if (typeof material !== 'string' || material === '') return 'none'
   return Buffer.from(
-    hkdfSync('sha256', material, HKDF_SALT, 'quackback:fleet:material-fingerprint:v1', 8)
+    hkdfSync('sha256', material, HKDF_SALT, 'quackback:fleet:material-fingerprint:v1', 8),
   ).toString('hex')
 }
 
