@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { gzipSync, brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 import { config } from '@/lib/server/config'
+import { publicWorkspaceCacheHeaders } from '@/lib/server/workspaces/http-cache'
 // Vite `?raw` imports ship the bundle content as a string at build time.
 // packages/widget/dist/browser.js must exist — produced by `bun run --filter
 // @quackback/widget build` before the web app builds.
@@ -36,8 +37,9 @@ function jsResponse(body: string, maxAge: number, acceptEncoding: string): Respo
   const headers: Record<string, string> = {
     'Content-Type': 'application/javascript; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Cache-Control': `public, max-age=${maxAge}`,
-    Vary: 'Accept-Encoding',
+    // The body bakes in the workspace's base URL and widget config, so it varies by
+    // Host as well as by encoding — see tenancy/http-cache.ts.
+    ...publicWorkspaceCacheHeaders(maxAge, 'Accept-Encoding'),
   }
   if (/\bbr\b/.test(acceptEncoding)) {
     return new Response(encodeBody(body).br as BodyInit, {

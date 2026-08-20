@@ -1311,6 +1311,7 @@ export const Route = createFileRoute('/api/v1/docs')({
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'public, max-age=3600',
+            Vary: 'Host',
           },
         })
       },
