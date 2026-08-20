@@ -279,6 +279,13 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     pattern: /^ALTER TABLE "settings" DROP COLUMN "cloud_workspace_key";?$/,
   },
   {
+    // The canary is written and read only by the per-workspace secret custody
+    // check (service-encrypted ciphertext); the ORM never names it, so a
+    // declaration would be a second owner for a column raw SQL already owns.
+    reason: 'settings.cloud_secret_canary is a raw-SQL-only custody column',
+    pattern: /^ALTER TABLE "settings" DROP COLUMN "cloud_secret_canary";?$/,
+  },
+  {
     // The migration owns this partial index because it must sit after the
     // guarded tenant_id-to-workspace_key rename and remain replay-safe.
     reason: 'presence agent heartbeat index is raw-SQL-owned rename-completion DDL',
