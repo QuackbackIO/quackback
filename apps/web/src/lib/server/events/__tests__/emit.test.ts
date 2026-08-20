@@ -70,6 +70,15 @@ describe('emit()', () => {
           'utf8'
         )
       )
+      await admin.unsafe(
+        readFileSync(
+          path.resolve(
+            __dirname,
+            '../../../../../../../packages/db/drizzle/0254_event_dispatch_owner_default_job.sql'
+          ),
+          'utf8'
+        )
+      )
     } finally {
       await admin.end({ timeout: 2 })
     }

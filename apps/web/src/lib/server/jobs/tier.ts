@@ -59,6 +59,7 @@ import {
 } from './runner'
 import { getProcessScheduler, stopTenantScheduler } from './scheduler'
 import { onDurableWorkCommitted } from '@/lib/server/tenancy/after-commit'
+import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 
 const log = logger.child({ component: 'job-tier' })
 
@@ -229,6 +230,11 @@ function startLoop(opts: {
         const now = Date.now()
 
         const result = await opts.scoped(async () => {
+          try {
+            await convertRelayOwnedEvents()
+          } catch (err) {
+            log.warn({ err, tenantId: opts.tenantId }, 'relay-owned event convert failed')
+          }
           if (now >= nextScheduleAt) {
             const tick = await runScheduleTick(schedule, new Date(now))
             s.scheduled += tick.enqueued

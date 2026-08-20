@@ -27,8 +27,18 @@ import { join, basename } from 'node:path'
 // fileURLToPath then throws at load.
 const EVENTS_DIR = join(__dirname, '..')
 
-/** The module that owns the queue: name, dedupe key, attempt limit. */
-const QUEUE_OWNERS = new Set(['process.ts', 'emit.ts'])
+/**
+ * The modules that own a queue: name, dedupe key, attempt limit.
+ *
+ * `event-dispatch-queue.ts` is here because it sweeps relay-owned events onto
+ * the `event-dispatch` queue, and writes them under the *same*
+ * `event-dispatch:<eventId>` key and attempt limit `emit.ts` uses. Two writers
+ * for one queue is safe only while the key is identical: a sweep of an event
+ * `emit.ts` already enqueued collides on the unique index and no-ops, which is
+ * the property this gate exists to protect rather than the single-writer rule
+ * as such.
+ */
+const QUEUE_OWNERS = new Set(['process.ts', 'emit.ts', 'event-dispatch-queue.ts'])
 
 /** An import of the queue's write side, in any of the spellings that reach it. */
 const ENQUEUE_IMPORT = /\b(?:enqueueJobs?|cancelJob)\b[^\n]*\bfrom\s+['"][^'"]*jobs\/job-queue['"]/
