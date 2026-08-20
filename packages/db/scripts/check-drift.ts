@@ -254,22 +254,35 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
     optional: true,
   },
   {
-    reason: 'drizzle-kit no-op composite PK rewrite for tenant-keyed two-column stores on PG 17',
+    reason: 'drizzle-kit no-op composite PK rename for workspace-keyed two-column stores on PG 17',
     pattern:
-      /^ALTER TABLE "(kv_store|rate_bucket)" DROP CONSTRAINT "\1_pkey";\s*--> statement-breakpoint\s*ALTER TABLE "\1" ADD CONSTRAINT "\1_pkey" PRIMARY KEY\("tenant_id","key"\);?$/,
+      /^ALTER TABLE "(kv_store|rate_bucket)" (?:DROP CONSTRAINT "\1_pkey"|ADD CONSTRAINT "\1_workspace_key_key_pk" PRIMARY KEY\("workspace_key","key"\));?$/,
     optional: true,
   },
   {
-    reason: 'drizzle-kit no-op composite PK rewrite for kv_set_member on PG 17',
+    reason: 'drizzle-kit no-op composite PK rename for workspace-keyed kv_set_member on PG 17',
     pattern:
-      /^ALTER TABLE "kv_set_member" DROP CONSTRAINT "kv_set_member_pkey";\s*--> statement-breakpoint\s*ALTER TABLE "kv_set_member" ADD CONSTRAINT "kv_set_member_pkey" PRIMARY KEY\("tenant_id","set_key","member"\);?$/,
+      /^ALTER TABLE "kv_set_member" (?:DROP CONSTRAINT "kv_set_member_pkey"|ADD CONSTRAINT "kv_set_member_workspace_key_set_key_member_pk" PRIMARY KEY\("workspace_key","set_key","member"\));?$/,
     optional: true,
   },
   {
-    reason: 'drizzle-kit no-op composite PK rewrite for presence_stream on PG 17',
+    reason: 'drizzle-kit no-op composite PK rename for workspace-keyed presence_stream on PG 17',
     pattern:
-      /^ALTER TABLE "presence_stream" DROP CONSTRAINT "presence_stream_pkey";\s*--> statement-breakpoint\s*ALTER TABLE "presence_stream" ADD CONSTRAINT "presence_stream_pkey" PRIMARY KEY\("tenant_id","principal_id","stream_id"\);?$/,
+      /^ALTER TABLE "presence_stream" (?:DROP CONSTRAINT "presence_stream_pkey"|ADD CONSTRAINT "presence_stream_workspace_key_principal_id_stream_id_pk" PRIMARY KEY\("workspace_key","principal_id","stream_id"\));?$/,
     optional: true,
+  },
+  {
+    // The ownership stamp is deliberately read through to_jsonb() and omitted
+    // from the ORM schema so older self-hosted databases can still serve while
+    // the additive migration rolls out. Raw SQL owns this column.
+    reason: 'settings.cloud_workspace_key is a raw-SQL-only compatibility column',
+    pattern: /^ALTER TABLE "settings" DROP COLUMN "cloud_workspace_key";?$/,
+  },
+  {
+    // The migration owns this partial index because it must sit after the
+    // guarded tenant_id-to-workspace_key rename and remain replay-safe.
+    reason: 'presence agent heartbeat index is raw-SQL-owned rename-completion DDL',
+    pattern: /^DROP INDEX "presence_stream_agents_idx";?$/,
   },
 ]
 
@@ -345,7 +358,10 @@ async function main(): Promise<number> {
     console.log('Applying all migrations to the scratch database...')
     // The same code path production boot uses (migrate + system seed); the
     // seed's DML cannot affect the DDL diff.
-    await runMigrations(scratchUrl())
+    // Concurrent indexes and the post-condition sweep are deliberately off:
+    // this check diffs DDL that drizzle-kit can express, while concurrent
+    // indexes are raw-SQL-owned and verified separately by schema operations.
+    await runMigrations(scratchUrl(), { concurrentIndexes: false, verify: false })
 
     console.log('Diffing live schema against the Drizzle TS schema...')
     // pushSchema reads `.rows` off execute() results, but the postgres-js
