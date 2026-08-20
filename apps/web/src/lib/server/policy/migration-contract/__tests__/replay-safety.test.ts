@@ -254,14 +254,19 @@ describe('the real corpus', () => {
     // is a number worth watching. A second one is not forbidden — it just has
     // to be noticed and argued for here rather than accumulating quietly.
     //
-    // 0263 (two blocks) and 0269 (one) are argued for on the same grounds as
-    // 0258: each is a `DO $$` whose body is guarded by
+    // 0263 (two blocks), 0266, 0267 and 0269 are argued for on the same grounds
+    // as 0258: each is a `DO $$` whose body is guarded by
     // `IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '<name>')`,
     // and whose only action is adding the constraint of that exact name. The
     // guard and the action name the same object, so a second run does nothing.
     // A DO block is the only shape the scanner will accept a claim for, because
     // it is the only one whose body it cannot read — the claim is about the
     // guard, not a request to be trusted about a statement.
+    //
+    // 0266 and 0267 were rewritten into that shape rather than merely annotated:
+    // both were a bare `ADD CONSTRAINT`, which Postgres has no IF NOT EXISTS
+    // form of, so the guard had to be written before there was anything to
+    // vouch for. The claim describes the guard now in the file.
     //
     // They are annotated rather than left refused because their verdicts sit
     // inside the fleet's gap-heal window: while they read as `mutates`, a heal
@@ -273,6 +278,8 @@ describe('the real corpus', () => {
     expect(vouching).toEqual([
       '0258_workspace_key_columns.sql',
       '0263_connectors.sql',
+      '0266_channel_threads.sql',
+      '0267_channel_threads_conversation_fk.sql',
       '0269_event_dispatch_owner.sql',
     ])
   })

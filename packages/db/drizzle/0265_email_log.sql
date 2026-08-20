@@ -1,6 +1,6 @@
 -- Outbound/inbound email ledger. Self-hosters get delivery debugging; the
 -- partial index is the month-quota counter for emailsPerMonth.
-CREATE TABLE "email_log" (
+CREATE TABLE IF NOT EXISTS "email_log" (
   "id" uuid PRIMARY KEY NOT NULL,
   "direction" varchar(16) NOT NULL,
   "email_type" varchar(64) NOT NULL,
@@ -19,10 +19,10 @@ CREATE TABLE "email_log" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX "email_log_created_idx" ON "email_log" ("created_at");
+CREATE INDEX IF NOT EXISTS "email_log_created_idx" ON "email_log" ("created_at");
 --> statement-breakpoint
-CREATE INDEX "email_log_conversation_idx" ON "email_log" ("conversation_id");
+CREATE INDEX IF NOT EXISTS "email_log_conversation_idx" ON "email_log" ("conversation_id");
 --> statement-breakpoint
-CREATE INDEX "email_log_month_billable_idx"
+CREATE INDEX IF NOT EXISTS "email_log_month_billable_idx"
   ON "email_log" ("created_at")
   WHERE "direction" = 'outbound' AND "status" = 'sent' AND "billable" = true;

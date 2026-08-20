@@ -519,6 +519,7 @@ export function assessReplaySafety(tag: string, sqlText: string): ReplaySafetyRe
   const stripped = stripNoise(sqlText)
   const statements = splitStatements(stripped)
   const droppedTriggers = new Set<string>()
+  const droppedConstraints = new Set<string>()
   const mutating: ReplayStatementFinding[] = []
   const erroring: ReplayStatementFinding[] = []
   const vouched: ReplayStatementFinding[] = []
@@ -576,6 +577,17 @@ export function assessReplaySafety(tag: string, sqlText: string): ReplaySafetyRe
     const dropTrigger = /^DROP\s+TRIGGER\s+IF\s+EXISTS\s+("?[\w.]+"?)/i.exec(flat)
     if (dropTrigger) droppedTriggers.add(normaliseIdent(dropTrigger[1]!))
 
+    // Same idiom as the trigger pair below, for constraints: Postgres has no
+    // ADD CONSTRAINT IF NOT EXISTS, so the house pattern is a preceding
+    // `DROP CONSTRAINT IF EXISTS` of the same name in the same file, which
+    // makes the two together a total overwrite. Recorded before the shape
+    // checks because the drop is itself safe and would `continue` past this.
+    const dropConstraint =
+      /^ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?[^\s,;]+\s+DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+("?[\w.]+"?)/i.exec(
+        flat
+      )
+    if (dropConstraint) droppedConstraints.add(normaliseIdent(dropConstraint[1]!))
+
     // Mutating is checked FIRST. An `INSERT ... ON CONFLICT` is the one write
     // that is genuinely absorbed, so it is the one exemption, and it is stated
     // here rather than left to a safe-shape match that might also swallow a
@@ -594,6 +606,12 @@ export function assessReplaySafety(tag: string, sqlText: string): ReplaySafetyRe
     // a total overwrite.
     const createTrigger = /^CREATE\s+(?:CONSTRAINT\s+)?TRIGGER\s+("?[\w.]+"?)/i.exec(flat)
     if (createTrigger && droppedTriggers.has(normaliseIdent(createTrigger[1]!))) continue
+
+    // The constraint half of the same rule. Only pairs: an ADD whose name was
+    // not dropped above it still errors on a second run, and says so.
+    const addConstraint =
+      /^ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?[^\s,;]+\s+ADD\s+CONSTRAINT\s+("?[\w.]+"?)/i.exec(flat)
+    if (addConstraint && droppedConstraints.has(normaliseIdent(addConstraint[1]!))) continue
 
     erroring.push({
       line: stmt.line,
