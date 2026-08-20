@@ -169,7 +169,31 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
     github: true,
     password: true,
   },
-  openSignup: false,
+  /**
+   * `true` because that is what a workspace that never answered the question
+   * has always DONE, not because open sign-ups are the friendlier choice.
+   *
+   * The setting bound nothing on any server path until `auth/signup-policy.ts`
+   * started enforcing it, so every workspace accepted new accounts regardless
+   * of what this reported. Two cohorts read their value from here rather than
+   * from a stored one: a config-file-provisioned workspace, whose `settings`
+   * row is inserted with no `authConfig` column at all, and any row written
+   * before this key existed. Defaulting them closed would not enforce a policy
+   * anyone set — it would invent one, apply it retroactively, and shut the
+   * public portal of every provisioned workspace the moment its owner arrived.
+   *
+   * `false` is honoured everywhere it is stored. Where it comes FROM is worth
+   * being exact about, because it is narrower than it looks: the onboarding
+   * wizard writes this key on workspace creation and always writes `true`, and
+   * nothing else writes it at all — no admin control sends it, and the
+   * declarative config file's `auth` block is a deprecated key the reconciler
+   * ignores. So on the team's side this default is, in practice, the value.
+   *
+   * The public portal's answer is the one an administrator can actually change,
+   * through the signup toggle on the portal access settings; see
+   * {@link PortalConfig.openSignup}.
+   */
+  openSignup: true,
 }
 
 // =============================================================================
@@ -294,6 +318,30 @@ export interface PortalNavConfig {
 export interface PortalConfig {
   /** Feature toggles */
   features: PortalFeatures
+  /**
+   * May a member of the public open an account on the PORTAL?
+   *
+   * The public portal's own answer to the question {@link AuthConfig.openSignup}
+   * answers for the team, and the two are routinely different: a workspace that
+   * takes feedback from anyone while keeping the team invitation-only says
+   * `true` here and `false` there. Provisioned workspaces are seeded with
+   * exactly that pair.
+   *
+   * **Optional, and deliberately absent from {@link DEFAULT_PORTAL_CONFIG}.**
+   * Absent means "this portal has no answer of its own", and the policy then
+   * falls back to the workspace-wide {@link AuthConfig.openSignup}. Giving this
+   * a default would make that absence unobservable and sever the fallback, so a
+   * workspace carrying only the workspace-wide answer would stop obeying it.
+   *
+   * Written by `updatePortalConfigFn` — the signup toggle on the portal access
+   * settings — and by nothing else. The first save writes an explicit value and
+   * the fallback stops applying from then on, which is the intended meaning of
+   * an administrator answering the question directly.
+   *
+   * Read through `signupOpenFor` in `auth/signup-policy.ts`; nothing else
+   * should compare this field directly.
+   */
+  openSignup?: boolean
   /** Welcome card on the portal index. Optional — absent = disabled. */
   welcomeCard?: PortalWelcomeCard
   /** Workspace-wide approval policy; applies to every board. */
@@ -882,6 +930,8 @@ export interface UpdateAuthConfigInput {
  */
 export interface UpdatePortalConfigInput {
   features?: Partial<PortalFeatures>
+  /** The portal's own signup answer; see {@link PortalConfig.openSignup}. */
+  openSignup?: boolean
   welcomeCard?: Partial<PortalWelcomeCard>
   moderationDefault?: ModerationDefault
   access?: Partial<PortalAccessConfig>
@@ -910,6 +960,13 @@ export interface PublicAuthConfig {
  */
 export interface PublicPortalConfig {
   features: PortalFeatures
+  /**
+   * The portal's RESOLVED signup answer — `portalConfig.openSignup` when it has
+   * one, the workspace-wide answer when it does not. Resolved on the server,
+   * through the same `signupOpenFor` the gate uses, so the sign-in form and the
+   * gate can never disagree about whether a stranger may open an account.
+   */
+  openSignup: boolean
   /**
    * Public OIDC sign-in buttons from the identity_provider table. Each
    * `id` is a provider's `registrationId` (drives

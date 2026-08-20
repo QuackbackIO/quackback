@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import { TrashIcon, XCircleIcon } from '@heroicons/react/24/solid'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
@@ -49,9 +50,10 @@ interface DomainsLanguagesTabProps {
 }
 
 export function DomainsLanguagesTab({ config }: DomainsLanguagesTabProps) {
+  const { billingEnabled } = useRouteContext({ from: '__root__' })
   return (
     <div className="space-y-6">
-      <DomainCard domain={config.domain} />
+      {billingEnabled ? null : <DomainCard domain={config.domain} />}
       <RedirectRulesCard />
       <IndexingCard indexable={config.seo.indexable} />
       <LocalesCard locales={config.locales} />

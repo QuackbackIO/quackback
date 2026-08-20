@@ -6,10 +6,18 @@ import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { MacrosManager } from '@/components/admin/conversation/macros-manager'
+import { UpgradeScreen } from '@/components/admin/upgrade'
 
 export const Route = createFileRoute('/admin/settings/macros')({
-  loader: ({ context }) => {
+  loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.CONVERSATION_MANAGE)
+    const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const [macrosEntitled] = await Promise.all([
+      hasEntitlementFn({ data: { key: 'aiDrafts' } }),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
+    ])
+    return { macrosEntitled }
   },
   component: MacrosSettingsRoute,
 })
@@ -25,6 +33,7 @@ function MacrosSettingsRoute() {
 }
 
 function MacrosSettingsPage() {
+  const { macrosEntitled } = Route.useLoaderData()
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="lg:hidden">
@@ -35,7 +44,11 @@ function MacrosSettingsPage() {
         title="Macros"
         description="Reusable replies with variables and bundled actions"
       />
-      <MacrosManager />
+      <MacrosSettingsBody entitled={macrosEntitled} />
     </div>
   )
+}
+
+export function MacrosSettingsBody({ entitled }: { entitled: boolean }) {
+  return entitled ? <MacrosManager /> : <UpgradeScreen entitlement="aiDrafts" />
 }

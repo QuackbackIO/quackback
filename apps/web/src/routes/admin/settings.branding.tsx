@@ -70,6 +70,8 @@ import {
   useUpdatePortalConfig,
 } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { UpgradeModal } from '@/components/admin/upgrade'
+import { describePlanUpgrade, isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import {
   DEFAULT_PORTAL_CONFIG,
   PORTAL_WELCOME_CARD_TITLE_MAX,
@@ -109,6 +111,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
     // of letting managers land on a shell full of 403s.
     assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
 
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
@@ -116,6 +119,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
       context.queryClient.ensureQueryData(settingsQueries.favicon()),
       context.queryClient.ensureQueryData(settingsQueries.customCss()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
   },
   component: BrandingPage,
@@ -174,6 +178,7 @@ function BrandingPage() {
   const navBaseline = useRef(JSON.stringify(navItems))
 
   const [saving, setSaving] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   const themeDirty =
     state.cssText !== themeBaseline.current.css || state.themeMode !== themeBaseline.current.mode
@@ -229,7 +234,11 @@ function BrandingPage() {
       toast.success('Branding saved')
       startTransition(() => router.invalidate())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't save branding. Try again.")
+      if (isPlanRefusal(error)) {
+        setUpgradeOpen(true)
+      } else {
+        toast.error(error instanceof Error ? error.message : "Couldn't save branding. Try again.")
+      }
     } finally {
       setSaving(false)
     }
@@ -618,6 +627,11 @@ function BrandingPage() {
           </Button>
         </div>
       </div>
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        description={describePlanUpgrade('Custom colours', 'pro')}
+      />
     </div>
   )
 }

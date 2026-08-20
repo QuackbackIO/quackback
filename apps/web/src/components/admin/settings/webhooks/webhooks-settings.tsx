@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { UpgradeModal } from '@/components/admin/upgrade'
 import { CreateWebhookDialog } from './create-webhook-dialog'
 import { EditWebhookDialog } from './edit-webhook-dialog'
 import { DeleteWebhookDialog } from './delete-webhook-dialog'
@@ -27,12 +28,22 @@ const EVENT_LABELS: Record<string, string> = {
 
 interface WebhooksSettingsProps {
   webhooks: Webhook[]
+  entitled: boolean
 }
 
-export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
+export function WebhooksSettings({ webhooks, entitled }: WebhooksSettingsProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [editWebhook, setEditWebhook] = useState<Webhook | null>(null)
   const [deleteWebhook, setDeleteWebhook] = useState<Webhook | null>(null)
+
+  const requestCreate = () => {
+    if (!entitled) {
+      setUpgradeOpen(true)
+      return
+    }
+    setCreateDialogOpen(true)
+  }
 
   const getStatusBadge = (webhook: Webhook) => {
     if (webhook.status === 'disabled') {
@@ -75,7 +86,7 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
             title="No webhooks configured"
             description="Get notified in real-time when posts are created, statuses change, or votes hit milestones. Connect to Slack, Discord, or your own systems."
             action={
-              <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+              <Button size="sm" onClick={requestCreate}>
                 <PlusIcon className="h-4 w-4 mr-1.5" />
                 Create your first webhook
               </Button>
@@ -88,11 +99,7 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
       {webhooks.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">{webhooks.length} of 25 webhooks</p>
-          <Button
-            size="sm"
-            onClick={() => setCreateDialogOpen(true)}
-            disabled={webhooks.length >= 25}
-          >
+          <Button size="sm" onClick={requestCreate} disabled={webhooks.length >= 25}>
             <PlusIcon className="h-4 w-4 mr-1.5" />
             Create Webhook
           </Button>
@@ -193,7 +200,15 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
       )}
 
       {/* Dialogs */}
-      <CreateWebhookDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
+      <CreateWebhookDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onPlanRefusal={() => {
+          setCreateDialogOpen(false)
+          setUpgradeOpen(true)
+        }}
+      />
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} entitlement="webhooks" />
 
       {editWebhook && (
         <EditWebhookDialog

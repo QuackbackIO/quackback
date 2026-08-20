@@ -11,10 +11,16 @@ import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 export const Route = createFileRoute('/admin/automation')({
   beforeLoad: ({ context }) => {
     const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
-    const canOpen = [PERMISSIONS.ASSISTANT_MANAGE, PERMISSIONS.WORKFLOW_MANAGE].some((permission) =>
-      permissions.includes(permission)
-    )
+    const canOpen = [
+      PERMISSIONS.ASSISTANT_MANAGE,
+      PERMISSIONS.WORKFLOW_MANAGE,
+      PERMISSIONS.ANALYTICS_VIEW,
+    ].some((permission) => permissions.includes(permission))
     if (!canOpen) throw new Error('Access denied: requires an AI & Automation permission')
+  },
+  loader: async ({ context }) => {
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    await ensureBillingCatalogue(context.queryClient, context.billingEnabled)
   },
   component: AutomationLayout,
 })

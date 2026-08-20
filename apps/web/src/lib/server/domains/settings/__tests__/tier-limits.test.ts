@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { OSS_TIER_LIMITS, type TierLimits } from '../tier-limits.types'
-import { mergeTierLimits } from '../tier-limits.service'
+import { mergeTierLimits, resolveEffectiveTierLimits } from '../tier-limits.service'
+import {
+  overlayProjectedLimits,
+  parseBillingProjection,
+  projectedLimitsAt,
+  type BillingProjection,
+  type ProjectedLimits,
+} from '../cloud/billing-projection'
 
 describe('OSS_TIER_LIMITS', () => {
   it('has all numeric limits set to null (unlimited)', () => {
@@ -86,5 +93,166 @@ describe('plan notice passthrough', () => {
   it('returns no notice when absent from stored limits', () => {
     expect(mergeTierLimits({ maxBoards: 1 }).notice).toBeUndefined()
     expect(mergeTierLimits(null).notice).toBeUndefined()
+  })
+})
+
+const PROJECTED_LIMITS: ProjectedLimits = {
+  maxBoards: 25,
+  maxPosts: 1_000,
+  maxTeamSeats: 10,
+  maxStatusComponents: 25,
+  maxCustomRoles: 5,
+  maxSendingDomains: 3,
+  aiTokensPerMonth: 100_000,
+  emailsPerMonth: null,
+  apiRequestsPerMonth: 100_000,
+  apiRequestsPerMinute: 600,
+}
+
+const PROJECTION: BillingProjection = {
+  version: 1,
+  effectivePlan: 'pro',
+  trialStartedAt: '2026-08-01T00:00:00.000Z',
+  trialExpiresAt: '2026-08-15T00:00:00.000Z',
+  subscriptionStatus: null,
+  entitlements: { customDomain: true },
+  freeLimits: { ...PROJECTED_LIMITS, maxBoards: 2 },
+  planLimits: PROJECTED_LIMITS,
+  planLimitsExpireAt: '2026-08-15T00:00:00.000Z',
+  canUpgrade: true,
+  canManageBilling: false,
+  renewalAt: null,
+  cancellationAt: null,
+}
+
+describe('projected numeric limits', () => {
+  it('raises Free limits while preserving higher operator allowances', () => {
+    const baseline = mergeTierLimits({
+      maxBoards: 2,
+      maxPosts: 500,
+      features: { customDomain: false },
+      notice: { label: 'Operator notice' },
+    })
+
+    const effective = overlayProjectedLimits(baseline, {
+      ...PROJECTED_LIMITS,
+      maxBoards: 25,
+      maxPosts: 100,
+    })
+
+    expect(effective.maxBoards).toBe(25)
+    expect(effective.maxPosts).toBe(500)
+    expect(effective.features.customDomain).toBe(false)
+    expect(effective.notice).toEqual({ label: 'Operator notice' })
+  })
+
+  it('preserves unlimited baselines and grants unlimited Pro fields', () => {
+    const baseline = mergeTierLimits({ maxBoards: null, maxPosts: 10 })
+    const effective = overlayProjectedLimits(baseline, {
+      ...PROJECTED_LIMITS,
+      maxBoards: 25,
+      maxPosts: null,
+    })
+
+    expect(effective.maxBoards).toBeNull()
+    expect(effective.maxPosts).toBeNull()
+  })
+
+  it('falls back to the cached Free baseline at the exact expiry instant', () => {
+    const baseline = mergeTierLimits({ maxBoards: 2 })
+    expect(
+      projectedLimitsAt(PROJECTION, baseline, new Date('2026-08-14T23:59:59.999Z')).maxBoards
+    ).toBe(25)
+    expect(
+      projectedLimitsAt(PROJECTION, baseline, new Date('2026-08-15T00:00:00.000Z')).maxBoards
+    ).toBe(2)
+  })
+
+  it('rejects unknown fields, provider references, and incomplete limits', () => {
+    expect(parseBillingProjection(PROJECTION)).toEqual(PROJECTION)
+    expect(parseBillingProjection({ ...PROJECTION, customerRef: 'cus_secret' })).toBeNull()
+    expect(
+      parseBillingProjection({
+        ...PROJECTION,
+        planLimits: { ...PROJECTION.planLimits, maxBoards: undefined },
+      })
+    ).toBeNull()
+  })
+
+  it('accepts a nine-key live projection and treats missing emailsPerMonth as unlimited', () => {
+    const { emailsPerMonth: _omitted, ...nineKey } = PROJECTED_LIMITS
+    const parsed = parseBillingProjection({
+      ...PROJECTION,
+      freeLimits: { ...nineKey, maxBoards: 2 },
+      planLimits: nineKey,
+    })
+    expect(parsed).not.toBeNull()
+    expect(parsed?.planLimits.emailsPerMonth).toBeNull()
+    expect(parsed?.freeLimits.emailsPerMonth).toBeNull()
+    expect(parsed?.planLimits.maxBoards).toBe(25)
+    expect(parsed?.canManageBilling).toBe(false)
+  })
+
+  it('rejects unrecognised plans, entitlements, and non-canonical dates', () => {
+    expect(parseBillingProjection({ ...PROJECTION, effectivePlan: 'enterprise' })).toBeNull()
+    expect(
+      parseBillingProjection({ ...PROJECTION, entitlements: { secretFeature: true } })
+    ).toBeNull()
+    expect(parseBillingProjection({ ...PROJECTION, trialExpiresAt: 'August 15' })).toBeNull()
+  })
+})
+
+describe('resolveEffectiveTierLimits (cloud, no operator row)', () => {
+  const beforeExpiry = new Date('2026-08-14T12:00:00.000Z')
+  const atExpiry = new Date('2026-08-15T00:00:00.000Z')
+
+  it('self-host with no row stays unlimited', () => {
+    expect(resolveEffectiveTierLimits(null, null)).toEqual(OSS_TIER_LIMITS)
+  })
+
+  it('does not inherit OSS unlimited once a billing projection is present', () => {
+    const effective = resolveEffectiveTierLimits(null, PROJECTION, beforeExpiry)
+    expect(effective.maxBoards).toBe(25)
+    expect(effective.maxPosts).toBe(PROJECTED_LIMITS.maxPosts)
+    expect(effective.features.customDomain).toBe(true)
+    expect(effective.features.webhooks).toBe(false)
+    expect(effective.features.ipAllowlist).toBe(false)
+  })
+
+  it('copies Pro-only feature flags from the projected plan, not only entitlements', () => {
+    const effective = resolveEffectiveTierLimits(null, PROJECTION, beforeExpiry)
+    expect(effective.features.analyticsExports).toBe(true)
+    expect(effective.features.customColors).toBe(true)
+    expect(effective.features.customCss).toBe(true)
+    expect(effective.features.integrations).toBe(true)
+  })
+
+  it('keeps Growth feature flags closed for keys that are not entitlements', () => {
+    const growth: BillingProjection = { ...PROJECTION, effectivePlan: 'growth' }
+    const effective = resolveEffectiveTierLimits(null, growth, beforeExpiry)
+    expect(effective.features.analyticsExports).toBe(false)
+    expect(effective.features.integrations).toBe(false)
+    expect(effective.features.customColors).toBe(false)
+    expect(effective.features.customCss).toBe(false)
+  })
+
+  it('falls back to projected Free numbers and closed features at exact expiry', () => {
+    const effective = resolveEffectiveTierLimits(null, PROJECTION, atExpiry)
+    expect(effective.maxBoards).toBe(2)
+    expect(effective.features.customDomain).toBe(false)
+    expect(effective.features.webhooks).toBe(false)
+    expect(effective.features.analyticsExports).toBe(false)
+    expect(effective.features.integrations).toBe(false)
+  })
+
+  it('still raises a stored operator floor in the least-restrictive direction', () => {
+    const effective = resolveEffectiveTierLimits(
+      { maxBoards: 2, maxPosts: 500, features: { customDomain: false } },
+      PROJECTION,
+      beforeExpiry
+    )
+    expect(effective.maxBoards).toBe(25)
+    expect(effective.maxPosts).toBe(PROJECTED_LIMITS.maxPosts)
+    expect(effective.features.customDomain).toBe(false)
   })
 })
