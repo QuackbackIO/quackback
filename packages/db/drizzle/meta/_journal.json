@@ -1639,6 +1639,34 @@
       "when": 1785700000014,
       "tag": "0256_workspace_key_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "7",
+      "when": 1785700000015,
+      "tag": "0257_sending_domain_reverify",
+      "breakpoints": true
+    },
+    {
+      "idx": 235,
+      "version": "7",
+      "when": 1785700000016,
+      "tag": "0258_email_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1785700000017,
+      "tag": "0259_channel_threads",
+      "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "7",
+      "when": 1785700000018,
+      "tag": "0260_channel_threads_conversation_fk",
+      "breakpoints": true
     }
   ]
 }
