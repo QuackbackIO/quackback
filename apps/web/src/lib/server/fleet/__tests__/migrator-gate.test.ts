@@ -338,6 +338,11 @@ describe('replayGateVerdict', () => {
       '0261_connectors',
       '0262_drop_assistant_custom_actions',
       '0263_core_product_flag_defaults',
+      '0264_settings_cloud',
+      '0265_billing',
+      '0266_settings_cloud_secret_canary',
+      '0267_drop_workspace_billing',
+      '0268_cloud_identity_projection',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

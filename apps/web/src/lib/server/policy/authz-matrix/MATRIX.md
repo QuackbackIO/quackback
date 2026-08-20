@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 652 surfaces
+### Server functions (`requireAuth`) — 667 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -255,6 +255,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/auth-provider-credentials.ts`::deleteAuthProviderCredentialsFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderCredentialsMaskedFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderStatusFn | auth.manage |
+| `lib/server/functions/billing.ts`::fetchBillingOverviewFn | billing.manage |
+| `lib/server/functions/billing.ts`::fetchBillingCatalogueFn | END_USER (any authenticated) |
+| `lib/server/functions/billing.ts`::fetchBillingInvoicesFn | billing.manage |
+| `lib/server/functions/billing.ts`::fetchPlanUsageFn | billing.manage |
 | `lib/server/functions/blocking.ts`::getPersonBlockStatusFn | people.view |
 | `lib/server/functions/blocking.ts`::blockPersonFn | people.manage |
 | `lib/server/functions/blocking.ts`::unblockPersonFn | people.manage |
@@ -292,6 +296,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/channel-accounts.ts`::updateSendingAddressSmtpFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::deleteChannelAccountFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::listRecentEmailLogFn | channel_account.manage |
+| `lib/server/functions/cloud-identity.ts`::getCloudIdentityFn | settings.manage |
+| `lib/server/functions/cloud-identity.ts`::markCloudWorkspaceDetailsSeenFn | settings.manage |
+| `lib/server/functions/cloud-identity.ts`::getCloudCustomDomainsFn | settings.custom_domain |
+| `lib/server/functions/cloud-identity.ts`::hasCustomDomainEntitlementFn | settings.custom_domain |
+| `lib/server/functions/cloud-identity.ts`::mutateCloudCustomDomainFn | settings.custom_domain |
+| `lib/server/functions/cloud-identity.ts`::updateCloudIdentityFn | settings.manage |
 | `lib/server/functions/comments.ts`::createCommentFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::addReactionFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::removeReactionFn | END_USER (any authenticated) |
@@ -466,6 +476,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::archiveNotificationFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | ADMIN-ONLY |
+| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | ADMIN-ONLY |
+| `lib/server/functions/owner-workspaces.ts`::listOwnerWorkspacesFn | settings.manage |
+| `lib/server/functions/owner-workspaces.ts`::openOwnerWorkspaceFn | settings.manage |
+| `lib/server/functions/ownership.ts`::getCloudOwnerEmailFn | END_USER (any authenticated) |
+| `lib/server/functions/ownership.ts`::transferWorkspaceOwnershipFn | END_USER (any authenticated) |
+| `lib/server/functions/ownership.ts`::leaveCloudWorkspaceFn | END_USER (any authenticated) |
 | `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
@@ -495,7 +511,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/post-views.ts`::deletePostViewFn | post.edit |
 | `lib/server/functions/post-voters-context.ts`::listPostVotersForVoteManagerFn | post.vote_on_behalf |
 | `lib/server/functions/posts.ts`::fetchInboxPostsForAdmin | post.view_private |
-| `lib/server/functions/posts.ts`::fetchInboxFilterCounts | post.view_private |
 | `lib/server/functions/posts.ts`::fetchPostWithDetails | post.view_private |
 | `lib/server/functions/posts.ts`::fetchPostVotersFn | post.view_private |
 | `lib/server/functions/posts.ts`::createPostFn | post.create |
@@ -757,10 +772,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 124 surfaces
+### Public REST API (`withApiKeyAuth`) — 125 surfaces
 
 | Surface | Enforces |
 | --- | --- |
+| `routes/api/billing/session.ts`::POST | billing.manage |
 | `routes/api/export.companies.ts`::GET | company.view |
 | `routes/api/export.users.ts`::handleExportUsers | people.view |
 | `routes/api/v1/apps/boards.ts`::GET | PUBLIC (any valid key) |
@@ -961,7 +977,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-183 of 946 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+191 of 969 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -986,6 +1002,9 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/csat-email.ts`::recordCsatViaTokenFn | server-fn |
 | `lib/server/functions/csat-email.ts`::validateCsatEmailTokenFn | server-fn |
 | `lib/server/functions/embeds.ts`::getEmbedPreviewFn | server-fn |
+| `lib/server/functions/entitlement-status.ts`::hasEntitlementFn | server-fn |
+| `lib/server/functions/entitlement-status.ts`::hasTierFeatureFn | server-fn |
+| `lib/server/functions/entitlement-status.ts`::listEntitlementsFn | server-fn |
 | `lib/server/functions/help-center-redirect-rules.ts`::resolveHelpCenterRedirectFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicArticleBySlugFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicCategoryBySlugFn | server-fn |
@@ -1005,6 +1024,8 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/invitations.ts`::getInviteBrandingFn | server-fn |
 | `lib/server/functions/invitations.ts`::setPasswordFn | server-fn |
 | `lib/server/functions/locale.ts`::getPortalLocaleFn | server-fn |
+| `lib/server/functions/onboarding.ts`::getWorkspaceClaimFn | server-fn |
+| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveUserNameFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | server-fn |
 | `lib/server/functions/portal-access.ts`::evaluateMyPortalAccessFn | server-fn |
@@ -1047,6 +1068,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/settings.ts`::fetchPublicAuthConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchPublicPortalConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchUserProfile | server-fn |
+| `lib/server/functions/sso-entitlement.ts`::hasSsoEntitlementFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusIncidentPublicFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
 | `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
@@ -1094,6 +1116,8 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/import/runs.ts`::GET | route |
 | `routes/api/integrations/$type/identify.ts`::POST | route |
 | `routes/api/integrations/$type/webhook.ts`::POST | route |
+| `routes/api/internal/billing-projection.ts`::POST | route |
+| `routes/api/internal/identity-projection.ts`::POST | route |
 | `routes/api/mcp.ts`::DELETE | route |
 | `routes/api/mcp.ts`::GET | route |
 | `routes/api/mcp.ts`::POST | route |
