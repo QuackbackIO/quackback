@@ -5,11 +5,10 @@ Quackback validates required runtime configuration before it starts workers or a
 | Variable       | Required | Description                                                           |
 | -------------- | -------: | --------------------------------------------------------------------- |
 | `DATABASE_URL` |      Yes | PostgreSQL connection URL.                                            |
-| `REDIS_URL`    |      Yes | Redis-compatible BullMQ connection URL.                               |
 | `SECRET_KEY`   |      Yes | At least 32 characters; generate with `openssl rand -base64 32`.      |
 | `BASE_URL`     |      Yes | Absolute public `http` or `https` URL for auth, links, and callbacks. |
 
-Production Compose supplies `DATABASE_URL` and `REDIS_URL` from its bundled services. You must set `BASE_URL` and `SECRET_KEY` in `.env`.
+Production Compose supplies `DATABASE_URL` from its bundled service. You must set `BASE_URL` and `SECRET_KEY` in `.env`.
 
 | Operational variable  |                Default | Description                                                                                 |
 | --------------------- | ---------------------: | ------------------------------------------------------------------------------------------- |
@@ -21,7 +20,7 @@ Production Compose supplies `DATABASE_URL` and `REDIS_URL` from its bundled serv
 
 With `TRUSTED_PROXY_HOPS=0` (the default), rate limiting and IP-based checks never trust client-supplied headers; they use the actual TCP peer address instead, so distinct clients still get distinct buckets even directly exposed. That resolution depends on the platform reporting the socket peer, which the production build (`bun run start`) always has; a dev runtime that doesn't expose it falls back to a single shared bucket rather than trusting a spoofable header. When you do run behind reverse proxies, set this to the number of hops so client IP is read from the correct `X-Forwarded-For` position instead.
 
-Use `/api/health/live` for process liveness and `/api/health/ready` for traffic readiness. Readiness checks PostgreSQL, Redis, the exact bundled migration ledger, and worker boot failures.
+Use `/api/health/live` for process liveness and `/api/health/ready` for traffic readiness. Readiness checks PostgreSQL, the exact bundled migration ledger, and whether a worker-role process is actually running the background job tier.
 
 For optional email, storage, AI, authentication, and integration settings, see [`.env.example`](../.env.example).
 
