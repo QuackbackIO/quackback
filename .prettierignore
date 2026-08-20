@@ -5,5 +5,17 @@ apps/web/src/lib/server/policy/authz-matrix/MATRIX.md
 # Generated dependency-graph snapshot — same file-snapshot contract as MATRIX.md.
 apps/web/src/lib/server/policy/dep-graph/GRAPH.md
 
+# Generated module-scope-state snapshot — same file-snapshot contract as MATRIX.md.
+apps/web/src/lib/server/policy/module-state/MODULE-STATE.md
+
 # Generated migration-contract ledger — same file-snapshot contract as MATRIX.md.
 apps/web/src/lib/server/policy/migration-contract/CONTRACT.md
+
+# Vendored control-plane contract. These files are byte-identical copies of
+# quackback-cp/src/lib/server/tenancy/, enforced by a digest and a direct
+# comparison in vendor-parity.test.ts. Formatting them here would break that
+# equality for a cosmetic reason, and the equality is the whole control: two
+# repos independently reading the same prose is how one ends up with a slightly
+# more forgiving version, and the forgiving one serves the wrong tenant.
+# Changes belong in the control plane, then get re-vendored.
+apps/web/src/lib/server/workspaces/vendor/

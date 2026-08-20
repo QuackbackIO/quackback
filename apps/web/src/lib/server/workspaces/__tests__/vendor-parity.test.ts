@@ -35,7 +35,7 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': '69872f4b0350941fdddf94275c9bcc8d35d40526b27f86cfbd2d70081c99a6ee',
+  'contract.ts': '23a144b7426230c578c1bc7a3264ea7bbf6bcde576c52964a65cd2a68a60d2c7',
   'secret-ref.ts': 'cf001176eafcbe9838ad5d86ba7d6cd30e338d4a6b0cb3439d6de7884045bc99',
   // Sealing and derivation, vendored for a sharper reason than the others: the
   // control plane seals a value and a fleet replica opens it. Drift here is not
