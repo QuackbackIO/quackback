@@ -10,14 +10,19 @@
     ".": "./src/index.ts",
     "./templates": "./src/templates/index.ts",
     "./anon": "./src/anon.ts",
-    "./recipient": "./src/recipient.ts"
+    "./message-id": "./src/message-id.ts",
+    "./recipient": "./src/recipient.ts",
+    "./sender": "./src/sender.ts",
+    "./ses": "./src/ses.ts",
+    "./ses-identity": "./src/ses-identity.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1111.0",
     "@quackback/logger": "workspace:*",
-    "@react-email/components": "^1.0.11",
-    "nodemailer": "^9.0.1",
+    "@react-email/components": "^1.0.12",
+    "nodemailer": "^9.0.5",
     "react": "^19.2.4",
-    "resend": "^6.10.0"
+    "resend": "^6.20.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.1",

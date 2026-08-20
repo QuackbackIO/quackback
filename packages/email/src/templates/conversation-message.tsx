@@ -1,6 +1,6 @@
-import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
-import { EmailLayout, NotificationFooter } from './email-layout'
-import { typography, button, colors } from './shared-styles'
+import { Column, Heading, Link, Row, Section, Text } from '@react-email/components'
+import { EmailLayout } from './email-layout'
+import { typography, colors, utils } from './shared-styles'
 
 interface ConversationMessageEmailProps {
   heading: string
@@ -18,7 +18,6 @@ interface ConversationMessageEmailProps {
   ctaLabel: string
   organizationName: string
   reason: string
-  unsubscribeUrl?: string
   logoUrl?: string
 }
 
@@ -32,7 +31,6 @@ export function ConversationMessageEmail({
   ctaLabel,
   organizationName,
   reason,
-  unsubscribeUrl,
   logoUrl,
 }: ConversationMessageEmailProps) {
   return (
@@ -79,23 +77,22 @@ export function ConversationMessageEmail({
                   ...typography.text,
                   marginTop: '0',
                   marginBottom: '0',
-                  fontStyle: 'italic',
                 }}
               >
-                &quot;{messagePreview}&quot;
+                {messagePreview}
               </Text>
             )}
           </Column>
         </Row>
       </Section>
 
-      <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
-        <Button style={button.primary} href={ctaUrl}>
+      <Section style={{ textAlign: 'center', marginTop: '24px', marginBottom: '24px' }}>
+        <Link href={ctaUrl} style={{ ...utils.link, fontWeight: 500, fontSize: '15px' }}>
           {ctaLabel}
-        </Button>
+        </Link>
       </Section>
 
-      <NotificationFooter reason={reason} unsubscribeUrl={unsubscribeUrl ?? ctaUrl} />
+      <Text style={typography.footer}>{reason}</Text>
     </EmailLayout>
   )
 }
