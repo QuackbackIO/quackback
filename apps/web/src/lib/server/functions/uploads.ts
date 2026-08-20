@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { getWidgetSession } from './widget-auth'
 import {
-  isS3Configured,
+  isS3Usable,
   generatePresignedUploadUrl,
   generateStorageKey,
   isAllowedImageType,
@@ -62,7 +62,7 @@ async function presignedImageUpload(
     `${opts.label} upload url requested`
   )
 
-  if (!isS3Configured()) {
+  if (!isS3Usable()) {
     throw new Error('File storage is not configured. Contact your administrator.')
   }
 
@@ -84,7 +84,7 @@ async function presignedImageUpload(
  */
 export const checkS3ConfiguredFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('s3 configured check')
-  return { configured: isS3Configured() }
+  return { configured: isS3Usable() }
 })
 
 /**
@@ -108,7 +108,7 @@ export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
     await requireAuth({ permission: PERMISSIONS.POST_CREATE })
 
     // Check S3 is configured
-    if (!isS3Configured()) {
+    if (!isS3Usable()) {
       throw new Error('File storage is not configured. Contact your administrator.')
     }
 
@@ -169,7 +169,7 @@ export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
       throw new Error('Authentication required to upload images.')
     }
 
-    if (!isS3Configured()) {
+    if (!isS3Usable()) {
       throw new Error('File storage is not configured. Contact your administrator.')
     }
 

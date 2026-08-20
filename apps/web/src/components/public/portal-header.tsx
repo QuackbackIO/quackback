@@ -334,7 +334,7 @@ export function PortalHeader({
       {/* Admin Button (visible for team members) */}
       {canAccessAdmin && (
         <Button variant="outline" size="sm" asChild className="ms-1 me-2">
-          <Link to="/admin">
+          <Link to="/admin" search={{}}>
             <ShieldCheckIcon className="me-2 h-4 w-4" />
             <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
           </Link>
@@ -374,7 +374,7 @@ export function PortalHeader({
             <DropdownMenuSeparator />
             {canAccessAdmin && (
               <DropdownMenuItem asChild>
-                <Link to="/admin">
+                <Link to="/admin" search={{}}>
                   <ShieldCheckIcon className="me-2 h-4 w-4" />
                   <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
                 </Link>

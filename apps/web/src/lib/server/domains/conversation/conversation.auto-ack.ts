@@ -15,13 +15,7 @@ const ACK_WINDOW_SECONDS = 3600
 const ACK_MAX = 2
 
 export type AutoAckRefusal =
-  | 'disabled'
-  | 'auto_submitted'
-  | 'precedence'
-  | 'list'
-  | 'own_domain'
-  | 'no_sender'
-  | 'rate_capped'
+  'disabled' | 'auto_submitted' | 'precedence' | 'list' | 'own_domain' | 'no_sender' | 'rate_capped'
 
 export function evaluateAutoAckGuards(
   parsed: ParsedInboundEmail,

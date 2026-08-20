@@ -179,7 +179,7 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
 export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
   .validator(confirmSchema)
   .handler(async ({ data }) => {
-    await requireAuth()
+    const ctx = await requireAuth()
     const { acceptableContactEmail } = await import('@/lib/server/domains/principals/contact-email')
     const email = acceptableContactEmail(data.email)
     if (!email) throw new ValidationError('VALIDATION_ERROR', 'Enter a valid email address.')
@@ -210,6 +210,14 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
       // and without it a misconfigured plugin looks exactly like a typo.
       log.warn({ email_masked: safeEmail(email), error: err }, 'email change confirmation failed')
       return { ok: false as const, reason: 'invalid_or_taken' as const }
+    }
+    // The control-plane seat is keyed by mailbox. A teammate who just
+    // proved a new address must push the new set; an end-user is not a seat.
+    const { isTeamMember } = await import('@/lib/shared/roles')
+    if (ctx.principal?.type === 'user' && isTeamMember(ctx.principal.role)) {
+      const { enqueueMembershipSync } =
+        await import('@/lib/server/domains/principals/membership-sync')
+      await enqueueMembershipSync()
     }
     return { ok: true as const, email }
   })

@@ -16,9 +16,9 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
+import { buildPortalAuthDialogConfig } from '@/components/auth/portal-auth-dialog-config'
 import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
 import { generateThemeCSS, readFontSans } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
@@ -177,13 +177,12 @@ export const Route = createFileRoute('/_portal')({
         userEmail: accessResult.reason === 'unauthorized' ? (session?.user?.email ?? null) : null,
         callbackUrl: prompt.callbackUrl,
         autoOpenSignin: prompt.mode,
-        authConfig: {
+        authConfig: buildPortalAuthDialogConfig({
           found: !!settings?.publicPortalConfig,
-          oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
-          oidcProviders: settings?.publicPortalConfig?.oidcProviders,
+          publicAuthConfig: settings?.publicAuthConfig,
+          publicPortalConfig: settings?.publicPortalConfig,
           registeredAuthProviders,
-          twoFactorRequired: settings?.publicAuthConfig?.twoFactor?.required ?? false,
-        },
+        }),
       }
       return { gate, prompt }
     }
@@ -236,13 +235,12 @@ export const Route = createFileRoute('/_portal')({
         }
       : undefined
 
-    const authConfig = {
+    const authConfig = buildPortalAuthDialogConfig({
       found: true,
-      oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
-      oidcProviders: publicPortalConfig?.oidcProviders,
+      publicAuthConfig: settings?.publicAuthConfig,
+      publicPortalConfig,
       registeredAuthProviders,
-      twoFactorRequired: settings?.publicAuthConfig?.twoFactor?.required ?? false,
-    }
+    })
 
     const { locale, messages } = await portalIntlPromise
 
@@ -290,7 +288,7 @@ export const Route = createFileRoute('/_portal')({
     const workspaceName = loaderData?.workspaceName ?? 'Quackback'
     const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
     // Social share image: custom OG upload > workspace logo > bundled default.
-    const ogImageUrl = resolvePortalOgImageUrl(loaderData?.brandingData)
+    const ogImageUrl = resolvePortalOgImageUrl(loaderData?.brandingData, loaderData?.baseUrl)
 
     const meta: Array<Record<string, string>> = [
       { title: workspaceName },

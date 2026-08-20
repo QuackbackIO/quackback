@@ -90,7 +90,7 @@ function parseAguiSse(text: string): Array<Record<string, unknown> & { type: str
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockGetFeatureFlags.mockResolvedValue({ helpCenter: true, helpCenterAiAnswers: true })
+  mockGetFeatureFlags.mockResolvedValue({ helpCenter: true })
   mockIsConfigured.mockReturnValue(true)
   mockIncrementBucket.mockResolvedValue({ count: 1 })
   mockBucketRetryAfter.mockResolvedValue(42)
@@ -116,13 +116,7 @@ const SOURCE_META = {
 
 describe('GET /api/widget/kb-ask (capability probe)', () => {
   it('404s when the help center flag is off', async () => {
-    mockGetFeatureFlags.mockResolvedValue({ helpCenter: false, helpCenterAiAnswers: true })
-    const res = await handleKbAskProbe({ request: makeProbe() })
-    expect(res.status).toBe(404)
-  })
-
-  it('404s when the AI answers flag is off', async () => {
-    mockGetFeatureFlags.mockResolvedValue({ helpCenter: true, helpCenterAiAnswers: false })
+    mockGetFeatureFlags.mockResolvedValue({ helpCenter: false })
     const res = await handleKbAskProbe({ request: makeProbe() })
     expect(res.status).toBe(404)
   })
@@ -145,12 +139,6 @@ describe('GET /api/widget/kb-ask (capability probe)', () => {
 })
 
 describe('POST /api/widget/kb-ask', () => {
-  it('404s when the AI answers flag is off', async () => {
-    mockGetFeatureFlags.mockResolvedValue({ helpCenter: true, helpCenterAiAnswers: false })
-    const res = await handleKbAsk({ request: makePost('hello') })
-    expect(res.status).toBe(404)
-  })
-
   it('400s on a non-AG-UI body', async () => {
     const res = await handleKbAsk({
       request: new Request('http://localhost/api/widget/kb-ask', {

@@ -51,7 +51,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-const { mutateSetupStateAtomic } = await import('../setup-state')
+const { applyDeferredLaunchStartingPoint, mutateSetupStateAtomic } = await import('../setup-state')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -99,5 +99,54 @@ describe('mutateSetupStateAtomic', () => {
     expect(stored.version).toBe(2)
     expect(stored.steps.startingPoint.source).toBe('existing')
     expect(stored.activationHandoffSeenAt).toBe('2026-01-01T00:00:00.000Z')
+  })
+})
+
+describe('applyDeferredLaunchStartingPoint', () => {
+  it('closes the wizard without creating a starter artifact', () => {
+    const next = applyDeferredLaunchStartingPoint(
+      {
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        useCase: 'product_feedback',
+      },
+      'product_feedback',
+      '2026-08-18T12:00:00.000Z'
+    )
+    expect(next.steps.startingPoint).toEqual({
+      outcome: 'product_feedback',
+      resourceType: 'none',
+      source: 'wizard',
+      resolution: 'deferred',
+      completedAt: '2026-08-18T12:00:00.000Z',
+    })
+    expect(next.completedAt).toBe('2026-08-18T12:00:00.000Z')
+  })
+
+  it('replaces a provision stamp so the owner still picks a goal', () => {
+    const next = applyDeferredLaunchStartingPoint(
+      {
+        version: 2,
+        steps: {
+          core: true,
+          workspace: true,
+          startingPoint: {
+            outcome: 'product_feedback',
+            resourceType: 'none',
+            source: 'managed',
+            resolution: 'configured',
+            completedAt: '2026-08-18T07:00:00.000Z',
+          },
+        },
+        useCase: 'product_feedback',
+        completionSource: 'managed',
+      },
+      'customer_support',
+      '2026-08-18T12:00:00.000Z'
+    )
+    expect(next.useCase).toBe('customer_support')
+    expect(next.steps.startingPoint?.source).toBe('wizard')
+    expect(next.steps.startingPoint?.resolution).toBe('deferred')
+    expect(next.completionSource).toBe('wizard')
   })
 })

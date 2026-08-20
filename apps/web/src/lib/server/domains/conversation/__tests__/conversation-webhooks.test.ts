@@ -16,6 +16,18 @@ const dispatch = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/server/events/dispatch', () => dispatch)
 
+const defaultSla = vi.hoisted(() => ({
+  getDefaultSlaPolicySettings: vi.fn(async (): Promise<{ policyId: string | null }> => ({
+    policyId: null,
+  })),
+}))
+vi.mock('@/lib/server/domains/settings/settings.sla-default', () => defaultSla)
+
+const slaService = vi.hoisted(() => ({
+  applySlaToConversation: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/sla/sla.service', () => slaService)
+
 import {
   emitConversationCreated,
   emitConversationStatusChanged,
@@ -73,9 +85,42 @@ const message = {
   createdAt: now,
 } as unknown as ConversationMessage
 
-beforeEach(() => Object.values(dispatch).forEach((m) => m.mockClear()))
+beforeEach(() => {
+  Object.values(dispatch).forEach((m) => m.mockClear())
+  defaultSla.getDefaultSlaPolicySettings.mockReset()
+  defaultSla.getDefaultSlaPolicySettings.mockResolvedValue({ policyId: null })
+  slaService.applySlaToConversation.mockReset()
+  slaService.applySlaToConversation.mockResolvedValue({})
+})
 
 describe('conversation.webhooks emit helpers', () => {
+  it('applies the default SLA policy before dispatching conversation.created', async () => {
+    defaultSla.getDefaultSlaPolicySettings.mockResolvedValueOnce({ policyId: 'sla_policy_1' })
+    const order: string[] = []
+    slaService.applySlaToConversation.mockImplementation(async () => {
+      order.push('apply')
+    })
+    dispatch.dispatchConversationCreated.mockImplementation(async () => {
+      order.push('dispatch')
+    })
+    await emitConversationCreated(visitorActor, anonAuthor, baseConversation)
+    expect(order).toEqual(['apply', 'dispatch'])
+    expect(slaService.applySlaToConversation).toHaveBeenCalledWith('conversation_1', 'sla_policy_1')
+  })
+
+  it('skips default SLA apply when no policy is configured', async () => {
+    await emitConversationCreated(visitorActor, anonAuthor, baseConversation)
+    expect(slaService.applySlaToConversation).not.toHaveBeenCalled()
+    expect(dispatch.dispatchConversationCreated).toHaveBeenCalledTimes(1)
+  })
+
+  it('still dispatches conversation.created if default SLA apply fails', async () => {
+    defaultSla.getDefaultSlaPolicySettings.mockResolvedValueOnce({ policyId: 'sla_policy_1' })
+    slaService.applySlaToConversation.mockRejectedValueOnce(new Error('boom'))
+    await emitConversationCreated(visitorActor, anonAuthor, baseConversation)
+    expect(dispatch.dispatchConversationCreated).toHaveBeenCalledTimes(1)
+  })
+
   it('emitConversationCreated sends a sanitized EventConversationData with a user actor', async () => {
     await emitConversationCreated(visitorActor, anonAuthor, baseConversation)
     expect(dispatch.dispatchConversationCreated).toHaveBeenCalledTimes(1)

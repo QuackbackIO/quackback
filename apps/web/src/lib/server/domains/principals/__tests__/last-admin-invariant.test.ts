@@ -42,6 +42,10 @@ vi.mock('@/lib/server/domains/teams', () => ({
   addPrincipalToDefaultTeam: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/principals/membership-sync', () => ({
+  enqueueMembershipSync: vi.fn(async () => {}),
+}))
+
 vi.mock('@/lib/server/db', async () => {
   const drizzle = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 

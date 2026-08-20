@@ -23,7 +23,7 @@ vi.mock('@/lib/server/utils/rate-bucket', () => ({
 }))
 
 import { auth } from '@/lib/server/auth'
-import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadObject } from '@/lib/server/storage/s3'
 import { handleWidgetUpload } from '../upload'
 
 function makeRequest(
@@ -52,7 +52,7 @@ function authAs() {
 describe('POST /api/widget/upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(isS3Configured).mockReturnValue(true)
+    vi.mocked(isS3Usable).mockReturnValue(true)
     mockGetSettings.mockResolvedValue({ id: 'settings_1' })
     mockIncrementBucket.mockResolvedValue({ count: 1 })
     mockBucketRetryAfter.mockResolvedValue(42)
@@ -67,7 +67,7 @@ describe('POST /api/widget/upload', () => {
 
   it('returns 503 when S3 is not configured', async () => {
     authAs()
-    vi.mocked(isS3Configured).mockReturnValue(false)
+    vi.mocked(isS3Usable).mockReturnValue(false)
     const res = await handleWidgetUpload({ request: makeRequest(undefined, 'valid-token') })
     expect(res.status).toBe(503)
   })

@@ -7,13 +7,13 @@ import { setSupportSurfaces } from '../../utils/db-helpers'
  * template gallery, and the fullscreen builder at
  * /admin/automation/workflows/$workflowId.
  *
- * The "Route conversations to the right team" template ships with two
- * needs-setup team placeholders (see workflow-templates.ts), so creating it
- * is also the fixture for exercising the issues chip, the "Needs setup" list
- * badge, and an unresolved action step in the inspector.
+ * The "Route by keywords" template ships with two needs-setup team
+ * placeholders (see workflow-templates.ts), so creating it is also the
+ * fixture for exercising the issues chip, the "Needs setup" list badge,
+ * and an unresolved action step in the inspector.
  */
 
-const TEMPLATE_NAME = 'Route conversations to the right team'
+const TEMPLATE_NAME = 'Route by keywords'
 const FRONT_DOOR_TEMPLATE_NAME = 'Front-door triage bot'
 
 /** The list row is a `div[role=button]` inside the `.divide-y` group list —
@@ -33,7 +33,7 @@ function workflowRow(page: Page, name: string) {
  *  menu item — expecting menu + item + dialog inside one short retry window,
  *  as this originally did, deadlocks against slow hydration. */
 async function openTemplateGallery(page: Page) {
-  const galleryDialog = page.getByRole('dialog', { name: 'Create a new workflow' })
+  const galleryDialog = page.getByRole('dialog', { name: 'Start from a template' })
   await expect(async () => {
     await page.getByRole('button', { name: 'New workflow' }).click()
     await expect(page.getByRole('menu')).toBeVisible({ timeout: 1500 })
@@ -88,10 +88,11 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     const galleryDialog = await openTemplateGallery(page)
 
     // Category rail + template cards.
-    await expect(galleryDialog.getByRole('button', { name: 'Popular' })).toBeVisible()
-    await expect(galleryDialog.getByRole('button', { name: 'Routing' })).toBeVisible()
-    await expect(galleryDialog.getByRole('button', { name: 'SLA & priority' })).toBeVisible()
-    await expect(galleryDialog.getByRole('button', { name: 'Housekeeping' })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /Popular/ })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /Routing/ })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /SLA & priority/ })).toBeVisible()
+    await expect(galleryDialog.getByRole('button', { name: /Housekeeping/ })).toBeVisible()
+    await galleryDialog.getByRole('button', { name: /Routing/ }).click()
     const templateCard = galleryDialog.getByRole('button', { name: new RegExp(TEMPLATE_NAME) })
     await expect(templateCard).toBeVisible()
 
@@ -155,7 +156,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
 
     // The hero template lives in the new "Customer facing" category (Phase C,
     // slice C-5) rather than "Popular", so switch the category rail first.
-    await galleryDialog.getByRole('button', { name: 'Customer facing' }).click()
+    await galleryDialog.getByRole('button', { name: /Customer facing/ }).click()
     const templateCard = galleryDialog.getByRole('button', {
       name: new RegExp(FRONT_DOOR_TEMPLATE_NAME),
     })
@@ -182,13 +183,9 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     await expect(outline.getByText('Path C · Billing')).toBeVisible()
     await expect(outline.getByText('Path D · Talk to sales')).toBeVisible()
 
-    // Every workspace ref (team/SLA policy/tag/attribute) in the template
-    // ships as an unresolved needs-setup sentinel: 3 "assign to team" from
-    // the Quinn hand-off branch, 1 collect-data attribute + 2 assign/SLA from
-    // the bug path, 2 assign/SLA from the billing path, and 3 assign/tag/
-    // collect-data from the sales path — 11 in total (see
-    // workflow-templates.ts's front-door-triage-bot payload).
-    await expect(page.getByRole('button', { name: '11 issues' })).toBeVisible({
+    // Workspace refs plus the unset issue-type branch (11 action/collect
+    // sentinels + the branch node).
+    await expect(page.getByRole('button', { name: '12 issues' })).toBeVisible({
       timeout: 10000,
     })
 

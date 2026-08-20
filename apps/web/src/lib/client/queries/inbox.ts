@@ -188,6 +188,7 @@ function inboxListParamsKey(params: InboxListParams): string {
     // A custom view can produce the same kinds+ticketType with this unset —
     // key it so the two never share a cache entry.
     params.linkedPairsOnly ? 'pairs' : '',
+    params.channel ?? '',
   ].join('|')
 }
 

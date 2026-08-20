@@ -16,7 +16,8 @@ import {
 } from '@/lib/server/domains/assistant/assistant.runtime'
 import { makeAssistantToolContext } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { assembleAssistantToolset } from '@/lib/server/domains/assistant/assistant.tools'
-import { listActionSpecsForAgent } from '@/lib/server/domains/assistant/custom-actions.service'
+import { listConnectorToolSpecsForAgent } from '@/lib/server/domains/assistant/connectors/connector-tools'
+import { countAssignedSkills } from '@/lib/server/domains/assistant/skills.service'
 import { resolveAssistantRolePolicy } from '@/lib/server/domains/assistant/assistant.system-prompt'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { resolveAssistantKnowledgeSnapshot } from '@/lib/server/domains/assistant/retrieval-sources'
@@ -248,27 +249,22 @@ export async function runToolsetScenario(
     // role policy's write policy governs which write tools survive assembly.
     simulate: conversationId === null,
     writeToolPolicy: conversationId === null ? 'simulate' : rolePolicy.writeToolPolicy,
+    skills: {
+      count:
+        scenario.config?.skills === true ? await countAssignedSkills(roleToAgent(role), testDb) : 0,
+      loads: 0,
+    },
   })
-  // Mirror the runtime's custom-action registration: when the
-  // `assistantCustomActions` flag is on, resolve every enabled definition
-  // assigned to this turn's agent into a dynamic spec and pass it to assembly,
-  // so a toolset scenario can assert an action is present for its assigned
-  // agent and absent for the other (Phase 5 gate).
-  const customActionSpecs =
-    scenario.config?.customActions === true
-      ? await listActionSpecsForAgent(roleToAgent(role), testDb)
+  const connectorSpecs =
+    scenario.config?.connectors === true
+      ? await listConnectorToolSpecsForAgent(roleToAgent(role), testDb)
       : []
-  const { tools } = await assembleAssistantToolset(
-    ctx,
-    undefined,
-    scenario.config?.assistantTools === true,
-    customActionSpecs
-  )
+  const { tools } = await assembleAssistantToolset(ctx, undefined, connectorSpecs)
   const toolNames = tools.map((t) => t.name)
   const failures = gradeStructural(scenario.structural, { kind: 'toolset', toolNames })
   return {
     failures,
-    detail: { toolNames, role, actionsEnabled: scenario.config?.assistantTools === true },
+    detail: { toolNames, role },
     errored: false,
   }
 }

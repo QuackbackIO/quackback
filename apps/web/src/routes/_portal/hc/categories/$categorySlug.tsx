@@ -25,7 +25,7 @@ export const Route = createFileRoute('/_portal/hc/categories/$categorySlug')({
 
 function CategoryLayout() {
   const { settings } = Route.useRouteContext()
-  const askAiEnabled = !!settings?.featureFlags?.helpCenterAiAnswers
+  const askAiEnabled = !!settings?.featureFlags?.helpCenter
   return (
     <>
       <HelpCenterHero variant="compact">

@@ -54,10 +54,7 @@ export type InboxView =
   | 'tickets_tracker'
 
 type TicketInboxView =
-  | 'tickets_all'
-  | 'tickets_customer'
-  | 'tickets_back_office'
-  | 'tickets_tracker'
+  'tickets_all' | 'tickets_customer' | 'tickets_back_office' | 'tickets_tracker'
 type TypedTicketInboxView = Exclude<TicketInboxView, 'tickets_all'>
 
 const TICKET_VIEW_TYPE: Record<TypedTicketInboxView, TicketType> = {

@@ -481,7 +481,6 @@ export function PortalAuthFormInline({
           (result.data as { twoFactorRedirect?: boolean } | null | undefined)?.twoFactorRedirect
         ) {
           setView({ stage: 'two-factor-challenge' })
-          setLoadingAction(null)
           return
         }
       }
@@ -489,7 +488,6 @@ export function PortalAuthFormInline({
       // is not enrolled (enrolled users get twoFactorRedirect, no session).
       if (twoFactorRequired) {
         setView({ stage: 'two-factor-enroll' })
-        setLoadingAction(null)
         return
       }
       postAuthSuccess()
@@ -502,6 +500,11 @@ export function PortalAuthFormInline({
               defaultMessage: 'Authentication failed',
             })
       )
+    } finally {
+      // Success clears it too: the broadcast is a request to whatever hosts
+      // this form, and a host that stays mounted (the onboarding account step)
+      // would otherwise be left with a spinning button and every field
+      // disabled behind `loadingAction !== null`.
       setLoadingAction(null)
     }
   }
@@ -1105,15 +1108,22 @@ export function PortalAuthFormInline({
     return (
       <div className="space-y-4">
         <BackToEmailLink onClick={backToEmail} />
+        {/* Says nothing about the ADDRESS. This screen is reached by every
+            address on a workspace that has closed sign-ups, so copy that
+            claimed "no account found" would be false for anybody who has one
+            and would read as a per-address answer the server deliberately
+            never gives. The fact stated is the workspace's own setting. */}
         <div className="space-y-2 text-center">
           <h2 className="text-lg font-semibold">
-            <FormattedMessage id="portal.auth.noAccount.title" defaultMessage="No account found" />
+            <FormattedMessage
+              id="portal.auth.signupClosed.title"
+              defaultMessage="New accounts are closed"
+            />
           </h2>
           <p className="text-sm text-muted-foreground">
             <FormattedMessage
-              id="portal.auth.noAccount.body"
-              defaultMessage="{email} doesn't have an account on this workspace, and new sign-ups are off. Ask your workspace admin to invite you."
-              values={{ email: <span className="font-medium text-foreground">{email}</span> }}
+              id="portal.auth.signupClosed.body"
+              defaultMessage="This workspace is not accepting new accounts right now. If you already have one, sign in. Otherwise, ask your workspace admin to invite you."
             />
           </p>
         </div>
@@ -1364,6 +1374,10 @@ export function PortalAuthFormInline({
 
       {step === 'code' && (
         <OtpCodeStep
+          // Workspace-level, so it renders for every address that reaches this
+          // step. See the prop's docstring for why it must never be narrowed to
+          // the address that was typed.
+          signupClosed={openSignup === false}
           email={email}
           code={emailSignin.code}
           onCodeChange={emailSignin.setCode}

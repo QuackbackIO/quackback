@@ -30,7 +30,7 @@ import { deleteAnonymousIdentity } from '../principal.factory'
 const PRINCIPAL_ID = 'principal_anon' as PrincipalId
 const USER_ID = 'user_anon' as UserId
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const exec = mockExec as any
 
 describe('deleteAnonymousIdentity', () => {

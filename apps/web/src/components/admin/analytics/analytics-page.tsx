@@ -154,8 +154,7 @@ export function AnalyticsPage() {
     (i) =>
       (i.key !== 'feedback' || isProductEnabled(flags, 'feedback')) &&
       (i.key !== 'support' || isProductEnabled(flags, 'support')) &&
-      (i.key !== 'changelog' || isProductEnabled(flags, 'changelog')) &&
-      (i.key !== 'visitors' || (flags?.visitorAnalytics ?? false))
+      (i.key !== 'changelog' || isProductEnabled(flags, 'changelog'))
   )
 
   const [period, setPeriod] = useState<AnalyticsPeriod>('30d')
@@ -171,7 +170,7 @@ export function AnalyticsPage() {
   const { data: visitorData, isLoading: visitorLoading } = useQuery({
     ...analyticsQueries.visitors(period, surface),
     placeholderData: keepPreviousData,
-    enabled: (flags?.visitorAnalytics ?? false) && section === 'visitors',
+    enabled: section === 'visitors',
   })
 
   return (

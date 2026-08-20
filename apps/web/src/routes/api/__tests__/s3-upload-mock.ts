@@ -27,7 +27,7 @@ export function createS3MockFactory() {
   )
 
   return {
-    isS3Configured: vi.fn(() => true),
+    isS3Usable: vi.fn(() => true),
     isAllowedImageType: mockIsAllowedImageType,
     generateStorageKey: mockGenerateStorageKey,
     uploadObject: mockUploadObject,

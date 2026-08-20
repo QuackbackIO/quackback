@@ -392,3 +392,42 @@ export async function removeTeamMember(
     throw new InternalError('DATABASE_ERROR', 'Failed to remove team member', error)
   }
 }
+
+/**
+ * Convert the signed-in teammate to a portal user. The control-plane owner
+ * gate lives at the caller; this only updates the workspace-owned roster.
+ */
+export async function leaveTeamSelf(
+  actingPrincipalId: PrincipalId,
+  actor: AuditActor | null = null,
+  headers?: Headers
+): Promise<void> {
+  try {
+    const me = await db.query.principal.findFirst({
+      where: eq(principal.id, actingPrincipalId),
+    })
+    if (!me || !isTeamMember(me.role)) {
+      throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
+    }
+
+    const previousRole = me.role
+    await setPrincipalRole({ principalId: actingPrincipalId }, 'user', { knownUserId: me.userId })
+
+    if (actor) {
+      await recordAuditEvent({
+        event: 'user.removed',
+        actor,
+        headers,
+        target: { type: 'principal', id: actingPrincipalId },
+        before: { role: previousRole },
+        after: { role: 'user' },
+      })
+    }
+  } catch (error) {
+    if (error instanceof ForbiddenError || error instanceof NotFoundError) {
+      throw error
+    }
+    log.error({ err: error }, 'failed to leave team')
+    throw new InternalError('DATABASE_ERROR', 'Failed to leave the team', error)
+  }
+}

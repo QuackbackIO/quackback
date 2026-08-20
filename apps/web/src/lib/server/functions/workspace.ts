@@ -1,13 +1,15 @@
 /**
- * Workspace data reads.
+ * Workspace data reads shared by SSR loaders, other server functions and the
+ * API route handlers.
  *
- * These are plain async functions, not `createServerFn` handlers, because
- * every caller is server-side (route loaders' server functions, API route
- * handlers). A `createServerFn` that no client module references never lands
- * in the server-function manifest, so its server-side callers resolve an RPC
- * stub whose ID the manifest cannot resolve — a runtime crash in production
- * builds. Keep anything called only from the server a plain function; the
- * build guard in `scripts/check-server-fn-manifest.ts` enforces this.
+ * These are deliberately plain async functions rather than `createServerFn`
+ * declarations. Nothing on the client calls them — every caller is already
+ * running on the server — so the RPC hop would only dispatch the server back
+ * into itself. It would also not survive the build: the server-function
+ * manifest is emitted from the registrations collected while the client graph
+ * is compiled, so a server function the client never references is absent from
+ * it and every call throws `Server function info not found`. Keep these plain;
+ * `bun run check:server-fn-manifest` guards the general case.
  */
 
 import type { Role } from '@/lib/shared/roles'

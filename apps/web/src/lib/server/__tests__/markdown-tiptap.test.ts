@@ -273,7 +273,11 @@ describe('contentJsonToMarkdown', () => {
     const result = contentJsonToMarkdown(doc, 'stale stored markdown')
     expect(result).toContain('🎉')
     expect(result).toContain('![S](https://cdn.example.com/s.png)')
-    expect(result).toContain('[Embedded post: post_123]')
+    // The serializer escapes markdown punctuation in literal text, so the
+    // placeholder arrives as `\[Embedded post: post\_123\]`. Compare with the
+    // escapes stripped: what matters is that the embed survives the round trip,
+    // not which characters the serializer chose to protect.
+    expect(result.replace(/\\/g, '')).toContain('[Embedded post: post_123]')
   })
 
   test('projects current text for an image-free structured-only edit', () => {

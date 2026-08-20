@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useIntl } from 'react-intl'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, Navigate } from '@tanstack/react-router'
@@ -19,6 +20,8 @@ import {
 } from '@heroicons/react/24/outline'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
+import { settingsQueries } from '@/lib/client/queries/settings'
+import { useUpdateDefaultSlaPolicy } from '@/lib/client/mutations/settings'
 import {
   archiveSlaPolicyFn,
   createSlaPolicyFn,
@@ -72,7 +75,10 @@ const slaOfficeHoursQuery = queryOptions({
 export const Route = createFileRoute('/admin/settings/sla')({
   loader: async ({ context }) => {
     assertRoutePermission(context.permissions, PERMISSIONS.SLA_MANAGE)
-    await context.queryClient.ensureQueryData(slaPoliciesQuery)
+    await Promise.all([
+      context.queryClient.ensureQueryData(slaPoliciesQuery),
+      context.queryClient.ensureQueryData(settingsQueries.defaultSlaPolicy()),
+    ])
     return {}
   },
   component: SlaSettingsRoute,
@@ -132,10 +138,15 @@ type EditorState =
   | { mode: 'edit'; policy: SlaPolicyDTO }
   | null
 
+const DEFAULT_SLA_NONE = '__none__'
+
 function SlaSettingsPage() {
+  const intl = useIntl()
   const queryClient = useQueryClient()
   const { data: policies } = useSuspenseQuery(slaPoliciesQuery)
   const { data: officeHours } = useQuery(slaOfficeHoursQuery)
+  const { data: defaultSla } = useQuery(settingsQueries.defaultSlaPolicy())
+  const updateDefaultSla = useUpdateDefaultSlaPolicy()
   const officeHoursEnabled = officeHours?.officeHoursEnabled ?? false
   const [tab, setTab] = useState<'live' | 'archived'>('live')
   const [editor, setEditor] = useState<EditorState>(null)
@@ -179,8 +190,51 @@ function SlaSettingsPage() {
       <PageHeader
         icon={ShieldCheckIcon}
         title="SLA policies"
-        description="Response and resolution targets your team commits to. Apply them to conversations from workflows."
+        description="Response and resolution targets your team commits to. A default can apply when a conversation starts; workflows can still replace it."
       />
+
+      <SettingsCard>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">
+              {intl.formatMessage({
+                id: 'settings.sla.defaultPolicy',
+                defaultMessage: 'Default policy',
+              })}
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'settings.sla.defaultPolicyHint',
+                defaultMessage: 'Applied when a conversation starts',
+              })}
+            </p>
+          </div>
+          <Select
+            value={defaultSla?.policyId ?? DEFAULT_SLA_NONE}
+            onValueChange={(value) =>
+              updateDefaultSla.mutate({ policyId: value === DEFAULT_SLA_NONE ? null : value })
+            }
+            disabled={updateDefaultSla.isPending}
+          >
+            <SelectTrigger size="sm" className="w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT_SLA_NONE}>
+                {intl.formatMessage({
+                  id: 'settings.sla.defaultPolicyNone',
+                  defaultMessage: 'None',
+                })}
+              </SelectItem>
+              {live.map((policy) => (
+                <SelectItem key={policy.id} value={policy.id}>
+                  {policy.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </SettingsCard>
 
       <SettingsCard
         title="Policies"
@@ -246,8 +300,8 @@ function SlaSettingsPage() {
       >
         <ul className="list-disc space-y-1.5 pl-4 text-xs text-muted-foreground">
           <li>
-            Policies are applied by workflows only, through the Apply SLA action. There is no
-            default policy and nothing is matched automatically.
+            A default policy can be applied when a conversation starts. Workflows can still apply a
+            different policy through the Apply SLA action.
           </li>
           <li>
             A conversation carries one active SLA. Applying another policy replaces it and restarts

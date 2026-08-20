@@ -11,6 +11,7 @@
     "oxlint": "^1.78.0",
     "oxlint-tsgolint": "^7.0.2000",
     "prettier": "3.9.6",
+    "railway": "^3.10.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },

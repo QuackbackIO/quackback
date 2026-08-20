@@ -1,8 +1,8 @@
 /**
  * Rate-limit helpers for sign-in endpoints. Built on the shared
  * `utils/rate-bucket` primitive so the limiter tests focus on policy
- * (thresholds, namespacing, dispatch) rather than re-asserting the
- * store plumbing (which has its own tests on the primitive).
+ * (thresholds, namespacing, dispatch) rather than re-asserting the bucket
+ * plumbing (which has its own tests on the primitive).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

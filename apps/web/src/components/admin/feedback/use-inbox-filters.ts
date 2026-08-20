@@ -6,6 +6,19 @@ import type { InboxFilters } from '@/lib/shared/types'
 
 export type { InboxFilters }
 
+function stringList(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string')
+    ? value
+    : undefined
+}
+
+function parseOptionalInt(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string' || value.length === 0) return undefined
+  const parsed = parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 export function useInboxFilters() {
   const navigate = useNavigate()
   const search = Route.useSearch()
@@ -13,19 +26,19 @@ export function useInboxFilters() {
   const filters: InboxFilters = useMemo(
     () => ({
       search: search.search,
-      status: search.status?.length ? search.status : undefined,
-      board: search.board?.length ? search.board : undefined,
-      tags: search.tags?.length ? search.tags : undefined,
-      segmentIds: search.segments?.length ? search.segments : undefined,
+      status: stringList(search.status),
+      board: stringList(search.board),
+      tags: stringList(search.tags),
+      segmentIds: stringList(search.segments),
       owner: search.owner,
       dateFrom: search.dateFrom,
       dateTo: search.dateTo,
-      minVotes: search.minVotes ? parseInt(search.minVotes, 10) : undefined,
-      minComments: search.minComments ? parseInt(search.minComments, 10) : undefined,
+      minVotes: parseOptionalInt(search.minVotes),
+      minComments: parseOptionalInt(search.minComments),
       responded: search.responded,
       updatedBefore: search.updatedBefore,
       hasDuplicates: search.hasDuplicates,
-      sort: search.sort,
+      sort: search.sort ?? 'newest',
       showDeleted: search.deleted,
     }),
     [search]

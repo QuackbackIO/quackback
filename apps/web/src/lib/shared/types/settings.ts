@@ -31,6 +31,7 @@ export type {
 // FeatureFlags and FEATURE_FLAG_REGISTRY live only in settings.types (not barrel-exported)
 export type {
   FeatureFlags,
+  LabSectionRow,
   ProductId,
   WidgetHomeCard,
   WidgetHomeCardType,
@@ -42,8 +43,11 @@ export type {
 // Runtime constants — safe because settings.types has no DB dependencies
 export {
   DEFAULT_FEATURE_FLAGS,
+  featureFlagsForUseCase,
+  enableFlagsForUseCase,
   FEATURE_FLAG_REGISTRY,
   LAB_SECTIONS,
+  GA_FEATURE_SECTIONS,
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
   getProductFlagUpdate,

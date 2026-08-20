@@ -1,7 +1,11 @@
 # Event dispatch (the outbox relay is gone)
 
-The former outbox relay no longer runs. Domain events are dispatched by the
-Postgres job queue. This file is the cutover record, not a second architecture.
+The outbox relay — `LISTEN outbox_wake`, `outbox_relay_leader`,
+`relay-tier.ts`, `drainOnce()` — no longer runs. Domain events are
+dispatched by the Postgres job queue.
+
+`SAAS-HOSTING-STACK.md` §7.3 described the old per-workspace relay loop.
+This file is the cutover record, not a second architecture.
 
 ## What replaced it
 
@@ -27,6 +31,8 @@ See `jobs/JOBS.md` for the remaining always-warm tier.
   job-tier / scheduler start (`convertRelayOwnedEvents`) and then drained
   like any other `event-dispatch` job. The column stays for one more soak;
   it is not a feature flag.
+- **`outbox_relay_leader`** (migration 0256) stays in the schema for
+  rollback safety. Nothing acquires or renews the lease.
 
 ## What was deleted
 

@@ -19,9 +19,9 @@ import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 
 /**
- * k8s liveness/readiness probe path. Hit every ~2s per pod, so a successful
- * probe is pure access-log noise (~40k lines/day/workspace). We skip the
- * completion line for healthy probes only — an unhealthy probe (status >= 400)
+ * Health probe path. Hit every few seconds by the platform's healthcheck,
+ * so a successful probe is pure access-log noise. We skip the completion
+ * line for healthy probes only — an unhealthy probe (status >= 400)
  * or a thrown error is still logged, since those are the signal we care about.
  */
 function isHealthPath(pathname: string): boolean {

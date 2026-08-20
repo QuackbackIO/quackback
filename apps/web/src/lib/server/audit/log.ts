@@ -25,7 +25,6 @@ import type { UserId } from '@quackback/ids'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import type { AuthContext } from '@/lib/server/functions/auth-helpers'
 import { logger } from '@/lib/server/logger'
-import { ASSISTANT_CONFIG_EVENT_LABELS } from '@/lib/shared/assistant/config-audit-events'
 import type { JsonValue } from '@/lib/shared/json'
 
 const log = logger.child({ component: 'audit' })
@@ -128,6 +127,13 @@ export type AuditEventType =
   | 'assistant.custom_action.created'
   | 'assistant.custom_action.updated'
   | 'assistant.custom_action.deleted'
+  | 'assistant.connector.created'
+  | 'assistant.connector.updated'
+  | 'assistant.connector.deleted'
+  | 'assistant.connector.refreshed'
+  | 'assistant.skill.created'
+  | 'assistant.skill.updated'
+  | 'assistant.skill.deleted'
   | 'assistant.tool_controls.changed'
   | 'assistant.surfaces.changed'
   | 'assistant.basics.changed'
@@ -149,18 +155,6 @@ export type AuditEventType =
   // webhooks and announcements are not sent a second time. The metadata
   // carries the restore instant and the per-column outcome.
   | 'restore.side_effects_settled'
-
-/**
- * The subset of {@link AuditEventType} the AI config changelog reads back
- * (assistant-config-changelog.ts). Derived from the shared label map's keys
- * rather than hand-listed, so the two can never diverge — a prefix/LIKE
- * match would work too, but this keeps the reader query on
- * `inArray(eventType, ...)`, which stays on the existing
- * (event_type, occurred_at) index.
- */
-export const ASSISTANT_CONFIG_AUDIT_EVENTS = Object.keys(
-  ASSISTANT_CONFIG_EVENT_LABELS
-) as AuditEventType[]
 
 export type AuditEventOutcome = 'success' | 'failure'
 
@@ -267,9 +261,8 @@ export async function recordAuditEventInTransaction(
 }
 
 /**
- * A single audit_log row, projected for readers. The one DTO shape for every
- * audit-log reader — both the paginated admin feed (listAuditEventsFn) and
- * the AI config changelog (getAssistantConfigChangelogFn) return this.
+ * A single audit_log row, projected for readers. The paginated admin feed
+ * (listAuditEventsFn) returns this.
  */
 export interface AuditEventRow {
   id: string
@@ -318,12 +311,10 @@ export interface QueryAuditEventsFilters {
 }
 
 /**
- * Shared row query behind every audit-log reader: the paginated admin feed
- * (listAuditEventsFn) and the AI config changelog (getAssistantConfigChangelogFn).
+ * Shared row query behind the paginated admin feed (listAuditEventsFn).
  *
- * No auth in here — each caller holds its own `requireAuth` gate, on
- * different permissions, before calling in. Do not add one here; it would
- * force both readers onto the same permission.
+ * No auth in here — the caller holds its own `requireAuth` gate before
+ * calling in.
  */
 export async function queryAuditEvents(filters: QueryAuditEventsFilters): Promise<AuditEventRow[]> {
   const conditions: SQL[] = []

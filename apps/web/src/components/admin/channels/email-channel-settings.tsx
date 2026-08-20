@@ -241,8 +241,7 @@ function SendingAddressesSection({
       <div className="space-y-2">
         {addresses.map((a) => {
           const smtp = a.config.smtp as
-            | { host?: string; port?: number; secure?: boolean; user?: string }
-            | undefined
+            { host?: string; port?: number; secure?: boolean; user?: string } | undefined
           return (
             <div key={a.id} className="flex items-center gap-2 text-sm">
               <div className="min-w-0 flex-1">

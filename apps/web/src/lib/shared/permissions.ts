@@ -14,7 +14,7 @@ export const PERMISSIONS = {
   SETTINGS_BRANDING: 'settings.branding',
   SETTINGS_MODERATION: 'settings.moderation',
   SETTINGS_NOTIFICATIONS: 'settings.notifications',
-  SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain',
+  SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain', // Settings → Domains
   BILLING_MANAGE: 'billing.manage',
   ROLE_MANAGE: 'role.manage',
   API_KEY_MANAGE: 'api_key.manage',

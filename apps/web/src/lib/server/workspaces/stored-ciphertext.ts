@@ -21,7 +21,7 @@
  * ## Why `jwks.private_key` and nothing else
  *
  * Several things are encrypted at rest — integration OAuth bundles, webhook
- * signing secrets, assistant custom-action headers, app signing secrets — and
+ * signing secrets, connector secrets, app signing secrets — and
  * every one of them goes through `encryption.ts`, which derives its key with
  * HKDF over *the active workspace namespace and a purpose string*. Reproducing that
  * derivation here would mean this module reconstructing, before the workspace scope

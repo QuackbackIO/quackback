@@ -120,6 +120,7 @@ export function mockDbModule(): Record<string, unknown> {
       title: 'inAppNotifications.title',
       __name: 'in_app_notifications',
     },
+    emailLog: { principalId: 'emailLog.principalId', __name: 'email_log' },
     pageViews: { principalId: 'pageViews.principalId', __name: 'page_views' },
     visitorDevices: { principalId: 'visitorDevices.principalId', __name: 'visitor_devices' },
     userSegments: {

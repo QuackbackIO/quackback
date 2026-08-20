@@ -38,7 +38,7 @@ const hoisted = vi.hoisted(() => ({
   markPendingActionExecuted: vi.fn(),
   markPendingActionFailed: vi.fn(),
   resolveToolSpecs: vi.fn(),
-  getActionSpecByToolName: vi.fn(),
+  getConnectorSpecByToolName: vi.fn(),
   getAssistantRuntimeConfig: vi.fn(),
   executeApprovedPendingAction: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
@@ -113,8 +113,8 @@ vi.mock('@/lib/server/domains/assistant/assistant.tools', () => ({
   executeApprovedPendingAction: hoisted.executeApprovedPendingAction,
 }))
 
-vi.mock('@/lib/server/domains/assistant/custom-actions.service', () => ({
-  getActionSpecByToolName: hoisted.getActionSpecByToolName,
+vi.mock('@/lib/server/domains/assistant/connectors/connector-tools', () => ({
+  getConnectorSpecByToolName: hoisted.getConnectorSpecByToolName,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
@@ -181,9 +181,9 @@ function expectDTOFrom(row: Record<string, unknown>): Partial<AssistantPendingAc
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const approve = (data: any) => approveAssistantActionFn({ data })
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const reject = (data: any) => rejectAssistantActionFn({ data })
 
 beforeEach(() => {
@@ -193,8 +193,8 @@ beforeEach(() => {
   hoisted.resolveToolSpecs.mockReturnValue([CLOSE_SPEC])
   // Custom-action resolver defaults: no dynamic spec, flag on. Built-in tests
   // (toolName without an `action_` prefix) never touch either.
-  hoisted.getActionSpecByToolName.mockResolvedValue(null)
-  hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: true })
+  hoisted.getConnectorSpecByToolName.mockResolvedValue(null)
+  hoisted.getAssistantRuntimeConfig.mockResolvedValue({ connectorsEnabled: true })
   hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   hoisted.assertConversationViewable.mockResolvedValue(undefined)
   hoisted.assertTicketVisible.mockResolvedValue(undefined)
@@ -361,15 +361,13 @@ describe('approveAssistantActionFn', () => {
     await expect(approve({ pendingActionId: 'nope' })).rejects.toMatchObject({ statusCode: 404 })
   })
 
-  describe('custom actions (Phase 5)', () => {
-    it('410s and never decides when the custom action was deleted since the proposal', async () => {
-      // A persisted `action_<slug>` toolName whose definition is gone resolves
-      // to NOTHING (built-in registry misses it, and the dynamic resolver
-      // returns null) — the approve path surfaces it as gone, same as a stale
-      // built-in, and executes nothing.
-      hoisted.getPendingActionById.mockResolvedValue(pendingRow({ toolName: 'action_deleted' }))
+  describe('connectors', () => {
+    it('410s and never decides when the connector was deleted since the proposal', async () => {
+      hoisted.getPendingActionById.mockResolvedValue(
+        pendingRow({ toolName: 'connector_acme__issue_refund' })
+      )
       hoisted.resolveToolSpecs.mockReturnValue([])
-      hoisted.getActionSpecByToolName.mockResolvedValue(null)
+      hoisted.getConnectorSpecByToolName.mockResolvedValue(null)
 
       await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
         statusCode: 410,
@@ -378,16 +376,16 @@ describe('approveAssistantActionFn', () => {
       expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
     })
 
-    it('settles failed (never executing) when the custom-actions flag is off — the in-flight kill switch', async () => {
-      const pending = pendingRow({ toolName: 'action_lookup_order' })
+    it('settles failed (never executing) when connectors are disabled', async () => {
+      const pending = pendingRow({ toolName: 'connector_acme__issue_refund' })
       hoisted.getPendingActionById.mockResolvedValue(pending)
-      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: false })
+      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ connectorsEnabled: false })
       const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
       hoisted.decidePendingAction.mockResolvedValue(decided)
       const settled = {
         ...decided,
         status: 'failed',
-        result: { error: 'Custom actions are disabled.' },
+        result: { error: 'Connectors are disabled.' },
       }
       hoisted.markPendingActionFailed.mockResolvedValue(settled)
 
@@ -395,19 +393,18 @@ describe('approveAssistantActionFn', () => {
 
       expect(hoisted.markPendingActionFailed).toHaveBeenCalledWith(
         'assistant_action_1',
-        'Custom actions are disabled.'
+        'Connectors are disabled.'
       )
-      // Short-circuits before ever resolving or executing the spec.
-      expect(hoisted.getActionSpecByToolName).not.toHaveBeenCalled()
+      expect(hoisted.getConnectorSpecByToolName).not.toHaveBeenCalled()
       expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
       expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
     })
 
-    it('conflicts (never executing) when a flag-off custom action was already decided', async () => {
+    it('conflicts (never executing) when a flag-off connector proposal was already decided', async () => {
       hoisted.getPendingActionById.mockResolvedValue(
-        pendingRow({ toolName: 'action_lookup_order' })
+        pendingRow({ toolName: 'connector_acme__issue_refund' })
       )
-      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: false })
+      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ connectorsEnabled: false })
       hoisted.decidePendingAction.mockResolvedValue(null)
 
       await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toThrow(

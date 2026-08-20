@@ -5,6 +5,7 @@ const S = 'conversation'
 const wf = { webhook: true, workflow: true } as const
 
 export const assistantHandedOff = decl('assistant.handed_off', 'conversation', wf, S)
+export const assistantResolved = decl('assistant.resolved', 'conversation', wf, S)
 export const slaApproachingBreach = decl(
   'sla.approaching_breach',
   'conversation',

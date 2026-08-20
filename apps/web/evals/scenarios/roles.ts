@@ -1,22 +1,19 @@
 /**
  * §7.3 Roles & actions, all structural, no judge. These encode the D14
- * write-tool contract: customer_support with the flag on executes
- * autonomously; copilot_qa proposes; flag off removes write tools from the
- * assembled set entirely.
+ * write-tool contract: customer_support executes autonomously; copilot_qa
+ * proposes. Write tools are always assembled.
  */
 import type { Scenario } from '../types'
 
 const PLAN_TIER_ATTR = { key: 'plan_tier', label: 'Plan tier', fieldType: 'text' as const }
 
-const WRITE_TOOLS = ['set_attribute', 'end_conversation', 'create_ticket', 'capture_feedback']
-
 export const roleScenarios: Scenario[] = [
   {
     id: '21',
-    title: 'customer_support with assistantTools on executes set_attribute directly (D14)',
+    title: 'customer_support executes set_attribute directly (D14)',
     roles: ['customer_support'],
     surface: 'widget',
-    config: { assistantTools: true },
+    config: {},
     fixtures: { withConversation: true, attributes: [PLAN_TIER_ATTR] },
     prompt:
       'Just so you have it on file for your records: my account is on the Enterprise plan tier. ' +
@@ -29,7 +26,7 @@ export const roleScenarios: Scenario[] = [
     id: '22',
     title: 'copilot_qa write call → proposal card entry with the right payload',
     roles: ['copilot_qa'],
-    config: { assistantTools: true },
+    config: {},
     fixtures: { withConversation: true, attributes: [PLAN_TIER_ATTR] },
     prompt:
       'Please tag this conversation with a plan_tier attribute set to Enterprise so it shows on our reports.',
@@ -39,7 +36,7 @@ export const roleScenarios: Scenario[] = [
     id: '37',
     title: 'copilot_qa capture_feedback → proposal, board chosen from the injected catalogue',
     roles: ['copilot_qa'],
-    config: { assistantTools: true },
+    config: {},
     fixtures: {
       withConversation: true,
       // Transcript evidence: grounding rules forbid capturing feedback the
@@ -64,24 +61,11 @@ export const roleScenarios: Scenario[] = [
     ],
   },
   {
-    id: '23',
-    title: 'assistantTools off → write tools absent from the assembled toolset',
-    kind: 'toolset',
-    roles: ['customer_support'],
-    surface: 'widget',
-    config: { assistantTools: false },
-    fixtures: { withConversation: true },
-    structural: [
-      { type: 'toolPresent', name: 'search' },
-      ...WRITE_TOOLS.map((name) => ({ type: 'toolAbsent' as const, name })),
-    ],
-  },
-  {
     id: '41',
     title: 'customer bug report → create_ticket executes autonomously',
     roles: ['customer_support'],
     surface: 'widget',
-    config: { assistantTools: true },
+    config: {},
     fixtures: {
       withConversation: true,
       conversationMessages: [
@@ -109,7 +93,7 @@ export const roleScenarios: Scenario[] = [
     title: 'existing feedback match → share_post surfaces the live card for the customer to vote',
     roles: ['customer_support'],
     surface: 'widget',
-    config: { assistantTools: true, knowledge: { agent: { posts: true } } },
+    config: { knowledge: { agent: { posts: true } } },
     fixtures: {
       withConversation: true,
       feedbackPosts: [
@@ -142,7 +126,7 @@ export const roleScenarios: Scenario[] = [
     title: 'roadmap-state answer — search surfaces the post status and the reply reports it',
     roles: ['customer_support'],
     surface: 'widget',
-    config: { assistantTools: true, knowledge: { agent: { posts: true } } },
+    config: { knowledge: { agent: { posts: true } } },
     fixtures: {
       withConversation: true,
       feedbackPosts: [

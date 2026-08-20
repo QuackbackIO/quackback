@@ -35,7 +35,7 @@ import {
   type AssistantToolContext,
 } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
-import { getActionSpecByToolName } from '@/lib/server/domains/assistant/custom-actions.service'
+import { getConnectorSpecByToolName } from '@/lib/server/domains/assistant/connectors/connector-tools'
 import { getAssistantRuntimeConfig } from '@/lib/server/domains/settings/settings.assistant'
 import { roleToAgent } from '@/lib/shared/assistant/config'
 import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
@@ -162,15 +162,10 @@ async function decideAssistantAction(
     return rejected
   }
 
-  // Custom-action kill switch (Phase 5): the `assistantCustomActions` flag
-  // gates registration at propose time, but a proposal can outlive the flag
-  // being flipped off. Re-check it here so an in-flight custom-action proposal
-  // (an `action_<slug>` toolName) can never execute after the switch is thrown.
-  // Settle it as failed with a clear note instead of executing. Built-ins (no
-  // `action_` prefix) are unaffected.
-  if (pending.toolName.startsWith('action_')) {
+  // Connector kill switch: a proposal can outlive the flag being flipped off.
+  if (pending.toolName.startsWith('connector_')) {
     const runtime = await getAssistantRuntimeConfig()
-    if (!runtime.customActionsEnabled) {
+    if (!runtime.connectorsEnabled) {
       const decided = await decidePendingAction(pendingActionId, decision, approverPrincipalId)
       if (!decided) {
         throw new ConflictError(
@@ -178,9 +173,7 @@ async function decideAssistantAction(
           'This request was already decided or has expired'
         )
       }
-      return (
-        (await markPendingActionFailed(pendingActionId, 'Custom actions are disabled.')) ?? decided
-      )
+      return (await markPendingActionFailed(pendingActionId, 'Connectors are disabled.')) ?? decided
     }
   }
 
@@ -193,7 +186,7 @@ async function decideAssistantAction(
   // exactly like a gone built-in.
   const spec =
     (await getToolSpecByName(pending.toolName)) ??
-    (await getActionSpecByToolName(pending.toolName, roleToAgent(pending.originRole)))
+    (await getConnectorSpecByToolName(pending.toolName, roleToAgent(pending.originRole)))
   if (!spec) throw new ToolSpecGoneError(pending.toolName)
   const parentKind = pending.conversationId ? 'conversation' : 'ticket'
   if (spec.risk !== 'write' || !spec.parents.includes(parentKind)) {

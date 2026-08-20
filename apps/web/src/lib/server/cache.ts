@@ -62,6 +62,8 @@ export const CACHE_KEYS = {
   // render. Invalidated by role/type mutations; 5min TTL backstops anything
   // we miss.
   PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}` as const,
+  CONNECTOR_CATALOG: 'assistant:connectors:catalog',
+  SKILL_CATALOGUE: (agent: string) => `assistant:skills:catalogue:${agent}` as const,
 } as const
 
 export async function cacheGet<T>(key: string): Promise<T | null> {

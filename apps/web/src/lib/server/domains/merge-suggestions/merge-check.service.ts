@@ -116,8 +116,8 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
 /**
  * Periodic sweep — find posts that haven't been checked recently and process them.
  * Mirrors the refreshStaleSummaries pattern from summary.service.ts, including
- * the workspace-keyed reentrancy guard: a process-wide boolean would let the
- * first workspace a fleet pass reaches suppress every other workspace's sweep.
+ * the workspace-keyed reentrancy guard: a process-wide boolean would let the first
+ * workspace a fleet pass reaches suppress every other workspace's sweep.
  */
 export async function sweepMergeSuggestions(): Promise<void> {
   if (!getOpenAI() || !getChatModel('merge')) return

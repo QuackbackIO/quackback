@@ -26,16 +26,40 @@ export interface PendingActionCardProps {
   summary: string
 }
 
+function formatArgValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value == null) return ''
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
 export function PendingActionCard({ pendingActionId, summary }: PendingActionCardProps) {
   const id = pendingActionId as AssistantPendingActionId
   const { data, isLoading, isError, busy, inlineError, approve, reject } =
     usePendingActionDecision(id)
+  const args =
+    data?.args && typeof data.args === 'object' && !Array.isArray(data.args)
+      ? (data.args as Record<string, unknown>)
+      : null
 
   return (
     <div className="mt-1.5 flex flex-col gap-1.5 rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-1.5">
       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
         <ShieldExclamationIcon className="h-3.5 w-3.5 shrink-0" /> {summary}
       </span>
+      {args && Object.keys(args).length > 0 && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px] text-amber-900/80 dark:text-amber-100/80">
+          {Object.entries(args).map(([key, value]) => (
+            <div key={key} className="contents">
+              <dt className="font-medium">{key}</dt>
+              <dd className="min-w-0 truncate">{formatArgValue(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {isLoading ? (
         <span className="text-[11px] text-muted-foreground">Checking status…</span>
       ) : isError ? (

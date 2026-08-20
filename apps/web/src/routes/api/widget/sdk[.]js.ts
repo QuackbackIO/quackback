@@ -60,7 +60,14 @@ export const Route = createFileRoute('/api/widget/sdk.js')({
       GET: async ({ request }) => {
         const acceptEncoding = request.headers.get('accept-encoding') ?? ''
         const { getPublicServerConfig } = await import('@/lib/server/widget/public-config')
-        const { enabled, config: serverConfig } = await getPublicServerConfig()
+        const { observeExternalWidgetRequest } =
+          await import('@/lib/server/domains/settings/settings.widget')
+        const [{ enabled, config: serverConfig }] = await Promise.all([
+          getPublicServerConfig(),
+          // Script-tag installs never fetch config.json (the bundle is baked
+          // in), so this is the request that has to record installation.
+          observeExternalWidgetRequest(request).catch(() => false),
+        ])
         if (!enabled) {
           return jsResponse(
             '/* Quackback widget is disabled */ console.warn("Quackback: Widget is disabled for this workspace.");',

@@ -42,7 +42,7 @@ export function headerForStep(
       description: (
         <FormattedMessage
           id="portal.auth.otp.description"
-          defaultMessage="We sent a 6-digit code to {email}."
+          defaultMessage="Check {email} for your 6-digit code."
           values={{ email: <strong className="text-foreground">{ctx.email}</strong> }}
         />
       ),

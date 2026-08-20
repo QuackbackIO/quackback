@@ -81,5 +81,26 @@ describe('createSettings', () => {
     // pre-create cached auth instance to invalidate on next request.
     expect(values.authConfigVersion).toBeTypeOf('number')
     expect(values.authConfigVersion).not.toBe(0)
+    expect(JSON.parse(String(values.featureFlags))).toMatchObject({
+      feedback: true,
+      changelog: true,
+      helpCenter: false,
+      supportInbox: false,
+      supportTickets: false,
+      statusPage: false,
+    })
+  })
+
+  it('enables Help Center as a product when the stamped goal is help_center', async () => {
+    const deps = makeReconcileDeps()
+    await deps.createSettings({
+      name: 'Docs',
+      slug: 'docs',
+      setupState: JSON.stringify({ useCase: 'help_center' }),
+      managedFieldPaths: [],
+    })
+    const flags = JSON.parse(String(hoisted.insertValuesCalls[0].featureFlags))
+    expect(flags.helpCenter).toBe(true)
+    expect(flags.supportInbox).toBe(false)
   })
 })

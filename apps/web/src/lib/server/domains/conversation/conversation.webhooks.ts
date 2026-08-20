@@ -9,6 +9,7 @@
  * userId). Synthetic anonymous emails are stripped via realEmail() everywhere
  * an email surfaces.
  */
+import type { ConversationId, SlaPolicyId } from '@quackback/ids'
 import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ConversationAuthorInput } from './conversation.types'
@@ -105,6 +106,15 @@ export async function emitConversationCreated(
   author: ConversationAuthorInput,
   conversation: Conversation
 ): Promise<void> {
+  // Apply before dispatch so a workflow's later apply_sla still wins the stamp.
+  await safe('conversation.created.default-sla', async () => {
+    const { getDefaultSlaPolicySettings } =
+      await import('@/lib/server/domains/settings/settings.sla-default')
+    const { applySlaToConversation } = await import('@/lib/server/domains/sla/sla.service')
+    const { policyId } = await getDefaultSlaPolicySettings()
+    if (!policyId) return
+    await applySlaToConversation(conversation.id as ConversationId, policyId as SlaPolicyId)
+  })
   await safe('conversation.created', () =>
     dispatchConversationCreated(toEventActor(actor, author), conversationData(conversation))
   )

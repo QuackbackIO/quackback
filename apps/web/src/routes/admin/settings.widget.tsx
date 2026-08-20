@@ -1,4 +1,11 @@
-import { createFileRoute, useRouter, useRouteContext, Link } from '@tanstack/react-router'
+import {
+  createFileRoute,
+  useRouter,
+  useRouteContext,
+  Link,
+  Outlet,
+  useChildMatches,
+} from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -6,11 +13,6 @@ import { useState, useTransition, useMemo, useEffect, type ReactNode } from 'rea
 import { useTheme } from 'next-themes'
 import {
   ChatBubbleLeftRightIcon,
-  ArrowPathIcon,
-  ClipboardDocumentIcon,
-  CheckIcon,
-  EyeIcon,
-  EyeSlashIcon,
   SparklesIcon,
   SunIcon,
   MoonIcon,
@@ -38,15 +40,10 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  HighlightedCode,
-  type SyntaxLang,
-} from '@/components/admin/settings/widget/highlighted-code'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { WarningBox } from '@/components/shared/warning-box'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
 import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
@@ -65,7 +62,6 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import {
   useUpdateWidgetConfig,
-  useRegenerateWidgetSecret,
   useUploadWidgetHeroImage,
   useDeleteWidgetHeroImage,
 } from '@/lib/client/mutations/settings'
@@ -78,6 +74,7 @@ import type {
 } from '@/lib/shared/types/settings'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import type { WidgetContentTranslation, WidgetTranslations } from '@/lib/shared/widget/translations'
+import { widgetOriginVerifiedLabel } from '@/lib/shared/widget/widget-origin'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
@@ -90,22 +87,28 @@ export const Route = createFileRoute('/admin/settings/widget')({
     const { queryClient } = context
     await Promise.all([
       queryClient.ensureQueryData(settingsQueries.widgetConfig()),
-      queryClient.ensureQueryData(settingsQueries.widgetSecret()),
       queryClient.ensureQueryData(settingsQueries.helpCenterConfig()),
       queryClient.ensureQueryData(adminQueries.boards()),
+      queryClient.ensureQueryData(adminQueries.onboardingStatus()),
     ])
 
     return {}
   },
-  component: WidgetSettingsPage,
+  component: WidgetSettingsGate,
 })
+
+export function WidgetSettingsGate() {
+  const childMatches = useChildMatches()
+  if (childMatches.length > 0) return <Outlet />
+  return <WidgetSettingsPage />
+}
 
 function WidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
-  const widgetSecretQuery = useSuspenseQuery(settingsQueries.widgetSecret())
   const helpCenterConfigQuery = useSuspenseQuery(settingsQueries.helpCenterConfig())
   const boardsQuery = useSuspenseQuery(adminQueries.boards())
-  const { baseUrl, settings } = useRouteContext({ from: '__root__' })
+  const onboardingQuery = useSuspenseQuery(adminQueries.onboardingStatus())
+  const { settings } = useRouteContext({ from: '__root__' })
 
   const flags = settings?.featureFlags as FeatureFlags | undefined
   const config = widgetConfigQuery.data
@@ -153,6 +156,8 @@ function WidgetSettingsPage() {
         title="Widget"
         description="Embed the messenger widget in your product — feedback, conversations, help, and updates"
       />
+
+      <WidgetInstallationStatusCard status={onboardingQuery.data} />
 
       {/* Full-screen editor: controls left, live preview right (sticky). */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
@@ -216,9 +221,42 @@ function WidgetSettingsPage() {
           </div>
         </div>
       </div>
-
-      <WidgetInstallation secret={widgetSecretQuery.data} baseUrl={baseUrl ?? ''} />
     </div>
+  )
+}
+
+function WidgetInstallationStatusCard({
+  status,
+}: {
+  status: { hasWidgetInstalled?: boolean; widgetOriginHost?: string | null }
+}) {
+  return (
+    <SettingsCard
+      title="Installation"
+      description={
+        status.hasWidgetInstalled
+          ? widgetOriginVerifiedLabel(status.widgetOriginHost)
+          : 'Add the SDK to your site and verify the connection'
+      }
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/50 p-4">
+        <div className="flex items-center gap-2 text-sm">
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full',
+              status.hasWidgetInstalled ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+            )}
+          />
+          {status.hasWidgetInstalled ? 'Widget connected' : 'Not detected yet'}
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/admin/settings/widget/install">
+            {status.hasWidgetInstalled ? 'View installation' : 'Install widget'}
+            <ArrowRightIcon className="h-4 w-4" />
+          </Link>
+        </Button>
+      </div>
+    </SettingsCard>
   )
 }
 
@@ -251,11 +289,7 @@ function WidgetToggle({ initialEnabled }: { initialEnabled: boolean }) {
             Show on your website
           </Label>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Paste the{' '}
-            <a href="#widget-installation" className="font-medium text-primary hover:underline">
-              install snippet
-            </a>{' '}
-            after turning this on
+            Use the focused installation flow after turning this on
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -382,8 +416,8 @@ function ModulesCard({
           <div className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5">
             <p className="text-xs text-muted-foreground">
               Enable Messenger in{' '}
-              <Link to="/admin/settings/conversations" className="font-medium text-primary">
-                Conversations settings
+              <Link to="/admin/settings/channels/messenger" className="font-medium text-primary">
+                Messenger settings
               </Link>{' '}
               to add a Messages tab.
             </p>
@@ -1330,485 +1364,5 @@ function AssistantLinkCard({
         <ArrowRightIcon className="h-4 w-4 text-muted-foreground/50" />
       </Link>
     </SettingsCard>
-  )
-}
-
-// ==============================================
-// Installation Guide -- Interactive Code Panel
-// ==============================================
-
-const SERVER_EXAMPLES: {
-  id: string
-  label: string
-  filename: string
-  lang: SyntaxLang
-  code: string
-}[] = [
-  {
-    id: 'nextjs',
-    label: 'Next.js',
-    filename: 'route.ts',
-    lang: 'js',
-    code: `import crypto from "crypto";
-import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-
-function signWidgetToken(payload) {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = crypto
-    .createHmac("sha256", process.env.QUACKBACK_WIDGET_SECRET!)
-    .update(\`\${header}.\${body}\`)
-    .digest("base64url");
-  return \`\${header}.\${body}.\${signature}\`;
-}
-
-export async function POST() {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({}, { status: 401 });
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  const ssoToken = signWidgetToken({
-    sub: session.user.id,
-    email: session.user.email,
-    name: session.user.name,
-    // Custom attributes (must be configured in Settings > User Attributes)
-    // plan: session.user.plan,
-    // mrr: session.user.mrr,
-    exp: now + 300,
-  });
-
-  return NextResponse.json({ ssoToken });
-}`,
-  },
-  {
-    id: 'express',
-    label: 'Express',
-    filename: 'widget.js',
-    lang: 'js',
-    code: `import crypto from "crypto";
-
-function signWidgetToken(payload) {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = crypto
-    .createHmac("sha256", process.env.QUACKBACK_WIDGET_SECRET)
-    .update(\`\${header}.\${body}\`)
-    .digest("base64url");
-  return \`\${header}.\${body}.\${signature}\`;
-}
-
-app.post("/api/widget-sso", (req, res) => {
-  // req.user set by your auth middleware
-  const now = Math.floor(Date.now() / 1000);
-  const ssoToken = signWidgetToken({
-    sub: req.user.id,
-    email: req.user.email,
-    name: req.user.name,
-    // Custom attributes (must be configured in Settings > User Attributes)
-    // plan: req.user.plan,
-    exp: now + 300,
-  });
-
-  res.json({ ssoToken });
-});`,
-  },
-  {
-    id: 'django',
-    label: 'Django',
-    filename: 'views.py',
-    lang: 'python',
-    code: `import base64, hashlib, hmac, json, time
-from django.conf import settings
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-
-def b64url(data):
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
-
-def sign_widget_token(payload):
-    header = b64url(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
-    body = b64url(json.dumps(payload).encode())
-    sig = hmac.new(
-        settings.QUACKBACK_WIDGET_SECRET.encode(),
-        f"{header}.{body}".encode(),
-        hashlib.sha256,
-    ).digest()
-    return f"{header}.{body}.{b64url(sig)}"
-
-@login_required
-def widget_sso(request):
-    now = int(time.time())
-    token = sign_widget_token({
-        "sub": str(request.user.id),
-        "email": request.user.email,
-        "name": request.user.get_full_name() or request.user.username,
-        # Custom attributes (must be configured in Settings > User Attributes)
-        # "plan": request.user.plan,
-        "exp": now + 300,
-    })
-    return JsonResponse({"ssoToken": token})`,
-  },
-  {
-    id: 'rails',
-    label: 'Rails',
-    filename: 'widget_controller.rb',
-    lang: 'ruby',
-    code: `require "base64"
-require "json"
-require "openssl"
-
-class Api::WidgetController < ApplicationController
-  before_action :authenticate_user!
-
-  def identify_sso
-    now = Time.now.to_i
-    payload = {
-      sub: current_user.id.to_s,
-      email: current_user.email,
-      name: current_user.name,
-      exp: now + 300,
-    }
-
-    render json: { ssoToken: sign_widget_token(payload) }
-  end
-
-  private
-
-  def sign_widget_token(payload)
-    header = Base64.urlsafe_encode64({ alg: "HS256", typ: "JWT" }.to_json, padding: false)
-    body = Base64.urlsafe_encode64(payload.to_json, padding: false)
-    sig = OpenSSL::HMAC.digest("sha256", ENV["QUACKBACK_WIDGET_SECRET"], "#{header}.#{body}")
-    "#{header}.#{body}.#{Base64.urlsafe_encode64(sig, padding: false)}"
-  end
-end`,
-  },
-  {
-    id: 'laravel',
-    label: 'Laravel',
-    filename: 'WidgetController.php',
-    lang: 'php',
-    code: `use Illuminate\\Http\\Request;
-
-class WidgetController extends Controller
-{
-    public function identifySso(Request $request)
-    {
-        $now = time();
-        $payload = [
-            "sub" => (string) $request->user()->id,
-            "email" => $request->user()->email,
-            "name" => $request->user()->name,
-            "exp" => $now + 300,
-        ];
-
-        return response()->json(["ssoToken" => $this->signWidgetToken($payload)]);
-    }
-
-    private function signWidgetToken(array $payload): string
-    {
-        $header = rtrim(strtr(base64_encode(json_encode(["alg" => "HS256", "typ" => "JWT"])), "+/", "-_"), "=");
-        $body = rtrim(strtr(base64_encode(json_encode($payload)), "+/", "-_"), "=");
-        $signature = hash_hmac(
-            "sha256",
-            $header . "." . $body,
-            config("services.quackback.widget_secret"),
-            true,
-        );
-
-        return $header . "." . $body . "." . rtrim(strtr(base64_encode($signature), "+/", "-_"), "=");
-    }
-}`,
-  },
-]
-
-const CLIENT_CODE_IDENTIFY = `import { useEffect } from "react";
-import { useAuth } from "@/hooks/use-auth";
-
-export function WidgetIdentify() {
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (!user) return;
-    fetch("/api/widget-sso", { method: "POST" })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch widget token");
-        return res.json();
-      })
-      .then(({ ssoToken }) => {
-        Quackback("identify", { ssoToken });
-      });
-  }, [user]);
-
-  return null;
-}`
-
-interface CodeTab {
-  id: string
-  label: string
-  lang: SyntaxLang
-  code: string
-}
-
-function WidgetInstallation({ secret, baseUrl }: { secret: string | null; baseUrl: string }) {
-  const [, startTransition] = useTransition()
-  const regenerateSecret = useRegenerateWidgetSecret()
-  const router = useRouter()
-
-  // Guide UI state
-  const [framework, setFramework] = useState('nextjs')
-  const [activeTab, setActiveTab] = useState('snippet')
-
-  const [currentSecret, setCurrentSecret] = useState(secret)
-  const [secretVisible, setSecretVisible] = useState(false)
-  const [copiedSecret, setCopiedSecret] = useState(false)
-  const [copiedCode, setCopiedCode] = useState(false)
-  const [regenerating, setRegenerating] = useState(false)
-
-  const installSnippet = useMemo(
-    () =>
-      `<script>
-  (function(w,d){if(w.Quackback)return;w.Quackback=function(){
-  (w.Quackback.q=w.Quackback.q||[]).push(arguments)};
-  var s=d.createElement("script");s.async=true;
-  s.src="${baseUrl}/api/widget/sdk.js";
-  d.head.appendChild(s)})(window,document);
-
-  Quackback("init");
-</script>`,
-    [baseUrl]
-  )
-
-  // Identify is verified-only: the guide always shows the backend signer.
-  const tabs = useMemo<CodeTab[]>(() => {
-    const t: CodeTab[] = [
-      { id: 'snippet', label: 'snippet.html', lang: 'js', code: installSnippet },
-    ]
-    const ex = SERVER_EXAMPLES.find((e) => e.id === framework)
-    if (ex) {
-      t.push({ id: 'server', label: ex.filename, lang: ex.lang, code: ex.code })
-    }
-    t.push({ id: 'client', label: 'identify.tsx', lang: 'js', code: CLIENT_CODE_IDENTIFY })
-    return t
-  }, [installSnippet, framework])
-
-  // Reset active tab if it's no longer available
-  useEffect(() => {
-    if (!tabs.find((t) => t.id === activeTab)) {
-      setActiveTab('snippet')
-    }
-  }, [tabs, activeTab])
-
-  const activeTabData = tabs.find((t) => t.id === activeTab) ?? tabs[0]
-
-  async function handleCopySecret() {
-    if (!currentSecret) return
-    await navigator.clipboard.writeText(currentSecret)
-    setCopiedSecret(true)
-    setTimeout(() => setCopiedSecret(false), 2000)
-  }
-
-  async function handleCopyCode() {
-    await navigator.clipboard.writeText(activeTabData.code)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
-  }
-
-  async function handleRegenerate() {
-    setRegenerating(true)
-    try {
-      const newSecret = await regenerateSecret.mutateAsync()
-      setCurrentSecret(newSecret)
-      startTransition(() => router.invalidate())
-    } finally {
-      setRegenerating(false)
-    }
-  }
-
-  const maskedSecret = currentSecret
-    ? currentSecret.slice(0, 8) + '•'.repeat(Math.max(0, currentSecret.length - 8))
-    : null
-
-  return (
-    <div
-      id="widget-installation"
-      className="scroll-mt-6 rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[480px]"
-    >
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] flex-1">
-        {/* Left: Configuration */}
-        <div className="flex flex-col border-b lg:border-b-0 lg:border-r border-border divide-y divide-border">
-          {/* Header */}
-          <div className="p-5">
-            <h3 className="text-sm font-semibold text-foreground">Installation</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Configure and add the widget to your site
-            </p>
-          </div>
-
-          {/* Step 1 */}
-          <div className="p-5 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                1
-              </span>
-              <span className="text-xs font-medium text-foreground">Add the script</span>
-            </div>
-            <p className="text-xs text-muted-foreground ml-7">
-              Paste before the closing <code className="text-xs">&lt;/body&gt;</code> tag
-            </p>
-          </div>
-
-          {/* Step 2 */}
-          <div className="flex-1 p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                2
-              </span>
-              <div>
-                <span className="text-xs font-medium text-foreground">Identify users</span>
-                <p className="text-xs text-muted-foreground">Required to display the widget</p>
-              </div>
-            </div>
-
-            <div className="ml-7 space-y-3">
-              <p className="text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded px-2 py-1.5 leading-relaxed">
-                Users are identified with an ssoToken your backend signs using the widget secret.
-                Visitors without one browse anonymously — nobody can claim an email they don&apos;t
-                own.
-              </p>
-
-              <div className="space-y-2.5">
-                {/* Framework */}
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Backend framework</Label>
-                  <Select value={framework} onValueChange={setFramework}>
-                    <SelectTrigger size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SERVER_EXAMPLES.map((ex) => (
-                        <SelectItem key={ex.id} value={ex.id}>
-                          {ex.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Secret */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Widget secret</Label>
-                  {currentSecret ? (
-                    <div className="flex items-center gap-1">
-                      <code className="flex-1 text-xs font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1 truncate">
-                        {secretVisible ? currentSecret : maskedSecret}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => setSecretVisible(!secretVisible)}
-                      >
-                        {secretVisible ? (
-                          <EyeSlashIcon className="h-3 w-3" />
-                        ) : (
-                          <EyeIcon className="h-3 w-3" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0"
-                        onClick={handleCopySecret}
-                      >
-                        {copiedSecret ? (
-                          <CheckIcon className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <ClipboardDocumentIcon className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground italic">
-                      Click regenerate to create a secret
-                    </p>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={handleRegenerate}
-                    disabled={regenerating}
-                  >
-                    {regenerating ? (
-                      <>
-                        <ArrowPathIcon className="h-3 w-3 animate-spin mr-1" />
-                        Regenerating...
-                      </>
-                    ) : (
-                      'Regenerate'
-                    )}
-                  </Button>
-                </div>
-
-                {/* Security note */}
-                <WarningBox variant="warning" title="Keep this secret server-side only" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Dynamic Code Panel */}
-        <div className="flex flex-col">
-          {/* File tabs */}
-          <div
-            className="flex items-center justify-between shrink-0 px-1"
-            style={{ backgroundColor: '#252526' }}
-          >
-            <div className="flex items-center">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'px-3 py-2 text-[11px] font-mono transition-colors border-b-2',
-                    activeTab === tab.id
-                      ? 'text-white/90 border-primary'
-                      : 'text-white/40 border-transparent hover:text-white/60'
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={handleCopyCode}
-              className="flex items-center gap-1 px-2.5 py-1.5 mr-1 rounded text-[11px] text-white/40 hover:text-white/70 transition-colors"
-            >
-              {copiedCode ? (
-                <>
-                  <CheckIcon className="h-3 w-3 text-green-400" />
-                  <span className="text-green-400">Copied</span>
-                </>
-              ) : (
-                <>
-                  <ClipboardDocumentIcon className="h-3 w-3" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Code display */}
-          <div className="flex-1 overflow-auto">
-            <HighlightedCode code={activeTabData.code} lang={activeTabData.lang} />
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }

@@ -23,6 +23,42 @@ export type BoardPreset = z.infer<typeof boardPresetSchema>
  * insert) and the client mutation hook (optimistic row) so both sides
  * agree on the shape — drift here would surface as a flicker on create.
  */
+const INHERIT_MODERATION = {
+  anonPosts: 'inherit',
+  signedPosts: 'inherit',
+  comments: 'inherit',
+} as const
+
+/**
+ * Fill leftover board.access rows that predate vote/comment/moderation.
+ * Missing moderation is inherit (workspace default), not a crash.
+ */
+export function normalizeBoardAccess(access: Partial<BoardAccess> | null | undefined): BoardAccess {
+  const view = access?.view ?? 'team'
+  const submit = access?.submit ?? view
+  const vote = access?.vote ?? submit
+  const comment = access?.comment ?? submit
+  const segments = access?.segments
+  const moderation = access?.moderation
+  return {
+    view,
+    vote,
+    comment,
+    submit,
+    segments: {
+      view: segments?.view ?? [],
+      vote: segments?.vote ?? [],
+      comment: segments?.comment ?? [],
+      submit: segments?.submit ?? [],
+    },
+    moderation: {
+      anonPosts: moderation?.anonPosts ?? INHERIT_MODERATION.anonPosts,
+      signedPosts: moderation?.signedPosts ?? INHERIT_MODERATION.signedPosts,
+      comments: moderation?.comments ?? INHERIT_MODERATION.comments,
+    },
+  }
+}
+
 export function accessForPreset(preset: BoardPreset): BoardAccess {
   if (preset === 'private') {
     return {

@@ -6,6 +6,8 @@ import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { WorkspaceSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
+import type { StoredCloudConfig } from '@/lib/shared/db-types'
+import { resolveCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { logger } from '@/lib/server/logger'
 import { runWithoutLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
@@ -42,6 +44,24 @@ export interface BootstrapData {
    *  Threaded into the admin route the same way `themeCookie` is, so the
    *  banner renders in its final expanded/collapsed state on first paint. */
   updateBannerDismissedVersion: string | null
+  /**
+   * Whether this workspace has a valid control-plane billing projection.
+   *
+   * A single boolean, and deliberately nothing more: the admin settings nav
+   * needs to know whether a Billing item exists, and nothing else on the
+   * client is entitled to a billing fact. No customer reference, no
+   * subscription reference, no plan, no price — every one of those stays
+   * server-side, and `settings.cloud` remains in `SERVER_ONLY_SETTINGS_KEYS`.
+   *
+   * False on every self-hosted install. Provider configuration is never read
+   * by the workspace application.
+   */
+  billingEnabled: boolean
+  /**
+   * Whether this workspace has a signed cloud identity projection.
+   * Gates the Settings Domains row. False on every self-hosted install.
+   */
+  cloudEnabled: boolean
 }
 
 // Returns both the session (with principalType) AND the user role in
@@ -161,8 +181,8 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // that must stay silent to let their computes suspend.
   //
   // `shouldRunWorkers()` is the same predicate `startup.ts` gates the sweepers
-  // and the relay behind, so telemetry now lives on the same side of the split
-  // as the rest of the background work.
+  // behind, so telemetry now lives on the same side of the split as the rest
+  // of the background work.
   if (!_initialized && shouldRunWorkers()) {
     _initialized = true
 
@@ -228,6 +248,9 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     currentHost: headers.get('host'),
     fallback: config.baseUrl,
   })
+  const cloud = resolveCloudConfig(
+    (settings?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
+  )
 
   return {
     baseUrl,
@@ -240,6 +263,8 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     registeredAuthProviders,
     acceptLanguageLocale,
     updateBannerDismissedVersion,
+    billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),
+    cloudEnabled: cloud.enabled,
   }
 })
 

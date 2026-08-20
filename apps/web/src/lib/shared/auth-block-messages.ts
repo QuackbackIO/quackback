@@ -27,6 +27,7 @@ export type AuthBlockCode =
   | 'token_expired'
   | 'invalid_token'
   | 'signup_disabled'
+  | 'signup_not_allowed'
   | 'OAUTH_CALLBACK_ERROR'
   | 'oauth_signin_error'
   | 'not_team_member'
@@ -47,8 +48,13 @@ export type AuthBlockCode =
   | 'invalid_code'
   | 'no_code'
   | 'unable_to_create_user'
+  // The magic-link plugin's own spelling of the same event. Better-Auth emits
+  // `unable_to_create_user` from the OAuth callback and `failed_to_create_user`
+  // from `/magic-link/verify`; both are real codes and both land on a browser.
+  | 'failed_to_create_user'
   | 'unable_to_create_session'
   | 'oauth_provider_not_found'
+  | 'handoff_failed'
 
 export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   password_method_not_allowed:
@@ -66,6 +72,8 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   invalid_token: 'Your login link is invalid or has been tampered with. Please try again.',
   signup_disabled:
     "Your account isn't pre-provisioned for SSO. Ask an administrator to invite you first.",
+  signup_not_allowed:
+    "This workspace isn't accepting new accounts. Ask an admin to invite you, then sign in with the account they invite.",
   OAUTH_CALLBACK_ERROR:
     'Sign-in failed. Your identity provider rejected the request — check the app configuration in your IdP and try again.',
   oauth_signin_error:
@@ -90,7 +98,11 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   invalid_code: "The sign-in couldn't be verified with your identity provider. Please try again.",
   no_code: "The sign-in couldn't be verified with your identity provider. Please try again.",
   unable_to_create_user: 'Something went wrong creating your account. Please try again.',
+  failed_to_create_user:
+    "We couldn't create an account for that link. It may have expired, or this workspace isn't accepting new accounts. Ask an admin to invite you, then use the link they send.",
   unable_to_create_session: 'Something went wrong signing you in. Please try again.',
   oauth_provider_not_found:
     "That sign-in provider isn't available right now. It may have been disabled by an administrator.",
+  handoff_failed:
+    'That workspace handoff expired or was already used. Sign in here, or reopen the workspace from Quackback.',
 }
