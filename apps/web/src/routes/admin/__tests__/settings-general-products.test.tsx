@@ -17,13 +17,13 @@ function renderCard(onToggle = vi.fn()) {
 }
 
 describe('Products card', () => {
-  it('renders the feedback switch on and non-interactive with a reason', () => {
+  it('renders the feedback switch on and non-interactive, and says so', () => {
     const onToggle = renderCard()
     const feedback = screen.getByLabelText('Feedback & Roadmaps')
 
     expect(feedback).toBeChecked()
     expect(feedback).toBeDisabled()
-    expect(screen.getByText('Always on: the portal homepage is your feedback board.')).toBeVisible()
+    expect(screen.getByText('Feedback & Roadmaps is always enabled')).toBeVisible()
 
     fireEvent.click(feedback)
     expect(onToggle).not.toHaveBeenCalled()

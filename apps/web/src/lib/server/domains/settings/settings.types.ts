@@ -1240,12 +1240,11 @@ export interface ProductDefinition {
   description: string
   featureFlags: readonly (keyof FeatureFlags)[]
   /**
-   * Set on a product the workspace cannot run without. The string is the
-   * inline reason shown beside its fixed-on switch in Settings. The lock is
-   * not cosmetic: `updateFeatureFlags` refuses to persist the backing flags
-   * as false, and `resolveFeatureFlags` reads them back as on.
+   * Set on a product the workspace cannot run without. The lock is not
+   * cosmetic: `updateFeatureFlags` refuses to persist the backing flags as
+   * false, and `resolveFeatureFlags` reads them back as on.
    */
-  alwaysOnReason?: string
+  alwaysOn?: boolean
   adminPath:
     '/admin/feedback' | '/admin/inbox' | '/admin/help-center' | '/admin/changelog' | '/admin/status'
 }
@@ -1264,7 +1263,7 @@ export const PRODUCT_DEFINITIONS = [
     featureFlags: ['feedback'],
     // The portal homepage is the feedback board; with this off the portal root
     // has nothing to render and falls through to a redirect or a 404.
-    alwaysOnReason: 'Always on: the portal homepage is your feedback board.',
+    alwaysOn: true,
     adminPath: '/admin/feedback',
   },
   {
@@ -1301,11 +1300,6 @@ function getProductDefinition(productId: ProductId): ProductDefinition {
   return PRODUCT_DEFINITIONS.find((product) => product.id === productId)!
 }
 
-/** The inline reason a product's switch is fixed on, or null if it is free. */
-export function getProductAlwaysOnReason(productId: ProductId): string | null {
-  return getProductDefinition(productId).alwaysOnReason ?? null
-}
-
 /**
  * Feature flags that must never be stored as false, derived from the product
  * list so the fixed-on switch and the server-side guard cannot drift apart.
@@ -1313,7 +1307,7 @@ export function getProductAlwaysOnReason(productId: ProductId): string | null {
 export const ALWAYS_ON_FEATURE_FLAGS: readonly (keyof FeatureFlags)[] = (
   PRODUCT_DEFINITIONS as readonly ProductDefinition[]
 )
-  .filter((product) => product.alwaysOnReason)
+  .filter((product) => product.alwaysOn)
   .flatMap((product) => product.featureFlags)
 
 /**

@@ -41,7 +41,6 @@ import {
   ALWAYS_ON_FEATURE_FLAGS,
   DEFAULT_FEATURE_FLAGS,
   findDisabledAlwaysOnFlag,
-  getProductAlwaysOnReason,
   resolveFeatureFlags,
   type FeatureFlags,
 } from '../settings.types'
@@ -56,10 +55,6 @@ function persistedFlags(): FeatureFlags | null {
 describe('always-on product flags', () => {
   it('locks Feedback & Roadmaps and nothing else', () => {
     expect([...ALWAYS_ON_FEATURE_FLAGS]).toEqual(['feedback'])
-    expect(getProductAlwaysOnReason('feedback')).toBeTruthy()
-    for (const productId of ['support', 'helpCenter', 'changelog', 'status'] as const) {
-      expect(getProductAlwaysOnReason(productId)).toBeNull()
-    }
   })
 
   it('defaults the feedback flag on for a new workspace', () => {
