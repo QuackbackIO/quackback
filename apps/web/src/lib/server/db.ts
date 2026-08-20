@@ -239,6 +239,7 @@ export {
   DEFAULT_TICKET_STATUSES,
   // Schema tables - email channel (support platform §4.8)
   channelAccounts,
+  channelThreads,
   emailSendingDomains,
   // Schema tables - office hours + SLA (support platform §4.6)
   officeHoursSchedules,
@@ -377,6 +378,7 @@ export {
   postActivityRelations,
   // Schema tables - ai usage log
   aiUsageLog,
+  emailLog,
   // Schema tables - analytics
   analyticsDailyStats,
   analyticsTopPosts,
@@ -501,6 +503,7 @@ export type {
   EmailSendingDomain,
   ChannelAccountConfig,
   SendingDomainDnsRecord,
+  SendingDomainOwnershipRecord,
 } from '@quackback/db'
 export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
 export type { ChangelogSubscriptionSource } from '@quackback/db'
