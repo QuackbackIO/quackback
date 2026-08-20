@@ -17,7 +17,7 @@ import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-f
 import {
   DEFAULT_FEATURE_FLAGS,
   PRODUCT_DEFINITIONS,
-  getProductAlwaysOnReason,
+  ALWAYS_ON_FEATURE_FLAGS,
   getProductFlagUpdate,
   isProductEnabled,
   type FeatureFlags,
@@ -156,8 +156,11 @@ export function ProductsCard(props: {
         {PRODUCT_DEFINITIONS.map((product) => {
           // A product the portal cannot render without keeps its switch fixed
           // on. updateFeatureFlags refuses the write as well, so this is a
-          // shortcut past a dead end rather than the guard itself.
-          const alwaysOnReason = getProductAlwaysOnReason(product.id)
+          // shortcut past a dead end rather than the guard itself. Read off the
+          // same list the server guard uses, so the two cannot drift.
+          const alwaysOn = product.featureFlags.some((flag) =>
+            ALWAYS_ON_FEATURE_FLAGS.includes(flag)
+          )
           return (
             <div
               key={product.id}
@@ -167,22 +170,24 @@ export function ProductsCard(props: {
                 <Label
                   htmlFor={`product-${product.id}`}
                   className={
-                    alwaysOnReason ? 'text-sm font-medium' : 'cursor-pointer text-sm font-medium'
+                    alwaysOn ? 'text-sm font-medium' : 'cursor-pointer text-sm font-medium'
                   }
                 >
                   {product.label}
                 </Label>
                 <p className="text-xs text-muted-foreground">{product.description}</p>
-                {alwaysOnReason && (
-                  <p className="text-xs text-muted-foreground">{alwaysOnReason}</p>
+                {alwaysOn && (
+                  <p className="text-xs text-muted-foreground">
+                    {product.label} is always enabled
+                  </p>
                 )}
               </div>
               <Switch
                 id={`product-${product.id}`}
-                checked={alwaysOnReason ? true : isProductEnabled(props.flags, product.id)}
+                checked={alwaysOn ? true : isProductEnabled(props.flags, product.id)}
                 onCheckedChange={(checked) => props.onToggle(product.id, checked)}
-                disabled={Boolean(alwaysOnReason) || props.pending}
-                aria-readonly={alwaysOnReason ? true : undefined}
+                disabled={alwaysOn || props.pending}
+                aria-readonly={alwaysOn ? true : undefined}
               />
             </div>
           )
