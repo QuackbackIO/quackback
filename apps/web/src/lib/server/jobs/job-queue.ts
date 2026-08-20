@@ -116,6 +116,18 @@ export interface EnqueueJobInput {
    * this; a retry would double-import a customer's data.
    */
   maxAttempts?: number
+  /**
+   * Caller's transaction (or any drizzle executor). When set, the INSERT
+   * participates in that transaction: a rollback leaves no job row, and this
+   * function does not fire the HTTP nudge (NOTIFY from the job_queue trigger
+   * is commit-gated). Omit for the historical auto-commit path.
+   */
+  executor?: JobSqlExecutor
+}
+
+/** Narrow enough for `db` and a drizzle transaction. */
+export type JobSqlExecutor = {
+  execute: (query: unknown) => Promise<unknown>
 }
 
 export interface EnqueueJobResult {
@@ -198,7 +210,8 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
     throw new Error(`maxAttempts must be an integer >= 1, received ${String(input.maxAttempts)}`)
   }
 
-  const result = await db.execute(sql`
+  const executor = input.executor ?? db
+  const result = await executor.execute(sql`
     INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
     VALUES (
       ${jobId},
@@ -239,7 +252,8 @@ export interface QueueClaimSpec {
  * enqueue from a re-drain.
  */
 export async function enqueueJobs(
-  inputs: readonly EnqueueJobInput[]
+  inputs: readonly EnqueueJobInput[],
+  opts?: { executor?: JobSqlExecutor }
 ): Promise<{ inserted: number; insertedDedupeKeys: string[] }> {
   if (inputs.length === 0) return { inserted: 0, insertedDedupeKeys: [] }
 
@@ -258,7 +272,8 @@ export async function enqueueJobs(
     }
   })
 
-  const result = await db.execute(sql`
+  const executor = opts?.executor ?? db
+  const result = await executor.execute(sql`
     INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
     SELECT x.job_id, x.queue, x.dedupe_key, ${currentTenantId()}, x.payload, x.run_at, x.max_attempts
     FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(
