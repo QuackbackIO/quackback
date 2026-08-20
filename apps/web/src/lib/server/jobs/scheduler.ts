@@ -14,6 +14,7 @@ import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import { listActiveTenants } from '@/lib/server/tenancy/registry'
 import { withTenantScopeById } from '@/lib/server/tenancy/fleet'
 import { SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
+import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 import { earliestTenantDeadline } from './deadlines'
 import { earliestPendingJobAt, isMissingJobQueue } from './job-queue'
 import {
@@ -83,11 +84,14 @@ export function createTenantScheduler(opts?: {
   clock?: SchedulerClock
   runTenant?: TenantRun
   maxFanout?: number
+  /** Drain-loop ceiling. Exposed so the dirty-bit finally path can be tested. */
+  maxPasses?: number
   config?: RunnerConfig
 }): TenantScheduler {
   const clock = opts?.clock ?? systemClock()
   const runTenant = opts?.runTenant ?? defaultRunTenant
   const maxFanout = opts?.maxFanout ?? DEFAULT_FANOUT
+  const maxPasses = opts?.maxPasses ?? MAX_PASSES
   const cfg = opts?.config ?? runnerConfig()
 
   const entries = new Map<string, HeapEntry>()
@@ -172,25 +176,31 @@ export function createTenantScheduler(opts?: {
   function startRun(tenantId: string): void {
     running.add(tenantId)
     const promise = (async () => {
+      let nextWake: Date | null
       try {
         let passes = 0
-        let nextWake: Date | null = null
         do {
           dirty.delete(tenantId)
           nextWake = await runPass(tenantId)
           passes += 1
-        } while (dirty.has(tenantId) && passes < MAX_PASSES)
-
-        if (nextWake) scheduleAt(tenantId, nextWake.getTime())
-        else entries.delete(tenantId)
+        } while (dirty.has(tenantId) && passes < maxPasses)
       } catch (err) {
         log.error({ err, tenant: tenantId }, 'scheduler pass failed')
-        scheduleAt(tenantId, clock.now() + BAD_TENANT_RETRY_MS)
+        nextWake = new Date(clock.now() + BAD_TENANT_RETRY_MS)
       } finally {
         running.delete(tenantId)
-        const next = waitQueue.shift()
-        if (next) kick(next)
-        else rearmTimer()
+        // A signal that landed after the last pass (or after the pass budget)
+        // is still pending. Kick now; never arm a future deadline over it.
+        if (dirty.has(tenantId)) {
+          kick(tenantId)
+          rearmTimer()
+        } else {
+          if (nextWake) scheduleAt(tenantId, nextWake.getTime())
+          else entries.delete(tenantId)
+          const next = waitQueue.shift()
+          if (next) kick(next)
+          else rearmTimer()
+        }
       }
     })()
     inflight.add(promise)
@@ -281,15 +291,26 @@ export async function runTenantUntilQuiescent(
   now = new Date()
 ): Promise<Date | null> {
   const pool: JobPool = createJobPool()
-  let nextCron: Date | null = null
+  let nextEnabledCron: Date | null = null
   let passes = 0
 
   try {
+    try {
+      await convertRelayOwnedEvents()
+    } catch (err) {
+      log.warn({ err }, 'relay-owned event convert failed')
+    }
     while (passes < MAX_PASSES) {
       passes += 1
       const scheduled = await runScheduleTick(state, now)
-      if (scheduled.nextSlotAt && (!nextCron || scheduled.nextSlotAt < nextCron)) {
-        nextCron = scheduled.nextSlotAt
+      // Heap only enabled / ungated crons. Gated-off snooze/SLA stay on
+      // `earliestTenantDeadline` — their `* * * * *` next slot must not
+      // wake the compute every minute.
+      if (
+        scheduled.nextEnabledSlotAt &&
+        (!nextEnabledCron || scheduled.nextEnabledSlotAt < nextEnabledCron)
+      ) {
+        nextEnabledCron = scheduled.nextEnabledSlotAt
       }
       await runMaintenanceTick(cfg)
       const dispatched = await dispatchPass({ pool, config: cfg, run: runJob })
@@ -304,7 +325,7 @@ export async function runTenantUntilQuiescent(
     }
     await awaitPool(pool)
   } catch (err) {
-    if (isMissingJobQueue(err)) return nextCron
+    if (isMissingJobQueue(err)) return nextEnabledCron
     throw err
   }
 
@@ -313,7 +334,7 @@ export async function runTenantUntilQuiescent(
     throw err
   })
   const deadline = await earliestTenantDeadline(now.getTime())
-  return minDate(pending, deadline, nextCron)
+  return minDate(pending, deadline, nextEnabledCron)
 }
 
 function minDate(...values: Array<Date | null | undefined>): Date | null {
