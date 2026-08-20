@@ -156,7 +156,9 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
 
     // The hero template lives in the new "Customer facing" category (Phase C,
     // slice C-5) rather than "Popular", so switch the category rail first.
-    await galleryDialog.getByRole('button', { name: /Customer facing/ }).click()
+    // Anchored: the card names carry a "Customer facing" chip too, and an
+    // unanchored regex resolves to the rail plus every chipped card.
+    await galleryDialog.getByRole('button', { name: /^Customer facing/ }).click()
     const templateCard = galleryDialog.getByRole('button', {
       name: new RegExp(FRONT_DOOR_TEMPLATE_NAME),
     })
