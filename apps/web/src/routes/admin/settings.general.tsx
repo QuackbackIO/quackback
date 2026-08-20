@@ -137,28 +137,40 @@ function GeneralSettingsPage() {
         description="Choose the Quackback products available to your team and customers"
       >
         <div className="divide-y divide-border/50">
-          {PRODUCT_DEFINITIONS.map((product) => (
-            <div
-              key={product.id}
-              className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0"
-            >
-              <div className="min-w-0 space-y-0.5">
-                <Label
-                  htmlFor={`product-${product.id}`}
-                  className="cursor-pointer text-sm font-medium"
-                >
-                  {product.label}
-                </Label>
-                <p className="text-xs text-muted-foreground">{product.description}</p>
+          {PRODUCT_DEFINITIONS.map((product) => {
+            // The public portal homepage is the feedback board, so turning this
+            // one off leaves the portal root with nothing to render.
+            const alwaysOn = product.id === 'feedback'
+            return (
+              <div
+                key={product.id}
+                className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <Label
+                    htmlFor={`product-${product.id}`}
+                    className={
+                      alwaysOn ? 'text-sm font-medium' : 'cursor-pointer text-sm font-medium'
+                    }
+                  >
+                    {product.label}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">{product.description}</p>
+                  {alwaysOn && (
+                    <p className="text-xs text-muted-foreground">
+                      {product.label} is always enabled
+                    </p>
+                  )}
+                </div>
+                <Switch
+                  id={`product-${product.id}`}
+                  checked={alwaysOn || isProductEnabled(localFlags, product.id)}
+                  onCheckedChange={(checked) => handleProductToggle(product.id, checked)}
+                  disabled={alwaysOn || productMutation.isPending}
+                />
               </div>
-              <Switch
-                id={`product-${product.id}`}
-                checked={isProductEnabled(localFlags, product.id)}
-                onCheckedChange={(checked) => handleProductToggle(product.id, checked)}
-                disabled={productMutation.isPending}
-              />
-            </div>
-          ))}
+            )
+          })}
         </div>
       </SettingsCard>
     </div>
