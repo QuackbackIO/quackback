@@ -1115,6 +1115,11 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
   for (const [legacyKey, umbrella] of Object.entries(LEGACY_FLAG_MAP)) {
     if (stored[umbrella] === undefined && stored[legacyKey] === true) flags[umbrella] = true
   }
+  // The public portal homepage is the feedback board, so this one is never off,
+  // whatever a workspace stored while the switch could still be moved. Read-time
+  // repair rather than a migration: it corrects the workspaces that are already
+  // wrong, not only the ones upgrading, and the next write persists it.
+  flags.feedback = true
   return flags
 }
 
