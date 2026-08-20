@@ -54,10 +54,19 @@ export type EmailAddress = string | { address: string; name?: string }
  * these parts, because the quoting rules are the whole point of that function.
  */
 export function parseAddress(value: string): EmailAddress {
-  const match = /^\s*(.*?)\s*<\s*([^>]+?)\s*>\s*$/.exec(value)
-  if (!match) return value.trim()
-  const name = match[1].replace(/^"(.*)"$/, '$1').trim()
-  const address = match[2]
+  // Split imperatively rather than with one regex: the obvious
+  // `/^\s*(.*?)\s*<...>\s*$/` backtracks polynomially on long space runs,
+  // and header values are library input.
+  const trimmed = value.trim()
+  const open = trimmed.lastIndexOf('<')
+  if (open === -1 || !trimmed.endsWith('>')) return trimmed
+  const address = trimmed.slice(open + 1, -1).trim()
+  if (!address) return trimmed
+  const name = trimmed
+    .slice(0, open)
+    .trim()
+    .replace(/^"(.*)"$/, '$1')
+    .trim()
   return name ? { address, name } : address
 }
 
