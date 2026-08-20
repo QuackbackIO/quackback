@@ -77,7 +77,12 @@ export const ID_PREFIXES = {
   // Distinct from `assistant_action` above, which is the pending-action row a
   // write-tool proposal mints (AssistantPendingActionId) — an unfortunate but
   // load-bearing name collision, so the definition table gets its own prefix.
-  assistant_custom_action: 'assistant_custom_action',
+  // Remote MCP connector (Agent Connectors). Distinct from the retired REST
+  // "data connectors" wave; the tool-name prefix `connector_<slug>__` is the
+  // same proven grammar.
+  connector: 'connector',
+  // Packaged agent procedure (name + when-to-use + markdown body).
+  skill: 'skill',
   assistant_tool_call: 'assistant_tool_call',
   assistant_snippet: 'assistant_snippet',
   assistant_document: 'assistant_document',
@@ -157,6 +162,11 @@ export const ID_PREFIXES = {
 
   // Visitor analytics
   page_view: 'pv',
+
+  // Billing (self-serve subscription for hosted workspaces; inert unless
+  // a billing provider is configured)
+  billing_event: 'billing_event',
+  billing_usage: 'billing_usage',
 
   // ============================================
   // Auth Entities (Better-auth, text primary keys)

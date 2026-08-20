@@ -36,23 +36,32 @@ import { sql } from 'drizzle-orm'
 import journal from '../drizzle/meta/_journal.json'
 
 /**
- * Absolute path to the bundled SQL, resolved from this module rather than from
- * a caller's cwd.
+ * Absolute path to the bundled SQL: `MIGRATIONS_FOLDER` when it is set, and
+ * this module's own location otherwise.
  *
- * The replay-safety preflight has to read the same files drizzle will execute.
- * A caller-relative path would give a different answer depending on where the
- * process was started, and "the plan disagreed with the run" is the one thing a
- * preflight must not do.
+ * The invariant is that the replay-safety preflight reads the same files
+ * drizzle will execute — "the plan disagreed with the run" is the one thing a
+ * preflight must not do. A *caller-relative* path breaks that, because the
+ * answer then depends on where the process was started, which is why the
+ * fallback is resolved from `import.meta.url`.
+ *
+ * `MIGRATIONS_FOLDER` does not break it, and is needed. Bundling collapses
+ * every module into one file, so `import.meta.url` becomes the bundle's own
+ * path and `../drizzle` lands a directory above the SQL — which is exactly the
+ * shape the image ships: `/app/fleet-migrator.mjs` beside `/app/drizzle`. The
+ * variable is deployment-level and read once here, so both halves still resolve
+ * to the same directory; it is also the variable `migrate.ts` has always
+ * honoured, so the image's existing `MIGRATIONS_FOLDER=/app/drizzle` already
+ * says the right thing.
  */
-export const MIGRATIONS_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../drizzle'
-)
+export const MIGRATIONS_DIR =
+  process.env['MIGRATIONS_FOLDER']?.trim() ||
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../drizzle')
 
 export interface BundledMigration {
   /** Journal `when` millis. The migrator stamps this into the ledger row. */
   when: number
-  /** File tag, e.g. `0251_pg_kv_presence_realtime`. */
+  /** File tag, e.g. `0255_settings_cloud_tenant_id`. */
   tag: string
 }
 
@@ -78,7 +87,7 @@ export class UnknownSchemaVersion extends Error {
   constructor(spec: string) {
     super(
       `MIN_SCHEMA_VERSION=${spec} names no bundled migration. Use a full tag ` +
-        `(0250_job_queue), its numeric prefix (0250), or a journal ` +
+        `(0255_settings_cloud_tenant_id), its numeric prefix (0251), or a journal ` +
         `millis value. Refusing rather than guessing: a floor that silently resolves ` +
         'to nothing is a gate that is switched off while looking switched on.'
     )

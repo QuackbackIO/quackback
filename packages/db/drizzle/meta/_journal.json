@@ -1667,6 +1667,27 @@
       "when": 1785700000018,
       "tag": "0260_channel_threads_conversation_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "7",
+      "when": 1785700000019,
+      "tag": "0261_connectors",
+      "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1785700000020,
+      "tag": "0262_drop_assistant_custom_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1785700000021,
+      "tag": "0263_core_product_flag_defaults",
+      "breakpoints": true
     }
   ]
 }

@@ -64,8 +64,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
-import path from 'path'
-import { fileURLToPath } from 'url'
 import * as schema from './schema'
 import { seedSystemData } from './seed-system'
 import {
@@ -77,13 +75,13 @@ import {
   type InvalidIndex,
   type PostconditionReport,
 } from './schema-ops'
+import { MIGRATIONS_DIR } from './schema-version'
 
-// Get the directory of this file to resolve the migrations folder
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Migrations folder is at packages/db/drizzle relative to this file
-const MIGRATIONS_FOLDER = path.resolve(__dirname, '../drizzle')
+// The same directory the replay-safety preflight reads, deliberately shared
+// rather than re-derived: a run that executes files the plan did not read is
+// the failure `MIGRATIONS_DIR` exists to prevent, and two copies of the same
+// expression drift the moment one of them learns something the other does not.
+const MIGRATIONS_FOLDER = MIGRATIONS_DIR
 
 export type MigrationStep =
   | 'connect'
