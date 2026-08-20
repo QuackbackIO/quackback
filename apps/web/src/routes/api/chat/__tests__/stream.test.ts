@@ -18,6 +18,7 @@ const mockTicketFilter = vi.fn()
 const mockConversationsEnabled = vi.fn()
 const mockPortalAccess = vi.fn()
 const mockMarkPresent = vi.fn()
+const mockRefreshPresence = vi.fn()
 const mockClearPresence = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
@@ -73,7 +74,7 @@ vi.mock('@/lib/server/realtime/pubsub', () => ({
 }))
 vi.mock('@/lib/server/realtime/presence', () => ({
   markPresent: (...a: unknown[]) => mockMarkPresent(...a),
-  refreshPresence: vi.fn(),
+  refreshPresence: (...a: unknown[]) => mockRefreshPresence(...a),
   clearPresence: (...a: unknown[]) => mockClearPresence(...a),
 }))
 vi.mock('@/lib/server/policy/conversation', () => ({
@@ -111,6 +112,7 @@ vi.mock('@/lib/server/logger', () => ({
 }))
 
 import { Route } from '../stream'
+import { SSE_HEARTBEAT_INTERVAL_MS } from '@/lib/server/realtime/stream-heartbeat'
 
 type RouteOpts = { server: { handlers: { GET: (a: { request: Request }) => Promise<Response> } } }
 const GET = (Route as unknown as { options: RouteOpts }).options.server.handlers.GET
@@ -152,6 +154,7 @@ beforeEach(() => {
   mockTicketFilter.mockReturnValue('MOCK_TICKET_FILTER_SQL')
   mockSubscribe.mockResolvedValue(async () => {})
   mockMarkPresent.mockResolvedValue(undefined)
+  mockRefreshPresence.mockResolvedValue(undefined)
   mockClearPresence.mockResolvedValue(false)
   mockCanView.mockReturnValue({ allowed: true })
   mockPortalAccess.mockResolvedValue({ granted: true })
@@ -467,5 +470,62 @@ describe('GET /api/chat/stream - assistant activity snapshot replay', () => {
     const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
     await settleAndClose(res)
     expect(mockReadActivitySnapshot).toHaveBeenCalledWith('conversation_1')
+  })
+})
+
+describe('GET /api/chat/stream - abandoned heartbeat timeout', () => {
+  it('stops polling presence and unsubscribes when pings go unconsumed', async () => {
+    vi.useFakeTimers()
+    try {
+      sessionPrincipal('admin')
+      const unsub = vi.fn(async () => {})
+      mockSubscribe.mockResolvedValue(unsub)
+      const res = await GET({ request: req('?scope=presence') })
+      expect(res.status).toBe(200)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockMarkPresent).toHaveBeenCalled()
+
+      // Nobody is reading the body — the shape of a tab that has gone away
+      // without aborting the request. Two unconsumed pings tear it down.
+      await vi.advanceTimersByTimeAsync(SSE_HEARTBEAT_INTERVAL_MS)
+      expect(mockRefreshPresence).not.toHaveBeenCalled()
+      expect(mockClearPresence).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(SSE_HEARTBEAT_INTERVAL_MS)
+      expect(mockClearPresence).toHaveBeenCalled()
+      expect(unsub).toHaveBeenCalled()
+      expect(mockRefreshPresence).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('refreshes presence while the consumer is still reading pings', async () => {
+    vi.useFakeTimers()
+    const reader = { current: null as ReadableStreamDefaultReader<Uint8Array> | null }
+    try {
+      sessionPrincipal('admin')
+      const res = await GET({ request: req('?scope=presence') })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockMarkPresent).toHaveBeenCalled()
+
+      reader.current = res.body!.getReader()
+      // Drain the connect frames (`retry` + `: connected`) so the queue is
+      // empty before the first ping — otherwise heartbeatPing reports
+      // unconsumed and never refreshes presence.
+      const decoder = new TextDecoder()
+      let opened = ''
+      while (!opened.includes(': connected')) {
+        const { value, done } = await reader.current.read()
+        if (done) break
+        opened += decoder.decode(value)
+      }
+      await vi.advanceTimersByTimeAsync(SSE_HEARTBEAT_INTERVAL_MS)
+      await reader.current.read()
+      expect(mockRefreshPresence).toHaveBeenCalled()
+      expect(mockClearPresence).not.toHaveBeenCalled()
+    } finally {
+      await reader.current?.cancel().catch(() => {})
+      vi.useRealTimers()
+    }
   })
 })

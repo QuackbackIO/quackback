@@ -392,8 +392,13 @@ describe('workspace pool cache', () => {
       idle_timeout?: number
     }
     expect(options.prepare).toBe(true)
-    // And the idle timeout must be well under Neon's 300s suspend window and
-    // Railway's 600s sleep window, or nothing ever goes quiet.
+    // The number the cost model rests on: well under the 300s suspend window
+    // and Railway's 600s sleep window, and the same value the cache is
+    // configured with — a hardcoded "less than 300" would still pass if this
+    // silently became 299.
+    const { config } = await import('@/lib/server/config')
+    expect(options.idle_timeout).toBe(config.workspacePoolIdleSeconds)
+    expect(options.idle_timeout).toBe(45)
     expect(options.idle_timeout).toBeLessThan(300)
     await cache.closeAllWorkspacePools()
   })

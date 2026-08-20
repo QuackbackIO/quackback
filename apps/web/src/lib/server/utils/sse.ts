@@ -19,6 +19,13 @@ export interface SseStream {
   send: (event: string, data: unknown, id?: string) => void
   /** Send a raw, pre-framed chunk (comments, retry hints, prebuilt frames). */
   sendRaw: (chunk: string) => void
+  /**
+   * Write a comment ping and report whether the consumer is still taking data.
+   *
+   * `unconsumed` means the previous write is still sitting in the stream — the
+   * reader is gone or stuck, which is how an abandoned tab is detected.
+   */
+  heartbeatPing: () => 'ok' | 'closed' | 'unconsumed'
   /** Whether the stream is closed or the consumer is gone. */
   isClosed: () => boolean
   /** Stop sending and close the stream. Safe to call more than once. */
@@ -56,6 +63,18 @@ export function createSseStream(
     sendRaw,
     send: (event, data, id) =>
       sendRaw(`${id ? `id: ${id}\n` : ''}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+    heartbeatPing: () => {
+      if (closed) return 'closed'
+      const size = controller?.desiredSize
+      if (size !== undefined && size !== null && size <= 0) return 'unconsumed'
+      try {
+        controller.enqueue(encoder.encode(': ping\n\n'))
+        return 'ok'
+      } catch {
+        closed = true
+        return 'closed'
+      }
+    },
     isClosed: () => closed,
     close: () => {
       closed = true

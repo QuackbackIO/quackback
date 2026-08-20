@@ -88,7 +88,7 @@ let controlSql: postgres.Sql | null = null
  * The 15s margin is slack for a miss that arrives a little late — a TTL that
  * expires at 30s is not read again at exactly 30s.
  */
-function controlIdleSeconds(): number {
+export function controlIdleSeconds(): number {
   return Math.ceil(config.workspaceRegistryTtlMs / 1000) + 15
 }
 
