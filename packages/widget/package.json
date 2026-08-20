@@ -28,7 +28,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc --emitDeclarationOnly",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
@@ -44,12 +44,12 @@
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "happy-dom": "^20.8.9",
-    "react-dom": "^19.2.5",
-    "tsup": "^8.0.0",
-    "react": "^19"
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "happy-dom": "^20.11.2",
+    "react-dom": "^19.2.8",
+    "tsup": "^8.5.1",
+    "react": "^19.2.8"
   },
   "repository": {
     "type": "git",

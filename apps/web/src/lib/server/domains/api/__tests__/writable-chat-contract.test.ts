@@ -34,21 +34,21 @@ describe('writable tickets/conversations/moderation OpenAPI contract', () => {
 
   it('exposes the documented required request-body fields', () => {
     const createBody = JSON.stringify(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       (paths['/tickets'] as any).post.requestBody.content['application/json'].schema
     )
     expect(createBody).toContain('type')
     expect(createBody).toContain('title')
 
     const statusBody = JSON.stringify(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       (paths['/tickets/{ticketId}/status'] as any).post.requestBody.content['application/json']
         .schema
     )
     expect(statusBody).toContain('statusId')
 
     const convStatusBody = JSON.stringify(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       (paths['/conversations/{conversationId}/status'] as any).post.requestBody.content[
         'application/json'
       ].schema
@@ -56,7 +56,7 @@ describe('writable tickets/conversations/moderation OpenAPI contract', () => {
     expect(convStatusBody).toContain('status')
 
     const tagBody = JSON.stringify(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       (paths['/conversations/{conversationId}/tags'] as any).post.requestBody.content[
         'application/json'
       ].schema

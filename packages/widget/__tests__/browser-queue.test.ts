@@ -29,7 +29,7 @@ function mockSDK(): unknown[][] {
 function installQueueStub(): void {
   const q: IArguments[] = []
   const queueFn = function (this: void) {
-    // eslint-disable-next-line prefer-rest-params
+    // oxlint-disable-next-line prefer-rest-params
     q.push(arguments)
   } as ((...args: unknown[]) => unknown) & { q: IArguments[] }
   queueFn.q = q

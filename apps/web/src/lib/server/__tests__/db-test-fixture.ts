@@ -23,7 +23,7 @@ import { sql } from 'drizzle-orm'
 // (and closes it cleanly in afterAll). The lint rule reserves
 // @quackback/db/client for the canonical db.ts entry; this fixture is a
 // sanctioned caller of `createDb`, like board-view-filter-parity.test.ts.
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import { createDb, type Database } from '@quackback/db/client'
 
 /** The transaction handle type the fixture parks each test inside. */

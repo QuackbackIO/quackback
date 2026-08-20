@@ -43,7 +43,7 @@ export const mockTx: MockTx = {
 }
 
 // The transaction function just calls the callback with itself (same API)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export const mockTransaction: Mock = vi.fn(async (fn: any) => fn(mockTx))
 
 /** Reset the shared spies + operations log; call from beforeEach. */
@@ -120,7 +120,6 @@ export function mockDbModule(): Record<string, unknown> {
       title: 'inAppNotifications.title',
       __name: 'in_app_notifications',
     },
-    emailLog: { principalId: 'emailLog.principalId', __name: 'email_log' },
     pageViews: { principalId: 'pageViews.principalId', __name: 'page_views' },
     visitorDevices: { principalId: 'visitorDevices.principalId', __name: 'visitor_devices' },
     userSegments: {

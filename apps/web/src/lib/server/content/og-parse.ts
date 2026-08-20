@@ -27,7 +27,7 @@ function decodeEntities(s: string): string {
 
 /** Strip ASCII control characters (U+0000-U+001F, U+007F). */
 function stripControl(s: string): string {
-  // eslint-disable-next-line no-control-regex
+  // oxlint-disable-next-line no-control-regex
   return s.replace(/[\x00-\x1f\x7f]/g, '')
 }
 

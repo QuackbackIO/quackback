@@ -1,0 +1,283 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "oxc"],
+  "jsPlugins": ["./scripts/oxlint/plugin.js"],
+  "categories": {
+    "correctness": "off"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "ignorePatterns": [
+    "node_modules/**",
+    ".venv/**",
+    ".next/**",
+    ".output/**",
+    "dist/**",
+    "build/**",
+    ".agents/**",
+    ".claude/**",
+    "scratchpad/**",
+    "deploy/edge/**",
+    "loop-evidence/**",
+    "artifacts/**",
+    "*.config.js",
+    "*.config.mjs",
+    "next-env.d.ts"
+  ],
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "typescript/no-explicit-any": "warn",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@quackback/db", "@quackback/db/*"],
+            "message": "Import from '@/lib/server/db' (server) or '@/lib/shared/db-types' (client) instead."
+          }
+        ]
+      }
+    ],
+    "quackback/no-small-menu-text": "error",
+    "quackback/no-sub-11px-text": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/src/lib/server/db.ts",
+        "**/src/lib/shared/db-types.ts",
+        "**/scripts/**",
+        "**/src/lib/server/workspaces/pool-cache.ts",
+        "**/src/lib/server/workspaces/workspace-context.ts",
+        "**/src/lib/server/fleet/migrator.ts",
+        "**/src/lib/server/fleet/schema-state.ts",
+        "**/src/lib/server/fleet/schema-floor.ts",
+        "**/src/lib/server/fleet/__tests__/**",
+        "**/src/lib/server/policy/migration-contract/__tests__/lineage-double-apply.db.test.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["**/src/lib/**/*.{ts,tsx}"],
+      "excludeFiles": [
+        "**/src/lib/server/db.ts",
+        "**/src/lib/shared/db-types.ts",
+        "**/src/lib/server/workspaces/pool-cache.ts",
+        "**/src/lib/server/workspaces/workspace-context.ts",
+        "**/src/lib/server/fleet/migrator.ts",
+        "**/src/lib/server/fleet/schema-state.ts",
+        "**/src/lib/server/fleet/schema-floor.ts",
+        "**/src/lib/server/fleet/__tests__/**",
+        "**/src/lib/server/policy/migration-contract/__tests__/lineage-double-apply.db.test.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@quackback/db", "@quackback/db/*"],
+                "message": "Import from '@/lib/server/db' (server) or '@/lib/shared/db-types' (client) instead."
+              },
+              {
+                "group": ["@/components/*", "@/components/**"],
+                "message": "lib/ must not import from components/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/lib/server/functions/**/*.ts"],
+      "excludeFiles": ["**/__tests__/**"],
+      "rules": {
+        "quackback/no-server-fn-log-rethrow": "error",
+        "quackback/no-with-error-log": "error"
+      }
+    },
+    {
+      "files": ["**/src/routes/**/*.tsx"],
+      "excludeFiles": ["**/src/routes/**/__tests__/**"],
+      "rules": {
+        "typescript/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/lib/server/*",
+                  "@/lib/server/**",
+                  "!@/lib/server/functions",
+                  "!@/lib/server/functions/**"
+                ],
+                "allowTypeImports": true,
+                "message": "Route files are client-bundled. Call server logic through a createServerFn in '@/lib/server/functions/*', or move pure helpers to '@/lib/shared/*'."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/components/**/*.{ts,tsx}"],
+      "excludeFiles": [
+        "**/src/components/**/__tests__/**",
+        "**/components/admin/automation/workflow-graph.ts",
+        "**/components/admin/settings/api-keys/api-keys-settings.tsx",
+        "**/components/admin/settings/api-keys/create-api-key-dialog.tsx",
+        "**/components/admin/settings/experimental-settings.tsx",
+        "**/components/admin/settings/integrations/**",
+        "**/components/auth/portal-auth-form-inline.tsx",
+        "**/components/auth/use-auto-open-auth.ts",
+        "**/components/public/comment-content.tsx",
+        "**/components/public/comment-thread.tsx"
+      ],
+      "rules": {
+        "typescript/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/lib/server/*",
+                  "@/lib/server/**",
+                  "!@/lib/server/functions",
+                  "!@/lib/server/functions/**"
+                ],
+                "allowTypeImports": true,
+                "message": "Components are client-capable. Call server logic through '@/lib/server/functions/*', or move pure helpers to '@/lib/shared/*'."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "**/domains/analytics/copilot-usage.ts",
+        "**/domains/api/schemas/roadmaps.ts",
+        "**/domains/api/schemas/status.ts",
+        "**/domains/assistant/assistant.runtime.ts",
+        "**/domains/assistant/assistant.tools.ts",
+        "**/domains/assistant/assistant.toolspec.ts",
+        "**/domains/assistant/conversation-summary.service.ts",
+        "**/domains/boards/board.service.ts",
+        "**/domains/changelog/changelog.service.ts",
+        "**/domains/comments/comment.service.ts",
+        "**/domains/conversation/conversation.email-inbound.service.ts",
+        "**/domains/conversation/conversation.email-inbound.ts",
+        "**/domains/conversation/conversation.notify.ts",
+        "**/domains/conversation/conversation.query.ts",
+        "**/domains/conversation/conversation.service.ts",
+        "**/domains/conversation/conversation-tag.service.ts",
+        "**/domains/conversation/conversation-translation.service.ts",
+        "**/domains/feedback/pipeline/interpretation.service.ts",
+        "**/domains/feedback/pipeline/suggestion.service.ts",
+        "**/domains/help-center/help-center-search.service.ts",
+        "**/domains/help-center/help-center.article.service.ts",
+        "**/domains/help-center/help-center.category.service.ts",
+        "**/domains/inbox/inbox.query.ts",
+        "**/domains/merge-suggestions/merge-suggestion.service.ts",
+        "**/domains/posts/post.merge.ts",
+        "**/domains/posts/post.public.detail.ts",
+        "**/domains/posts/post.service.ts",
+        "**/domains/principals/principal-repoint.ts",
+        "**/domains/segments/segment.evaluation.ts",
+        "**/domains/segments/segment.service.ts",
+        "**/domains/settings/identity-providers.service.ts",
+        "**/domains/settings/settings.service.ts",
+        "**/domains/settings/settings.types.ts",
+        "**/domains/sla/sla.service.ts",
+        "**/domains/status/status.service.ts",
+        "**/domains/subscriptions/subscription.service.ts",
+        "**/domains/tickets/ticket.service.ts",
+        "**/domains/users/user.service.ts",
+        "**/domains/workflows/action.executor.ts",
+        "**/domains/workflows/event-trigger.ts",
+        "**/domains/workflows/graph.ts",
+        "**/domains/workflows/workflow-sweep.ts",
+        "**/domains/workflows/workflow.engine.ts",
+        "**/domains/workflows/workflow.schemas.ts"
+      ],
+      "rules": {
+        "max-lines": ["warn", { "max": 400, "skipBlankLines": true, "skipComments": true }]
+      }
+    },
+    {
+      "files": ["**/server/domains/**/*.{ts,tsx}"],
+      "excludeFiles": [
+        "**/server/domains/**/__tests__/**",
+        "**/domains/analytics/copilot-usage.ts",
+        "**/domains/api/schemas/roadmaps.ts",
+        "**/domains/api/schemas/status.ts",
+        "**/domains/assistant/assistant.runtime.ts",
+        "**/domains/assistant/assistant.tools.ts",
+        "**/domains/assistant/assistant.toolspec.ts",
+        "**/domains/assistant/conversation-summary.service.ts",
+        "**/domains/boards/board.service.ts",
+        "**/domains/changelog/changelog.service.ts",
+        "**/domains/comments/comment.service.ts",
+        "**/domains/conversation/conversation.email-inbound.service.ts",
+        "**/domains/conversation/conversation.email-inbound.ts",
+        "**/domains/conversation/conversation.notify.ts",
+        "**/domains/conversation/conversation.query.ts",
+        "**/domains/conversation/conversation.service.ts",
+        "**/domains/conversation/conversation-tag.service.ts",
+        "**/domains/conversation/conversation-translation.service.ts",
+        "**/domains/feedback/pipeline/interpretation.service.ts",
+        "**/domains/feedback/pipeline/suggestion.service.ts",
+        "**/domains/help-center/help-center-search.service.ts",
+        "**/domains/help-center/help-center.article.service.ts",
+        "**/domains/help-center/help-center.category.service.ts",
+        "**/domains/inbox/inbox.query.ts",
+        "**/domains/merge-suggestions/merge-suggestion.service.ts",
+        "**/domains/posts/post.merge.ts",
+        "**/domains/posts/post.public.detail.ts",
+        "**/domains/posts/post.service.ts",
+        "**/domains/principals/principal-repoint.ts",
+        "**/domains/segments/segment.evaluation.ts",
+        "**/domains/segments/segment.service.ts",
+        "**/domains/settings/identity-providers.service.ts",
+        "**/domains/settings/settings.service.ts",
+        "**/domains/settings/settings.types.ts",
+        "**/domains/sla/sla.service.ts",
+        "**/domains/status/status.service.ts",
+        "**/domains/subscriptions/subscription.service.ts",
+        "**/domains/tickets/ticket.service.ts",
+        "**/domains/users/user.service.ts",
+        "**/domains/workflows/action.executor.ts",
+        "**/domains/workflows/event-trigger.ts",
+        "**/domains/workflows/graph.ts",
+        "**/domains/workflows/workflow-sweep.ts",
+        "**/domains/workflows/workflow.engine.ts",
+        "**/domains/workflows/workflow.schemas.ts"
+      ],
+      "rules": {
+        "max-lines": ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }]
+      }
+    },
+    {
+      "files": ["**/server/domains/**/__tests__/**/*.{ts,tsx}"],
+      "rules": {
+        "max-lines": ["warn", { "max": 800, "skipBlankLines": true, "skipComments": true }]
+      }
+    },
+    {
+      "files": ["**/client/hooks/**/*.{ts,tsx}"],
+      "rules": {
+        "max-lines": ["warn", { "max": 300, "skipBlankLines": true, "skipComments": true }]
+      }
+    }
+  ]
+}

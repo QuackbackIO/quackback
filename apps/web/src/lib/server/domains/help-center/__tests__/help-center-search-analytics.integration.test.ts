@@ -11,7 +11,7 @@ import { describe, it, expect, afterAll } from 'vitest'
 import { sql } from 'drizzle-orm'
 
 import { helpCenterSearchQueries, type Database } from '@/lib/server/db'
-// eslint-disable-next-line no-restricted-imports -- legitimate createDb caller: this file owns the global db for its worker (see help-center-segment-gate.integration.test.ts)
+// oxlint-disable-next-line no-restricted-imports -- legitimate createDb caller: this file owns the global db for its worker (see help-center-segment-gate.integration.test.ts)
 import { createDb } from '@quackback/db/client'
 import { recordSearchQuery, listTopSearchTerms } from '../help-center.search-analytics'
 

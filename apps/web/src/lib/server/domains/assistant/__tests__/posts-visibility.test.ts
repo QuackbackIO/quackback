@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { sql, eq, and } from 'drizzle-orm'
 import { boards, posts, principal, type BoardAccess, type Database } from '@/lib/server/db'
-// eslint-disable-next-line no-restricted-imports -- legitimate second createDb caller (see board-view-filter-parity.test.ts)
+// oxlint-disable-next-line no-restricted-imports -- legitimate second createDb caller (see board-view-filter-parity.test.ts)
 import { createDb } from '@quackback/db/client'
 import { postsVisibilityConditions } from '../posts-retrieval'
 import { createId, type PrincipalId, type BoardId, type PostId } from '@quackback/ids'
