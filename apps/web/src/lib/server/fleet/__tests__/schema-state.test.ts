@@ -19,6 +19,8 @@
  */
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { createDbFromSql } from '@quackback/db/client'
@@ -37,7 +39,7 @@ import {
 
 const MIGRATION_SQL_PATH =
   process.env.CP_SCHEMA_STATE_SQL ??
-  '/home/james/quackback-cp-wt/fleet-migrator/drizzle/0049_tenant_schema_state.sql'
+  join(dirname(fileURLToPath(import.meta.url)), 'fixtures', '0049_tenant_schema_state.sql')
 
 const ADMIN_URL =
   process.env.DRIFT_CHECK_DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/postgres'
