@@ -57,6 +57,8 @@ import {
   runnerConfig,
   type RunnerConfig,
 } from './runner'
+import { getProcessScheduler, stopTenantScheduler } from './scheduler'
+import { onDurableWorkCommitted } from '@/lib/server/tenancy/after-commit'
 
 const log = logger.child({ component: 'job-tier' })
 
@@ -69,6 +71,8 @@ const SINGLE = '__single__'
 interface TenantLoop {
   tenantId: string
   stop(): Promise<void>
+  /** End the current poll wait so an after-commit enqueue is claimed now. */
+  signal(): void
   /** Latest registry view, so a revision change is seen without a restart. */
   observe(tenant: TenantDescriptor): void
 }
@@ -96,6 +100,7 @@ const loops = new Map<string, TenantLoop>()
 const stats = new Map<string, LoopStats>()
 let running = false
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
+let unsubscribeCommit: (() => void) | null = null
 
 function emptyStats(): LoopStats {
   return {
@@ -301,6 +306,7 @@ function startLoop(opts: {
 
   return {
     tenantId: opts.tenantId,
+    signal: nudge,
     observe(tenant) {
       const changed = descriptor !== null && descriptor.revision !== tenant.revision
       descriptor = tenant
@@ -424,6 +430,13 @@ export async function startJobTier(): Promise<void> {
   // runner.ts's primeJobHandlers for the shape this is guarding against.
   await primeJobHandlers()
 
+  // After-commit flush nudges the in-process poll loop. There is no LISTEN
+  // doorbell: Neon is gone, and a transaction-mode pooler would not deliver
+  // NOTIFY anyway. The poll is the mechanism; this only cuts the wait.
+  unsubscribeCommit = onDurableWorkCommitted((tenantId) => {
+    signalTenant(tenantId)
+  })
+
   if (!config.isPooledTenancy) {
     startSingleTenantLoop(cfg)
     log.info({ poll_interval_ms: cfg.pollIntervalMs }, 'job tier started (single tenant)')
@@ -444,6 +457,9 @@ export async function stopJobTier(): Promise<void> {
     clearTimeout(refreshTimer)
     refreshTimer = null
   }
+  unsubscribeCommit?.()
+  unsubscribeCommit = null
+  await stopTenantScheduler()
   const all = [...loops.values()]
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
@@ -463,4 +479,26 @@ export function getJobTierStatus(): JobTierStatus {
     running,
     tenants: [...stats.entries()].map(([tenantId, s]) => ({ tenantId, ...s })),
   }
+}
+
+/**
+ * Ring this tenant's loop or process scheduler if it exists.
+ */
+export function signalTenant(tenantId: string): boolean {
+  const loop = loops.get(tenantId)
+  if (loop) loop.signal()
+  const scheduler = getProcessScheduler()
+  if (scheduler) scheduler.signal(tenantId)
+  return Boolean(loop || scheduler)
+}
+
+/**
+ * Re-read the active tenant set and start any missing loops.
+ */
+export function requestTenantLoopRefresh(): void {
+  if (!running) return
+  if (!config.isPooledTenancy) return
+  void refreshTenantLoops(runnerConfig()).catch((err) =>
+    log.error({ err }, 'job tier tenant refresh failed')
+  )
 }
