@@ -53,7 +53,7 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => mockIncrementBucket(...args),
 }))
 

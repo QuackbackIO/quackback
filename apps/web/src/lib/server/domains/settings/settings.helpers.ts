@@ -3,7 +3,7 @@
  * NOT part of the public API — import from settings.service instead.
  */
 import { db, eq, settings } from '@/lib/server/db'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { logger } from '@/lib/server/logger'

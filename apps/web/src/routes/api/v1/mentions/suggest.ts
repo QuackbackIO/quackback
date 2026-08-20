@@ -16,7 +16,7 @@ import type { SQL } from 'drizzle-orm'
 import { auth } from '@/lib/server/auth'
 import { db, principal, user, eq, and, inArray, sql } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
-import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
+import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
 const MENTION_ELIGIBLE_ROLES = ['admin', 'member', 'user'] as const

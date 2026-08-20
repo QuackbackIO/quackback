@@ -17,7 +17,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   sql: { raw: vi.fn() },
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheDel: vi.fn(),
   CACHE_KEYS: { WEBHOOK_LIST: 'wl' },
 }))

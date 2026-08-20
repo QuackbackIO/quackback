@@ -22,7 +22,7 @@ vi.mock('../magic-bytes', async (importActual) => ({
   sniffImageMime,
 }))
 vi.mock('@/lib/server/storage/s3', () => ({ uploadImageBuffer }))
-vi.mock('@/lib/server/redis', () => ({ cacheGet, cacheSet }))
+vi.mock('@/lib/server/cache', () => ({ cacheGet, cacheSet }))
 
 import { unfurlExternalUrl } from '../unfurl'
 

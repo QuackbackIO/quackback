@@ -2,9 +2,8 @@
 # Bootstraps a linked git worktree for local dev: real `bun install` (not a
 # node_modules symlink, which silently resolves packages/* back to the
 # canonical checkout), builds the gitignored artifacts the app can't run
-# without, and gives the worktree its own port + Postgres database + Redis
-# namespace so it can run alongside other worktrees without fighting over
-# shared dev data.
+# without, and gives the worktree its own port and Postgres database so it
+# can run alongside other worktrees without fighting over shared dev data.
 #
 # Usage: run from anywhere inside the worktree, e.g.:
 #   ./scripts/worktree-bootstrap.sh
@@ -39,8 +38,8 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # 3. Per-worktree .env — reuse the canonical checkout's secrets, but this
-#    worktree gets its own PORT, Postgres database, and Redis DB index so it
-#    doesn't collide with other worktrees' dev servers/tests.
+#    worktree gets its own PORT and Postgres database so it doesn't collide
+#    with other worktrees' dev servers/tests.
 # ---------------------------------------------------------------------------
 if [ ! -f .env ]; then
   if [ -f "$MAIN_ROOT/.env" ]; then
@@ -121,51 +120,19 @@ else
   db_name="quackback_${slug}"
 fi
 
-# Same guard as PORT: a Redis DB index inherited from the main checkout's
-# .env would share its namespace, so only reuse an index that differs from
-# main's.
-main_redis_idx=""
-[ -f "$MAIN_ROOT/.env" ] && main_redis_idx="$(sed -n -E 's#^REDIS_URL=redis://[^/]+/([0-9]+).*#\1#p' "$MAIN_ROOT/.env" | head -1)"
-existing_redis_url="$(read_env REDIS_URL)"
-if [[ "$existing_redis_url" =~ ^redis://[^/]+/([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" != "$main_redis_idx" ]; then
-  redis_idx="${BASH_REMATCH[1]}"
-else
-  claimed_redis_idx=()
-  while IFS= read -r wt_path; do
-    [ "$wt_path" = "$WORKTREE_ROOT" ] && continue
-    [ -f "$wt_path/.env" ] || continue
-    r="$(sed -n -E 's#^REDIS_URL=redis://[^/]+/([0-9]+).*#\1#p' "$wt_path/.env" | head -1)"
-    [ -n "$r" ] && claimed_redis_idx+=("$r")
-  done < <(git worktree list --porcelain | awk '/^worktree /{print $2}')
-
-  redis_idx=""
-  for candidate in $(seq 1 15); do
-    skip=""
-    for c in "${claimed_redis_idx[@]:-}"; do [ "$c" = "$candidate" ] && skip=1; done
-    [ -n "$skip" ] && continue
-    redis_idx="$candidate"
-    break
-  done
-  [ -n "$redis_idx" ] || {
-    echo "No free Redis DB index found in 1-15" >&2
-    exit 1
-  }
-fi
-
 set_env PORT "$port"
 set_env BASE_URL "http://localhost:${port}"
 set_env TRUSTED_ORIGINS "http://localhost:${port},http://acme.localhost:${port}"
 set_env DATABASE_URL "postgresql://postgres:password@localhost:5432/${db_name}"
-set_env REDIS_URL "redis://localhost:6379/${redis_idx}"
 
-echo "Worktree config: PORT=$port  DATABASE_URL=.../${db_name}  REDIS_URL=.../${redis_idx}"
+echo "Worktree config: PORT=$port  DATABASE_URL=.../${db_name}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 4. Shared dev infra (Postgres, MinIO, Dragonfly, Mailpit)
+# 4. Shared dev infra (Postgres, MinIO, Mailpit)
 # ---------------------------------------------------------------------------
 echo "Ensuring shared dev infra is up..."
-docker compose up -d postgres minio minio-init dragonfly mailpit
+docker compose up -d postgres minio minio-init mailpit
 echo ""
 
 echo "Waiting for Postgres..."

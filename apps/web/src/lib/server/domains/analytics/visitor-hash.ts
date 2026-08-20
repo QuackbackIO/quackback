@@ -2,13 +2,14 @@
  * Cookieless visitor identity for analytics.
  *
  * A visitor key is hash(daily_salt + site_origin + ip + user_agent). Salts are
- * date-keyed in Redis (UTC calendar day) and expire after 48h, so a key
- * becomes unrecoverable once its salt ages out: same-day visits collapse to
- * one visitor, and cross-day re-identification is impossible by construction.
+ * date-keyed (UTC calendar day) and expire after 48h, so a key becomes
+ * unrecoverable once its salt ages out: same-day visits collapse to one
+ * visitor, and cross-day re-identification is impossible by construction.
  * The raw IP and User-Agent exist only as inputs here; they are never stored.
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { getRedis } from '@/lib/server/redis'
+import { kvGetOrCreate } from '@/lib/server/kv/pg-kv'
+import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
 import { logger } from '@/lib/server/logger'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
@@ -22,27 +23,35 @@ export function utcDateKey(now: Date = new Date()): string {
 }
 
 // The salt is constant per UTC day, so the beacon hot path serves it from
-// process memory; Redis is only consulted on each pod's first beacon of a day.
-let cachedSalt: { dateKey: string; salt: string } | null = null
+// process memory; the database is only consulted on each pod's first beacon of
+// a day.
+//
+// Per tenant, in both the heap and the store. A shared salt would hash the same
+// visitor to the same key in every workspace, so the layer-1 key becomes a
+// fleet-wide visitor identifier — exactly the cross-site correlation the daily
+// rotation exists to make impossible, reintroduced across tenants instead of
+// across days.
+const cachedSalts = new TenantKeyedCache<string>()
 
 /**
- * Get-or-create the salt for the given UTC day. Race-safe across pods:
- * SET NX keeps the first writer's salt, the follow-up GET reads whichever
- * value won. The 48h TTL lets a salt survive its own day plus the midnight
- * boundary, then deletes it — that deletion is the privacy guarantee.
+ * Get-or-create the salt for the given UTC day. Race-safe across pods: the
+ * upsert keeps the first writer's salt and returns whichever value won, in one
+ * statement rather than the SET-NX-then-GET pair Redis needed. The 48h TTL lets
+ * a salt survive its own day plus the midnight boundary, then expires it — that
+ * expiry is the privacy guarantee, and it is a predicate on every read rather
+ * than a deletion the caller has to wait for.
  *
- * Returns null when Redis is unavailable; callers must drop the event
+ * Returns null when the store is unavailable; callers must drop the event
  * rather than persist anything derived from raw identifiers without a salt.
  */
 export async function getDailySalt(now: Date = new Date()): Promise<string | null> {
   const dateKey = utcDateKey(now)
-  if (cachedSalt?.dateKey === dateKey) return cachedSalt.salt
+  const cached = cachedSalts.get(dateKey)
+  if (cached) return cached
   try {
-    const redis = getRedis()
     const fresh = randomBytes(32).toString('hex')
-    await redis.set(`visitor:salt:${dateKey}`, fresh, 'EX', SALT_TTL_SECONDS, 'NX')
-    const salt = await redis.get(`visitor:salt:${dateKey}`)
-    if (salt) cachedSalt = { dateKey, salt }
+    const salt = await kvGetOrCreate<string>(`visitor:salt:${dateKey}`, fresh, SALT_TTL_SECONDS)
+    if (salt) cachedSalts.set(dateKey, salt)
     return salt
   } catch (error) {
     log.error({ err: error }, 'daily salt unavailable, dropping event')

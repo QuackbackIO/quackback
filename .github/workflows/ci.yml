@@ -83,15 +83,7 @@ jobs:
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-      # Dev/prod run Dragonfly, but the app only speaks the Redis protocol
-      # (ioredis), so the canonical Redis image keeps the CI service simple.
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      REDIS_URL: redis://localhost:6379
       SECRET_KEY: e2e-smoke-secret-key-for-ci-only-at-least-32-chars
       BASE_URL: http://acme.localhost:3000
     steps:
@@ -110,7 +102,6 @@ jobs:
         run: |
           cat > .env <<EOF
           DATABASE_URL=$DATABASE_URL
-          REDIS_URL=$REDIS_URL
           SECRET_KEY=$SECRET_KEY
           BASE_URL=$BASE_URL
           EOF
@@ -189,13 +180,8 @@ jobs:
           POSTGRES_DB: quackback_test
         ports: ['5432:5432']
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-      redis:
-        image: redis:7
-        ports: ['6379:6379']
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       CI: 'true'
-      REDIS_URL: redis://localhost:6379
       SECRET_KEY: live-api-secret-key-for-ci-only-at-least-32-characters
       BASE_URL: http://acme.localhost:3000
       API_BASE_URL: http://acme.localhost:3000/api/v1
@@ -213,7 +199,6 @@ jobs:
         run: |
           cat > .env <<EOF
           DATABASE_URL=$DATABASE_URL
-          REDIS_URL=$REDIS_URL
           SECRET_KEY=$SECRET_KEY
           BASE_URL=$BASE_URL
           EOF
@@ -262,12 +247,7 @@ jobs:
           POSTGRES_DB: quackback_test
         ports: ['5432:5432']
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-      redis:
-        image: redis:7
-        ports: ['6379:6379']
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      REDIS_URL: redis://localhost:6379
       SECRET_KEY: e2e-full-secret-key-for-ci-only-at-least-32-chars
       BASE_URL: http://acme.localhost:3000
     steps:
@@ -280,7 +260,6 @@ jobs:
         run: |
           cat > .env <<EOF
           DATABASE_URL=$DATABASE_URL
-          REDIS_URL=$REDIS_URL
           SECRET_KEY=$SECRET_KEY
           BASE_URL=$BASE_URL
           EOF

@@ -7,7 +7,7 @@
  * just-in-time by id).
  */
 import { db, webhooks, and, eq, isNull } from '@/lib/server/db'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { getEventDefinition } from '../catalogue'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'

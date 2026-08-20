@@ -17,7 +17,6 @@ import type { Actor } from '@/lib/server/policy/types'
 
 if (!process.env.BASE_URL?.startsWith('http')) process.env.BASE_URL = 'http://localhost:3000'
 process.env.SECRET_KEY ??= 'test-secret-key-with-at-least-32-characters'
-process.env.REDIS_URL ??= 'redis://localhost:6379'
 
 import {
   db,

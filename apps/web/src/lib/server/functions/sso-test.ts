@@ -202,7 +202,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       detailsChangedAt: provider.detailsChangedAt,
     }
 
-    const { cacheSet } = await import('@/lib/server/redis')
+    const { cacheSet } = await import('@/lib/server/cache')
     await cacheSet(ssoTestSessionKey(state), session, TTL_SECONDS)
 
     // Mirror production: genericOAuth runs with pkce: true, so the
@@ -286,7 +286,7 @@ export const getSsoTestResultFn = createServerFn({ method: 'POST' })
   .validator(z.object({ testId: z.string() }))
   .handler(async ({ data }): Promise<SsoTestDiagnostic | null> => {
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-    const { cacheGet } = await import('@/lib/server/redis')
+    const { cacheGet } = await import('@/lib/server/cache')
     return (await cacheGet<SsoTestDiagnostic>(ssoTestResultKey(data.testId))) ?? null
   })
 

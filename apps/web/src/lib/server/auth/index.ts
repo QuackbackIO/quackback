@@ -719,7 +719,7 @@ async function createAuth() {
 
             // The principal's `type` flipped from 'anonymous' → 'user'; drop
             // any cached entry so the next SSR render reads the new value.
-            const { cacheDel } = await import('@/lib/server/redis')
+            const { cacheDel } = await import('@/lib/server/cache')
             await cacheDel(...cacheKeysToBust)
 
             log.info(

@@ -69,6 +69,41 @@ export interface StoredAssistantConfig {
   }
 }
 
+/** Storage-only shape for the narrow control-plane projection. */
+export interface StoredProjectedLimits {
+  maxBoards: number | null
+  maxPosts: number | null
+  maxTeamSeats: number | null
+  maxStatusComponents: number | null
+  maxCustomRoles: number | null
+  maxSendingDomains: number | null
+  aiTokensPerMonth: number | null
+  apiRequestsPerMonth: number | null
+  apiRequestsPerMinute: number | null
+}
+
+/** Commercial state safe to project into a workspace database. */
+export interface StoredBillingProjection {
+  version: number
+  effectivePlan: string
+  trialStartedAt: string | null
+  trialExpiresAt: string | null
+  subscriptionStatus: string | null
+  entitlements: Record<string, boolean>
+  freeLimits: StoredProjectedLimits
+  planLimits: StoredProjectedLimits
+  planLimitsExpireAt: string | null
+  canUpgrade: boolean
+  canManageBilling: boolean
+  renewalAt: string | null
+  cancellationAt: string | null
+}
+
+export interface StoredCloudConfig {
+  enabled: boolean
+  projection?: StoredBillingProjection | null
+}
+
 /**
  * User table - User identities for the application
  */

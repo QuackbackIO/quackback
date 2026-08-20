@@ -55,7 +55,7 @@ export async function handleSsoTestCallback(
 ): Promise<SsoTestCallbackHandled | null> {
   if (!input.state) return null
 
-  const { cacheGet, cacheSet, cacheDel } = await import('@/lib/server/redis')
+  const { cacheGet, cacheSet, cacheDel } = await import('@/lib/server/cache')
 
   const sessionKey = ssoTestSessionKey(input.state)
   const session = await cacheGet<TestSession>(sessionKey)

@@ -22,7 +22,7 @@ const mockFindMany = vi.fn()
 const mockInsert = vi.fn()
 const mockDelete = vi.fn()
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: (...a: unknown[]) => mockCacheGet(...a),
   cacheSet: (...a: unknown[]) => mockCacheSet(...a),
   cacheDel: (...a: unknown[]) => mockCacheDel(...a),

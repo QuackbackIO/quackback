@@ -188,6 +188,12 @@ export const ID_PREFIXES = {
   event: 'evt',
 
   // ============================================
+  // Background jobs (Postgres queue, SAAS-HOSTING-STACK.md §7)
+  // ============================================
+
+  job: 'job',
+
+  // ============================================
   // App platform (third-party OAuth apps)
   // ============================================
 

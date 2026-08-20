@@ -13,7 +13,6 @@ import type { Actor } from '@/lib/server/policy/types'
 
 process.env.BASE_URL = 'https://quackback.test'
 process.env.SECRET_KEY ||= 'x'.repeat(32)
-process.env.REDIS_URL ||= 'redis://localhost:6379'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -49,7 +48,7 @@ vi.mock('../conversation.query', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../conversation.query')>()),
   conversationToDTO: vi.fn(async (row: { id: string }) => ({ id: row.id })),
 }))
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: vi.fn().mockResolvedValue({ count: 1 }),
   incrementBuckets: vi.fn().mockResolvedValue([1]),
   bucketRetryAfter: vi.fn().mockResolvedValue(60),
@@ -304,7 +303,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
   it('files a bursting sender to Spam without invoking the AI classifier', async () => {
     await seedWorkspace()
     mockChat.mockResolvedValue({ spam: false })
-    const { incrementBucket } = await import('@/lib/server/utils/redis-rate-bucket')
+    const { incrementBucket } = await import('@/lib/server/utils/rate-bucket')
     vi.mocked(incrementBucket).mockImplementation(async (spec: { key: string }) => ({
       count: spec.key.includes(':burst:') ? 5 : 1,
     }))

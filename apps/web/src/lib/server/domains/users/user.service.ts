@@ -465,7 +465,7 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
 
     if (userId) {
       try {
-        const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+        const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
         await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(userId))
       } catch (error) {
         log.warn(

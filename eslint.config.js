@@ -7,6 +7,9 @@ import prettier from 'eslint-config-prettier'
 // Files that ARE the re-export layer or standalone scripts — they must import @quackback/db directly
 const dbReexportFiles = [
   '**/src/lib/server/db.ts',
+  '**/src/lib/server/fleet/schema-floor.ts',
+  '**/src/lib/server/tenancy/pool-cache.ts',
+  '**/src/lib/server/tenancy/tenant-context.ts',
   '**/src/lib/shared/db-types.ts',
   '**/scripts/**',
 ]
@@ -191,7 +194,7 @@ export default tseslint.config(
   },
   // Page routes are client-bundled (via routeTree.gen), so server logic must
   // cross through createServerFn bridges in lib/server/functions. Anything
-  // else drags server modules (db/redis/settings) into the client graph, which
+  // else drags server modules (db/cache/settings) into the client graph, which
   // import-protection rejects at request time — this rule fails it at lint
   // time instead. Pure helpers belong in lib/shared.
   {

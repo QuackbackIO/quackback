@@ -377,6 +377,13 @@ export type WebhookId = TypeId<'webhook'>
 /** Domain event ID (events outbox row) - e.g., evt_01h455vb4pex5vsknk084sn02q */
 export type EvtId = TypeId<'evt'>
 
+// ============================================
+// Background job Entity IDs (Postgres queue)
+// ============================================
+
+/** Queued background job ID (job_queue row) - e.g., job_01h455vb4pex5vsknk084sn02q */
+export type JobId = TypeId<'job'>
+
 /** Third-party app ID (OAuth app platform) - e.g., app_01h455vb4pex5vsknk084sn02q */
 export type AppId = TypeId<'app'>
 
@@ -502,6 +509,7 @@ export interface EntityIdMap {
   api_key: ApiKeyId
   webhook: WebhookId
   event: EvtId
+  job: JobId
   app: AppId
   kb_category: KbCategoryId
   kb_article: KbArticleId

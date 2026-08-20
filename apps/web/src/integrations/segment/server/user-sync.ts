@@ -24,7 +24,7 @@ import type {
 import { logger } from '@/lib/server/logger'
 import { db, integrations, and, eq } from '@/lib/server/db'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
-import { getRedis } from '@/lib/server/redis'
+import { kvSetNx } from '@/lib/server/kv/pg-kv'
 
 const log = logger.child({ component: 'segment' })
 
@@ -83,8 +83,8 @@ export const segmentUserSync: UserSyncHandler = {
     // write so provider retries cannot apply the same identify mutation twice.
     if (typeof payload.messageId === 'string' && payload.messageId.length > 0) {
       const digest = createHash('sha256').update(payload.messageId).digest('hex')
-      const claimed = await getRedis().set(`segment:identify:${digest}`, '1', 'EX', 86_400, 'NX')
-      if (claimed !== 'OK') return new Response('OK', { status: 200 })
+      const claimed = await kvSetNx(`segment:identify:${digest}`, 1, 86_400)
+      if (!claimed) return new Response('OK', { status: 200 })
     }
 
     // Only process identify events — acknowledge but ignore everything else

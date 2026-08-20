@@ -451,7 +451,7 @@ export async function handleSsoCallbackAfter(
   })
 
   if (bootstrapCacheKeys.length) {
-    const { cacheDel } = await import('@/lib/server/redis')
+    const { cacheDel } = await import('@/lib/server/cache')
     await cacheDel(...bootstrapCacheKeys)
   }
 }

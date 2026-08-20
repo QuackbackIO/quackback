@@ -25,7 +25,7 @@ const mockGetConfiguredIntegrationTypes = vi.fn()
 const mockListIdentityProviders = vi.fn()
 const mockGetRegisteredOidcProviderIds = vi.fn()
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn().mockResolvedValue(null),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),

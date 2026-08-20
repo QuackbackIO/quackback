@@ -28,7 +28,7 @@ import {
 } from '@/lib/server/domains/settings/identity-providers.service'
 import { AUTH_CREDENTIAL_PREFIX, getAllAuthProviders } from './auth-providers'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 
 /**
  * TTL for the cached registered-provider list. A generous backstop: every

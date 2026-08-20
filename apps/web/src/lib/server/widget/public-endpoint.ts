@@ -3,7 +3,7 @@
  * response headers, the JSON error shape, and the per-IP rate limit.
  */
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
-import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/redis-rate-bucket'
+import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/rate-bucket'
 import { createHash } from 'node:crypto'
 
 /** Every public widget response: any origin may read it, nothing caches it. */

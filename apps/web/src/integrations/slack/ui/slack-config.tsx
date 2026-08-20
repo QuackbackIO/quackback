@@ -75,7 +75,7 @@ function useSlackChannels() {
   const query = useQuery({
     queryKey: ['slack-channels'],
     queryFn: () => fetchSlackChannelsFn({ data: { force: false } }),
-    staleTime: 5 * 60 * 1000, // 5 minutes — matches server-side Dragonfly TTL
+    staleTime: 5 * 60 * 1000, // 5 minutes — matches the server-side cache TTL
     retry: 1,
   })
 

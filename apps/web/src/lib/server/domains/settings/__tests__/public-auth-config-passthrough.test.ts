@@ -23,7 +23,7 @@ const mockFindFirst = vi.fn()
 const mockIsEmailConfigured = vi.fn()
 const mockGetConfiguredIntegrationTypes = vi.fn()
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn().mockResolvedValue(null),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),

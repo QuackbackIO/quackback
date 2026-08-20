@@ -47,6 +47,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@quackback/db/client': path.resolve(__dirname, './packages/db/src/client.ts'),
+      '@quackback/db/schema-version': path.resolve(
+        __dirname,
+        './packages/db/src/schema-version.ts'
+      ),
       '@quackback/db/schema': path.resolve(__dirname, './packages/db/src/schema/index.ts'),
       '@quackback/db/types': path.resolve(__dirname, './packages/db/src/types.ts'),
       '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),

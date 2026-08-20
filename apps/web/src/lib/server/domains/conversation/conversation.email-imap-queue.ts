@@ -1,45 +1,75 @@
 /**
- * IMAP inbound poller — a ~60s repeatable job that pulls unseen mail from a
+ * IMAP inbound poller — a once-a-minute job that pulls unseen mail from a
  * configured IMAP mailbox and feeds it to the shared ingest core (Layer 1 for
  * self-hosters, no provider webhook required).
  *
- * Gated on config: when EMAIL_INBOUND_PROVIDER is not `imap` (or credentials
- * are incomplete) the worker never initializes — no queue, no connection. When
- * it does run it mirrors the webhook's conversations-enabled gate before
- * ingesting.
+ * Under BullMQ this was a repeatable job with `every: 60_000`; here it is a
+ * `* * * * *` cron on the job definition. Same cadence, and the same
+ * once-per-slot guarantee, now enforced by the unique index on
+ * `(queue, dedupe_key)` rather than by a stable BullMQ job id.
+ *
+ * **The gate moved from construction to scheduling, deliberately.** The old
+ * shape simply never built the worker when IMAP was unconfigured. A cron that
+ * enqueued anyway and returned early from the handler would write 1,440 no-op
+ * rows a day per tenant, so `isEmailImapPollable()` gates the schedule instead:
+ * nothing is written at all.
+ *
+ * **It refuses to schedule under pooled tenancy, and that is the honest
+ * answer.** The mailbox is configured from process environment — one mailbox
+ * for the whole process — while the queue is per tenant. Scheduling it on every
+ * tenant's loop would have each tenant poll the *same* mailbox and ingest the
+ * same message into its own database. That is a cross-tenant data movement, so
+ * it fails closed and says why. It is not a regression: under pooled tenancy
+ * the BullMQ worker was never started either (`startup.ts` refuses the whole
+ * registry), so this replaces a silent absence with a stated refusal.
  */
-import { Queue, Worker } from 'bullmq'
-import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
+import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { readImapConfig, createImapClient, pollOnce } from './conversation.email-imap'
+import { isConversationsEnabled } from '@/lib/server/domains/settings/settings.support'
+import { ingestParsedEmail } from './conversation.email-inbound.service'
+import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 
 const log = logger.child({ component: 'email-imap-queue' })
 
-const QUEUE_NAME = '{email-imap}'
-const CONCURRENCY = 1
-const POLL_INTERVAL_MS = 60_000
+/** The logical queue name. Matches the definition in `jobs/definitions.ts`. */
+export const EMAIL_IMAP_QUEUE = 'email-imap'
 
-interface EmailImapJob {
-  type: 'poll'
+let warnedPooled = false
+
+/**
+ * Whether the poll schedule should be live at all.
+ *
+ * Read per tick rather than once at boot so an operator who configures the
+ * mailbox does not have to restart, matching what a lazily-initialised worker
+ * would have done on its first enqueue.
+ */
+export function isEmailImapPollable(): boolean {
+  if (!readImapConfig(process.env)) return false
+  if (config.isPooledTenancy) {
+    if (!warnedPooled) {
+      warnedPooled = true
+      log.error(
+        'IMAP inbound is configured from process environment but the queue is per tenant — ' +
+          'polling one shared mailbox from every tenant loop would ingest the same message ' +
+          'into every database. The poller is NOT scheduled under pooled tenancy.'
+      )
+    }
+    return false
+  }
+  return true
 }
 
-let initPromise: Promise<{
-  queue: Queue<EmailImapJob>
-  worker: Worker<EmailImapJob> | null
-}> | null = null
-
-async function runPoll(): Promise<void> {
-  const config = readImapConfig(process.env)
-  if (!config) return
+/** Poll the mailbox once. */
+export async function runEmailImapPoll(_job: ClaimedJob): Promise<void> {
+  const imap = readImapConfig(process.env)
+  if (!imap) return
 
   // Same gate the webhook applies: when no visitor surface is enabled, replies
   // have nowhere to land.
-  const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
   if (!(await isConversationsEnabled())) return
 
-  const { ingestParsedEmail } = await import('./conversation.email-inbound.service')
-  const client = await createImapClient(config)
+  const client = await createImapClient(imap)
   try {
     const result = await pollOnce(client, ingestParsedEmail)
     if (result.ingested > 0 || result.failed > 0) {
@@ -48,88 +78,4 @@ async function runPoll(): Promise<void> {
   } finally {
     await client.close().catch(() => {})
   }
-}
-
-async function initializeQueue() {
-  const connection = getQueueRedis()
-
-  const queue = new Queue<EmailImapJob>(QUEUE_NAME, {
-    connection,
-    defaultJobOptions: {
-      attempts: 1, // a failed poll just retries on the next tick
-      removeOnComplete: { count: 50, age: 86400 },
-      removeOnFail: { age: 86400 },
-    },
-  })
-
-  // Consumer side is role-gated: web-role replicas enqueue and register
-  // schedules but never construct a Worker (see queue/role.ts).
-  const worker = shouldRunWorkers()
-    ? new Worker<EmailImapJob>(
-        QUEUE_NAME,
-        async (job) => {
-          if (job.data.type === 'poll') await runPoll()
-        },
-        { connection, concurrency: CONCURRENCY }
-      )
-    : null
-
-  // Stable jobId so worker reboots dedupe instead of stacking cron entries.
-  await queue.add(
-    'email-imap:poll',
-    { type: 'poll' },
-    {
-      jobId: 'email-imap:poll',
-      repeat: { every: POLL_INTERVAL_MS },
-      removeOnComplete: { count: 50 },
-      removeOnFail: { age: 86400 },
-    }
-  )
-
-  try {
-    await Promise.race([
-      queue.waitUntilReady(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
-      ),
-    ])
-  } catch (error) {
-    await queue.close().catch(() => {})
-    await worker?.close().catch(() => {})
-    throw error
-  }
-
-  worker?.on('failed', (job, error) => {
-    if (!job) return
-    log.error({ err: error }, 'imap poll job failed')
-  })
-
-  return { queue, worker }
-}
-
-/**
- * Initialize the IMAP poller eagerly (called from startup). No-op — never
- * connecting to Redis or IMAP — unless the IMAP inbound provider is configured.
- */
-export async function initEmailImapWorker(): Promise<void> {
-  if (!readImapConfig(process.env)) {
-    log.debug('imap inbound not configured; poller disabled')
-    return
-  }
-  if (!initPromise) {
-    initPromise = initializeQueue().catch((err) => {
-      initPromise = null
-      throw err
-    })
-  }
-  await initPromise
-  log.info('imap inbound poller initialized')
-}
-
-export async function closeEmailImapQueue(): Promise<void> {
-  if (!initPromise) return
-  const { worker, queue } = await initPromise
-  initPromise = null
-  await worker?.close().catch(() => {})
-  await queue.close().catch(() => {})
 }

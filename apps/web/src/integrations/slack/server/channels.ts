@@ -3,7 +3,7 @@
  */
 
 import { WebClient } from '@slack/web-api'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'slack' })
@@ -14,7 +14,7 @@ const CACHE_TTL_SECONDS = 300 // 5 minutes
 
 /**
  * List all channels accessible to the bot.
- * Results are cached in Dragonfly for 5 minutes to avoid Slack API rate limits.
+ * Results are cached for 5 minutes to avoid Slack API rate limits.
  * Pass `force: true` to bypass the cache (e.g. refresh button).
  */
 export async function listSlackChannels(

@@ -1,124 +1,105 @@
 /**
- * SLA breach sweeper — a per-minute repeatable job that records breaches for
- * conversations whose stamped deadline has passed with no settling event (see
+ * SLA breach sweeper — a per-minute job that records breaches for conversations
+ * whose stamped deadline has passed with no settling event (see
  * sweepOverdueSlaBreaches). The lazy evaluator in sla.event-hooks.ts only fires
  * on agent reply / close, so without this sweep a conversation that blows its
  * deadline in silence would never be marked breached. The ticket-anchored TTR
- * clock (ticket-sla.sweep.ts's sweepOverdueTicketSlaBreaches) runs in the
- * same job: its lazy evaluator only fires on ticket status changes, so a
- * ticket that blows its deadline with no status move needs the sweep just the
- * same.
+ * clock (ticket-sla.sweep.ts's sweepOverdueTicketSlaBreaches) runs in the same
+ * job: its lazy evaluator only fires on ticket status changes, so a ticket that
+ * blows its deadline with no status move needs the sweep just the same.
+ *
+ * Runs on the Postgres job queue (`lib/server/jobs`). Schedule and retry policy
+ * live in `jobs/definitions.ts`.
+ *
+ * The sweep modules are imported STATICALLY. They used to be `await import(...)`
+ * inside the handler, which is a scope hazard rather than a style choice: the
+ * tier opens a tenant scope around every pass, so a call-time import runs the
+ * imported module's top level under whichever tenant happened to trigger it
+ * first. `primeJobHandlers()` loads this module before any scope is open, and
+ * static imports are what make that cover the modules the work actually lives
+ * in. `__tests__/handler-imports.test.ts` keeps it that way.
  */
-import { Queue, Worker } from 'bullmq'
-import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
+import { sql } from 'drizzle-orm'
+import { db } from '@/lib/server/db'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
+import { dueWithin, registerTenantDeadline } from '@/lib/server/jobs/deadlines'
+import { sweepOverdueSlaBreaches } from './sla.sweep'
+import { sweepOverdueTicketSlaBreaches } from './ticket-sla.sweep'
 
-const log = logger.child({ component: 'sla-breach-sweep-queue' })
+const log = logger.child({ component: 'sla-breach-sweep' })
 
-const QUEUE_NAME = '{sla-breach-sweep}'
-const CONCURRENCY = 1
-
-interface SlaBreachSweepJob {
-  type: 'record-overdue-breaches'
+/**
+ * The earliest SLA clock this tenant has that is still running unsettled — or
+ * null, if it has none.
+ *
+ * Four clocks across two tables, and each arm restates its sweep's own eligible
+ * condition rather than approximating it: a clock is a candidate only while its
+ * due instant is set, its settled marker is unset and its breached marker is
+ * unset. An arm that dropped one of those tests would report a deadline for a
+ * clock that has already been answered, which costs a wake; an arm that added
+ * one would hide a clock that has not, which costs a breach going unnoticed. The
+ * second is the one that matters, so the conditions are copied verbatim.
+ *
+ * `paused_at` is honoured for the same reason `scanSlaClockCandidates` honours
+ * it: a paused clock is not counting down, so its stored due instant is not a
+ * deadline.
+ *
+ * The due values are ISO-8601 strings inside a JSON column, which compare
+ * lexicographically exactly as they compare chronologically — the property
+ * `sla.sweep.ts` already relies on for its window predicate.
+ */
+async function nextSlaBreachAt(): Promise<Date | null> {
+  const result = await db.execute(sql`
+    SELECT LEAST(
+      (SELECT min(LEAST(
+                CASE WHEN sla_applied ->> 'firstResponseAt' IS NULL
+                      AND sla_applied ->> 'firstResponseBreachedAt' IS NULL
+                     THEN sla_applied ->> 'firstResponseDueAt' END,
+                CASE WHEN sla_applied ->> 'nextResponseAt' IS NULL
+                      AND sla_applied ->> 'nextResponseBreachedAt' IS NULL
+                     THEN sla_applied ->> 'nextResponseDueAt' END,
+                CASE WHEN sla_applied ->> 'resolvedAt' IS NULL
+                      AND sla_applied ->> 'resolutionBreachedAt' IS NULL
+                     THEN sla_applied ->> 'timeToCloseDueAt' END))
+         FROM conversations
+        WHERE sla_applied IS NOT NULL AND (sla_applied ->> 'pausedAt') IS NULL),
+      (SELECT min(CASE WHEN sla_applied ->> 'resolvedAt' IS NULL
+                        AND sla_applied ->> 'resolutionBreachedAt' IS NULL
+                       THEN sla_applied ->> 'timeToResolveDueAt' END)
+         FROM tickets
+        WHERE sla_applied IS NOT NULL AND (sla_applied ->> 'pausedAt') IS NULL)
+    ) AS due_at
+  `)
+  const rows = getExecuteRows<{ due_at: string | null }>(result)
+  const value = rows[0]?.due_at ?? null
+  if (value === null) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed
 }
 
-let initPromise: Promise<{
-  queue: Queue<SlaBreachSweepJob>
-  worker: Worker<SlaBreachSweepJob> | null
-}> | null = null
+registerTenantDeadline('sla-breach-sweep', nextSlaBreachAt)
 
-async function initializeQueue() {
-  const connection = getQueueRedis()
+/**
+ * The cron gate: is any clock due inside the next slot?
+ *
+ * The window is the schedule's own minute, so this can only ever suppress a tick
+ * that would have found nothing — a breach is still recorded within a minute of
+ * falling due, exactly as before.
+ */
+export function isSlaBreachSweepDue(): Promise<boolean> {
+  return dueWithin('sla-breach-sweep', 60_000)
+}
 
-  const queue = new Queue<SlaBreachSweepJob>(QUEUE_NAME, {
-    connection,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: 'exponential' as const, delay: 5000 },
-      removeOnComplete: { count: 100, age: 7 * 86400 },
-      removeOnFail: { age: 7 * 86400 },
-    },
-  })
-
-  // Consumer side is role-gated: web-role replicas enqueue and register
-  // schedules but never construct a Worker (see queue/role.ts).
-  const worker = shouldRunWorkers()
-    ? new Worker<SlaBreachSweepJob>(
-        QUEUE_NAME,
-        async (job) => {
-          if (job.data.type === 'record-overdue-breaches') {
-            const { sweepOverdueSlaBreaches } = await import('./sla.sweep')
-            const result = await sweepOverdueSlaBreaches()
-            // The ticket-anchored TTR twin — same per-minute tick, same
-            // exactly-once marker discipline on its own stamp.
-            const { sweepOverdueTicketSlaBreaches } = await import('./ticket-sla.sweep')
-            const ticketResult = await sweepOverdueTicketSlaBreaches()
-            if (result.recorded > 0 || ticketResult.recorded > 0) {
-              log.debug(
-                { recorded: result.recorded, ticketRecorded: ticketResult.recorded },
-                'sla-breach-sweep run complete'
-              )
-            }
-          }
-        },
-        { connection, concurrency: CONCURRENCY }
-      )
-    : null
-
-  // Every minute. Stable jobId so worker reboots dedupe instead of stacking
-  // duplicate cron entries.
-  await queue.add(
-    'sla-breach-sweep:minutely',
-    { type: 'record-overdue-breaches' },
-    {
-      jobId: 'sla-breach-sweep:minutely',
-      repeat: { pattern: '* * * * *' },
-      removeOnComplete: { count: 100 },
-      removeOnFail: { age: 7 * 86400 },
-    }
-  )
-
-  try {
-    await Promise.race([
-      queue.waitUntilReady(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
-      ),
-    ])
-  } catch (error) {
-    await queue.close().catch(() => {})
-    await worker?.close().catch(() => {})
-    throw error
+export async function runSlaBreachSweep(): Promise<void> {
+  const result = await sweepOverdueSlaBreaches()
+  // The ticket-anchored TTR twin — same per-minute tick, same exactly-once
+  // marker discipline on its own stamp.
+  const ticketResult = await sweepOverdueTicketSlaBreaches()
+  if (result.recorded > 0 || ticketResult.recorded > 0) {
+    log.debug(
+      { recorded: result.recorded, ticketRecorded: ticketResult.recorded },
+      'sla-breach-sweep run complete'
+    )
   }
-
-  worker?.on('failed', (job, error) => {
-    if (!job) return
-    const isPermanent =
-      job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
-    const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    log.error({ err: error, status: prefix }, 'sla-breach-sweep job failed')
-  })
-
-  return { queue, worker }
-}
-
-/** Initialize the SLA breach-sweep worker eagerly (called from startup). */
-export async function initSlaBreachSweepWorker(): Promise<void> {
-  if (!initPromise) {
-    initPromise = initializeQueue().catch((err) => {
-      initPromise = null
-      throw err
-    })
-  }
-  await initPromise
-  log.info('sla-breach-sweep worker initialized')
-}
-
-export async function closeSlaBreachSweepQueue(): Promise<void> {
-  if (!initPromise) return
-  const { worker, queue } = await initPromise
-  initPromise = null
-  await worker?.close().catch(() => {})
-  await queue.close().catch(() => {})
 }

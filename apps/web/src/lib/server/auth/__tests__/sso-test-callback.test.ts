@@ -20,7 +20,7 @@ const hoisted = vi.hoisted(() => ({
   markTestSucceeded: vi.fn(),
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: hoisted.cacheGet,
   cacheSet: hoisted.cacheSet,
   cacheDel: hoisted.cacheDel,

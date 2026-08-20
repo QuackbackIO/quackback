@@ -20,7 +20,7 @@ vi.mock('@/lib/server/db', () => ({
   and: vi.fn((...args: unknown[]) => ({ _type: 'and', args })),
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheDel: vi.fn(),
   CACHE_KEYS: { PRINCIPAL_BY_USER: (id: string) => `principal:user:${id}` },
 }))

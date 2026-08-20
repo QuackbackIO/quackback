@@ -17,7 +17,7 @@ vi.mock('@/lib/server/functions/workspace', () => ({
 
 const mockIncrementBucket = vi.fn()
 const mockBucketRetryAfter = vi.fn()
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => mockIncrementBucket(...args),
   bucketRetryAfter: (...args: unknown[]) => mockBucketRetryAfter(...args),
 }))

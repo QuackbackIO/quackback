@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 
 // The module logs failures via the structured logger (a child of @/lib/server/
 // logger). Mock it so the child's `.error` is a spy we can assert on.
-const { logSpies, redisSet } = vi.hoisted(() => ({
+const { logSpies, claimMessageId } = vi.hoisted(() => ({
   logSpies: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -12,13 +12,19 @@ const { logSpies, redisSet } = vi.hoisted(() => ({
     error: vi.fn(),
     fatal: vi.fn(),
   },
-  redisSet: vi.fn().mockResolvedValue('OK'),
+  claimMessageId: vi.fn().mockResolvedValue(true),
 }))
 vi.mock('@/lib/server/logger', () => {
   const child = () => ({ ...logSpies, child })
   return { logger: { ...logSpies, child }, createLogger: () => ({ ...logSpies, child }) }
 })
-vi.mock('@/lib/server/redis', () => ({ getRedis: () => ({ set: redisSet }) }))
+// The replay guard claims the messageId through the Postgres kv statements
+// (`kvSetNx`), which is what the Redis `SET NX EX` became. Spread the original
+// so the module's other exports stay available to the rest of the graph.
+vi.mock('@/lib/server/kv/pg-kv', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/kv/pg-kv')>()),
+  kvSetNx: claimMessageId,
+}))
 
 import { segmentUserSync } from '@/integrations/segment/server/user-sync'
 
@@ -55,7 +61,8 @@ describe('segmentUserSync.handleIdentify', () => {
       messageId: 'segment-message-1',
       traits: { email: 'user@example.com' },
     })
-    redisSet.mockResolvedValueOnce(null)
+    // Someone already claimed this messageId: NX loses.
+    claimMessageId.mockResolvedValueOnce(false)
     const signature = createHmac('sha1', secret).update(replayBody).digest('base64')
 
     const result = await segmentUserSync.handleIdentify?.(
@@ -70,7 +77,7 @@ describe('segmentUserSync.handleIdentify', () => {
   })
 
   it('rejects a tampered signature with 401 and never reaches the mutation path', async () => {
-    redisSet.mockClear()
+    claimMessageId.mockClear()
     const secret = 'segment-secret'
     // Correct HMAC, but flip the last byte so it decodes to a same-length,
     // wrong-content signature — must fail the timing-safe comparison.
@@ -89,11 +96,11 @@ describe('segmentUserSync.handleIdentify', () => {
     expect((result as Response).status).toBe(401)
     // The signature check must fail before the messageId dedup claim (the
     // first write-adjacent side effect on the path to a mutation) is reached.
-    expect(redisSet).not.toHaveBeenCalled()
+    expect(claimMessageId).not.toHaveBeenCalled()
   })
 
   it('rejects a missing x-signature header with 401 and never reaches the mutation path', async () => {
-    redisSet.mockClear()
+    claimMessageId.mockClear()
     const secret = 'segment-secret'
 
     const result = await segmentUserSync.handleIdentify?.(
@@ -105,7 +112,7 @@ describe('segmentUserSync.handleIdentify', () => {
 
     expect(result).toBeInstanceOf(Response)
     expect((result as Response).status).toBe(401)
-    expect(redisSet).not.toHaveBeenCalled()
+    expect(claimMessageId).not.toHaveBeenCalled()
   })
 })
 

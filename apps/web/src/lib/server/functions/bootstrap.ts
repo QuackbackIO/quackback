@@ -63,7 +63,7 @@ async function getSessionAndRole(): Promise<{
   const [{ auth }, { db, principal, eq }, { cacheGet, cacheSet, CACHE_KEYS }] = await Promise.all([
     import('@/lib/server/auth/index'),
     import('@/lib/server/db'),
-    import('@/lib/server/redis'),
+    import('@/lib/server/cache'),
   ])
 
   try {

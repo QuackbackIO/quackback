@@ -7,7 +7,7 @@ import {
   type Transaction,
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import {

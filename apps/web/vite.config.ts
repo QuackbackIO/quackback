@@ -118,8 +118,6 @@ export default defineConfig(({ mode }) => {
               '@quackback/db',
               '@quackback/db/client',
               '@quackback/db/schema',
-              'bullmq',
-              'ioredis',
               'openai',
               '@quackback/logger',
               'pino',

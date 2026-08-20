@@ -102,14 +102,14 @@ export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler
 // =============================================================================
 
 /**
- * Per-domain Redis rate-limit (SET-NX-EX, 10s window). Throws when
+ * Per-domain rate-limit (set-if-absent, 10s window). Throws when
  * throttled. Keyed on tenant+domain so admins can verify multiple
  * pending domains in parallel without throttling each other.
  */
 async function assertVerifyDomainRateLimit(tenantId: string, domainId: string): Promise<void> {
-  const { getRedis } = await import('@/lib/server/redis')
-  const took = await getRedis().set(`verify-domain:${tenantId}:${domainId}`, '1', 'EX', 10, 'NX')
-  if (took !== 'OK') {
+  const { kvSetNx } = await import('@/lib/server/kv/pg-kv')
+  const took = await kvSetNx(`verify-domain:${tenantId}:${domainId}`, 1, 10)
+  if (!took) {
     throw new ConflictError(
       'VERIFY_RATE_LIMITED',
       'Slow down — wait a few seconds before retrying.'
@@ -181,7 +181,6 @@ const claimMappingSchema = z.object({
     .object({
       map: z.array(z.object({ claimPath: z.string(), attributeKey: z.string() })).optional(),
       overrideExisting: z.boolean().optional(),
-      syncOnSignIn: z.boolean().optional(),
     })
     .optional(),
 })
@@ -251,6 +250,23 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
     const prior = data.id
       ? existing.find((p) => p.id === data.id)
       : existing.find((p) => p.registrationId === data.registrationId)
+
+    // Plan gate. The carve-out is exactly one shape — taking a currently-enabled
+    // provider out of service — so a workspace that loses the entitlement can
+    // still switch SSO off. It deliberately mirrors the lockout check below
+    // rather than the looser `data.enabled !== false`: that form also let a
+    // caller CREATE a provider, persisting a full set of connection details and
+    // an idp.created audit event, merely by sending `enabled: false`. Editing an
+    // already-disabled provider is a reconfiguration, not a take-out-of-service,
+    // and needs the entitlement like any other write.
+    //
+    // No-op on any install without a cloud config.
+    const isTakingProviderOutOfService = data.enabled === false && prior?.enabled === true
+    if (!isTakingProviderOutOfService) {
+      const { requireEntitlement } =
+        await import('@/lib/server/domains/settings/cloud/entitlements')
+      await requireEntitlement('sso')
+    }
 
     // Refuse to disable the workspace's only working sign-in method (lockout).
     // Only a true→false transition on a currently-usable provider can do it.
