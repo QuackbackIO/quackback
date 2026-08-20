@@ -71,6 +71,7 @@ export {
   GA_FEATURE_SECTIONS,
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
+  getProductAlwaysOnReason,
   getProductFlagUpdate,
   isProductEnabled,
 } from './settings'

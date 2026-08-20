@@ -1115,6 +1115,11 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
   for (const [legacyKey, umbrella] of Object.entries(LEGACY_FLAG_MAP)) {
     if (stored[umbrella] === undefined && stored[legacyKey] === true) flags[umbrella] = true
   }
+  // An always-on product is load-bearing for the portal, so a stored `false`
+  // (written before the flag was locked, or hand-edited into the row) reads
+  // back as on. Healing here rather than in a data migration is the same
+  // read-time repair the legacy keys above get, and it covers every reader.
+  for (const key of ALWAYS_ON_FEATURE_FLAGS) flags[key] = true
   return flags
 }
 
@@ -1234,6 +1239,13 @@ export interface ProductDefinition {
   label: string
   description: string
   featureFlags: readonly (keyof FeatureFlags)[]
+  /**
+   * Set on a product the workspace cannot run without. The string is the
+   * inline reason shown beside its fixed-on switch in Settings. The lock is
+   * not cosmetic: `updateFeatureFlags` refuses to persist the backing flags
+   * as false, and `resolveFeatureFlags` reads them back as on.
+   */
+  alwaysOnReason?: string
   adminPath:
     '/admin/feedback' | '/admin/inbox' | '/admin/help-center' | '/admin/changelog' | '/admin/status'
 }
@@ -1250,6 +1262,9 @@ export const PRODUCT_DEFINITIONS = [
     label: 'Feedback & Roadmaps',
     description: 'Collect ideas, votes, and comments from customers and share your roadmap.',
     featureFlags: ['feedback'],
+    // The portal homepage is the feedback board; with this off the portal root
+    // has nothing to render and falls through to a redirect or a 404.
+    alwaysOnReason: 'Always on: the portal homepage is your feedback board.',
     adminPath: '/admin/feedback',
   },
   {
@@ -1284,6 +1299,30 @@ export const PRODUCT_DEFINITIONS = [
 
 function getProductDefinition(productId: ProductId): ProductDefinition {
   return PRODUCT_DEFINITIONS.find((product) => product.id === productId)!
+}
+
+/** The inline reason a product's switch is fixed on, or null if it is free. */
+export function getProductAlwaysOnReason(productId: ProductId): string | null {
+  return getProductDefinition(productId).alwaysOnReason ?? null
+}
+
+/**
+ * Feature flags that must never be stored as false, derived from the product
+ * list so the fixed-on switch and the server-side guard cannot drift apart.
+ */
+export const ALWAYS_ON_FEATURE_FLAGS: readonly (keyof FeatureFlags)[] = (
+  PRODUCT_DEFINITIONS as readonly ProductDefinition[]
+)
+  .filter((product) => product.alwaysOnReason)
+  .flatMap((product) => product.featureFlags)
+
+/**
+ * The first always-on flag a partial update tries to switch off, or null when
+ * the update is allowed. A UI-only lock is no lock, so every write path runs
+ * this before it persists.
+ */
+export function findDisabledAlwaysOnFlag(input: Partial<FeatureFlags>): keyof FeatureFlags | null {
+  return ALWAYS_ON_FEATURE_FLAGS.find((key) => input[key] === false) ?? null
 }
 
 /** A product is available when any of its backing capabilities is enabled. */
