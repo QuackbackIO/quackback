@@ -32,12 +32,13 @@ function decodeEntities(text: string): string {
   return text
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
+    // Last, so `&amp;lt;` decodes to the literal `&lt;` instead of `<`.
+    .replace(/&amp;/g, '&')
 }
 
 /**
