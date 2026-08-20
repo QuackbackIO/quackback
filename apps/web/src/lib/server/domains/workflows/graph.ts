@@ -99,11 +99,6 @@ export type WorkflowNode =
        *  buildStepInstructionsPrompt) — never persisted config, never read
        *  outside this one action.executor.ts call. */
       instructions?: string
-      /** Reserved: floated by the design brief as an assistant auto-close
-       *  override, but no such runtime knob exists to override yet (see this
-       *  slice's report). Stored and round-tripped so authoring isn't lost
-       *  across a save, deliberately UNREAD by the walker/executor today. */
-      autoCloseOverride?: boolean
     }
   | { id: string; type: 'disable_composer' }
   | {

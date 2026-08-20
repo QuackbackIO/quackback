@@ -62,6 +62,8 @@ export interface WaitCursor {
    *  time, not written at park time. The sweeper prefers it over the wait's
    *  scheduled fire time, which under-reports liveness when a timer fires late. */
   resumedAt?: string
+  /** Assistant waits (and input waits) expire down the escalated edge. */
+  expiresAt?: string | null
 }
 
 /**

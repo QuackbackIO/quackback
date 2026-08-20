@@ -39,6 +39,7 @@ const {
   getOfficeHoursSchedule,
   buildReplyTimeMessage,
   runAssistantTurnForConversation,
+  previewAssistantTurnForConversation,
 } = vi.hoisted(() => ({
   assignConversation: vi.fn(),
   assignTeam: vi.fn(),
@@ -59,6 +60,7 @@ const {
   getOfficeHoursSchedule: vi.fn(),
   buildReplyTimeMessage: vi.fn(),
   runAssistantTurnForConversation: vi.fn(),
+  previewAssistantTurnForConversation: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
@@ -87,6 +89,7 @@ vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({ getOffic
 vi.mock('@/lib/server/domains/office-hours/reply-time-message', () => ({ buildReplyTimeMessage }))
 vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
   runAssistantTurnForConversation,
+  previewAssistantTurnForConversation,
 }))
 
 const { safeFetch } = vi.hoisted(() => ({ safeFetch: vi.fn() }))
@@ -180,6 +183,7 @@ beforeEach(() => {
     config: { identity: { name: 'Quinn', avatarUrl: null } },
   })
   appendAssistantReply.mockResolvedValue({ id: 'conversation_message_block_1' })
+  previewAssistantTurnForConversation.mockResolvedValue('eligible')
   safeFetch.mockResolvedValue({ ok: true, status: 200 })
   // convert_to_ticket's Phase 4 type resolution: the customer-category default
   // exists (the 0215 seed) and an explicit type resolves to itself.
@@ -287,7 +291,14 @@ describe('applyAction', () => {
     expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
 
     expect(await applyAction({ type: 'close' }, ctx)).toMatchObject({ label: 'closed' })
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, undefined)
+    // The 5th argument is the close lifecycle: an explicit close, not an auto-close.
+    expect(setConversationStatus).toHaveBeenCalledWith(
+      conversationId,
+      'closed',
+      actor,
+      undefined,
+      'closed'
+    )
 
     expect(await applyAction({ type: 'reopen' }, ctx)).toMatchObject({ label: 'reopened' })
     expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
@@ -296,9 +307,13 @@ describe('applyAction', () => {
   it('threads ctx.workflowName as system-notice attribution into the notice-posting service calls', async () => {
     const attributedCtx: WorkflowContext = { ...ctx, workflowName: 'Auto-close after CSAT' }
     await applyAction({ type: 'close' }, attributedCtx)
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, {
-      workflowName: 'Auto-close after CSAT',
-    })
+    expect(setConversationStatus).toHaveBeenCalledWith(
+      conversationId,
+      'closed',
+      actor,
+      { workflowName: 'Auto-close after CSAT' },
+      'closed'
+    )
 
     await applyAction(
       { type: 'assign_agent', principalId: 'principal_x' as PrincipalId },
@@ -810,6 +825,15 @@ describe('applyAction', () => {
       await expect(applyAction({ type: 'let_assistant_answer' }, ctx)).resolves.toMatchObject({
         label: 'handed to assistant',
       })
+    })
+
+    it('returns assistantDeclined when the orchestrator preview says Quinn will not run', async () => {
+      previewAssistantTurnForConversation.mockResolvedValueOnce('declined')
+      await expect(applyAction({ type: 'let_assistant_answer' }, ctx)).resolves.toMatchObject({
+        label: 'assistant declined',
+        assistantDeclined: true,
+      })
+      expect(runAssistantTurnForConversation).not.toHaveBeenCalled()
     })
   })
 

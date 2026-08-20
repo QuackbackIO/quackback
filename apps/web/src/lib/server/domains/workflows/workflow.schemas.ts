@@ -124,7 +124,10 @@ export const actionSchema = z.union([
     priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']),
   }),
   snoozeActionSchema,
-  z.object({ type: z.literal('close') }),
+  z.object({
+    type: z.literal('close'),
+    lifecycle: z.literal('auto_closed').optional(),
+  }),
   // (SF4) `close`'s counterpart — see action.executor.ts's WorkflowAction doc
   // for why this is workflows-only, not shared with macro.schemas.ts's
   // separate MacroAction catalogue.
@@ -207,6 +210,11 @@ export const MAX_ASSISTANT_STEP_INSTRUCTIONS = 2000
 const buttonOptionSchema = z.object({ key: z.string().min(1), label: z.string().min(1).max(80) })
 const attributeOptionSchema = z.object({ id: z.string().min(1), label: z.string().min(1) })
 
+// Builder-authored graphs are trees. Forks exist only at branch,
+// reply-buttons, assistant-outcome, and wired rating steps; there are
+// no rejoins, parallel lanes, or sub-workflows. The block-kind union is
+// closed — new conversational behavior belongs to the agent (skills and
+// guidance), not new block kinds.
 const nodeSchema = z.discriminatedUnion('type', [
   z.object({ id: z.string().min(1), type: z.literal('trigger') }),
   z.object({ id: z.string().min(1), type: z.literal('action'), action: actionSchema }),
@@ -231,13 +239,9 @@ const nodeSchema = z.discriminatedUnion('type', [
   z.object({
     id: z.string().min(1),
     type: z.literal('let_assistant_answer'),
-    // Both optional (Phase C, slice C-6): a one-time per-step instruction
-    // folded into just this turn's prompt (see assistant.runtime.ts's
-    // buildStepInstructionsPrompt), and a reserved auto-close override with
-    // no backing runtime knob yet — see graph.ts's WorkflowNode doc for why
-    // the walker leaves autoCloseOverride deliberately unread.
+    // Optional one-time per-step instruction folded into just this turn's
+    // prompt (see assistant.runtime.ts's buildStepInstructionsPrompt).
     instructions: z.string().max(MAX_ASSISTANT_STEP_INSTRUCTIONS).optional(),
-    autoCloseOverride: z.boolean().optional(),
   }),
   z.object({ id: z.string().min(1), type: z.literal('disable_composer') }),
   z.object({

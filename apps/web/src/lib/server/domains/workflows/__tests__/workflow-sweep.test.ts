@@ -804,7 +804,9 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(setConversationStatus).toHaveBeenCalledWith(
         conversationId,
         'closed',
-        expect.objectContaining({ principalType: 'service' })
+        expect.objectContaining({ principalType: 'service' }),
+        undefined,
+        'auto_closed'
       )
     })
 
@@ -856,7 +858,9 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(setConversationStatus).toHaveBeenCalledWith(
         conversationId,
         'closed',
-        expect.anything()
+        expect.anything(),
+        undefined,
+        'auto_closed'
       )
     })
 

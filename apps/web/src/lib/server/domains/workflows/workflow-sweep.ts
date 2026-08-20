@@ -302,7 +302,7 @@ async function closeIfAbandoned(
   if (!convo || convo.status === 'closed') return
   if (await hasVisitorMessage(conversationId)) return
   if (keepIfEmailCaptured && (await hasCapturedEmail(conversationId))) return
-  await setConversationStatus(conversationId, 'closed', sweepActor())
+  await setConversationStatus(conversationId, 'closed', sweepActor(), undefined, 'auto_closed')
 }
 
 /**
@@ -371,6 +371,33 @@ export async function sweepExpiredInputWaits(now: Date): Promise<number> {
     if (run.conversationId) {
       await closeIfAbandoned(run.conversationId, keepIfEmailCaptured)
     }
+  }
+  return swept
+}
+
+/** Expired `let_assistant_answer` parks resume down the escalated edge. */
+export async function sweepExpiredAssistantWaits(now: Date): Promise<number> {
+  const isExpiredAssistantWait = and(
+    eq(workflowRuns.state, 'waiting'),
+    sql`coalesce(${workflowRuns.cursor}->>'waitKind', 'timer') = 'assistant'`,
+    sql`(${workflowRuns.cursor}->>'expiresAt') IS NOT NULL`,
+    sql`(${workflowRuns.cursor}->>'expiresAt')::timestamptz <= ${now.toISOString()}::timestamptz`
+  )
+  const candidates = await db
+    .select()
+    .from(workflowRuns)
+    .where(isExpiredAssistantWait)
+    .orderBy(asc(workflowRuns.startedAt))
+    .limit(SWEEP_BATCH_SIZE)
+  if (candidates.length === 0) return 0
+
+  const { resumeWorkflowRun } = await import('./workflow.engine')
+  let swept = 0
+  for (const run of candidates) {
+    const resumed = await resumeWorkflowRun(run.id, { assistantOutcome: 'escalated' })
+    if (!resumed) continue
+    await logRunEvent(run.id, run.workflowId, run.subjectPrincipalId, 'swept_assistant_expired')
+    swept++
   }
   return swept
 }
@@ -757,17 +784,26 @@ export async function sweepWorkflowRuns(): Promise<void> {
   const staleCount = await sweepStaleRunningRuns(now)
   const rescheduledCount = await sweepOrphanedWaitingRuns(now)
   const expiredCount = await sweepExpiredInputWaits(now)
+  const assistantExpiredCount = await sweepExpiredAssistantWaits(now)
   const unresponsiveCount = await sweepUnresponsiveConversations(now)
   const slaTimerCount = await sweepSlaTimerTriggers(now)
   if (
     staleCount > 0 ||
     rescheduledCount > 0 ||
     expiredCount > 0 ||
+    assistantExpiredCount > 0 ||
     unresponsiveCount > 0 ||
     slaTimerCount > 0
   ) {
     log.info(
-      { staleCount, rescheduledCount, expiredCount, unresponsiveCount, slaTimerCount },
+      {
+        staleCount,
+        rescheduledCount,
+        expiredCount,
+        assistantExpiredCount,
+        unresponsiveCount,
+        slaTimerCount,
+      },
       'workflow-sweep run complete'
     )
   }

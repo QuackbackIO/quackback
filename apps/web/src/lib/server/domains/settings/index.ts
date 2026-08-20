@@ -65,3 +65,27 @@ export type { VerifiedDomain } from './settings.types'
 // import it directly in server-only code to avoid leaking DB into the client bundle.
 export type { TierLimits, TierLimit, TierFeatureFlags } from './tier-limits.types'
 export { OSS_TIER_LIMITS } from './tier-limits.types'
+
+// Cloud config — plans and entitlements. Types, catalogues and the disabled
+// default are pure data with no DB dependency, so they are barrel-safe. The
+// resolver (cloud.service.ts) and the gate (entitlements.ts) must NOT be
+// exported here; import them directly in server-only code.
+export type {
+  CloudConfig,
+  BillingStatus,
+  PlanId,
+  PlanDefinition,
+  EntitlementKey,
+  EntitlementDefinition,
+} from './cloud/cloud.types'
+export {
+  PLAN_IDS,
+  PLAN_CATALOGUE,
+  PLAN_DEFINITIONS,
+  ENTITLEMENTS,
+  ENTITLEMENT_KEYS,
+  DISABLED_CLOUD_CONFIG,
+  minimumPlanFor,
+  isPlanId,
+  isEntitlementKey,
+} from './cloud/cloud.types'

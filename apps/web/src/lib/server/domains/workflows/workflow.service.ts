@@ -38,6 +38,13 @@ const asJson = (graph: WorkflowGraph): Record<string, unknown> =>
   graph as unknown as Record<string, unknown>
 
 export async function createWorkflow(input: WorkflowInput): Promise<Workflow> {
+  // Plan gate on authoring a workflow. Existing workflows keep running: a
+  // workspace that drops below the plan that includes workflows can still
+  // pause, edit and delete what it already built, it just cannot add more.
+  // No-op on any install without a plan, which is every self-hosted one —
+  // see domains/settings/cloud/entitlements.ts.
+  const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  await requireEntitlement('workflows')
   const [row] = await db
     .insert(workflows)
     .values({
@@ -231,7 +238,16 @@ export async function listLiveWorkflowsForTrigger(triggerType: string): Promise<
 
 const HAS_LIVE_WORKFLOW_CACHE_TTL_MS = 30_000
 
-/** Per workspace, because the answer is a fact about one workspace's rows. */
+/**
+ * Per workspace, because the answer is a fact about one workspace's rows.
+ *
+ * The two failure directions are not symmetric and both are silent. A shared
+ * `true` from a workspace that has workflows makes a workspace with none pay
+ * the enqueue and dispatch path on every inbound message. A shared `false`
+ * from a workspace that has none makes a workspace with live workflows **stop
+ * running them** — the gate is read before the enqueue, so nothing dispatches,
+ * nothing errors, and no run row is ever written to notice was missing.
+ */
 const hasLiveWorkflowCache = new WorkspaceKeyedCache<{ value: boolean; expiresAt: number }>(2_048)
 const HAS_LIVE_KEY = 'has-live'
 
@@ -241,6 +257,10 @@ const HAS_LIVE_KEY = 'has-live'
  * setStatus/softDelete); exported so tests can start each case cold — the
  * cache is module-level mutable state that would otherwise leak a value
  * cached by an earlier case into a later one.
+ *
+ * Clears the ACTIVE workspace's entry only: a workspace toggling a workflow says
+ * nothing about anyone else's, and dropping the fleet's entries would turn one
+ * admin's click into a fleet-wide re-query storm on the hottest path there is.
  */
 export function invalidateHasLiveWorkflowCache(): void {
   hasLiveWorkflowCache.delete(HAS_LIVE_KEY)
@@ -340,13 +360,33 @@ function collectAttributeKeysFromGraph(graph: unknown, into: Set<string>): void 
   }
 }
 
+function collectAttributeKeysFromWorkflow(
+  workflow: {
+    graph: unknown
+    triggerSettings?: Record<string, unknown> | null
+  },
+  into: Set<string>
+): void {
+  const audience = workflow.triggerSettings?.audience
+  if (audience && typeof audience === 'object' && !Array.isArray(audience)) {
+    collectAttributeKeys(audience as WorkflowCondition, into)
+  }
+  collectAttributeKeysFromGraph(workflow.graph, into)
+}
+
 /** Short-lived cache: a live workflow's conditions rarely change second to
  *  second, and this is read on every inbound customer message via the
  *  assistant orchestrator, so a module-level TTL cache (no existing caching
  *  idiom in this domain to follow) avoids a DB round trip per message. */
 const LIVE_ATTRIBUTE_KEYS_CACHE_TTL_MS = 30_000
 
-/** Per workspace: these keys are read from one workspace's stored graphs. */
+/**
+ * Per workspace: these keys are read out of one workspace's stored workflow
+ * graphs. Shared, one workspace's attribute vocabulary decides which
+ * conversation attributes another workspace re-classifies mid-conversation —
+ * spending its AI budget on keys its own workflows never branch on, while the
+ * keys they do branch on go stale.
+ */
 const liveAttributeKeysCache = new WorkspaceKeyedCache<{
   keys: ReadonlySet<string>
   expiresAt: number
@@ -363,11 +403,11 @@ export async function getLiveWorkflowReferencedAttributeKeys(): Promise<Readonly
   const cached = liveAttributeKeysCache.get(LIVE_ATTRIBUTE_KEYS_KEY)
   if (cached && cached.expiresAt > now) return cached.keys
   const live = await db
-    .select({ graph: workflows.graph })
+    .select({ graph: workflows.graph, triggerSettings: workflows.triggerSettings })
     .from(workflows)
     .where(and(eq(workflows.status, 'live'), isNull(workflows.deletedAt)))
   const keys = new Set<string>()
-  for (const row of live) collectAttributeKeysFromGraph(row.graph, keys)
+  for (const row of live) collectAttributeKeysFromWorkflow(row, keys)
   liveAttributeKeysCache.set(LIVE_ATTRIBUTE_KEYS_KEY, {
     keys,
     expiresAt: now + LIVE_ATTRIBUTE_KEYS_CACHE_TTL_MS,

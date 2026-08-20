@@ -132,9 +132,7 @@ function settingsRow(overrides: Record<string, unknown> = {}) {
     assistantConfig: structuredClone(CONFIG),
     assistantConfigRevision: 7,
     managedFieldPaths: [],
-    featureFlags: JSON.stringify({
-      assistantTools: true,
-    }),
+    featureFlags: JSON.stringify({}),
     ...overrides,
   }
 }
@@ -277,8 +275,8 @@ describe('V2 assistant configuration reads', () => {
       config: DEFAULT_ASSISTANT_CONFIG,
       revision: 23,
       workspaceName: 'Acme Support',
-      actionsEnabled: true,
-      customActionsEnabled: false,
+      connectorsEnabled: false,
+      skillsEnabled: false,
       configFallbackReason: 'invalid_assistant_config',
     })
     expect(result.config).not.toBe(DEFAULT_ASSISTANT_CONFIG)
