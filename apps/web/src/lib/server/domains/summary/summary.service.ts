@@ -29,6 +29,7 @@ import {
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { commentPlainText } from '@/lib/server/markdown-tiptap'
+import { withWorkspaceSweepReentrancyGuard } from '@/lib/server/sweep-lock'
 import type { PostId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
@@ -205,14 +206,16 @@ const SWEEP_BATCH_SIZE = 50
 const SWEEP_BATCH_DELAY_MS = 500
 const SWEEP_ABORT_AFTER_EMPTY_BATCHES = 2
 
-let _sweepInProgress = false
-
 /**
  * Refresh stale summaries.
  *
  * Finds all posts where the summary is missing or the live comment count has
  * changed, and processes them in batches until none remain. See #180 for why
  * the sweep needs an attempted-set, circuit breaker, and reentrancy guard.
+ *
+ * The reentrancy guard is keyed by workspace: a process-wide boolean would let
+ * whichever workspace this fleet pass reached first suppress every other
+ * workspace's sweep for as long as it runs.
  */
 export async function refreshStaleSummaries(): Promise<void> {
   // Fast-path skip when AI is off OR the summary model is unset/disabled —
@@ -220,13 +223,7 @@ export async function refreshStaleSummaries(): Promise<void> {
   // circuit breaker trips.
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !getChatModel('summary'))
     return
-  if (_sweepInProgress) return
-  _sweepInProgress = true
-  try {
-    await _doSweep()
-  } finally {
-    _sweepInProgress = false
-  }
+  await withWorkspaceSweepReentrancyGuard('summary_sweep', _doSweep)
 }
 
 async function _doSweep(): Promise<void> {

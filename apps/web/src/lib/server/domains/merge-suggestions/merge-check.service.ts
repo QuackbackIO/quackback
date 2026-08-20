@@ -11,6 +11,7 @@ import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
 import { createMergeSuggestion, expireStaleMergeSuggestions } from './merge-suggestion.service'
 import { logger } from '@/lib/server/logger'
+import { withWorkspaceSweepReentrancyGuard } from '@/lib/server/sweep-lock'
 import type { PostId } from '@quackback/ids'
 
 const log = logger.child({ component: 'merge-check' })
@@ -112,22 +113,15 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
   await updateMergeCheckedAt(postId)
 }
 
-let _sweepInProgress = false
-
 /**
  * Periodic sweep — find posts that haven't been checked recently and process them.
- * Mirrors the refreshStaleSummaries pattern from summary.service.ts.
+ * Mirrors the refreshStaleSummaries pattern from summary.service.ts, including
+ * the workspace-keyed reentrancy guard: a process-wide boolean would let the
+ * first workspace a fleet pass reaches suppress every other workspace's sweep.
  */
 export async function sweepMergeSuggestions(): Promise<void> {
   if (!getOpenAI() || !getChatModel('merge')) return
-  if (_sweepInProgress) return
-  _sweepInProgress = true
-
-  try {
-    await _doSweep()
-  } finally {
-    _sweepInProgress = false
-  }
+  await withWorkspaceSweepReentrancyGuard('merge_sweep', _doSweep)
 }
 
 async function _doSweep(): Promise<void> {
