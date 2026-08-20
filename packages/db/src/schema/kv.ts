@@ -40,7 +40,7 @@ export const kvStore = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.key] }),
+    primaryKey({ name: 'kv_store_pkey', columns: [t.tenantId, t.key] }),
     index('kv_store_expires_at_idx').on(t.expiresAt),
   ]
 )
@@ -55,7 +55,7 @@ export const rateBucket = pgTable(
     windowExpiresAt: timestamp('window_expires_at', { withTimezone: true }).notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.key] }),
+    primaryKey({ name: 'rate_bucket_pkey', columns: [t.tenantId, t.key] }),
     index('rate_bucket_window_expires_at_idx').on(t.windowExpiresAt),
   ]
 )
@@ -70,7 +70,7 @@ export const kvSetMember = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.setKey, t.member] }),
+    primaryKey({ name: 'kv_set_member_pkey', columns: [t.tenantId, t.setKey, t.member] }),
     index('kv_set_member_expires_at_idx').on(t.expiresAt),
   ]
 )
@@ -86,7 +86,10 @@ export const presenceStream = pgTable(
     heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.principalId, t.streamId] }),
+    primaryKey({
+      name: 'presence_stream_pkey',
+      columns: [t.tenantId, t.principalId, t.streamId],
+    }),
     index('presence_stream_heartbeat_idx').on(t.heartbeatAt),
   ]
 )

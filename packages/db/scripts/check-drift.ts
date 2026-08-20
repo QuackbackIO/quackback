@@ -245,6 +245,24 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
       /^ALTER TABLE "(?:status_incident_components|ticket_links|visitor_top_stats|ticket_conversations|changelog_entry_categories)" DROP CONSTRAINT "(?:status_incident_components_incident_id_component_id_pk|ticket_links_pkey|visitor_top_stats_pkey|ticket_conversations_pkey|changelog_entry_categories_pk)"/,
     optional: true,
   },
+  {
+    reason: 'drizzle-kit no-op composite PK rewrite for tenant-keyed two-column stores on PG 17',
+    pattern:
+      /^ALTER TABLE "(kv_store|rate_bucket)" DROP CONSTRAINT "\1_pkey";\s*--> statement-breakpoint\s*ALTER TABLE "\1" ADD CONSTRAINT "\1_pkey" PRIMARY KEY\("tenant_id","key"\);?$/,
+    optional: true,
+  },
+  {
+    reason: 'drizzle-kit no-op composite PK rewrite for kv_set_member on PG 17',
+    pattern:
+      /^ALTER TABLE "kv_set_member" DROP CONSTRAINT "kv_set_member_pkey";\s*--> statement-breakpoint\s*ALTER TABLE "kv_set_member" ADD CONSTRAINT "kv_set_member_pkey" PRIMARY KEY\("tenant_id","set_key","member"\);?$/,
+    optional: true,
+  },
+  {
+    reason: 'drizzle-kit no-op composite PK rewrite for presence_stream on PG 17',
+    pattern:
+      /^ALTER TABLE "presence_stream" DROP CONSTRAINT "presence_stream_pkey";\s*--> statement-breakpoint\s*ALTER TABLE "presence_stream" ADD CONSTRAINT "presence_stream_pkey" PRIMARY KEY\("tenant_id","principal_id","stream_id"\);?$/,
+    optional: true,
+  },
 ]
 
 function scratchUrl(): string {
