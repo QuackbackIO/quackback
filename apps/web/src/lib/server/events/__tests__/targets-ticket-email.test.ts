@@ -9,6 +9,8 @@
  * lookups return exactly what each case wants.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
+import { SELF_HOSTED_MAIL_SLUG } from '@/lib/server/domains/conversation/conversation.mail-slug'
 import type { EventData } from '../types'
 import type { HookContext } from '../hook-context'
 
@@ -59,9 +61,12 @@ vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => (
 }))
 
 // --- reply-to minting ---
-const inboundTicketReplyToAddress = vi.fn<() => string | null>()
+// Arguments are forwarded, not swallowed: the second one is the workspace's mail
+// slug, and an address minted without it names no workspace on a shared inbound
+// domain. A mock that dropped it would let that regression through silently.
+const inboundTicketReplyToAddress = vi.fn<(...args: unknown[]) => string | null>()
 vi.mock('@/lib/server/domains/conversation/conversation.email-channel', () => ({
-  inboundTicketReplyToAddress: () => inboundTicketReplyToAddress(),
+  inboundTicketReplyToAddress: (...args: unknown[]) => inboundTicketReplyToAddress(...args),
 }))
 
 // --- stage labels ---
@@ -201,6 +206,22 @@ describe('getTicketCreatedEmailTargets', () => {
       from: 'support@team.example',
       replyTo: 'reply+tkt-1.sig@inbound.example',
     })
+  })
+
+  it('mints the reply-to under the active workspace’s mail slug', async () => {
+    // The address has to name a workspace before a shared inbound front door can
+    // route it anywhere, and the ticket id alone does not: ticket ids live in
+    // per-workspace databases. Passing no slug is what the pre-registry code did
+    // and it mints nothing at all.
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    await withWorkspace('neon-t2', () => getTicketCreatedEmailTargets(createdEvent(), context))
+    expect(inboundTicketReplyToAddress).toHaveBeenCalledWith('ticket_1', mailSlugFor('neon-t2'))
+  })
+
+  it('mints under the self-hosted label when no workspace scope is open', async () => {
+    queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    await getTicketCreatedEmailTargets(createdEvent(), context)
+    expect(inboundTicketReplyToAddress).toHaveBeenCalledWith('ticket_1', SELF_HOSTED_MAIL_SLUG)
   })
 })
 

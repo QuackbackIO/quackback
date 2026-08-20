@@ -5,7 +5,7 @@
  * before its `email.received` payload is routed into ingestion. Other event
  * types and unroutable payloads are acked (200) so the provider stops retrying.
  */
-import { isEmailInboundConfigured } from './conversation.email-channel'
+import { isEmailInboundWebhookConfigured } from './conversation.email-channel'
 import { verifyResendWebhookSignature } from './email-webhook-verify'
 import { ingestInboundEmail } from './conversation.email-inbound.service'
 import { readTextBodyOr413 } from '@/lib/server/utils/read-body'
@@ -22,7 +22,9 @@ function header(request: Request, base: string): string | null {
 }
 
 export async function handleInboundEmailWebhook(request: Request): Promise<Response> {
-  if (!isEmailInboundConfigured()) return new Response('Not found', { status: 404 })
+  // The door's own question, which is not the minting one: a mint domain this
+  // install cannot use costs a Reply-To, and closing this would cost the message.
+  if (!isEmailInboundWebhookConfigured()) return new Response('Not found', { status: 404 })
 
   // Bounded read of the raw body; the signature covers these exact bytes.
   const body = await readTextBodyOr413(request, MAX_EMAIL_WEBHOOK_BODY_BYTES)
@@ -46,6 +48,10 @@ export async function handleInboundEmailWebhook(request: Request): Promise<Respo
   const type = (event as { type?: unknown })?.type
   // Only inbound receipts are actionable; ack the rest so retries stop.
   if (typeof type === 'string' && type !== 'email.received') {
+    if (type === 'email.bounced' || type === 'email.complained') {
+      const { applyDeliveryEvent } = await import('@/lib/server/email/email-delivery-events')
+      await applyDeliveryEvent(event)
+    }
     return new Response('', { status: 200 })
   }
 

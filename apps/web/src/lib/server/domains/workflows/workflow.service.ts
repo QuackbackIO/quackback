@@ -247,6 +247,22 @@ export function invalidateHasLiveWorkflowCache(): void {
   liveAttributeKeysCache.delete(LIVE_ATTRIBUTE_KEYS_KEY)
 }
 
+/** True when at least one live workflow is subscribed to this trigger. */
+export async function hasLiveWorkflowForTrigger(triggerType: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(
+      and(
+        eq(workflows.triggerType, triggerType),
+        eq(workflows.status, 'live'),
+        isNull(workflows.deletedAt)
+      )
+    )
+    .limit(1)
+  return Boolean(row)
+}
+
 /**
  * Whether ANY workflow is currently live, workspace-global (not scoped by
  * trigger type). It must stay workspace-global: interruptWaitingRuns (§4.6)

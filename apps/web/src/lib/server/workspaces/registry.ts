@@ -69,6 +69,7 @@ interface RegistryRow {
   fingerprint_stamped_at: Date | string
   storage: unknown
   email_from: string
+  mail_slug: string
   ai_enabled: boolean
   revision: string | number
   pg_database_oid: string | number | null
@@ -200,13 +201,22 @@ export function __setControlSqlForTests(sql: postgres.Sql | null): void {
   controlRead.lastError = null
 }
 
-const SELECT_COLUMNS = `
+/**
+ * Exported so a test can read the column list back.
+ *
+ * A column added to {@link RegistryRow} and to {@link toRecord} but not here
+ * projects `undefined` for every workspace at once, which the contract refuses:
+ * a fleet-wide 503 on every hostname, from an omission that reads as complete in
+ * every other file that mentions the field. Nothing that takes a row as input —
+ * which is every other test in this module — can see it.
+ */
+export const SELECT_COLUMNS = `
   r.workspace_key, r.contract_version, r.state::text AS state, r.state_reason,
   r.primary_hostname, r.base_url,
   r.db_pooled_url, r.db_direct_url, r.db_name, r.db_role, r.db_credential_ref,
   r.app_secrets_ref,
   r.workspace_id, r.fingerprint_stamped_at,
-  r.storage, r.email_from, r.ai_enabled, r.revision,
+  r.storage, r.email_from, r.mail_slug, r.ai_enabled, r.revision,
   r.pg_database_oid,
   COALESCE(
     (SELECT array_agg(h2.hostname ORDER BY h2.hostname)
@@ -399,7 +409,7 @@ function toRecord(row: RegistryRow): unknown {
     },
     secrets: { appSecretsRef: row.app_secrets_ref },
     storage: typeof row.storage === 'string' ? safeJson(row.storage) : row.storage,
-    email: { from: row.email_from },
+    email: { from: row.email_from, mailSlug: row.mail_slug },
     features: { aiEnabled: row.ai_enabled },
   }
 }

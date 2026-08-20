@@ -29,11 +29,26 @@ export interface ParsedEmailAttachment {
 }
 
 export interface ParsedInboundEmail {
-  /** Recipient addresses (one is our plus-addressed `reply+<id>@domain`). */
+  /** Recipient addresses (one is our plus-addressed `<slug>+c<id>.<tag>@domain`). */
   toAddresses: string[]
   /** Cc addresses. Cold-inbound (§4.8) turns these into group participants;
    *  the reply path ignores them. Bcc never appears on a received message. */
   ccAddresses: string[]
+  /**
+   * `Reply-To` addresses, empty when the message carries none.
+   *
+   * The mail-loop guard's evidence, and the reason it is a field rather than
+   * something read where it is needed. On our own outbound mail this is the
+   * plus-address we minted; a reply carries none, or the replier's own, because
+   * a client answering our mail does not copy the header it is answering. That
+   * difference is what lets the guard tell a copy of our own message from an
+   * answer to it — see {@link mailLoopSignal}.
+   *
+   * Kept apart from {@link toAddresses} deliberately. Every genuine reply is
+   * ADDRESSED to an address we minted; only a copy of our own message carries
+   * one of ours here.
+   */
+  replyToAddresses: string[]
   from: string | null
   subject: string | null
   text: string | null
@@ -44,6 +59,11 @@ export interface ParsedInboundEmail {
   html?: string
   /** Provider Message-ID (header preferred, email id as fallback) for dedupe. */
   messageId: string | null
+  /** The delivering transport's own id for this message, when the front door
+   *  that accepted it carries one. Only a FALLBACK dedupe key, read when
+   *  {@link messageId} is null — see {@link inboundDedupeKey}. Absent on every
+   *  front door that sends no such id, which is every one but the edge bridge. */
+  transportMessageId?: string | null
   /** Provider email id (Resend `email_id`) — used to fetch the body when the
    *  webhook payload is metadata-only (Resend `email.received`, #320). Null for
    *  the IMAP front door, which already carries the full RFC822 body. */
@@ -70,6 +90,88 @@ export interface ParsedInboundEmail {
 
 function asString(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null
+}
+
+/**
+ * The namespace a transport-supplied id is held in, so it can never be read as a
+ * `Message-ID`.
+ *
+ * The two kinds of id are stored in one column and compared with one equality,
+ * which is what lets both share the partial unique index that is the hard
+ * backstop against a double insert. Sharing a column means sharing a value
+ * space, so the two are separated by construction instead: a real `Message-ID`
+ * is stored exactly as the message carried it, and a transport id is only ever
+ * stored and only ever looked up behind this prefix.
+ *
+ * WHICH DIRECTION THIS DEFENDS. A transport id is not covered by the delivery
+ * signature, so it is chosen by whoever put it on the wire. Every `Message-ID`
+ * we have ever stored is visible to anyone who was on the thread it came from,
+ * so without the prefix a chosen transport id equal to one of them would
+ * suppress a message by matching a row it has nothing to do with. Prefixed, no
+ * chosen value can name a stored `Message-ID` at all.
+ *
+ * The mirror — a message crafted with a `Message-ID` spelled like a namespaced
+ * transport key, to suppress a later message — needs the transport's own id for
+ * that later message, assigned by the mail service at receipt and not knowable
+ * in advance. The prefix closes the direction that is free; the other one costs
+ * a guess nobody can make.
+ */
+const TRANSPORT_MESSAGE_ID_NAMESPACE = 'qb-transport:'
+
+/**
+ * Longest dedupe key worth storing, whichever kind of id it was made from.
+ *
+ * The key is written into message metadata and indexed, and a btree entry has a
+ * hard size ceiling — so an oversized value is not a bad dedupe key, it is an
+ * INSERT that throws: a 500, a retry, and a message that never lands. The cap
+ * therefore belongs to the KEY rather than to either source of one. A
+ * `Message-ID` arrives in a header nobody upstream bounds, and the transport id
+ * arrives in another; capping only the id our own sender sets would leave the
+ * exposed one uncapped in the same index.
+ *
+ * Over the cap the message is treated as offering no key at all, exactly like
+ * one that carried neither id. Truncating instead would be worse than the
+ * throw it avoids: two distinct long ids would truncate to one key, and the
+ * second message would be silently suppressed as a duplicate of the first.
+ */
+export const MAX_DEDUPE_KEY_CHARS = 255
+
+/**
+ * Longest transport id a front door should carry, so that a plausible one always
+ * fits {@link MAX_DEDUPE_KEY_CHARS} once namespaced.
+ *
+ * Derived rather than typed a second time: two independently chosen numbers for
+ * one ceiling are two numbers that can drift, and the drift would show up as a
+ * value accepted at the door that then produces no key at all.
+ */
+export const MAX_TRANSPORT_MESSAGE_ID_CHARS =
+  MAX_DEDUPE_KEY_CHARS - TRANSPORT_MESSAGE_ID_NAMESPACE.length
+
+/**
+ * The value this message deduplicates on, or null when it offers none.
+ *
+ * The message's own `Message-ID` whenever it has one, unchanged and unprefixed:
+ * that is what is already stored against every message ingested before this
+ * fallback existed, and re-spelling it would make today's copy of a redelivered
+ * message fail to match yesterday's row.
+ *
+ * The transport's id is a FALLBACK and only that. A message that carries a
+ * `Message-ID` is deduplicated on it even when a transport id is present, so the
+ * unsigned header can never displace the signed message's own identity — and a
+ * message carrying neither is exactly as undeduplicable as it was before.
+ *
+ * One derivation, spent by every reader and every writer of the key: the value
+ * looked up before an insert and the value stamped by it come from here, so the
+ * two cannot come to disagree and file one message under two spellings.
+ */
+export function inboundDedupeKey(parsed: ParsedInboundEmail): string | null {
+  if (parsed.messageId) {
+    return parsed.messageId.length <= MAX_DEDUPE_KEY_CHARS ? parsed.messageId : null
+  }
+  const transport = parsed.transportMessageId?.trim()
+  if (!transport) return null
+  const key = `${TRANSPORT_MESSAGE_ID_NAMESPACE}${transport}`
+  return key.length <= MAX_DEDUPE_KEY_CHARS ? key : null
 }
 
 /** Read a header value case-insensitively from either an array of
@@ -257,6 +359,67 @@ function addressArray(raw: unknown): string[] {
 }
 
 /**
+ * Every address in EVERY instance of an address-list header, in the order the
+ * message carried them.
+ *
+ * `readHeader` answers with the first value, which is right for a header that
+ * names one thing (`Subject`, `Message-ID`) and wrong for an address list: RFC
+ * 5322 permits one `Reply-To`, so a message with two is malformed and no reading
+ * of it is more correct than another, but the two front doors must not disagree
+ * about it — a guard whose verdict depends on which door a message arrived
+ * through has a second, undocumented rule. Both doors read their address lists
+ * through here, and reading all of them is also the reading that cannot be
+ * evaded by prepending a decoy.
+ *
+ * An absent or empty value yields no entries rather than one holding nothing, so
+ * a caller iterating the list never has to special-case a blank member.
+ */
+function headerAddresses(headers: unknown, name: string): string[] {
+  const want = name.toLowerCase()
+  const values: string[] = []
+  if (Array.isArray(headers)) {
+    for (const h of headers) {
+      if (!h || typeof h !== 'object') continue
+      if (String((h as { name?: unknown }).name).toLowerCase() !== want) continue
+      const value = asString((h as { value?: unknown }).value)
+      if (value) values.push(value)
+    }
+  } else {
+    // An object-shaped map has one entry per name by construction, so there is
+    // nothing to collect beyond it.
+    const single = readHeader(headers, name)
+    if (single) values.push(single)
+  }
+  return values.flatMap((value) =>
+    value
+      .split(',')
+      .map((address) => address.trim())
+      .filter(Boolean)
+  )
+}
+
+/**
+ * The `Reply-To` addresses of a provider webhook payload.
+ *
+ * Header block first, payload field second: a provider that hands us the raw
+ * headers and one that lifts `Reply-To` into a field of its own both occur, and
+ * the mail-loop guard downstream has no other evidence to fall back on.
+ *
+ * The field is read by the same array-aware reader `to` and `cc` beside it use,
+ * because what it lifts out is an address LIST and a list arrives as an array. A
+ * string-only reader answered "no Reply-To at all" for the exact payload shape
+ * the branch was written for, which is a guard silently wired to nothing.
+ * Entries are taken as they stand there (one address per element), while a
+ * header LINE is split on commas, which is the shape each actually has.
+ */
+function webhookReplyToAddresses(d: Record<string, unknown>): string[] {
+  const fromHeaderBlock = headerAddresses(d.headers, 'reply-to')
+  if (fromHeaderBlock.length > 0) return fromHeaderBlock
+  const lifted = addressArray(d.reply_to)
+  return lifted.length > 0 ? lifted : addressArray(d.replyTo)
+}
+
+/**
  * Map a provider webhook's `attachments` array to decoded parts. Resend's
  * `email.received` event embeds each attachment's payload as a base64 `content`
  * string (the webhook handler sizes its body limit for exactly this); we tolerate
@@ -305,6 +468,7 @@ export function parseInboundEmail(data: unknown): ParsedInboundEmail {
   return {
     toAddresses: addressArray(d.to),
     ccAddresses: addressArray(d.cc),
+    replyToAddresses: webhookReplyToAddresses(d),
     from: asString(d.from),
     subject: asString(d.subject),
     text: asString(d.text),
@@ -530,18 +694,11 @@ function extractMime(headers: RawHeader[], body: string): ExtractedMime {
 export function parseRawEmail(raw: string): ParsedInboundEmail {
   const { headerBlock, body } = splitHeadersAndBody(raw)
   const headers = parseRawHeaders(headerBlock)
-  const headerAddresses = (name: string): string[] =>
-    headers
-      .filter((h) => h.name.toLowerCase() === name)
-      .map((h) => h.value)
-      .join(', ')
-      .split(',')
-      .map((a) => a.trim())
-      .filter(Boolean)
   const { text, html, attachments } = extractMime(headers, body)
   return {
-    toAddresses: headerAddresses('to'),
-    ccAddresses: headerAddresses('cc'),
+    toAddresses: headerAddresses(headers, 'to'),
+    ccAddresses: headerAddresses(headers, 'cc'),
+    replyToAddresses: headerAddresses(headers, 'reply-to'),
     // Raw headers, unlike a provider webhook payload, still carry RFC 2047
     // encoded-words for any non-ASCII display name or subject.
     from: decodeEncodedWords(readHeader(headers, 'from')),
@@ -563,7 +720,7 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
  */
 export function isAutoGeneratedEmail(
   parsed: ParsedInboundEmail,
-  ownDomains: ReadonlySet<string> = new Set()
+  ownMessageIdDomains: ReadonlySet<string> = new Set()
 ): boolean {
   // RFC 3834: anything other than "no" marks an auto-generated/auto-replied mail.
   if (parsed.autoSubmitted && parsed.autoSubmitted.trim().toLowerCase() !== 'no') return true
@@ -573,22 +730,89 @@ export function isAutoGeneratedEmail(
   const precedence = parsed.precedence?.trim().toLowerCase()
   if (precedence === 'bulk' || precedence === 'junk' || precedence === 'list') return true
   if (parsed.hasListHeaders) return true
-  if (isMailLoopEmail(parsed, ownDomains)) return true
+  // The Message-ID half of the loop question only: an id we minted is a machine
+  // mail of ours by construction. The reply-address half is deliberately NOT
+  // asked here — it reaches a different disposition (see `mailLoopSignal`) and
+  // the ingest core asks it separately, before this.
+  if (mailLoopSignal(parsed, ownMessageIdDomains) !== null) return true
   return false
 }
 
 /**
- * Mail-loop detection: one of OUR outbound mails echoing back (our own
- * Message-ID domain coming back in). Split from `isAutoGeneratedEmail` because
- * the ingest core treats the two differently — a loop is always a hard drop,
- * while other auto-generated mail may be filed to Spam instead of dropped.
+ * Why a message looks like one of OUR outbound mails coming back.
+ *
+ * Three members, and the vocabulary is one union rather than a boolean because
+ * they are not equally good evidence and the ingest core does not treat them
+ * alike. Two are facts and are dropped; one is our own inference and is
+ * retained.
+ *
+ *   recorded_outbound  the message's own `Message-ID` is a row THIS workspace
+ *                      wrote when its own mail went out. Exact, and the only
+ *                      member that survives a transport which assigns its own
+ *                      ids. Answered by the store, so it is not produced here.
+ *   own_message_id     the id's host is a domain whose mail is this workspace's
+ *                      own (see `ownMessageIdDomains`). The original test, still
+ *                      whole wherever WE mint the id.
+ *   own_reply_to       the message carries a reply address this workspace
+ *                      minted. An INFERENCE: that address rides in a header any
+ *                      sender controls, and everyone we have ever emailed holds
+ *                      one.
  */
-export function isMailLoopEmail(
+export type MailLoopSignal = 'recorded_outbound' | 'own_message_id' | 'own_reply_to'
+
+/**
+ * Mail-loop detection: one of OUR outbound mails echoing back. Split from
+ * `isAutoGeneratedEmail` because the ingest core treats the two differently — a
+ * loop is suppressed outright, while other auto-generated mail may be filed to
+ * Spam instead.
+ *
+ * ## Two signals here, because there are two kinds of transport
+ *
+ * `Message-ID` on a domain of ours answers it wherever WE mint the id: the host
+ * is then a zone we operate, and a stranger's mail does not legitimately carry
+ * one. That is the whole answer on a mail server we hand a message to. The set
+ * handed in must be the domains THIS workspace's own mail is minted on, not
+ * every domain the process receives on — on a shared fleet those are the same
+ * domains for every workspace, and a neighbour's mail read as ours is the same
+ * mistake as the one below, one level in.
+ *
+ * It is no answer at all on a sending provider that assigns the id itself and
+ * replaces ours before signing. The host on the wire is then the PROVIDER's, and
+ * it is the same host for every account on that provider's region. Adding it to
+ * the set of hosts that mean "ours" is the shortcut to refuse: it reads any of
+ * that provider's other customers' mail as our own, converting a loop into
+ * silent mail loss with a far wider blast radius — and it looks like a one-line
+ * fix and passes a test that never puts a stranger's message through it. So on
+ * that transport the question is asked of something we still control: the reply
+ * address we minted and put on the message ourselves, which carries this
+ * workspace's label under an HMAC tag. See `isOwnInboundAddress` in
+ * `conversation.email-channel.ts`.
+ *
+ * ## Which way it fails
+ *
+ * `isOwnInboundAddress` is optional, and absent it means every message answers
+ * "not ours" and is ingested. That is the direction to be wrong in. A missed
+ * loop is a message filed, still bounded by the RFC 3834 / `Precedence` /
+ * `List-*` guards beside it and by the dedupe key below. The same asymmetry
+ * decides the narrow reading of `Reply-To`: a genuine reply is ADDRESSED to an
+ * address we minted, so reading the recipients instead would suppress the entire
+ * inbound channel.
+ *
+ * Reply-To is asked BEFORE the host, so that a message answering both is
+ * reported as the inference and retained. Retention costs a Spam row; the other
+ * order would cost the message.
+ */
+export function mailLoopSignal(
   parsed: ParsedInboundEmail,
-  ownDomains: ReadonlySet<string> = new Set()
-): boolean {
+  ownMessageIdDomains: ReadonlySet<string> = new Set(),
+  isOwnInboundAddress?: (address: string) => boolean
+): MailLoopSignal | null {
+  if (isOwnInboundAddress && parsed.replyToAddresses.some((a) => isOwnInboundAddress(a))) {
+    return 'own_reply_to'
+  }
   const domain = messageIdDomain(parsed.messageId)
-  return domain !== null && ownDomains.has(domain)
+  if (domain !== null && ownMessageIdDomains.has(domain)) return 'own_message_id'
+  return null
 }
 
 // Lines that mark the start of quoted history from common mail clients. These

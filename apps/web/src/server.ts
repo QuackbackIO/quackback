@@ -10,7 +10,7 @@ import { logStartupBanner } from '@/lib/server/startup'
 // so every route 500s forever while the process stays up and keeps dialling.
 assertBootConfigurationOrExit()
 
-// Cold-start optimization: eagerly warm the database connection AND preload
+// Cold-start optimization: eagerly warm the database connections AND preload
 // the modules that bootstrap.ts dynamically imports on first SSR. The
 // underlying TCP+TLS handshakes happen in parallel with Bun's module load
 // + Knative's pod-readiness propagation, so by the time the first request
@@ -24,6 +24,7 @@ if (process.env.QUACKBACK_BUILD !== '1') {
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
+    import('@/lib/server/email/email-log.sink').then((m) => m.ensureEmailLogSink()),
   ]).catch(() => {
     // Pool initialization happens inside getDatabase(); if the
     // first probe fails the next real query will retry from cold.

@@ -32,9 +32,19 @@ async function mailpitUp(): Promise<boolean> {
 }
 const available = await mailpitUp()
 
-/** Deliver through the real SMTP transport and hand back the raw MIME received. */
-async function roundTrip(options: Parameters<typeof sendRawEmail>[0]): Promise<string> {
-  const result = await sendRawEmail(options)
+/**
+ * Deliver through the real SMTP transport and hand back the raw MIME received.
+ *
+ * `from` is widened here rather than at each call. The sender demands a
+ * `SendingIdentity`, which only the send guard mints, and this suite is about
+ * what an MTA does to a message rather than about who is entitled to send it —
+ * so the one cast lives in the harness, where it is visible, instead of being
+ * repeated in every case.
+ */
+async function roundTrip(
+  options: Omit<Parameters<typeof sendRawEmail>[0], 'from'> & { from: string }
+): Promise<string> {
+  const result = await sendRawEmail(options as Parameters<typeof sendRawEmail>[0])
   expect(result.sent).toBe(true)
 
   const deadline = Date.now() + 5000
@@ -51,15 +61,20 @@ async function roundTrip(options: Parameters<typeof sendRawEmail>[0]): Promise<s
 
 describe.skipIf(!available)('inbound parsing of real MTA output (round-trip)', () => {
   const saved: Record<string, string | undefined> = {}
-  const keys = ['EMAIL_SMTP_HOST', 'EMAIL_SMTP_PORT', 'EMAIL_RESEND_API_KEY', 'RESEND_API_KEY']
+  const keys = [
+    'EMAIL_SMTP_HOST',
+    'EMAIL_SMTP_PORT',
+    'EMAIL_SES_ACCESS_KEY_ID',
+    'EMAIL_SES_SECRET_ACCESS_KEY',
+  ]
 
   beforeAll(() => {
     for (const k of keys) saved[k] = process.env[k]
     process.env.EMAIL_SMTP_HOST = 'localhost'
     process.env.EMAIL_SMTP_PORT = '1025'
-    // Resend would otherwise win provider selection.
-    delete process.env.EMAIL_RESEND_API_KEY
-    delete process.env.RESEND_API_KEY
+    // SES would otherwise win provider selection.
+    delete process.env.EMAIL_SES_ACCESS_KEY_ID
+    delete process.env.EMAIL_SES_SECRET_ACCESS_KEY
   })
   afterAll(() => {
     for (const k of keys) {

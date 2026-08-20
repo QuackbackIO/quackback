@@ -57,7 +57,7 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
   const { config } = await import('@/lib/server/config')
   return {
     ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
-    isS3Configured: () => true,
+    isS3Usable: () => true,
     uploadImageBuffer: async (bytes: Buffer, mime: string) => ({
       url: `${config.baseUrl}/api/storage/chat-images/img-${bytes.length}.${mime.split('/')[1]}`,
     }),
@@ -147,6 +147,7 @@ function agentActor(): Actor {
 const coldEmail = (over: Partial<ParsedInboundEmail> = {}): ParsedInboundEmail => ({
   toAddresses: ['support@quackback.io'],
   ccAddresses: [],
+  replyToAddresses: [],
   from: 'customer@acme.com',
   subject: 'Help with billing',
   text: 'My invoice looks wrong.',
@@ -336,6 +337,40 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('open')
     expect(stored?.endReason).toBeNull()
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  // The trust list outranks every FILING path, and that is correct — but a hard
+  // DMARC reject is a REFUSAL, decided before any filing path runs, and the two
+  // must not be confused. Trusting a domain says "mail genuinely from these
+  // people is never spam"; it cannot say "anyone claiming to be these people is
+  // fine", because the whole content of a reject verdict is that we could not
+  // establish the sender is who they claim. Routing the refusal through the
+  // ordinary spam filter would have handed a stranger the open inbox by
+  // spoofing an address the workspace trusts, which is strictly worse than the
+  // destruction this change replaced.
+  it('quarantines a hard DMARC reject even when the spoofed domain is trusted', async () => {
+    await seedWorkspace(['acme.com'])
+    mockChat.mockResolvedValue({ spam: false })
+
+    const res = await ingestParsedEmail(
+      coldEmail({
+        from: 'spoofer@acme.com',
+        authenticationResults: 'mx.quackback.io; dmarc=fail (p=reject) header.from=acme.com',
+      })
+    )
+
+    expect(res.status).toBe('quarantined')
+    if (res.status !== 'quarantined') return
+    const stored = await testDb.query.conversations.findFirst({
+      where: eq(conversations.id, res.conversationId),
+    })
+    expect(stored?.status).toBe('closed')
+    expect(stored?.endReason).toBe('spam')
+    expect(stored?.spamReason).toBe('sender_auth_reject')
+    // Retained AND reviewable: the Spam view is where the agent finds it.
+    await expect(spamViewIds()).resolves.toContain(res.conversationId)
+    await expect(spamViewReason(res.conversationId)).resolves.toBe('sender_auth_reject')
     expect(mockChat).not.toHaveBeenCalled()
   })
 })

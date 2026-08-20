@@ -261,7 +261,7 @@ export function SignInProvidersTab({
           description={
             emailConfigured
               ? 'One-click link or 6-digit code by email.'
-              : 'Configure SMTP or Resend to enable email delivery.'
+              : 'Configure SMTP or Amazon SES to enable email delivery.'
           }
           checked={magicLinkEnabled}
           onCheckedChange={(v) => void saveBuiltin('magicLink', v)}

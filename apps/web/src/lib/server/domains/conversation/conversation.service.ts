@@ -41,6 +41,7 @@ import type {
   TeamId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { channelFromVisitorTransport } from '@/lib/shared/channels'
 import {
   canSendVisitorMessage,
   canStartConversation,
@@ -422,7 +423,7 @@ export async function sendVisitorMessage(
         // mailbox as a side channel and silently drops replies. Bidirectional on
         // purpose: moving back into the widget must restore the presence gate,
         // otherwise they would get an in-app message AND a redundant email.
-        channel: messageMetadata?.source === 'email' ? 'email' : 'messenger',
+        channel: channelFromVisitorTransport(messageMetadata?.source),
       })
       .where(eq(conversations.id, conversation.id))
       .returning()
@@ -457,7 +458,7 @@ export async function sendVisitorMessage(
   // effort (never blocks the send), and runs outside the transaction so a store
   // hiccup can't roll back the visitor's message.
   if (created && txResult.conversation.assignedAgentPrincipalId === null) {
-    await assignRoutedConversation(txResult.conversation)
+    await routeUnassignedConversation(txResult.conversation)
   }
 
   void notifyVisitorMessage({
@@ -929,7 +930,8 @@ export async function setConversationStatus(
   conversationId: ConversationId,
   status: ConversationStatus,
   actor: Actor,
-  attribution?: SystemNoticeAttribution
+  attribution?: SystemNoticeAttribution,
+  lifecycle?: 'closed' | 'auto_closed'
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -980,6 +982,18 @@ export async function setConversationStatus(
   // classification hooks (assistant_closed / handoff). Fire-and-forget: the
   // classifier is flag-gated and never throws on its own, and the extra
   // catch here is defense in depth so a failure can never affect the close.
+  if (status === 'closed' && previous !== 'closed') {
+    void import('@/lib/server/domains/channels')
+      .then(({ requireChannelAdapter }) =>
+        requireChannelAdapter(updated.channel).deliverLifecycleEvent(lifecycle ?? 'closed', {
+          conversationId,
+          closerPrincipalId: actor.principalId,
+        })
+      )
+      .catch((err) => {
+        log.warn({ err, conversationId }, 'conversation close lifecycle delivery failed')
+      })
+  }
   if (status === 'closed' && previous !== 'closed' && actor.principalType === 'user') {
     void classifyConversationAttributes(conversationId, { trigger: 'teammate_close' }).catch(
       (err) => {
@@ -1100,6 +1114,16 @@ export async function endConversation(
   publishConversationUpdate(conversationId, dto)
   if (previous !== 'closed') {
     void emitConversationStatusChanged(actor, updated, previous)
+    void import('@/lib/server/domains/channels')
+      .then(({ requireChannelAdapter }) =>
+        requireChannelAdapter(updated.channel).deliverLifecycleEvent('closed', {
+          conversationId,
+          closerPrincipalId: actor.principalId,
+        })
+      )
+      .catch((err) => {
+        log.warn({ err, conversationId }, 'conversation end lifecycle delivery failed')
+      })
   }
   return dto
 }
@@ -1378,6 +1402,14 @@ async function emitSnoozeSystemMessage(
  * null when routing declines (disabled / nobody active) or the row was claimed
  * concurrently — the caller then leaves it in the unassigned queue.
  */
+/** Best-effort auto-assign for any channel's new-conversation path. */
+export async function routeUnassignedConversation(
+  conversation: Conversation
+): Promise<PrincipalId | null> {
+  if (conversation.assignedAgentPrincipalId) return conversation.assignedAgentPrincipalId
+  return assignRoutedConversation(conversation)
+}
+
 async function assignRoutedConversation(conversation: Conversation): Promise<PrincipalId | null> {
   const { routeConversation } = await import('./routing')
   const { assignedPrincipalId } = await routeConversation(conversation)
@@ -2189,20 +2221,34 @@ export async function executeAssistantHandoff(
   const [updated] = await db
     .update(conversations)
     .set({
-      customAttributes: sql`coalesce(${conversations.customAttributes}, '{}'::jsonb) || jsonb_build_object('assistant_escalation_reason', ${reason}::text)`,
       status: 'open',
       updatedAt: new Date(),
     })
     .where(eq(conversations.id, conversationId))
     .returning()
+  try {
+    const { ensureAssistantEscalationReasonAttribute } =
+      await import('@/lib/server/domains/conversation-attributes/conversation-attribute.service')
+    const { setConversationAttribute } =
+      await import('@/lib/server/domains/conversation-attributes/set-attribute.service')
+    await ensureAssistantEscalationReasonAttribute()
+    await setConversationAttribute({ conversationId }, 'assistant_escalation_reason', reason, 'ai')
+  } catch (err) {
+    log.warn({ err, conversationId }, 'failed to write escalation reason attribute')
+  }
   // A visitor-visible transition marker so the customer clearly sees the shift
   // from Quinn to the human team (localized on the client via systemEvent.kind).
   await emitSystemMessage(conversationId, 'Connecting you to the team', {
     kind: 'assistant_handoff',
   })
-  const assigned = await assignRoutedConversation(updated)
+  // A live assistant.handed_off workflow owns assignment. The deterministic
+  // router stands down so the customer does not see two assignment notices.
+  const { hasLiveWorkflowForTrigger } =
+    await import('@/lib/server/domains/workflows/workflow.service')
+  const routingWorkflowOwnsHandoff = await hasLiveWorkflowForTrigger('assistant.handed_off')
+  const assigned = routingWorkflowOwnsHandoff ? null : await assignRoutedConversation(updated)
   // assignRoutedConversation broadcasts the assigned DTO itself on success; when
-  // routing declines, still surface the updated attributes/status to the inbox.
+  // routing declines (or a workflow owns the handoff), still surface the update.
   if (!assigned) {
     publishConversationUpdate(updated.id, await conversationToDTO(updated, 'agent'))
   }
