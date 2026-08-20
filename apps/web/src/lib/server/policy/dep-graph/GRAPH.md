@@ -25,10 +25,11 @@ Hard rule (test-enforced, not just snapshotted): no package imports app code.
 Top-level directories of src, with lib split one level deeper; root-level files form `(root)`. The components -> lib/server edge is the TanStack Start server-function pattern, recorded as reality.
 
 Nodes (11): (root), components, integrations, lib/client, lib/server, lib/shared, locales, routes, styles, test, types
-Edges (25):
+Edges (26):
 
 - (root) -> components
 - (root) -> lib/server
+- (root) -> routes
 - components -> integrations
 - components -> lib/client
 - components -> lib/server
