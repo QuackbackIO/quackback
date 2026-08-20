@@ -33,6 +33,8 @@ const ROW: {
   revision: string | number
   pg_database_oid: string | number | null
   hostnames: string[]
+  requested_kind?: string
+  redirect_to_hostname?: string | null
 } = {
   workspace_key: 'inst_cloud_ws_t1',
   contract_version: 1,
@@ -55,10 +57,10 @@ const ROW: {
     region: 'auto',
     forcePathStyle: false,
     publicUrl: 'https://ws-t1.quackback.co.uk/api/storage',
-    credentialRef: 'env://QUACKBACK_TENANT_SECRET_INST_CLOUD_WS_T1_STORAGE',
+    credentialRef: 'env://QUACKBACK_TENANT_SECRET_INST_GAUNTLET_WS_T1_STORAGE',
   },
   email_from: 'Quackback Cloud <noreply@notifications.quackback.io>',
-  mail_slug: 'neon-t1',
+  mail_slug: 'ws-t1',
   ai_enabled: false,
   revision: 2,
   pg_database_oid: 4242,
@@ -80,6 +82,32 @@ function assertCarriesNoDsn(value: unknown): void {
 }
 
 describe('interpretRow', () => {
+  it('returns only redirect metadata for an obsolete platform hostname', () => {
+    const result = interpretRow(
+      row({
+        requested_kind: 'platform_redirect',
+        redirect_to_hostname: 'new-name.quackback.co.uk',
+      }),
+      'old-name.quackback.co.uk'
+    )
+    expect(result).toEqual({
+      kind: 'redirect',
+      workspaceKey: 'inst_cloud_ws_t1',
+      hostname: 'old-name.quackback.co.uk',
+      location: 'https://new-name.quackback.co.uk',
+    })
+    assertCarriesNoDsn(result)
+  })
+
+  it('fails closed when a redirect-only hostname has no destination', () => {
+    const result = interpretRow(
+      row({ requested_kind: 'platform_redirect', redirect_to_hostname: null }),
+      'old-name.quackback.co.uk'
+    )
+    expect(result.kind).toBe('invalid')
+    assertCarriesNoDsn(result)
+  })
+
   it('accepts a record whose storage names no credential of its own', () => {
     // The pooled default: one fleet bucket, isolation in the key prefix, so
     // there is no per-workspace credential to name. This must parse as a healthy
@@ -210,7 +238,7 @@ describe('interpretRow', () => {
     const result = interpretRow(row(), 't1.localhost')
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(result.workspace.email.mailSlug).toBe('neon-t1')
+    expect(result.workspace.email.mailSlug).toBe('ws-t1')
   })
 
   it('refuses a row with no mail slug rather than reading one as undefined', () => {
@@ -231,7 +259,7 @@ describe('interpretRow', () => {
     // not get to assume it ran: an over-length or upper-case slug produces a
     // local part a receiving MTA rejects, i.e. mail that silently stops
     // arriving, attributed to anything but the address that caused it.
-    for (const slug of ['NEON-T1', 'neon_t1', 'fourteen-chars', '']) {
+    for (const slug of ['WS-T1', 'ws_t1', 'fourteen-chars', '']) {
       expect(interpretRow(row({ mail_slug: slug }), 't1.localhost').kind).toBe('invalid')
     }
   })
@@ -249,6 +277,8 @@ describe('the projection', () => {
       if (column === 'hostnames') continue
       // Cast to text, so it is selected under an alias rather than bare.
       if (column === 'state') continue
+      // Added by the hostname-specific query, not the shared registry projection.
+      if (column === 'requested_kind' || column === 'redirect_to_hostname') continue
       expect(SELECT_COLUMNS).toContain(`r.${column}`)
     }
     expect(SELECT_COLUMNS).toContain('r.state::text AS state')

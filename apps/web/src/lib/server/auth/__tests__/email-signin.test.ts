@@ -8,18 +8,28 @@ const hoisted = vi.hoisted(() => ({
     // than the request string, so the mock has to carry it.
     sealedAddress: opts.email,
   })),
-  mockSendVerificationOTP: vi.fn(async () => undefined),
+  // The path-less mint returns the code to its caller rather than routing it
+  // through the plugin's send callback, so the double returns one too.
+  mockCreateVerificationOTP: vi.fn(async () => '123456'),
   mockSendMagicLinkEmail: vi.fn(async () => undefined),
-  mockGetOTP: vi.fn(() => '123456'),
 }))
 
 vi.mock('../magic-link-mint', () => ({ mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl }))
 
+// This suite is about which failed-verify URL the mint is asked for, so the
+// signup gate in front of it is opened rather than exercised. Spread the real
+// module so `SignupNotAllowedError` stays the real class for anyone catching it.
+// `email-signin-signup-gate.test.ts` drives the gate for real, against the real
+// mint — a mocked mint cannot see the row it writes.
+vi.mock('../signup-policy', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../signup-policy')>()),
+  isAccountCreationAllowed: vi.fn(async () => true),
+}))
+
 vi.mock('../index', () => ({
   getAuth: vi.fn(async () => ({
-    api: { sendVerificationOTP: hoisted.mockSendVerificationOTP },
+    api: { createVerificationOTP: hoisted.mockCreateVerificationOTP },
   })),
-  getOTP: hoisted.mockGetOTP,
 }))
 
 vi.mock('@/lib/server/db', () => ({
@@ -29,6 +39,9 @@ vi.mock('@/lib/server/db', () => ({
 vi.mock('@quackback/email', () => ({
   isEmailConfigured: () => true,
   sendMagicLinkEmail: hoisted.mockSendMagicLinkEmail,
+  // Present so the module destructure resolves; this suite opens the gate, so
+  // the refusal branch is never taken and this is never called.
+  sendSignupNotAllowedEmail: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({ getEmailSafeUrl: () => null }))

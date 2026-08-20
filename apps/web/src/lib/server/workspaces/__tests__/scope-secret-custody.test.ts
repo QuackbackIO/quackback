@@ -138,9 +138,7 @@ describe('the storage-credential consumer still works', () => {
     // The failure that matters is not "throws" — `s3.ts` turns this into a 503 —
     // it is that the operator-readable reason survives and no credential does.
     expect(
-      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), {
-        secrets: NO_STORAGE,
-      })
+      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), { secrets: NO_STORAGE })
     ).toEqual({ ok: false, problem: NO_STORAGE.storageProblem })
   })
 
@@ -167,9 +165,7 @@ describe('the storage-credential consumer still works', () => {
     // workspace whose reference failed would be served the fleet credential.
     expect(getWorkspaceStorageCredential()).toBeNull()
     expect(
-      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), {
-        secrets: NO_STORAGE,
-      })
+      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), { secrets: NO_STORAGE })
     ).not.toBeNull()
   })
 
@@ -227,9 +223,9 @@ describe('neither accessor is a complete addressing capability on its own', () =
     const bucket = withWorkspace('workspace-alpha', () => getCurrentWorkspace()?.storage.bucket)
 
     expect(bucket).toBe(ALPHA_BUCKET)
-    expect(
-      reachableStrings(withWorkspace('workspace-alpha', () => getCurrentWorkspace()))
-    ).not.toContain(ALPHA_STORAGE.secretAccessKey)
+    expect(reachableStrings(withWorkspace('workspace-alpha', () => getCurrentWorkspace()))).not.toContain(
+      ALPHA_STORAGE.secretAccessKey
+    )
   })
 })
 
@@ -359,9 +355,7 @@ describe('a scope cannot exist without its SECRET_KEY having resolved', () => {
       origin: 'test',
     } as never
 
-    expect(() => runWithWorkspaceScope(literal, () => 'ran')).toThrow(
-      WorkspaceScopeSecretsMissingError
-    )
+    expect(() => runWithWorkspaceScope(literal, () => 'ran')).toThrow(WorkspaceScopeSecretsMissingError)
   })
 
   it('throws rather than reading the fleet key for a scope planted onto the store', () => {

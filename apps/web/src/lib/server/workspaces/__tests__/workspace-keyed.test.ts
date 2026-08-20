@@ -4,9 +4,8 @@
  * It had no direct tests, and that is exactly how `workspaceKeys()` shipped dead:
  * `compose()` and `clearWorkspace()` composed with a NUL separator while
  * `workspaceKeys()` composed with a space, so it matched nothing and always
- * returned `[]`. Its only caller is the relay's retry-ledger prune, whose
- * failure mode is silent (memory, not behaviour) — and the test written to
- * cover it asserted a negative that held either way.
+ * returned `[]`. The failure mode is silent (memory, not behaviour) — and
+ * the test written to cover it asserted a negative that held either way.
  *
  * The separator now lives in one place, but a shared constant is a convention
  * and this file is the check. Every method that composes a key is exercised
@@ -41,7 +40,7 @@ describe('the methods that compose a key agree with each other', () => {
   })
 
   it('a key listed by workspaceKeys() can be deleted with delete()', () => {
-    // The exact round trip the relay's prune performs. With the two methods
+    // The exact round trip a keyed prune performs. With the two methods
     // composing differently this returned nothing to delete, so the ledger
     // never pruned while rows remained.
     const c = new WorkspaceKeyedCache<number>()
