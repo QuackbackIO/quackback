@@ -128,7 +128,7 @@ export interface RunMigrationsOptions {
    * the table lock it needs **fails fast instead of waiting**. Unset means no
    * timeout, which is the historical behaviour and what the boot path keeps.
    *
-   * The hazard is specific and was hit against the live fleet. `0253_job_queue`
+   * The hazard is specific and was hit against the live fleet. `0250_job_queue`
    * contains `DROP TRIGGER IF EXISTS job_queue_wake_trg ON job_queue`, which
    * needs ACCESS EXCLUSIVE on `job_queue` — a table the worker tier's poller
    * holds ROW EXCLUSIVE on continuously. The migration transaction has already

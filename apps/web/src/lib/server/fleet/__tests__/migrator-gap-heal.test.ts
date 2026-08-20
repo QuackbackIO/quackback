@@ -4,16 +4,12 @@
  * `migrator-gate.test.ts` decides *whether* a hole may be closed; nothing pure
  * can establish that closing it works, because the claim is about what Drizzle's
  * migrator does with a `drizzle.__drizzle_migrations` table it did not expect —
- * and that is a property of the driver and of these 233 SQL files, not of our
+ * and that is a property of the driver and of these 234 SQL files, not of our
  * arithmetic about them.
  *
- * The state under test is one that happened. Two live workspaces had a high-water
- * mark at `0253` with rows absent for `0249`, `0250`, `0252`, `0256` and `0257`,
- * `settings.cloud` physically missing, and every page returning 500 — while the
- * reconciler reported `OK [reconciled] post=true` and the post-condition check
- * reported `ok=true`. Both instruments agreed the workspace was fine. The fixtures
- * below reproduce that ledger exactly and assert that neither instrument says so
- * any more.
+ * The state under test has a high-water mark at `0252`, the `0250` row absent,
+ * and the forward tail withheld. It reproduces the ledger shape that once let a
+ * reconciler report success while skipping a hole below the high-water mark.
  *
  * ## Method
  *
@@ -197,12 +193,12 @@ afterEach(() => {
 describe('a hole the whole of which is replay-safe', () => {
   it('is healed, and the rows that come back are written by drizzle', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0250', '0253', '0254', '0255', '0256')
 
     const before = await ledgerOf(db)
     // The instrument that could not see this, kept as the control: it reports a
-    // two-migration tail on a ledger that is missing seven.
-    expect(replaySetFor(before)).toHaveLength(2)
+    // four-migration tail on a ledger that also has a hole beneath its mark.
+    expect(replaySetFor(before)).toHaveLength(4)
     expect(planFor(before).tags).toHaveLength(7)
     const digestBefore = await catalogueDigest(db)
 
@@ -210,11 +206,7 @@ describe('a hole the whole of which is replay-safe', () => {
 
     expect(result.ok).toBe(true)
     expect(result.code).toBe('healed_ledger_gap')
-    expect(result.gap!.missing).toEqual([
-      '0249_settings_cloud',
-      '0250_billing',
-      '0252_settings_cloud_secret_canary',
-    ])
+    expect(result.gap!.missing).toEqual(['0250_job_queue'])
     // Seven executed, not two — and the ledger ends complete.
     expect(result.replaySet).toHaveLength(7)
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
@@ -231,12 +223,12 @@ describe('a hole the whole of which is replay-safe', () => {
     // "this database was wrong" has to be distinguishable from one that means
     // "this database was behind".
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0250', '0253', '0254', '0255', '0256')
     const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).not.toBe('reconciled')
     expect(result.code).not.toBe('already_current')
     expect(result.detail).toContain('healed a ledger gap')
-    expect(result.detail).toContain('0249_settings_cloud')
+    expect(result.detail).toContain('0250_job_queue')
   }, 120_000)
 })
 
@@ -247,7 +239,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
     // nothing repaired, with the post-condition verdict green beside it. The
     // truncation still really happens, so the ledger the check reads is real.
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0250', '0253', '0254', '0255', '0256')
     executor.pretendItRan = true
 
     const result = await migrateWorkspace(workspaceOn(db))
@@ -255,7 +247,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('migration_failed')
     expect(result.detail).toContain('the ledger does not record 7 of the 7')
-    expect(result.detail).toContain('0249_settings_cloud')
+    expect(result.detail).toContain('0250_job_queue')
     // Green post-conditions do not rescue it. That combination — a passing
     // catalogue verdict over an unapplied plan — is the exact false green.
     expect(result.postconditions!.ok).toBe(true)
@@ -263,7 +255,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
 
   it('is not a check that cannot fail: the same run un-stubbed reports the heal', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0249', '0250', '0252', '0256', '0257')
+    await dropLedgerRows(db, '0250', '0253', '0254', '0255', '0256')
     const result = await migrateWorkspace(workspaceOn(db))
     expect(result.code).toBe('healed_ledger_gap')
   }, 120_000)
@@ -329,7 +321,7 @@ describe('a hole that must not be healed', () => {
 describe('the ledgers that are not holes — the controls', () => {
   it('a contiguous ledger behind the tip migrates exactly as it did before', async () => {
     const db = await scratch()
-    await dropLedgerRows(db, '0256', '0257')
+    await dropLedgerRows(db, '0255', '0256')
 
     const result = await migrateWorkspace(workspaceOn(db))
 
@@ -338,7 +330,10 @@ describe('the ledgers that are not holes — the controls', () => {
     // rollout path untouched.
     expect(result.code).toBe('reconciled')
     expect(result.gap).toBeNull()
-    expect(result.replaySet).toEqual(['0256_outbox_relay_leader', '0257_pg_kv_presence_realtime'])
+    expect(result.replaySet).toEqual([
+      '0255_settings_cloud_tenant_id',
+      '0256_workspace_key_columns',
+    ])
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
   }, 120_000)
 
@@ -390,20 +385,20 @@ describe('the ledgers that are not holes — the controls', () => {
 
 describe('what the post-condition check can now see', () => {
   it('reports a declared column the database does not have', async () => {
-    // The live symptom, reproduced: `settings.cloud` absent, ledger complete.
+    // The symptom, reproduced: a declared scope column absent, ledger complete.
     // Before this check, `verifySchemaPostconditions` returned ok=true for it.
     const db = await scratch()
     const clean = await withSql(db, (sql) => verifySchemaPostconditions(sql))
     expect(clean.ok).toBe(true)
     expect(clean.observed.missingColumns).toEqual([])
 
-    await withSql(db, (sql) => sql.unsafe(`ALTER TABLE settings DROP COLUMN cloud`))
+    await withSql(db, (sql) => sql.unsafe(`ALTER TABLE job_queue DROP COLUMN workspace_key`))
     const report = await withSql(db, (sql) => verifySchemaPostconditions(sql))
 
     expect(report.ok).toBe(false)
-    expect(report.observed.missingColumns).toEqual(['public.settings.cloud'])
+    expect(report.observed.missingColumns).toEqual(['public.job_queue.workspace_key'])
     expect(report.violations.find((v) => v.kind === 'missing_column')!.detail).toContain(
-      'public.settings.cloud'
+      'public.job_queue.workspace_key'
     )
     // The control that makes the finding attributable: the checks that existed
     // before are unmoved by a dropped column, which is exactly why they reported
@@ -415,7 +410,7 @@ describe('what the post-condition check can now see', () => {
 
   it('refuses the workspace whose ledger is complete and whose schema is not', async () => {
     const db = await scratch()
-    await withSql(db, (sql) => sql.unsafe(`ALTER TABLE settings DROP COLUMN cloud`))
+    await withSql(db, (sql) => sql.unsafe(`ALTER TABLE job_queue DROP COLUMN workspace_key`))
 
     const result = await migrateWorkspace(workspaceOn(db))
 
@@ -423,21 +418,21 @@ describe('what the post-condition check can now see', () => {
     // catalogue does, and it is now the one that decides.
     expect(result.ok).toBe(false)
     expect(result.code).toBe('postconditions_violated')
-    expect(result.detail).toContain('settings.cloud')
+    expect(result.detail).toContain('job_queue.workspace_key')
   }, 120_000)
 })
 
-describe('the lock a replay of 0253 has to take', () => {
+describe('the lock a replay of 0250 has to take', () => {
   /**
-   * `0253_job_queue` builds indexes on `job_queue` and replaces its wake
+   * `0250_job_queue` builds indexes on `job_queue` and replaces its wake
    * trigger, and both want a lock that conflicts with the ROW EXCLUSIVE the job
    * poller holds while it claims work. On a fresh rollout the table does not
    * exist yet so nothing contends; on a *replay* — which is what healing a hole
-   * spanning 0253 does — the workspace's worker tier is live. Measured against the
+   * spanning 0250 does — the workspace's worker tier is live. Measured against the
    * fleet, that pair does not queue politely.
    */
-  async function replayFrom0253(db: string, lockTimeoutMs?: number) {
-    await withSql(db, (sql) => truncateAppliedLedger(sql, whenOf('0253')))
+  async function replayFrom0250(db: string, lockTimeoutMs?: number) {
+    await withSql(db, (sql) => truncateAppliedLedger(sql, whenOf('0250')))
     return runMigrations(dsnFor(db), {
       concurrentIndexes: false,
       seed: false,
@@ -456,7 +451,7 @@ describe('the lock a replay of 0253 has to take', () => {
       // The control. The wait is unbounded, so "still pending" after a second is
       // not a race — it can only fail if the locks do not actually conflict.
       let settled = false
-      const pending = replayFrom0253(db).then(
+      const pending = replayFrom0250(db).then(
         () => (settled = true),
         () => (settled = true)
       )
@@ -477,7 +472,7 @@ describe('the lock a replay of 0253 has to take', () => {
       await holder.unsafe(`BEGIN`)
       await holder.unsafe(`LOCK TABLE job_queue IN ROW EXCLUSIVE MODE`)
       const started = Date.now()
-      const err = await replayFrom0253(db, 500).then(
+      const err = await replayFrom0250(db, 500).then(
         () => null,
         (e: Error) => e
       )
@@ -489,8 +484,8 @@ describe('the lock a replay of 0253 has to take', () => {
       // The lineage is one transaction, so the aborted run changed nothing and
       // the ledger is still merely under-claiming — the recoverable direction.
       const after = await ledgerOf(db)
-      expect(after.max).toBeLessThan(whenOf('0253'))
-      expect(after.versions.has(whenOf('0253'))).toBe(false)
+      expect(after.max).toBeLessThan(whenOf('0250'))
+      expect(after.versions.has(whenOf('0250'))).toBe(false)
     } finally {
       await holder.unsafe(`ROLLBACK`).catch(() => {})
       await holder.end({ timeout: 5 }).catch(() => {})

@@ -26,7 +26,7 @@ const URL =
 
 const MIGRATION = path.resolve(
   __dirname,
-  '../../../../../../../packages/db/drizzle/0253_job_queue.sql'
+  '../../../../../../../packages/db/drizzle/0250_job_queue.sql'
 )
 
 let sqlHandle: postgres.Sql | null = null

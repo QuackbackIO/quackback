@@ -141,7 +141,7 @@ The reconciler refuses a workspace whose replay set contains a `mutates` migrati
 **and whose ledger is non-empty** — a fresh database has nothing to replay, only
 to apply. The refusal names the file, the statement and the repair.
 
-**`0251_settings_cloud_tenant_id` is `safe`**, which is what makes this fleet
+**`0255_settings_cloud_tenant_id` is `safe`**, which is what makes this fleet
 healable. Its two statements are `ADD COLUMN IF NOT EXISTS` and `COMMENT ON`;
 neither touches a value. Established statically _and_ empirically — see §5.
 
@@ -296,7 +296,7 @@ The two verdicts side by side, on that database:
 
 ```
 THE LEDGER SAYS:     {"upToDate":true,"bundledCount":228,"appliedCount":228}
-  floor at 0253:     {"ok":true,"missing":[],"floorTag":"0253_job_queue"}
+  floor at 0253:     {"ok":true,"missing":[],"floorTag":"0250_job_queue"}
 THE CATALOGUE SAYS:  ok=false
   VIOLATION [invalid_index] public.posts_embedding_hnsw_idx on posts is INVALID (indisready=true)
   VIOLATION [missing_index] kb_articles_embedding_hnsw_idx does not exist
@@ -450,7 +450,7 @@ data, the column's shape, the column's comment and the stamp itself.
 
 ```
 BEFORE   digest D0                     stamp = inst_gauntlet_neon_t1
-psql -f 0251_settings_cloud_tenant_id.sql
+psql -f 0255_settings_cloud_tenant_id.sql
          NOTICE: column "cloud_workspace_key" of relation "settings" already exists, skipping
 AFTER    digest D0   ← unchanged       stamp = inst_gauntlet_neon_t1
 ```
@@ -637,7 +637,7 @@ pooled web tier, whose whole cost model depends on going silent.
 one below was not, and it is the difference that matters.
 
 A workspace being reconciled has a **live worker tier**. Its job poller holds ROW
-EXCLUSIVE on `job_queue` more or less continuously, and `0253_job_queue` both
+EXCLUSIVE on `job_queue` more or less continuously, and `0250_job_queue` both
 builds indexes on that table (SHARE) and replaces its wake trigger (`DROP
 TRIGGER IF EXISTS job_queue_wake_trg` / `CREATE TRIGGER`, SHARE ROW EXCLUSIVE).
 Both conflict with ROW EXCLUSIVE. On a fresh rollout nothing contends, because

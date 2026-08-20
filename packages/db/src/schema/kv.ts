@@ -6,7 +6,7 @@
  * successor of the `t:<workspaceKey>:` prefix `tenancy/workspace-keyed.ts` puts on
  * every Redis key: the same discriminator, moved from a string prefix into a
  * key column. Under pooled tenancy the row also sits in the workspace's own
- * database, so the boundary is stated twice — see `0257_pg_kv_presence_realtime.sql`
+ * database, so the boundary is stated twice — see `0251_pg_kv_presence_realtime.sql`
  * for why that redundancy is deliberate rather than belt-and-braces.
  *
  * The statements that read these tables live in `apps/web/src/lib/server/kv/`

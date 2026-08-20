@@ -35,7 +35,7 @@ const URL =
 
 const MIGRATION = path.resolve(
   __dirname,
-  '../../../../../../../packages/db/drizzle/0257_pg_kv_presence_realtime.sql'
+  '../../../../../../../packages/db/drizzle/0251_pg_kv_presence_realtime.sql'
 )
 
 let sqlHandle: postgres.Sql | null = null

@@ -39,18 +39,46 @@ const ALL_WHEN = BUNDLED_MIGRATIONS.map((e) => e.when)
 const whenOf = (prefix: string) =>
   BUNDLED_MIGRATIONS.find((e) => e.tag.startsWith(`${prefix}_`))!.when
 
+/** Full tag for a `0NNN` prefix. */
+const tagOf = (prefix: string) =>
+  BUNDLED_MIGRATIONS.find((e) => e.tag.startsWith(`${prefix}_`))!.tag
+
+/** Bundled tags strictly above a high-water mark: the forward rollout tail. */
+const tagsAbove = (mark: number) =>
+  BUNDLED_MIGRATIONS.filter((e) => e.when > mark).map((e) => e.tag)
+
+/** Bundled tags from `from` to the tip, inclusive: a contiguous replay span. */
+const tagsFrom = (from: number) =>
+  BUNDLED_MIGRATIONS.filter((e) => e.when >= from).map((e) => e.tag)
+
 /** A complete ledger with these migrations' rows removed — what `psql -f` drift looks like. */
 const withoutRows = (...prefixes: string[]) => {
   const removed = new Set(prefixes.map(whenOf))
   return ALL_WHEN.filter((v) => !removed.has(v))
 }
 
+/** A representative row physically absent below the mark: the hole itself. */
+const REPRESENTATIVE_HOLE = ['0250']
+
+/** A later applied row that makes the missing row invisible to drizzle. */
+const REPRESENTATIVE_MARK = whenOf('0252')
+
 /**
- * The shape measured on two live workspaces: a high-water mark at `0253` with rows
- * absent for `0249`, `0250`, `0252`, `0256` and `0257`, while the database
- * physically carried some of them and was serving 500s.
+ * A high-water mark at `0252` with the `0250` row absent, while the database
+ * physically carries the migration's effects.
+ *
+ * Everything above the mark is withheld, because the measurement is a hole
+ * *below* a mark with an ordinary rollout tail *above* it. That tail is derived
+ * from the journal rather than listed, and it has to be: a newer migration
+ * whose row this fixture kept would move the mark past the tail, turning the
+ * tail into part of the hole and quietly replacing the measured shape with a
+ * different one that happens to still parse. Listing it by tag meant every
+ * migration added after this was written silently re-shaped the fixture.
  */
-const MEASURED_DRIFT = withoutRows('0249', '0250', '0252', '0256', '0257')
+const REPRESENTATIVE_DRIFT = (() => {
+  const holes = new Set(REPRESENTATIVE_HOLE.map(whenOf))
+  return ALL_WHEN.filter((v) => v <= REPRESENTATIVE_MARK && !holes.has(v))
+})()
 
 describe('replaySetFor', () => {
   it('is everything on a database that has never been migrated', () => {
@@ -111,21 +139,20 @@ describe('ledgerGapFor', () => {
     expect(ledgerGapFor(ledger([...ALL_WHEN, latestBundledVersion() + 1_000]))).toBeNull()
   })
 
-  it('finds the fleet’s measured hole, and does not mistake the forward tail for it', () => {
-    const gap = ledgerGapFor(ledger(MEASURED_DRIFT))
+  it('finds a ledger hole, and does not mistake the forward tail for it', () => {
+    const gap = ledgerGapFor(ledger(REPRESENTATIVE_DRIFT))
     expect(gap).not.toBeNull()
-    // 0256 and 0257 are ABOVE the high-water mark, so they are an ordinary
+    // 0253 and later are ABOVE the high-water mark, so they are an ordinary
     // rollout tail rather than part of the hole. Only what is missing from the
     // prefix this ledger claims to have completed counts.
-    expect(gap!.missing).toEqual([
-      '0249_settings_cloud',
-      '0250_billing',
-      '0252_settings_cloud_secret_canary',
-    ])
-    expect(gap!.from).toBe(whenOf('0249'))
+    expect(gap!.missing).toEqual(['0250_job_queue'])
+    expect(gap!.from).toBe(whenOf('0250'))
     // The rows the truncation withdraws: applied, at or above the truncation
     // point, and bundled here so drizzle can write them back.
-    expect(gap!.rewrites).toEqual(['0251_settings_cloud_tenant_id', '0253_job_queue'])
+    expect(gap!.rewrites).toEqual([
+      '0251_pg_kv_presence_realtime',
+      '0252_conversation_spam_retention_idx',
+    ])
     expect(gap!.unrewritable).toEqual([])
   })
 
@@ -137,24 +164,25 @@ describe('ledgerGapFor', () => {
 })
 
 describe('planFor', () => {
-  it('reports seven where the high-water mark reports two', () => {
+  it('reports the complete repair where the high-water mark reports only the tail', () => {
     // The whole defect in one assertion. `replaySetFor` answers a question about
     // drizzle's high-water mark; on this ledger that answer reads as "nearly
     // current" at the moment the database is least current.
-    const applied = ledger(MEASURED_DRIFT)
-    expect(replaySetFor(applied)).toEqual([
-      '0256_outbox_relay_leader',
-      '0257_pg_kv_presence_realtime',
-    ])
-    expect(planFor(applied).tags).toEqual([
-      '0249_settings_cloud',
-      '0250_billing',
-      '0251_settings_cloud_tenant_id',
-      '0252_settings_cloud_secret_canary',
-      '0253_job_queue',
-      '0256_outbox_relay_leader',
-      '0257_pg_kv_presence_realtime',
-    ])
+    const applied = ledger(REPRESENTATIVE_DRIFT)
+    const replay = replaySetFor(applied)
+    const plan = planFor(applied).tags
+
+    // Drizzle's answer is the tail above the mark, and nothing else.
+    expect(replay).toEqual(tagsAbove(REPRESENTATIVE_MARK))
+    // It contains none of the hole. That omission is the entire defect: the
+    // rows the database is actually missing are the ones it will never revisit.
+    for (const prefix of REPRESENTATIVE_HOLE) expect(replay).not.toContain(tagOf(prefix))
+
+    // The plan spans from the earliest missing entry to the tip, so it covers
+    // the hole as well as the tail, and is therefore strictly the larger set.
+    expect(plan).toEqual(tagsFrom(whenOf(REPRESENTATIVE_HOLE[0]!)))
+    for (const prefix of REPRESENTATIVE_HOLE) expect(plan).toContain(tagOf(prefix))
+    expect(plan.length).toBeGreaterThan(replay.length)
   })
 
   it('is exactly replaySetFor whenever the ledger has no hole — the control', () => {
@@ -179,7 +207,7 @@ describe('planFor', () => {
     // `from`, the new high-water mark is the largest applied value below `from`,
     // and every bundled entry below `from` is in the ledger — so what drizzle
     // then applies is precisely the bundled entries at or above `from`.
-    const applied = ledger(MEASURED_DRIFT)
+    const applied = ledger(REPRESENTATIVE_DRIFT)
     const { gap, tags } = planFor(applied)
     const below = BUNDLED_MIGRATIONS.filter((e) => e.when < gap!.from)
     expect(below.every((e) => applied.versions.has(e.when))).toBe(true)
@@ -194,8 +222,8 @@ describe('gapHealVerdict', () => {
     return gapHealVerdict(gap!, verdictsFor(tags))
   }
 
-  it('heals the fleet’s measured hole — every migration it replays is a no-op', () => {
-    expect(verdictFor(MEASURED_DRIFT)).toEqual({ ok: true })
+  it('heals the representative hole — every migration it replays is a no-op', () => {
+    expect(verdictFor(REPRESENTATIVE_DRIFT)).toEqual({ ok: true })
   })
 
   it('refuses when a row it would delete records a migration that is not a no-op', () => {
@@ -266,6 +294,7 @@ describe('replayGateVerdict', () => {
     // what lies between is plain DDL that would error on a second run, and
     // migrate()'s transaction bounds that. A gate that refused it would refuse
     // every rollout this system exists to perform.
+    //
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
     const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
     const tags = replaySetFor(before)
@@ -275,23 +304,21 @@ describe('replayGateVerdict', () => {
     expect(replayGateVerdict(before, verdicts, false)).toEqual({ ok: true })
   })
 
-  it('this fleet’s actual drift — a ledger at 0248 carrying everything since — passes the gate', () => {
-    // Five live gauntlet workspace databases are in exactly this state, because
-    // every builder applied with `psql -f`, which never writes the ledger. The
-    // window grows with every migration the branch adds, and it is listed
-    // rather than derived on purpose: if one of these ever stops being
-    // replay-safe, healing those databases stops being free and this is where
-    // that is noticed.
+  it('this phase’s post-0248 migration span passes the replay gate', () => {
+    // The current span is listed deliberately: a newly mutating migration must
+    // turn this test red so the operator path is documented in the phase that
+    // introduces it.
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
     const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
     expect(replaySetFor(before)).toEqual([
-      '0249_settings_cloud',
-      '0250_billing',
-      '0251_settings_cloud_tenant_id',
-      '0252_settings_cloud_secret_canary',
-      '0253_job_queue',
-      '0256_outbox_relay_leader',
-      '0257_pg_kv_presence_realtime',
+      '0249_identity_provider_last_test_capture',
+      '0250_job_queue',
+      '0251_pg_kv_presence_realtime',
+      '0252_conversation_spam_retention_idx',
+      '0253_event_dispatch_owner',
+      '0254_event_dispatch_owner_default_job',
+      '0255_settings_cloud_tenant_id',
+      '0256_workspace_key_columns',
     ])
     expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)).toEqual({
       ok: true,

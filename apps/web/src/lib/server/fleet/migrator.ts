@@ -167,7 +167,7 @@ export interface MigrateWorkspaceOptions {
  * How long the lineage will wait for a table lock before giving up.
  *
  * Set here rather than left off, because the migrator runs against workspaces whose
- * worker tier is live. `0253_job_queue` needs ACCESS EXCLUSIVE on `job_queue` to
+ * worker tier is live. `0250_job_queue` needs ACCESS EXCLUSIVE on `job_queue` to
  * replace its wake trigger, and the job poller holds ROW EXCLUSIVE on that table
  * more or less continuously — measured against the live fleet, that pair
  * deadlocks rather than queues, because the migration transaction is upgrading a

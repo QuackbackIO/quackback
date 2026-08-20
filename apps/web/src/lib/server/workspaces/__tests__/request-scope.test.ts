@@ -138,7 +138,7 @@ describe('resolveWorkspaceAndContinue', () => {
       kind: 'refused',
       workspaceKey: 'inst_a',
       code: 'schema_below_floor',
-      detail: 'missing 1 migration(s): 0251_settings_cloud_tenant_id',
+      detail: 'missing 1 migration(s): 0255_settings_cloud_tenant_id',
     })
     const res = (await serve('t1.localhost')) as Response
     expect(res.status).toBe(503)
@@ -146,7 +146,7 @@ describe('resolveWorkspaceAndContinue', () => {
     const body = await res.text()
     expect(body).toContain('being updated')
     // Still no operator detail to the visitor.
-    expect(body).not.toContain('0251_settings_cloud_tenant_id')
+    expect(body).not.toContain('0255_settings_cloud_tenant_id')
     // Warn, not error: this is expected during a rollout.
     expect(silentLog.warn).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'schema_below_floor' }),

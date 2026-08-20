@@ -51,6 +51,8 @@ export default defineConfig({
         __dirname,
         './packages/db/src/schema-version.ts'
       ),
+      '@quackback/db/schema-ops': path.resolve(__dirname, './packages/db/src/schema-ops.ts'),
+      '@quackback/db/migrate': path.resolve(__dirname, './packages/db/src/migrate-runtime.ts'),
       '@quackback/db/schema': path.resolve(__dirname, './packages/db/src/schema/index.ts'),
       '@quackback/db/types': path.resolve(__dirname, './packages/db/src/types.ts'),
       '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),

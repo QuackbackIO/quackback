@@ -15,7 +15,8 @@
     "./queries/public": "./src/queries/public.ts",
     "./types": "./src/types.ts",
     "./drizzle/*": "./drizzle/*",
-    "./schema-version": "./src/schema-version.ts"
+    "./schema-version": "./src/schema-version.ts",
+    "./schema-ops": "./src/schema-ops.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
@@ -31,14 +32,14 @@
   "dependencies": {
     "@quackback/ids": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "postgres": "^3.4.8"
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
-    "@faker-js/faker": "^10.4.0",
+    "@faker-js/faker": "^10.6.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/bun": "^1.4.0",
     "bcryptjs": "^3.0.3",
-    "dotenv": "^17.4.0",
+    "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10"
   }
 }

@@ -146,11 +146,11 @@ describe('WorkspaceSchemaFloorRefusal', () => {
   it('carries a code distinct from a fingerprint refusal, and names what is missing', () => {
     const err = new WorkspaceSchemaFloorRefusal('inst_x', {
       ok: false,
-      missing: ['0251_settings_cloud_tenant_id'],
-      floorTag: '0251_settings_cloud_tenant_id',
+      missing: ['0255_settings_cloud_tenant_id'],
+      floorTag: '0255_settings_cloud_tenant_id',
     })
     expect(err.code).toBe('schema_below_floor')
-    expect(err.message).toContain('0251_settings_cloud_tenant_id')
+    expect(err.message).toContain('0255_settings_cloud_tenant_id')
     // A fingerprint refusal means "wrong database" and is a security event; this
     // means "right database, mid-rollout". The strings must not be confusable.
     expect(err.message).not.toContain('self_reported_workspace_id_mismatch')

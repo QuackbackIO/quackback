@@ -22,7 +22,7 @@
  * that built the `t:<workspaceKey>:` prefix on the Redis wire key, so the
  * discriminator is not merely equivalent — it is the same value, moved from a
  * string prefix into a key column. Under pooled tenancy the row is additionally
- * in the workspace's own database. See `0257_pg_kv_presence_realtime.sql`.
+ * in the workspace's own database. See `0251_pg_kv_presence_realtime.sql`.
  *
  * ## Expiry
  *
