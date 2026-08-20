@@ -773,12 +773,6 @@ const messengerConfigInputSchema = z.object({
         .length(7),
     })
     .optional(),
-  routing: z
-    .object({
-      enabled: z.boolean(),
-      strategy: z.literal('auto_assign_active'),
-    })
-    .optional(),
 })
 
 // heroImageKey is intentionally absent: the hero image is written only via
@@ -903,6 +897,48 @@ export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(asyn
   return await getOfficeHoursSchedule()
 })
 
+const conversationRoutingSchema = z.object({
+  enabled: z.boolean(),
+  strategy: z.literal('auto_assign_active'),
+})
+
+export const fetchConversationRoutingFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch conversation routing')
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { getConversationRouting } =
+    await import('@/lib/server/domains/settings/settings.conversation-routing')
+  return await getConversationRouting()
+})
+
+export const updateConversationRoutingFn = createServerFn({ method: 'POST' })
+  .validator(conversationRoutingSchema)
+  .handler(async ({ data }) => {
+    log.info({ enabled: data.enabled }, 'update conversation routing')
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { updateConversationRouting } =
+      await import('@/lib/server/domains/settings/settings.conversation-routing')
+    return await updateConversationRouting(data)
+  })
+
+const emailAutoAckSchema = z.object({ enabled: z.boolean() })
+
+export const fetchEmailAutoAckFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch email auto-ack')
+  await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+  const { getEmailAutoAck } = await import('@/lib/server/domains/settings/settings.email-auto-ack')
+  return await getEmailAutoAck()
+})
+
+export const updateEmailAutoAckFn = createServerFn({ method: 'POST' })
+  .validator(emailAutoAckSchema)
+  .handler(async ({ data }) => {
+    log.info({ enabled: data.enabled }, 'update email auto-ack')
+    await requireAuth({ permission: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE })
+    const { updateEmailAutoAck } =
+      await import('@/lib/server/domains/settings/settings.email-auto-ack')
+    return await updateEmailAutoAck(data)
+  })
+
 export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
   .validator(officeHoursScheduleSchema)
   .handler(async ({ data }) => {
@@ -1008,13 +1044,16 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
   log.debug('get email channel status')
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
   const { getEmailProvider } = await import('@quackback/email')
-  const { isEmailInboundConfigured } =
+  const { isEmailInboundConfigured, inboundMintDomain } =
     await import('@/lib/server/domains/conversation/conversation.email-channel')
   return {
     provider: getEmailProvider(),
     fromAddress: process.env.EMAIL_FROM ?? null,
     inboundConfigured: isEmailInboundConfigured(),
-    inboundDomain: process.env.EMAIL_INBOUND_DOMAIN ?? null,
+    // The domain as every reader of it resolves it, not as it was typed. A value
+    // naming no single domain resolves to none, so this surface reports the
+    // channel unconfigured rather than echoing a string nothing can receive on.
+    inboundDomain: inboundMintDomain(),
   }
 })
 

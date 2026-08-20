@@ -95,8 +95,8 @@ function filterOAuthByCredentials(
  *
  * `password` is always passthrough — the team and portal both use
  * stored credential hashes, not SMTP. `magicLink` only renders when
- * SMTP/Resend is wired so we don't surface a button that would
- * silently fail.
+ * an outbound transport is wired so we don't surface a button that
+ * would silently fail.
  */
 async function getEmailDependentPassthroughKeys(): Promise<string[]> {
   const { isEmailConfigured } = await import('@quackback/email')

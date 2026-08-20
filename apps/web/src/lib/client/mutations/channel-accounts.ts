@@ -5,7 +5,11 @@ import {
   createSendingAddressFn,
   createSendingDomainFn,
   verifySendingDomainFn,
+  deleteSendingDomainFn,
   deleteChannelAccountFn,
+  updateInboundTrustFn,
+  clearInboundForwardingFn,
+  updateSendingAddressSmtpFn,
 } from '@/lib/server/functions/channel-accounts'
 import { emailChannelKeys } from '@/lib/client/queries/channel-accounts'
 
@@ -33,5 +37,23 @@ export const useCreateSendingDomain = () =>
 export const useVerifySendingDomain = () =>
   useConfigMutation((id: string) => verifySendingDomainFn({ data: { id } }))
 
+export const useDeleteSendingDomain = () =>
+  useConfigMutation((id: string) => deleteSendingDomainFn({ data: { id } }))
+
 export const useDeleteChannelAccount = () =>
   useConfigMutation((id: string) => deleteChannelAccountFn({ data: { id } }))
+
+export const useUpdateInboundTrust = () =>
+  useConfigMutation((inboundTrust: 'strict' | 'lenient') =>
+    updateInboundTrustFn({ data: { inboundTrust } })
+  )
+
+export const useClearInboundForwarding = () => useConfigMutation(() => clearInboundForwardingFn())
+
+export const useUpdateSendingAddressSmtp = () =>
+  useConfigMutation(
+    (data: {
+      id: string
+      smtp: { host: string; port: number; secure: boolean; user: string } | null
+    }) => updateSendingAddressSmtpFn({ data })
+  )
