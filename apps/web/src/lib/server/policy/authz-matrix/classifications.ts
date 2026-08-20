@@ -352,6 +352,21 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'routes/api/v1/statuses/index.ts::GET': PUBLIC_DATA('public status list'),
   'routes/api/v1/tags/$tagId.ts::GET': PUBLIC_DATA('public tag'),
   'routes/api/v1/tags/index.ts::GET': PUBLIC_DATA('public tag list'),
+
+  // Cloud-workspace wipe: reachable self-hosted too, where the fn no-ops
+  // without a control plane. The gate is identity, not role: only the owner
+  // address may wipe, and the control plane re-checks when configured.
+  'lib/server/functions/workspace-wipe.ts::wipeCloudWorkspaceFn': END_USER(
+    'refuses unless the caller own session address equals the current owner; the control plane re-checks'
+  ),
+
+  // Best-effort product-analytics beacon. Unauthenticated callers are not
+  // refused, they are ignored: the body is size-capped and schema-parsed, the
+  // emit happens only inside a successful `requireAuth()`, and every path
+  // answers 204 so a missing session cannot be probed through this route.
+  'routes/api/plg-events.ts::handlePlgEvent': END_USER(
+    'attributes an event to the caller own session; without one nothing is recorded'
+  ),
 }
 
 // ---------------------------------------------------------------------------
@@ -436,5 +451,9 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'routes/api/v1/principals/$principalId.ts::fetchTeamMemberWithUser::isTeamMember': NOT_A_GATE(
     'route is already key-gated (member.view/manage); this returns 404 for non-team principals'
+  ),
+
+  'lib/server/functions/contact-email.ts::confirmEmailChangeFn::isTeamMember': NOT_A_GATE(
+    'decides whether the confirmed address changes a control-plane seat — a teammate is a seat, an end-user is not; the address was already written above it'
   ),
 }

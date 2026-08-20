@@ -15,7 +15,7 @@
  * well under the 5s budget (measured ~1.5s), and cannot be fooled by
  * import-shaped text in comments or strings.
  */
-import * as ts from 'typescript'
+import * as ts from '@typescript/typescript6'
 import { readFileSync } from 'node:fs'
 import { relative } from 'node:path'
 import { posix } from 'node:path'

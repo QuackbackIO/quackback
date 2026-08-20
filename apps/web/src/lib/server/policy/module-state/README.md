@@ -108,8 +108,8 @@ cases pinning it — including an import of the same name from a different modul
 
 What the check still does not prove is that the guard covers the _site_. That
 claim lives where it can be observed: `__tests__/singletons-not-shared.test.ts`
-asserts the relay does not attempt leadership under pooled tenancy and the
-readiness probe never reads the migration status.
+asserts the readiness probe never reads the migration status under pooled
+tenancy.
 
 ## Why the TypeScript AST and not a regex
 

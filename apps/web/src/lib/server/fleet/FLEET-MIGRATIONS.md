@@ -134,8 +134,18 @@ The distinction that works is between the **two ways a replay goes wrong**:
 
 `policy/migration-contract/replay-safety.ts` classifies each migration from its
 own SQL, reusing the destructive-DDL scanner's tokenizer so the two agree about
-what is a comment and what is a string. Of the 228 bundled migrations: **31
+what is a comment and what is a string. Of the 234 bundled migrations: **37
 safe, 145 errors, 52 mutates.**
+
+One of those `safe` verdicts is not read off a statement shape. A `DO $$ … $$`
+block is opaque to the tokenizer and is refused by default; an author may
+override that for one statement with `-- @replay: guarded-by <what the guard
+tests>` directly above it, which is how `0256_workspace_key_columns` renames a
+column idempotently (Postgres has no `RENAME COLUMN IF EXISTS`). The claim is
+narrow — it reaches nothing but a `DO` block — and it is checked rather than
+trusted: `migration-contract/__tests__/lineage-double-apply.db.test.ts` applies
+the lineage and then re-applies every `safe` migration, and a claim that is
+false shows up there as a Postgres error.
 
 The reconciler refuses a workspace whose replay set contains a `mutates` migration
 **and whose ledger is non-empty** — a fresh database has nothing to replay, only

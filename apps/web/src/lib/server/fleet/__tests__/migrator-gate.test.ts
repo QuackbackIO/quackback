@@ -315,12 +315,11 @@ describe('replayGateVerdict', () => {
     //
     // **It has now happened, and this case is the notice.** 0257 demotes every
     // sending domain verified by a check that could not tell an owner from
-    // anybody else, which is an UPDATE and therefore a write the gate will not
-    // replay unattended. Healing a ledger gap across it is now an operator
-    // action: establish that the ledger is honest — a branch dry-run is the
-    // cheap way — and re-run with `allowMutatingReplay`. That cost is
-    // deliberate and small: the alternative is a workspace sending signed as a
-    // domain it never proved it owns.
+    // anybody else (an UPDATE); 0262 drops a table and 0263 rewrites stored
+    // product-flag defaults. All three are writes the gate will not replay
+    // unattended. Healing a ledger gap across them is now an operator action:
+    // establish that the ledger is honest — a branch dry-run is the cheap way —
+    // and re-run with `allowMutatingReplay`.
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
     const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
     expect(replaySetFor(before)).toEqual([
@@ -336,6 +335,9 @@ describe('replayGateVerdict', () => {
       '0258_email_log',
       '0259_channel_threads',
       '0260_channel_threads_conversation_fk',
+      '0261_connectors',
+      '0262_drop_assistant_custom_actions',
+      '0263_core_product_flag_defaults',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

@@ -20,7 +20,7 @@ import {
   inlineKey,
 } from './classifications'
 
-export type Channel = 'server-fn' | 'api-route' | 'mcp' | 'sse'
+export type Channel = 'server-fn' | 'api-route' | 'session-route' | 'mcp' | 'sse'
 
 export type ResolvedAuthz =
   /** A specific catalogue permission is required. */
@@ -57,6 +57,11 @@ const PERMISSION_BY_CONST = new Map<string, PermissionKey>(
 
 function channelOf(file: string): Channel {
   if (file.startsWith('routes/api/chat/stream')) return 'sse'
+  // Cookie-authenticated routes the app's own pages call. They live under
+  // routes/api/ but present a session, not an API key, so grouping them with
+  // the key-authenticated REST surface would say the wrong thing about which
+  // principal classes can reach them.
+  if (file.startsWith('routes/api/plg-events')) return 'session-route'
   if (file === 'lib/server/mcp/handler.ts') return 'mcp'
   if (file.startsWith('routes/api/')) return 'api-route'
   return 'server-fn'

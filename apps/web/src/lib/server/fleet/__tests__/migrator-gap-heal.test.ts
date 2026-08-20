@@ -144,35 +144,30 @@ const whenOf = (prefix: string) =>
   BUNDLED_MIGRATIONS.find((e) => e.tag.startsWith(`${prefix}_`))!.when
 
 /**
- * The tail of the corpus whose every migration replays as a no-op.
+ * The heal window these fixtures are built in: a hole below a mark below a
+ * tail, all positions in the journal.
  *
- * A heal deletes every ledger row from the earliest missing one to the tip and
- * lets drizzle replay the whole span, so a span is healable only when each
- * migration in it is `safe`. That makes the healable window a property of the
- * corpus as it stands today, not a set of tags anyone can write down: the
- * measured `0249` drift these fixtures were built on stopped being healable the
- * moment ordinary migrations with a DELETE and an UPDATE landed above it, and
- * its refusal is asserted below as the refusal it now is.
+ * The source suite derived this window as the corpus's replay-safe suffix, and
+ * that derivation collapsed here the moment 0262 (a table drop) and 0263 (a
+ * stored-defaults rewrite) landed at the tip: on this corpus NO ledger gap
+ * heals for free any more, because every replay span reaches the tip and the
+ * tip mutates. `no longer derives — the corpus tip mutates` below pins that.
  *
- * Derived rather than listed for that reason. A migration added above this
- * window keeps it healable if it is guarded; if it is not, the window collapses
- * and `the healable window still exists` says so in one line, instead of six
- * heal assertions failing in ways that read like the heal broke.
+ * The heal mechanics do not need the span to be free: every heal in this file
+ * already runs under `allowMutatingReplay` (see MUTATING_TAIL above), and
+ * `gapHealVerdict` ignores that flag entirely. So the window is now listed —
+ * hole, mark, tail — and the refusal a flagless run earns is asserted where
+ * the operator would meet it.
  */
-const SAFE_SUFFIX = (() => {
-  const verdictOf = (tag: string) =>
-    assessReplaySafety(tag, readFileSync(join(MIGRATIONS_DIR, `${tag}.sql`), 'utf8')).verdict
-  let i = BUNDLED_MIGRATIONS.length
-  while (i > 0 && verdictOf(BUNDLED_MIGRATIONS[i - 1]!.tag) === 'safe') i--
-  return BUNDLED_MIGRATIONS.slice(i)
-})()
-
+const entryOf = (prefix: string) => BUNDLED_MIGRATIONS.find((e) => e.tag.startsWith(prefix))!
 /** The row withheld from below the mark: the hole itself. */
-const HEAL_HOLE = SAFE_SUFFIX[0]
+const HEAL_HOLE = entryOf('0258_')
 /** The newest row kept, which is therefore the database's high-water mark. */
-const HEAL_MARK = SAFE_SUFFIX[1]
+const HEAL_MARK = entryOf('0259_')
 /** Rows withheld from above the mark: an ordinary forward rollout tail. */
-const HEAL_TAIL = SAFE_SUFFIX.slice(2)
+const HEAL_TAIL = BUNDLED_MIGRATIONS.slice(BUNDLED_MIGRATIONS.indexOf(HEAL_MARK) + 1)
+/** The whole replay span a heal executes: hole to tip, mark included. */
+const HEAL_SPAN = [HEAL_HOLE, HEAL_MARK, ...HEAL_TAIL]
 
 /**
  * The measured shape, rebuilt inside the healable window: a hole below the
@@ -279,7 +274,7 @@ afterEach(() => {
  */
 const MUTATING_TAIL = { allowMutatingReplay: true } as const
 
-describe('a hole the whole of which is replay-safe', () => {
+describe('a hole with a mark above it and a rollout tail above that', () => {
   it('is healed, and the rows that come back are written by drizzle', async () => {
     const db = await scratch()
     await applyHealableDrift(db)
@@ -289,7 +284,7 @@ describe('a hole the whole of which is replay-safe', () => {
     // only the tail above the mark, on a ledger that is also missing the hole
     // beneath it.
     expect(replaySetFor(before)).toEqual(HEAL_TAIL.map((e) => e.tag))
-    expect(planFor(before).tags).toEqual(SAFE_SUFFIX.map((e) => e.tag))
+    expect(planFor(before).tags).toEqual(HEAL_SPAN.map((e) => e.tag))
     expect(planFor(before).tags.length).toBeGreaterThan(replaySetFor(before).length)
     const digestBefore = await catalogueDigest(db)
 
@@ -299,7 +294,7 @@ describe('a hole the whole of which is replay-safe', () => {
     expect(result.code).toBe('healed_ledger_gap')
     expect(result.gap!.missing).toEqual([HEAL_HOLE!.tag])
     // The whole span executed, not just the tail — and the ledger ends complete.
-    expect(result.replaySet).toEqual(SAFE_SUFFIX.map((e) => e.tag))
+    expect(result.replaySet).toEqual(HEAL_SPAN.map((e) => e.tag))
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
     expect(ledgerGapFor(result.after!)).toBeNull()
     expect(result.postconditions!.ok).toBe(true)
@@ -324,42 +319,40 @@ describe('a hole the whole of which is replay-safe', () => {
 })
 
 describe('the healable window itself', () => {
-  it('still exists — a heal needs a hole, a mark above it and a tail above that', () => {
-    // The one line that explains the other six if they ever go red together.
-    // Every fixture in this file is built inside `SAFE_SUFFIX`, so a migration
-    // landing above it that does not replay as a no-op collapses the window and
-    // takes the heal cases with it. The fix is to guard that migration the way
-    // 0265-0267 are guarded, not to widen anything here.
-    expect(
-      SAFE_SUFFIX.length,
-      `no healable window: the newest ${SAFE_SUFFIX.length} migration(s) replay as no-ops, ` +
-        'and a hole below a mark below a tail needs three'
-    ).toBeGreaterThanOrEqual(3)
+  it('no longer derives — the corpus tip mutates, so every heal is an operator action', () => {
+    // The one line that explains the fixtures above. The source derived its
+    // window as the corpus's replay-safe suffix; 0262 and 0263 mutate, so that
+    // suffix is now empty and a flagless heal refuses every gap. The window is
+    // therefore LISTED, and this pins both facts: the derivation's collapse,
+    // and that the listed three are in the order the fixtures assume — if the
+    // hole ever sorted above the mark, `applyHealableDrift` would build a
+    // truncation and the heal cases would pass while testing the wrong thing.
+    const verdictOf = (tag: string) =>
+      assessReplaySafety(tag, readFileSync(join(MIGRATIONS_DIR, `${tag}.sql`), 'utf8')).verdict
+    expect(verdictOf(BUNDLED_MIGRATIONS.at(-1)!.tag)).not.toBe('safe')
 
-    // And that the three are in the order the fixtures assume. Derived bounds
-    // are worth exactly as much as this check: if the hole ever sorted above
-    // the mark, `applyHealableDrift` would build a truncation and the heal
-    // cases would pass while testing the wrong thing.
-    expect(HEAL_HOLE!.when).toBeLessThan(HEAL_MARK!.when)
-    for (const e of HEAL_TAIL) expect(e.when).toBeGreaterThan(HEAL_MARK!.when)
+    expect(HEAL_HOLE.when).toBeLessThan(HEAL_MARK.when)
+    for (const e of HEAL_TAIL) expect(e.when).toBeGreaterThan(HEAL_MARK.when)
   })
+
 })
 
 describe('the drift that was measured, which is no longer healable', () => {
   it('refuses it now, and names the migrations that stopped it being free', async () => {
     // The shape two live workspaces were actually in: a hole at 0249/0250/0252
     // under a mark at 0253. It healed when this file was written. It does not
-    // now, and the reason is ordinary: a migration carrying an UPDATE landed
-    // above it, and the span from the hole to the tip runs through it. That is
-    // the gate working, so it is asserted rather than engineered around — and
-    // asserted by name, because "refuses" alone would also pass if it refused
-    // for some unrelated reason.
+    // now, and the reason is ordinary: migrations carrying a DELETE and an
+    // UPDATE landed above it, and the span from the hole to the tip runs
+    // through them. That is the gate working, so it is asserted rather than
+    // engineered around — and asserted by name, because "refuses" alone would
+    // also pass if it refused for some unrelated reason.
     const db = await scratch()
     const holes = MEASURED_HOLE.map(whenOf)
     await withSql(db, (sql) =>
-      sql.unsafe(`DELETE FROM drizzle.__drizzle_migrations WHERE created_at = ANY($1::bigint[])`, [
-        holes,
-      ])
+      sql.unsafe(
+        `DELETE FROM drizzle.__drizzle_migrations WHERE created_at = ANY($1::bigint[])`,
+        [holes]
+      )
     )
     const before = await ledgerOf(db)
 
@@ -367,7 +360,8 @@ describe('the drift that was measured, which is no longer healable', () => {
 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('refused_ledger_gap')
-    expect(result.detail).toContain('0257_sending_domain_reverify')
+    expect(result.detail).toContain('0262_drop_assistant_custom_actions')
+    expect(result.detail).toContain('0263_core_product_flag_defaults')
     // The refusal happens before the DELETE, same as every other refusal here.
     const after = await ledgerOf(db)
     expect(after.count).toBe(before.count)
@@ -390,7 +384,7 @@ describe('the run has to do what it planned, not merely report that it did', () 
     expect(result.ok).toBe(false)
     expect(result.code).toBe('migration_failed')
     expect(result.detail).toContain(
-      `the ledger does not record ${SAFE_SUFFIX.length} of the ${SAFE_SUFFIX.length}`
+      `the ledger does not record ${HEAL_SPAN.length} of the ${HEAL_SPAN.length}`
     )
     expect(result.detail).toContain(HEAL_HOLE!.tag)
     // Green post-conditions do not rescue it. That combination — a passing
@@ -581,7 +575,7 @@ describe('the ledgers that are not holes — the controls', () => {
     // rollout path untouched.
     expect(result.code).toBe('reconciled')
     expect(result.gap).toBeNull()
-    expect(result.replaySet).toEqual(SAFE_SUFFIX.map((e) => e.tag))
+    expect(result.replaySet).toEqual(HEAL_SPAN.map((e) => e.tag))
     expect(result.after!.count).toBe(BUNDLED_MIGRATIONS.length)
   }, 120_000)
 

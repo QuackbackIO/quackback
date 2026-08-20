@@ -8,6 +8,7 @@ import { sql, isNull, type SQL } from 'drizzle-orm'
 import { boards, type BoardAccess, type AccessTier } from '@/lib/server/db'
 import { allowDecision, denyDecision, isTeamActor, type Actor, type Decision } from './types'
 import { tierAllows } from './access'
+import { normalizeBoardAccess } from '@/lib/shared/schemas/boards'
 
 function viewDenyMessage(tier: AccessTier): string {
   switch (tier) {
@@ -28,9 +29,10 @@ function viewDenyMessage(tier: AccessTier): string {
 
 /** Single-row board read authorization. */
 export function canViewBoard(actor: Actor, board: { access: BoardAccess }): Decision {
-  return tierAllows(actor, board.access.view, board.access.segments.view)
+  const access = normalizeBoardAccess(board.access)
+  return tierAllows(actor, access.view, access.segments.view)
     ? allowDecision()
-    : denyDecision(viewDenyMessage(board.access.view))
+    : denyDecision(viewDenyMessage(access.view))
 }
 
 /**
