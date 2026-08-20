@@ -51,7 +51,6 @@ export {
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
   getProductFlagUpdate,
-  ALWAYS_ON_FEATURE_FLAGS,
   isProductEnabled,
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,

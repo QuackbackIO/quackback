@@ -72,7 +72,6 @@ export {
   PRODUCT_DEFINITIONS,
   getFirstEnabledAdminProductPath,
   getProductFlagUpdate,
-  ALWAYS_ON_FEATURE_FLAGS,
   isProductEnabled,
 } from './settings'
 

@@ -45,8 +45,6 @@ import {
   DEFAULT_MESSENGER_CONFIG,
   DEFAULT_FEATURE_FLAGS,
   DEFAULT_HELP_CENTER_CONFIG,
-  FEATURE_FLAG_REGISTRY,
-  findDisabledAlwaysOnFlag,
   resolveFeatureFlags,
 } from './settings.types'
 import { signupOpenFor } from '@/lib/shared/signup-open'
@@ -1026,24 +1024,9 @@ export async function isCopilotCapabilityEnabled(
 }
 
 /**
- * Update feature flags (partial update, merges with existing).
- *
- * Always-on products are refused rather than silently coerced: this module
- * already answers "you may not switch that off" with a ValidationError (see
- * enableHelpCenterLocale and the default locale), and a caller that asked for
- * a state it did not get is worth telling. The admin UI never sends such an
- * update, so the error only reaches an API or server-fn caller going around
- * the fixed-on switch.
+ * Update feature flags (partial update, merges with existing)
  */
 export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
-  const locked = findDisabledAlwaysOnFlag(input)
-  if (locked) {
-    log.warn({ flag: locked }, 'refused to disable an always-on product flag')
-    throw new ValidationError(
-      'PRODUCT_ALWAYS_ENABLED',
-      `${FEATURE_FLAG_REGISTRY[locked].label} cannot be turned off`
-    )
-  }
   const org = await requireSettings()
   // resolveFeatureFlags drops legacy pre-consolidation keys (after coalescing
   // them into their umbrella flag), so this write persists a clean shape.

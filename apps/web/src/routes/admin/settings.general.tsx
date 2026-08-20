@@ -25,7 +25,6 @@ import {
   DEFAULT_FEATURE_FLAGS,
   GA_FEATURE_SECTIONS,
   PRODUCT_DEFINITIONS,
-  ALWAYS_ON_FEATURE_FLAGS,
   getProductFlagUpdate,
   isProductEnabled,
   type FeatureFlags,
@@ -181,11 +180,47 @@ function GeneralSettingsPage() {
         />
       )}
 
-      <ProductsCard
-        flags={localFlags}
-        pending={productMutation.isPending}
-        onToggle={handleProductToggle}
-      />
+      <SettingsCard
+        title="Products"
+        description="Choose the Quackback products available to your team and customers"
+      >
+        <div className="divide-y divide-border/50">
+          {PRODUCT_DEFINITIONS.map((product) => {
+            // The public portal homepage is the feedback board, so turning this
+            // one off leaves the portal root with nothing to render.
+            const alwaysOn = product.id === 'feedback'
+            return (
+              <div
+                key={product.id}
+                className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <Label
+                    htmlFor={`product-${product.id}`}
+                    className={
+                      alwaysOn ? 'text-sm font-medium' : 'cursor-pointer text-sm font-medium'
+                    }
+                  >
+                    {product.label}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">{product.description}</p>
+                  {alwaysOn && (
+                    <p className="text-xs text-muted-foreground">
+                      {product.label} is always enabled
+                    </p>
+                  )}
+                </div>
+                <Switch
+                  id={`product-${product.id}`}
+                  checked={alwaysOn || isProductEnabled(localFlags, product.id)}
+                  onCheckedChange={(checked) => handleProductToggle(product.id, checked)}
+                  disabled={alwaysOn || productMutation.isPending}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </SettingsCard>
 
       <FeatureFlagSections
         sections={GA_FEATURE_SECTIONS}
@@ -196,61 +231,6 @@ function GeneralSettingsPage() {
 
       <WorkspaceDangerCard cloudEnabled={Boolean(cloudIdentity)} />
     </div>
-  )
-}
-
-export function ProductsCard(props: {
-  flags: FeatureFlags
-  pending: boolean
-  onToggle: (productId: ProductId, enabled: boolean) => void
-}) {
-  return (
-    <SettingsCard
-      title="Products"
-      description="Choose the Quackback products available to your team and customers"
-    >
-      <div className="divide-y divide-border/50">
-        {PRODUCT_DEFINITIONS.map((product) => {
-          // A product the portal cannot render without keeps its switch fixed
-          // on. updateFeatureFlags refuses the write as well, so this is a
-          // shortcut past a dead end rather than the guard itself. Read off the
-          // same list the server guard uses, so the two cannot drift.
-          const alwaysOn = product.featureFlags.some((flag) =>
-            ALWAYS_ON_FEATURE_FLAGS.includes(flag)
-          )
-          return (
-            <div
-              key={product.id}
-              className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0"
-            >
-              <div className="min-w-0 space-y-0.5">
-                <Label
-                  htmlFor={`product-${product.id}`}
-                  className={
-                    alwaysOn ? 'text-sm font-medium' : 'cursor-pointer text-sm font-medium'
-                  }
-                >
-                  {product.label}
-                </Label>
-                <p className="text-xs text-muted-foreground">{product.description}</p>
-                {alwaysOn && (
-                  <p className="text-xs text-muted-foreground">
-                    {product.label} is always enabled
-                  </p>
-                )}
-              </div>
-              <Switch
-                id={`product-${product.id}`}
-                checked={alwaysOn ? true : isProductEnabled(props.flags, product.id)}
-                onCheckedChange={(checked) => props.onToggle(product.id, checked)}
-                disabled={alwaysOn || props.pending}
-                aria-readonly={alwaysOn ? true : undefined}
-              />
-            </div>
-          )
-        })}
-      </div>
-    </SettingsCard>
   )
 }
 
