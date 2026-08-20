@@ -5,8 +5,8 @@
  * string `level`, service/env bindings, request-context correlation via ALS,
  * and secret redaction.
  */
-import { describe, it, expect } from 'vitest'
-import { createLogger } from '../logger'
+import { afterEach, describe, it, expect, vi } from 'vitest'
+import { createLogger, serviceNameForProcess } from '../logger'
 import { runWithLogContext } from '../log-context'
 import * as clientStub from '../logger.client-stub'
 
@@ -21,8 +21,44 @@ function capture() {
   }
 }
 
+describe('serviceNameForProcess', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('maps the process role onto the service identity', () => {
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: 'worker' })).toBe('quackback-worker')
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: 'migrator' })).toBe('quackback-migrator')
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: 'web' })).toBe('quackback-web')
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: 'all' })).toBe('quackback-web')
+    expect(serviceNameForProcess({})).toBe('quackback-web')
+  })
+
+  it('trims the role the same way the role parser does', () => {
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: '  worker' })).toBe('quackback-worker')
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: 'migrator ' })).toBe('quackback-migrator')
+  })
+
+  it('does not fold case — a typo is not a worker', () => {
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: 'Worker' })).toBe('quackback-web')
+    expect(serviceNameForProcess({ QUACKBACK_ROLE: 'MIGRATOR' })).toBe('quackback-web')
+  })
+
+  it('lets OTEL_SERVICE_NAME override the derived name', () => {
+    expect(
+      serviceNameForProcess({ QUACKBACK_ROLE: 'worker', OTEL_SERVICE_NAME: 'fleet-worker-a' })
+    ).toBe('fleet-worker-a')
+  })
+})
+
 describe('logger', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('emits flat JSON with a string level, service_name, env and msg', () => {
+    vi.stubEnv('QUACKBACK_ROLE', undefined)
+    vi.stubEnv('OTEL_SERVICE_NAME', undefined)
     const sink = capture()
     const log = createLogger({ destination: sink.destination, level: 'info' })
 
@@ -34,6 +70,24 @@ describe('logger', () => {
     expect(rec.service_name).toBe('quackback-web')
     expect(rec.env).toBeUndefined() // env is not stamped on log lines
     expect(typeof rec.time).toBe('number') // epoch ms (Pino default)
+  })
+
+  it('stamps quackback-worker when QUACKBACK_ROLE=worker', () => {
+    vi.stubEnv('QUACKBACK_ROLE', 'worker')
+    vi.stubEnv('OTEL_SERVICE_NAME', undefined)
+    const sink = capture()
+    const log = createLogger({ destination: sink.destination, level: 'info' })
+    log.info('drain')
+    expect(sink.last().service_name).toBe('quackback-worker')
+  })
+
+  it('stamps quackback-migrator when QUACKBACK_ROLE=migrator', () => {
+    vi.stubEnv('QUACKBACK_ROLE', 'migrator')
+    vi.stubEnv('OTEL_SERVICE_NAME', undefined)
+    const sink = capture()
+    const log = createLogger({ destination: sink.destination, level: 'info' })
+    log.info('enrol')
+    expect(sink.last().service_name).toBe('quackback-migrator')
   })
 
   it('stamps the active request context onto every line', () => {
