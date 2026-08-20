@@ -207,9 +207,16 @@ describe('getPublicWidgetConfig — launcher projection', () => {
 
 describe('getPublicWidgetConfig — tickets projection (converged Messages)', () => {
   it('projects tabs.tickets from the supportTickets flag alone — no per-tab toggle', async () => {
-    settingsRow.current = fixtureRow({ enabled: true, tabs: { feedback: false } })
+    // The flag is set explicitly, and the stored tabs deliberately carry no
+    // `tickets` key: that is the point of the assertion. DEFAULT_FEATURE_FLAGS
+    // is core-only (Feedback + Changelog) since 0268, so relying on a default
+    // here would assert the default rather than the projection.
+    settingsRow.current = fixtureRow(
+      { enabled: true, tabs: { feedback: false } },
+      { supportTickets: true }
+    )
     const projected = await getPublicWidgetConfig()
-    // supportTickets defaults on; ticket pairs surface through Messages.
+    // Ticket pairs surface through Messages; the flag alone decides.
     expect(projected.tabs?.tickets).toBe(true)
     // Tickets can be the sole enabled surface (email-first workspaces).
     expect(projected.enabled).toBe(true)

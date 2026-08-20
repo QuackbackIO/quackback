@@ -58,7 +58,11 @@ vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
 }))
 
-vi.mock('@/lib/server/setup-state', () => ({
+// Only the atomic mutator is replaced. `applyDeferredLaunchStartingPoint` is a
+// pure state transform the promotion path calls, so the real one runs and the
+// assertions below see the state it actually produces.
+vi.mock('@/lib/server/setup-state', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/setup-state')>()),
   mutateSetupStateAtomic: vi.fn(
     async (
       mutate: (
@@ -212,7 +216,19 @@ describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
     expect(JSON.parse(inserted.setupState as string)).toEqual(
       expect.objectContaining({
         version: 2,
-        steps: { core: true, workspace: true, startingPoint: null },
+        steps: expect.objectContaining({
+          core: true,
+          workspace: true,
+          // The wizard defers the starter artifact to the use-case launch
+          // list, so it records that choice rather than leaving the step
+          // unanswered: resolved, but with nothing created.
+          startingPoint: expect.objectContaining({
+            outcome: 'customer_support',
+            resourceType: 'none',
+            source: 'wizard',
+            resolution: 'deferred',
+          }),
+        }),
         useCase: 'customer_support',
       })
     )

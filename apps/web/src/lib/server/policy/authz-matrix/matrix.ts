@@ -119,6 +119,7 @@ export function renderMatrixDoc(
   const sections = [
     ['server-fn', 'Server functions (`requireAuth`)'],
     ['api-route', 'Public REST API (`withApiKeyAuth`)'],
+    ['session-route', 'Session-authenticated routes (`requireAuth`)'],
     ['sse', 'SSE stream (inline gate)'],
     ['mcp', 'MCP transport entry'],
   ] as const

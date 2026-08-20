@@ -40,6 +40,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     update: () => ({ set: mockSet, where: mockWhere }),
     // Default-team enrollment lookup: resolves empty (no default team seeded).
     select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+    // Role writes note a membership change, which cancels and re-enqueues the
+    // membership-sync job through `db.execute`. No rows: nothing was queued.
+    execute: async () => [],
     insert: () => ({
       values: (...args: unknown[]) => {
         mockInsertValues(...args)

@@ -352,6 +352,40 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'routes/api/v1/statuses/index.ts::GET': PUBLIC_DATA('public status list'),
   'routes/api/v1/tags/$tagId.ts::GET': PUBLIC_DATA('public tag'),
   'routes/api/v1/tags/index.ts::GET': PUBLIC_DATA('public tag list'),
+
+  // Advertised plan stickers, the same payload Plan & billing renders. Any
+  // signed-in principal may read them so upgrade offers stay consistent;
+  // checkout, invoices and usage stay behind BILLING_MANAGE.
+  'lib/server/functions/billing.ts::fetchBillingCatalogueFn': END_USER(
+    'advertised plan catalogue; null when cloud is off'
+  ),
+
+  // Cloud workspace ownership. The gate admits any authenticated principal and
+  // the *handler* makes the access decision by comparing the caller's own
+  // session address against the owner the control plane reports — there is no
+  // catalogue permission for "is the owner", and an admin is deliberately not
+  // enough. The control plane re-checks and answers `not_owner` regardless, so
+  // this is defence in depth rather than the only bar.
+  'lib/server/functions/ownership.ts::getCloudOwnerEmailFn': END_USER(
+    'reads the owner address the ownership panel shows every teammate; null when cloud billing is off'
+  ),
+  'lib/server/functions/ownership.ts::transferWorkspaceOwnershipFn': END_USER(
+    'refuses unless the caller own session address equals the current owner'
+  ),
+  'lib/server/functions/ownership.ts::leaveCloudWorkspaceFn': END_USER(
+    'acts only on the caller own membership, and refuses the owner outright'
+  ),
+  'lib/server/functions/workspace-wipe.ts::wipeCloudWorkspaceFn': END_USER(
+    'refuses unless the caller own session address equals the current owner; the control plane re-checks'
+  ),
+
+  // Best-effort product-analytics beacon. Unauthenticated callers are not
+  // refused, they are ignored: the body is size-capped and schema-parsed, the
+  // emit happens only inside a successful `requireAuth()`, and every path
+  // answers 204 so a missing session cannot be probed through this route.
+  'routes/api/plg-events.ts::handlePlgEvent': END_USER(
+    'attributes an event to the caller own session; without one nothing is recorded'
+  ),
 }
 
 // ---------------------------------------------------------------------------
@@ -384,8 +418,16 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'admin',
     why: 'onboarding bootstrap: the first authenticated user provisions as admin; once the workspace step is done, completing setup requires an existing admin',
   },
+  'lib/server/functions/onboarding.ts::saveCloudOnboardingGoalFn::isAdmin': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'admin',
+    why: 'the control-plane-provisioned variant of the same step: the workspace already exists, so there is no bootstrap case and an existing admin is always required',
+  },
 
   // Behavior refinements sitting behind an already-present entry gate.
+  'lib/server/functions/contact-email.ts::confirmEmailChangeFn::isTeamMember': NOT_A_GATE(
+    'decides whether the confirmed address changes a control-plane seat — a teammate is a seat, an end-user is not; the address was already written above it'
+  ),
   'lib/server/functions/admin.ts::checkOnboardingState::isAdmin': NOT_A_GATE(
     'reports whether setup is already owned by somebody else so the wizard can route — the fn writes nothing'
   ),

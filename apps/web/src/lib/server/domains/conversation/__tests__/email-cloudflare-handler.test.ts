@@ -32,6 +32,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHmac } from 'crypto'
 import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
+import { workspaceSlugFromInboundAddress } from '../conversation.email-channel'
 
 const ingestParsedEmail = vi.fn()
 const isConversationsEnabled = vi.fn<() => Promise<boolean>>()
@@ -785,15 +786,17 @@ describe('the guard', () => {
     // envelope carrying one derives the same label the edge signed. Pinned
     // because a cross-check comparing raw bytes instead would refuse mail the
     // edge had already decided belonged here.
+    //
+    // Asserted against the derivation directly rather than through a request:
+    // `x-qb-envelope-to` is an HTTP header, headers are ByteStrings, and a code
+    // point above 255 cannot be put in one at all — `Headers.set` throws. So a
+    // request carrying a raw U+212A is not a case the handler can ever meet,
+    // and building one tested the test harness rather than the folding rule.
     const kelvinEnvelope = `\u{212A}ilo-1@${DOMAIN}`
     expect(kelvinEnvelope).not.toContain(mailSlugFor('kilo-1'))
 
-    const res = await post(
-      inboundRequest({ mailSlug: mailSlugFor('kilo-1'), envelopeTo: kelvinEnvelope }),
-      'kilo-1'
-    )
-
-    expect(res.status).toBe(200)
+    const named = workspaceSlugFromInboundAddress(kelvinEnvelope)
+    expect(named).toEqual({ kind: 'slug', slug: mailSlugFor('kilo-1') })
   })
 
   it('splits on the last `@`, so a local part carrying one cannot spoof a label', async () => {

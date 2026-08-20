@@ -52,7 +52,10 @@ function testFiles(dir: string): string[] {
 describe('db test fixture', () => {
   it('never issues DDL on the shared transaction', () => {
     const offenders: string[] = []
-    for (const file of testFiles(join(process.cwd(), 'src'))) {
+    // Anchored to this file, not to `process.cwd()`: the suite is run both from
+    // `apps/web` and from the repo root, and the cwd-relative form silently
+    // scanned a directory that does not exist in the second case.
+    for (const file of testFiles(join(__dirname, '../../..'))) {
       // This file carries the banned statement on purpose, as the control below.
       if (file.endsWith('db-fixture-no-ddl.test.ts')) continue
       const source = readFileSync(file, 'utf8')

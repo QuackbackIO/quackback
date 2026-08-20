@@ -13,6 +13,7 @@
  * switched off. Every case below is driven through the real server function.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 
 type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
@@ -75,7 +76,7 @@ const upsert = upsertIdentityProviderFn as unknown as AnyHandler
 /** A cloud-enabled workspace on a plan that does NOT include SSO. */
 function onFreePlan() {
   hoisted.mockGetWorkspaceSettings.mockResolvedValue({
-    settings: { id: 'ws_1', cloud: { enabled: true, plan: 'free' } },
+    settings: { id: 'ws_1', cloud: storedCloud('free') },
   })
 }
 

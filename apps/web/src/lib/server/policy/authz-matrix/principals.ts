@@ -76,7 +76,7 @@ export interface PrincipalClass {
 
 const perms = (role: Role | null): ReadonlySet<PermissionKey> => resolveActorPermissions(role)
 
-const SESSION_CHANNELS = new Set<Channel>(['server-fn', 'sse'])
+const SESSION_CHANNELS = new Set<Channel>(['server-fn', 'sse', 'session-route'])
 const KEY_CHANNELS = new Set<Channel>(['api-route', 'mcp'])
 
 export const PRINCIPAL_CLASSES: PrincipalClass[] = [

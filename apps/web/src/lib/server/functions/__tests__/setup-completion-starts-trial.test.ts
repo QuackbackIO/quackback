@@ -60,7 +60,23 @@ vi.mock('@/lib/server/setup-state', () => ({
   ) => {
     const result = await mutate(
       hoisted.state,
-      { id: 'ws_1', name: 'Acme', slug: 'acme', managedFieldPaths: [], featureFlags: null },
+      {
+        id: 'ws_1',
+        name: 'Acme',
+        slug: 'acme',
+        managedFieldPaths: [],
+        // The product flags are stated rather than defaulted. Since 0268,
+        // DEFAULT_FEATURE_FLAGS is core-only (Feedback + Changelog), so a null
+        // blob resolves supportInbox/helpCenter off and every starter here
+        // lands on `unavailable` instead of exercising the trial report.
+        featureFlags: JSON.stringify({
+          feedback: true,
+          changelog: true,
+          helpCenter: true,
+          supportInbox: true,
+          supportTickets: true,
+        }),
+      },
       { update: () => ({ set: () => ({ where: async () => undefined }) }) }
     )
     hoisted.state = result.state

@@ -12,6 +12,7 @@
  * code.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import type { PostId } from '@quackback/ids'
 
@@ -99,7 +100,7 @@ describe('generateAndSavePostSummary — no cloud config', () => {
 
 describe('generateAndSavePostSummary — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud(storedCloud('growth'))
 
     const refusal = await generateAndSavePostSummary(POST_ID).catch((error: unknown) => error)
 
@@ -120,7 +121,7 @@ describe('generateAndSavePostSummary — plan gate', () => {
   })
 
   it('summarises the post on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'pro' })
+    withCloud(storedCloud('pro'))
     await expect(generateAndSavePostSummary(POST_ID)).resolves.toBeUndefined()
     expect(hoisted.mockChat).toHaveBeenCalledOnce()
     expect(hoisted.mockUpdate).toHaveBeenCalledOnce()
@@ -128,11 +129,11 @@ describe('generateAndSavePostSummary — plan gate', () => {
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { aiInsights: true } })
+    withCloud(storedCloud('free', { aiInsights: true }))
     await expect(generateAndSavePostSummary(POST_ID)).resolves.toBeUndefined()
     expect(hoisted.mockChat).toHaveBeenCalledOnce()
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { aiInsights: false } })
+    withCloud(storedCloud('scale', { aiInsights: false }))
     await expect(generateAndSavePostSummary(POST_ID)).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )

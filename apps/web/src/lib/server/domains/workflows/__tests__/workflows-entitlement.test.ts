@@ -10,6 +10,7 @@
  * the refusal case would pass against unwired code.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 
 const hoisted = vi.hoisted(() => ({
@@ -72,7 +73,7 @@ describe('createWorkflow — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
     // Growth, not Free: the refusal has to name the cheapest plan that GRANTS
     // workflows (Pro), not merely the next plan up from the workspace's own.
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud(storedCloud('growth'))
 
     const refusal = await createWorkflow(INPUT).catch((error: unknown) => error)
 
@@ -88,16 +89,16 @@ describe('createWorkflow — plan gate', () => {
   })
 
   it('creates the workflow on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'pro' })
+    withCloud(storedCloud('pro'))
     await expect(createWorkflow(INPUT)).resolves.toMatchObject({ id: 'workflow_1' })
     expect(hoisted.mockInsert).toHaveBeenCalledOnce()
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { workflows: true } })
+    withCloud(storedCloud('free', { workflows: true }))
     await expect(createWorkflow(INPUT)).resolves.toBeDefined()
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { workflows: false } })
+    withCloud(storedCloud('scale', { workflows: false }))
     await expect(createWorkflow(INPUT)).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

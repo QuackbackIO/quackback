@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
+import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import type { PrincipalId } from '@quackback/ids'
 
 const hoisted = vi.hoisted(() => ({
@@ -79,7 +80,7 @@ describe('macro library — no cloud config', () => {
 
 describe('macro library — plan gate', () => {
   it('refuses the read on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'free' })
+    withCloud(storedCloud('free'))
 
     const refusal = await listMacros('support').catch((error: unknown) => error)
 
@@ -95,13 +96,13 @@ describe('macro library — plan gate', () => {
   })
 
   it('refuses the write on a plan without the entitlement', async () => {
-    withCloud({ enabled: true, plan: 'free' })
+    withCloud(storedCloud('free'))
     await expect(createMacro(CREATE_INPUT)).rejects.toBeInstanceOf(EntitlementRequiredError)
     expect(hoisted.mockInsert).not.toHaveBeenCalled()
   })
 
   it('lists and creates macros on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud(storedCloud('growth'))
     await expect(listMacros('support')).resolves.toEqual([ROW])
     await expect(createMacro(CREATE_INPUT)).resolves.toEqual(ROW)
     expect(hoisted.mockSelect).toHaveBeenCalledOnce()
@@ -109,10 +110,10 @@ describe('macro library — plan gate', () => {
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { aiDrafts: true } })
+    withCloud(storedCloud('free', { aiDrafts: true }))
     await expect(listMacros()).resolves.toEqual([ROW])
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { aiDrafts: false } })
+    withCloud(storedCloud('scale', { aiDrafts: false }))
     await expect(listMacros()).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

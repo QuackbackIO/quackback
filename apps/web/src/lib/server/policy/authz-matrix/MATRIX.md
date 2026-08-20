@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 653 surfaces
+### Server functions (`requireAuth`) — 667 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -256,6 +256,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderCredentialsMaskedFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::fetchAuthProviderStatusFn | auth.manage |
 | `lib/server/functions/billing.ts`::fetchBillingOverviewFn | billing.manage |
+| `lib/server/functions/billing.ts`::fetchBillingCatalogueFn | END_USER (any authenticated) |
 | `lib/server/functions/billing.ts`::fetchBillingInvoicesFn | billing.manage |
 | `lib/server/functions/billing.ts`::fetchPlanUsageFn | billing.manage |
 | `lib/server/functions/blocking.ts`::getPersonBlockStatusFn | people.view |
@@ -290,7 +291,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/channel-accounts.ts`::createSendingDomainFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::verifySendingDomainFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::deleteSendingDomainFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::updateInboundTrustFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::clearInboundForwardingFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::updateSendingAddressSmtpFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::deleteChannelAccountFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::listRecentEmailLogFn | channel_account.manage |
 | `lib/server/functions/cloud-identity.ts`::getCloudIdentityFn | settings.manage |
 | `lib/server/functions/cloud-identity.ts`::markCloudWorkspaceDetailsSeenFn | settings.manage |
 | `lib/server/functions/cloud-identity.ts`::getCloudCustomDomainsFn | settings.custom_domain |
@@ -471,8 +476,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::archiveNotificationFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
 | `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | ADMIN-ONLY |
+| `lib/server/functions/onboarding.ts`::saveCloudOnboardingGoalFn | ADMIN-ONLY |
 | `lib/server/functions/owner-workspaces.ts`::listOwnerWorkspacesFn | settings.manage |
 | `lib/server/functions/owner-workspaces.ts`::openOwnerWorkspaceFn | settings.manage |
+| `lib/server/functions/ownership.ts`::getCloudOwnerEmailFn | END_USER (any authenticated) |
+| `lib/server/functions/ownership.ts`::transferWorkspaceOwnershipFn | END_USER (any authenticated) |
+| `lib/server/functions/ownership.ts`::leaveCloudWorkspaceFn | END_USER (any authenticated) |
 | `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
@@ -568,6 +577,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::deleteWidgetHeroImageFn | settings.manage |
 | `lib/server/functions/settings.ts`::regenerateWidgetSecretFn | settings.manage |
 | `lib/server/functions/settings.ts`::fetchOfficeHoursFn | office_hours.manage |
+| `lib/server/functions/settings.ts`::fetchConversationRoutingFn | settings.manage |
+| `lib/server/functions/settings.ts`::updateConversationRoutingFn | settings.manage |
+| `lib/server/functions/settings.ts`::fetchEmailAutoAckFn | channel_account.manage |
+| `lib/server/functions/settings.ts`::updateEmailAutoAckFn | channel_account.manage |
 | `lib/server/functions/settings.ts`::updateOfficeHoursFn | office_hours.manage |
 | `lib/server/functions/settings.ts`::fetchChangelogSettingsFn | changelog.manage |
 | `lib/server/functions/settings.ts`::updateChangelogSettingsFn | changelog.manage |
@@ -757,6 +770,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::previewWorkflowFn | routing.manage |
 | `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
+| `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
 ### Public REST API (`withApiKeyAuth`) — 125 surfaces
 
@@ -888,6 +902,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
 | `routes/api/widget/identify.ts`::POST | TEAM-ONLY |
 
+### Session-authenticated routes (`requireAuth`) — 1 surface
+
+| Surface | Enforces |
+| --- | --- |
+| `routes/api/plg-events.ts`::handlePlgEvent | END_USER (any authenticated) |
+
 ### SSE stream (inline gate) — 1 surface
 
 | Surface | Enforces |
@@ -957,7 +977,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-190 of 960 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+191 of 969 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1077,6 +1097,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/auth/$.ts`::POST | route |
 | `routes/api/auth/invitation.$invitationId.ts`::GET | route |
 | `routes/api/auth/portal-signin.ts`::POST | route |
+| `routes/api/chat/email/events.ts`::POST | route |
 | `routes/api/chat/email/inbound.ts`::POST | route |
 | `routes/api/chat/stream.ts`::GET | route |
 | `routes/api/devices.ts`::DELETE | route |

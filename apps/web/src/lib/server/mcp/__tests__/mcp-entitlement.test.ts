@@ -12,6 +12,7 @@
  * would pass against unwired code.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
 import type { ApiKeyId, PrincipalId } from '@quackback/ids'
 
@@ -97,7 +98,7 @@ describe('handleMcpRequest — no cloud config', () => {
 
 describe('handleMcpRequest — plan gate', () => {
   it('refuses with 402 on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'free' })
+    withCloud(storedCloud('free'))
 
     const response = await handleMcpRequest(mcpRequest())
 
@@ -121,24 +122,24 @@ describe('handleMcpRequest — plan gate', () => {
   })
 
   it('serves the request on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud(storedCloud('growth'))
     const response = await handleMcpRequest(mcpRequest())
     expect(response.status).toBe(200)
     expect(hoisted.mockCreateMcpServer).toHaveBeenCalledOnce()
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { mcpServer: true } })
+    withCloud(storedCloud('free', { mcpServer: true }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(200)
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { mcpServer: false } })
+    withCloud(storedCloud('scale', { mcpServer: false }))
     expect((await handleMcpRequest(mcpRequest())).status).toBe(402)
   })
 
   it('does not disclose the plan to an unauthenticated caller', async () => {
     // A 402 naming the workspace's plan is an answer only a caller who already
     // authenticated should get; an anonymous probe still sees the 401.
-    withCloud({ enabled: true, plan: 'free' })
+    withCloud(storedCloud('free'))
     const response = await handleMcpRequest(
       new Request('https://example.com/api/mcp', { method: 'POST' })
     )

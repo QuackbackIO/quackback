@@ -69,7 +69,14 @@ describe('applyMacroActions', () => {
     expect(attachTag).toHaveBeenCalledWith(conversationId, 'ctag_1')
     expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
     expect(snoozeConversation).toHaveBeenCalledWith(conversationId, expect.any(Date), actor)
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, undefined)
+    // The 5th argument is the close lifecycle: an explicit close, not an auto-close.
+    expect(setConversationStatus).toHaveBeenCalledWith(
+      conversationId,
+      'closed',
+      actor,
+      undefined,
+      'closed'
+    )
     expect(applied).toEqual([
       'assigned',
       'assigned to team',

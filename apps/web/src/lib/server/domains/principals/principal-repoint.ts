@@ -40,6 +40,7 @@ import {
   conversationSummaries,
   postSubscriptions,
   inAppNotifications,
+  emailLog,
   pageViews,
   visitorDevices,
   userSegments,
@@ -239,6 +240,12 @@ export const REPOINT_STEPS: RepointStep[] = [
   },
   simpleRepoint('post_comments', postComments, 'principal_id', 'Comment authorship.'),
   simpleRepoint('posts', posts, 'principal_id', 'Post authorship.'),
+  simpleRepoint(
+    'email_log',
+    emailLog,
+    'principal_id',
+    'Who the logged email concerned. A visitor is emailable before they identify (auto-ack, cold inbound), so anonymous rows exist and the ledger has to follow the surviving identity rather than point at a torn-down one.'
+  ),
   simpleRepoint(
     'post_edit_history',
     postEditHistory,

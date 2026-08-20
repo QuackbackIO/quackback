@@ -13,6 +13,7 @@
  * unwired code.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import type { PrincipalId } from '@quackback/ids'
 
@@ -104,7 +105,7 @@ describe('createWebhook — no cloud config', () => {
 
 describe('createWebhook — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'free' })
+    withCloud(storedCloud('free'))
 
     const refusal = await createWebhook(INPUT, CREATOR).catch((error: unknown) => error)
 
@@ -121,7 +122,7 @@ describe('createWebhook — plan gate', () => {
   })
 
   it('creates the webhook on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud(storedCloud('growth'))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toMatchObject({
       webhook: { url: INPUT.url },
     })
@@ -129,10 +130,10 @@ describe('createWebhook — plan gate', () => {
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { webhooks: true } })
+    withCloud(storedCloud('free', { webhooks: true }))
     await expect(createWebhook(INPUT, CREATOR)).resolves.toBeDefined()
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { webhooks: false } })
+    withCloud(storedCloud('scale', { webhooks: false }))
     await expect(createWebhook(INPUT, CREATOR)).rejects.toBeInstanceOf(EntitlementRequiredError)
   })
 })

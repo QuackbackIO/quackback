@@ -291,7 +291,14 @@ describe('applyAction', () => {
     expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
 
     expect(await applyAction({ type: 'close' }, ctx)).toMatchObject({ label: 'closed' })
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, undefined)
+    // The 5th argument is the close lifecycle: an explicit close, not an auto-close.
+    expect(setConversationStatus).toHaveBeenCalledWith(
+      conversationId,
+      'closed',
+      actor,
+      undefined,
+      'closed'
+    )
 
     expect(await applyAction({ type: 'reopen' }, ctx)).toMatchObject({ label: 'reopened' })
     expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
@@ -300,9 +307,13 @@ describe('applyAction', () => {
   it('threads ctx.workflowName as system-notice attribution into the notice-posting service calls', async () => {
     const attributedCtx: WorkflowContext = { ...ctx, workflowName: 'Auto-close after CSAT' }
     await applyAction({ type: 'close' }, attributedCtx)
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, {
-      workflowName: 'Auto-close after CSAT',
-    })
+    expect(setConversationStatus).toHaveBeenCalledWith(
+      conversationId,
+      'closed',
+      actor,
+      { workflowName: 'Auto-close after CSAT' },
+      'closed'
+    )
 
     await applyAction(
       { type: 'assign_agent', principalId: 'principal_x' as PrincipalId },

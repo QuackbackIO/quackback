@@ -11,6 +11,7 @@
  * that forgot to enable cloud would pass against unwired code.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { storedCloud } from '@/lib/server/domains/settings/cloud/__tests__/cloud-fixture'
 import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 
 const hoisted = vi.hoisted(() => ({
@@ -86,7 +87,7 @@ describe('analyzeSentiment — no cloud config', () => {
 
 describe('analyzeSentiment — plan gate', () => {
   it('refuses on a plan without the entitlement and names the plan that has it', async () => {
-    withCloud({ enabled: true, plan: 'growth' })
+    withCloud(storedCloud('growth'))
 
     const refusal = await analyzeSentiment('Title', 'Great feature!').catch(
       (error: unknown) => error
@@ -106,7 +107,7 @@ describe('analyzeSentiment — plan gate', () => {
   })
 
   it('classifies the post on a plan that includes it', async () => {
-    withCloud({ enabled: true, plan: 'pro' })
+    withCloud(storedCloud('pro'))
     await expect(analyzeSentiment('Title', 'Great feature!')).resolves.toMatchObject({
       sentiment: 'positive',
     })
@@ -115,12 +116,12 @@ describe('analyzeSentiment — plan gate', () => {
   })
 
   it('honours an explicit override in either direction', async () => {
-    withCloud({ enabled: true, plan: 'free', entitlements: { aiInsights: true } })
+    withCloud(storedCloud('free', { aiInsights: true }))
     await expect(analyzeSentiment('Title', 'Great feature!')).resolves.toMatchObject({
       sentiment: 'positive',
     })
 
-    withCloud({ enabled: true, plan: 'scale', entitlements: { aiInsights: false } })
+    withCloud(storedCloud('scale', { aiInsights: false }))
     await expect(analyzeSentiment('Title', 'Great feature!')).rejects.toBeInstanceOf(
       EntitlementRequiredError
     )
