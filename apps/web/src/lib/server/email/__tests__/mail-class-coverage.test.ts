@@ -29,6 +29,8 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
 
   // No capability: may follow the contact address.
   sendConversationMessageEmail: 'contact',
+  sendConversationClosedEmail: 'contact',
+  sendConversationAutoAckEmail: 'contact',
   sendCsatRequestEmail: 'contact',
   sendStatusChangeEmail: 'contact',
   sendNewCommentEmail: 'contact',
@@ -41,6 +43,11 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   // Proves control of an address someone is claiming. The code confirms the
   // address; it grants nothing on its own, so it is not a capability.
   sendVerifyAddressEmail: 'contact',
+  // Goes to an address a visitor typed, which is the definition of the contact
+  // class. Safe there because it carries no link, no code and no account: it
+  // says only that the workspace will not open one. That absence is what makes
+  // the class honest, and `signup-not-allowed.test.tsx` is what pins it.
+  sendSignupNotAllowedEmail: 'contact',
 
   // Exported with no production caller. Classified rather than deleted so the
   // decision to remove them is a separate, deliberate change.
@@ -66,5 +73,18 @@ describe('mail class coverage', () => {
     const exported = new Set(Object.keys(mail))
     const stale = Object.keys(MAIL_CLASS).filter((k) => !exported.has(k))
     expect(stale, `Classified but no longer exported:\n${stale.join('\n')}`).toEqual([])
+  })
+
+  it('every exported sender has a billable class', async () => {
+    const { EMAIL_BILLABLE } = await import('@quackback/email')
+    const exported = Object.keys(mail).filter((k) => /^send\w*Email$/.test(k))
+    const missing = exported.filter((k) => {
+      const emailType = k.slice(4)
+      return !(emailType in EMAIL_BILLABLE)
+    })
+    expect(
+      missing,
+      `New mail sender(s) with no billable class. Add them to EMAIL_BILLABLE:\n${missing.join('\n')}`
+    ).toEqual([])
   })
 })

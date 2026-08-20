@@ -66,6 +66,21 @@ export function sealedRecipient(minted: { sealedAddress: string }): SealedEmail 
 }
 
 /**
+ * An address a visitor typed into a form, nothing more.
+ *
+ * Contact class, which is the honest one: nobody has proven they own it, so it
+ * may only carry mail that grants nothing. That is why the cast lives here
+ * beside the other three rather than at a call site — the class is what stops
+ * a future caller from handing this to a capability-bearing sender, and the
+ * compiler enforces it because those senders demand a `SecureRecipient`.
+ *
+ * Returns null for a synthetic placeholder address, which is never a person.
+ */
+export function typedAddressRecipient(raw: string): ContactEmail | null {
+  return (realEmail(raw.trim().toLowerCase()) ?? null) as ContactEmail | null
+}
+
+/**
  * The contact-class precedence, pure so it can be unit-tested without a
  * database and shared by every caller that has the two fields to hand.
  */
