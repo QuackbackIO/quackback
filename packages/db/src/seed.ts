@@ -290,7 +290,11 @@ async function seed() {
         },
       },
       completedAt: new Date().toISOString(),
-      completionSource: 'managed',
+      // A seeded demo workspace is a human-completed setup, not a
+      // control-plane-provisioned one: 'managed' would route every admin into
+      // the cloud onboarding wizard, which bounces against the acknowledged
+      // handoff below in an endless redirect.
+      completionSource: 'wizard',
       activationHandoffSeenAt: new Date().toISOString(),
       useCase: 'product_feedback',
     }
