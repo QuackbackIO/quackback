@@ -4,6 +4,8 @@
 ALTER TABLE "events"
   ADD COLUMN IF NOT EXISTS "dispatch_owner" text NOT NULL DEFAULT 'relay';
 
+-- @replay: guarded-by IF NOT EXISTS on pg_constraint.conname = 'events_dispatch_owner_ck'; the block's
+-- only action is adding that constraint, so a second run does nothing.
 DO $$
 BEGIN
   IF NOT EXISTS (
