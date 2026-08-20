@@ -222,7 +222,7 @@ describe('notification resolver routing (WO-8c)', () => {
     expect(await notificationResolver.resolve(evt('message.created'))).toEqual([])
   })
 
-  it('fails resolution when no hook context can be built so the relay retries', async () => {
+  it('fails resolution when no hook context can be built so dispatch retries', async () => {
     h.buildHookContext.mockResolvedValue(null)
     await expect(notificationResolver.resolve(evt('post.status_changed'))).rejects.toThrow(
       'Failed to build notification hook context'

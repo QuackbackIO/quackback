@@ -298,8 +298,7 @@ has not loaded the full application config.
 | `JOB_RETENTION_MS`      | 7 days                       | How long terminal rows are kept. Must exceed any live cron slot key |
 | `JOB_MAX_CONCURRENCY`   | sum of per-queue concurrency | Ceiling on one tenant loop's in-flight jobs (see §10)               |
 
-`QUACKBACK_ROLE=web` does not start the tier, the same gate `startOutboxRelay`
-uses.
+`QUACKBACK_ROLE=web` does not start the tier.
 
 ## 9. Tenant scope, and the shape this must not reproduce
 
@@ -515,10 +514,10 @@ scheduling it on every tenant's loop would have each tenant poll the _same_
 mailbox and ingest the same message into its own database. Not a regression: the
 BullMQ worker was never started under pooled tenancy either.
 
-**The outbox relay is still not started under pooled tenancy.** It needs a
-session-mode connection for `LISTEN` and `pg_advisory_lock` per tenant, which is
-future per-tenant work of its own. Its _enqueue_ is already this queue's, so
-what it needs is a per-tenant loop of exactly the shape `tier.ts` already runs.
+**Domain events are dispatched through this queue.** `emit()` writes an
+`event-dispatch` job in the same transaction as the outbox row. The former
+relay is gone; see `events/RELAY.md`. Leftover `dispatch_owner = relay` rows
+stay unpublished until the conversion step runs.
 
 ## 11. The evidence
 

@@ -83,9 +83,9 @@ function makeEvent(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent 
 }
 
 /**
- * Enqueue as the relay would, after resolving targets. The deterministic
- * content-hash key is the relay's own concern (relay.test.ts); here the key
- * only has to be unique to this run so cleanup can find it.
+ * Enqueue as event-dispatch would, after resolving targets. The
+ * deterministic content-hash key is event-dispatch's concern; here the
+ * key only has to be unique to this run so cleanup can find it.
  */
 async function enqueueViaRelay(
   event: PostCreatedEvent,
@@ -192,14 +192,14 @@ describe('hook delivery, end to end on Postgres', () => {
     expect(callCount).toBe(3)
   })
 
-  it('re-enqueuing the same keys is a no-op — the relay can re-drain safely', async () => {
+  it('re-enqueuing the same keys is a no-op — a retried dispatch is safe', async () => {
     mockHookRun.mockResolvedValue({ success: true })
     mockGetHook.mockReturnValue({ run: mockHookRun })
 
     const event = makeEvent({ id: `evt-${RUN}-dedupe` })
     const targets = [{ type: 'test-hook', target: {}, config: {} }]
     await enqueueViaRelay(event, targets)
-    // The relay re-drains an unpublished row after a crash and re-enqueues the
+    // A retried dispatch re-enqueues the
     // SAME keys; the keys array grows but the table must not.
     await enqueueViaRelay(event, targets)
 

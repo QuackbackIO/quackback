@@ -17,8 +17,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 
 import { db, events, eq } from '@/lib/server/db'
 import { runEventDispatch } from '../event-dispatch-queue'
-import { drainOnce } from '../relay'
-import { MAX_STRICT_RESOLVE_ATTEMPTS } from '../relay'
+import { MAX_STRICT_RESOLVE_ATTEMPTS } from '../outbox'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
 import type { HookTarget } from '../hook-types'
 
@@ -200,7 +199,7 @@ describe('runEventDispatch', () => {
     expect(row.publishedAt).not.toBeNull()
   })
 
-  it('matches the relay job-id shape for webhook and workflow targets', async () => {
+  it('uses deterministic job ids of the form eventId:sink:hash', async () => {
     const eventId = await insertEvent({ owner: 'job' })
     const fromJob: string[] = []
     await runEventDispatch(job(eventId), {
@@ -210,39 +209,23 @@ describe('runEventDispatch', () => {
       },
     })
 
-    const relayEventId = await insertEvent({ owner: 'relay' })
-    const fromRelay: string[] = []
-    await drainOnce({
-      resolve: webhookAndWorkflow,
-      enqueue: async (jobs) => {
-        fromRelay.push(...jobs.map((j) => j.jobId))
-      },
-    })
-
-    const jobSuffixes = fromJob.map((k) => k.slice(eventId.length)).sort()
-    const relayOurs = fromRelay
-      .filter((k) => k.startsWith(`${relayEventId}:`))
-      .map((k) => k.slice(relayEventId.length))
-      .sort()
-    expect(jobSuffixes).toEqual(relayOurs)
-    expect(jobSuffixes.some((s) => s.startsWith(':webhook:'))).toBe(true)
-    expect(jobSuffixes.some((s) => s.startsWith(':workflow:'))).toBe(true)
+    expect(fromJob.every((k) => k.startsWith(`${eventId}:`))).toBe(true)
+    expect(fromJob.some((s) => s.startsWith(`${eventId}:webhook:`))).toBe(true)
+    expect(fromJob.some((s) => s.startsWith(`${eventId}:workflow:`))).toBe(true)
+    expect(new Set(fromJob).size).toBe(2)
   })
 
-  it('lets job-owned and relay-owned unpublished rows coexist', async () => {
+  it('leaves leftover relay-owned rows unpublished while publishing job-owned ones', async () => {
     const jobId = await insertEvent({ owner: 'job' })
     const relayId = await insertEvent({ owner: 'relay' })
 
     await runEventDispatch(job(jobId), { resolve: webhookAndWorkflow, enqueue: async () => {} })
-    await drainOnce({
-      resolve: webhookAndWorkflow,
-      enqueue: async () => {},
-    })
+    await runEventDispatch(job(relayId), { resolve: webhookAndWorkflow, enqueue: async () => {} })
 
     const [jobRow] = await db.select().from(events).where(eq(events.eventId, jobId))
     const [relayRow] = await db.select().from(events).where(eq(events.eventId, relayId))
     expect(jobRow.publishedAt).not.toBeNull()
-    expect(relayRow.publishedAt).not.toBeNull()
+    expect(relayRow.publishedAt).toBeNull()
     expect(jobRow.dispatchOwner).toBe('job')
     expect(relayRow.dispatchOwner).toBe('relay')
   })

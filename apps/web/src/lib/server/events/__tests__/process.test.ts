@@ -34,7 +34,7 @@ vi.mock('@/lib/server/jobs/job-queue', async (importOriginal) => ({
   },
 }))
 
-// EVENTING-V2: processEvent now writes to the outbox (the relay enqueues).
+// EVENTING-V2: processEvent now writes to the outbox (event-dispatch enqueues).
 const mockWriteEventToOutbox = vi.fn().mockResolvedValue(true)
 vi.mock('../outbox-dispatch', () => ({
   writeEventToOutbox: (...args: unknown[]) => mockWriteEventToOutbox(...args),
@@ -130,9 +130,10 @@ describe('Event processing', () => {
   })
 
   describe('processEvent', () => {
-    // EVENTING-V2 (WO-18): processEvent writes to the durable outbox; the relay
-    // is the sole enqueuer, so processEvent never touches the queue directly.
-    // The relay's drain→enqueue is covered by relay.test.ts.
+    // EVENTING-V2 (WO-18): processEvent writes to the durable outbox;
+    // event-dispatch is the sole hook enqueuer, so processEvent never
+    // touches the queue directly. The drain is covered by
+    // event-dispatch-queue.test.ts.
     it('writes the event to the outbox and does not enqueue directly', async () => {
       const event = makeEvent()
       await processEvent(event)

@@ -6,7 +6,7 @@ import type { DomainEvent } from '../envelope'
 /**
  * WO-8a — the webhook resolver's pure matching logic (board extraction, event-type
  * + board-overlap match, private-comment guard, catalogue-derived interest).
- * End-to-end coverage rides the relay + dispatch-outbox-parity suites.
+ * End-to-end coverage rides the event-dispatch + dispatch-outbox-parity suites.
  */
 
 function evt(type: string, payload: Record<string, unknown>): DomainEvent {

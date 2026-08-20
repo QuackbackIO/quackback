@@ -414,7 +414,7 @@ function scheduleTenantRefresh(cfg: RunnerConfig): void {
 
 /**
  * Start the job tier. Worker-role only, so calling it on a web replica is a
- * no-op — the same gate `startOutboxRelay` uses.
+ * no-op.
  */
 export async function startJobTier(): Promise<void> {
   if (running) return

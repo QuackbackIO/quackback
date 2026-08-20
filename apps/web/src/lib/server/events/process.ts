@@ -94,20 +94,19 @@ export async function processEvent(event: EventData): Promise<void> {
 
   // EVENTING-V2 (WO-18 cutover): the durable outbox is the ONLY path. The event
   // is written transactionally (closing the commit-vs-enqueue loss window) and
-  // the leader relay resolves targets and enqueues onto the `events` queue: the
-  // relay is the sole enqueuer. The legacy direct getHookTargets + bulk-add path
-  // is deleted; there is no flag branch anymore.
+  // `event-dispatch` resolves targets and enqueues onto the `events` queue.
+  // The legacy direct getHookTargets + bulk-add path is deleted.
   const { writeEventToOutbox } = await import('./outbox-dispatch')
   await writeEventToOutbox(event)
 }
 
 /**
- * Enqueue pre-resolved hook jobs with caller-supplied deterministic keys
- * (EVENTING-V2 WO-3). The outbox relay is the sole caller: it passes
- * `jobId = ${eventId}:${sink}:${targetKey}` so a re-drained event re-enqueues
- * the SAME key, which the unique index on `(queue, dedupe_key)` turns into a
- * no-op (and `hook_deliveries` catches the rest) — the load-bearing mechanism
- * for effectively-once delivery. One statement, whatever the fan-out.
+ * Enqueue pre-resolved hook jobs with caller-supplied deterministic keys.
+ * `event-dispatch` passes `jobId = ${eventId}:${sink}:${targetKey}` so a
+ * retried dispatch re-enqueues the SAME key, which the unique index on
+ * `(queue, dedupe_key)` turns into a no-op (and `hook_deliveries` catches
+ * the rest) — the load-bearing mechanism for effectively-once delivery.
+ * One statement, whatever the fan-out.
  */
 export async function enqueueHookJobsWithIds(
   jobs: Array<{ name: string; data: HookJobData; jobId: string }>,

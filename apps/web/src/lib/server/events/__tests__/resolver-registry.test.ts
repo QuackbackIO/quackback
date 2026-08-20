@@ -47,7 +47,7 @@ describe('resolver registry', () => {
     expect(targets).toEqual([])
   })
 
-  it('rejects when any interested resolver fails so the relay can retry', async () => {
+  it('rejects when any interested resolver fails so dispatch can retry', async () => {
     registerResolver({
       sink: 'boom',
       interestedIn: () => true,
