@@ -9,7 +9,7 @@
  * The suite is scoped to unique queue names because `DATABASE_URL` points every
  * worktree on this machine at one shared `quackback_test`.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   cleanupQueues,
   closeHarness,
@@ -47,6 +47,11 @@ vi.mock('@/lib/server/tenancy/tenant-context', () => ({
 }))
 
 import {
+  __resetAfterCommitForTests,
+  onDurableWorkCommitted,
+} from '@/lib/server/tenancy/after-commit'
+
+import {
   cancelJob,
   claimJobs,
   completeJob,
@@ -68,12 +73,22 @@ function queue(label: string): string {
   return q
 }
 
+const signaled: string[] = []
+let unsubCommit: (() => void) | undefined
+
 beforeAll(async () => {
   await ensureJobQueueSchema()
 })
 
+beforeEach(() => {
+  signaled.length = 0
+  unsubCommit = onDurableWorkCommitted((key) => signaled.push(key))
+})
+
 afterEach(() => {
   currentTenantId = null
+  unsubCommit?.()
+  __resetAfterCommitForTests()
 })
 
 afterAll(async () => {
@@ -666,14 +681,18 @@ describe('per-queue retention', () => {
 })
 
 describe('transactional enqueue', () => {
-  it('commits the job with the caller transaction', async () => {
+  it('commits the job with the caller transaction and signals only after commit', async () => {
     const q = queue('tx-commit')
     currentTenantId = 'tenant-tx'
-    await testDb().transaction(async (tx) => {
+    const { wrapDbTransaction } = await import('@/lib/server/tenancy/after-commit')
+    const transaction = wrapDbTransaction(testDb().transaction.bind(testDb()))
+    await transaction(async (tx) => {
       const { inserted } = await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
       expect(inserted).toBe(true)
+      expect(signaled).toEqual([])
     })
     expect((await rowsFor(q)).length).toBe(1)
+    expect(signaled).toEqual(['tenant-tx'])
   })
 
   it('leaves no row when the caller transaction rolls back', async () => {
@@ -685,5 +704,6 @@ describe('transactional enqueue', () => {
       })
     ).rejects.toThrow('boom')
     expect((await rowsFor(q)).length).toBe(0)
+    expect(signaled).toEqual([])
   })
 })

@@ -77,6 +77,8 @@ import { getExecuteCount, getExecuteRows } from '@/lib/server/utils/execute-rows
 import { hasPgErrorCode } from '@/lib/server/utils/pg-error'
 import { logger } from '@/lib/server/logger'
 import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { isPooledTenancy } from '@/lib/server/tenancy/mode'
+import { noteDurableWork, SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
 import {
   leaseClaimGroupedSql,
   leaseCompleteSql,
@@ -191,6 +193,15 @@ function currentTenantId(): string | null {
   return getCurrentTenant()?.tenantId ?? null
 }
 
+/** Tenant the after-commit scheduler should ring for this insert. */
+function workKeyForSignal(): string | null {
+  return currentTenantId() ?? (isPooledTenancy() ? null : SINGLE_TENANT_ID)
+}
+
+function noteInsertedWork(executor?: JobSqlExecutor): void {
+  noteDurableWork(workKeyForSignal(), { committed: !executor })
+}
+
 function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value)
 }
@@ -227,7 +238,11 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   `)
 
   const rows = getExecuteRows<{ job_id: string }>(result)
-  return { jobId, inserted: rows.length > 0 }
+  const inserted = rows.length > 0
+  // Transactional inserts record the tenant and flush only after the
+  // outer commit. Auto-commit inserts are already visible, so they signal now.
+  if (inserted) noteInsertedWork(input.executor)
+  return { jobId, inserted }
 }
 
 /** How many rows one queue may have claimed in a pass, and for how long. */
@@ -284,6 +299,7 @@ export async function enqueueJobs(
     RETURNING dedupe_key
   `)
   const written = getExecuteRows<{ dedupe_key: string | null }>(result)
+  if (written.length > 0) noteInsertedWork(opts?.executor)
   return {
     inserted: written.length,
     insertedDedupeKeys: written.map((r) => r.dedupe_key).filter((k): k is string => k !== null),
