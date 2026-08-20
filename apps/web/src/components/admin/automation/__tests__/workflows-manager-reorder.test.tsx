@@ -1,18 +1,20 @@
 // @vitest-environment happy-dom
 /**
- * Priority reordering in the workflows manager (support platform §4.6). Within
- * one trigger group the live customer-facing workflows compete for a single
- * exclusive first-match slot, so their stored order is the rule that decides
- * which one runs. Covers the ranking shown on the rows, the drag affordance,
- * and the reorder the drop persists.
+ * Priority reordering in the workflows manager (support platform §4.6).
+ * Customer-facing workflows share one first-match list in stored order
+ * (including draft/paused); background workflows are unranked.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
 import { render, renderHook, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }))
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+  useRouteContext: () => ({ settings: { featureFlags: {}, publicWidgetConfig: {} } }),
+}))
 
 const hoisted = vi.hoisted(() => ({
   listWorkflowsFn: vi.fn(),
@@ -37,9 +39,15 @@ vi.mock('@/lib/server/functions/workflow-reporting', () => ({
   workflowRunTimelineFn: vi.fn(),
 }))
 
-import { WorkflowsManager, firstMatchRanks, reorderGroup } from '../workflows-manager'
+import {
+  WorkflowsManager,
+  firstMatchRanks,
+  needsSetupBadgeText,
+  reorderGroup,
+} from '../workflows-manager'
 import { useReorderWorkflows } from '@/lib/client/mutations/workflows'
 import type { WorkflowDTO } from '@/lib/server/functions/workflows'
+import { treeToGraph, createStep, newTree, insertStepAt, ROOT_LOCATION } from '../workflow-graph'
 
 afterEach(cleanup)
 
@@ -68,9 +76,11 @@ const GROUP = [
 function renderManager() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const ui: ReactElement = (
-    <QueryClientProvider client={queryClient}>
-      <WorkflowsManager />
-    </QueryClientProvider>
+    <IntlProvider locale="en" defaultLocale="en" messages={{}}>
+      <QueryClientProvider client={queryClient}>
+        <WorkflowsManager />
+      </QueryClientProvider>
+    </IntlProvider>
   )
   return render(ui)
 }
@@ -89,40 +99,59 @@ describe('reorderGroup', () => {
 })
 
 describe('firstMatchRanks', () => {
-  it('ranks only the workflows competing for the slot', () => {
+  it('ranks every customer-facing workflow in stored order, including drafts', () => {
     const ranks = firstMatchRanks([
       workflow('a', 'A'),
       workflow('b', 'B', { status: 'paused' }),
-      workflow('c', 'C'),
+      workflow('c', 'C', { status: 'draft' }),
       workflow('d', 'D', { class: 'background' }),
     ])
-    // A paused workflow cannot win the slot, and a background one never
-    // competes for it, so neither takes a rank from the live pair.
     expect([...ranks]).toEqual([
       ['a', 1],
-      ['c', 2],
+      ['b', 2],
+      ['c', 3],
     ])
   })
 
-  it('ranks nothing when only one workflow can win', () => {
-    expect(
-      firstMatchRanks([workflow('a', 'A'), workflow('b', 'B', { status: 'draft' })]).size
-    ).toBe(0)
+  it('ranks a lone customer-facing workflow as 1', () => {
+    expect([...firstMatchRanks([workflow('a', 'A')])]).toEqual([['a', 1]])
   })
 })
 
-describe('WorkflowsManager priority list', () => {
-  it('shows each competing workflow its first-match rank', async () => {
-    hoisted.listWorkflowsFn.mockResolvedValue(GROUP)
+describe('needsSetupBadgeText', () => {
+  it('uses branch-option phrasing only when every issue is an unset path', () => {
+    expect(needsSetupBadgeText({ branchOptions: 2, other: 0 })).toBe(
+      'Needs setup · 2 branch options'
+    )
+    expect(needsSetupBadgeText({ branchOptions: 1, other: 0 })).toBe(
+      'Needs setup · 1 branch option'
+    )
+  })
+
+  it('falls back to a count when issues are mixed or generic', () => {
+    expect(needsSetupBadgeText({ branchOptions: 0, other: 2 })).toBe('Needs setup · 2')
+    expect(needsSetupBadgeText({ branchOptions: 2, other: 1 })).toBe('Needs setup · 3')
+  })
+})
+
+describe('WorkflowsManager class list', () => {
+  it('groups by class and ranks customer-facing rows in visual order', async () => {
+    hoisted.listWorkflowsFn.mockResolvedValue([
+      ...GROUP,
+      workflow('workflow_bg', 'Nightly sweep', { class: 'background', sortOrder: 3 }),
+    ])
     hoisted.workflowEffectivenessFn.mockResolvedValue([])
     renderManager()
 
-    expect(await screen.findByTitle('First match for this trigger')).toBeTruthy()
+    expect(await screen.findByText('Customer-facing')).toBeTruthy()
+    expect(screen.getByText('Background')).toBeTruthy()
+    expect(screen.getByText('Priority when live · drafts do not run')).toBeTruthy()
     const ranks = await screen.findAllByTestId('first-match-rank')
     expect(ranks.map((el) => el.textContent)).toEqual(['1', '2', '3'])
+    expect(screen.queryByLabelText('Reorder Nightly sweep')).toBeNull()
   })
 
-  it('gives every row in the group a drag handle', async () => {
+  it('gives every customer-facing row a drag handle when there are two or more', async () => {
     hoisted.listWorkflowsFn.mockResolvedValue(GROUP)
     hoisted.workflowEffectivenessFn.mockResolvedValue([])
     renderManager()
@@ -137,11 +166,11 @@ describe('WorkflowsManager priority list', () => {
     hoisted.workflowEffectivenessFn.mockResolvedValue([])
     renderManager()
 
-    // 'i' hides "Welcome tour" and leaves the other two.
-    await userEvent.type(await screen.findByLabelText('Search workflows'), 'i')
+    await userEvent.type(await screen.findByLabelText('Search workflows…'), 'i')
     const handle = await screen.findByLabelText('Reorder Billing triage')
     expect(handle.getAttribute('disabled')).not.toBeNull()
     expect(screen.queryByLabelText('Reorder Welcome tour')).toBeNull()
+    expect(screen.queryByText('Priority when live · drafts do not run')).toBeNull()
   })
 
   it('offers no handle where there is no order to set', async () => {
@@ -151,6 +180,36 @@ describe('WorkflowsManager priority list', () => {
 
     await screen.findByText('Welcome tour')
     expect(screen.queryByLabelText('Reorder Welcome tour')).toBeNull()
+    expect(screen.getByTestId('first-match-rank').textContent).toBe('1')
+  })
+
+  it('omits the customer-facing group when every workflow is background', async () => {
+    hoisted.listWorkflowsFn.mockResolvedValue([
+      workflow('workflow_bg', 'Nightly sweep', { class: 'background' }),
+    ])
+    hoisted.workflowEffectivenessFn.mockResolvedValue([])
+    renderManager()
+
+    expect(await screen.findByText('Nightly sweep')).toBeTruthy()
+    expect(screen.queryByText('Customer-facing')).toBeNull()
+    expect(screen.getByText('Background')).toBeTruthy()
+    expect(screen.queryByText('Priority when live · drafts do not run')).toBeNull()
+  })
+
+  it('badges a branch with unset options as needs setup', async () => {
+    let tree = newTree()
+    const branch = createStep(tree, 'branch')
+    tree = insertStepAt(tree, ROOT_LOCATION, 0, branch)
+    hoisted.listWorkflowsFn.mockResolvedValue([
+      workflow('workflow_route', 'Route by issue type', {
+        class: 'background',
+        graph: treeToGraph(tree) as WorkflowDTO['graph'],
+      }),
+    ])
+    hoisted.workflowEffectivenessFn.mockResolvedValue([])
+    renderManager()
+
+    expect(await screen.findByText('Needs setup · 2 branch options')).toBeTruthy()
   })
 })
 

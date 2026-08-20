@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Link, useRouteContext, useRouterState } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import {
-  BeakerIcon,
   BoltIcon,
+  BookOpenIcon,
   ChartBarIcon,
+  LinkIcon,
   SparklesIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/solid'
@@ -18,12 +20,13 @@ interface NavItem {
   defaultLabel: string
   to: string
   icon: typeof SparklesIcon
+  badge?: 'new'
 }
 
 /**
- * A titled cluster of nav rows. The "Quinn AI" group holds the two peer agents
- * (Agent, Copilot); the trailing untitled group holds the standalone tools
- * (Workflows, Test, Performance) that sit beside Quinn rather than under it.
+ * A titled cluster of nav rows. The Agents group holds the two peer agents
+ * plus their shared catalog (Connectors, Skills); the trailing untitled group
+ * holds standalone tools (Workflows, Performance).
  */
 interface NavSection {
   labelId?: string
@@ -38,10 +41,16 @@ interface AutomationNavPermissions {
 }
 
 export function buildAutomationNavSections(
-  flags: { supportInbox?: boolean } | undefined,
+  flags:
+    | {
+        supportInbox?: boolean
+        assistantConnectors?: boolean
+        assistantSkills?: boolean
+      }
+    | undefined,
   permissions: AutomationNavPermissions
 ): NavSection[] {
-  const quinn: NavItem[] = permissions.assistant
+  const agents: NavItem[] = permissions.assistant
     ? [
         {
           labelId: 'automation.nav.agent',
@@ -55,6 +64,28 @@ export function buildAutomationNavSections(
           to: '/admin/automation/copilot',
           icon: UserGroupIcon,
         },
+        ...(flags?.assistantConnectors
+          ? [
+              {
+                labelId: 'automation.nav.connectors',
+                defaultLabel: 'Connectors',
+                to: '/admin/automation/connectors',
+                icon: LinkIcon,
+                badge: 'new',
+              } satisfies NavItem,
+            ]
+          : []),
+        ...(flags?.assistantSkills
+          ? [
+              {
+                labelId: 'automation.nav.skills',
+                defaultLabel: 'Skills',
+                to: '/admin/automation/skills',
+                icon: BookOpenIcon,
+                badge: 'new',
+              } satisfies NavItem,
+            ]
+          : []),
       ]
     : []
 
@@ -65,14 +96,6 @@ export function buildAutomationNavSections(
           defaultLabel: 'Workflows',
           to: '/admin/automation/workflows',
           icon: BoltIcon,
-        }
-      : null,
-    permissions.assistant
-      ? {
-          labelId: 'automation.nav.test',
-          defaultLabel: 'Test agent',
-          to: '/admin/automation/test',
-          icon: BeakerIcon,
         }
       : null,
     permissions.analytics
@@ -86,15 +109,35 @@ export function buildAutomationNavSections(
   ].filter((item): item is NavItem => item !== null)
 
   const sections: NavSection[] = []
-  if (quinn.length > 0) {
+  if (agents.length > 0) {
     sections.push({
-      labelId: 'automation.nav.group.quinn',
-      defaultLabel: 'Quinn AI',
-      items: quinn,
+      labelId: 'automation.nav.group.agents',
+      defaultLabel: 'Agents',
+      items: agents,
     })
   }
   if (tools.length > 0) sections.push({ items: tools })
   return sections
+}
+
+const NAV_SEEN_CONNECTORS = 'qb.nav.seen.connectors'
+const NAV_SEEN_SKILLS = 'qb.nav.seen.skills'
+
+function useNavSeen(key: string, visiting: boolean): boolean {
+  const [seen, setSeen] = useState(false)
+  useEffect(() => {
+    try {
+      if (visiting) {
+        localStorage.setItem(key, '1')
+        setSeen(true)
+      } else {
+        setSeen(localStorage.getItem(key) === '1')
+      }
+    } catch {
+      setSeen(false)
+    }
+  }, [key, visiting])
+  return seen
 }
 
 export function AutomationNav() {
@@ -108,6 +151,15 @@ export function AutomationNav() {
     analytics: usePermission(PERMISSIONS.ANALYTICS_VIEW),
   }
   const sections = buildAutomationNavSections(flags, permissions)
+  const seenConnectors = useNavSeen(
+    NAV_SEEN_CONNECTORS,
+    pathname === '/admin/automation/connectors' ||
+      pathname.startsWith('/admin/automation/connectors/')
+  )
+  const seenSkills = useNavSeen(
+    NAV_SEEN_SKILLS,
+    pathname === '/admin/automation/skills' || pathname.startsWith('/admin/automation/skills/')
+  )
 
   return (
     <nav
@@ -133,7 +185,6 @@ export function AutomationNav() {
                 to={item.to}
                 className={cn(
                   MENU_ROW,
-                  'min-h-9',
                   isActive
                     ? 'bg-primary/10 font-medium text-foreground'
                     : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
@@ -143,6 +194,13 @@ export function AutomationNav() {
                 <span className="min-w-0 flex-1 truncate">
                   {intl.formatMessage({ id: item.labelId, defaultMessage: item.defaultLabel })}
                 </span>
+                {item.badge === 'new' &&
+                  !(item.to === '/admin/automation/connectors' && seenConnectors) &&
+                  !(item.to === '/admin/automation/skills' && seenSkills) && (
+                    <span className="ms-auto text-[11px] font-semibold uppercase tracking-wide text-primary">
+                      {intl.formatMessage({ id: 'automation.nav.new', defaultMessage: 'New' })}
+                    </span>
+                  )}
               </Link>
             )
           })}

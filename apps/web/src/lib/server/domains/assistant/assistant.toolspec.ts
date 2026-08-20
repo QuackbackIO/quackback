@@ -48,6 +48,7 @@ import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { TICKET_TYPES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
 import { DEFAULT_ASSISTANT_CONFIG, type AssistantRole } from '@/lib/shared/assistant/config'
+import { SKILL_LOADS_PER_TURN } from '@/lib/shared/assistant/skills'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
 import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
@@ -106,6 +107,8 @@ export interface AssistantProposedAction {
   /** `spec.label` at proposal time — the admin-facing tool name (e.g. "End conversation"),
    *  for the proposed-action card's title. */
   label: string
+  connector?: { name: string; initials: string }
+  argsPreview?: Record<string, string>
 }
 
 export interface AssistantToolOutcome {
@@ -155,7 +158,7 @@ export interface AssistantToolLedger {
    * trying to infer actions from customer-facing prose.
    */
   toolCalls: string[]
-  /** Privacy-safe outcomes for Test agent and operational traces. */
+  /** Privacy-safe outcomes for operational traces. */
   toolOutcomes: AssistantToolOutcome[]
   /** Set only by the handoff_to_human control tool. */
   handoffRequest: AssistantHandoffRequest | null
@@ -276,6 +279,11 @@ export interface AssistantToolContext {
    * See `resolveEffectiveToolMode` in assistant.tools.ts.
    */
   writeToolPolicy?: AssistantWriteToolPolicy
+  /**
+   * Assigned skill count for this turn's agent. `use_skill` registers only
+   * when this is > 0. Skill load budget lives on the ledger.
+   */
+  skills?: { count: number; loads: number }
   /** The involvement this turn belongs to, for audit rows and pending actions. Null before the first involvement opens. */
   involvementId: AssistantInvolvementId | null
   /** The customer message this turn answers, keying the write-tool idempotency key. Null in the sandbox. */
@@ -317,6 +325,7 @@ export function makeAssistantToolContext(init: {
   latestCustomerMessageId?: string | null
   simulate?: boolean
   writeToolPolicy?: AssistantWriteToolPolicy
+  skills?: { count: number; loads: number }
   actor?: Actor
   attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
 }): AssistantToolContext {
@@ -340,6 +349,7 @@ export function makeAssistantToolContext(init: {
     ledger: makeAssistantToolLedger(),
     simulate: init.simulate ?? init.conversationId === null,
     writeToolPolicy: init.writeToolPolicy,
+    skills: init.skills,
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
@@ -447,6 +457,14 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
   parents: readonly ('conversation' | 'ticket')[]
   /** Optional turn-local availability gate, applied before mode resolution. */
   availableWhen?: (ctx: AssistantToolContext) => boolean
+  /**
+   * Per-tool permission dial for remote connector tools. Built-ins leave this
+   * undefined so role policy (D14) is untouched. `approval` maps to propose;
+   * `always` maps to autonomous. Policy `never` is filtered before assembly.
+   */
+  approvalPolicy?: 'always' | 'approval'
+  /** Source chip for approval cards. Built-ins omit this. */
+  connector?: { name: string; initials: string }
   /** The TanStack tool definition: model-facing name, description, and zod schemas. */
   definition: ToolDefinition<any, any, string>
   execute(args: In, ctx: AssistantToolContext): Promise<Out>
@@ -1231,6 +1249,50 @@ function defineToolSpec<TDef extends ToolDefinition<any, any, string>>(spec: {
   } as AssistantToolSpec
 }
 
+const useSkillOutputSchema = z.object({
+  name: z.string(),
+  instructions: z.string().optional(),
+  note: z.string().optional(),
+})
+
+export const useSkillTool = toolDefinition({
+  name: 'use_skill',
+  description:
+    "Load a packaged procedure by exact name from this turn's skill catalogue. Returns the instruction body to follow. Does not grant new tools.",
+  inputSchema: z.object({
+    name: z.string().min(1).max(80).describe('The skill name from the catalogue.'),
+  }),
+  outputSchema: withGateEnvelope(useSkillOutputSchema),
+})
+
+type UseSkillArgs = InferToolInput<typeof useSkillTool>
+type UseSkillOutput = z.infer<typeof useSkillOutputSchema>
+
+async function executeUseSkill(
+  args: UseSkillArgs,
+  ctx: AssistantToolContext
+): Promise<UseSkillOutput> {
+  const skills = ctx.skills ?? { count: 0, loads: 0 }
+  if (skills.loads >= SKILL_LOADS_PER_TURN) {
+    return {
+      name: args.name,
+      note: `Skill load budget reached (${SKILL_LOADS_PER_TURN} this turn). Continue from skills already loaded.`,
+    }
+  }
+  const { getSkillBody } = await import('./skills.service')
+  const { roleToAgent } = await import('@/lib/shared/assistant/config')
+  const body = await getSkillBody(args.name, roleToAgent(ctx.role), ctx.db)
+  skills.loads += 1
+  ctx.skills = skills
+  if (!body) {
+    return {
+      name: args.name,
+      note: `No skill named "${args.name}" is assigned to this agent.`,
+    }
+  }
+  return { name: args.name, instructions: body }
+}
+
 const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
     label: 'Search knowledge',
@@ -1385,6 +1447,19 @@ const SPECS: readonly AssistantToolSpec[] = [
     definition: captureFeedbackTool,
     execute: executeCaptureFeedback,
     summarize: (args) => `Capture feedback: "${args.title}"`,
+  }),
+  defineToolSpec({
+    label: 'Use skill',
+    description: 'Load a packaged procedure by name and follow its instructions for this turn.',
+    promptGuidance:
+      'Load a skill only when its when-to-use line matches the current request. Loading never grants a new tool. Stop after the load budget is reached.',
+    risk: 'read',
+    permissions: [],
+    parents: ['conversation', 'ticket'],
+    availableWhen: (ctx) => (ctx.skills?.count ?? 0) > 0,
+    definition: useSkillTool,
+    execute: executeUseSkill,
+    summarize: (args) => `Follow skill "${args.name}"`,
   }),
 ]
 

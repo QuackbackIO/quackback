@@ -74,6 +74,8 @@ export interface BuildAssistantPromptInput {
   workspaceName: string
   /** The actual post-policy tool set assembled for this turn. */
   tools: readonly AssistantPromptTool[]
+  /** One line per enabled+assigned skill for this agent. */
+  skillCatalogue?: readonly { name: string; whenToUse: string }[]
   /** Platform-resolved facts, not a conversation transcript or retrieved excerpt. */
   trustedRuntimeContext?: string | null
   /** Active customer channel. */
@@ -451,6 +453,15 @@ function composeAssistantSystemMessages(
   if (input.tools.some((tool) => tool.name === 'capture_feedback')) {
     const catalogue = buildBoardCatalogueMessage(input.boardCatalogue ?? [])
     if (catalogue) messages.push(catalogue)
+  }
+
+  if (input.tools.some((tool) => tool.name === 'use_skill') && input.skillCatalogue?.length) {
+    const lines = input.skillCatalogue.map((skill) => `- ${skill.name}: ${skill.whenToUse}`)
+    messages.push(
+      `# Skills
+Packaged procedures you may load on demand with use_skill. Loading a skill never grants a new tool; it only tells you how to use tools you already have. Load a skill only when its when-to-use line matches the current request.
+${lines.join('\n')}`
+    )
   }
 
   return messages

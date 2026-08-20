@@ -101,12 +101,8 @@ const ALL_KNOWLEDGE = { sources: new Set(ASSISTANT_CITATION_TYPES), status: true
 
 /** Tools-only view of the assembly, for the many cases here that don't need
  *  the paired specs. */
-async function assembleTools(
-  c: AssistantToolContext,
-  specs?: readonly AssistantToolSpec[],
-  actionsEnabled = specs !== undefined
-) {
-  return (await assembleAssistantToolset(c, specs, actionsEnabled)).tools
+async function assembleTools(c: AssistantToolContext, specs?: readonly AssistantToolSpec[]) {
+  return (await assembleAssistantToolset(c, specs)).tools
 }
 
 const ctx = makeToolTestContext
@@ -328,21 +324,15 @@ describe('search', () => {
   })
 })
 
-describe('assembleAssistantToolset: assistant actions flag', () => {
-  it('returns the read tool plus core control tools with no pipeline wrapping when the flag is off', async () => {
+describe('assembleAssistantToolset: built-in actions', () => {
+  it('exposes write tools with the rest of the catalogue', async () => {
     const tools = await assembleTools(ctx())
-    expect(tools.map((t) => t.name).sort()).toEqual(['report_inability', 'search'])
-  })
-
-  it('exposes the write tools too when actions are enabled', async () => {
-    const tools = await assembleTools(ctx(), undefined, true)
-    // Read + control tools plus the default-active write tools.
     expect(tools.map((t) => t.name)).toContain('search')
     expect(tools.map((t) => t.name)).toContain('set_attribute')
   })
 
   it('read tools always run — there is no per-tool off switch', async () => {
-    const tools = await assembleTools(ctx(), undefined, true)
+    const tools = await assembleTools(ctx())
     expect(tools.map((t) => t.name)).toContain('search')
   })
 })
@@ -357,7 +347,7 @@ describe('assembleAssistantToolset: write-policy gating', () => {
   })
 
   it('a read tool is never dropped by the write policy', async () => {
-    const tools = await assembleTools(ctx({ writeToolPolicy: 'propose' }), undefined, true)
+    const tools = await assembleTools(ctx({ writeToolPolicy: 'propose' }))
     expect(tools.map((t) => t.name)).toContain('search')
   })
 })
@@ -386,7 +376,7 @@ describe('assembleAssistantToolset: parent-kind gating (unified inbox §2.9/§3.
     expect(tools.map((t) => t.name)).toEqual(['lookup_thing'])
   })
 
-  it('filters the same way with the assistantTools flag off (legacy read-only branch)', async () => {
+  it('filters conversation-only specs off a ticket-scoped turn', async () => {
     const c = ctx({ conversationId: null, ticketId: 'ticket_1' as never })
     // A conversation-only read spec (hypothetical: today's only read tool,
     // search, declares both) must still be excluded here too.
@@ -599,10 +589,11 @@ describe('assembleAssistantToolset: propose policy (copilot Q&A)', () => {
     }
   )
 
-  it('actions disabled still excludes write tools but keeps core controls', async () => {
+  it('still exposes write tools under propose policy (they run through the pipeline)', async () => {
     const tools = await assembleTools(ctx({ writeToolPolicy: 'propose' }))
 
-    expect(tools.map((t) => t.name)).toEqual(['search', 'report_inability'])
+    expect(tools.map((t) => t.name)).toContain('set_attribute')
+    expect(tools.map((t) => t.name)).toContain('search')
   })
 })
 

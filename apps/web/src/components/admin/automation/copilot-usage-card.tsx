@@ -4,10 +4,8 @@
  * leaderboard, and the propose-approve-execute actions funnel, over the last
  * 30 days. Read-only reporting; gated server-side on analytics.view like the
  * rest of the Quinn performance surface. Mounted whenever inboxAi is on (see
- * automation.assistant.tsx); only the actions funnel additionally needs
- * assistantTools — the pending-actions funnel this section reports on doesn't
- * exist otherwise — so the page passes that flag as `showActionsFunnel`
- * rather than gating the whole card on it.
+ * automation.performance.tsx). `showActionsFunnel` is a presentational
+ * switch for the pending-actions section, not a feature-flag gate.
  *
  * "Top teammates" answers who uses Copilot; "Cited sources" answers what's
  * carrying the answers — the two views over the same question volume a
@@ -55,8 +53,8 @@ function CountRow({ label, value }: CountRowProps) {
 }
 
 export interface CopilotUsageCardProps {
-  /** True when the assistantTools flag is on; gates only the actions-funnel
-   *  section (approval-rate tile + propose/approve/reject/expire list). */
+  /** When true, show the actions-funnel section (approval-rate tile +
+   *  propose/approve/reject/expire list). */
   showActionsFunnel: boolean
 }
 

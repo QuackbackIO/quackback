@@ -16,6 +16,7 @@ import { verifyAccessToken } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { API_KEY_SCOPES, effectiveScopes } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { DomainException, RateLimitError } from '@/lib/shared/errors'
+import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
 import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
@@ -32,6 +33,23 @@ function jsonRpcError(status: number, message: string): Response {
       id: null,
     }),
     { status, headers: { 'Content-Type': 'application/json' } }
+  )
+}
+
+/**
+ * A refusal the caller can act on: the JSON-RPC error envelope every MCP client
+ * already understands, at HTTP 402, carrying the plan that would grant the
+ * server in `data` so a client can show the upgrade prompt rather than a bare
+ * "denied".
+ */
+function jsonRpcEntitlementError(error: EntitlementRequiredError): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: error.message, data: error.toResponseBody() },
+      id: null,
+    }),
+    { status: error.statusCode, headers: { 'Content-Type': 'application/json' } }
   )
 }
 
@@ -198,6 +216,18 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   // API key auth paths, and the API key path converts failures to Response
   // objects internally rather than throwing.
   if (auth instanceof Response) return auth
+
+  // Plan gate, deliberately after auth: a 402 names the workspace's plan, which
+  // is an answer only a caller who has already identified itself should get.
+  // No-op on any install without a plan, which is every self-hosted one — see
+  // domains/settings/cloud/entitlements.ts.
+  const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  try {
+    await requireEntitlement('mcpServer')
+  } catch (err) {
+    if (!(err instanceof EntitlementRequiredError)) throw err
+    return jsonRpcEntitlementError(err)
+  }
 
   // Portal user access check
   if (auth.role === 'user') {

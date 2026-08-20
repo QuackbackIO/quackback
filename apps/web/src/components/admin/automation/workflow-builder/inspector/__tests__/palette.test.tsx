@@ -76,4 +76,17 @@ describe('StepPalette', () => {
     fireEvent.click(screen.getByText('Ask for a rating'))
     expect(onInsert).toHaveBeenLastCalledWith('request_csat')
   })
+
+  it('disables Let Quinn answer in a background workflow with the wait reason', () => {
+    const onInsert = vi.fn()
+    render(<StepPalette onInsert={onInsert} workflowClass="background" />)
+
+    const quinn = screen.getByRole('button', { name: /Let Quinn answer/ })
+    expect(quinn).toBeDisabled()
+    expect(quinn.textContent).toContain(
+      "Customer-facing workflows only: a background run can't wait for the reply"
+    )
+    fireEvent.click(quinn)
+    expect(onInsert).not.toHaveBeenCalled()
+  })
 })

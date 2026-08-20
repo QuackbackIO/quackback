@@ -46,7 +46,7 @@ function AutomationPerformancePage() {
       />
       <QuinnPerformanceCard />
       <QuinnToolsCard />
-      {flags?.inboxAi && <CopilotUsageCard showActionsFunnel={Boolean(flags.assistantTools)} />}
+      {flags?.inboxAi && <CopilotUsageCard showActionsFunnel />}
       <SupportPerformanceCard />
     </div>
   )

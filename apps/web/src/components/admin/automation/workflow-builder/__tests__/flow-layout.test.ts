@@ -253,6 +253,34 @@ describe('buildFlowNodes / buildFlowEdges — no branch', () => {
       chips: [{ label: 'Until they reply' }],
     })
   })
+
+  it('renders Let Quinn answer as a Step with the engine-default 10-min escalate chip', () => {
+    let tree = newTree()
+    const step = createStep(tree, 'let_assistant_answer')
+    tree = insertStepAt(tree, ROOT_LOCATION, 0, step)
+    const node = buildFlowNodes(baseInput(tree)).find((n) => n.id === step.id)
+    expect(node).toMatchObject({
+      data: {
+        eyebrow: 'Step',
+        title: 'Let Quinn answer',
+        chips: [
+          { label: "Escalates after 10 min if Quinn can't reply", tone: 'amber', wrap: true },
+        ],
+      },
+    })
+  })
+
+  it('phrases the escalate chip from assistantEscalateMinutes when provided', () => {
+    let tree = newTree()
+    const step = createStep(tree, 'let_assistant_answer')
+    tree = insertStepAt(tree, ROOT_LOCATION, 0, step)
+    const node = buildFlowNodes(baseInput(tree, { assistantEscalateMinutes: 5 })).find(
+      (n) => n.id === step.id
+    )
+    expect(node?.data).toMatchObject({
+      chips: [{ label: "Escalates after 5 min if Quinn can't reply" }],
+    })
+  })
 })
 
 describe('buildFlowNodes / buildFlowEdges — branch', () => {

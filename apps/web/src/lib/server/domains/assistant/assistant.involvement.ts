@@ -224,6 +224,25 @@ export async function recordOutcome(
       )
     )
     .returning()
+  if (row) {
+    try {
+      const { dispatchAssistantResolved, buildEventActor } =
+        await import('@/lib/server/events/dispatch')
+      const { ensureAssistantPrincipal } =
+        await import('@/lib/server/domains/assistant/assistant.principal')
+      const assistant = await ensureAssistantPrincipal()
+      await dispatchAssistantResolved(
+        buildEventActor({
+          principalId: assistant.id,
+          displayName: assistant.displayName ?? undefined,
+        }),
+        row.conversationId,
+        row.status
+      )
+    } catch (err) {
+      log.warn({ err, id }, 'assistant.resolved dispatch failed')
+    }
+  }
   return row ?? null
 }
 

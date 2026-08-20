@@ -1,17 +1,14 @@
 /**
  * Workflows manager (AI & Automation, support platform §4.6). A grouped,
- * filterable directory: workflows are bucketed by trigger type (in catalogue
- * order), each row shows lifecycle + class + trailing-7-day run metrics, and
- * "New workflow" opens either the template gallery or a blank draft. Editing
- * happens on the fullscreen builder route; this component only lists,
- * filters, and manages lifecycle (status, delete). The metrics cell doubles
- * as the entry point into WorkflowRunsSheet, the per-run drill-down (runs
- * list + event timeline) — otherwise a failing workflow is invisible beyond
- * these aggregate counts.
+ * filterable directory: customer-facing first (first-match order), then
+ * background. "New workflow" lives in the page header and opens either the
+ * template gallery or a blank draft. Editing happens on the fullscreen
+ * builder route; this component lists, filters, and manages lifecycle.
  */
-import { useMemo, useState, type ComponentType } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import {
   DndContext,
@@ -30,26 +27,15 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Bars3Icon } from '@heroicons/react/24/solid'
 import {
-  ArrowPathIcon,
-  BoltIcon,
-  ChatBubbleLeftRightIcon,
-  ChevronDownIcon,
-  ClockIcon,
-  DocumentTextIcon,
+  ChevronRightIcon,
   ExclamationTriangleIcon,
-  FireIcon,
-  FlagIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   SparklesIcon,
-  StarIcon,
-  TagIcon,
-  UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import { EllipsisVerticalIcon } from '@heroicons/react/24/solid'
+import { BoltIcon, ChevronDownIcon, EllipsisVerticalIcon } from '@heroicons/react/24/solid'
 import type { WorkflowDTO } from '@/lib/server/functions/workflows'
 import { workflowsQuery } from '@/lib/client/queries/workflows'
 import { workflowEffectivenessQuery } from '@/lib/client/queries/workflow-reporting'
@@ -60,22 +46,31 @@ import {
   useReorderWorkflows,
 } from '@/lib/client/mutations/workflows'
 import {
-  collectStepIssues,
+  ACTION_LABELS,
+  BLOCK_STEP_LABELS,
+  CONDITION_FIELD_META,
+  countSetupIssues,
   graphToTree,
+  isAttributeField,
+  attributeKeyFromField,
   newTree,
+  stepPaths,
   treeToGraph,
+  triggerLabel,
   validateGraph,
+  type GraphCondition,
+  type TreeStep,
 } from './workflow-graph'
 import { WorkflowTemplateGallery } from './workflow-template-gallery'
 import type { WorkflowTemplate } from './workflow-templates'
 import { WorkflowRunsSheet } from './workflow-runs-sheet'
 import { cn } from '@/lib/shared/utils'
+import { PageHeader } from '@/components/shared/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { TimeAgo } from '@/components/ui/time-ago'
 import {
   Select,
   SelectContent,
@@ -96,117 +91,13 @@ const CLASSES = [
   { value: 'background', label: 'Background' },
 ] as const
 
-interface TriggerMeta {
-  value: string
-  label: string
-  icon: ComponentType<{ className?: string }>
-  colorClass: string
-}
-
-/** Group order for the list: same order the builder's trigger picker uses. */
-const TRIGGERS: TriggerMeta[] = [
-  {
-    value: 'conversation.created',
-    label: 'New conversation',
-    icon: BoltIcon,
-    colorClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  },
-  {
-    value: 'message.created',
-    label: 'Message received',
-    icon: ChatBubbleLeftRightIcon,
-    colorClass: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  },
-  {
-    value: 'conversation.status_changed',
-    label: 'Status changed',
-    icon: ArrowPathIcon,
-    colorClass: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-  },
-  {
-    value: 'conversation.assigned',
-    label: 'Assigned to team/agent',
-    icon: UserGroupIcon,
-    colorClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  },
-  {
-    value: 'assistant.handed_off',
-    label: 'AI agent handed off to a human',
-    icon: SparklesIcon,
-    colorClass: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
-  },
-  {
-    value: 'conversation.priority_changed',
-    label: 'Priority changed',
-    icon: FlagIcon,
-    colorClass: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
-  },
-  {
-    value: 'conversation.attribute_changed',
-    label: 'Attribute changed',
-    icon: TagIcon,
-    colorClass: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
-  },
-  {
-    value: 'conversation.csat_submitted',
-    label: 'CSAT rating submitted',
-    icon: StarIcon,
-    colorClass: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
-  },
-  {
-    value: 'message.note_created',
-    label: 'Internal note added',
-    icon: DocumentTextIcon,
-    colorClass: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
-  },
-  {
-    value: 'conversation.customer_unresponsive',
-    label: 'Customer stopped responding',
-    icon: ClockIcon,
-    colorClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
-  },
-  {
-    value: 'conversation.teammate_unresponsive',
-    label: 'Teammate hasn’t responded',
-    icon: ClockIcon,
-    colorClass: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
-  },
-  {
-    value: 'sla.approaching_breach',
-    label: 'SLA approaching breach',
-    icon: ExclamationTriangleIcon,
-    colorClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  },
-  {
-    value: 'sla.breached',
-    label: 'SLA breached',
-    icon: FireIcon,
-    colorClass: 'bg-red-500/10 text-red-600 dark:text-red-400',
-  },
-]
-
-const OTHER_TRIGGER_META: TriggerMeta = {
-  value: 'other',
-  label: 'Other triggers',
-  icon: BoltIcon,
-  colorClass: 'bg-muted text-muted-foreground',
-}
-
 const STATUSES = ['draft', 'live', 'paused'] as const
 type StatusValue = (typeof STATUSES)[number]
 
-const STATUS_META: Record<StatusValue, { label: string; dotClass: string; textClass: string }> = {
-  live: {
-    label: 'Live',
-    dotClass: 'bg-emerald-500',
-    textClass: 'text-emerald-600 dark:text-emerald-400',
-  },
-  paused: {
-    label: 'Paused',
-    dotClass: 'bg-amber-500',
-    textClass: 'text-amber-600 dark:text-amber-400',
-  },
-  draft: { label: 'Draft', dotClass: 'bg-muted-foreground', textClass: 'text-muted-foreground' },
+const STATUS_META: Record<StatusValue, { label: string }> = {
+  live: { label: 'Live' },
+  paused: { label: 'Paused' },
+  draft: { label: 'Draft' },
 }
 
 const STATUS_ACTION_LABEL: Record<StatusValue, string> = {
@@ -218,7 +109,6 @@ const STATUS_ACTION_LABEL: Record<StatusValue, string> = {
 type EffectivenessMetrics = {
   started: number
   completed: number
-  /** Funnel (customer-facing workflows only — see WorkflowRow's render). */
   sentRuns: number
   engagedRuns: number
 }
@@ -241,22 +131,105 @@ export function reorderGroup(
 }
 
 /**
- * Each workflow's position in the race for a trigger's single customer-facing
- * first-match slot: the dispatcher tries live customer-facing workflows in
- * stored order and stops at the first that runs, so only those are ranked.
- * A paused or draft workflow can't win the slot and a background workflow
- * never competes for it, so neither takes a rank. Empty below two contenders,
- * where a lone winner has no priority worth showing.
+ * Each customer-facing workflow's visual rank in stored order — including
+ * draft and paused rows. That is the order they will take when live.
+ * Background workflows never take a rank.
  */
 export function firstMatchRanks(items: readonly WorkflowDTO[]): Map<string, number> {
   const ranks = new Map<string, number>()
-  const contenders = items.filter((wf) => wf.class === 'customer_facing' && wf.status === 'live')
-  if (contenders.length < 2) return ranks
-  contenders.forEach((wf, i) => ranks.set(wf.id, i + 1))
+  items.filter((wf) => wf.class === 'customer_facing').forEach((wf, i) => ranks.set(wf.id, i + 1))
   return ranks
 }
 
-export function WorkflowsManager() {
+export function needsSetupBadgeText(counts: {
+  branchOptions: number
+  other: number
+}): string | null {
+  const total = counts.branchOptions + counts.other
+  if (total === 0) return null
+  if (counts.other === 0) {
+    return counts.branchOptions === 1
+      ? 'Needs setup · 1 branch option'
+      : `Needs setup · ${counts.branchOptions} branch options`
+  }
+  return `Needs setup · ${total}`
+}
+
+function conditionFieldLabel(field: string): string {
+  const staticMeta = (CONDITION_FIELD_META as Record<string, { label: string } | undefined>)[field]
+  if (staticMeta) return staticMeta.label
+  if (isAttributeField(field)) return attributeKeyFromField(field).replace(/_/g, ' ')
+  return field
+}
+
+function firstConditionField(condition: GraphCondition | undefined): string | undefined {
+  if (!condition || typeof condition !== 'object') return undefined
+  const rec = condition as Record<string, unknown>
+  if (typeof rec.field === 'string') return rec.field
+  const children = [
+    ...(Array.isArray(rec.all) ? rec.all : []),
+    ...(Array.isArray(rec.any) ? rec.any : []),
+  ]
+  for (const child of children) {
+    const field = firstConditionField(child as GraphCondition)
+    if (field) return field
+  }
+  return undefined
+}
+
+function shortStepLabel(step: TreeStep): string {
+  switch (step.kind) {
+    case 'action':
+      return ACTION_LABELS[step.action.type]
+    case 'condition': {
+      const field = firstConditionField(step.condition)
+      return field ? conditionFieldLabel(field) : 'Condition'
+    }
+    case 'wait':
+      return 'Wait'
+    case 'branch': {
+      const field = firstConditionField(step.paths[0]?.condition)
+      return field ? `Branch on ${conditionFieldLabel(field)}` : 'Branch'
+    }
+    case 'message':
+    case 'send_ticket_form':
+    case 'show_reply_time':
+    case 'disable_composer':
+    case 'collect_data':
+    case 'collect_reply':
+    case 'let_assistant_answer':
+    case 'reply_buttons':
+    case 'request_csat':
+      return BLOCK_STEP_LABELS[step.kind]
+  }
+}
+
+export function workflowStepSummary(graph: unknown): string {
+  const checked = validateGraph(graph)
+  if (!checked.ok) return ''
+  const tree = graphToTree(checked.value)
+  if (!tree.ok) return ''
+  const labels: string[] = []
+  const walk = (steps: TreeStep[]) => {
+    for (const step of steps) {
+      if (labels.length >= 3) return
+      labels.push(shortStepLabel(step))
+      const paths = stepPaths(step)
+      if (paths) {
+        for (const path of paths) walk(path.steps)
+      }
+    }
+  }
+  walk(tree.value.steps)
+  return labels.join(' · ')
+}
+
+export function WorkflowsManager({
+  children,
+}: {
+  children?: ReactNode
+}) {
+  const intl = useIntl()
   const navigate = useNavigate()
   const { data: workflows } = useQuery(workflowsQuery())
   const { data: effectiveness } = useQuery(workflowEffectivenessQuery())
@@ -275,6 +248,13 @@ export function WorkflowsManager() {
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [deleting, setDeleting] = useState<WorkflowDTO | null>(null)
   const [runsWorkflow, setRunsWorkflow] = useState<WorkflowDTO | null>(null)
+
+  // On source this refuses into the upgrade modal when the plan lacks
+  // workflows; the commercial layer lands with the billing catalogue phase,
+  // and an unconfigured install is entitled to everything.
+  const refuseOr = (run: () => void) => {
+    run()
+  }
 
   const metricsByWorkflow: EffectivenessMap = useMemo(() => {
     const map: EffectivenessMap = new Map()
@@ -299,15 +279,16 @@ export function WorkflowsManager() {
     })
   }, [workflows, search, statusFilter, typeFilter])
 
-  const groups = useMemo(() => {
-    const known = TRIGGERS.map((trigger) => ({
-      trigger,
-      items: filtered.filter((wf) => wf.triggerType === trigger.value),
-    })).filter((g) => g.items.length > 0)
-    const knownValues = new Set(TRIGGERS.map((t) => t.value))
-    const other = filtered.filter((wf) => !knownValues.has(wf.triggerType))
-    return other.length > 0 ? [...known, { trigger: OTHER_TRIGGER_META, items: other }] : known
-  }, [filtered])
+  const groups = useMemo(
+    () =>
+      CLASSES.map((cls) => ({
+        cls,
+        items: filtered.filter((wf) => wf.class === cls.value),
+      })).filter((g) => g.items.length > 0),
+    [filtered]
+  )
+
+  const ranks = useMemo(() => firstMatchRanks(workflows ?? []), [workflows])
 
   const goToBuilder = (workflowId: string) => {
     void navigate({
@@ -317,25 +298,29 @@ export function WorkflowsManager() {
   }
 
   const createFromScratch = () => {
-    create.mutate(
-      {
-        name: 'Untitled workflow',
-        class: 'customer_facing',
-        triggerType: 'conversation.created',
-        graph: treeToGraph(newTree()),
-      },
-      {
-        onSuccess: (wf) => goToBuilder(wf.id),
-        onError: () => toast.error('Could not create the workflow'),
-      }
-    )
+    refuseOr(() => {
+      create.mutate(
+        {
+          name: 'Untitled workflow',
+          class: 'customer_facing',
+          triggerType: 'conversation.created',
+          graph: treeToGraph(newTree()),
+        },
+        {
+          onSuccess: (wf) => goToBuilder(wf.id),
+          onError: () => toast.error('Could not create the workflow'),
+        }
+      )
+    })
   }
 
   const createFromTemplate = (template: WorkflowTemplate) => {
     setGalleryOpen(false)
-    create.mutate(template.payload, {
-      onSuccess: (wf) => goToBuilder(wf.id),
-      onError: () => toast.error('Could not create the workflow from this template'),
+    refuseOr(() => {
+      create.mutate(template.payload, {
+        onSuccess: (wf) => goToBuilder(wf.id),
+        onError: () => toast.error('Could not create the workflow from this template'),
+      })
     })
   }
 
@@ -369,131 +354,222 @@ export function WorkflowsManager() {
 
   const hasAnyWorkflows = (workflows?.length ?? 0) > 0
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-xs">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search workflows…"
-            aria-label="Search workflows"
-            className="pl-8"
-          />
-        </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
+  const newWorkflowMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm">
+          <PlusIcon className="size-4" />
+          {intl.formatMessage({
+            id: 'automation.workflows.new',
+            defaultMessage: 'New workflow',
+          })}
+          <ChevronDownIcon className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {/* Deferred one tick: opening a dialog synchronously from a
+            dropdown's onSelect races the menu's own teardown — the
+            dialog captures the menu's body pointer-events lock as its
+            restore baseline, and closing it (or navigating away from
+            it) then leaves the whole page unclickable. */}
+        <DropdownMenuItem
+          onSelect={() =>
+            refuseOr(() => {
+              setTimeout(() => setGalleryOpen(true), 0)
+            })
+          }
         >
-          <SelectTrigger size="sm" className="w-36" aria-label="Filter by status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any">Status · Any</SelectItem>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATUS_META[s].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
-          <SelectTrigger size="sm" className="w-44" aria-label="Filter by type">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any">Type · Any</SelectItem>
-            {CLASSES.map((c) => (
-              <SelectItem key={c.value} value={c.value}>
-                {c.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="ml-auto">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm">
-                <PlusIcon className="mr-1.5 size-4" />
-                New workflow
-                <ChevronDownIcon className="ml-1.5 size-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {/* Deferred one tick: opening a dialog synchronously from a
-                  dropdown's onSelect races the menu's own teardown — the
-                  dialog captures the menu's body pointer-events lock as its
-                  restore baseline, and closing it (or navigating away from
-                  it) then leaves the whole page unclickable. */}
-              <DropdownMenuItem onSelect={() => setTimeout(() => setGalleryOpen(true), 0)}>
-                <SparklesIcon className="mr-2 size-4 text-primary" />
-                Create from template
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={createFromScratch}>
-                <PencilSquareIcon className="mr-2 size-4 text-muted-foreground" />
-                Create from scratch
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+          <SparklesIcon className="mr-2 size-4 text-primary" />
+          {intl.formatMessage({
+            id: 'automation.workflows.fromTemplate',
+            defaultMessage: 'Create from template',
+          })}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={createFromScratch}>
+          <PencilSquareIcon className="mr-2 size-4 text-muted-foreground" />
+          {intl.formatMessage({
+            id: 'automation.workflows.fromScratch',
+            defaultMessage: 'Create from scratch',
+          })}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
-      {!hasAnyWorkflows ? (
-        <div className="rounded-lg border border-dashed">
-          <EmptyState
-            icon={BoltIcon}
-            title="No workflows yet"
-            description="Automate routing, SLAs, and replies from a trigger. Start from a template or build one from scratch."
-          />
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        icon={BoltIcon}
+        title={intl.formatMessage({
+          id: 'automation.workflows.title',
+          defaultMessage: 'Workflows',
+        })}
+        description={intl.formatMessage({
+          id: 'automation.workflows.description',
+          defaultMessage:
+            'Automate routing, replies, and housekeeping on top of your conversations.',
+        })}
+        action={newWorkflowMenu}
+      />
+
+      {children}
+
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full max-w-xs">
+            <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={intl.formatMessage({
+                id: 'automation.workflows.search',
+                defaultMessage: 'Search workflows…',
+              })}
+              aria-label={intl.formatMessage({
+                id: 'automation.workflows.search',
+                defaultMessage: 'Search workflows…',
+              })}
+              className="pl-8"
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
+          >
+            <SelectTrigger size="sm" className="w-36" aria-label="Filter by status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Status · Any</SelectItem>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATUS_META[s].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
+            <SelectTrigger size="sm" className="w-44" aria-label="Filter by type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Type · Any</SelectItem>
+              {CLASSES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      ) : groups.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No workflows match these filters.
-        </div>
-      ) : (
-        groups.map((group) => {
-          const ranks = firstMatchRanks(group.items)
-          return (
-            <div key={group.trigger.value}>
-              <GroupHeader
-                trigger={group.trigger}
-                count={group.items.length}
-                contested={ranks.size > 0}
-              />
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(event) => handleDragEnd(group.items, event)}
-              >
-                <SortableContext
-                  items={group.items.map((wf) => wf.id)}
-                  strategy={verticalListSortingStrategy}
+
+        {!hasAnyWorkflows ? (
+          <div className="rounded-lg border border-dashed">
+            <EmptyState
+              icon={BoltIcon}
+              title={intl.formatMessage({
+                id: 'automation.workflows.emptyTitle',
+                defaultMessage: 'No workflows yet',
+              })}
+              description={intl.formatMessage({
+                id: 'automation.workflows.emptyDescription',
+                defaultMessage:
+                  'Automate routing, SLAs, and replies from a trigger. Start from a template or build one from scratch.',
+              })}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    refuseOr(() => {
+                      setTimeout(() => setGalleryOpen(true), 0)
+                    })
+                  }
                 >
-                  <div className="divide-y rounded-lg border">
-                    {group.items.map((wf) => (
-                      <WorkflowRow
-                        key={wf.id}
-                        workflow={wf}
-                        metrics={metricsByWorkflow.get(wf.id)}
-                        rank={ranks.get(wf.id)}
-                        contested={ranks.size > 0}
-                        reorder={
-                          group.items.length < 2 ? 'none' : isFiltered ? 'filtered' : 'enabled'
-                        }
-                        onNavigate={goToBuilder}
-                        onSetStatus={handleSetStatus}
-                        onDelete={setDeleting}
-                        onViewRuns={setRunsWorkflow}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            </div>
-          )
-        })
-      )}
+                  {intl.formatMessage({
+                    id: 'automation.workflows.fromTemplate',
+                    defaultMessage: 'Create from template',
+                  })}
+                </Button>
+              }
+            />
+          </div>
+        ) : groups.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            {intl.formatMessage({
+              id: 'automation.workflows.noMatch',
+              defaultMessage: 'No workflows match these filters.',
+            })}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border">
+            {groups.map((group, groupIndex) => {
+              const isCustomerFacing = group.cls.value === 'customer_facing'
+              const reorderMode: 'enabled' | 'filtered' | 'none' = !isCustomerFacing
+                ? 'none'
+                : group.items.length < 2
+                  ? 'none'
+                  : isFiltered
+                    ? 'filtered'
+                    : 'enabled'
+              return (
+                <div key={group.cls.value} className={groupIndex > 0 ? 'border-t' : undefined}>
+                  <GroupHeader
+                    label={
+                      group.cls.value === 'customer_facing'
+                        ? intl.formatMessage({
+                            id: 'automation.workflows.customerFacing',
+                            defaultMessage: 'Customer-facing',
+                          })
+                        : intl.formatMessage({
+                            id: 'automation.workflows.background',
+                            defaultMessage: 'Background',
+                          })
+                    }
+                    count={group.items.length}
+                    dragHint={
+                      isCustomerFacing && !isFiltered
+                        ? intl.formatMessage({
+                            id: 'automation.workflows.firstMatchHint',
+                            defaultMessage: 'Priority when live · drafts do not run',
+                          })
+                        : null
+                    }
+                  />
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => {
+                      if (reorderMode === 'enabled') handleDragEnd(group.items, event)
+                    }}
+                  >
+                    <SortableContext
+                      items={group.items.map((wf) => wf.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="divide-y">
+                        {group.items.map((wf) => (
+                          <WorkflowRow
+                            key={wf.id}
+                            workflow={wf}
+                            metrics={metricsByWorkflow.get(wf.id)}
+                            rank={isCustomerFacing ? ranks.get(wf.id) : undefined}
+                            reorder={reorderMode}
+                            onNavigate={goToBuilder}
+                            onSetStatus={handleSetStatus}
+                            onDelete={setDeleting}
+                            onViewRuns={setRunsWorkflow}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <WorkflowTemplateGallery
         open={galleryOpen}
@@ -525,54 +601,44 @@ export function WorkflowsManager() {
 }
 
 function GroupHeader({
-  trigger,
+  label,
   count,
-  contested,
+  dragHint,
 }: {
-  trigger: TriggerMeta
+  label: string
   count: number
-  /** Two or more live customer-facing workflows share this trigger's single
-   *  first-match slot, so their order is a rule and not just a listing. */
-  contested: boolean
+  dragHint: string | null
 }) {
-  const Icon = trigger.icon
   return (
-    <div className="mt-6 mb-2 flex items-center gap-2 text-sm font-semibold first:mt-0">
-      <span
-        className={cn('flex size-6 items-center justify-center rounded-md', trigger.colorClass)}
-      >
-        <Icon className="size-3.5" />
-      </span>
-      {trigger.label}
-      <span className="font-normal text-muted-foreground">· {count}</span>
-      {contested && (
-        <span className="ml-auto text-xs font-normal text-muted-foreground">
-          Customer-facing: first match wins · drag to set priority
-        </span>
+    <div className="flex items-center gap-2 bg-muted/30 px-4 py-2">
+      <span className="text-[13px] font-semibold">{label}</span>
+      <Badge size="sm" shape="pill" variant="secondary">
+        {count}
+      </Badge>
+      {dragHint && (
+        <span className="ml-auto text-[11px] font-medium text-muted-foreground">{dragHint}</span>
       )}
     </div>
   )
 }
 
-/** First problem worth badging on a row: a structural graph error, or the
- *  first step whose config is unresolved (per `actionIssue`, which also treats
- *  template needs-setup placeholders as unset), including the class-rule
- *  check (Phase C, slice C-6) against the row's own stored class. Null when
- *  clean. */
-function rowIssue(graph: unknown, workflowClass: WorkflowDTO['class']): string | null {
-  const checked = validateGraph(graph)
-  if (!checked.ok) return checked.error
+function rowSetup(workflow: WorkflowDTO): { branchOptions: number; other: number } {
+  const checked = validateGraph(workflow.graph)
+  if (!checked.ok) return { branchOptions: 0, other: 1 }
   const tree = graphToTree(checked.value)
-  if (!tree.ok) return tree.error
-  const [first] = collectStepIssues(tree.value, workflowClass).values()
-  return first ?? null
+  if (!tree.ok) return { branchOptions: 0, other: 1 }
+  const audience = workflow.triggerSettings?.audience
+  return countSetupIssues(
+    tree.value,
+    workflow.class,
+    audience && typeof audience === 'object' ? { audience: audience as GraphCondition } : undefined
+  )
 }
 
 function WorkflowRow({
   workflow,
   metrics,
   rank,
-  contested,
   reorder,
   onNavigate,
   onSetStatus,
@@ -581,13 +647,8 @@ function WorkflowRow({
 }: {
   workflow: WorkflowDTO
   metrics: EffectivenessMetrics | undefined
-  /** First-match priority within the trigger group, when this workflow is in
-   *  the race for the slot at all (see firstMatchRanks). */
   rank: number | undefined
-  /** The group ranks its contenders, so unranked rows hold the rank slot open
-   *  and every name in the group stays on one line. */
-  contested: boolean
-  /** 'none' for a group of one, which has no order to set; 'filtered' while the
+  /** 'none' for a group of one or background rows; 'filtered' while the
    *  list is narrowed, where a drop would silently reprioritize hidden rows. */
   reorder: 'enabled' | 'filtered' | 'none'
   onNavigate: (id: string) => void
@@ -595,13 +656,15 @@ function WorkflowRow({
   onDelete: (workflow: WorkflowDTO) => void
   onViewRuns: (workflow: WorkflowDTO) => void
 }) {
-  // Structural problems (bad JSON, cycles) and unresolved step config (a team
-  // never picked, a template's needs-setup placeholder) both badge the row.
-  const issue = rowIssue(workflow.graph, workflow.class)
-  const status = STATUS_META[workflow.status as StatusValue] ?? STATUS_META.draft
+  const needsSetup = needsSetupBadgeText(rowSetup(workflow))
   const started = metrics?.started ?? 0
   const completed = metrics?.completed ?? 0
-  const isCustomerFacing = workflow.class === 'customer_facing'
+  const trigger = triggerLabel(workflow.triggerType)
+  const showMetrics = workflow.status === 'live' && started > 0
+  const metricsText = showMetrics
+    ? `${started.toLocaleString()} runs · ${Math.round((completed / started) * 100)}% completed (7d)`
+    : ''
+  const stepSummary = showMetrics ? '' : workflowStepSummary(workflow.graph)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workflow.id,
     disabled: reorder !== 'enabled',
@@ -618,115 +681,66 @@ function WorkflowRow({
         if (e.key === 'Enter') onNavigate(workflow.id)
       }}
       className={cn(
-        // The funnel line under the run count sets the metrics column width:
-        // it reads as one line or not at all.
-        'group relative grid cursor-pointer grid-cols-[20px_minmax(0,1fr)_92px_130px_210px_36px] items-center gap-3 bg-background px-4 py-3 hover:bg-muted/40',
+        'group relative flex cursor-pointer items-center gap-3 bg-background px-4 py-3 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
         isDragging && 'z-10 shadow-lg'
       )}
     >
-      {/* The handle carries the drag listeners, not the row: the row itself is
-          the click target for the builder. The empty slot a group of one keeps
-          holds every group's columns on the same grid. */}
-      {reorder === 'none' ? (
-        <span aria-hidden />
-      ) : (
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          onClick={(e) => e.stopPropagation()}
-          disabled={reorder === 'filtered'}
-          aria-label={`Reorder ${workflow.name}`}
-          title={reorder === 'filtered' ? 'Clear the filters to reorder' : 'Drag to set priority'}
-          className="flex size-5 touch-none items-center justify-center rounded text-muted-foreground/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground/50 enabled:cursor-grab enabled:hover:bg-muted enabled:active:cursor-grabbing"
-        >
-          <Bars3Icon className="size-3.5" />
-        </button>
-      )}
+      {rank !== undefined &&
+        (reorder === 'none' ? (
+          <span
+            data-testid="first-match-rank"
+            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold text-muted-foreground"
+          >
+            {rank}
+          </span>
+        ) : (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+            disabled={reorder === 'filtered'}
+            aria-label={`Reorder ${workflow.name}`}
+            data-testid="first-match-rank"
+            title={reorder === 'filtered' ? 'Clear the filters to reorder' : 'Drag to set priority'}
+            className="flex size-5 shrink-0 touch-none items-center justify-center rounded-full bg-muted text-[11px] font-bold text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-30 enabled:cursor-grab enabled:hover:bg-muted-foreground/15 enabled:active:cursor-grabbing"
+          >
+            {rank}
+          </button>
+        ))}
 
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          {rank !== undefined ? (
-            <Badge
-              data-testid="first-match-rank"
-              size="sm"
-              variant={rank === 1 ? 'default' : 'secondary'}
-              className="size-5 shrink-0 px-0 tabular-nums"
-              title={
-                rank === 1
-                  ? 'First match for this trigger'
-                  : `Runs only if the ${rank - 1} above it do not match`
-              }
-            >
-              {rank}
-            </Badge>
-          ) : (
-            contested && <span aria-hidden className="size-5 shrink-0" />
-          )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-semibold">{workflow.name}</span>
-          {issue && (
-            <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400"
-              title={issue}
-            >
-              <ExclamationTriangleIcon className="size-3" />
-              Needs setup
-            </span>
-          )}
+          <WorkflowStatusBadge
+            status={(workflow.status as StatusValue) ?? 'draft'}
+            needsSetup={needsSetup}
+          />
         </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          Edited <TimeAgo date={workflow.updatedAt} />
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+          {trigger}
+          {metricsText ? (
+            <>
+              {' · '}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onViewRuns(workflow)
+                }}
+                title="View run history"
+                className="hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {metricsText}
+              </button>
+            </>
+          ) : stepSummary ? (
+            <> · {stepSummary}</>
+          ) : null}
         </div>
       </div>
 
-      <span
-        className={cn(
-          'inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium',
-          status.textClass
-        )}
-      >
-        <span className={cn('size-1.5 rounded-full', status.dotClass)} />
-        {status.label}
-      </span>
-
-      <span className="truncate text-xs text-muted-foreground">
-        {workflow.class === 'customer_facing' ? 'Customer-facing' : 'Background'}
-      </span>
-
-      {/* The 7d started/completion metrics double as the run-history
-          drill-down entry point (WorkflowRunsSheet) — stopPropagation so it
-          doesn't also navigate to the builder like the rest of the row. */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onViewRuns(workflow)
-        }}
-        title="View run history"
-        className="flex flex-col items-end gap-0.5 rounded px-1 py-0.5 text-right text-xs font-medium tabular-nums hover:bg-muted hover:underline"
-      >
-        <span>
-          {started > 0 ? (
-            <>
-              {started.toLocaleString()} · {Math.round((completed / started) * 100)}%
-            </>
-          ) : (
-            '—'
-          )}
-        </span>
-        {/* Funnel line (customer-facing only — a background workflow never
-            sends a block, so it never has anything to funnel). Numbers only,
-            muted, no new chrome — background workflows keep the display above
-            exactly as it was. */}
-        {isCustomerFacing && (
-          <span className="font-normal text-muted-foreground no-underline">
-            sent {(metrics?.sentRuns ?? 0).toLocaleString()} · engaged{' '}
-            {(metrics?.engagedRuns ?? 0).toLocaleString()} · done {completed.toLocaleString()}
-          </span>
-        )}
-      </button>
-
-      <div onClick={(e) => e.stopPropagation()}>
+      <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -740,6 +754,7 @@ function WorkflowRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => onNavigate(workflow.id)}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onViewRuns(workflow)}>View runs</DropdownMenuItem>
             <DropdownMenuSeparator />
             {STATUSES.filter((s) => s !== workflow.status).map((s) => (
               <DropdownMenuItem key={s} onSelect={() => onSetStatus(workflow.id, s)}>
@@ -757,7 +772,53 @@ function WorkflowRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ChevronRightIcon className="size-3.5 text-muted-foreground" aria-hidden />
       </div>
     </div>
+  )
+}
+
+function WorkflowStatusBadge({
+  status,
+  needsSetup,
+}: {
+  status: StatusValue
+  needsSetup: string | null
+}) {
+  return (
+    <>
+      {status === 'live' ? (
+        <Badge
+          size="sm"
+          shape="pill"
+          className="border-transparent bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
+        >
+          Live
+        </Badge>
+      ) : status === 'paused' ? (
+        <Badge
+          size="sm"
+          shape="pill"
+          className="border-transparent bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
+        >
+          Paused
+        </Badge>
+      ) : (
+        <Badge size="sm" shape="pill" variant="secondary">
+          Draft
+        </Badge>
+      )}
+      {needsSetup && (
+        <Badge
+          size="sm"
+          shape="pill"
+          className="gap-1 border-transparent bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
+          title={needsSetup}
+        >
+          <ExclamationTriangleIcon className="size-3" />
+          {needsSetup}
+        </Badge>
+      )}
+    </>
   )
 }

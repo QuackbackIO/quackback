@@ -1,14 +1,13 @@
 /**
  * Fullscreen builder top bar (support platform §4.6): back link, outline
  * toggle, an inline-renameable workflow name, status + class pills, the
- * issues chip (jumps to the first invalid step), the Visual/JSON toggle, the
- * dirty-state text, and the explicit Save / Set live / Pause actions.
+ * issues chip (jumps to the first invalid step), the Visual/JSON toggle,
+ * the dirty-state text, and the explicit Save / Set live / Pause actions.
  */
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowLeftIcon,
-  BeakerIcon,
   ClockIcon,
   CodeBracketIcon,
   ExclamationTriangleIcon,
@@ -78,7 +77,6 @@ export function WorkflowBuilderTopBar({
   outlineCollapsed,
   onToggleOutline,
   onOpenHistory,
-  onOpenPreview,
 }: {
   name: string
   onChangeName: (v: string) => void
@@ -99,8 +97,6 @@ export function WorkflowBuilderTopBar({
   onToggleOutline: () => void
   /** Opens the version history + rollback sheet (support platform §4.6). */
   onOpenHistory: () => void
-  /** Opens the dry-run preview panel (support platform §4.6). */
-  onOpenPreview: () => void
 }) {
   const classMeta = WORKFLOW_CLASSES.find((c) => c.value === workflowClass)
 
@@ -184,10 +180,6 @@ export function WorkflowBuilderTopBar({
       <Button size="sm" variant="outline" onClick={onOpenHistory}>
         <ClockIcon className="size-3.5" />
         History
-      </Button>
-      <Button size="sm" variant="outline" onClick={onOpenPreview}>
-        <BeakerIcon className="size-3.5" />
-        Test
       </Button>
 
       <span className="hidden text-xs text-muted-foreground sm:inline">

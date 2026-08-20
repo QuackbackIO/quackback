@@ -10,8 +10,7 @@
  * to the conversation/ticket itself and never opens or touches an
  * assistant_involvements row: those side effects live entirely in
  * assistant.orchestrator.ts's runAssistantTurnForConversation, which this
- * route never calls; it calls the runtime seam directly, exactly as the
- * admin sandbox does.
+ * route never calls; it calls the runtime seam directly.
  *
  * WIRE: TanStack AI's AG-UI protocol. The client (useChat) POSTs a
  * `RunAgentInput` — its accumulated message history plus `forwardedProps`
@@ -24,8 +23,8 @@
  * stream with a coded RUN_ERROR frame instead.
  *
  * ACTION tools are forced to `writeToolPolicy: 'propose'` (see
- * `resolveEffectiveToolMode`) regardless of the assistantTools setting and
- * each tool's configured mode: a copilot turn is a teammate asking Quinn a
+ * `resolveEffectiveToolMode`) regardless of each tool's configured mode:
+ * a copilot turn is a teammate asking Quinn a
  * question about the conversation, never Quinn acting in it directly, so a
  * write-tool call turns into a pending-approval proposal instead of running
  * for real (P2-C.4, "act-on-approval"). This includes metadata writes such as

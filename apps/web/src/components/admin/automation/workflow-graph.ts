@@ -27,6 +27,7 @@ import {
   parseInactivityMinutes,
   parseBreachLeadMinutes,
 } from '@/lib/server/domains/workflows/workflow.schemas'
+import { listChannelDescriptors } from '@/lib/shared/channels'
 import type {
   FrequencyCap,
   ValidatedWorkflowGraph,
@@ -42,6 +43,7 @@ export {
   DEFAULT_INACTIVITY_MINUTES,
   MAX_BREACH_LEAD_MINUTES,
   DEFAULT_BREACH_LEAD_MINUTES,
+  PARKING_BLOCK_KINDS,
 }
 import type {
   ATTRIBUTE_FIELD_PREFIX as ServerAttributeFieldPrefix,
@@ -201,7 +203,7 @@ export function insertVariableToken(body: BlockBody, key: string): BlockBody {
 export const RATING_KEYS = ['1', '2', '3', '4', '5'] as const
 export type RatingKey = (typeof RATING_KEYS)[number]
 /** Derived from the canonical CSAT_FACES (index = rating-1) rather than its
- *  own hardcoded set, so the canvas summary (flow-layout.ts) shows the exact
+ *  own hardcoded set, so the step-list summary (step-content.ts) shows the exact
  *  row the customer actually taps in the widget — not a lookalike-but-
  *  different emoji set authored separately here. */
 export const RATING_EMOJI: Record<RatingKey, string> = Object.fromEntries(
@@ -308,11 +310,7 @@ export const CONDITION_FIELD_META: Record<ConditionField, ConditionFieldMeta> = 
   'conversation.channel': {
     label: 'Channel',
     kind: 'choice',
-    // Mirrors CHANNELS in @quackback/db/types.
-    options: [
-      { value: 'messenger', label: 'Messenger' },
-      { value: 'email', label: 'Email' },
-    ],
+    options: listChannelDescriptors().map((d) => ({ value: d.id, label: d.label })),
   },
   'conversation.priority': { label: 'Priority', kind: 'choice', options: PRIORITY_OPTIONS },
   'conversation.waiting_minutes': { label: 'Customer waiting (minutes)', kind: 'number' },
@@ -482,6 +480,8 @@ export interface AttributeFieldDef {
   fieldType: AttributeFieldType
   /** select / multi_select only — option id is the stored value. */
   options?: readonly { id: string; label: string }[]
+  /** When true, this field is AI-populated. */
+  aiDetect?: boolean
 }
 
 /** The operators offered per attribute field type (v1: date stays valueless-only). */
@@ -530,12 +530,19 @@ export function toAttributeFieldDefs(
     label: string
     fieldType: AttributeFieldType
     options?: readonly { id: string; label: string }[] | null
+    aiDetect?: boolean
   }[]
 ): ReadonlyMap<string, AttributeFieldDef> {
   return new Map(
     items.map((d) => [
       d.key,
-      { key: d.key, label: d.label, fieldType: d.fieldType, options: d.options ?? undefined },
+      {
+        key: d.key,
+        label: d.label,
+        fieldType: d.fieldType,
+        options: d.options ?? undefined,
+        aiDetect: d.aiDetect,
+      },
     ])
   )
 }
@@ -756,6 +763,7 @@ export const TRIGGER_LABELS: Record<TriggerType, string> = {
   'conversation.status_changed': 'Status changed',
   'conversation.assigned': 'Assigned to team or agent',
   'assistant.handed_off': 'AI agent handed off to a human',
+  'assistant.resolved': 'AI agent resolved the conversation',
   'conversation.priority_changed': 'Priority changed',
   'conversation.attribute_changed': 'Attribute changed',
   'conversation.csat_submitted': 'CSAT rating submitted',
@@ -1111,13 +1119,12 @@ export type TreeStep =
   | { id: string; kind: 'collect_reply'; body: BlockBody; attributeKey: string }
   /** paths: exactly LET_ASSISTANT_DEFAULT_KEY + LET_ASSISTANT_ESCALATED_KEY,
    *  always both present (not user add/remove/reorderable — see the
-   *  let-assistant editor). instructions/autoCloseOverride (Phase C, slice
-   *  C-6) mirror the server node's own optional fields verbatim. */
+   *  let-assistant editor). instructions (Phase C, slice C-6) mirror the
+   *  server node's own optional field. */
   | {
       id: string
       kind: 'let_assistant_answer'
       instructions?: string
-      autoCloseOverride?: boolean
       paths: KeyedPath[]
     }
   | { id: string; kind: 'reply_buttons'; body: BlockBody; allowTyping: boolean; paths: KeyedPath[] }
@@ -1144,7 +1151,7 @@ export interface WorkflowTree {
  * key, since a rule pill's name IS the key there), reply_buttons/
  * request_csat/let_assistant_answer's native KeyedPath. Null for every other
  * kind (nothing to fan out). Shared by the tree-editing helpers below and the
- * canvas auto-layout (flow-layout.ts), which both need to walk/measure every
+ * step-list walk (tree-walk.ts), which both need to walk every
  * fan-out kind the same way instead of hand-copying a `kind === 'branch'`
  * special case per call site.
  */
@@ -1155,7 +1162,7 @@ export function stepPaths(step: TreeStep): KeyedPath[] | null {
     case 'reply_buttons':
     case 'request_csat':
     case 'let_assistant_answer':
-      return step.paths
+      return step.paths.length > 0 ? step.paths : null
     default:
       return null
   }
@@ -1516,9 +1523,6 @@ export function validateGraph(input: unknown): Result<WorkflowGraphJson> {
             )
           }
         }
-        if (node.autoCloseOverride !== undefined && typeof node.autoCloseOverride !== 'boolean') {
-          return fail(`${where}: "autoCloseOverride" must be true or false when present`)
-        }
         break
       case 'reply_buttons': {
         const err = validateBlockBody(node.body, where)
@@ -1786,29 +1790,48 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
       }
 
       // ── request_csat: one path per WIRED rating digit, if any (C-5) ──────
+      // An empty CSAT (no rating edges yet) is linear: one unlabeled
+      // successor is the rest of the lane, same as a message step.
       if (node.type === 'request_csat') {
+        const outs = outgoing.get(node.id) ?? []
+        const unlabeled = outs.filter((e) => e.branch === undefined)
+        const labeled = outs.filter((e) => e.branch !== undefined)
         const edgeByKey = new Map<string, GraphEdge>()
-        for (const edge of outgoing.get(node.id) ?? []) {
-          if (
-            edge.branch === undefined ||
-            !(RATING_KEYS as readonly string[]).includes(edge.branch)
-          ) {
+        for (const edge of labeled) {
+          if (!(RATING_KEYS as readonly string[]).includes(edge.branch!)) {
             return fail(
-              `ask-for-rating "${node.id}" has a connection with an unexpected label ("${edge.branch ?? 'none'}")`
+              `ask-for-rating "${node.id}" has a connection with an unexpected label ("${edge.branch}")`
             )
           }
-          if (edgeByKey.has(edge.branch)) {
+          if (edgeByKey.has(edge.branch!)) {
             return fail(`ask-for-rating "${node.id}" has two connections for rating ${edge.branch}`)
           }
-          edgeByKey.set(edge.branch, edge)
+          edgeByKey.set(edge.branch!, edge)
         }
-        const paths: KeyedPath[] = []
-        for (const key of RATING_KEYS) {
-          const edge = edgeByKey.get(key)
-          if (!edge) continue // that rating isn't wired: no path to show
-          const sub = walkFrom(edge.to)
-          if (!sub.ok) return sub
-          paths.push({ key, label: RATING_LABELS[key], steps: sub.value })
+        if (labeled.length > 0) {
+          if (unlabeled.length > 0) {
+            return fail(`ask-for-rating "${node.id}" has both a continuation and rating paths`)
+          }
+          const paths: KeyedPath[] = []
+          for (const key of RATING_KEYS) {
+            const edge = edgeByKey.get(key)
+            if (!edge) continue
+            const sub = walkFrom(edge.to)
+            if (!sub.ok) return sub
+            paths.push({ key, label: RATING_LABELS[key], steps: sub.value })
+          }
+          steps.push({
+            id: node.id,
+            kind: 'request_csat',
+            body: node.body,
+            allowTypingInterrupt: node.allowTypingInterrupt,
+            commentPrompt: node.commentPrompt,
+            paths,
+          })
+          return { ok: true, value: steps }
+        }
+        if (unlabeled.length > 1) {
+          return fail(`ask-for-rating "${node.id}" has more than one outgoing connection`)
         }
         steps.push({
           id: node.id,
@@ -1816,9 +1839,10 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
           body: node.body,
           allowTypingInterrupt: node.allowTypingInterrupt,
           commentPrompt: node.commentPrompt,
-          paths,
+          paths: [],
         })
-        return { ok: true, value: steps }
+        currentId = unlabeled[0]?.to
+        continue
       }
 
       // ── let_assistant_answer: default (unlabeled) + optional 'escalated' ─
@@ -1837,7 +1861,6 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
           id: node.id,
           kind: 'let_assistant_answer',
           instructions: node.instructions,
-          autoCloseOverride: node.autoCloseOverride,
           paths: [
             {
               key: LET_ASSISTANT_DEFAULT_KEY,
@@ -2004,7 +2027,6 @@ export function treeToGraph(tree: WorkflowTree): WorkflowGraphJson {
             id: step.id,
             type: 'let_assistant_answer',
             instructions: step.instructions,
-            autoCloseOverride: step.autoCloseOverride,
           })
           emitFixedTwoPathEdges(step, LET_ASSISTANT_DEFAULT_KEY, LET_ASSISTANT_ESCALATED_KEY, emit)
           break
@@ -2264,8 +2286,7 @@ export interface RuleGroupDraft {
 }
 
 export type ConditionGroupsDraft =
-  | { kind: 'groups'; groups: RuleGroupDraft[] }
-  | { kind: 'advanced'; condition: GraphCondition }
+  { kind: 'groups'; groups: RuleGroupDraft[] } | { kind: 'advanced'; condition: GraphCondition }
 
 const isLeafCondition = (c: GraphCondition): c is ConditionLeaf => 'field' in c
 
@@ -2589,8 +2610,7 @@ export function attributeValueText(value: unknown): string {
 // ---------------------------------------------------------------------------
 
 export type GraphDraft =
-  | { mode: 'visual'; tree: WorkflowTree }
-  | { mode: 'json'; text: string; notice?: string }
+  { mode: 'visual'; tree: WorkflowTree } | { mode: 'json'; text: string; notice?: string }
 
 /**
  * Open a stored graph for editing: visual when the graph is tree-shaped,
@@ -2898,11 +2918,31 @@ const CLASS_RESTRICTED_STEP_MESSAGE =
  *  more fundamental problem to fix first. Defaults to 'customer_facing' (the
  *  permissive case) so every existing call site/fixture that predates this
  *  parameter keeps behaving exactly as before. */
+function conditionNeedsSetup(condition: GraphCondition | undefined): boolean {
+  if (!condition) return true
+  if ('field' in condition) {
+    if (!condition.field) return true
+    if (VALUELESS_OPERATORS.has(condition.op)) return false
+    const value = condition.value
+    if (value === undefined || value === null || value === '') return true
+    if (Array.isArray(value) && value.length === 0) return true
+    if (typeof value === 'string' && isNeedsSetupRef(value)) return true
+    return false
+  }
+  const children = [...(condition.all ?? []), ...(condition.any ?? [])]
+  if (children.length === 0) return true
+  return children.some(conditionNeedsSetup)
+}
+
 export function collectStepIssues(
   tree: WorkflowTree,
-  workflowClass: WorkflowClassValue = 'customer_facing'
+  workflowClass: WorkflowClassValue = 'customer_facing',
+  triggerSettings?: { audience?: GraphCondition }
 ): Map<string, string> {
   const issues = new Map<string, string>()
+  if (triggerSettings?.audience && conditionNeedsSetup(triggerSettings.audience)) {
+    issues.set('trigger-audience', 'Audience needs a complete condition')
+  }
   const walk = (steps: TreeStep[]) => {
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i]!
@@ -2911,6 +2951,14 @@ export function collectStepIssues(
       } else if (step.kind === 'action') {
         const message = actionIssue(step.action)
         if (message) issues.set(step.id, message)
+      } else if (step.kind === 'condition') {
+        if (conditionNeedsSetup(step.condition)) {
+          issues.set(step.id, 'This condition is missing a value')
+        }
+      } else if (step.kind === 'branch') {
+        if (step.paths.some((path) => conditionNeedsSetup(path.condition))) {
+          issues.set(step.id, 'A branch path is missing a condition value')
+        }
       } else if (step.kind === 'disable_composer') {
         const adjacent = (s: TreeStep | undefined) => !!s && INTERRUPT_RELEVANT_KINDS.has(s.kind)
         if (!adjacent(steps[i - 1]) && !adjacent(steps[i + 1])) {
@@ -2926,6 +2974,43 @@ export function collectStepIssues(
   }
   walk(tree.steps)
   return issues
+}
+
+/** List-badge counts: empty branch paths are counted individually so two
+ *  unset options read as "2 branch options", not one node-sized issue. */
+export function countSetupIssues(
+  tree: WorkflowTree,
+  workflowClass: WorkflowClassValue = 'customer_facing',
+  triggerSettings?: { audience?: GraphCondition }
+): { branchOptions: number; other: number } {
+  let branchOptions = 0
+  let other = 0
+  if (triggerSettings?.audience && conditionNeedsSetup(triggerSettings.audience)) {
+    other += 1
+  }
+  const walk = (steps: TreeStep[]) => {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i]!
+      if (workflowClass !== 'customer_facing' && PARKING_BLOCK_KINDS.has(step.kind)) {
+        other += 1
+      } else if (step.kind === 'action') {
+        if (actionIssue(step.action)) other += 1
+      } else if (step.kind === 'condition') {
+        if (conditionNeedsSetup(step.condition)) other += 1
+      } else if (step.kind === 'branch') {
+        branchOptions += step.paths.filter((path) => conditionNeedsSetup(path.condition)).length
+      } else if (step.kind === 'disable_composer') {
+        const adjacent = (s: TreeStep | undefined) => !!s && INTERRUPT_RELEVANT_KINDS.has(s.kind)
+        if (!adjacent(steps[i - 1]) && !adjacent(steps[i + 1])) other += 1
+      } else if (blockStepIssue(step)) {
+        other += 1
+      }
+      const paths = stepPaths(step)
+      if (paths) for (const p of paths) walk(p.steps)
+    }
+  }
+  walk(tree.steps)
+  return { branchOptions, other }
 }
 
 export interface DraftIssues {

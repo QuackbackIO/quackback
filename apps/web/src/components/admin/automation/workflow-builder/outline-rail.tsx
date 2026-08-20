@@ -52,7 +52,7 @@ export function OutlineRail({
           entry.kind === 'path-header' ? (
             <div
               key={`path-${i}`}
-              className="mt-2 mb-1 flex items-center gap-1.5 px-2 text-[10.5px] font-semibold tracking-wide text-muted-foreground/80 uppercase"
+              className="mt-2 mb-1 flex items-center gap-1.5 px-2 text-[11px] font-semibold tracking-wide text-muted-foreground/80 uppercase"
               style={{ paddingLeft: `${entry.depth * 12 + 8}px` }}
             >
               {entry.label}
