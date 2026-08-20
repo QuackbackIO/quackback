@@ -859,6 +859,11 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
       // which already busts the key.
       if (isOnboardingComplete(getSetupState(rawSetup ?? null))) {
         log.debug('workspace settings cache hit')
+        // The same repair resolveFeatureFlags applies. This path returns flags
+        // that were resolved when the entry was written, so an entry from
+        // before that rule existed still carries feedback:false and would keep
+        // the portal dark for the hour the entry has left to live.
+        if (cached.featureFlags) cached.featureFlags.feedback = true
         return cached
       }
     }
