@@ -1160,5 +1160,14 @@
   "automation.workflows.closeSpamHint": "Когда Квинн помечает разговор как спам",
   "settings.sla.defaultPolicy": "Политика по умолчанию",
   "settings.sla.defaultPolicyHint": "Применяется при начале разговора",
-  "settings.sla.defaultPolicyNone": "Нет"
+  "settings.sla.defaultPolicyNone": "Нет",
+  "automation.builtinTools.title": "Встроенные действия",
+  "automation.builtinTools.titleAgent": "Встроенные действия (Агент)",
+  "automation.builtinTools.titleCopilot": "Встроенные действия (Copilot)",
+  "automation.builtinTools.description": "Что может делать каждый встроенный инструмент записи у этого агента. «Никогда» полностью убирает инструмент из его ходов.",
+  "automation.builtinTools.reset": "Сбросить к значениям по умолчанию",
+  "automation.builtinTools.default": "По умолчанию",
+  "automation.builtinTools.saving": "Сохранение…",
+  "automation.builtinTools.saveError": "Не удалось обновить разрешения инструментов.",
+  "automation.builtinTools.loadError": "Не удалось загрузить каталог инструментов."
 }

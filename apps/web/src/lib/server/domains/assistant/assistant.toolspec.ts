@@ -1484,3 +1484,32 @@ export function resolveToolSpecs(): AssistantToolSpec[] {
 export function getToolSpecByName(name: string): AssistantToolSpec | null {
   return ASSISTANT_TOOL_SPECS[name] ?? null
 }
+
+/**
+ * Overlay the workspace's saved per-tool rules onto the built-in catalogue for
+ * one agent. Read/control tools are untouchable — the dial exists for writes.
+ * `deny` removes the spec before the model ever sees it; `ask`/`allow` stamp
+ * the same `approvalPolicy` the remote-connector dial rides, so mode
+ * resolution and the approval pipeline treat both dials identically. An
+ * absent key leaves the spec untouched and the turn's role policy deciding,
+ * which is exactly the pre-dial behavior.
+ */
+export function applyBuiltInToolRules(
+  specs: readonly AssistantToolSpec[],
+  toolRules: Readonly<Record<string, 'allow' | 'ask' | 'deny'>> | undefined
+): AssistantToolSpec[] {
+  if (!toolRules || Object.keys(toolRules).length === 0) return [...specs]
+  const out: AssistantToolSpec[] = []
+  for (const spec of specs) {
+    if (spec.risk !== 'write') {
+      out.push(spec)
+      continue
+    }
+    const rule = toolRules[spec.name]
+    if (rule === 'deny') continue
+    if (rule === 'ask') out.push({ ...spec, approvalPolicy: 'approval' })
+    else if (rule === 'allow') out.push({ ...spec, approvalPolicy: 'always' })
+    else out.push(spec)
+  }
+  return out
+}

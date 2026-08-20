@@ -9,6 +9,7 @@ import {
   reorderGuidanceRulesFn,
 } from '@/lib/server/functions/assistant-guidance'
 import {
+  updateAssistantToolRulesFn,
   getAssistantSettingsFn,
   updateAssistantIdentityFn,
   updateAssistantVoiceFn,
@@ -105,6 +106,15 @@ export function useUpdateAssistantAgentKnowledge() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateAssistantAgentKnowledgeFn>[0]['data']) =>
       updateAssistantAgentKnowledgeFn({ data }),
+    onSuccess: (result) => setAssistantConfig(queryClient, result),
+  })
+}
+
+export function useUpdateAssistantToolRules() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateAssistantToolRulesFn>[0]['data']) =>
+      updateAssistantToolRulesFn({ data }),
     onSuccess: (result) => setAssistantConfig(queryClient, result),
   })
 }

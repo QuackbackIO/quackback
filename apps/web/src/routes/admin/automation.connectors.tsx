@@ -1,3 +1,4 @@
+import { BuiltInToolsCard } from '@/components/admin/automation/builtin-tools-card'
 import { useState } from 'react'
 import { createFileRoute, Link, Navigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -181,6 +182,8 @@ function ConnectorsPage() {
             'Connectors call external servers from your workspace. Only connect servers you trust.',
         })}
       </p>
+      <BuiltInToolsCard agent="agent" />
+      <BuiltInToolsCard agent="copilot" />
       <AddConnectorDialog open={addOpen} onOpenChange={setAddOpen} />
       <UpdateBearerDialog
         connectorId={tokenConnectorId}

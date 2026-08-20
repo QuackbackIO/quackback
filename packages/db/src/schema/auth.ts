@@ -52,6 +52,7 @@ export interface StoredAssistantConfig {
         documents: boolean
         status: boolean
       }
+      toolRules: Record<string, string>
     }
     copilot: {
       capabilities: { qa: boolean }
@@ -65,6 +66,7 @@ export interface StoredAssistantConfig {
         documents: boolean
         status: boolean
       }
+      toolRules: Record<string, string>
     }
   }
 }
@@ -418,6 +420,7 @@ export const settings = pgTable('settings', {
             documents: true,
             status: false,
           },
+          toolRules: {},
         },
         copilot: {
           capabilities: { qa: true },
@@ -431,6 +434,7 @@ export const settings = pgTable('settings', {
             documents: true,
             status: true,
           },
+          toolRules: {},
         },
       },
     }),

@@ -168,6 +168,7 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
           documents: true,
           status: false,
         },
+        toolRules: {},
       },
       copilot: {
         capabilities: { qa: true },
@@ -181,6 +182,7 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
           documents: true,
           status: true,
         },
+        toolRules: {},
       },
     },
   },
@@ -369,6 +371,7 @@ describe('mockRuntimeConfig helper', () => {
               documents: false,
               status: true,
             },
+            toolRules: {},
           },
         },
       },
@@ -1037,7 +1040,7 @@ describe('runAssistantTurn', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
     expect(mockGetAssistantRuntimeConfig).toHaveBeenCalledTimes(1)
     expect(mockAssembleAssistantToolset).toHaveBeenCalledTimes(1)
-    expect(mockAssembleAssistantToolset).toHaveBeenCalledWith(expect.any(Object), undefined, [])
+    expect(mockAssembleAssistantToolset).toHaveBeenCalledWith(expect.any(Object), expect.anything(), [])
     expect(result.status !== 'suppressed' && result.trace.configRevision).toBe(37)
     expect(lastLoggedMetadata?.configRevision).toBe(37)
   })
@@ -2126,7 +2129,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
           status: false,
         },
       }),
-      undefined,
+      expect.anything(),
       []
     )
   })

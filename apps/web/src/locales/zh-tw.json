@@ -1160,5 +1160,14 @@
   "automation.workflows.closeSpamHint": "當 Quinn 將會話判定為垃圾時",
   "settings.sla.defaultPolicy": "預設政策",
   "settings.sla.defaultPolicyHint": "會話開始時套用",
-  "settings.sla.defaultPolicyNone": "無"
+  "settings.sla.defaultPolicyNone": "無",
+  "automation.builtinTools.title": "內建操作",
+  "automation.builtinTools.titleAgent": "內建操作（客服代理）",
+  "automation.builtinTools.titleCopilot": "內建操作（Copilot）",
+  "automation.builtinTools.description": "每個內建寫入工具在此代理上的權限。「從不」會將該工具從其回合中完全移除。",
+  "automation.builtinTools.reset": "恢復預設設定",
+  "automation.builtinTools.default": "預設",
+  "automation.builtinTools.saving": "儲存中…",
+  "automation.builtinTools.saveError": "無法更新工具權限。",
+  "automation.builtinTools.loadError": "無法載入工具目錄。"
 }
