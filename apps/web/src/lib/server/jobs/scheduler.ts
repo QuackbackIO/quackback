@@ -176,17 +176,17 @@ export function createTenantScheduler(opts?: {
   function startRun(tenantId: string): void {
     running.add(tenantId)
     const promise = (async () => {
-      let nextWake: Date | null
+      const wake = { next: null as Date | null }
       try {
         let passes = 0
         do {
           dirty.delete(tenantId)
-          nextWake = await runPass(tenantId)
+          wake.next = await runPass(tenantId)
           passes += 1
         } while (dirty.has(tenantId) && passes < maxPasses)
       } catch (err) {
+        wake.next = new Date(clock.now() + BAD_TENANT_RETRY_MS)
         log.error({ err, tenant: tenantId }, 'scheduler pass failed')
-        nextWake = new Date(clock.now() + BAD_TENANT_RETRY_MS)
       } finally {
         running.delete(tenantId)
         // A signal that landed after the last pass (or after the pass budget)
@@ -195,7 +195,7 @@ export function createTenantScheduler(opts?: {
           kick(tenantId)
           rearmTimer()
         } else {
-          if (nextWake) scheduleAt(tenantId, nextWake.getTime())
+          if (wake.next) scheduleAt(tenantId, wake.next.getTime())
           else entries.delete(tenantId)
           const next = waitQueue.shift()
           if (next) kick(next)
