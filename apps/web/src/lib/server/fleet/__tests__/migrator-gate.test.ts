@@ -295,19 +295,32 @@ describe('replayGateVerdict', () => {
     // migrate()'s transaction bounds that. A gate that refused it would refuse
     // every rollout this system exists to perform.
     //
+    // Bounded at 0256 rather than run to the tip: 0257 is a data migration, and
+    // the point of THIS case is the DDL-only tail. The tail that does contain
+    // it is the case below, which is where its consequence is recorded.
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
+    const end = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0257_'))
     const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
-    const tags = replaySetFor(before)
+    const tags = replaySetFor(before).slice(0, end - cutoff - 1)
     const verdicts = verdictsFor(tags)
     expect(tags.length).toBeGreaterThan(0)
     expect(verdicts.every((v) => v.verdict !== 'mutates')).toBe(true)
     expect(replayGateVerdict(before, verdicts, false)).toEqual({ ok: true })
   })
 
-  it('this phase’s post-0248 migration span passes the replay gate', () => {
-    // The current span is listed deliberately: a newly mutating migration must
-    // turn this test red so the operator path is documented in the phase that
+  it('this phase’s post-0248 migration span no longer heals for free', () => {
+    // The span is listed deliberately: a newly mutating migration must turn
+    // this test red so the operator path is documented in the phase that
     // introduces it.
+    //
+    // **It has now happened, and this case is the notice.** 0257 demotes every
+    // sending domain verified by a check that could not tell an owner from
+    // anybody else, which is an UPDATE and therefore a write the gate will not
+    // replay unattended. Healing a ledger gap across it is now an operator
+    // action: establish that the ledger is honest — a branch dry-run is the
+    // cheap way — and re-run with `allowMutatingReplay`. That cost is
+    // deliberate and small: the alternative is a workspace sending signed as a
+    // domain it never proved it owns.
     const cutoff = BUNDLED_MIGRATIONS.findIndex((e) => e.tag.startsWith('0248_'))
     const before = ledger(BUNDLED_MIGRATIONS.slice(0, cutoff + 1).map((e) => e.when))
     expect(replaySetFor(before)).toEqual([
@@ -319,8 +332,19 @@ describe('replayGateVerdict', () => {
       '0254_event_dispatch_owner_default_job',
       '0255_settings_cloud_tenant_id',
       '0256_workspace_key_columns',
+      '0257_sending_domain_reverify',
+      '0258_email_log',
+      '0259_channel_threads',
+      '0260_channel_threads_conversation_fk',
     ])
-    expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)).toEqual({
+    const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) throw new Error('unreachable')
+    expect(verdict.detail).toContain('0257_sending_domain_reverify')
+
+    // And it goes through once an operator has said the ledger is honest, which
+    // is the whole point of the flag rather than of a weaker gate.
+    expect(replayGateVerdict(before, verdictsFor(replaySetFor(before)), true)).toEqual({
       ok: true,
     })
   })

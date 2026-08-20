@@ -6,13 +6,13 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 234. Migrations with destructive DDL: 30.
+Migrations scanned: 238. Migrations with destructive DDL: 31.
 
 | Kind | Occurrences |
 | --- | --- |
 | DROP COLUMN | 22 |
 | DROP TABLE | 17 |
-| DROP CONSTRAINT | 7 |
+| DROP CONSTRAINT | 9 |
 | RENAME COLUMN | 15 |
 | RENAME TO (table) | 13 |
 | SET NOT NULL | 4 |
@@ -53,6 +53,7 @@ Migrations scanned: 234. Migrations with destructive DDL: 30.
 | 0220_drop_assistant_custom_actions.sql | DROP TABLE assistant_actions | grandfathered |
 | 0224_identity_provider_claim_mapping.sql | DROP COLUMN identity_provider.attribute_mapping | grandfathered |
 | 0256_workspace_key_columns.sql | RENAME COLUMN kv_store.tenant_id -> workspace_key; RENAME COLUMN rate_bucket.tenant_id -> workspace_key; RENAME COLUMN kv_set_member.tenant_id -> workspace_key; RENAME COLUMN presence_stream.tenant_id -> workspace_key; RENAME COLUMN realtime_overflow.tenant_id -> workspace_key; RENAME COLUMN job_queue.tenant_id -> workspace_key; DROP COLUMN settings.cloud_tenant_id; RENAME COLUMN settings.cloud_tenant_id -> cloud_workspace_key | annotated (safe-after 0.13.1) |
+| 0259_channel_threads.sql | DROP CONSTRAINT channel_accounts.channel_accounts_channel_check; DROP CONSTRAINT channel_accounts.channel_accounts_role_check | annotated (safe-after 0.13.2) |
 
 ## Grandfathered (29)
 
