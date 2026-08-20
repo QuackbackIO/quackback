@@ -52,7 +52,7 @@ describe('after-commit signaling', () => {
     expect(seen).toEqual([])
   })
 
-  it('coalesces the same tenant to one delivery per commit', async () => {
+  it('coalesces the same workspace to one delivery per commit', async () => {
     const seen: string[] = []
     onDurableWorkCommitted((key) => seen.push(key))
 

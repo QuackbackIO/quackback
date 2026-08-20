@@ -1,12 +1,12 @@
 /**
- * After-commit tenant signaling.
+ * After-commit workspace signaling.
  *
  * A job inserted on the caller's transaction is not visible to another
  * connection until that transaction commits. Signaling the scheduler
  * before commit can inspect an empty queue and go back to sleep — or
  * fire for a row that then rolls back.
  *
- * `db.transaction` is wrapped so every outer commit flushes the tenant
+ * `db.transaction` is wrapped so every outer commit flushes the workspace
  * keys recorded during that transaction. Rollback discards them. Nested
  * `db.transaction` calls are savepoints: an inner throw restores the
  * pending set to the snapshot taken on entry.
@@ -20,8 +20,7 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'after-commit' })
 
 /** Sentinel used when a single-workspace install has no ambient scope. */
-export const SINGLE_TENANT_ID = '__single__'
-export const SINGLE_WORKSPACE_KEY = SINGLE_TENANT_ID
+export const SINGLE_WORKSPACE_KEY = '__single__'
 
 interface AfterCommitFrame {
   depth: number
@@ -30,7 +29,7 @@ interface AfterCommitFrame {
 
 const frames = new AsyncLocalStorage<AfterCommitFrame>()
 
-type DurableWorkSink = (tenantId: string) => void
+type DurableWorkSink = (workspaceKey: string) => void
 
 const sinks: DurableWorkSink[] = []
 
@@ -55,25 +54,25 @@ export function onDurableWorkCommitted(sink: DurableWorkSink): () => void {
 }
 
 export function noteDurableWork(
-  tenantId: string | null | undefined,
+  workspaceKey: string | null | undefined,
   opts?: { committed?: boolean }
 ): void {
-  if (!tenantId) return
+  if (!workspaceKey) return
   const frame = frames.getStore()
   if (frame && frame.depth > 0) {
-    frame.pending.add(tenantId)
+    frame.pending.add(workspaceKey)
     return
   }
   if (opts?.committed === false) return
-  deliver(tenantId)
+  deliver(workspaceKey)
 }
 
-function deliver(tenantId: string): void {
+function deliver(workspaceKey: string): void {
   for (const sink of sinks) {
     try {
-      sink(tenantId)
+      sink(workspaceKey)
     } catch (err) {
-      log.error({ err, tenantId }, 'after-commit sink threw')
+      log.error({ err, workspaceKey }, 'after-commit sink threw')
     }
   }
 }

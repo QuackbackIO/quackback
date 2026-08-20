@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// --- Cache mocks ---
+// --- Redis cache mocks ---
 const mockCacheGet = vi.fn()
 const mockCacheSet = vi.fn()
 

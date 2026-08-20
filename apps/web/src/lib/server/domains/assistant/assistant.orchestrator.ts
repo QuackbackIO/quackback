@@ -54,23 +54,29 @@ import {
   activityToStatus,
 } from '.'
 import { logger } from '@/lib/server/logger'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
 const log = logger.child({ component: 'assistant-orchestrator' })
 
 // The assistant's service principal is immutable once provisioned, so its id is
-// memoized in-process to skip the find-or-create round trip on every turn.
-let memoizedAssistantPrincipalId: PrincipalId | null = null
+// memoized to skip the find-or-create round trip on every turn — but per workspace.
+// This id is written as the author foreign key on every message the assistant
+// sends, so one workspace's id memoized process-wide is another workspace's rows
+// pointing at a principal that does not exist in its database.
+const memoizedAssistantPrincipalId = new WorkspaceKeyedCache<PrincipalId>(256)
+const ASSISTANT_PRINCIPAL_KEY = 'principal-id'
 
 async function ensureAssistantPrincipalId(): Promise<PrincipalId> {
-  if (memoizedAssistantPrincipalId) return memoizedAssistantPrincipalId
+  const memoized = memoizedAssistantPrincipalId.get(ASSISTANT_PRINCIPAL_KEY)
+  if (memoized) return memoized
   const principal = await ensureAssistantPrincipal()
-  memoizedAssistantPrincipalId = principal.id
-  return memoizedAssistantPrincipalId
+  memoizedAssistantPrincipalId.set(ASSISTANT_PRINCIPAL_KEY, principal.id)
+  return principal.id
 }
 
-/** Test-only: clear the in-process principal-id memo between cases. */
+/** Test-only: clear the principal-id memo between cases. */
 export function __resetAssistantPrincipalMemo(): void {
-  memoizedAssistantPrincipalId = null
+  memoizedAssistantPrincipalId.clear()
 }
 
 /**
