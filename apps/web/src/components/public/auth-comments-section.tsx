@@ -48,6 +48,8 @@ interface AuthCommentsSectionProps {
   onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
   restoringCommentId?: PostCommentId | null
+  onImageUpload?: (file: File) => Promise<string>
+  canModerate?: boolean
 }
 
 /**
@@ -77,6 +79,8 @@ export function AuthCommentsSection({
   deletingCommentId,
   onRestoreComment,
   restoringCommentId,
+  onImageUpload,
+  canModerate = false,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -169,6 +173,8 @@ export function AuthCommentsSection({
       deletingCommentId={deletingCommentId}
       onRestoreComment={onRestoreComment}
       restoringCommentId={restoringCommentId}
+      onImageUpload={onImageUpload}
+      canModerate={canModerate}
     />
   )
 }

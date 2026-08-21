@@ -24,6 +24,8 @@ const INLINE_CODE_RX = /`[^`\n]/
 const ITALIC_STAR_RX = /(?<![\w*])\*[^*\s][^*\n]*\*(?!\w)/
 const ITALIC_UNDERSCORE_RX = /(?<![\w_])_[^_\s][^_\n]*_(?!\w)/
 const LINK_RX = /\[[^\]\n]+\]\([^)\n]+\)/
+const IMAGE_RX = /!\[[^\]]*\]\([^)\n]+\)/
+const TABLE_RX = /(^|\n)\s*\|.+\|/
 
 export function hasMarkdownTokens(text: string): boolean {
   if (!text) return false
@@ -34,7 +36,9 @@ export function hasMarkdownTokens(text: string): boolean {
     INLINE_CODE_RX.test(text) ||
     ITALIC_STAR_RX.test(text) ||
     ITALIC_UNDERSCORE_RX.test(text) ||
-    LINK_RX.test(text)
+    LINK_RX.test(text) ||
+    IMAGE_RX.test(text) ||
+    TABLE_RX.test(text)
   )
 }
 

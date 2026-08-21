@@ -26,9 +26,8 @@ import {
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { dispatchCommentCreatedEvent } from './comment.announce'
-import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
-import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import type { TiptapContent } from '@/lib/shared/db-types'
+import { prepareCommentContent } from './comment-content'
+import { contentHoldReason } from '@/lib/server/content/content-holds'
 import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from './comment.types'
 import { canCreateComment } from '@/lib/server/policy/posts'
 import type { Actor } from '@/lib/server/policy/types'
@@ -39,25 +38,6 @@ import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 
 const log = logger.child({ component: 'comments' })
-
-/**
- * Resolve the TipTap doc to store. UI clients send `contentJson` directly
- * (the editor produces it natively); REST/API callers post only markdown,
- * so we parse + sanitise on their behalf. Markdown stays the API source of
- * truth; the JSON column is a render-time cache.
- *
- * Provided JSON is sanitised before storage: the read path prefers
- * contentJson, so a caller who supplied innocuous `content` and a wholly
- * different JSON shape would otherwise be able to render arbitrary nodes
- * regardless of the 5,000-char content cap.
- */
-function resolveContentJson(
-  content: string,
-  provided: TiptapContent | null | undefined
-): TiptapContent {
-  if (provided) return sanitizeTiptapContent(provided)
-  return commentMarkdownToTiptapJson(content)
-}
 
 export async function createComment(
   input: CreateCommentInput,
@@ -102,13 +82,8 @@ export async function createComment(
   if (!decision.allowed) {
     throw new ForbiddenError('FORBIDDEN', decision.reason)
   }
-  // canCreateComment.requiresApproval is true when the actor is non-team and
-  // the resolved `moderation.comments` rule is `'on'`. Held comments land
-  // with moderationState='pending' so they don't appear publicly until a
-  // moderator approves them via approveCommentFn.
-  const initialModerationState: ModerationState = decision.requiresApproval
-    ? 'pending'
-    : 'published'
+  // Author-type hold is decided here; content holds (images/links) are OR'd
+  // on after we have canonical contentJson below.
 
   // Validate parent comment exists if specified
   let parentIsPrivate = false
@@ -159,7 +134,17 @@ export async function createComment(
   const shouldChangeStatus = !!(input.statusId && authorIsTeamMember && !input.parentId)
 
   const trimmedContent = input.content.trim()
-  const contentJson = resolveContentJson(trimmedContent, input.contentJson)
+  const { content: storedContent, contentJson } = await prepareCommentContent({
+    content: trimmedContent,
+    contentJson: input.contentJson,
+    authorIsTeamMember,
+    principalId: author.principalId,
+  })
+  const holdReason = authorIsTeamMember
+    ? null
+    : contentHoldReason(portalConfig.moderationDefault, contentJson, storedContent)
+  const initialModerationState: ModerationState =
+    decision.requiresApproval || holdReason ? 'pending' : 'published'
 
   let comment: PostComment
   let previousStatusName: string | null = null
@@ -189,7 +174,7 @@ export async function createComment(
         .insert(postComments)
         .values({
           postId: input.postId,
-          content: trimmedContent,
+          content: storedContent,
           contentJson,
           parentId: input.parentId || null,
           principalId: author.principalId,
@@ -253,7 +238,7 @@ export async function createComment(
         .insert(postComments)
         .values({
           postId: input.postId,
-          content: trimmedContent,
+          content: storedContent,
           contentJson,
           parentId: input.parentId || null,
           principalId: author.principalId,
@@ -296,7 +281,13 @@ export async function createComment(
       headers: options?.headers,
       target: { type: 'comment', id: comment.id },
       after: { moderationState: 'pending' },
-      metadata: { postId: post.id, boardId: board.id, principalType: actor.principalType },
+      metadata: {
+        postId: post.id,
+        boardId: board.id,
+        principalType: actor.principalType,
+        ...(holdReason ? { reason: holdReason } : {}),
+        previouslyPublished: false,
+      },
     })
   }
 
@@ -378,14 +369,20 @@ export async function updateComment(
     }
   }
 
-  // Build update data
+  // Build update data. contentJson-only updates still go through sanitize +
+  // rehost so a caller cannot persist hostile image srcs (the sanitizer is
+  // the only gate; the zod schema is z.unknown()).
   const updateData: Partial<PostComment> = {}
-  if (input.content !== undefined) {
-    const trimmed = input.content.trim()
-    updateData.content = trimmed
-    updateData.contentJson = resolveContentJson(trimmed, input.contentJson)
-  } else if (input.contentJson !== undefined) {
-    updateData.contentJson = input.contentJson
+  if (input.content !== undefined || input.contentJson !== undefined) {
+    const trimmed = (input.content ?? existingComment.content).trim()
+    const prepared = await prepareCommentContent({
+      content: trimmed,
+      contentJson: input.contentJson ?? undefined,
+      authorIsTeamMember: isTeamMember(actor.role),
+      principalId: actor.principalId,
+    })
+    updateData.content = prepared.content
+    updateData.contentJson = prepared.contentJson
   }
 
   // Update the comment

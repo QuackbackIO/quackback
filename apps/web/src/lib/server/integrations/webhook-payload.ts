@@ -5,6 +5,7 @@
 
 import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate, formatStatus } from '@/lib/server/events/hook-utils'
+import { commentPlainText } from '@/lib/server/markdown-tiptap'
 
 interface WebhookPayload {
   event: string
@@ -104,7 +105,7 @@ export function buildWebhookPayload(event: EventData, rootUrl: string): WebhookP
         },
         comment: {
           id: comment.id,
-          content: truncate(stripHtml(comment.content), 1000),
+          content: truncate(commentPlainText(comment), 1000),
           author_name: comment.authorName,
           author_email: comment.authorEmail,
         },

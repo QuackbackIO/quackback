@@ -201,11 +201,16 @@ export interface PortalFeatures {
 }
 
 /**
- * Workspace-wide post-approval policy. Applies to every board — there is
- * no per-board override.
+ * Workspace-wide post-approval policy. Author-type hold (`requireApproval`)
+ * can be overridden per board; content holds (`holdImages` / `holdLinks`)
+ * are workspace-wide only.
  */
 export interface ModerationDefault {
   requireApproval: 'none' | 'anonymous' | 'authenticated' | 'all'
+  /** Hold posts and comments that contain an image. Default false. */
+  holdImages?: boolean
+  /** Hold posts and comments that contain an external link. Default false. */
+  holdLinks?: boolean
 }
 
 /**
@@ -330,7 +335,7 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     title: '',
     body: { type: 'doc', content: [{ type: 'paragraph' }] },
   },
-  moderationDefault: { requireApproval: 'none' },
+  moderationDefault: { requireApproval: 'none', holdImages: false, holdLinks: false },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
   support: { enabled: false },
 }

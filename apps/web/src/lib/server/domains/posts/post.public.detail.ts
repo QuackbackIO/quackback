@@ -226,6 +226,7 @@ export async function getPublicPostDetail(
     sc_from_color: string | null
     sc_to_name: string | null
     sc_to_color: string | null
+    moderation_state: string
   }
 
   // The comment set is the UNION of this post + every merged source the actor
@@ -245,6 +246,7 @@ export async function getPublicPostDetail(
         c.id, c.post_id, c.parent_id, c.principal_id,
         m.display_name as author_name,
         c.content, c.content_json, c.is_team_member, c.is_private,
+        c.moderation_state,
         c.created_at, c.updated_at, c.deleted_at, c.deleted_by_principal_id,
         m.avatar_key, m.avatar_url,
         COALESCE(
@@ -363,6 +365,7 @@ export async function getPublicPostDetail(
       null,
     isTeamMember: comment.is_team_member,
     isPrivate: comment.is_private,
+    moderationState: comment.moderation_state,
     createdAt: ensureDate(comment.created_at),
     updatedAt: comment.updated_at ? ensureDate(comment.updated_at) : null,
     deletedAt: comment.deleted_at ? ensureDate(comment.deleted_at) : null,
@@ -406,6 +409,7 @@ export async function getPublicPostDetail(
       isEdited: !deleted && !!node.updatedAt,
       avatarUrl: deleted ? null : (node.avatarUrl ?? null),
       statusChange: deleted ? null : (node.statusChange ?? null),
+      moderationState: deleted ? 'published' : (node.moderationState ?? 'published'),
       replies: node.replies.map(mapToPublicComment),
       reactions: deleted ? [] : node.reactions,
     }
@@ -488,5 +492,6 @@ export async function getPublicPostDetail(
     pinnedComment,
     pinnedCommentId: pinnedComment ? (postResult.pinnedCommentId as PostCommentId) : null,
     isCommentsLocked: postResult.isCommentsLocked,
+    moderationState: postResult.postModerationState,
   }
 }

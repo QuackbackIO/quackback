@@ -93,14 +93,18 @@ describe('<CommentContent>', () => {
     expect(container.querySelector('em')).not.toBeNull()
   })
 
-  it('does not render an <img> for image markdown', () => {
+  it('renders an <img> for image markdown', async () => {
     const { container } = render(<CommentContent content="![alt](https://x.com/y.png)" />)
-    expect(container.querySelector('img')).toBeNull()
+    await waitFor(() => {
+      expect(container.querySelector('img')).not.toBeNull()
+    })
   })
 
-  it('does not render a <table> for table markdown', () => {
+  it('renders a <table> for table markdown', async () => {
     const { container } = render(<CommentContent content={'| a | b |\n|---|---|\n| 1 | 2 |'} />)
-    expect(container.querySelector('table')).toBeNull()
+    await waitFor(() => {
+      expect(container.querySelector('table')).not.toBeNull()
+    })
   })
 
   it('does not render a <script> for embedded HTML', () => {

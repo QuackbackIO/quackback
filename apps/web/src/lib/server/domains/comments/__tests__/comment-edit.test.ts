@@ -38,6 +38,20 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
   createActivity: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getPortalConfig: vi.fn().mockResolvedValue({
+    moderationDefault: { requireApproval: 'none' },
+  }),
+}))
+
+vi.mock('@/lib/server/audit/log', () => ({
+  recordAuditEvent: vi.fn(),
+}))
+
+vi.mock('@/lib/server/content/rehost-images', () => ({
+  rehostExternalImages: vi.fn(async (json: unknown) => json),
+}))
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const COMMENT_ID = 'comment_test123' as unknown as PostCommentId

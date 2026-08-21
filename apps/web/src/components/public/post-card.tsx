@@ -31,6 +31,7 @@ import { cn, getInitials } from '@/lib/shared/utils'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { AuthorHoverCard } from '@/components/public/author-hover-card'
 import type { PostId, PostStatusId, PrincipalId } from '@quackback/ids'
+import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 
 interface PostCardProps {
   id: PostId
@@ -98,6 +99,11 @@ interface PostCardProps {
   showQuickActions?: boolean
   /** Whether to show avatar in meta row */
   showAvatar?: boolean
+  moderationState?: 'published' | 'pending' | string | null
+  canModerate?: boolean
+  moderationBusy?: boolean
+  onApprove?: () => void
+  onReject?: () => void
 }
 
 export function PostCard({
@@ -131,6 +137,11 @@ export function PostCard({
   onMouseLeave,
   showQuickActions = false,
   showAvatar = true,
+  moderationState,
+  canModerate = false,
+  moderationBusy = false,
+  onApprove,
+  onReject,
 }: PostCardProps): React.ReactElement {
   // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
   const intl = useIntl()
@@ -524,6 +535,17 @@ export function PostCard({
             </span>
           )}
         </div>
+        {moderationState === 'pending' && (
+          <div className="mt-2.5" onClick={(e) => e.stopPropagation()}>
+            <InlineModerationActions
+              pending
+              noun="post"
+              busy={moderationBusy}
+              onApprove={canModerate ? onApprove : undefined}
+              onReject={canModerate ? onReject : undefined}
+            />
+          </div>
+        )}
       </div>
 
       {/* Quick actions */}

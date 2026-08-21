@@ -72,13 +72,16 @@ describe('MCP content format metadata', () => {
     expect(tool.description).toContain('PNG, JPEG, WebP, GIF, AVIF')
   })
 
-  it.each(COMMENT_TOOLS)(
-    '%s: content field declares plain text and no markdown support',
-    (toolName) => {
-      const tool = tools.find((t) => t.name === toolName)!
-      const description = tool.schema.content?.description ?? ''
-      expect(description.toLowerCase()).toContain('plain text')
-      expect(description.toLowerCase()).toContain('not supported')
-    }
-  )
+  it.each(COMMENT_TOOLS)('%s: content field mentions markdown and auto-rehost', (toolName) => {
+    const tool = tools.find((t) => t.name === toolName)!
+    const description = tool.schema.content?.description ?? ''
+    expect(description.toLowerCase()).toContain('markdown')
+    expect(description.toLowerCase()).toContain('auto-rehost')
+  })
+
+  it.each(COMMENT_TOOLS)('%s: tool description contains the content format block', (toolName) => {
+    const tool = tools.find((t) => t.name === toolName)!
+    expect(tool.description).toContain('Content format:')
+    expect(tool.description).toContain('PNG, JPEG, WebP, GIF, AVIF')
+  })
 })

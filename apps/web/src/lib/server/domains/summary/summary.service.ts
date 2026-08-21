@@ -28,6 +28,7 @@ import {
 } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
+import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import type { PostId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
@@ -133,6 +134,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   const commentRows = await db
     .select({
       content: postComments.content,
+      contentJson: postComments.contentJson,
       isTeamMember: postComments.isTeamMember,
     })
     .from(postComments)
@@ -146,7 +148,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     input += '\n\n## Comments\n'
     for (const c of commentRows) {
       const prefix = c.isTeamMember ? '[Team]' : '[User]'
-      input += `\n${prefix}: ${c.content}`
+      input += `\n${prefix}: ${commentPlainText(c)}`
     }
   }
 

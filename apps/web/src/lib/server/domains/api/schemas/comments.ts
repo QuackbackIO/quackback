@@ -34,6 +34,11 @@ const CommentListItemSchema: z.ZodType = z.lazy(() =>
     postId: TypeIdSchema,
     parentId: TypeIdSchema.nullable().meta({ description: 'Parent comment ID for replies' }),
     content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
+    contentJson: z
+      .record(z.string(), z.unknown())
+      .nullable()
+      .optional()
+      .meta({ description: 'Rich text content as TipTap JSON' }),
     authorName: z.string().nullable().meta({ example: 'Jane Doe' }),
     principalId: TypeIdSchema.nullable().meta({
       description: 'Principal ID of the comment author',
@@ -56,6 +61,11 @@ const CommentDetailSchema = z.object({
   postId: TypeIdSchema,
   parentId: TypeIdSchema.nullable().meta({ description: 'Parent comment ID for replies' }),
   content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
+  contentJson: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .optional()
+    .meta({ description: 'Rich text content as TipTap JSON' }),
   authorName: z.string().nullable().meta({ example: 'Jane Doe' }),
   authorEmail: z.string().nullable().meta({ example: 'user@example.com' }),
   principalId: TypeIdSchema.nullable().meta({ description: 'Principal ID of the comment author' }),
@@ -77,6 +87,11 @@ const CommentResponseSchema = z.object({
   postId: TypeIdSchema,
   parentId: TypeIdSchema.nullable(),
   content: z.string(),
+  contentJson: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .optional()
+    .meta({ description: 'Rich text content as TipTap JSON' }),
   authorName: z.string().nullable(),
   principalId: TypeIdSchema.nullable(),
   isTeamMember: z.boolean(),

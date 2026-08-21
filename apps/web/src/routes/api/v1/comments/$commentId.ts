@@ -11,6 +11,7 @@ import {
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PostCommentId } from '@quackback/ids'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 
 // Input validation schema
 const updateCommentSchema = z.object({
@@ -43,7 +44,8 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             id: comment.id,
             postId: comment.postId,
             parentId: comment.parentId,
-            content: comment.content,
+            content: contentJsonToMarkdown(comment.contentJson, comment.content),
+            contentJson: comment.contentJson ?? null,
             authorName: comment.authorName,
             authorEmail: comment.authorEmail,
             principalId: comment.principalId,
@@ -114,7 +116,8 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             id: result.id,
             postId: result.postId,
             parentId: result.parentId,
-            content: result.content,
+            content: contentJsonToMarkdown(result.contentJson, result.content),
+            contentJson: result.contentJson ?? null,
             authorName: commentMember?.user?.name ?? null,
             principalId: result.principalId,
             isTeamMember: result.isTeamMember,

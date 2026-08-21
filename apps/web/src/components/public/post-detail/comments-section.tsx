@@ -95,6 +95,10 @@ interface CommentsSectionProps {
   isLoadingMoreComments?: boolean
   /** Remaining root comments not yet loaded (for the button label). */
   remainingCommentCount?: number
+  /** When set, comment composers expose image insert. */
+  onImageUpload?: (file: File) => Promise<string>
+  /** Team members with post.approve can approve/reject pending comments inline. */
+  canModerate?: boolean
 }
 
 export function CommentsSection({
@@ -119,6 +123,8 @@ export function CommentsSection({
   onLoadMoreComments,
   isLoadingMoreComments = false,
   remainingCommentCount,
+  onImageUpload,
+  canModerate = false,
 }: CommentsSectionProps) {
   const intl = useIntl()
   const commentCount = useMemo(() => countAllComments(comments), [comments])
@@ -180,6 +186,8 @@ export function CommentsSection({
         onRestoreComment={onRestoreComment}
         restoringCommentId={restoringCommentId}
         hideCommentForm={disableCommenting && !!adminUser}
+        onImageUpload={onImageUpload}
+        canModerate={canModerate}
       />
 
       {hasMoreComments && onLoadMoreComments && (

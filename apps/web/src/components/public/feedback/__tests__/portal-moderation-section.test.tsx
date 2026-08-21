@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -8,16 +8,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // gate itself is enforced server-side (covered by moderation.test.ts); these
 // tests assert the portal render contract: zero footprint when the viewer
 // lacks post.approve, and correct wiring when they hold it.
-const { mockList, mockApprove, mockReject } = vi.hoisted(() => ({
+const { mockList, mockListComments } = vi.hoisted(() => ({
   mockList: vi.fn(),
-  mockApprove: vi.fn(),
-  mockReject: vi.fn(),
+  mockListComments: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/moderation', () => ({
   listPendingPostsFn: (...args: unknown[]) => mockList(...args),
-  approvePostFn: (...args: unknown[]) => mockApprove(...args),
-  rejectPostFn: (...args: unknown[]) => mockReject(...args),
+  listPendingCommentsFn: (...args: unknown[]) => mockListComments(...args),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -60,8 +58,7 @@ const PENDING = {
 
 beforeEach(() => {
   mockList.mockReset()
-  mockApprove.mockReset().mockResolvedValue({ ok: true })
-  mockReject.mockReset().mockResolvedValue({ ok: true })
+  mockListComments.mockReset().mockResolvedValue({ comments: [] })
 })
 
 afterEach(() => cleanup())
@@ -78,15 +75,12 @@ describe('PortalModerationSection — render gate', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders the banner and a pending card for a post.approve holder', async () => {
+  it('renders the banner for a post.approve holder without duplicating the post as a card', async () => {
     mockList.mockResolvedValue(PENDING)
     renderSection(true)
-    // Banner count + card content driven by the reused list fn.
-    expect(await screen.findByText(/waiting for approval/i)).toBeInTheDocument()
-    expect(screen.getByText('Dark mode please')).toBeInTheDocument()
-    // Pending state is text, not colour alone.
-    expect(screen.getByText(/pending approval/i)).toBeInTheDocument()
-    expect(screen.getByText(/cannot see this post yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/waiting for review/i)).toBeInTheDocument()
+    expect(screen.queryByText('Dark mode please')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /open queue/i })).toBeInTheDocument()
   })
 
   it('renders nothing when the holder has an empty queue', async () => {
@@ -94,34 +88,5 @@ describe('PortalModerationSection — render gate', () => {
     const { container } = renderSection(true)
     await waitFor(() => expect(mockList).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
-  })
-})
-
-describe('PortalModerationSection — actions', () => {
-  it('Approve calls approvePostFn with the post id', async () => {
-    mockList.mockResolvedValue(PENDING)
-    renderSection(true)
-    const approveBtn = await screen.findByRole('button', { name: /approve/i })
-    fireEvent.click(approveBtn)
-    await waitFor(() => {
-      expect(mockApprove).toHaveBeenCalledWith({ data: { postId: 'post_1' } })
-    })
-  })
-
-  it('Reject opens the reason dialog and confirms with the typed reason', async () => {
-    mockList.mockResolvedValue(PENDING)
-    renderSection(true)
-    const rejectBtn = await screen.findByRole('button', { name: /^reject$/i })
-    fireEvent.click(rejectBtn)
-    // Dialog appears with the optional reason field.
-    const textarea = await screen.findByLabelText(/reason/i)
-    fireEvent.change(textarea, { target: { value: 'off topic' } })
-    const confirmBtn = screen.getByRole('button', { name: /reject post/i })
-    fireEvent.click(confirmBtn)
-    await waitFor(() => {
-      expect(mockReject).toHaveBeenCalledWith({
-        data: { postId: 'post_1', reason: 'off topic' },
-      })
-    })
   })
 })

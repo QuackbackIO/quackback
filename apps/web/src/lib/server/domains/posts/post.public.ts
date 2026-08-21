@@ -95,6 +95,7 @@ export interface PostWithVotesAndAvatars {
   board: { id: string; name: string; slug: string }
   hasVoted: boolean
   avatarUrl: string | null
+  moderationState?: 'published' | 'pending' | string
 }
 
 interface PostListParams {
@@ -248,6 +249,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       principalId: posts.principalId,
       createdAt: posts.createdAt,
       pinnedAt: posts.pinnedAt,
+      moderationState: posts.moderationState,
       boardId: boards.id,
       boardName: boards.name,
       boardSlug: boards.slug,
@@ -323,6 +325,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       principalId: post.principalId,
       createdAt: post.createdAt,
       pinnedAt: post.pinnedAt,
+      moderationState: post.moderationState,
       tags: tagsByPost.get(post.id) ?? [],
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
       hasVoted: post.hasVoted ?? false,
@@ -351,6 +354,7 @@ export async function listPublicPosts(
       commentCount: posts.commentCount,
       principalId: posts.principalId,
       createdAt: posts.createdAt,
+      moderationState: posts.moderationState,
       boardId: boards.id,
       boardName: boards.name,
       boardSlug: boards.slug,
@@ -386,6 +390,7 @@ export async function listPublicPosts(
     principalId: post.principalId,
     createdAt: post.createdAt,
     commentCount: post.commentCount,
+    moderationState: post.moderationState,
     tags: parseJson<Array<{ id: PostTagId; name: string; color: string }>>(post.tagsJson),
     board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
   }))

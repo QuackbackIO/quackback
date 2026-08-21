@@ -1096,6 +1096,30 @@ describe('getModerationStatus', () => {
     expect(result.enabled).toBe(false)
   })
 
+  it('enabled=true when holdImages is on even if requireApproval is none', async () => {
+    stubSelectCalls(0)
+    mockGetPortalConfig.mockResolvedValue({
+      moderationDefault: { requireApproval: 'none', holdImages: true },
+    })
+    const result = (await getModerationStatusHandler()({ data: {} })) as {
+      enabled: boolean
+      pendingCount: number
+    }
+    expect(result.enabled).toBe(true)
+  })
+
+  it('enabled=true when holdLinks is on even if requireApproval is none', async () => {
+    stubSelectCalls(0)
+    mockGetPortalConfig.mockResolvedValue({
+      moderationDefault: { requireApproval: 'none', holdLinks: true },
+    })
+    const result = (await getModerationStatusHandler()({ data: {} })) as {
+      enabled: boolean
+      pendingCount: number
+    }
+    expect(result.enabled).toBe(true)
+  })
+
   it('enabled=true when policy is none but a per-board backlog exists', async () => {
     // Per-board approval can route items to pending while the workspace
     // default is 'none'. The sidebar status must surface that backlog so

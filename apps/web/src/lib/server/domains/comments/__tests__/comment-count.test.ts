@@ -214,6 +214,10 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   }),
 }))
 
+vi.mock('@/lib/server/content/rehost-images', () => ({
+  rehostExternalImages: vi.fn(async (json: unknown) => json),
+}))
+
 const portalActor: Actor = {
   principalId: 'principal_mock' as unknown as PrincipalId,
   role: 'user',

@@ -31,6 +31,11 @@ const PinnedCommentSchema = z
   .object({
     id: TypeIdSchema,
     content: z.string(),
+    contentJson: z
+      .record(z.string(), z.unknown())
+      .nullable()
+      .optional()
+      .meta({ description: 'Rich text content as TipTap JSON' }),
     authorName: z.string().nullable(),
     createdAt: TimestampSchema,
   })

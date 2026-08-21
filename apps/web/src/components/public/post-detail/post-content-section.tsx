@@ -28,6 +28,7 @@ import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { SimilarPostsSection } from './similar-posts-section'
 import { PostActionsMenu } from './post-actions-menu'
 import type { PostId } from '@quackback/ids'
+import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
 
 export function PostContentSectionSkeleton(): React.ReactElement {
   return (
@@ -86,6 +87,10 @@ interface PostContentSectionProps {
   isSaving?: boolean
   /** Editor features for inline editing (defaults to simple user-friendly options) */
   editorFeatures?: EditorFeatures
+  canModerate?: boolean
+  moderationBusy?: boolean
+  onApprove?: () => void
+  onReject?: () => void
 }
 
 /** Default editor features for end users */
@@ -119,6 +124,10 @@ export function PostContentSection({
   onImageUpload,
   isSaving = false,
   editorFeatures = DEFAULT_USER_EDITOR_FEATURES,
+  canModerate = false,
+  moderationBusy = false,
+  onApprove,
+  onReject,
 }: PostContentSectionProps): React.ReactElement {
   const intl = useIntl()
   const [editTitle, setEditTitle] = useState(post.title)
@@ -256,6 +265,17 @@ export function PostContentSection({
       </div>
 
       <h1 className="text-xl sm:text-2xl font-semibold text-foreground mb-4">{post.title}</h1>
+
+      {post.moderationState === 'pending' && (
+        <InlineModerationActions
+          pending
+          noun="post"
+          className="mb-4"
+          busy={moderationBusy}
+          onApprove={canModerate ? onApprove : undefined}
+          onReject={canModerate ? onReject : undefined}
+        />
+      )}
 
       <PostContent
         content={post.content}

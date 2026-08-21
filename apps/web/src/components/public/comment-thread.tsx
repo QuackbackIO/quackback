@@ -34,6 +34,8 @@ import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
+import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
+import { useApproveComment, useRejectComment } from '@/lib/client/mutations/moderation'
 
 /**
  * Groups root-level comments so consecutive private comments are wrapped
@@ -151,6 +153,9 @@ interface CommentThreadProps {
   onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
   restoringCommentId?: PostCommentId | null
+  /** When set, comment composers expose image insert. */
+  onImageUpload?: (file: File) => Promise<string>
+  canModerate?: boolean
 }
 
 export function CommentThread({
@@ -178,6 +183,8 @@ export function CommentThread({
   deletingCommentId,
   onRestoreComment,
   restoringCommentId,
+  onImageUpload,
+  canModerate = false,
 }: CommentThreadProps) {
   const intl = useIntl()
   const sortedComments = [...comments].sort((a, b) => {
@@ -201,6 +208,7 @@ export function CommentThread({
           statuses={statuses}
           currentStatusId={currentStatusId}
           isTeamMember={isTeamMember}
+          onImageUpload={onImageUpload}
         />
       )
     }
@@ -275,6 +283,8 @@ export function CommentThread({
             deletingCommentId,
             onRestoreComment,
             restoringCommentId,
+            onImageUpload,
+            canModerate,
           })}
         </div>
       )}
@@ -311,6 +321,8 @@ interface CommentItemProps {
   restoringCommentId?: PostCommentId | null
   /** Whether this comment is rendered inside a PrivateNoteCard (suppresses per-comment private styling) */
   insidePrivateCard?: boolean
+  onImageUpload?: (file: File) => Promise<string>
+  canModerate?: boolean
 }
 
 const MAX_NESTING_DEPTH = 5
@@ -336,8 +348,12 @@ function CommentItem({
   onRestoreComment,
   restoringCommentId,
   insidePrivateCard = false,
+  onImageUpload,
+  canModerate = false,
 }: CommentItemProps) {
   const intl = useIntl()
+  const approveComment = useApproveComment(postId)
+  const rejectComment = useRejectComment(postId)
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
@@ -533,6 +549,8 @@ function CommentItem({
           className={cn(
             'py-2',
             isPinned && 'bg-primary/[0.04] border border-primary/15 rounded-lg px-3 -mx-3',
+            comment.moderationState === 'pending' &&
+              'rounded-lg border border-amber-500/25 bg-amber-500/[0.04] px-3 -mx-3',
             isDeleted && isTeamMember && 'opacity-50'
           )}
         >
@@ -676,6 +694,7 @@ function CommentItem({
                   minHeight="64px"
                   autofocus="end"
                   features={COMMENT_EDITOR_FEATURES}
+                  onImageUpload={onImageUpload}
                   disabled={editMutation.isPending}
                   onChange={(json, _html, markdown) => {
                     editJsonRef.current = json as TiptapContent
@@ -727,6 +746,18 @@ function CommentItem({
               content={comment.content}
               contentJson={comment.contentJson ?? null}
               className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
+            />
+          )}
+          {comment.moderationState === 'pending' && (
+            <InlineModerationActions
+              pending
+              noun="comment"
+              className="mt-2 ms-10"
+              busy={approveComment.isPending || rejectComment.isPending}
+              onApprove={canModerate ? () => approveComment.mutate(comment.id) : undefined}
+              onReject={
+                canModerate ? () => rejectComment.mutate({ commentId: comment.id }) : undefined
+              }
             />
           )}
 
@@ -953,6 +984,7 @@ function CommentItem({
                   createComment={createComment}
                   isTeamMember={isTeamMember}
                   defaultPrivate={comment.isPrivate}
+                  onImageUpload={onImageUpload}
                 />
               </div>
             </div>
@@ -991,6 +1023,8 @@ function CommentItem({
                   onRestoreComment={onRestoreComment}
                   restoringCommentId={restoringCommentId}
                   insidePrivateCard={insidePrivateCard}
+                  onImageUpload={onImageUpload}
+                  canModerate={canModerate}
                 />
               ))}
             </div>
