@@ -57,6 +57,12 @@ export const events = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
     /** NULL = outbox-pending; set by the relay once fanned out. */
     publishedAt: timestamp('published_at', { withTimezone: true }),
+    /**
+     * Who may drain this unpublished row. New rows default to `job`.
+     * Leftover `relay` rows are converted onto the job path at job-tier /
+     * scheduler start.
+     */
+    dispatchOwner: text('dispatch_owner').notNull().default('job'),
   },
   (table) => [
     uniqueIndex('events_event_id_idx').on(table.eventId),

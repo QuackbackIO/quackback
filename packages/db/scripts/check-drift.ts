@@ -228,6 +228,14 @@ const EXEMPTIONS: { reason: string; pattern: RegExp; optional?: boolean }[] = [
       /^ALTER TABLE "settings" ALTER COLUMN "assistant_config" SET DEFAULT '\{"version":3,.*\}'::jsonb;?$/,
   },
   {
+    // dispatch_owner is rollout compatibility state owned by migrations 0253/0254.
+    // The application reads the column, while this CHECK deliberately remains
+    // raw SQL so an older schema declaration cannot silently redefine the
+    // accepted owner vocabulary during the relay-to-job cutover.
+    reason: 'events dispatch_owner CHECK is raw-SQL-owned rollout compatibility state',
+    pattern: /^ALTER TABLE "events" DROP CONSTRAINT "events_dispatch_owner_ck";?$/,
+  },
+  {
     // drizzle-kit on PG 17 reports composite UNIQUE/PK columns in creation
     // order; on PG 18 it reports them alphabetically (matching the TS
     // declarations). The resulting DROP+ADD pair is a column-order rewrite

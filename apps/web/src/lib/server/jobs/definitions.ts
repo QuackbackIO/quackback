@@ -253,6 +253,17 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/hook-job').then((m) => m.onHookJobFailure(job, error, permanent)),
   },
   {
+    // Drains one job-owned outbox row. The row is written in emit()'s
+    // transaction so rollback leaves nothing.
+    name: 'event-dispatch',
+    concurrency: 5,
+    maxAttempts: 10,
+    retentionMs: DAY_MS,
+    failedRetentionMs: 30 * DAY_MS,
+    handler: () =>
+      import('@/lib/server/events/event-dispatch-queue').then((m) => m.runEventDispatch),
+  },
+  {
     // Was `{segment-evaluation}`. Its schedules are rows in the tenant's own
     // `segments` table, so they are derived per tick rather than registered.
     name: 'segment-evaluation',

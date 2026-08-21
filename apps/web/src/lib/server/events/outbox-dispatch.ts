@@ -6,8 +6,8 @@
  *
  * Because the existing dispatchers run AFTER their mutation has committed (no tx
  * in scope), this opens a short transaction solely to write the outbox row —
- * still strictly better than fire-and-forget, since the row + its pg_notify are
- * atomic and the relay guarantees at-least-once delivery.
+ * still strictly better than fire-and-forget, since the row and its
+ * `event-dispatch` job commit together.
  */
 import { db } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'

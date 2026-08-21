@@ -121,7 +121,7 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
     policy: 'settle',
     strategy: 'stamp-pending',
     reason:
-      'The outbox relay drains WHERE published_at IS NULL through the events_unpublished_idx partial index and fans each row out to the hook queue, so a rewind re-delivers every webhook in the restored window.',
+      'event-dispatch drains unpublished job-owned events through the events_unpublished_idx partial index and fans each row out to the hook queue, so a rewind re-delivers every webhook in the restored window.',
   },
   {
     column: schema.changelogEntries.notifiedAt,

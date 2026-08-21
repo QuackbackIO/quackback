@@ -105,10 +105,10 @@ would invert the reason for pooling; that concern is about a process that
 listens for _every_ tenant. The bound here is _tenants with a live SSE stream on
 this replica_, which is already proportional to a long-lived resource.
 
-**Seam with the outbox relay:** the relay holds its own dedicated session
-connection for `LISTEN` and its advisory lock (`events/relay-lock.ts`) rather
-than sharing this one — that file is load-bearing for event delivery. If a
-shared session-connection manager ever appears, both are candidates to join it.
+**Seam with the job tier:** the queue polls; it does not LISTEN. The realtime
+bus is the only remaining session-mode listener (`realtime/pg-listener.ts`).
+If a shared session-connection manager ever appears, the realtime bus is the
+consumer that would join it.
 
 ## 6. The cost, measured once
 

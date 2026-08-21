@@ -6,12 +6,15 @@
  * payload against the catalogue definition, INSERTs one `events` row on the
  * passed transaction (so the event commits atomically with the mutation), writes
  * an `audit_log` row in the same transaction when the definition opts in, and
- * fires the commit-time doorbell (`pg_notify 'outbox_wake'`) so the relay wakes
- * immediately. It NEVER enqueues BullMQ — the relay is the sole enqueuer.
+ * inserts an `event-dispatch` job_queue row in that same transaction. The
+ * job_queue trigger NOTIFYs on commit. Leftover unpublished rows may still
+ * carry `dispatch_owner = relay`; job-tier / scheduler start converts them.
  */
-import { db, events, auditLog, sql, type Database, type Transaction } from '@/lib/server/db'
+import { db, events, auditLog, type Database, type Transaction } from '@/lib/server/db'
 import { createId, type EvtId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { enqueueJob } from '@/lib/server/jobs/job-queue'
+import { EVENT_DISPATCH_QUEUE } from './event-dispatch-queue'
 import type { EventDefinition } from './catalogue/define'
 import type { DomainEvent, EventActorType, EventContext } from './envelope'
 
@@ -32,8 +35,8 @@ export interface EmitInput<P> {
 }
 
 /**
- * Validate + persist one event on the caller's transaction, then ring the
- * commit-time doorbell. Returns the new event's TypeID.
+ * Validate + persist one event on the caller's transaction, then signal the
+ * job tier after commit. Returns the new event's TypeID.
  */
 export async function emit<P>(
   tx: DbOrTx,
@@ -58,6 +61,7 @@ export async function emit<P>(
     context: context as unknown as Record<string, unknown>,
     schemaVersion: def.version,
     dedupeKey: input.dedupeKey ?? null,
+    dispatchOwner: 'job',
   })
 
   // Compliance audit rows are written in the SAME transaction when the
@@ -77,11 +81,15 @@ export async function emit<P>(
     })
   }
 
-  // Commit-time doorbell: Postgres delivers this NOTIFY only if the tx commits,
-  // so the relay is woken exactly when there is a durably-committed event to
-  // drain — and never for a rolled-back one.
-  await tx.execute(sql`select pg_notify('outbox_wake', '')`)
-
+  // Same transaction as the event (and audit) row. Rollback leaves no
+  // dispatch job. The job_queue wake trigger fires only if this commits.
+  await enqueueJob({
+    queue: EVENT_DISPATCH_QUEUE,
+    payload: { eventId },
+    dedupeKey: `event-dispatch:${eventId}`,
+    maxAttempts: 10,
+    executor: tx,
+  })
   return eventId
 }
 
@@ -111,7 +119,7 @@ export async function emitBestEffort<P>(
 /**
  * Build a child context from a triggering event: depth+1, causationId set to the
  * parent's id, correlationId propagated. Used when a reaction (e.g. a workflow
- * action) causes a further mutation, so the relay's depth guard can break loops.
+ * action) causes a further mutation, so the depth guard can break loops.
  */
 export function inherit(parent: DomainEvent, source?: string): Partial<EventContext> {
   return {

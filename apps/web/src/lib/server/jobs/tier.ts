@@ -57,18 +57,19 @@ import {
   runnerConfig,
   type RunnerConfig,
 } from './runner'
+import { onDurableWorkCommitted, SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
+import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 
 const log = logger.child({ component: 'job-tier' })
 
 /** How often the pooled tier re-reads the tenant list from the control database. */
 const TENANT_REFRESH_MS = 60_000
 
-/** Sentinel tenant id for a single-tenant install. Never a real tenant id. */
-const SINGLE = '__single__'
-
 interface TenantLoop {
   tenantId: string
   stop(): Promise<void>
+  /** End the current poll wait so an after-commit enqueue is claimed now. */
+  signal(): void
   /** Latest registry view, so a revision change is seen without a restart. */
   observe(tenant: TenantDescriptor): void
 }
@@ -96,6 +97,7 @@ const loops = new Map<string, TenantLoop>()
 const stats = new Map<string, LoopStats>()
 let running = false
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
+let unsubscribeCommit: (() => void) | null = null
 
 function emptyStats(): LoopStats {
   return {
@@ -224,6 +226,11 @@ function startLoop(opts: {
         const now = Date.now()
 
         const result = await opts.scoped(async () => {
+          try {
+            await convertRelayOwnedEvents()
+          } catch (err) {
+            log.warn({ err, tenantId: opts.tenantId }, 'relay-owned event convert failed')
+          }
           if (now >= nextScheduleAt) {
             const tick = await runScheduleTick(schedule, new Date(now))
             s.scheduled += tick.enqueued
@@ -301,6 +308,7 @@ function startLoop(opts: {
 
   return {
     tenantId: opts.tenantId,
+    signal: nudge,
     observe(tenant) {
       const changed = descriptor !== null && descriptor.revision !== tenant.revision
       descriptor = tenant
@@ -332,12 +340,12 @@ function errText(err: unknown): string {
 
 function startSingleTenantLoop(cfg: RunnerConfig): void {
   const loop = startLoop({
-    tenantId: SINGLE,
+    tenantId: SINGLE_TENANT_ID,
     config: cfg,
     tenant: null,
     scoped: (body) => body(),
   })
-  loops.set(SINGLE, loop)
+  loops.set(SINGLE_TENANT_ID, loop)
 }
 
 function startTenantLoop(tenant: TenantDescriptor, cfg: RunnerConfig): void {
@@ -408,7 +416,7 @@ function scheduleTenantRefresh(cfg: RunnerConfig): void {
 
 /**
  * Start the job tier. Worker-role only, so calling it on a web replica is a
- * no-op — the same gate `startOutboxRelay` uses.
+ * no-op.
  */
 export async function startJobTier(): Promise<void> {
   if (running) return
@@ -423,6 +431,13 @@ export async function startJobTier(): Promise<void> {
   // module can execute its top level under one tenant's connection. See
   // runner.ts's primeJobHandlers for the shape this is guarding against.
   await primeJobHandlers()
+
+  // After-commit flush nudges the in-process poll loop. There is no LISTEN
+  // doorbell: Neon is gone, and a transaction-mode pooler would not deliver
+  // NOTIFY anyway. The poll is the mechanism; this only cuts the wait.
+  unsubscribeCommit = onDurableWorkCommitted((tenantId) => {
+    signalTenant(tenantId)
+  })
 
   if (!config.isPooledTenancy) {
     startSingleTenantLoop(cfg)
@@ -444,6 +459,8 @@ export async function stopJobTier(): Promise<void> {
     clearTimeout(refreshTimer)
     refreshTimer = null
   }
+  unsubscribeCommit?.()
+  unsubscribeCommit = null
   const all = [...loops.values()]
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
@@ -463,4 +480,14 @@ export function getJobTierStatus(): JobTierStatus {
     running,
     tenants: [...stats.entries()].map(([tenantId, s]) => ({ tenantId, ...s })),
   }
+}
+
+/**
+ * End this tenant's current poll wait so an after-commit enqueue is claimed now.
+ */
+export function signalTenant(tenantId: string): boolean {
+  const loop = loops.get(tenantId)
+  if (!loop) return false
+  loop.signal()
+  return true
 }

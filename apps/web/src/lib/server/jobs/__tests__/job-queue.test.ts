@@ -9,7 +9,7 @@
  * The suite is scoped to unique queue names because `DATABASE_URL` points every
  * worktree on this machine at one shared `quackback_test`.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   cleanupQueues,
   closeHarness,
@@ -47,6 +47,11 @@ vi.mock('@/lib/server/tenancy/tenant-context', () => ({
 }))
 
 import {
+  __resetAfterCommitForTests,
+  onDurableWorkCommitted,
+} from '@/lib/server/tenancy/after-commit'
+
+import {
   cancelJob,
   claimJobs,
   completeJob,
@@ -68,12 +73,22 @@ function queue(label: string): string {
   return q
 }
 
+const signaled: string[] = []
+let unsubCommit: (() => void) | undefined
+
 beforeAll(async () => {
   await ensureJobQueueSchema()
 })
 
+beforeEach(() => {
+  signaled.length = 0
+  unsubCommit = onDurableWorkCommitted((key) => signaled.push(key))
+})
+
 afterEach(() => {
   currentTenantId = null
+  unsubCommit?.()
+  __resetAfterCommitForTests()
 })
 
 afterAll(async () => {
@@ -470,7 +485,7 @@ describe('the lease-shape constraint', () => {
 
 describe('what a claimed row carries', () => {
   it('hands the handler its dedupe key', async () => {
-    // Not decoration: for a relay-enqueued hook this key IS the deterministic
+    // Not decoration: for a hook job this key IS the deterministic
     // `<eventId>:<sink>:<target>` id the reference passed into `hook.run` as
     // `job.id`, and handlers dedupe their own side effects on it. A test that
     // builds a ClaimedJob by hand cannot see this mapping break.
@@ -575,7 +590,7 @@ describe('bulk enqueue', () => {
     expect(await rowsFor(q)).toHaveLength(2)
   })
 
-  it('is a no-op on keys that already exist — the relay’s re-drain', async () => {
+  it('is a no-op on keys that already exist — a retried dispatch', async () => {
     const q = queue('bulk-dedupe')
     await enqueueJobs([{ queue: q, dedupeKey: 'k' }])
     const again = await enqueueJobs([
@@ -662,5 +677,33 @@ describe('per-queue retention', () => {
 
     const rows = await rowsFor(q)
     expect(rows.map((r) => r.status)).toEqual(['failed'])
+  })
+})
+
+describe('transactional enqueue', () => {
+  it('commits the job with the caller transaction and signals only after commit', async () => {
+    const q = queue('tx-commit')
+    currentTenantId = 'tenant-tx'
+    const { wrapDbTransaction } = await import('@/lib/server/tenancy/after-commit')
+    const transaction = wrapDbTransaction(testDb().transaction.bind(testDb()))
+    await transaction(async (tx) => {
+      const { inserted } = await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
+      expect(inserted).toBe(true)
+      expect(signaled).toEqual([])
+    })
+    expect((await rowsFor(q)).length).toBe(1)
+    expect(signaled).toEqual(['tenant-tx'])
+  })
+
+  it('leaves no row when the caller transaction rolls back', async () => {
+    const q = queue('tx-rollback')
+    await expect(
+      testDb().transaction(async (tx) => {
+        await enqueueJob({ queue: q, payload: { n: 1 }, executor: tx })
+        throw new Error('boom')
+      })
+    ).rejects.toThrow('boom')
+    expect((await rowsFor(q)).length).toBe(0)
+    expect(signaled).toEqual([])
   })
 })

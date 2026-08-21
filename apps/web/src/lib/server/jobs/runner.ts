@@ -427,7 +427,7 @@ export interface ScheduleTickResult {
    */
   attempted: number
   enqueued: number
-  /** Earliest next slot across all schedules, for setting the next timer. */
+  /** Earliest next slot across all schedules, including gated-off ones. */
   nextSlotAt: Date | null
 }
 
@@ -565,8 +565,8 @@ export async function runScheduleTick(
    * once a gate can stay shut for hours.
    *
    * `live` and `nextSlotAt` are maintained for the same reason: a gated-off
-   * schedule is not one that has gone away, and its next slot is still when the
-   * gate should be asked again.
+   * schedule is not one that has gone away, and the poll loop still asks the
+   * gate on that slot.
    */
   const adopt = (stateKey: string, pattern: string): void => {
     const cron = cronFor(pattern)

@@ -142,6 +142,20 @@ describe('the schedule tick', () => {
     expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 40, 0))
   })
 
+  it('still reports a gated-off cron so the poll loop re-asks the gate', async () => {
+    const gated = queue('gated-min')
+    __setJobDefinitionsForTests([
+      {
+        name: gated,
+        cron: '* * * * *',
+        cronEnabled: async () => false,
+        handler: async () => async () => {},
+      },
+    ])
+    const tick = await runScheduleTick(createScheduleState(), new Date(2026, 7, 9, 14, 37, 0))
+    expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 38, 0))
+  })
+
   it('does not backfill missed slots after an outage', async () => {
     // A tier down for three hours must run an hourly sweep ONCE on restart, not
     // three times — the behaviour the repeatable jobs had.

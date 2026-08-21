@@ -40,10 +40,6 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        // Stop the relay before closing the queue so a final poll cannot
-        // enqueue into a queue that is already draining.
-        await import('./events/relay').then(({ stopOutboxRelay }) => stopOutboxRelay())
-
         // Stop the Postgres job tier's loops and release its LISTEN
         // connections. Jobs already running are awaited within this shutdown
         // budget; anything left after process death is adjudicated by its lease.
@@ -151,14 +147,11 @@ export function logStartupBanner(): void {
   if (shouldRunWorkers()) {
     startBackgroundProcessing()
   } else {
-    // Web replicas write domain events to the durable outbox but do NOT drain it
-    // — the relay runs worker-side only. Since EVENTING-V2's cutover made the
-    // outbox the SOLE delivery path, a deployment that scales web replicas MUST
-    // also run at least one worker-role (or 'all') replica, or every webhook /
-    // notification / workflow will pile up unpublished. Warn (not info) so a
-    // web-only topology is loud in the logs.
+    // Web replicas write domain events and enqueue jobs but do NOT claim them.
+    // Since event dispatch is job-owned, a deployment that scales web replicas
+    // must also run at least one worker-role (or 'all') replica.
     log.warn(
-      'QUACKBACK_ROLE=web — queue workers and the outbox relay are worker-side; ' +
+      'QUACKBACK_ROLE=web — queue workers are worker-side; ' +
         'ensure a worker (or role=all) replica is running or events will not be delivered'
     )
   }
@@ -189,20 +182,6 @@ function startBackgroundProcessing(): void {
       runFleetPass('sweep', () => ensurePageViewPartitionsAtBoot())
     )
     .catch((err) => log.error({ err }, 'boot-time partition ensure failed'))
-
-  // Durable event outbox relay (EVENTING-V2 WO-3). Leader-elected, so multiple
-  // worker replicas stay safe. Post-cutover (WO-18) the outbox is the SOLE
-  // delivery path, so the relay always runs here — the only gate is
-  // QUACKBACK_ROLE (worker/all), enforced inside startOutboxRelay().
-  if (config.isPooledTenancy) {
-    log.warn(
-      'pooled tenancy — the legacy outbox relay is not started; event dispatch remains on the PR 2 boundary'
-    )
-  } else {
-    import('./events/relay')
-      .then(({ startOutboxRelay }) => startOutboxRelay())
-      .catch((err) => log.error({ err }, 'failed to start outbox relay'))
-  }
 
   // Space reclamation for the tables that replaced Redis (kv_store,
   // rate_bucket, kv_set_member, presence_stream, realtime_overflow).

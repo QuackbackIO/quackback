@@ -70,13 +70,15 @@
  */
 import { randomUUID } from 'node:crypto'
 import { hostname } from 'node:os'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
 import { getExecuteCount, getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { hasPgErrorCode } from '@/lib/server/utils/pg-error'
 import { logger } from '@/lib/server/logger'
 import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { isPooledTenancy } from '@/lib/server/tenancy/mode'
+import { noteDurableWork, SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
 import {
   leaseClaimGroupedSql,
   leaseCompleteSql,
@@ -116,6 +118,26 @@ export interface EnqueueJobInput {
    * this; a retry would double-import a customer's data.
    */
   maxAttempts?: number
+  /**
+   * Caller's transaction (or any drizzle executor). When set, the INSERT
+   * participates in that transaction: a rollback leaves no job row, and this
+   * function does not fire the HTTP nudge (NOTIFY from the job_queue trigger
+   * is commit-gated). Omit for the historical auto-commit path.
+   */
+  executor?: JobSqlExecutor
+}
+
+/**
+ * Narrow enough for `db` and a drizzle transaction.
+ *
+ * The parameter is `SQL` rather than `unknown` on purpose: parameters are
+ * contravariant, so an `unknown` parameter demands a handler that accepts
+ * *anything*, which drizzle's `execute` (`string | SQLWrapper`) is not. Every
+ * call here passes a `sql` template, so `SQL` is both the honest type and the
+ * one that lets a real transaction satisfy this.
+ */
+export type JobSqlExecutor = {
+  execute: (query: SQL) => Promise<unknown>
 }
 
 export interface EnqueueJobResult {
@@ -143,8 +165,8 @@ export interface ClaimedJob {
    * The idempotency handle this row was enqueued under, when it had one.
    *
    * Handlers that dedupe their own side effects need it: the reference passed
-   * BullMQ's `job.id` into `hook.run`, and for relay-enqueued hooks that id was
-   * the deterministic `<eventId>:<sink>:<target>` key. That key is this column.
+   * BullMQ's `job.id` into `hook.run`, and for hook jobs that id is the
+   * deterministic `<eventId>:<sink>:<target>` key. That key is this column.
    */
   dedupeKey: string | null
   payload: Record<string, unknown>
@@ -179,6 +201,15 @@ function currentTenantId(): string | null {
   return getCurrentTenant()?.tenantId ?? null
 }
 
+/** Tenant the after-commit scheduler should ring for this insert. */
+function workKeyForSignal(): string | null {
+  return currentTenantId() ?? (isPooledTenancy() ? null : SINGLE_TENANT_ID)
+}
+
+function noteInsertedWork(executor?: JobSqlExecutor): void {
+  noteDurableWork(workKeyForSignal(), { committed: !executor })
+}
+
 function asDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value)
 }
@@ -198,7 +229,8 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
     throw new Error(`maxAttempts must be an integer >= 1, received ${String(input.maxAttempts)}`)
   }
 
-  const result = await db.execute(sql`
+  const executor = input.executor ?? db
+  const result = await executor.execute(sql`
     INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
     VALUES (
       ${jobId},
@@ -214,7 +246,11 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   `)
 
   const rows = getExecuteRows<{ job_id: string }>(result)
-  return { jobId, inserted: rows.length > 0 }
+  const inserted = rows.length > 0
+  // Transactional inserts record the tenant and flush only after the
+  // outer commit. Auto-commit inserts are already visible, so they signal now.
+  if (inserted) noteInsertedWork(input.executor)
+  return { jobId, inserted }
 }
 
 /** How many rows one queue may have claimed in a pass, and for how long. */
@@ -229,9 +265,9 @@ export interface QueueClaimSpec {
 /**
  * Enqueue many jobs in one statement, deduplicating on `dedupeKey`.
  *
- * This is the outbox relay's shape (`enqueueHookJobsWithIds`): it re-drains a
- * row after a crash and re-enqueues the SAME deterministic keys, and the fact
- * that a second enqueue is a no-op is what makes delivery effectively-once.
+ * This is the event-dispatch shape (`enqueueHookJobsWithIds`): a retried
+ * dispatch re-enqueues the SAME deterministic keys, and the fact that a
+ * second enqueue is a no-op is what makes delivery effectively-once.
  * `ON CONFLICT DO NOTHING` gives that, including for duplicates *within* one
  * call — unlike `DO UPDATE`, which errors when a command touches a row twice.
  *
@@ -239,7 +275,8 @@ export interface QueueClaimSpec {
  * enqueue from a re-drain.
  */
 export async function enqueueJobs(
-  inputs: readonly EnqueueJobInput[]
+  inputs: readonly EnqueueJobInput[],
+  opts?: { executor?: JobSqlExecutor }
 ): Promise<{ inserted: number; insertedDedupeKeys: string[] }> {
   if (inputs.length === 0) return { inserted: 0, insertedDedupeKeys: [] }
 
@@ -258,7 +295,8 @@ export async function enqueueJobs(
     }
   })
 
-  const result = await db.execute(sql`
+  const executor = opts?.executor ?? db
+  const result = await executor.execute(sql`
     INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
     SELECT x.job_id, x.queue, x.dedupe_key, ${currentTenantId()}, x.payload, x.run_at, x.max_attempts
     FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(
@@ -269,6 +307,7 @@ export async function enqueueJobs(
     RETURNING dedupe_key
   `)
   const written = getExecuteRows<{ dedupe_key: string | null }>(result)
+  if (written.length > 0) noteInsertedWork(opts?.executor)
   return {
     inserted: written.length,
     insertedDedupeKeys: written.map((r) => r.dedupe_key).filter((k): k is string => k !== null),
