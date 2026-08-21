@@ -44,14 +44,13 @@ export function __resetRelayOwnedConvertForTests(): void {
  */
 export async function convertRelayOwnedEvents(opts?: {
   force?: boolean
-  limit?: number
 }): Promise<{ converted: number; enqueued: number }> {
   const tenantId = getCurrentTenant()?.tenantId ?? SINGLE_TENANT_ID
   if (!opts?.force && convertedTenants.has(tenantId)) {
     return { converted: 0, enqueued: 0 }
   }
 
-  const limit = opts?.limit ?? RELAY_CONVERT_BATCH
+  const limit = RELAY_CONVERT_BATCH
   let converted = 0
   let enqueued = 0
   let hitCap = false

@@ -263,7 +263,7 @@ describe('runEventDispatch', () => {
     const alreadyJob = await insertEvent({ owner: 'job' })
     const publishedRelay = await insertEvent({ owner: 'relay', published: true })
 
-    const first = await convertRelayOwnedEvents({ force: true })
+    const first = await convertRelayOwnedEvents()
     expect(first.converted).toBeGreaterThanOrEqual(1)
 
     const [converted] = await db.select().from(events).where(eq(events.eventId, leftover))
