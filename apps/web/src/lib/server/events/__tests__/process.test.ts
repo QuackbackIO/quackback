@@ -105,7 +105,6 @@ function makeJob(overrides: Partial<ClaimedJob> = {}): ClaimedJob {
 import {
   EVENTS_QUEUE,
   addDelayedJob,
-  closeQueue,
   enqueueHookJobsWithIds,
   processEvent,
   removeDelayedJob,
@@ -203,10 +202,6 @@ describe('Event processing', () => {
     it('cancels a delayed job by its key', async () => {
       await removeDelayedJob('changelog:cl_1')
       expect(cancelled).toEqual([{ queue: EVENTS_QUEUE, dedupeKey: 'changelog:cl_1' }])
-    })
-
-    it('closeQueue is a no-op now the queue is a table', async () => {
-      await expect(closeQueue()).resolves.toBeUndefined()
     })
   })
 
