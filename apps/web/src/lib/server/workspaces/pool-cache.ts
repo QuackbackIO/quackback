@@ -22,10 +22,9 @@
  * costing money".
  *
  * Measured caveat, and it is not optional: eviction is **necessary but not
- * sufficient**. A session-mode LISTEN holds the compute awake while attached.
- * Cloud `quackback` runs the connectionless scheduler instead, so idle saving
- * no longer depends on a web/worker split. Listener-mode still depends on the
- * detach policy in `idle.ts`.
+ * sufficient**. Under `QUACKBACK_ROLE=all` the job tier polls each tenant
+ * database on its own interval, so the compute never suspends whatever this
+ * cache does. Idle saving requires `QUACKBACK_ROLE=web`.
  *
  * ## Credential rotation
  *
@@ -207,7 +206,7 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
 /**
  * Dereference a workspace's database credential.
  *
- * Exported because the queue tier's `LISTEN` connections terminate at the
+ * Exported because session-mode consumers (the realtime bus) terminate at the
  * **direct** endpoint rather than at the pooled one, so they are built outside
  * this cache and still need the same credential — resolved by the same function
  * so a rotation cannot be picked up by one path and missed by the other.

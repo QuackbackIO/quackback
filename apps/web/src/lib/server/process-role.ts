@@ -12,8 +12,7 @@
  *                        don't route user traffic to it.
  * QUACKBACK_ROLE=all     Both — the default. Unset means `all`, which is the
  *                        self-host single-container path and the cloud
- *                        tenant-facing topology (`QUACKBACK_WAKE_MODE=scheduler`
- *                        on that service only).
+ *                        tenant-facing topology.
  * QUACKBACK_ROLE=migrator Reconcile workspace schemas toward the control plane's
  *                        recorded intent, then exit (SAAS-HOSTING-STACK.md
  *                        §10.3). Serves no traffic and runs no queues: it holds

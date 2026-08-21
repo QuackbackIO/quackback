@@ -40,11 +40,11 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        // Stop the Postgres job tier's loops and release its LISTEN
-        // connections. Jobs already running are awaited within the budget
-        // below; anything still in flight when the process dies is NOT
-        // re-run blindly — its lease lapses and the reaper adjudicates it,
-        // which for a no-retry job means terminal rather than a second run.
+        // Stop the Postgres job tier's poll loops. Jobs already running are
+        // awaited within the budget below; anything still in flight when the
+        // process dies is NOT re-run blindly — its lease lapses and the
+        // reaper adjudicates it, which for a no-retry job means terminal
+        // rather than a second run.
         await import('./jobs/tier').then(({ stopJobTier }) => stopJobTier())
 
         // Drain the conversation pub/sub subscriber connection before the
