@@ -175,6 +175,9 @@ export type SentimentId = TypeId<'sentiment'>
 /** AI usage log entry ID - e.g., ailog_01h455vb4pex5vsknk084sn02q */
 export type AiUsageLogId = TypeId<'ailog'>
 
+/** Email ledger row ID - e.g., emaillog_01h455vb4pex5vsknk084sn02q */
+export type EmailLogId = TypeId<'emaillog'>
+
 /** Pipeline audit log entry ID - e.g., plog_01h455vb4pex5vsknk084sn02q */
 export type PipelineLogId = TypeId<'plog'>
 
@@ -234,6 +237,9 @@ export type TicketSubscriptionId = TypeId<'ticket_sub'>
 
 /** Channel account ID (§4.8) - e.g., channel_account_01h455vb4pex5vsknk084sn02q */
 export type ChannelAccountId = TypeId<'channel_account'>
+
+/** Channel thread correlation ID - e.g., channel_thread_01h455vb4pex5vsknk084sn02q */
+export type ChannelThreadId = TypeId<'channel_thread'>
 
 /** Sending domain ID (§4.8) - e.g., sending_domain_01h455vb4pex5vsknk084sn02q */
 export type SendingDomainId = TypeId<'sending_domain'>
@@ -421,6 +427,7 @@ export interface EntityIdMap {
   role_assignment: RoleAssignmentId
   sentiment: SentimentId
   ai_usage: AiUsageLogId
+  email_log: EmailLogId
   pipeline_log: PipelineLogId
   post_activity: PostActivityId
   page_view: PageViewId
@@ -441,6 +448,7 @@ export interface EntityIdMap {
   ticket_summary: TicketSummaryId
   ticket_sub: TicketSubscriptionId
   channel_account: ChannelAccountId
+  channel_thread: ChannelThreadId
   sending_domain: SendingDomainId
   office_hours: OfficeHoursId
   sla_policy: SlaPolicyId

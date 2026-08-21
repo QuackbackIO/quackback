@@ -9,7 +9,7 @@
  * `kind !== 'ok'` would not notice it eroding.
  */
 import { describe, expect, it } from 'vitest'
-import { interpretRow, normalizeHostHeader } from '../registry'
+import { SELECT_COLUMNS, interpretRow, normalizeHostHeader } from '../registry'
 
 const ROW: {
   workspace_key: string
@@ -28,6 +28,7 @@ const ROW: {
   fingerprint_stamped_at: Date | string
   storage: unknown
   email_from: string
+  mail_slug: string
   ai_enabled: boolean
   revision: string | number
   pg_database_oid: string | number | null
@@ -57,6 +58,7 @@ const ROW: {
     credentialRef: 'env://QUACKBACK_TENANT_SECRET_INST_CLOUD_WS_T1_STORAGE',
   },
   email_from: 'Quackback Cloud <noreply@notifications.quackback.io>',
+  mail_slug: 'neon-t1',
   ai_enabled: false,
   revision: 2,
   pg_database_oid: 4242,
@@ -199,6 +201,57 @@ describe('interpretRow', () => {
   it('refuses a NULL workspace id instead of substituting a default', () => {
     const result = interpretRow(row({ workspace_id: null as unknown as string }), 't1.localhost')
     expect(result.kind).toBe('invalid')
+  })
+
+  it('surfaces the mail slug on the record', () => {
+    // The label the fleet's one shared inbound domain routes on. It reaches a
+    // sender through the record and nowhere else, so a projection that dropped
+    // it would take reply-by-email off every workspace at once.
+    const result = interpretRow(row(), 't1.localhost')
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.workspace.email.mailSlug).toBe('neon-t1')
+  })
+
+  it('refuses a row with no mail slug rather than reading one as undefined', () => {
+    // The half-landed change this pairs with: re-vendoring the contract without
+    // adding `mail_slug` to the SELECT leaves every row projecting `undefined`
+    // here. Validation is what turns that into a refusal instead of a fleet
+    // quietly minting `undefined+c…@` into customers' mail clients.
+    const { mail_slug: _dropped, ...withoutSlug } = row()
+    const result = interpretRow(withoutSlug as Row, 't1.localhost')
+    expect(result.kind).toBe('invalid')
+    if (result.kind !== 'invalid') return
+    expect(result.problems.join(' ')).toContain('email.mailSlug')
+    assertCarriesNoDsn(result)
+  })
+
+  it('refuses a mail slug the address grammar could not spend', () => {
+    // The database CHECK constraint says the same thing, and this reader does
+    // not get to assume it ran: an over-length or upper-case slug produces a
+    // local part a receiving MTA rejects, i.e. mail that silently stops
+    // arriving, attributed to anything but the address that caused it.
+    for (const slug of ['NEON-T1', 'neon_t1', 'fourteen-chars', '']) {
+      expect(interpretRow(row({ mail_slug: slug }), 't1.localhost').kind).toBe('invalid')
+    }
+  })
+})
+
+describe('the projection', () => {
+  it('selects every column the row shape declares', () => {
+    // The other half of every field this module gains. A column named on the row
+    // type and read by the mapper but never selected arrives as `undefined` for
+    // every workspace at once, and the contract refuses the lot — which is a
+    // fleet-wide 503, from a change that looks finished everywhere it is
+    // mentioned. `interpretRow` cannot see it, because a test hands it a row.
+    for (const column of Object.keys(ROW)) {
+      // Aggregated from the hostname table, not a registry column.
+      if (column === 'hostnames') continue
+      // Cast to text, so it is selected under an alias rather than bare.
+      if (column === 'state') continue
+      expect(SELECT_COLUMNS).toContain(`r.${column}`)
+    }
+    expect(SELECT_COLUMNS).toContain('r.state::text AS state')
   })
 })
 

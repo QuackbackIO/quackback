@@ -4,9 +4,8 @@
  * from, gated by the DMARC trust verdict and the decided identity model
  * (IDENTITY-MODEL-ANALYSIS.md): inbound email attaches by address only under a
  * DMARC pass ("verified lead"); anything weaker becomes a standalone unverified
- * lead; a hard reject is dropped.
+ * lead.
  *
- *   - drop   → hard DMARC reject; the caller creates nothing.
  *   - attach → an existing principal already owns this address: either a DMARC
  *              pass matching a known user account (a verified lead adopting a
  *              known contact), or a lead we minted from an earlier mail. Reusing
@@ -14,6 +13,16 @@
  *   - create → a new anonymous principal carrying the (verified-or-not) contact
  *              email; `unverified` drives the agent-facing "unverified sender"
  *              badge and blocks silent attachment to a known identity.
+ *
+ * A hard DMARC reject resolves like any other weak verdict rather than being
+ * refused here. What a reject decides is the DISPOSITION of the message (the
+ * caller quarantines it), and disposition is not this function's job — the
+ * message still has to be attributed to somebody in order to be retained and
+ * reviewed at all. Identity is not weakened by that, and the reason is
+ * structural rather than a promise: `pass` is the only branch below that can
+ * adopt an existing account, `verdict.verdict === 'pass'` guards it, and a
+ * reject verdict can never satisfy that test. Everything a reject can reach
+ * mints or reuses an anonymous lead and sets `unverified`.
  *
  * Resolution only touches identity; the caller owns creating the conversation.
  */
@@ -28,7 +37,11 @@ import {
   conversations,
   conversationMessages,
 } from '@/lib/server/db'
-import type { TiptapContent, ConversationAttachment } from '@/lib/server/db'
+import type {
+  TiptapContent,
+  ConversationAttachment,
+  ConversationSpamFiledBy,
+} from '@/lib/server/db'
 import type { PrincipalId, ChannelAccountId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -38,30 +51,31 @@ import {
   ensurePrincipalForUser,
 } from '@/lib/server/domains/principals/principal.factory'
 import { evaluateInboundAuth, type InboundAuthResult } from './email-auth'
-import { normalizeSenderAddress, type ParsedInboundEmail } from './conversation.email-inbound'
+import {
+  inboundDedupeKey,
+  normalizeSenderAddress,
+  type ParsedInboundEmail,
+} from './conversation.email-inbound'
 import type { ConversationAuthorInput } from './conversation.types'
 import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
 
-export type ColdInboundResolution =
-  | { action: 'drop'; verdict: InboundAuthResult }
-  | {
-      action: 'attach' | 'create'
-      principalId: PrincipalId
-      /** True for a weak-auth lead — drives the unverified-sender badge. */
-      unverified: boolean
-      verdict: InboundAuthResult
-    }
+export interface ColdInboundResolution {
+  action: 'attach' | 'create'
+  principalId: PrincipalId
+  /** True for a weak-auth lead — drives the unverified-sender badge. */
+  unverified: boolean
+  verdict: InboundAuthResult
+}
 
 /**
- * Resolve the sender of a cold inbound email to a principal (or a drop), gated by
- * the Authentication-Results header. `fromEmail` is the raw From address.
+ * Resolve the sender of a cold inbound email to a principal, gated by the
+ * Authentication-Results header. `fromEmail` is the raw From address.
  */
 export async function resolveColdInboundSender(
   fromEmail: string | null,
   authResultsHeader: string | null
 ): Promise<ColdInboundResolution> {
   const verdict = evaluateInboundAuth(authResultsHeader)
-  if (verdict.verdict === 'reject') return { action: 'drop', verdict }
 
   // The bare address, not the raw header: `"Jane" <jane@acme.com>` must resolve
   // to the same person as `jane@acme.com`, or every distinct display name mints
@@ -140,6 +154,23 @@ export async function resolveColdInboundSender(
  * next-response SLA clock all ride, so an emailed-in thread raises the same
  * signals a widget-started one does. Direct inserts (the visitor-message create
  * path hardcodes channel='messenger'); the emit bridge is error-isolated.
+ *
+ * `quarantine` inverts both halves of that for a message we REFUSED. It files
+ * the thread to Spam in the same INSERT, and it fires neither emit.
+ *
+ * Filing in the insert rather than with a follow-up update is what makes the
+ * refusal hold: there is no instant at which a refused message sits in the open
+ * queue, and no second write whose failure would leave it there. Going through
+ * the ordinary spam filter instead would reintroduce exactly that, and worse —
+ * that path is bypassed for a workspace-trusted sender, so a stranger spoofing
+ * a trusted address would land in the normal inbox, which is the one outcome a
+ * hard reject exists to prevent.
+ *
+ * The emits are skipped for the same reason. A refused message must not ring
+ * the team bell, fire outbound webhooks, start an SLA clock, or trigger a
+ * message workflow — an auto-reply workflow firing on a forged From is
+ * backscatter sent in our name, and a bell any stranger can ring is a
+ * notification channel we have handed to them.
  */
 export async function createEmailConversation(input: {
   parsed: ParsedInboundEmail
@@ -151,8 +182,12 @@ export async function createEmailConversation(input: {
   contentJson?: TiptapContent | null
   /** Discrete files rehosted from the inbound MIME parts, or none. */
   attachments?: ConversationAttachment[]
+  /** Refused mail: file to Spam in the insert and raise no signals. The cause
+   *  is the enumerated one the Spam view badges the row with. */
+  quarantine?: { cause: ConversationSpamFiledBy; note: string } | null
 }): Promise<ConversationId> {
   const { parsed, channelAccountId, principalId, unverified, content, contentJson } = input
+  const quarantine = input.quarantine ?? null
   // Direct insert bypasses sendVisitorMessage, so mirror its guards here: an
   // untrusted sender's inline images may only reference our own storage (a
   // cold-inbound cid: / external src is cleared until the attachment task
@@ -171,12 +206,25 @@ export async function createEmailConversation(input: {
         channel: 'email',
         source: 'email',
         channelAccountId,
-        status: 'open',
+        status: quarantine ? 'closed' : 'open',
         subject: parsed.subject?.slice(0, 200) ?? null,
         lastMessagePreview: (content || (attachments[0] ? attachments[0].name : '')).slice(0, 200),
         lastMessageAt: now,
         // The customer is waiting on the first reply from the moment it lands.
-        waitingSince: now,
+        // Nobody is waiting on refused mail — an agent has to release it first.
+        waitingSince: quarantine ? null : now,
+        // The Spam-view shape, written here rather than by a follow-up update:
+        // the same (status, resolvedAt, endReason, spamReason) tuple
+        // autoFileConversationAsSpam sets, so the Spam view, restore and
+        // delete-forever all see an ordinary spam-filed thread.
+        ...(quarantine
+          ? {
+              resolvedAt: now,
+              endReason: 'spam' as const,
+              endNote: quarantine.note,
+              spamReason: quarantine.cause,
+            }
+          : {}),
         visitorEmail: normalizeSenderAddress(parsed.from),
         customAttributes: unverified ? { unverifiedSender: true } : {},
       })
@@ -193,11 +241,18 @@ export async function createEmailConversation(input: {
         content,
         contentJson: safeContentJson,
         attachments: attachments.length > 0 ? attachments : null,
-        metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
+        // The same derivation the cold-inbound path deduplicated on a moment
+        // ago, so the row a redelivery has to match is filed under the key that
+        // redelivery will look up.
+        metadata: { source: 'email', emailMessageId: inboundDedupeKey(parsed) ?? undefined },
       })
       .returning()
     return { conversation: created, message: inserted }
   })
+
+  // Refused mail raises nothing. It is retained and reviewable, which is the
+  // whole point, but it has not been accepted into the conversation flow.
+  if (quarantine) return conversation.id
 
   // A customer-initiated event: the visitor is the actor so it counts as human.
   const actor: Actor = {
@@ -212,6 +267,11 @@ export async function createEmailConversation(input: {
   // team bell entirely when the message is NOT the first one and any agent is
   // online, so passing false here would leave this defect half-fixed.
   await emitMessageCreated(actor, author, message, conversation, true)
+
+  // Routing is channel-agnostic: a cold-inbound email conversation auto-assigns
+  // the same way a widget conversation does when routing is enabled.
+  const { routeUnassignedConversation } = await import('./conversation.service')
+  await routeUnassignedConversation(conversation)
 
   return conversation.id
 }

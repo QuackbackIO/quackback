@@ -55,8 +55,8 @@ Edges (25):
 
 ## 3. Server domains (lib/server/domains)
 
-Nodes (47): activity, ai, analytics, api, api-keys, assistant, boards, changelog, channel-accounts, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (100):
+Nodes (48): activity, ai, analytics, api, api-keys, assistant, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
+Edges (107):
 
 - analytics -> api
 - analytics -> assistant
@@ -84,6 +84,11 @@ Edges (100):
 - changelog -> ai
 - changelog -> embeddings
 - changelog -> settings
+- channel-accounts -> conversation
+- channel-accounts -> settings
+- channels -> channel-accounts
+- channels -> conversation
+- channels -> settings
 - comments -> activity
 - comments -> posts
 - comments -> settings
@@ -92,6 +97,7 @@ Edges (100):
 - conversation -> assistant
 - conversation -> changelog
 - conversation -> channel-accounts
+- conversation -> channels
 - conversation -> comments
 - conversation -> conversation-attributes
 - conversation -> posts
@@ -100,6 +106,7 @@ Edges (100):
 - conversation -> sla
 - conversation -> teams
 - conversation -> tickets
+- conversation -> workflows
 - conversation-attributes -> ai
 - conversation-attributes -> assistant
 - conversation-attributes -> conversation
@@ -163,5 +170,5 @@ Edges (100):
 
 Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
 
-- assistant <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
+- assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
 - changelog <-> embeddings <-> merge-suggestions <-> posts <-> subscriptions

@@ -49,13 +49,20 @@ export const channelIdentities = pgTable(
 )
 
 /**
- * Outbound conversation-email threading map: the deterministic Message-ID we
- * stamped on each notification email, keyed back to its conversation. Two jobs:
- * building the RFC 5322 References chain on the next outbound mail, and routing
- * an inbound reply whose client stripped the plus-address but preserved the
- * In-Reply-To/References headers (the deterministic-Message-ID fallback). The
- * message_id is the bare RFC822 id (no angle brackets), lower-cased for a
- * stable match. CASCADEs with the conversation.
+ * Outbound conversation-email threading map: the Message-ID each notification
+ * email went out with, keyed back to its conversation. Two jobs: building the
+ * RFC 5322 References chain on the next outbound mail, and routing an inbound
+ * reply whose client stripped the plus-address but preserved the
+ * In-Reply-To/References headers (the Message-ID fallback). CASCADEs with the
+ * conversation.
+ *
+ * `message_id` is the RFC822 id without its angle brackets, lower-cased for a
+ * stable match, in the form the SENDING SIDE reported it. That is two shapes:
+ * `local@host` where we chose the id, and `local` alone where the transport
+ * chose it and reports it bare. A row is therefore not always a literal token a
+ * reply will quote, so match through `resolveConversationByMessageIds` rather
+ * than comparing this column to a header value directly. A provider's own
+ * delivery events use the bare form and join straight onto it.
  */
 export const conversationOutboundEmails = pgTable(
   'conversation_outbound_emails',

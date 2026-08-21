@@ -396,11 +396,50 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
   },
   {
     file: 'packages/email/src/index.ts',
-    name: 'resendClient',
+    name: 'inboundFetchClient',
     category: 'fleet-wide',
     reason:
-      'Built from the Resend API key, which §8 confirms the control plane writes fleet-wide into ' +
-      'every workspace.',
+      'Built from the inbound API key, which §8 confirms the control plane writes fleet-wide into ' +
+      'every workspace. Fetches an inbound body by provider id; carries no outbound mail.',
+  },
+  {
+    file: 'packages/email/src/ses.ts',
+    name: 'cachedClient',
+    category: 'fleet-wide',
+    reason:
+      'Built from EMAIL_SES_ACCESS_KEY_ID/SECRET/REGION. One fleet credential signs for every ' +
+      'workspace identity, so the client holds no workspace of its own; a cross-workspace hit ' +
+      'returns the same signer either workspace would have built. Holds an HTTP connection pool, ' +
+      'which is the reason it is cached rather than rebuilt per send.',
+  },
+  {
+    file: 'packages/email/src/ses.ts',
+    name: 'cachedClientKey',
+    category: 'fleet-wide',
+    reason:
+      'Region plus key id of the client cached beside it, so a credential change rebuilds rather ' +
+      'than being served stale. Fleet-wide for the same reason the client is, and carries no ' +
+      'secret: the key id names a principal, the secret is never part of it.',
+  },
+  {
+    file: 'packages/email/src/ses-identity.ts',
+    name: 'cachedClient',
+    category: 'fleet-wide',
+    reason:
+      'Built from EMAIL_SES_IDENTITY_ACCESS_KEY_ID/SECRET and EMAIL_SES_REGION. One fleet ' +
+      'credential provisions identities for every workspace, so the client holds no workspace of ' +
+      'its own; a cross-workspace hit returns the same signer, against the same region, that ' +
+      'either workspace would have built. What a workspace owns about a sending domain is the ' +
+      'row and the ownership token in its own database, and neither is in here.',
+  },
+  {
+    file: 'packages/email/src/ses-identity.ts',
+    name: 'cachedClientKey',
+    category: 'fleet-wide',
+    reason:
+      'Region plus key id of the client cached beside it, so a rotated credential rebuilds rather ' +
+      'than being served stale. Fleet-wide for the same reason the client is, and carries no ' +
+      'secret: the key id names a principal, the secret is never part of it.',
   },
   {
     file: 'packages/email/src/index.ts',
@@ -892,5 +931,46 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The process-level list of after-commit listeners (the job scheduler). Not workspace data: ' +
       'each sink is a function this replica registered at start. A second workspace hitting the ' +
       'same list is the point — one scheduler serves every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/domains/channels/registry.ts',
+    name: 'ADAPTERS',
+    category: 'process-lifetime',
+    reason:
+      'Process-wide channel adapter table, keyed by channel id. The same adapter implementation ' +
+      'serves every workspace; a cross-workspace hit returns the same code module, not another ' +
+      "workspace's data.",
+  },
+  {
+    file: 'apps/web/src/lib/shared/channels/registry.ts',
+    name: 'DESCRIPTORS',
+    category: 'process-lifetime',
+    reason:
+      'Process-wide channel descriptor table, keyed by channel id. Descriptors are compile-time ' +
+      'product metadata, identical for every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/email/email-log.sink.ts',
+    name: 'registered',
+    category: 'process-lifetime',
+    reason:
+      'Once-per-process latch that the email log sink has been installed. It is a boolean about ' +
+      'this replica, not about a workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/email/sns-signature.ts',
+    name: 'certCache',
+    category: 'content-addressed',
+    reason:
+      'SNS signing cert PEM keyed by the certificate URL. A cross-workspace hit returns the same ' +
+      'bytes the requesting workspace would have fetched.',
+  },
+  {
+    file: 'packages/email/src/index.ts',
+    name: 'emailLogSink',
+    category: 'process-lifetime',
+    reason:
+      'The installed email-log callback for this process. apps/web plugs it in once; every ' +
+      'workspace uses the same function, which then writes through the active workspace scope.',
   },
 ]

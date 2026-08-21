@@ -6,7 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
+import { mailSlugFor, withWorkspace } from '@/lib/server/__tests__/workspace-scope'
 import type { Conversation } from '@/lib/server/db'
+import { conversationIdFromInboundAddress } from '../conversation.email-channel'
+import { SELF_HOSTED_MAIL_SLUG } from '../conversation.mail-slug'
 
 // Drives the team/visitor SELECT result. notifyVisitorMessage resolves the
 // `.where(...)` thenable to a team array; notifyAgentReply resolves `.limit(1)`
@@ -47,11 +50,15 @@ vi.mock('@/lib/server/events/hook-context', () => ({
 }))
 
 // notify.ts imports this dynamically inside the email branches.
-vi.mock('@quackback/email', () => ({
-  sendConversationMessageEmail: (...a: [Record<string, unknown>]) =>
-    sendConversationMessageEmail(...a),
-  sendCsatRequestEmail: (...a: [Record<string, unknown>]) => sendCsatRequestEmail(...a),
-}))
+vi.mock('@quackback/email', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@quackback/email')>()
+  return {
+    ...actual,
+    sendConversationMessageEmail: (...a: [Record<string, unknown>]) =>
+      sendConversationMessageEmail(...a),
+    sendCsatRequestEmail: (...a: [Record<string, unknown>]) => sendCsatRequestEmail(...a),
+  }
+})
 
 // notifyCsatRequestEmail's mint import (moved here from action.executor.ts —
 // see the module doc's CSAT-over-email paragraph).
@@ -61,11 +68,13 @@ vi.mock('../csat-email-token', () => ({
 
 // Outbound-email persistence (threading map + channel identities). No-op here;
 // exercised in its own suite. Keeps notify's fire-and-forget path off the db.
-const priorOutboundMessageIds = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => [])
+const threadIdsForOutbound = vi.fn<
+  (...a: unknown[]) => Promise<{ inbound: string[]; outbound: string[]; merged: string[] }>
+>(async () => ({ inbound: [], outbound: [], merged: [] }))
 const recordOutboundEmail = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 const recordEmailIdentity = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 vi.mock('../conversation.email-store', () => ({
-  priorOutboundMessageIds: (...a: unknown[]) => priorOutboundMessageIds(...a),
+  threadIdsForOutbound: (...a: unknown[]) => threadIdsForOutbound(...a),
   recordOutboundEmail: (...a: unknown[]) => recordOutboundEmail(...a),
   recordEmailIdentity: (...a: unknown[]) => recordEmailIdentity(...a),
 }))
@@ -75,6 +84,18 @@ vi.mock('../conversation.email-store', () => ({
 const isPortalSupportEnabled = vi.fn<() => Promise<boolean>>(async () => false)
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isPortalSupportEnabled: () => isPortalSupportEnabled(),
+}))
+
+// The From a conversation's outbound mail leaves as. Mocked because its own
+// resolution (and the sending-identity guard behind it) is tested where it
+// lives; what this suite pins is that the SAME answer reaches every mail in a
+// thread. A rating prompt that arrived from the platform address on a
+// conversation answered from the customer's own support address is a thread
+// that changes identity halfway through.
+const resolveConversationFrom = vi.fn<(...a: unknown[]) => Promise<string | null>>(async () => null)
+vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', async (orig) => ({
+  ...(await orig<typeof import('@/lib/server/domains/channel-accounts/channel-account.service')>()),
+  resolveConversationFrom: (...a: unknown[]) => resolveConversationFrom(...a),
 }))
 
 // The group-thread fan-out (§4.8): which added customers a reply goes out to.
@@ -119,6 +140,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     c.from = () => c
     c.leftJoin = () => c
     c.where = () => c
+    c.orderBy = () => c
     c.limit = async () => (limitQueue.length ? limitQueue.shift()! : visitorRows)
     c.then = (resolve: (v: unknown) => unknown) => resolve(teamRows)
     return c
@@ -153,7 +175,10 @@ beforeEach(() => {
   // Silence the fire-and-forget warning logs.
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   buildHookContext.mockResolvedValue(ctx)
-  sendConversationMessageEmail.mockResolvedValue(undefined)
+  // The shape every rung of the send layer actually returns. `undefined` is not
+  // one of them, and defaulting to it would leave the caller's handling of a
+  // reported Message-ID exercised by nothing.
+  sendConversationMessageEmail.mockResolvedValue({ sent: true })
   listParticipantReplyRecipients.mockResolvedValue([])
 })
 
@@ -217,8 +242,10 @@ describe('notifyVisitorMessage', () => {
       to: 'a@x.com',
       direction: 'visitor_message',
       senderName: 'Jane',
+      isFirstMessage: false,
       ctaUrl: `https://acme.example.com/admin/inbox?i=${conversationId}`,
       workspaceName: 'Acme',
+      conversationId,
     })
   })
 
@@ -459,34 +486,80 @@ describe('notifyAgentReply', () => {
   describe('inbound-email Reply-To', () => {
     const prevDomain = process.env.EMAIL_INBOUND_DOMAIN
     const prevSecret = process.env.EMAIL_INBOUND_SIGNING_SECRET
+    const prevTenancy = process.env.QUACKBACK_TENANCY
+
+    /** The one Reply-To the send layer was handed, or undefined. */
+    async function replyToOf(run: (fn: () => Promise<void>) => Promise<void>): Promise<unknown> {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      await run(async () => {
+        await notifyAgentReply({
+          conversationId,
+          visitorPrincipalId,
+          content: 'here is your answer',
+          agentName: 'Agent',
+          channel: 'messenger',
+        })
+      })
+      expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+      return sendConversationMessageEmail.mock.calls[0][0].replyTo
+    }
+
+    const bare = (fn: () => Promise<void>) => fn()
 
     afterEach(() => {
       if (prevDomain === undefined) delete process.env.EMAIL_INBOUND_DOMAIN
       else process.env.EMAIL_INBOUND_DOMAIN = prevDomain
       if (prevSecret === undefined) delete process.env.EMAIL_INBOUND_SIGNING_SECRET
       else process.env.EMAIL_INBOUND_SIGNING_SECRET = prevSecret
+      if (prevTenancy === undefined) delete process.env.QUACKBACK_TENANCY
+      else process.env.QUACKBACK_TENANCY = prevTenancy
     })
 
-    it('sets a conversation-specific Reply-To when inbound email is configured', async () => {
+    // An inbound address names the workspace it belongs to, because one inbound
+    // domain can stand in front of a whole fleet. Where that name comes from is
+    // the only part that differs between a fleet replica and a self-hosted
+    // install, so all three outcomes are pinned here.
+    it('advertises an address under the active workspace’s mail slug', async () => {
       process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
       process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
-      isPrincipalOnline.mockResolvedValue(false)
-      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      process.env.QUACKBACK_TENANCY = 'pooled'
 
-      await notifyAgentReply({
-        conversationId,
-        visitorPrincipalId,
-        content: 'here is your answer',
-        agentName: 'Agent',
-        channel: 'messenger',
-      })
+      const replyTo = await replyToOf((fn) => withWorkspace('ws-t2', fn))
 
-      // Signed plus-address: reply+<id-suffix>.<hmac>@domain (unforgeable; the
-      // `conversation_` prefix is dropped to stay under the 64-char local part).
-      const suffix = conversationId.replace(/^conversation_/, '')
-      expect(sendConversationMessageEmail.mock.calls[0][0].replyTo).toMatch(
-        new RegExp(`^reply\\+${suffix}\\.[A-Za-z0-9_-]+@tenaevexeo\\.resend\\.app$`)
+      expect(replyTo).toMatch(
+        new RegExp(`^${mailSlugFor('ws-t2')}\\+c1\\.[A-Za-z0-9_-]{22}@tenaevexeo\\.resend\\.app$`)
       )
+      // The address is not merely slug-shaped: it verifies back to this
+      // conversation, which is the whole point of advertising it.
+      expect(conversationIdFromInboundAddress(String(replyTo))).toBe(conversationId)
+    })
+
+    it('advertises the self-hosted label when there is no workspace scope', async () => {
+      // A single-workspace install owns its whole inbound domain, and `reply` is
+      // the label the grammar minted under before a fleet existed — so the mail
+      // routing an install already has keeps receiving. Falling to no address
+      // here would end reply-by-email for every self-hoster on upgrade.
+      process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
+      process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
+      delete process.env.QUACKBACK_TENANCY
+
+      const replyTo = await replyToOf(bare)
+
+      expect(replyTo).toMatch(
+        new RegExp(`^${SELF_HOSTED_MAIL_SLUG}\\+c1\\.[A-Za-z0-9_-]{22}@tenaevexeo\\.resend\\.app$`)
+      )
+      expect(conversationIdFromInboundAddress(String(replyTo))).toBe(conversationId)
+    })
+
+    it('omits Reply-To on a pooled process with no workspace resolved', async () => {
+      // The address would name no workspace, so the shared front door could not
+      // route it: better no route home than one that does not exist.
+      process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
+      process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
+      process.env.QUACKBACK_TENANCY = 'pooled'
+
+      expect(await replyToOf(bare)).toBeUndefined()
     })
 
     it('omits Reply-To when inbound email is not configured', async () => {
@@ -550,6 +623,32 @@ describe('conversation email send retry', () => {
 
     delete process.env.EMAIL_INBOUND_DOMAIN
     delete process.env.EMAIL_INBOUND_SIGNING_SECRET
+  })
+
+  it('does not retry an error that declares itself permanent', async () => {
+    // Retrying is the default precisely because a hand-maintained taxonomy of
+    // transient errors fails closed. An error that says re-sending reproduces it
+    // is the one thing worth honouring: a From on a domain the provider is not
+    // authorized for is the same rejection every time, and spending the budget
+    // on it only delays the failure.
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    sendConversationMessageEmail.mockRejectedValue(
+      Object.assign(new Error('domain not onboarded'), { retryable: false })
+    )
+
+    await expect(
+      notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Agent',
+        channel: 'email',
+      })
+    ).resolves.toBeUndefined()
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+    expect(recordOutboundEmail).not.toHaveBeenCalled()
   })
 
   it('gives up after the retry budget without rejecting or recording the send', async () => {
@@ -633,7 +732,30 @@ describe('notifyCsatRequestEmail', () => {
       ],
       workspaceName: 'Acme',
       logoUrl: undefined,
+      from: undefined,
+      conversationId,
     })
+  })
+
+  it('asks the rating from the address the thread is already being answered from', async () => {
+    // The conversation is answered as the customer's own support address, so the
+    // prompt has to arrive from there too. From the recipient's side — and from
+    // their mail client's threading — a different sender is a different
+    // conversation.
+    limitQueue = [
+      [{ channel: 'email', visitorPrincipalId }],
+      [{ type: 'user', email: 'visitor@example.com', contactEmail: null }],
+    ]
+    mintCsatEmailToken.mockReturnValue('signed-token')
+    sendCsatRequestEmail.mockResolvedValue({ sent: true })
+    resolveConversationFrom.mockResolvedValue('support@tenant-a.example')
+
+    await notifyCsatRequestEmail(conversationId, 'How did we do?')
+
+    expect(resolveConversationFrom).toHaveBeenCalledWith(conversationId)
+    expect(sendCsatRequestEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'support@tenant-a.example' })
+    )
   })
 
   it('swallows a thrown dependency (does not reject) — best-effort, same as every other notify* function', async () => {
@@ -783,11 +905,32 @@ describe('threading headers (P4.6 regression guard)', () => {
       else process.env.EMAIL_INBOUND_SIGNING_SECRET = prevSecret
     })
 
+    it('threads a team alert under team.<conversation> and stamps conversationId', async () => {
+      isAnyAgentOnline.mockResolvedValue(false)
+      teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+
+      await notifyVisitorMessage({
+        conversation,
+        content: 'urgent please help',
+        authorName: 'Jane',
+        isFirstMessage: false,
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      const suffix = conversationId.replace(/^conversation_/, '')
+      expect(call.conversationId).toBe(conversationId)
+      expect(call.inReplyTo).toBe(`team.${suffix}@tenaevexeo.resend.app`)
+      expect(call.references).toEqual([`team.${suffix}@tenaevexeo.resend.app`])
+      expect(call.messageId).toMatch(
+        new RegExp(`^team\\.${suffix}\\.[A-Za-z0-9_-]+@tenaevexeo\\.resend\\.app$`)
+      )
+    })
+
     it('mints a fresh Message-ID (no parent) and records it against the conversation', async () => {
       isPrincipalOnline.mockResolvedValue(false)
       visitorRows = [{ type: 'user', email: 'account@x.com' }]
       // No prior outbound mails → nothing to reply to / reference.
-      priorOutboundMessageIds.mockResolvedValue([])
+      threadIdsForOutbound.mockResolvedValue({ inbound: [], outbound: [], merged: [] })
 
       await notifyAgentReply({
         conversationId,
@@ -812,7 +955,7 @@ describe('threading headers (P4.6 regression guard)', () => {
       isPrincipalOnline.mockResolvedValue(false)
       visitorRows = [{ type: 'user', email: 'account@x.com' }]
       const prior = ['c.1.aaa@tenaevexeo.resend.app', 'c.1.bbb@tenaevexeo.resend.app']
-      priorOutboundMessageIds.mockResolvedValue(prior)
+      threadIdsForOutbound.mockResolvedValue({ inbound: [], outbound: prior, merged: prior })
 
       await notifyAgentReply({
         conversationId,
@@ -825,6 +968,128 @@ describe('threading headers (P4.6 regression guard)', () => {
       const call = sendConversationMessageEmail.mock.calls[0][0]
       expect(call.references).toEqual(prior)
       expect(call.inReplyTo).toBe('c.1.bbb@tenaevexeo.resend.app')
+    })
+
+    it('forwards the stored conversation subject to the sender', async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      limitQueue = [
+        [{ type: 'user', email: 'account@x.com' }],
+        [{ subject: 'Re: Billing overcharge', channel: 'email' }],
+      ]
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Alex',
+        channel: 'email',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.conversationSubject).toBe('Re: Billing overcharge')
+      expect(call.channel).toBe('email')
+    })
+
+    it("puts the customer's inbound Message-ID in In-Reply-To and References", async () => {
+      isPrincipalOnline.mockResolvedValue(false)
+      visitorRows = [{ type: 'user', email: 'account@x.com' }]
+      threadIdsForOutbound.mockResolvedValue({
+        inbound: ['cust-inbound@mail.example'],
+        outbound: ['c.1.aaa@tenaevexeo.resend.app'],
+        merged: ['cust-inbound@mail.example', 'c.1.aaa@tenaevexeo.resend.app'],
+      })
+
+      await notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Agent',
+        channel: 'email',
+      })
+
+      const call = sendConversationMessageEmail.mock.calls[0][0]
+      expect(call.inReplyTo).toBe('cust-inbound@mail.example')
+      expect(call.references).toEqual([
+        'cust-inbound@mail.example',
+        'c.1.aaa@tenaevexeo.resend.app',
+      ])
+      expect(call.channel).toBe('email')
+      // Named From is on the resolved identity when one exists, else on
+      // fromDisplayName so dispatch can wrap EMAIL_FROM.
+      expect(
+        [call.from, call.fromDisplayName].some(
+          (value) => typeof value === 'string' && value.includes('Agent (Acme)')
+        )
+      ).toBe(true)
+    })
+
+    /**
+     * Which Message-ID is stored is decided by the send layer's three-state
+     * answer, and the three states mean genuinely different things: we own the
+     * header, the transport owns it and said which id it used, or the transport
+     * owns it and did not say. Only the stored id can match an inbound reply's
+     * In-Reply-To, so storing the wrong one is a routing failure that surfaces
+     * as a reply opening a second conversation.
+     */
+    describe('which Message-ID is recorded', () => {
+      beforeEach(() => {
+        isPrincipalOnline.mockResolvedValue(false)
+        visitorRows = [{ type: 'user', email: 'account@x.com' }]
+        threadIdsForOutbound.mockResolvedValue({ inbound: [], outbound: [], merged: [] })
+      })
+
+      const reply = () =>
+        notifyAgentReply({
+          conversationId,
+          visitorPrincipalId,
+          content: 'answer',
+          agentName: 'Agent',
+          channel: 'messenger',
+        })
+
+      it('records the id we minted when the transport does not report one', async () => {
+        // No `messageId` key at all: the transport took the header we set, so
+        // the minted id is what went out and what a reply will quote.
+        sendConversationMessageEmail.mockResolvedValue({ sent: true })
+
+        await reply()
+
+        const minted = sendConversationMessageEmail.mock.calls[0][0].messageId
+        expect(minted).toMatch(/^c\.1\./)
+        expect(recordOutboundEmail).toHaveBeenCalledWith(minted, conversationId)
+      })
+
+      it("records the transport's id when it generated and reported its own", async () => {
+        // The minted id never left: a transport that owns Message-ID strips
+        // ours. Storing it would store an id that exists nowhere.
+        sendConversationMessageEmail.mockResolvedValue({
+          sent: true,
+          messageId: 'cf-assigned-1@mx.cloudflare.net',
+        })
+
+        await reply()
+
+        expect(sendConversationMessageEmail.mock.calls[0][0].messageId).toMatch(/^c\.1\./)
+        expect(recordOutboundEmail).toHaveBeenCalledWith(
+          'cf-assigned-1@mx.cloudflare.net',
+          conversationId
+        )
+      })
+
+      it('records nothing when the transport generated an id it did not disclose', async () => {
+        // Explicit null is not "no id was set", it is "an id was set and we do
+        // not know it". Nothing can be stored, and falling back to the minted id
+        // would guarantee every Message-ID lookup for this mail misses.
+        sendConversationMessageEmail.mockResolvedValue({ sent: true, messageId: null })
+
+        await reply()
+
+        expect(sendConversationMessageEmail.mock.calls[0][0].messageId).toMatch(/^c\.1\./)
+        expect(recordOutboundEmail).not.toHaveBeenCalled()
+        // The recipient identity is still recorded: the mail did go out.
+        expect(recordEmailIdentity).toHaveBeenCalled()
+      })
     })
   })
 })

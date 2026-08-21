@@ -145,6 +145,7 @@ const configSchema = z
     emailSmtpUser: z.string().optional(),
     emailSmtpPass: z.string().optional(),
     emailSmtpSecure: envBoolean,
+    /** Credential for the inbound body fetch, not for sending. */
     emailResendApiKey: z.string().optional(),
 
     // S3 (optional)

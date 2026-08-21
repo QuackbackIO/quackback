@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 631 surfaces
+### Server functions (`requireAuth`) — 640 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -280,7 +280,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/channel-accounts.ts`::createSendingAddressFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::createSendingDomainFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::verifySendingDomainFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::deleteSendingDomainFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::updateInboundTrustFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::clearInboundForwardingFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::updateSendingAddressSmtpFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::deleteChannelAccountFn | channel_account.manage |
+| `lib/server/functions/channel-accounts.ts`::listRecentEmailLogFn | channel_account.manage |
 | `lib/server/functions/comments.ts`::createCommentFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::addReactionFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::removeReactionFn | END_USER (any authenticated) |
@@ -550,6 +555,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::deleteWidgetHeroImageFn | settings.manage |
 | `lib/server/functions/settings.ts`::regenerateWidgetSecretFn | settings.manage |
 | `lib/server/functions/settings.ts`::fetchOfficeHoursFn | office_hours.manage |
+| `lib/server/functions/settings.ts`::fetchConversationRoutingFn | settings.manage |
+| `lib/server/functions/settings.ts`::updateConversationRoutingFn | settings.manage |
+| `lib/server/functions/settings.ts`::fetchEmailAutoAckFn | channel_account.manage |
+| `lib/server/functions/settings.ts`::updateEmailAutoAckFn | channel_account.manage |
 | `lib/server/functions/settings.ts`::updateOfficeHoursFn | office_hours.manage |
 | `lib/server/functions/settings.ts`::fetchChangelogSettingsFn | changelog.manage |
 | `lib/server/functions/settings.ts`::updateChangelogSettingsFn | changelog.manage |
@@ -935,7 +944,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-182 of 924 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+183 of 934 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1050,6 +1059,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/auth/$.ts`::POST | route |
 | `routes/api/auth/invitation.$invitationId.ts`::GET | route |
 | `routes/api/auth/portal-signin.ts`::POST | route |
+| `routes/api/chat/email/events.ts`::POST | route |
 | `routes/api/chat/email/inbound.ts`::POST | route |
 | `routes/api/chat/stream.ts`::GET | route |
 | `routes/api/devices.ts`::DELETE | route |

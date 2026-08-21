@@ -18,7 +18,7 @@ describe('CsatRequestEmail', () => {
     expect(html).toContain('How did we do?')
     // react-email HTML-escapes `&` in href attributes.
     for (const url of ratingUrls) {
-      expect(html).toContain(url.replace('&', '&amp;'))
+      expect(html).toContain(url.replaceAll('&', '&amp;'))
     }
     // All 5 emoji faces present.
     for (const face of ['😞', '🙁', '😐', '🙂', '😄']) {
@@ -30,10 +30,11 @@ describe('CsatRequestEmail', () => {
     const html = await render(
       <CsatRequestEmail promptText="" ratingUrls={ratingUrls} workspaceName="Acme" />
     )
-    expect(html).toContain('How did we do, Acme?')
+    expect(html).toContain('How did we do?')
+    expect(html).not.toContain('How did we do, Acme?')
     // react-email HTML-escapes `&` in href attributes.
     for (const url of ratingUrls) {
-      expect(html).toContain(url.replace('&', '&amp;'))
+      expect(html).toContain(url.replaceAll('&', '&amp;'))
     }
   })
 })

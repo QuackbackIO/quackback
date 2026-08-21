@@ -19,6 +19,26 @@ import type { ResolvedWorkspaceSecrets } from '@/lib/server/workspaces/vendor/wo
 type StorageOverrides = Partial<WorkspaceDescriptor['storage']>
 
 /**
+ * A legal mail slug per workspace, derived rather than constant.
+ *
+ * Same rule as {@link makeWorkspaceSecrets} and {@link workspaceUuidFor}: two
+ * workspaces sharing one slug would make every "an address minted for one
+ * workspace does not verify for another" assertion vacuously true, which is the
+ * exact property the address grammar exists to hold. A workspace key is not
+ * itself a legal slug — keys carry underscores and run well past the 13
+ * characters the local-part budget leaves — so it is reduced to the slug
+ * vocabulary here the way the control plane reduces a hostname label.
+ */
+export function mailSlugFor(workspaceKey: string): string {
+  const reduced = workspaceKey
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .slice(0, 13)
+    .replace(/^-+|-+$/g, '')
+  return reduced === '' ? 'ws' : reduced
+}
+
+/**
  * A distinct `settings.id` per workspace, derived rather than shared.
  *
  * Same rule as {@link makeWorkspaceSecrets}: a fixture that hands every workspace one
@@ -104,7 +124,7 @@ export function makeWorkspaceDescriptor(
       credentialRef: 'env://QUACKBACK_TENANT_SECRET_STORAGE',
       ...(overrides.storage ?? {}),
     },
-    email: { from: `support@${host}` },
+    email: { from: `support@${host}`, mailSlug: mailSlugFor(workspaceKey) },
     features: { aiEnabled: true },
     physical: { catalogName: null, catalogOid: null },
   }

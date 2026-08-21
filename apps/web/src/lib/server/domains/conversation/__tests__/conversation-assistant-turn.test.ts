@@ -63,10 +63,18 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 const mockGetLiveWorkflowReferencedAttributeKeys = vi.hoisted(() => vi.fn(async () => new Set()))
 vi.mock('@/lib/server/domains/workflows/workflow.service', () => ({
   getLiveWorkflowReferencedAttributeKeys: mockGetLiveWorkflowReferencedAttributeKeys,
+  hasLiveWorkflowForTrigger: vi.fn(async () => false),
 }))
 const mockClassifyConversationAttributes = vi.hoisted(() => vi.fn(async () => []))
 vi.mock('@/lib/server/domains/conversation-attributes/ai-classification.service', () => ({
   classifyConversationAttributes: mockClassifyConversationAttributes,
+}))
+const mockSetConversationAttribute = vi.hoisted(() => vi.fn(async () => ({})))
+vi.mock('@/lib/server/domains/conversation-attributes/set-attribute.service', () => ({
+  setConversationAttribute: mockSetConversationAttribute,
+}))
+vi.mock('@/lib/server/domains/conversation-attributes/conversation-attribute.service', () => ({
+  ensureAssistantEscalationReasonAttribute: vi.fn(async () => {}),
 }))
 
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
@@ -464,13 +472,12 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
       senderType: 'agent',
       content: 'I am connecting you with a teammate now.',
     })
-    expect(
-      updateSets.some(
-        (s) =>
-          (s.customAttributes as Record<string, unknown> | undefined)
-            ?.assistant_escalation_reason === 'low_confidence'
-      )
-    ).toBe(true)
+    expect(mockSetConversationAttribute).toHaveBeenCalledWith(
+      { conversationId: CONV },
+      'assistant_escalation_reason',
+      'low_confidence',
+      'ai'
+    )
   })
 
   it('threads the active involvement id and the latest customer message id into the engine', async () => {
@@ -623,13 +630,12 @@ describe('runAssistantTurnForConversation activity snapshot (Redis mirror)', () 
       'system_error'
     )
     expect(mockAppendAssistantHandoffNote).not.toHaveBeenCalled()
-    expect(
-      updateSets.some(
-        (s) =>
-          (s.customAttributes as Record<string, unknown> | undefined)
-            ?.assistant_escalation_reason === 'system_error'
-      )
-    ).toBe(true)
+    expect(mockSetConversationAttribute).toHaveBeenCalledWith(
+      { conversationId: CONV },
+      'assistant_escalation_reason',
+      'system_error',
+      'ai'
+    )
     expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
   })
 

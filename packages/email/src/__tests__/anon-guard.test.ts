@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ANON_EMAIL_DOMAIN } from '../anon'
 
-// Spy on the Resend transport so we can assert whether a real network send was
+// Spy on the SES transport so we can assert whether a real network send was
 // attempted. Hoisted so it's available inside the vi.mock factory below.
 const { sendSpy } = vi.hoisted(() => ({ sendSpy: vi.fn() }))
 
-vi.mock('resend', () => ({
-  Resend: class {
-    emails = { send: sendSpy }
-  },
-}))
+vi.mock('@aws-sdk/client-sesv2', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@aws-sdk/client-sesv2')>()
+  return {
+    ...actual,
+    SESv2Client: class {
+      send = sendSpy
+    },
+  }
+})
 
 import { sendMagicLinkEmail } from '../index'
-import { sealed } from './seal'
+import { sealedTo } from './brands'
 
 /**
  * The synthetic anonymous placeholder domain (temp-<id>@anon.quackback.io) is
@@ -21,7 +25,13 @@ import { sealed } from './seal'
  * sanitize via realEmail().
  */
 describe('sendEmail anon-domain delivery guard', () => {
-  const keys = ['EMAIL_SMTP_HOST', 'EMAIL_RESEND_API_KEY', 'RESEND_API_KEY', 'EMAIL_FROM']
+  const keys = [
+    'EMAIL_SMTP_HOST',
+    'EMAIL_SES_ACCESS_KEY_ID',
+    'EMAIL_SES_SECRET_ACCESS_KEY',
+    'EMAIL_SES_REGION',
+    'EMAIL_FROM',
+  ]
   const saved: Record<string, string | undefined> = {}
 
   beforeEach(() => {
@@ -29,11 +39,15 @@ describe('sendEmail anon-domain delivery guard', () => {
       saved[key] = process.env[key]
       delete process.env[key]
     }
-    // Fully configure the Resend provider so a send WOULD go out if not guarded.
-    process.env.EMAIL_RESEND_API_KEY = 're_test_123'
+    // Fully configure the SES provider so a send WOULD go out if not guarded.
+    // The region is part of "fully": without one the transport refuses before
+    // it builds a request, which would pass this test for the wrong reason.
+    process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
+    process.env.EMAIL_SES_SECRET_ACCESS_KEY = 'secret'
+    process.env.EMAIL_SES_REGION = 'us-east-1'
     process.env.EMAIL_FROM = 'noreply@example.com'
     sendSpy.mockReset()
-    sendSpy.mockResolvedValue({ data: { id: 'test_id' }, error: null })
+    sendSpy.mockResolvedValue({ MessageId: 'test_id', $metadata: { httpStatusCode: 200 } })
   })
 
   afterEach(() => {
@@ -49,34 +63,35 @@ describe('sendEmail anon-domain delivery guard', () => {
 
   it('does not deliver to a synthetic anonymous address', async () => {
     const result = await sendMagicLinkEmail({
-      to: sealed(`temp-ni7j5mnendrdtsjwbesk4mubz4jzszhj@${ANON_EMAIL_DOMAIN}`),
+      to: sealedTo(`temp-ni7j5mnendrdtsjwbesk4mubz4jzszhj@${ANON_EMAIL_DOMAIN}`),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
 
     expect(sendSpy).not.toHaveBeenCalled()
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'anon_recipient' })
   })
 
   it('matches the anon domain case-insensitively', async () => {
     const result = await sendMagicLinkEmail({
-      to: sealed('temp-abc@ANON.QUACKBACK.IO'),
+      to: sealedTo('temp-abc@ANON.QUACKBACK.IO'),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
 
     expect(sendSpy).not.toHaveBeenCalled()
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'anon_recipient' })
   })
 
   it('still delivers to a real address (guard is domain-specific)', async () => {
     const result = await sendMagicLinkEmail({
-      to: sealed('jane@example.com'),
+      to: sealedTo('jane@example.com'),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
 
     expect(sendSpy).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ sent: true })
+    // The id comes back exactly as the API reported it.
+    expect(result).toEqual({ sent: true, messageId: 'test_id' })
   })
 })

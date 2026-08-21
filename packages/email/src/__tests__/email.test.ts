@@ -11,7 +11,7 @@ import {
   sendRawEmail,
   sendCsatRequestEmail,
 } from '../index'
-import { sealed } from './seal'
+import { sealedTo, sendingAs } from './brands'
 
 /** Save and restore env vars around each test. */
 function withCleanEnv() {
@@ -21,6 +21,8 @@ function withCleanEnv() {
     'EMAIL_SMTP_PORT',
     'EMAIL_SMTP_USER',
     'EMAIL_SMTP_PASS',
+    'EMAIL_SES_ACCESS_KEY_ID',
+    'EMAIL_SES_SECRET_ACCESS_KEY',
     'EMAIL_RESEND_API_KEY',
     'RESEND_API_KEY',
     'EMAIL_FROM',
@@ -56,27 +58,28 @@ describe('isEmailConfigured', () => {
     expect(isEmailConfigured()).toBe(true)
   })
 
-  it('returns true when Resend API key is set', () => {
-    process.env.EMAIL_RESEND_API_KEY = 're_test_123'
+  it('returns true when both halves of the SES credential are set', () => {
+    process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
+    process.env.EMAIL_SES_SECRET_ACCESS_KEY = 'secret'
     expect(isEmailConfigured()).toBe(true)
   })
 
-  it('returns true when RESEND_API_KEY (alternate) is set', () => {
+  it('returns false for half an SES credential', () => {
+    process.env.EMAIL_SES_ACCESS_KEY_ID = 'AKIAEXAMPLE'
+    expect(isEmailConfigured()).toBe(false)
+  })
+
+  it('returns false for the inbound-only key, which carries no mail out', () => {
+    process.env.EMAIL_RESEND_API_KEY = 're_test_123'
     process.env.RESEND_API_KEY = 're_test_123'
-    expect(isEmailConfigured()).toBe(true)
-  })
-
-  it('prefers SMTP over Resend when both are set', () => {
-    process.env.EMAIL_SMTP_HOST = 'smtp.example.com'
-    process.env.EMAIL_RESEND_API_KEY = 're_test_123'
-    expect(isEmailConfigured()).toBe(true)
+    expect(isEmailConfigured()).toBe(false)
   })
 })
 
 describe('getReceivedEmail', () => {
   withCleanEnv()
 
-  it('returns null when no Resend API key is configured (no API call attempted)', async () => {
+  it('returns null when no inbound API key is configured (no API call attempted)', async () => {
     await expect(getReceivedEmail('em_x')).resolves.toBeNull()
   })
 })
@@ -86,36 +89,36 @@ describe('console mode returns { sent: false }', () => {
 
   it('sendInvitationEmail returns { sent: false }', async () => {
     const result = await sendInvitationEmail({
-      to: sealed('test@example.com'),
+      to: sealedTo('test@example.com'),
       invitedByName: 'Admin',
       workspaceName: 'TestWorkspace',
       inviteLink: 'https://example.com/invite',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendWelcomeEmail returns { sent: false }', async () => {
     const result = await sendWelcomeEmail({
-      to: 'test@example.com',
+      to: sealedTo('test@example.com'),
       name: 'Test',
       workspaceName: 'TestWorkspace',
       dashboardUrl: 'https://example.com/dashboard',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendMagicLinkEmail returns { sent: false }', async () => {
     const result = await sendMagicLinkEmail({
-      to: sealed('test@example.com'),
+      to: sealedTo('test@example.com'),
       signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendStatusChangeEmail returns { sent: false }', async () => {
     const result = await sendStatusChangeEmail({
-      to: 'test@example.com',
+      to: sealedTo('test@example.com'),
       postTitle: 'Test Post',
       postUrl: 'https://example.com/post/1',
       previousStatus: 'open',
@@ -123,12 +126,12 @@ describe('console mode returns { sent: false }', () => {
       workspaceName: 'TestWorkspace',
       unsubscribeUrl: 'https://example.com/unsubscribe',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendNewCommentEmail returns { sent: false }', async () => {
     const result = await sendNewCommentEmail({
-      to: 'test@example.com',
+      to: sealedTo('test@example.com'),
       postTitle: 'Test Post',
       postUrl: 'https://example.com/post/1',
       commenterName: 'Commenter',
@@ -137,20 +140,20 @@ describe('console mode returns { sent: false }', () => {
       workspaceName: 'TestWorkspace',
       unsubscribeUrl: 'https://example.com/unsubscribe',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendPasswordResetEmail returns { sent: false }', async () => {
     const result = await sendPasswordResetEmail({
-      to: sealed('test@example.com'),
+      to: sealedTo('test@example.com'),
       resetLink: 'https://example.com/auth/reset-password?token=abc',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendCsatRequestEmail returns { sent: false }', async () => {
     const result = await sendCsatRequestEmail({
-      to: 'visitor@example.com',
+      to: sealedTo('visitor@example.com'),
       promptText: 'How did we do?',
       ratingUrls: [
         'https://example.com/csat?token=abc&rating=1',
@@ -161,27 +164,29 @@ describe('console mode returns { sent: false }', () => {
       ],
       workspaceName: 'TestWorkspace',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendRawEmail returns { sent: false } (custom From, prerendered html)', async () => {
     const result = await sendRawEmail({
-      from: 'support@acme.com',
+      from: sendingAs('support@acme.com'),
       to: 'customer@example.com',
       subject: 'Re: your ticket',
       html: '<p>Here is the reply.</p>',
       text: 'Here is the reply.',
     })
-    expect(result).toEqual({ sent: false })
+    expect(result).toEqual({ sent: false, reason: 'no_provider' })
   })
 
   it('sendRawEmail drops a synthetic anonymous recipient', async () => {
     const result = await sendRawEmail({
-      from: 'support@acme.com',
+      from: sendingAs('support@acme.com'),
       to: 'temp-abc123@anon.quackback.io',
       subject: 'x',
       html: '<p>x</p>',
     })
-    expect(result).toEqual({ sent: false })
+    // Refused for the recipient, not for want of a provider: the guard runs
+    // before the ladder, so the reason names the address rather than the config.
+    expect(result).toEqual({ sent: false, reason: 'anon_recipient' })
   })
 })

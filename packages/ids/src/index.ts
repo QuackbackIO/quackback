@@ -136,6 +136,7 @@ export type {
   TicketActivityId,
   TicketSummaryId,
   ChannelAccountId,
+  ChannelThreadId,
   SendingDomainId,
   OfficeHoursId,
   SlaPolicyId,

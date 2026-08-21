@@ -265,7 +265,12 @@ describe('the real corpus', () => {
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
-    expect(vouching).toEqual(['0253_event_dispatch_owner.sql', '0256_workspace_key_columns.sql'])
+    expect(vouching).toEqual([
+      '0253_event_dispatch_owner.sql',
+      '0256_workspace_key_columns.sql',
+      '0259_channel_threads.sql',
+      '0260_channel_threads_conversation_fk.sql',
+    ])
   })
 
   it('0006 — a CTE INSERT — is caught as mutating', () => {

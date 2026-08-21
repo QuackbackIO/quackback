@@ -94,6 +94,7 @@ export const ID_PREFIXES = {
 
   // Email channel (support platform §4.8)
   channel_account: 'channel_account',
+  channel_thread: 'channel_thread',
   sending_domain: 'sending_domain',
 
   // Workflows + SLA + office hours (support platform §4.6)
@@ -141,6 +142,7 @@ export const ID_PREFIXES = {
   // AI
   sentiment: 'sentiment',
   ai_usage: 'ailog',
+  email_log: 'emaillog',
   pipeline_log: 'plog',
 
   // Feedback aggregation

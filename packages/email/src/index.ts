@@ -1,10 +1,18 @@
 /**
  * Email sending module for Quackback
  *
- * Uses Nodemailer for SMTP or Resend API with React Email components.
- * No build step required - React components are rendered at runtime.
+ * Uses the Amazon SES v2 API or Nodemailer for SMTP, with React Email
+ * components. No build step required - React components are rendered at
+ * runtime.
  *
- * Priority: SMTP (if EMAIL_SMTP_HOST set) → Resend (if EMAIL_RESEND_API_KEY set) → Console logging (dev mode)
+ * Priority: SES (if EMAIL_SES_ACCESS_KEY_ID + EMAIL_SES_SECRET_ACCESS_KEY set)
+ * → SMTP (if EMAIL_SMTP_HOST set) → Console logging (dev mode).
+ *
+ * The order is deliberate rather than incidental. An install that has set
+ * `EMAIL_SMTP_HOST` has named the mail server it wants used and keeps it,
+ * because a self-hoster with a mail server of their own has no SES credentials
+ * to be overtaken by; only an install that has been given both halves of an SES
+ * credential gets that path, which is a pair nobody sets by accident.
  */
 
 import { render } from '@react-email/components'
@@ -13,18 +21,29 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
+import { applyDisplayName, isSesEmailConfigured, sendViaSes } from './ses'
 // Capability-bearing senders declare `to: SecureRecipient` so a contact address
 // cannot be passed to one. See ./recipient for why the classes are shaped this
 // way, and why the guarantee belongs here rather than at the call sites.
-import type { SecureRecipient } from './recipient'
+import type { ContactEmail, SecureRecipient } from './recipient'
 export type { AccountEmail, SealedEmail, ContactEmail, SecureRecipient } from './recipient'
+// Senders that may leave the platform's own address declare `from: SendingIdentity`
+// for the same reason: on a shared provider account the From is a claim about
+// which workspace is speaking, and the compiler is what checks it was earned.
+import type { SendingIdentity } from './sender'
+export type { SendingIdentity } from './sender'
 import { MagicLinkEmail } from './templates/magic-link'
+import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 import { InvitationEmail } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
+import { ConversationReplyEmail } from './templates/conversation-reply'
+import { conversationMessageCopy, conversationReplySubject } from './conversation-copy'
+import { ConversationClosedEmail } from './templates/conversation-closed'
+import { isEmailBillable } from './mail-class'
 import { PostMentionEmail } from './templates/post-mention'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
@@ -47,14 +66,38 @@ function getEnv(key: string): string | undefined {
   return process.env[key]
 }
 
+/**
+ * A send refused because the install is not configured for it.
+ *
+ * Declares itself permanent for the same reason the transport's own errors do.
+ * The conversation send path retries anything that does not say otherwise —
+ * deliberately, so a new provider error name cannot quietly stop being retried
+ * — and a missing environment variable is not something a second attempt
+ * supplies. Without the marker a misconfiguration spends the whole backoff
+ * before failing exactly as it did on the first try.
+ */
+export class EmailConfigError extends Error {
+  readonly retryable = false
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'EmailConfigError'
+  }
+}
+
 function getEmailFrom(): string {
   const from = getEnv('EMAIL_FROM')
   if (!from) {
-    throw new Error('EMAIL_FROM environment variable is required for sending emails')
+    throw new EmailConfigError('EMAIL_FROM environment variable is required for sending emails')
   }
   return from
 }
 
+/**
+ * Credential for the inbound body fetch below. Nothing outbound reads it: the
+ * provider that owns this key does not carry any of our mail out, only the
+ * metadata-only inbound webhook's missing body back in.
+ */
 function getResendApiKey(): string | undefined {
   // Support both EMAIL_RESEND_API_KEY and RESEND_API_KEY
   return getEnv('EMAIL_RESEND_API_KEY') || getEnv('RESEND_API_KEY')
@@ -62,11 +105,45 @@ function getResendApiKey(): string | undefined {
 
 // Lazy-initialized transports
 let smtpTransporter: Transporter | null = null
-let resendClient: Resend | null = null
+let inboundFetchClient: Resend | null = null
 
-export type EmailResult = { sent: boolean }
+/**
+ * Why a send did not happen. Present only when `sent` is false. Both cases are
+ * the system declining on purpose, so neither is a failure a caller should
+ * report as one; a send that was attempted and went wrong throws instead.
+ */
+export type EmailNotSentReason =
+  /** No provider is configured at all. The message was logged as a dev preview,
+   *  which is the normal development case and not a failure. */
+  | 'no_provider'
+  /** The recipient was the synthetic anonymous placeholder address, which is
+   *  never deliverable. Refusing it is the guard doing its job. */
+  | 'anon_recipient'
 
-type EmailProvider = 'smtp' | 'resend' | 'console'
+export type EmailResult = {
+  sent: boolean
+  /** Why nothing was sent, when nothing was. See {@link EmailNotSentReason}. */
+  reason?: EmailNotSentReason
+  /**
+   * Who owns the outbound `Message-ID` for this send, in three states.
+   *
+   * - **absent** — we set it, so the caller's own minted id is what went on the
+   *   wire and is what a reply will quote. Every rung but SES.
+   * - **a string** — the transport generated the id and told us which one, in
+   *   whatever form the transport reports it. Store THIS, not the minted one:
+   *   the minted one was never sent. It is not necessarily the literal token a
+   *   reply quotes back — SES reports its ids without the host its header
+   *   carries — so a caller comparing a quoted id to a stored one goes through
+   *   the store's resolver rather than comparing strings itself.
+   * - **null** — the transport generated the id and did not tell us which one.
+   *   There is nothing to store, and no reply can be matched back by
+   *   `Message-ID`. Callers must not fall back to their minted id here; it would
+   *   record an id that exists nowhere and can only ever produce a miss.
+   */
+  messageId?: string | null
+}
+
+type EmailProvider = 'ses' | 'smtp' | 'console'
 
 export function isEmailConfigured(): boolean {
   return getProvider() !== 'console'
@@ -77,9 +154,17 @@ export function getEmailProvider(): EmailProvider {
   return getProvider()
 }
 
+/**
+ * The ladder, per process.
+ *
+ * Whole-process and nothing else: SES verifies a sending identity from a DNS
+ * record its owner publishes rather than from a zone we host, so a workspace
+ * sending as its own branded domain is on the same rung as everything else and
+ * there is no identity this ladder has to route around.
+ */
 function getProvider(): EmailProvider {
+  if (isSesEmailConfigured()) return 'ses'
   if (getEnv('EMAIL_SMTP_HOST')) return 'smtp'
-  if (getResendApiKey()) return 'resend'
   return 'console'
 }
 
@@ -113,12 +198,13 @@ function getSmtpTransporter(): Transporter {
   return smtpTransporter
 }
 
-function getResend(): Resend {
-  if (!resendClient) {
-    log.info('initializing resend client')
-    resendClient = new Resend(getResendApiKey())
+/** Client for the inbound body fetch below, never for sending. */
+function getInboundFetchClient(): Resend {
+  if (!inboundFetchClient) {
+    log.info('initializing inbound email fetch client')
+    inboundFetchClient = new Resend(getResendApiKey())
   }
-  return resendClient
+  return inboundFetchClient
 }
 
 /** Wrap a bare Message-ID in angle brackets for a header value (idempotent). */
@@ -132,10 +218,57 @@ interface ThreadingOptions {
   messageId?: string
   inReplyTo?: string
   references?: string[]
+  extraHeaders?: Record<string, string>
+}
+
+export interface EmailLogSinkEntry {
+  direction: 'outbound'
+  emailType: string
+  provider: string
+  to: string
+  subject: string
+  status: 'sent' | 'failed' | 'skipped'
+  messageId?: string | null
+  providerMessageId?: string | null
+  error?: string
+  billable: boolean
+  conversationId?: string | null
+  ticketId?: string | null
+  postId?: string | null
+}
+
+export type EmailLogSink = (entry: EmailLogSinkEntry) => void | Promise<void>
+
+let emailLogSink: EmailLogSink | null = null
+
+/** Registered by apps/web. The sink must never throw; dispatch swallows sink errors. */
+export function setEmailLogSink(sink: EmailLogSink | null): void {
+  emailLogSink = sink
+}
+
+function entityIds(options: {
+  conversationId?: string | null
+  ticketId?: string | null
+  postId?: string | null
+}): Pick<EmailLogSinkEntry, 'conversationId' | 'ticketId' | 'postId'> {
+  return {
+    conversationId: options.conversationId,
+    ticketId: options.ticketId,
+    postId: options.postId,
+  }
+}
+
+function recordOutboundLog(entry: EmailLogSinkEntry): void {
+  if (!emailLogSink) return
+  try {
+    void Promise.resolve(emailLogSink(entry)).catch(() => undefined)
+  } catch {
+    // A ledger failure must never block a send.
+  }
 }
 
 function buildThreadingHeaders(options: ThreadingOptions): Record<string, string> {
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { ...(options.extraHeaders ?? {}) }
   if (options.messageId) headers['Message-ID'] = angleId(options.messageId)
   if (options.inReplyTo) headers['In-Reply-To'] = angleId(options.inReplyTo)
   if (options.references && options.references.length > 0) {
@@ -145,17 +278,20 @@ function buildThreadingHeaders(options: ThreadingOptions): Record<string, string
 }
 
 /**
- * Fetch a received (inbound) email's content by its Resend email id.
- * Resend's `email.received` webhook is metadata-only (no text/html body) —
+ * Fetch a received (inbound) email's content by its provider email id.
+ * The `email.received` webhook is metadata-only (no text/html body) —
  * callers use this to pull the body before parsing (#320). Returns null when
- * no Resend API key is configured or the email cannot be found; throws on
- * other errors so the webhook route can 500 and let Resend redeliver.
+ * no inbound API key is configured or the email cannot be found; throws on
+ * other errors so the webhook route can 500 and let the provider redeliver.
+ *
+ * The only consumer of the inbound credential. Outbound mail leaves by the
+ * ladder above and never touches this client.
  */
 export async function getReceivedEmail(
   emailId: string
 ): Promise<{ text: string | null; html: string | null } | null> {
   if (!getResendApiKey()) return null
-  const { data, error } = await getResend().emails.receiving.get(emailId)
+  const { data, error } = await getInboundFetchClient().emails.receiving.get(emailId)
   if (error) {
     log.warn({ emailId, error: error.name }, 'received-email fetch failed')
     if (error.name === 'not_found') return null
@@ -165,10 +301,11 @@ export async function getReceivedEmail(
 }
 
 /**
- * The single low-level send: provider selection (SMTP → Resend → console), the
- * anon-address guard, and RFC 5322 threading. Takes EITHER a prerendered `html`
- * body or a `react` element (the branded senders pass `react`; the raw sender
- * passes `html`). Falls back to console when unconfigured.
+ * The single low-level send: provider selection (SES → SMTP → console), the
+ * anon-address guard, and RFC 5322 threading. Takes EITHER a
+ * prerendered `html` body or a `react` element (the branded senders pass
+ * `react`; the raw sender passes `html`). Falls back to console when
+ * unconfigured.
  *
  * Every send goes through here, including the console preview, so no caller has
  * to know which provider is active.
@@ -176,7 +313,7 @@ export async function getReceivedEmail(
 async function dispatch(
   options: {
     /** Omit to use the workspace EMAIL_FROM; the raw sender passes its own. */
-    from?: string
+    from?: SendingIdentity
     to: string
     subject: string
     html?: string
@@ -187,6 +324,11 @@ async function dispatch(
     emailType?: string
     /** Extra identifying fields for the dev preview line (links, codes). */
     preview?: Record<string, unknown>
+    /** Display name wrapped around `from` (or EMAIL_FROM) as RFC 5322. */
+    fromDisplayName?: string
+    conversationId?: string | null
+    ticketId?: string | null
+    postId?: string | null
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const threadingHeaders = buildThreadingHeaders(options)
@@ -196,7 +338,17 @@ async function dispatch(
   // realEmail(), but if one slips through, drop it here rather than bounce.
   if (isSyntheticAnonEmail(options.to)) {
     log.warn('refusing to send to synthetic anonymous address')
-    return { sent: false }
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType: options.emailType ?? 'RawEmail',
+      provider: getProvider(),
+      to: options.to,
+      subject: options.subject,
+      status: 'skipped',
+      billable: false,
+      ...entityIds(options),
+    })
+    return { sent: false, reason: 'anon_recipient' }
   }
 
   const provider = getProvider()
@@ -204,74 +356,131 @@ async function dispatch(
   // Console provider never sends. Handled before `from` is resolved because
   // getEmailFrom() throws when EMAIL_FROM is unset, which is the normal dev
   // case and must not stop a preview from being logged.
+  const emailType = options.emailType ?? 'RawEmail'
+  const billable = isEmailBillable(emailType)
+
   if (provider === 'console') {
+    // Said out loud, once per dropped message. The other two rungs announce
+    // themselves when they initialize; this one delivers nothing and its
+    // preview sits at `debug`, so a production deploy that dropped every
+    // notification used to emit no line at all while callers read `sent: false`
+    // as routine. Kept apart from the preview line because that one carries the
+    // recipient, and an address does not belong at a level anyone ships.
+    log.warn(
+      { provider: 'console', email_type: emailType },
+      'no email provider configured: message logged as a preview and not delivered'
+    )
     log.debug(
-      { email_type: options.emailType ?? 'RawEmail', to: options.to, ...options.preview },
+      { email_type: emailType, to: options.to, ...options.preview },
       '[dev] email preview (console provider)'
     )
-    return { sent: false }
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'console',
+      to: options.to,
+      subject: options.subject,
+      status: 'skipped',
+      billable: false,
+      ...entityIds(options),
+    })
+    return { sent: false, reason: 'no_provider' }
   }
 
-  const from = options.from ?? getEmailFrom()
+  const resolvedFrom = options.from ?? getEmailFrom()
+  const from = options.fromDisplayName
+    ? applyDisplayName(resolvedFrom, options.fromDisplayName)
+    : resolvedFrom
+  const html = options.html ?? (options.react ? await render(options.react) : undefined)
+  const text =
+    options.text ?? (options.react ? await render(options.react, { plainText: true }) : undefined)
 
-  if (provider === 'smtp') {
-    const html = options.html ?? (options.react ? await render(options.react) : undefined)
-    try {
-      const result = await getSmtpTransporter().sendMail({
-        from,
-        to: options.to,
-        subject: options.subject,
-        html,
-        text: options.text,
-        replyTo: options.replyTo,
-        messageId: threadingHeaders['Message-ID'],
-        inReplyTo: threadingHeaders['In-Reply-To'],
-        references: threadingHeaders['References'],
-      })
-      log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
-    } catch (error) {
-      // Reset transporter on connection errors so next attempt creates a fresh connection
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        (error as { code: string }).code === 'ETIMEDOUT'
-      ) {
-        smtpTransporter = null
-      }
-      log.error({ err: error, provider: 'smtp' }, 'email send failed')
-      throw error
-    }
-    return { sent: true }
-  }
-
-  if (provider === 'resend') {
-    // Resend renders `react` itself; a raw send supplies `html` (+ optional text).
-    const body = options.react
-      ? { react: options.react }
-      : { html: options.html ?? '', ...(options.text ? { text: options.text } : {}) }
-    const result = await getResend().emails.send({
+  if (provider === 'ses') {
+    // Message-ID is platform-controlled: the transport drops ours on the way
+    // out and reports back the one SES assigned. In-Reply-To and References are
+    // allowed and pass through, which is what keeps the recipient's mail client
+    // threading. What is lost is our ability to CHOOSE the id; the Message-ID
+    // route home survives because the caller records the assigned one instead
+    // of the minted one.
+    const result = await sendViaSes({
       from,
       to: options.to,
       subject: options.subject,
-      ...body,
-      replyTo: options.replyTo,
-      // Resend may reassign its own Message-ID, in which case plus-address
-      // routing carries the reply; In-Reply-To/References still thread the client.
+      ...(html !== undefined ? { html } : {}),
+      ...(text !== undefined ? { text } : {}),
+      ...(options.replyTo !== undefined ? { replyTo: options.replyTo } : {}),
       ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
     })
-    if (result.error) {
-      log.error(
-        { provider: 'resend', error_name: result.error.name, error_message: result.error.message },
-        'email send failed'
-      )
-      throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
-    }
-    log.info({ provider: 'resend', message_id: result.data?.id }, 'email sent')
-    return { sent: true }
+    // The id as the provider reported it, which is what its delivery events and
+    // the threading map both name the message by. A raw inbound header quotes
+    // the same id at a host, so a search across the two has to expect the pair.
+    log.info({ provider: 'ses', message_id: result.messageId }, 'email sent')
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'ses',
+      to: options.to,
+      subject: options.subject,
+      status: 'sent',
+      messageId: result.messageId,
+      providerMessageId: result.messageId,
+      billable,
+      ...entityIds(options),
+    })
+    return { sent: true, messageId: result.messageId }
   }
 
-  // Console mode - caller handles logging
-  return { sent: false }
+  // SMTP is the last rung: console and SES both returned above.
+  try {
+    const result = await getSmtpTransporter().sendMail({
+      from,
+      to: options.to,
+      subject: options.subject,
+      html,
+      text,
+      replyTo: options.replyTo,
+      messageId: threadingHeaders['Message-ID'],
+      inReplyTo: threadingHeaders['In-Reply-To'],
+      references: threadingHeaders['References'],
+      headers: options.extraHeaders,
+    })
+    log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'smtp',
+      to: options.to,
+      subject: options.subject,
+      status: 'sent',
+      messageId: result.messageId,
+      providerMessageId: result.messageId,
+      billable,
+      ...entityIds(options),
+    })
+  } catch (error) {
+    // Reset transporter on connection errors so next attempt creates a fresh connection
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      (error as { code: string }).code === 'ETIMEDOUT'
+    ) {
+      smtpTransporter = null
+    }
+    log.error({ err: error, provider: 'smtp' }, 'email send failed')
+    recordOutboundLog({
+      direction: 'outbound',
+      emailType,
+      provider: 'smtp',
+      to: options.to,
+      subject: options.subject,
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'send failed',
+      billable,
+      ...entityIds(options),
+    })
+    throw error
+  }
+  return { sent: true }
 }
 
 /**
@@ -286,11 +495,15 @@ async function sendEmail(
     /** Conversation-specific reply address (e.g. plus-addressed inbound). */
     replyTo?: string
     /** Override the workspace EMAIL_FROM (e.g. a per-team sending address). */
-    from?: string
+    from?: SendingIdentity
     /** Template name, for the dev preview line. */
     emailType?: string
     /** Extra identifying fields for the dev preview line (links, codes). */
     preview?: Record<string, unknown>
+    fromDisplayName?: string
+    conversationId?: string | null
+    ticketId?: string | null
+    postId?: string | null
   } & ThreadingOptions
 ): Promise<EmailResult> {
   return dispatch(options)
@@ -299,7 +512,7 @@ async function sendEmail(
 /** A prerendered, custom-From email (no template). */
 export interface RawEmailOptions extends ThreadingOptions {
   /** Sender identity — e.g. a verified support sending address, not EMAIL_FROM. */
-  from: string
+  from: SendingIdentity
   to: string
   subject: string
   html: string
@@ -417,6 +630,41 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
     react: MagicLinkEmail({ signInUrl, code, logoUrl }),
     emailType: 'MagicLinkEmail',
     preview: { signInUrl, code },
+  })
+}
+
+// ============================================================================
+// Sign-in refused (no account, and the workspace is not accepting new ones)
+// ============================================================================
+
+interface SendSignupNotAllowedParams {
+  /**
+   * `ContactEmail`, not a `SecureRecipient`. The address was typed by whoever
+   * filled in the form, so nobody has proven they own it — and this message is
+   * deliberately the one kind that may go to such an address, because it grants
+   * nothing. No link, no code, no account.
+   */
+  to: ContactEmail
+  workspaceName?: string
+  logoUrl?: string
+}
+
+/**
+ * Sent instead of a sign-in link when the workspace refuses to open an account
+ * for the address. The HTTP response is identical either way, so this is the
+ * only place the reason is stated, and it reaches only the address it is about.
+ */
+export async function sendSignupNotAllowedEmail(
+  params: SendSignupNotAllowedParams
+): Promise<EmailResult> {
+  const { to, workspaceName, logoUrl } = params
+
+  log.debug('sending sign-in refusal email')
+  return sendEmail({
+    to,
+    subject: 'About your Quackback sign-in request',
+    react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
+    emailType: 'SignupNotAllowedEmail',
   })
 }
 
@@ -624,7 +872,6 @@ interface SendConversationMessageEmailParams {
   ctaUrl: string
   workspaceName: string
   logoUrl?: string
-  unsubscribeUrl?: string
   /** Conversation-specific reply address so a visitor's reply routes back to
    *  the right thread (inbound email channel). */
   replyTo?: string
@@ -638,7 +885,23 @@ interface SendConversationMessageEmailParams {
   references?: string[]
   /** Send from a per-team sending address (§4.8) instead of the branded
    *  EMAIL_FROM. Absent = the workspace default. */
-  from?: string
+  from?: SendingIdentity
+  /**
+   * Active conversation channel. `email` selects the human reply template for
+   * agent correspondence; messenger keeps the notification card.
+   */
+  channel?: string
+  /** Stored `conversations.subject`; when set, visitor-facing mail uses `Re:`. */
+  conversationSubject?: string | null
+  /** Team-alert copy: first visitor message vs a follow-up. */
+  isFirstMessage?: boolean
+  /** Their-surface correspondence (email today). Overrides the channel string gate. */
+  correspondence?: boolean
+  /** Immediately previous message, quoted one level on the human template. */
+  quotedPrevious?: { date: Date | string; name: string; text: string }
+  /** Display name for the From header (`Alex (Acme)`). */
+  fromDisplayName?: string
+  conversationId?: string | null
 }
 
 /**
@@ -657,61 +920,143 @@ export async function sendConversationMessageEmail(
     ctaUrl,
     workspaceName,
     logoUrl,
-    unsubscribeUrl,
     replyTo,
     messageId,
     inReplyTo,
     references,
     from,
+    channel,
+    conversationSubject,
+    isFirstMessage,
+    correspondence,
+    quotedPrevious,
+    fromDisplayName,
+    conversationId,
   } = params
 
-  const isReply = direction === 'agent_reply'
-  const isStarted = direction === 'agent_started'
-  const heading = isReply
-    ? `New reply from ${workspaceName}`
-    : isStarted
-      ? `New message from ${workspaceName}`
-      : 'New message'
-  const intro = isReply
-    ? `${senderName} replied to your conversation with ${workspaceName}.`
-    : isStarted
-      ? `${senderName} from ${workspaceName} sent you a message.`
-      : `${senderName} started a conversation in ${workspaceName}.`
-  const ctaLabel = isReply || isStarted ? 'View conversation' : 'Open inbox'
-  const reason = isReply
-    ? 'You received this email because you have an open conversation with this team.'
-    : isStarted
-      ? `You received this email because ${workspaceName} sent you a message.`
-      : 'You received this email because you are a member of this workspace.'
-  const subject = isReply
-    ? `New reply from ${workspaceName}`
-    : isStarted
-      ? `New message from ${workspaceName}`
-      : `New message in ${workspaceName}`
+  const copy = conversationMessageCopy({
+    direction,
+    senderName,
+    workspaceName,
+    conversationSubject,
+    preview: messagePreview,
+    channel,
+    isFirstMessage,
+    correspondence,
+  })
+
+  const react = copy.useHumanTemplate
+    ? ConversationReplyEmail({
+        bodyHtml,
+        messagePreview,
+        agentName: senderName,
+        teamName: workspaceName,
+        viewUrl: ctaUrl,
+        quotedPrevious,
+      })
+    : ConversationMessageEmail({
+        heading: copy.heading,
+        intro: copy.intro,
+        senderName,
+        messagePreview,
+        bodyHtml,
+        ctaUrl,
+        ctaLabel: copy.ctaLabel,
+        organizationName: workspaceName,
+        reason: copy.reason,
+        logoUrl,
+      })
 
   return sendEmail({
     to,
-    subject,
-    react: ConversationMessageEmail({
-      heading,
-      intro,
-      senderName,
-      messagePreview,
-      bodyHtml,
-      ctaUrl,
-      ctaLabel,
-      organizationName: workspaceName,
-      reason,
-      unsubscribeUrl,
-      logoUrl,
-    }),
+    subject: copy.subject,
+    react,
     replyTo,
     messageId,
     inReplyTo,
     references,
     from,
-    emailType: 'ConversationMessageEmail',
+    fromDisplayName,
+    conversationId,
+    emailType: copy.useHumanTemplate ? 'ConversationReplyEmail' : 'ConversationMessageEmail',
     preview: { ctaUrl },
+  })
+}
+
+export async function sendConversationClosedEmail(params: {
+  to: string
+  workspaceName: string
+  variant: 'closed' | 'auto_closed'
+  conversationSubject?: string | null
+  viewUrl?: string
+  csatPrompt?: string
+  ratingUrls?: readonly [string, string, string, string, string]
+  replyTo?: string
+  from?: SendingIdentity
+  fromDisplayName?: string
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+  conversationId?: string | null
+}): Promise<EmailResult> {
+  const subject =
+    conversationReplySubject(params.conversationSubject) ??
+    `Re: your conversation with ${params.workspaceName}`
+  return sendEmail({
+    to: params.to,
+    subject,
+    react: ConversationClosedEmail({
+      workspaceName: params.workspaceName,
+      variant: params.variant,
+      viewUrl: params.viewUrl,
+      csatPrompt: params.csatPrompt,
+      ratingUrls: params.ratingUrls,
+    }),
+    replyTo: params.replyTo,
+    from: params.from,
+    fromDisplayName: params.fromDisplayName,
+    messageId: params.messageId,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
+    conversationId: params.conversationId,
+    emailType: 'ConversationClosedEmail',
+  })
+}
+
+export async function sendConversationAutoAckEmail(params: {
+  to: string
+  workspaceName: string
+  conversationSubject?: string | null
+  replyTo?: string
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+  from?: SendingIdentity
+  conversationId?: string | null
+}): Promise<EmailResult> {
+  const subject =
+    conversationReplySubject(params.conversationSubject) ??
+    `Re: your message to ${params.workspaceName}`
+  return sendEmail({
+    to: params.to,
+    subject,
+    react: ConversationReplyEmail({
+      bodyHtml: `<p>We received your email and will get back to you shortly.</p>`,
+      messagePreview: 'We received your email and will get back to you shortly.',
+      agentName: params.workspaceName,
+      teamName: params.workspaceName,
+    }),
+    replyTo: params.replyTo,
+    from: params.from,
+    messageId: params.messageId,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
+    conversationId: params.conversationId,
+    extraHeaders: {
+      'Auto-Submitted': 'auto-replied',
+      Precedence: 'auto_reply',
+    },
+    emailType: 'ConversationAutoAckEmail',
   })
 }
 
@@ -753,7 +1098,7 @@ export interface SendTicketEventEmailParams {
   preferencesUrl?: string
   logoUrl?: string
   /** Per-team sending address override; absent = branded EMAIL_FROM. */
-  from?: string
+  from?: SendingIdentity
   /** Per-ticket inbound reply address (reply-by-email); absent = no Reply-To. */
   replyTo?: string
   messageId?: string
@@ -1024,7 +1369,7 @@ interface SendChangelogPublishedParams {
   logoUrl?: string
   /** Send from the changelog module's sending address (§4.8) instead of the
    *  branded EMAIL_FROM. Absent = the workspace default. */
-  from?: string
+  from?: SendingIdentity
 }
 
 export async function sendChangelogPublishedEmail(
@@ -1239,6 +1584,18 @@ interface SendCsatRequestEmailParams {
   ratingUrls: readonly [string, string, string, string, string]
   workspaceName: string
   logoUrl?: string
+  /**
+   * The same From the conversation's replies go out as; absent = the workspace
+   * default.
+   *
+   * Carried rather than defaulted because this arrives in the middle of a
+   * thread. A conversation answered from the customer's own support address
+   * whose rating prompt came from the platform address is a thread that changes
+   * identity halfway through, which reads as a different sender to the person
+   * being asked and to their mail client's threading.
+   */
+  from?: SendingIdentity
+  conversationId?: string | null
 }
 
 /** Sent by the workflow engine's send_block csat path (action.executor.ts)
@@ -1248,12 +1605,14 @@ interface SendCsatRequestEmailParams {
 export async function sendCsatRequestEmail(
   params: SendCsatRequestEmailParams
 ): Promise<EmailResult> {
-  const { to, promptText, ratingUrls, workspaceName, logoUrl } = params
+  const { to, promptText, ratingUrls, workspaceName, logoUrl, from, conversationId } = params
 
   return sendEmail({
     to,
-    subject: `How did we do, ${workspaceName}?`,
+    subject: 'How did we do?',
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
+    from,
+    conversationId,
     emailType: 'CsatRequestEmail',
   })
 }
@@ -1266,6 +1625,7 @@ export { InvitationEmail } from './templates/invitation'
 export { PortalInviteEmail } from './templates/portal-invite'
 export { WelcomeEmail } from './templates/welcome'
 export { MagicLinkEmail } from './templates/magic-link'
+export { SignupNotAllowedEmail } from './templates/signup-not-allowed'
 export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
 export { PostMentionEmail } from './templates/post-mention'
@@ -1278,6 +1638,18 @@ export { StatusIncidentPublishedEmail } from './templates/status-incident-publis
 export type { IncidentImpact } from './templates/status-incident-published'
 export { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 export { CsatRequestEmail, CSAT_FACES as CSAT_REQUEST_EMAIL_FACES } from './templates/csat-request'
+export { ConversationReplyEmail } from './templates/conversation-reply'
+export { ConversationMessageEmail } from './templates/conversation-message'
+export {
+  conversationReplySubject,
+  conversationMessageCopy,
+  assembleOutboundThreading,
+  isHumanReplyTemplate,
+  agentReplyDisplayName,
+  teamAlertSubject,
+} from './conversation-copy'
+export { ConversationClosedEmail } from './templates/conversation-closed'
+export { EMAIL_BILLABLE, isEmailBillable } from './mail-class'
 
 // ============================================================================
 // Address verification (add or change)

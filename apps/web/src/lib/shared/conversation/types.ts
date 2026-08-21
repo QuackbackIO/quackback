@@ -370,6 +370,9 @@ export const CONVERSATION_END_REASON_LABELS: Record<ConversationEndReason, strin
 export const CONVERSATION_SPAM_FILED_BY_LABELS: Record<ConversationSpamFiledBy, string> = {
   auto_responder: 'Auto-responder',
   sender_auth_failure: 'Sender-auth failure',
+  sender_auth_reject: 'Sender-auth refused',
+  sender_auth_arc_rescued: 'Forwarder-vouched, unverified',
+  mail_loop_suspected: 'Suspected mail loop',
   burst_rate: 'Burst rate',
   ai_classifier: 'AI classifier',
   manual: 'Manually filed',

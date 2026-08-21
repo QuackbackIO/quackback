@@ -5,10 +5,11 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'conversation-routing' })
 
-/** The routing config lives on the messenger config (widget JSON); null = off. */
+/** Shared routing config: metadata bag, with read-time fallback to messenger.routing. */
 async function getRoutingConfig() {
-  const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
-  return (await getMessengerConfig()).routing ?? null
+  const { getConversationRouting } =
+    await import('@/lib/server/domains/settings/settings.conversation-routing')
+  return await getConversationRouting()
 }
 
 /**

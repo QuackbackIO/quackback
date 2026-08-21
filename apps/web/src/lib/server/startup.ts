@@ -90,6 +90,24 @@ export function logStartupBanner(): void {
     'server started'
   )
 
+  // Surface a mail domain that names no domain, for the same reason as the AI
+  // check below: the failure is otherwise entirely silent. Every reader treats
+  // an unusable value as absent, which is the safe behaviour — nothing is minted
+  // and inbound mail is deferred rather than bounced — and safe here means the
+  // channel simply stops working with no line anywhere saying why. A stray comma
+  // in the domain a cutover is being carried on is exactly the typo this catches.
+  import('@/lib/server/domains/conversation/conversation.email-channel')
+    .then(({ invalidInboundDomainValues }) => {
+      for (const { variable, value } of invalidInboundDomainValues()) {
+        log.error(
+          { variable, value },
+          'inbound mail domain names no usable domain, so it is being ignored: no reply ' +
+            'address is minted on it and no mail is accepted for it'
+        )
+      }
+    })
+    .catch((err) => log.error({ err }, 'inbound mail domain validation failed'))
+
   // Surface half-configured AI loudly instead of failing silently (see #180).
   import('@/lib/server/domains/ai/config')
     .then(({ validateAiConfig }) => validateAiConfig())
@@ -207,6 +225,7 @@ function startBackgroundProcessing(): void {
     import('./domains/ai/usage-log'),
     import('./domains/assistant/tool-audit'),
     import('./domains/conversation/conversation-translation.service'),
+    import('./email/email-log.retention'),
     import('@/lib/server/sweep-lock'),
   ])
     .then(
@@ -217,6 +236,7 @@ function startBackgroundProcessing(): void {
         { cleanupExpiredLogs },
         { cleanupExpiredToolCalls, cleanupExpiredAssistantEvents },
         { cleanupExpiredMessageTranslations },
+        { runEmailLogRetention },
         { withSweepLock },
       ]) => {
         const runDailyAuditMaintenance = async () => {
@@ -248,6 +268,11 @@ function startBackgroundProcessing(): void {
               cleanupExpiredAssistantEvents(),
               cleanupExpiredMessageTranslations(),
             ]).catch((err) => log.error({ err }, 'logs retention cleanup failed'))
+          })
+          await withSweepLock('email_log_retention', ONE_HOUR, async () => {
+            await runEmailLogRetention().catch((err) =>
+              log.error({ err }, 'email log retention failed')
+            )
           })
         }
         setTimeout(() => {

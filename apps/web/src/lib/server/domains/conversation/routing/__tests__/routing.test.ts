@@ -6,7 +6,7 @@ const listOnlineAgentIds = vi.fn<() => Promise<string[]>>()
 let principalRows: Array<{ id: string; role: string }> = []
 // One row per open conversation currently assigned to an agent (counted in app code).
 let loadRows: Array<{ agent: string }> = []
-const getMessengerConfig = vi.fn()
+const getConversationRouting = vi.fn()
 
 vi.mock('@/lib/server/realtime/presence', () => ({
   listOnlineAgentIds: (...a: []) => listOnlineAgentIds(...a),
@@ -36,8 +36,8 @@ vi.mock('@/lib/server/db', () => {
   }
 })
 
-vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
-  getMessengerConfig: (...a: []) => getMessengerConfig(...a),
+vi.mock('@/lib/server/domains/settings/settings.conversation-routing', () => ({
+  getConversationRouting: (...a: []) => getConversationRouting(...a),
 }))
 
 import { autoAssignActiveStrategy, pickLeastLoaded } from '../strategies/auto-assign-active'
@@ -109,21 +109,26 @@ describe('autoAssignActiveStrategy', () => {
 
 describe('routeConversation', () => {
   it('does not assign (or even query agents) when routing is disabled', async () => {
-    getMessengerConfig.mockResolvedValue({
-      routing: { enabled: false, strategy: 'auto_assign_active' },
+    getConversationRouting.mockResolvedValue({
+      enabled: false,
+      strategy: 'auto_assign_active',
     })
     expect((await routeConversation(conversation)).assignedPrincipalId).toBeNull()
     expect(listOnlineAgentIds).not.toHaveBeenCalled()
   })
 
   it('does not assign when routing config is absent', async () => {
-    getMessengerConfig.mockResolvedValue({})
+    getConversationRouting.mockResolvedValue({
+      enabled: false,
+      strategy: 'auto_assign_active',
+    })
     expect((await routeConversation(conversation)).assignedPrincipalId).toBeNull()
   })
 
   it('delegates to the active-agent strategy when enabled', async () => {
-    getMessengerConfig.mockResolvedValue({
-      routing: { enabled: true, strategy: 'auto_assign_active' },
+    getConversationRouting.mockResolvedValue({
+      enabled: true,
+      strategy: 'auto_assign_active',
     })
     listOnlineAgentIds.mockResolvedValue(['principal_amy'])
     principalRows = [{ id: 'principal_amy', role: 'admin' }]
@@ -131,8 +136,9 @@ describe('routeConversation', () => {
   })
 
   it('fails soft to no assignment when the strategy throws', async () => {
-    getMessengerConfig.mockResolvedValue({
-      routing: { enabled: true, strategy: 'auto_assign_active' },
+    getConversationRouting.mockResolvedValue({
+      enabled: true,
+      strategy: 'auto_assign_active',
     })
     listOnlineAgentIds.mockRejectedValue(new Error('redis down'))
     expect((await routeConversation(conversation)).assignedPrincipalId).toBeNull()

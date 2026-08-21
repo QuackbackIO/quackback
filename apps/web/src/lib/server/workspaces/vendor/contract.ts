@@ -30,6 +30,7 @@
  *    same function.
  */
 import { z } from 'zod'
+import { MAIL_SLUG_MAX_LENGTH, MAIL_SLUG_PATTERN } from './mail-slug-pattern'
 import {
   SECRET_REF_SCHEMES,
   isSecretRefAllowedFor,
@@ -47,6 +48,16 @@ export { SECRET_REF_SCHEMES, type SecretRef }
  * Bumped when the record shape changes in a way a reader must notice. A reader
  * refuses a record whose version it does not implement, rather than reading a
  * familiar-looking subset of an unfamiliar record.
+ *
+ * "In a way a reader must notice" is the whole of the test, and it is narrower
+ * than "the shape changed". The gate below is exact equality, not a floor, so a
+ * bump is not a compatibility signal — it is a fleet-wide refusal that lasts
+ * until every replica carries the new reader. Purely ADDITIVE fields therefore
+ * do not bump it: an older reader that ignores a new column serves exactly what
+ * it served before, and trading that for a 503 on every hostname buys nothing.
+ * A bump is for a change that makes the OLD reading wrong — a field whose
+ * meaning moved, a value that stopped being what it says, an invariant that no
+ * longer holds.
  */
 export const WORKSPACE_REGISTRY_CONTRACT_VERSION = 1
 
@@ -166,6 +177,24 @@ export type WorkspaceRecord = {
   email: {
     /** EMAIL_FROM. The provider API key itself is fleet-wide. */
     from: string
+    /**
+     * This workspace's label in the fleet's single shared inbound mail domain:
+     * `<mailSlug>@<inbound domain>` reaches it, and a reply address is
+     * `<mailSlug>+<marker><conversation suffix>.<signature>@<inbound domain>`.
+     *
+     * Per-workspace rather than fleet-wide, and therefore a field: the inbound
+     * domain, its routing rule and the signing secret are all one-per-fleet, but
+     * the address has to name a workspace before anything can start resolving
+     * it. Conversation ids live in per-workspace databases, so a bare
+     * conversation id in an address identifies nothing until the workspace is
+     * already known.
+     *
+     * Minted once at registration and never recomputed. An address that has
+     * reached a customer's mail client outlives every other routing fact about a
+     * workspace, including its primary hostname, so this is the one identifier
+     * here that a hostname change must not move.
+     */
+    mailSlug: string
   }
 
   features: {
@@ -204,6 +233,21 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const DSN_RE = /^postgres(ql)?:\/\/[^:@/]+@[^@/:]+(:\d+)?\/[^/?]+(\?.*)?$/
 
 export const hostnameSchema = z.string().regex(HOSTNAME_RE, 'not a bare lowercase DNS hostname')
+
+/**
+ * The slug vocabulary itself lives in `mail-slug-pattern.ts` — a module with no
+ * imports, so the edge Email Worker can apply the identical rule without
+ * pulling this schema and zod into a workerd bundle. Re-exported here because
+ * this file remains the contract server code reads.
+ */
+export { MAIL_SLUG_MAX_LENGTH, MAIL_SLUG_PATTERN }
+
+export const mailSlugSchema = z
+  .string()
+  .regex(
+    MAIL_SLUG_PATTERN,
+    `not a legal mail slug: 1-${MAIL_SLUG_MAX_LENGTH} characters of a-z, 0-9 and '-'`,
+  )
 /**
  * Validated with the same parser the resolver uses, not merely a scheme check.
  *
@@ -277,7 +321,7 @@ export const workspaceRecordSchema = z.object({
   }),
   secrets: z.object({ appSecretsRef: fieldRefSchema('appSecrets') }),
   storage: workspaceStorageSchema,
-  email: z.object({ from: z.string().min(1) }),
+  email: z.object({ from: z.string().min(1), mailSlug: mailSlugSchema }),
   features: z.object({ aiEnabled: z.boolean() }),
 })
 

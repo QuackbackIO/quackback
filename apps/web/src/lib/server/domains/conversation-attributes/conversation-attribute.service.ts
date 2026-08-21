@@ -24,6 +24,8 @@ const log = logger.child({ component: 'conversation-attributes' })
 
 const SELECT_TYPES: ReadonlySet<string> = new Set(['select', 'multi_select'])
 
+export const ASSISTANT_ESCALATION_REASON_KEY = 'assistant_escalation_reason'
+
 /** Normalize a machine key: trimmed, lowercased, whitespace to underscores. */
 export function normalizeAttributeKey(key: string): string {
   return key.trim().toLowerCase().replace(/\s+/g, '_')
@@ -114,6 +116,36 @@ export async function listConversationAttributes(opts?: {
   } catch (error) {
     log.error({ err: error }, 'failed to list conversation attributes')
     throw new InternalError('DATABASE_ERROR', 'Failed to list conversation attributes', error)
+  }
+}
+
+/** Seed the system select used by handoff so the builder can branch on it. */
+export async function ensureAssistantEscalationReasonAttribute(): Promise<void> {
+  const [existing] = await db
+    .select({ id: conversationAttributeDefinitions.id })
+    .from(conversationAttributeDefinitions)
+    .where(eq(conversationAttributeDefinitions.key, ASSISTANT_ESCALATION_REASON_KEY))
+    .limit(1)
+  if (existing) return
+  const { ASSISTANT_HANDOFF_REASONS } = await import('@/lib/server/db')
+  const { HANDOFF_REASON_LABELS } = await import('@/lib/shared/conversation/types')
+  try {
+    await db.insert(conversationAttributeDefinitions).values({
+      key: ASSISTANT_ESCALATION_REASON_KEY,
+      label: 'Escalation reason',
+      description: 'Why the AI agent handed this conversation to the team.',
+      fieldType: 'select',
+      options: ASSISTANT_HANDOFF_REASONS.map((reason) => ({
+        id: reason,
+        label: HANDOFF_REASON_LABELS[reason] ?? reason,
+      })),
+      sourceHint: 'ai',
+      aiDetect: false,
+      detectOnClose: false,
+    })
+  } catch (err) {
+    if (isUniqueViolation(err)) return
+    throw err
   }
 }
 

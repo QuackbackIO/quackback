@@ -9,14 +9,15 @@ vi.mock('nodemailer', () => ({
 }))
 
 import { sendTicketEventEmail, type TicketEmailKind } from '../index'
+import { sendingAs } from './brands'
 
 const ENV_KEYS = [
   'EMAIL_SMTP_HOST',
   'EMAIL_SMTP_PORT',
   'EMAIL_SMTP_USER',
   'EMAIL_SMTP_PASS',
-  'EMAIL_RESEND_API_KEY',
-  'RESEND_API_KEY',
+  'EMAIL_SES_ACCESS_KEY_ID',
+  'EMAIL_SES_SECRET_ACCESS_KEY',
   'EMAIL_FROM',
 ]
 
@@ -98,7 +99,7 @@ describe('sendTicketEventEmail', () => {
       kind: 'reply',
       messageBody: 'Full reply body',
       authorName: 'Sarah',
-      from: 'support@acme-support.example.com',
+      from: sendingAs('support@acme-support.example.com'),
       replyTo: 'inbound+tkt-ticket_1-abc123@mail.example.com',
       messageId: 'msg-1@mail.example.com',
       inReplyTo: 'ticket-ticket_1@mail.example.com',
