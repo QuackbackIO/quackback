@@ -193,7 +193,7 @@ describe('tenant scheduler', () => {
         return null
       },
     })
-    await recoverPendingWork(scheduler, async () => ['ws_now', 'ws_later'], 2)
+    await recoverPendingWork(scheduler, async () => ['ws_now', 'ws_later'])
     expect(ran.sort()).toEqual(['ws_later', 'ws_now'])
     expect(scheduler.peek()?.tenantId).toBe('ws_later')
     clock.advance(45_000)

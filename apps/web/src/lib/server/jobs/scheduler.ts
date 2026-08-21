@@ -38,7 +38,6 @@ const log = logger.child({ component: 'job-scheduler' })
 export const NODE_MAX_TIMEOUT_MS = 2_147_483_647
 
 const DEFAULT_FANOUT = 8
-const DEFAULT_STARTUP_CONCURRENCY = 4
 const BAD_TENANT_RETRY_MS = 60_000
 const MAX_PASSES = 64
 
@@ -382,29 +381,15 @@ export async function stopTenantScheduler(): Promise<void> {
 /**
  * Reconstruct pending work after a process start.
  *
- * This is the only fleet scan. It is not repeated on an interval. At the
- * current fleet size (under 20 tenants) a bounded concurrent pass is
- * cheaper than a second durable scheduler. Revisit when startup exceeds
- * ~30s or the active fleet exceeds ~200 tenants.
+ * This is the only fleet scan. It is not repeated on an interval.
  */
 export async function recoverPendingWork(
   scheduler: TenantScheduler,
-  list: () => Promise<string[]> = listRecoverableTenants,
-  concurrency = envInt('JOB_STARTUP_SCAN_CONCURRENCY', DEFAULT_STARTUP_CONCURRENCY, 1, 32)
+  list: () => Promise<string[]> = listRecoverableTenants
 ): Promise<void> {
   const keys = await list()
-  log.info({ tenants: keys.length, concurrency }, 'scheduler startup recovery')
-  let index = 0
-  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, keys.length || 1)) }, () =>
-    (async () => {
-      while (index < keys.length) {
-        const key = keys[index]
-        index += 1
-        scheduler.signal(key)
-      }
-    })()
-  )
-  await Promise.all(workers)
+  log.info({ tenants: keys.length }, 'scheduler startup recovery')
+  for (const key of keys) scheduler.signal(key)
   await scheduler.idle()
 }
 
@@ -412,12 +397,4 @@ async function listRecoverableTenants(): Promise<string[]> {
   if (!isPooledTenancy()) return [SINGLE_TENANT_ID]
   const { tenants } = await listActiveTenants()
   return tenants.map((w) => w.tenantId)
-}
-
-function envInt(name: string, fallback: number, min: number, max: number): number {
-  const raw = process.env[name]
-  if (!raw) return fallback
-  const n = Number(raw)
-  if (!Number.isInteger(n) || n < min || n > max) return fallback
-  return n
 }
