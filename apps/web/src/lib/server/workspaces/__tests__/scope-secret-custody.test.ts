@@ -428,17 +428,13 @@ describe('the export surface cannot re-widen', () => {
     expect(exercised).toBe(allowed.size)
   })
 
-  it('keeps the two accessors off the workspaces module’s public face', async () => {
+  it('keeps the two accessors off any workspaces public face', async () => {
     // `secret-key.ts` and `storage/s3.ts` import them from `workspace-context`
-    // directly. Adding them to the barrel would put the storage credential one
+    // directly. A barrel would put the storage credential one
     // `@/lib/server/workspaces` import away from anything, which is the shape of
-    // the leak being closed.
-    const barrel = await import('../index')
-
-    expect(barrel).not.toHaveProperty('getWorkspaceSecretKey')
-    expect(barrel).not.toHaveProperty('getWorkspaceStorageCredential')
-    expect(barrel).not.toHaveProperty('getCurrentWorkspaceSecrets')
-    // CONTROL: the barrel is the real one and does re-export the scope itself.
-    expect(barrel).toHaveProperty('getWorkspaceScope')
+    // the leak being closed. The barrel is gone.
+    const { existsSync } = await import('node:fs')
+    const { fileURLToPath } = await import('node:url')
+    expect(existsSync(fileURLToPath(new URL('../index.ts', import.meta.url)))).toBe(false)
   })
 })
