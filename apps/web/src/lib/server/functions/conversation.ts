@@ -418,10 +418,11 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
  * the widget loader calls it server-side to SSR-seed the same value so the first
  * paint matches what the poll reports.
  *
- * The Redis/DB reads stay INSIDE the handler so the server-fn transform strips
- * them — and their transitive `ioredis` import — from the client bundle. A plain
- * exported helper holding these dynamic imports would leak ioredis client-side
- * and break the build, so callers (incl. the loader) must go through this fn.
+ * The database reads stay INSIDE the handler so the server-fn transform strips
+ * them — and their transitive `postgres` import — from the client bundle. A
+ * plain exported helper holding these dynamic imports would leak the database
+ * stack client-side and trip `vite.config.ts`'s import protection, so callers
+ * (incl. the loader) must go through this fn.
  */
 export const getConversationPresenceFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<ConversationPresence> => {

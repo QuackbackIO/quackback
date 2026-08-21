@@ -1,7 +1,7 @@
 /**
  * Unit coverage for the widget entry-point rate limits (Phase 6 R1): under the
- * cap allows, over the cap blocks with a retry-after, and a Redis error fails
- * open. The redis-rate-bucket primitive is mocked so this pins only the policy.
+ * cap allows, over the cap blocks with a retry-after, and a store error fails
+ * open. The rate-bucket primitive is mocked so this pins only the policy.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -9,7 +9,7 @@ const { incrementBuckets, bucketRetryAfter } = vi.hoisted(() => ({
   incrementBuckets: vi.fn(),
   bucketRetryAfter: vi.fn().mockResolvedValue(42),
 }))
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({ incrementBuckets, bucketRetryAfter }))
+vi.mock('@/lib/server/utils/rate-bucket', () => ({ incrementBuckets, bucketRetryAfter }))
 
 import { checkAnonMintRateLimit, checkWidgetIdentifyRateLimit } from '../widget-rate-limit'
 

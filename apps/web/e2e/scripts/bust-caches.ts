@@ -1,12 +1,14 @@
 /**
- * CLI: delete the given Redis cache keys so a running dev server picks up
- * raw-SQL mutations immediately. Used by the e2e helpers instead of exec-ing
- * redis-cli inside the Redis container, so cache busting also works in CI
- * where no docker access is available.
+ * CLI: delete the given cache keys so a running dev server picks up raw-SQL
+ * mutations immediately.
+ *
+ * The cache is `kv_store` in the workspace's own database, so this is a DELETE
+ * over the same DATABASE_URL every other e2e script already uses — which is
+ * also why it works in CI, where there is no docker exec to fall back on.
  *
  * Usage: bun bust-caches.ts <key> [key...]
  */
-import Redis from 'ioredis'
+import { openDb, deleteCacheKeys } from './_lib'
 
 const keys = process.argv.slice(2)
 if (keys.length === 0) {
@@ -14,21 +16,14 @@ if (keys.length === 0) {
   process.exit(1)
 }
 
-const redisUrl = process.env.REDIS_URL
-if (!redisUrl) {
-  console.error('REDIS_URL environment variable is required')
-  process.exit(1)
-}
-
-const redis = new Redis(redisUrl, { lazyConnect: true, connectTimeout: 5000 })
+const sql = openDb()
 
 try {
-  await redis.connect()
-  const deleted = await redis.del(...keys)
+  const deleted = await deleteCacheKeys(sql, keys)
   console.log(JSON.stringify({ deleted }))
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err))
   process.exitCode = 1
 } finally {
-  redis.disconnect()
+  await sql.end()
 }

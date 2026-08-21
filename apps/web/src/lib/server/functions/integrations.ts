@@ -5,7 +5,8 @@ import { db, integrations, integrationEventMappings, eq, and, sql } from '@/lib/
 import type { IntegrationId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
-// cacheDel/CACHE_KEYS are imported dynamically inside handlers to keep ioredis out of the client bundle
+// cacheDel/CACHE_KEYS are imported dynamically inside handlers to keep the
+// database stack out of the client bundle
 
 const log = logger.child({ component: 'integrations' })
 
@@ -98,7 +99,7 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
         })
     }
 
-    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
     log.info({ integration_id: data.id }, 'integration updated')
     return { success: true }
@@ -149,7 +150,7 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
 
     await db.delete(integrations).where(eq(integrations.id, integrationId))
 
-    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
     log.info({ integration_id: data.id }, 'integration deleted')
     return { id: data.id }
@@ -227,7 +228,7 @@ export const addNotificationChannelFn = createServerFn({ method: 'POST' })
         },
       })
 
-    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
     log.info(
       { channel_id: data.channelId, event_count: data.events.length },
@@ -287,7 +288,7 @@ export const updateNotificationChannelFn = createServerFn({ method: 'POST' })
         )
       )
 
-    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
     log.info({ channel_id: data.channelId }, 'notification channel updated')
     return { success: true }
@@ -313,7 +314,7 @@ export const removeNotificationChannelFn = createServerFn({ method: 'POST' })
         )
       )
 
-    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+    const { cacheDel, CACHE_KEYS } = await import('@/lib/server/cache')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
     log.info({ channel_id: data.channelId }, 'notification channel removed')
     return { success: true }

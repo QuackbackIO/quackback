@@ -12,7 +12,7 @@
 import type { IntegrationId } from '@quackback/ids'
 import { decryptSecrets, encryptSecrets } from './encryption'
 import { db, integrations, eq } from '@/lib/server/db'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'token-refresh' })

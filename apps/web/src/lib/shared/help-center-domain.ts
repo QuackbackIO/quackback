@@ -2,7 +2,7 @@
  * Pure host-matching helpers for the help center custom domain (domains/
  * languages §1). Client-safe: route files evaluate the default-host ->
  * custom-domain 301 in beforeLoad, which is client-bundled, so these must not
- * pull the server-only domain service (settings/redis/db) into that graph.
+ * pull the server-only domain service (settings/cache/db) into that graph.
  * The service re-exports them for server callers.
  */
 import type { HelpCenterDomainConfig } from '@/lib/shared/types/settings'

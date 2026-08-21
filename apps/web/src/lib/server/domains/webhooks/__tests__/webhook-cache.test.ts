@@ -8,10 +8,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PrincipalId, WebhookId } from '@quackback/ids'
 
-// --- Redis cache mocks ---
+// --- Cache mocks ---
 const mockCacheDel = vi.fn()
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheDel: (...args: unknown[]) => mockCacheDel(...args),
   CACHE_KEYS: {
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',

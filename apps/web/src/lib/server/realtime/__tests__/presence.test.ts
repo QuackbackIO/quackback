@@ -1,102 +1,107 @@
+/**
+ * Presence fail-directions.
+ *
+ * The behavioural cases this file used to hold — online for the life of a
+ * stream, not-offline until the last stream closes, ghost pruning, no duplicate
+ * on heartbeat — moved to `presence-concurrency.db.test.ts`, where they run
+ * against a real server. They had been asserted against an in-memory fake of
+ * Redis's sorted sets, which cannot exist now and which could never have shown
+ * the defect the real-server suite found on its first run.
+ *
+ * What stays here is the half a database test cannot easily produce: what each
+ * function does when the store is *unreachable*. Those directions are not
+ * uniform and each was chosen for a reason, so each gets a case.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Minimal in-memory Redis sorted-set fake — enough to exercise the per-principal
-// stream-set presence logic realistically (incl. cross-replica + crash pruning).
-const store = new Map<string, Map<string, number>>()
-const set = (key: string) => {
-  let z = store.get(key)
-  if (!z) store.set(key, (z = new Map()))
-  return z
-}
-const fakeRedis = {
-  zadd: vi.fn(async (key: string, score: number, member: string) => {
-    set(key).set(member, score)
-  }),
-  zrem: vi.fn(async (key: string, member: string) => {
-    const z = store.get(key)
-    if (z) {
-      z.delete(member)
-      if (z.size === 0) store.delete(key) // Redis drops empty sorted sets
-    }
-  }),
-  zremrangebyscore: vi.fn(async (key: string, min: number, max: number) => {
-    const z = store.get(key)
-    if (!z) return
-    for (const [m, s] of z) if (s >= min && s <= max) z.delete(m)
-    if (z.size === 0) store.delete(key)
-  }),
-  zcard: vi.fn(async (key: string) => store.get(key)?.size ?? 0),
-  zrange: vi.fn(async (key: string) => [...(store.get(key)?.keys() ?? [])]),
-  expire: vi.fn(async () => {}),
-  // Mirrors CLEAR_PRESENCE_SCRIPT (the only eval) against the in-memory store.
-  eval: vi.fn(async (_script: string, numKeys: number, ...args: string[]) => {
-    const [streamsK, agentsK] = args.slice(0, numKeys)
-    const [streamId, cutoff, principalId, isAgent] = args.slice(numKeys)
-    await fakeRedis.zrem(streamsK, streamId)
-    await fakeRedis.zremrangebyscore(streamsK, 0, Number(cutoff))
-    if ((await fakeRedis.zcard(streamsK)) > 0) return 0
-    if (isAgent === '1') await fakeRedis.zrem(agentsK, principalId)
-    return 1
-  }),
-}
-vi.mock('../../redis', () => ({ getRedis: () => fakeRedis }))
+const hoisted = vi.hoisted(() => ({
+  fail: false,
+  boom: () => {
+    throw new Error('database unreachable')
+  },
+}))
 
-import {
+vi.mock('@/lib/server/db', () => ({
+  db: {
+    execute: async () => {
+      if (hoisted.fail) hoisted.boom()
+      return []
+    },
+    transaction: async (fn: (tx: unknown) => unknown) => {
+      if (hoisted.fail) hoisted.boom()
+      return fn({ execute: async () => [] })
+    },
+    select: () => ({ from: () => ({ where: async () => [] }) }),
+    update: () => ({ set: () => ({ where: async () => undefined }) }),
+  },
+  principal: { id: 'id', chatAvailability: 'chat_availability' },
+  eq: () => null,
+  and: () => null,
+  inArray: () => null,
+}))
+
+const {
   markPresent,
-  refreshPresence,
   clearPresence,
   isPrincipalOnline,
   isAnyAgentOnline,
-  PRESENCE_TTL_SECONDS,
-} from '../presence'
-import type { PrincipalId } from '@quackback/ids'
+  listOnlineAgentIds,
+  listAvailableAgentIds,
+} = await import('../presence')
+type PrincipalId = Parameters<typeof isPrincipalOnline>[0]
 
-const A = 'principal_a' as unknown as PrincipalId
+const A = 'principal_a' as PrincipalId
 
-describe('presence (per-principal stream set)', () => {
-  beforeEach(() => store.clear())
+beforeEach(() => {
+  hoisted.fail = false
+})
 
-  it('marks a principal online for the lifetime of a stream', async () => {
-    expect(await isPrincipalOnline(A)).toBe(false)
-    await markPresent(A, 'stream-1', false)
-    expect(await isPrincipalOnline(A)).toBe(true)
-    expect(await clearPresence(A, 'stream-1', false)).toBe(true) // last stream → offline
+describe('when the store is unreachable', () => {
+  it('markPresent swallows the failure — a stream must still open', async () => {
+    hoisted.fail = true
+    await expect(markPresent(A, 's', true)).resolves.toBeUndefined()
+  })
+
+  it('clearPresence returns false — never report an offline we could not write', async () => {
+    // The caller re-queues an agent's unanswered conversations on a `true`, so a
+    // fabricated offline moves live work off an agent who never left.
+    hoisted.fail = true
+    expect(await clearPresence(A, 's', true)).toBe(false)
+  })
+
+  it('isPrincipalOnline fails CLOSED — a redundant email beats a reply nobody sees', async () => {
+    hoisted.fail = true
     expect(await isPrincipalOnline(A)).toBe(false)
   })
 
-  it('stays online (and reports not-offline) until the LAST stream closes', async () => {
-    // Two concurrent streams (e.g. two replicas / tabs) for the same principal.
-    await markPresent(A, 'stream-1', true)
-    await markPresent(A, 'stream-2', true)
-    // Closing the first is NOT "went offline" — the other is still live.
-    expect(await clearPresence(A, 'stream-1', true)).toBe(false)
-    expect(await isPrincipalOnline(A)).toBe(true)
+  it('isAnyAgentOnline fails OPEN — the widget claims staffed rather than shutting chat off', async () => {
+    // Deliberately the opposite direction to its neighbours. Pinned so a later
+    // "consistency" tidy-up has to argue with a test rather than a comment.
+    hoisted.fail = true
     expect(await isAnyAgentOnline()).toBe(true)
-    // Closing the last one is.
-    expect(await clearPresence(A, 'stream-2', true)).toBe(true)
+  })
+
+  it('listOnlineAgentIds fails CLOSED — leave conversations unassigned, never mis-route', async () => {
+    hoisted.fail = true
+    expect(await listOnlineAgentIds()).toEqual([])
+  })
+
+  it('listAvailableAgentIds short-circuits an empty input without touching the store', async () => {
+    hoisted.fail = true
+    expect(await listAvailableAgentIds([])).toEqual([])
+  })
+})
+
+describe('when the store is reachable', () => {
+  it('the same functions do not report the failure values', async () => {
+    // The positive control. Without it every assertion above is satisfied by a
+    // function that always returns its failure value.
     expect(await isPrincipalOnline(A)).toBe(false)
+    expect(await listOnlineAgentIds()).toEqual([])
+    expect(await clearPresence(A, 's', true)).toBe(false)
+    // `db.execute` returns no rows here, so `went_offline` is undefined and the
+    // guarded read yields false rather than throwing — the shape a malformed
+    // reply takes.
     expect(await isAnyAgentOnline()).toBe(false)
-  })
-
-  it('prunes a crashed replica’s stale stream so it cannot keep a principal online', async () => {
-    // A ghost stream whose last heartbeat is older than the TTL.
-    set(`conversation:presence:streams:${A}`).set(
-      'ghost',
-      Date.now() - (PRESENCE_TTL_SECONDS + 5) * 1000
-    )
-    expect(await isPrincipalOnline(A)).toBe(false) // stale member pruned on read
-  })
-
-  it('does not report a clean offline when Redis throws', async () => {
-    await markPresent(A, 'stream-1', true)
-    fakeRedis.eval.mockRejectedValueOnce(new Error('redis down'))
-    expect(await clearPresence(A, 'stream-1', true)).toBe(false)
-  })
-
-  it('refreshPresence keeps the stream live without adding a duplicate', async () => {
-    await markPresent(A, 'stream-1', false)
-    await refreshPresence(A, 'stream-1', false)
-    expect(await isPrincipalOnline(A)).toBe(true)
-    expect(store.get(`conversation:presence:streams:${A}`)?.size).toBe(1)
   })
 })

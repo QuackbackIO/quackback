@@ -1,7 +1,7 @@
 /**
  * Tests for the SSO test-callback helper that the auth catch-all route
  * calls (for any `/api/auth/oauth2/callback/*` path) before handing off
- * to Better-Auth. State-keyed Redis lookup is the discriminator: a hit
+ * to Better-Auth. State-keyed KV lookup is the discriminator: a hit
  * means "this is an admin Test sign-in, run the diagnostic handshake
  * and render the popup HTML"; a miss means "let Better-Auth handle it
  * as a normal OAuth callback."
@@ -20,7 +20,7 @@ const hoisted = vi.hoisted(() => ({
   markTestSucceeded: vi.fn(),
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: hoisted.cacheGet,
   cacheSet: hoisted.cacheSet,
   cacheDel: hoisted.cacheDel,

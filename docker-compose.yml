@@ -1,5 +1,5 @@
 # ============================================================================
-# DEVELOPMENT infrastructure only — Postgres, MinIO, Dragonfly, Mailpit.
+# DEVELOPMENT infrastructure only — Postgres, MinIO, Mailpit.
 # Started by `bun run setup` / `bun run dev`; the app itself runs on the host
 # via `bun run dev`, so there is NO app service here.
 #
@@ -53,26 +53,6 @@ services:
       timeout: 5s
       retries: 5
 
-  dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
-    container_name: quackback-dragonfly
-    restart: unless-stopped
-    # BullMQ requires cluster_mode=emulated + lock_on_hashtags for Lua script compatibility.
-    # Queue names use hashtags (e.g. {event-hooks}) to pin keys to a single thread.
-    # See: https://www.dragonflydb.io/docs/integrations/bullmq
-    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
-    ports:
-      - '6379:6379'
-    volumes:
-      - dragonfly_data:/data
-    ulimits:
-      memlock: -1
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   mailpit:
     image: axllent/mailpit:latest
     container_name: quackback-mailpit
@@ -105,4 +85,3 @@ services:
 volumes:
   postgres_data:
   minio_data:
-  dragonfly_data:

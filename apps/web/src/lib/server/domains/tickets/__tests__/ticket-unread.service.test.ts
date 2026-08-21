@@ -31,7 +31,7 @@ import {
   markTicketUnreadFromMessage,
 } from '../ticket-unread.service'
 
-// Realtime publish (unified inbox §3.2, M3): neutralize the real Redis-backed
+// Realtime publish (unified inbox §3.2, M3): neutralize the real Postgres-backed
 // publish so these DB-fixture tests stay deterministic, and assert the mark-
 // read writes wire it.
 const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))

@@ -314,10 +314,10 @@ export async function dispatchWorkflowTrigger(
   // caveat as above — runWorkflow's transaction-scoped re-check is authoritative.
   //
   // Each workflow is isolated in its own try/catch: this call runs inside the
-  // workflow-dispatch BullMQ job (see event-trigger.ts), so an uncaught
-  // rejection here would fail the whole job and let BullMQ retry it. With
+  // workflow-dispatch job (see event-trigger.ts), so an uncaught
+  // rejection here would fail the whole job and let the job queue retry it. With
   // Promise.all over uncaught per-workflow promises, one workflow throwing
-  // after siblings already committed their runs (e.g. a transient Redis error
+  // after siblings already committed their runs (e.g. a transient database error
   // scheduling a wait, thrown from deep inside runWorkflow) would reject the
   // batch and cause the retry to re-run those already-committed siblings —
   // there's no idempotency guard for that (the exclusive partial index only

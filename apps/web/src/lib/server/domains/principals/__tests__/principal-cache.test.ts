@@ -11,7 +11,7 @@ import type { PrincipalId, UserId } from '@quackback/ids'
 
 const mockCacheDel = vi.fn()
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheDel: (...args: unknown[]) => mockCacheDel(...args),
   CACHE_KEYS: {
     PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}`,

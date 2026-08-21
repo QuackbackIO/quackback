@@ -69,7 +69,7 @@ export async function isAuthMethodAllowed(
   /** Optional pre-fetched tenant settings to skip the cache hit. Used
    *  by hooks.ts where the same settings already drove a hard-binding
    *  check earlier in the request — passing it through avoids a
-   *  redundant Redis round-trip per sign-in attempt. */
+   *  redundant cache round-trip per sign-in attempt. */
   tenantSettings?: Awaited<ReturnType<typeof getTenantSettings>>
 ): Promise<AuthMethodResult> {
   // Any registered OIDC provider is a method for every role; role governs

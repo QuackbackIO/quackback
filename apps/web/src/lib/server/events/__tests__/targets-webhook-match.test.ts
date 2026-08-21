@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 // --- Minimal mocks so targets.ts module loads ---
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),

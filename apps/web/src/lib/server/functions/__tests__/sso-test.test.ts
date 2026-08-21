@@ -5,7 +5,7 @@
  *    `listIdentityProviders`, fetches the credential secret via
  *    `getIdentityProviderCredentials`, builds a per-provider OIDC authorize
  *    URL (S256 PKCE — mirrors prod genericOAuth's pkce: true), persists a
- *    TestSession (carrying registrationId) to Redis, and returns the
+ *    TestSession (carrying registrationId) to the KV store, and returns the
  *    authorize URL with a redirect_uri matching the provider's own
  *    production callback.
  *  - getSsoTestResultFn gates on admin auth, polls the result key, and
@@ -48,7 +48,7 @@ const hoisted = vi.hoisted(() => ({
   safeFetch: vi.fn(),
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: hoisted.cacheGet,
   cacheSet: hoisted.cacheSet,
   cacheDel: hoisted.cacheDel,
@@ -149,7 +149,7 @@ describe('startSsoTestFn', () => {
     expect(result.authorizeUrl).toMatch(/code_challenge_method=S256/)
     expect(hoisted.cacheSet).toHaveBeenCalledTimes(1)
 
-    // Session persisted to Redis must carry the registrationId.
+    // Session persisted to the KV store must carry the registrationId.
     const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
     expect(session.registrationId).toBe('sso')
   })

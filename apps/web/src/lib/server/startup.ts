@@ -3,9 +3,8 @@
  * Build-time constants are injected via Vite `define`; runtime info is read at call time.
  */
 import { logger } from '@/lib/server/logger'
-import { closeAllWorkers, initAllWorkers } from './queue/worker-registry'
-import { getProcessRole, shouldRunWorkers } from './queue/role'
-import { validateRuntimeConfig } from './config'
+import { getProcessRole, shouldRunWorkers } from './process-role'
+import { config, validateRuntimeConfig } from './config'
 
 const log = logger.child({ component: 'startup' })
 
@@ -13,11 +12,10 @@ let _logged = false
 let _shutdownWired = false
 
 /**
- * Wire SIGTERM/SIGINT to gracefully drain BullMQ queues + workers and
- * close the shared Redis connection. BullMQ's stalled-job checker
- * recovers any in-flight jobs on the next startup, but shutting down
- * cleanly avoids spurious "stalled" reports and double-billing on
- * AI/webhook handlers that are mid-flight.
+ * Wire SIGTERM/SIGINT to drain the job tier and close the remaining Postgres
+ * connections cleanly. A job left mid-flight is not lost — its lease lapses and
+ * the reaper adjudicates it — but draining avoids abandoning work that was
+ * seconds from finishing, and avoids double-billing an AI call.
  *
  * 30s overall budget — if any worker hangs (e.g. a 60s OpenAI call),
  * we force-exit so k8s/systemd doesn't SIGKILL us mid-cleanup.
@@ -42,21 +40,18 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        // Stop the relay before closing BullMQ/Redis so a final poll cannot
+        // Stop the relay before closing the queue so a final poll cannot
         // enqueue into a queue that is already draining.
         await import('./events/relay').then(({ stopOutboxRelay }) => stopOutboxRelay())
 
-        // Drain every registered queue/worker. One list drives boot and
-        // shutdown, so nothing can be booted but left undrained.
-        await closeAllWorkers()
+        // Stop the Postgres job tier's loops and release its LISTEN
+        // connections. Jobs already running are awaited within this shutdown
+        // budget; anything left after process death is adjudicated by its lease.
+        await import('./jobs/tier').then(({ stopJobTier }) => stopJobTier())
 
         // Drain the conversation pub/sub subscriber connection before the
         // shared client closes — it's a separate long-lived socket.
         await import('./realtime/pubsub').then(({ closeSubscriber }) => closeSubscriber())
-
-        // After all queues + workers have closed, quit the shared
-        // IORedis client so we don't leave a half-open socket behind.
-        await import('./queue/redis-config').then(({ closeQueueRedis }) => closeQueueRedis())
 
         clearTimeout(forceExit)
         log.info('shutdown complete')
@@ -104,9 +99,20 @@ export function logStartupBanner(): void {
     .then(({ validateAiConfig }) => validateAiConfig())
     .catch((err) => log.error({ err }, 'ai config validation failed'))
 
-  import('@/integrations/segment/server/user-sync')
-    .then(({ warnIfSegmentInboundIsInsecure }) => warnIfSegmentInboundIsInsecure())
-    .catch((err) => log.error({ err }, 'failed to validate Segment inbound configuration'))
+  if (config.isPooledTenancy && !shouldRunWorkers()) {
+    log.info(
+      'pooled tenancy on a web replica — integration config validation runs on the worker tier'
+    )
+  } else {
+    Promise.all([
+      import('@/integrations/segment/server/user-sync'),
+      import('@/lib/server/tenancy/fleet'),
+    ])
+      .then(([{ warnIfSegmentInboundIsInsecure }, { runFleetPass }]) =>
+        runFleetPass('sweep', () => warnIfSegmentInboundIsInsecure())
+      )
+      .catch((err) => log.error({ err }, 'failed to validate Segment inbound configuration'))
+  }
 
   // Wire SIGTERM/SIGINT once — the rest of this function spawns
   // long-lived workers + sweepers, so register the drain handler before
@@ -116,16 +122,29 @@ export function logStartupBanner(): void {
   // One-time in-place data backfills (idempotent, advisory-locked). Runs the
   // custom-oidc → identity_provider migration that needs SECRET_KEY to decrypt
   // its credential and so can't live in the SQL migration bundle.
-  import('@/lib/server/auth/backfill-custom-oidc-provider')
-    .then(({ runStartupBackfills }) => runStartupBackfills())
-    .catch((err) => log.error({ err }, 'failed to run startup backfills'))
+  if (config.isPooledTenancy && !shouldRunWorkers()) {
+    log.info('pooled tenancy on a web replica — startup backfills are left to the worker tier')
+  } else {
+    Promise.all([
+      import('@/lib/server/auth/backfill-custom-oidc-provider'),
+      import('@/lib/server/tenancy/fleet'),
+    ])
+      .then(([{ runStartupBackfills }, { runFleetPass }]) =>
+        runFleetPass('sweep', () => runStartupBackfills())
+      )
+      .catch((err) => log.error({ err }, 'failed to run startup backfills'))
+  }
 
   // Quackback config file watcher — reconciles managed fields from
   // /etc/quackback/config.yaml on every change. No-op when the file
   // is absent (self-host default).
-  import('@/lib/server/config-file')
-    .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
-    .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
+  if (config.isPooledTenancy) {
+    log.info('pooled tenancy — the single config-file watcher is not started')
+  } else {
+    import('@/lib/server/config-file')
+      .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
+      .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
+  }
 
   // Background processing is role-gated: QUACKBACK_ROLE=web replicas serve
   // HTTP and enqueue only, so scaling them never scales queue consumption.
@@ -152,17 +171,52 @@ export function logStartupBanner(): void {
  * replicas stay safe.
  */
 function startBackgroundProcessing(): void {
-  // Boot every eagerly-initialized queue worker from the registry. Each init
-  // is isolated: one failure is logged without blocking the rest.
-  initAllWorkers()
+  // Every background queue now drains from durable rows in the workspace's
+  // Postgres database. The tier owns its leases, schedules and
+  // shutdown path.
+  import('./jobs/tier')
+    .then(({ startJobTier }) => startJobTier())
+    .catch((err) => log.error({ err }, 'failed to start the job tier'))
+
+  // The old analytics queue created today's partition as a side effect of
+  // worker construction. Keep that boot guarantee now that no queue object is
+  // constructed, and scope it across the fleet when pooling is enabled.
+  Promise.all([
+    import('./domains/analytics/partition-maintenance-queue'),
+    import('@/lib/server/tenancy/fleet'),
+  ])
+    .then(([{ ensurePageViewPartitionsAtBoot }, { runFleetPass }]) =>
+      runFleetPass('sweep', () => ensurePageViewPartitionsAtBoot())
+    )
+    .catch((err) => log.error({ err }, 'boot-time partition ensure failed'))
 
   // Durable event outbox relay (EVENTING-V2 WO-3). Leader-elected, so multiple
   // worker replicas stay safe. Post-cutover (WO-18) the outbox is the SOLE
   // delivery path, so the relay always runs here — the only gate is
   // QUACKBACK_ROLE (worker/all), enforced inside startOutboxRelay().
-  import('./events/relay')
-    .then(({ startOutboxRelay }) => startOutboxRelay())
-    .catch((err) => log.error({ err }, 'failed to start outbox relay'))
+  if (config.isPooledTenancy) {
+    log.warn(
+      'pooled tenancy — the legacy outbox relay is not started; event dispatch remains on the PR 2 boundary'
+    )
+  } else {
+    import('./events/relay')
+      .then(({ startOutboxRelay }) => startOutboxRelay())
+      .catch((err) => log.error({ err }, 'failed to start outbox relay'))
+  }
+
+  // Space reclamation for the tables that replaced Redis (kv_store,
+  // rate_bucket, kv_set_member, presence_stream, realtime_overflow).
+  Promise.all([import('./kv/sweep'), import('@/lib/server/sweep-lock')])
+    .then(([{ sweepExpiredKv }, { withSweepLock }]) => {
+      const ONE_HOUR = 60 * 60 * 1000
+      const runKvSweep = () =>
+        withSweepLock('kv_sweep', ONE_HOUR, async () => {
+          await sweepExpiredKv().catch((err) => log.error({ err }, 'kv sweep failed'))
+        })
+      setTimeout(() => void runKvSweep(), 45_000)
+      setInterval(() => void runKvSweep(), ONE_HOUR)
+    })
+    .catch((err) => log.error({ err }, 'failed to init kv sweep'))
 
   // Audit-log retention sweep + expired portal/team invite sweep.
   // Daily maintenance runs under a cross-instance lock so only one

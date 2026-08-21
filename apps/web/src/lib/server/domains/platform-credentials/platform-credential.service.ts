@@ -14,7 +14,7 @@
 
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
-import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { encryptPlatformCredentials } from '@/lib/server/integrations/encryption'
 import { config } from '@/lib/server/config'
 import { DbCredentialSource, EnvCredentialSource, type CredentialSource } from './credential-source'
@@ -117,7 +117,7 @@ export async function savePlatformCredentials({
     await bumpAuthConfigVersionInTx(tx)
   })
   resetAuth()
-  // One Redis round-trip drops both keys (TENANT_SETTINGS for the
+  // One cache round-trip drops both keys (TENANT_SETTINGS for the
   // version-check fallback, PLATFORM_INTEGRATION_TYPES for the cached
   // configured-types Set hit by getRegisteredAuthProviders).
   await cacheDel(
@@ -134,8 +134,8 @@ export async function savePlatformCredentials({
  * Returns null if not configured.
  *
  * Intentionally NOT cached — the returned value contains decrypted OAuth
- * client secrets / bot tokens, and Redis snapshots / replication shouldn't
- * carry plaintext credentials.
+ * client secrets / bot tokens, and cache rows (and their backups/replicas)
+ * shouldn't carry plaintext credentials.
  */
 export async function getPlatformCredentials(
   integrationType: string
@@ -161,14 +161,14 @@ export async function hasPlatformCredentials(integrationType: string): Promise<b
 export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
   // Deduped per request: several bootstrap/auth callers (getRegisteredAuthProviders
   // alone hits it twice) invoke this within one request, and even the cached path
-  // costs a Redis round-trip. memoizePerRequest shares one computation across all
+  // costs a cache round-trip. memoizePerRequest shares one computation across all
   // callers in the same request and transparently no-ops outside a request scope.
   return memoizePerRequest('platform-cred:configured-types', computeConfiguredIntegrationTypes)
 }
 
 async function computeConfiguredIntegrationTypes(): Promise<Set<string>> {
   // env mode: derive from the pod's current env on every call. There is no write
-  // path to invalidate a Redis entry in env mode, so caching would serve a stale set
+  // path to invalidate a cache entry in env mode, so caching would serve a stale set
   // for up to the TTL after OpenBao/ESO changes the managed credentials (e.g. an empty
   // list from before a provider was added, or a removed one). The cost is an env scan
   // plus one auth_* DB lookup — cheap, and already gated by the getTenantSettings

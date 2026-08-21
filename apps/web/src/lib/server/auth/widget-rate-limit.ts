@@ -3,8 +3,8 @@
  * the anonymous-session mint (Better Auth /sign-in/anonymous) and the identify
  * handshake. Both are open to the internet, so without a bound a single client
  * can flood the session table or brute-force ssoTokens. Built on the shared
- * redis-rate-bucket (durable across instances); fails OPEN on a Redis error so a
- * cache blip never locks visitors out.
+ * rate-bucket primitive (Postgres-backed, durable across instances); fails OPEN
+ * on a store error so a blip never locks visitors out.
  *
  * Keyed on the real client IP (getClientIp reads cf-connecting-ip behind the
  * trusted proxy), so the caps target one client, not a shared proxy. Generous
@@ -14,7 +14,7 @@ import {
   bucketRetryAfter,
   incrementBuckets,
   type RateBucketSpec,
-} from '@/lib/server/utils/redis-rate-bucket'
+} from '@/lib/server/utils/rate-bucket'
 
 export interface WidgetRateLimitResult {
   allowed: boolean
@@ -27,7 +27,7 @@ const IDENTIFY_LIMIT = 60
 const IDENTIFY_WINDOW_S = 15 * 60
 
 /** Increment every bucket, then block on the first over its cap. A null count
- *  (Redis error) fails open. */
+ *  (store error) fails open. */
 async function limit(specs: RateBucketSpec[], limits: number[]): Promise<WidgetRateLimitResult> {
   const counts = await incrementBuckets(specs)
   if (counts.some((c) => c === null)) return { allowed: true }

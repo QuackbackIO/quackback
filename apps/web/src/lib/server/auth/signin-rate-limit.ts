@@ -1,7 +1,8 @@
 /**
- * Per-endpoint rate-limiters for sign-in. Built on `redis-rate-bucket`
- * so they share INCR/EXPIRE-NX/TTL plumbing with `recovery-codes-consume`
- * and any future limiters.
+ * Per-endpoint rate-limiters for sign-in. Built on the shared
+ * `utils/rate-bucket` primitive (Postgres-backed) so they share
+ * increment/TTL plumbing with `recovery-codes-consume` and any future
+ * limiters.
  *
  * Two shapes:
  *  - Credential: 5/5min per (ip+email) + 50/15min per IP. Brute-force
@@ -9,13 +10,13 @@
  *  - Magic-link send: 3/15min per (ip+email) + 20/15min per IP. Looser
  *    cap aimed at email-spam, not credential guessing.
  *
- * Fail open on Redis errors.
+ * Fail open on store errors.
  */
 import {
   bucketRetryAfter,
   incrementBuckets,
   type RateBucketSpec,
-} from '@/lib/server/utils/redis-rate-bucket'
+} from '@/lib/server/utils/rate-bucket'
 
 export interface SignInRateLimitResult {
   allowed: boolean
@@ -81,7 +82,7 @@ async function check(
     windowSeconds: shape.ipWindowS,
   }
   const [tupleCount, ipCount] = await incrementBuckets([tupleSpec, ipSpec])
-  // Either Redis error → fail open.
+  // Either store error → fail open.
   if (tupleCount === null || ipCount === null) return { allowed: true }
   if (tupleCount > shape.tupleLimit) {
     return { allowed: false, retryAfter: await bucketRetryAfter(tupleSpec) }

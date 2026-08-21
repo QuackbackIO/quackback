@@ -62,8 +62,8 @@ async function getSessionDirect(): Promise<SessionResult | null> {
 }
 
 /**
- * The tenant settings row, served from the Redis-cached tenant-settings blob
- * (a single Redis GET when warm) and additionally memoized per request. This is
+ * The tenant settings row, served from the KV-cached tenant-settings blob
+ * (a single cache GET when warm) and additionally memoized per request. This is
  * the auth-helper READ path only — never a read-modify-write, which must keep
  * using the uncached settings read so a write is never based on a cached row.
  * Returns null when unconfigured (getOptionalAuth's public surfaces treat that

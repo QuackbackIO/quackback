@@ -1,5 +1,6 @@
 /**
- * Ephemeral snapshot of Quinn's live activity trace, backed by Redis.
+ * Ephemeral snapshot of Quinn's live activity trace, held in the Postgres KV
+ * cache.
  *
  * The widget's working trace ("Thinking...", "Searching the knowledge
  * base...") is published as a fire-and-forget event on the conversation
@@ -7,14 +8,14 @@
  * A brand-new conversation's stream connects AFTER the turn starts, so the
  * first "thinking" event is lost and the visible trace starts mid-turn (or
  * not at all, for a short answer). Treating the trace as state fixes this: the
- * latest activity is mirrored into Redis on every publish, and a subscriber
+ * latest activity is mirrored into the cache on every publish, and a subscriber
  * that connects mid-turn reads it once, right after subscribing, to replay
  * the current state as its first frame.
  *
- * Best-effort throughout, via the shared cache helpers: a Redis failure must
+ * Best-effort throughout, via the shared cache helpers: a cache failure must
  * never fail the turn or the stream.
  */
-import { cacheGet, cacheSet, cacheDel } from '@/lib/server/redis'
+import { cacheGet, cacheSet, cacheDel } from '@/lib/server/cache'
 import type { ConversationId } from '@quackback/ids'
 
 /** Comfortably longer than the gap between activity publishes in a live turn;
@@ -52,7 +53,7 @@ export async function clearActivitySnapshot(conversationId: ConversationId): Pro
 }
 
 /** Read the latest activity snapshot for a conversation, if a turn is in
- *  flight. Null on a miss (no turn running) or a Redis error. */
+ *  flight. Null on a miss (no turn running) or a cache error. */
 export async function readActivitySnapshot(conversationId: ConversationId): Promise<unknown> {
   return cacheGet<unknown>(activitySnapshotKey(conversationId))
 }

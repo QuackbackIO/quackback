@@ -33,7 +33,7 @@ const hoisted = vi.hoisted(() => ({
   mockCacheDel: vi.fn(),
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheDel: hoisted.mockCacheDel,
   CACHE_KEYS: { PRINCIPAL_BY_USER: (id: string) => `principal:user:${id}` },
 }))

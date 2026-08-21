@@ -30,7 +30,7 @@ cd quackback
 cp .env.prod.example .env
 # Edit .env — fill in every value (generate secrets with: openssl rand -base64 32)
 
-# Start the application (app + Postgres + Dragonfly + MinIO)
+# Start the application (app + Postgres + MinIO)
 docker compose -f docker-compose.prod.yml up -d
 
 # View logs
@@ -165,7 +165,7 @@ pg_restore -d quackback quackback_backup.dump
 
 ### Prerequisites
 
-- **Bun** 1.3.3+
+- **Bun** 1.4.0+
 - **PostgreSQL** 17+
 - **Node.js** 20+ (for some dev tools)
 
@@ -272,26 +272,19 @@ For deployments with higher load or stricter uptime requirements, run multiple i
 | `web`    | HTTP only, enqueues but does not consume | 1+       | Safe to scale horizontally               |
 | `worker` | Background workers and sweepers          | 1+       | Required for background jobs to run      |
 
-All replicas must share the same PostgreSQL, Redis, and S3-compatible storage.
+All replicas must share the same PostgreSQL and S3-compatible storage.
 
-Sticky sessions are not required. Realtime features use Redis pub/sub.
+Sticky sessions are not required. Realtime features use PostgreSQL `LISTEN`/`NOTIFY`.
 
-Run at least one `worker` replica (or use `all`) at all times, or background jobs like email polling, workflow timers, and analytics refresh will not execute. Multiple worker replicas are safe; jobs are processed exactly once via the shared queue.
+Run at least one `worker` replica (or use `all`) at all times, or background jobs like email polling, workflow timers, and analytics refresh will not execute. Multiple worker replicas are safe; jobs are processed exactly once via the shared queue tables in PostgreSQL.
 
 ### Docker Compose Example
 
-The datastores (Postgres, Dragonfly, MinIO) are the same as in `docker-compose.prod.yml`. The app splits into a scaled `web` service and a `worker` service running the same image. Web replicas cannot each publish port 3000 on the host, so run a reverse proxy or load balancer (see [Reverse Proxy](#reverse-proxy)) in front of the `web` service and let Compose's internal DNS balance across replicas.
+The datastores (Postgres, MinIO) are the same as in `docker-compose.prod.yml`. The app splits into a scaled `web` service and a `worker` service running the same image. Web replicas cannot each publish port 3000 on the host, so run a reverse proxy or load balancer (see [Reverse Proxy](#reverse-proxy)) in front of the `web` service and let Compose's internal DNS balance across replicas.
 
 ```yaml
 services:
   # postgres, minio: same as docker-compose.prod.yml
-
-  dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
-    # BullMQ requires cluster_mode=emulated + lock_on_hashtags.
-    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
-    volumes:
-      - dragonfly_data:/data
 
   web:
     image: ghcr.io/quackbackio/quackback:latest
@@ -299,14 +292,12 @@ services:
       QUACKBACK_ROLE: web
       SKIP_MIGRATIONS: 'true'
       DATABASE_URL: postgresql://postgres:password@postgres:5432/quackback
-      REDIS_URL: redis://dragonfly:6379
       SECRET_KEY: ${SECRET_KEY}
       BASE_URL: ${BASE_URL}
       # plus your S3_* and email settings, same as docker-compose.prod.yml
     restart: unless-stopped
     depends_on:
       - postgres
-      - dragonfly
       - minio
     deploy:
       replicas: 3
@@ -317,20 +308,17 @@ services:
       QUACKBACK_ROLE: worker
       SKIP_MIGRATIONS: 'true'
       DATABASE_URL: postgresql://postgres:password@postgres:5432/quackback
-      REDIS_URL: redis://dragonfly:6379
       SECRET_KEY: ${SECRET_KEY}
       BASE_URL: ${BASE_URL}
       # plus your S3_* and email settings, same as docker-compose.prod.yml
     restart: unless-stopped
     depends_on:
       - postgres
-      - dragonfly
       - minio
     deploy:
       replicas: 1
 
 volumes:
-  dragonfly_data:
 ```
 
 ### Database Migrations at Scale

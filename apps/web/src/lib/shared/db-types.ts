@@ -76,6 +76,9 @@ export type {
   // Structural twin of the assistant config schema; a drift tripwire in
   // lib/shared/assistant/__tests__/config.test.ts asserts the two agree.
   StoredAssistantConfig,
+  StoredCloudConfig,
+  StoredBillingProjection,
+  StoredProjectedLimits,
 } from '@quackback/db/schema'
 
 // Runtime exports used in client components.

@@ -2,7 +2,7 @@
 # Quackback — production stack (self-hosting)
 # ============================================================================
 # A self-contained, single-host deployment: the Quackback app plus its
-# datastores (PostgreSQL + Dragonfly + MinIO). Unlike the dev docker-compose.yml,
+# datastores (PostgreSQL + MinIO). Unlike the dev docker-compose.yml,
 # this file is safe to run on a server:
 #   - the app is the ONLY service with a published host port
 #   - datastores are reachable only on the internal compose network
@@ -20,7 +20,7 @@
 #     docker compose -f docker-compose.prod.yml up -d
 # (back up your database first — see the self-hosting docs).
 #
-# For an external Postgres / Redis / S3 instead of the bundled datastores,
+# For an external Postgres / S3 instead of the bundled datastores,
 # point the URLs at your managed services and remove the services you no longer
 # need. To scale beyond one host, use managed datastores + the `docker run`
 # path; this compose is single-node by design.
@@ -38,7 +38,6 @@ services:
     # self-hoster can't point these at the wrong host — these override env_file.
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-quackback}
-      REDIS_URL: redis://dragonfly:6379
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${S3_BUCKET:-quackback}
       S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
@@ -51,8 +50,6 @@ services:
       - '${APP_PORT:-3000}:3000'
     depends_on:
       postgres:
-        condition: service_healthy
-      dragonfly:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
@@ -85,27 +82,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./docker/postgres/init-pgcron.sql:/docker-entrypoint-initdb.d/init-pgcron.sql
-    # pg_cron is required for scheduled analytics/materialized-view refreshes.
+    # pg_cron is preloaded for existing volumes; the `analytics` queue runs on
+    # the app job tier, not through pg_cron. Do not drop the preload: that is a
+    # self-host image change with upgrade-path risk for those volumes.
     command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=${POSTGRES_DB:-quackback} -c max_connections=200
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
-    container_name: quackback-dragonfly
-    restart: unless-stopped
-    # BullMQ requires cluster_mode=emulated + lock_on_hashtags for Lua script compatibility.
-    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
-    # No host port — reachable only on the internal network.
-    volumes:
-      - dragonfly_data:/data
-    ulimits:
-      memlock: -1
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -150,4 +132,3 @@ services:
 volumes:
   postgres_data:
   minio_data:
-  dragonfly_data:

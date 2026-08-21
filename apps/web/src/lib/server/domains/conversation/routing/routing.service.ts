@@ -14,7 +14,7 @@ async function getRoutingConfig() {
 /**
  * Decide who (if anyone) a newly-created conversation should be auto-assigned
  * to. Fails soft: routing is a best-effort enhancement, so any error (bad
- * config, Redis down, missing strategy) yields a null assignment and the
+ * config, presence store down, missing strategy) yields a null assignment and the
  * conversation is simply left unassigned.
  */
 export async function routeConversation(conversation: Conversation): Promise<RoutingResult> {

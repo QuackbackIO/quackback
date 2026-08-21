@@ -135,7 +135,7 @@ async function createAuth() {
   const genericOAuthConfigs: GenericOAuthConfig[] = []
 
   // Tier limits + tenant settings are independent reads — fire them
-  // together to avoid stacking Redis round-trips on every auth-instance
+  // together to avoid stacking cache round-trips on every auth-instance
   // rebuild. tenantSettings still drives the social-provider surface
   // filter below; OIDC config now comes from the identity_provider list.
   const [tierLimits, tenantSettings] = await Promise.all([getTierLimits(), getTenantSettings()])
@@ -719,7 +719,7 @@ async function createAuth() {
 
             // The principal's `type` flipped from 'anonymous' → 'user'; drop
             // any cached entry so the next SSR render reads the new value.
-            const { cacheDel } = await import('@/lib/server/redis')
+            const { cacheDel } = await import('@/lib/server/cache')
             await cacheDel(...cacheKeysToBust)
 
             log.info(
@@ -757,7 +757,7 @@ async function createAuth() {
  * Get the auth instance (lazy-initialized).
  *
  * Cross-pod invalidation: every call reads the cached settings row's
- * `authConfigVersion` (one Redis hit, already happens for everything
+ * `authConfigVersion` (one cache hit, already happens for everything
  * else). If the cached _auth was built against an older version, drop
  * it and rebuild. This guarantees that a write on pod A propagates to
  * pod B no later than its next request after pod A's commit. The

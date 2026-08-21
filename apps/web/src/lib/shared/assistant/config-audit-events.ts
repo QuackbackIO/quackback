@@ -6,7 +6,7 @@
  * to be added here to show up correctly in both places.
  *
  * Client-safe: `AuditEventType` is imported as a type only, which is erased
- * at compile time, so no server code (db/pino/redis) reaches the client
+ * at compile time, so no server code (db/pino/kv) reaches the client
  * bundle. The `Record<Extract<...>, string>` shape means adding a new
  * `assistant.*` literal to the AuditEventType union without a matching entry
  * here is a compile error — the label map can never drift from the taxonomy.

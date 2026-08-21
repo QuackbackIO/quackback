@@ -1,140 +1,103 @@
 /**
- * Snooze-wake sweeper — a per-minute repeatable job that reopens snoozed
- * conversations whose wake timer has elapsed (see sweepDueSnoozedConversations),
- * publishing the same realtime/inbox updates a manual reopen does.
+ * Snooze-wake sweeper — a per-minute job that reopens snoozed conversations
+ * whose wake timer has elapsed (see sweepDueSnoozedConversations), publishing
+ * the same realtime/inbox updates a manual reopen does.
+ *
+ * Runs on the Postgres job queue (`lib/server/jobs`). Schedule and retry policy
+ * live in `jobs/definitions.ts`. Every collaborator is imported statically so
+ * `primeJobHandlers()` loads it outside any tenant scope — see
+ * sla-breach-sweep-queue.ts for why that matters.
  */
-import { Queue, Worker } from 'bullmq'
-import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
+import { sql } from 'drizzle-orm'
+import { db } from '@/lib/server/db'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
+import { dueWithin, registerTenantDeadline } from '@/lib/server/jobs/deadlines'
+import {
+  ASSUMED_RESOLUTION_INACTIVITY_MINUTES,
+  finalizeStaleAssistantInvolvements,
+} from '@/lib/server/domains/assistant'
+import { sweepAndNotifyExpiredPendingActions } from '@/lib/server/domains/assistant/pending-actions.service'
+import { sweepDueSnoozedConversations } from './conversation.service'
 
-const log = logger.child({ component: 'snooze-sweep-queue' })
+const log = logger.child({ component: 'snooze-sweep' })
 
-const QUEUE_NAME = '{snooze-sweep}'
-const CONCURRENCY = 1
-
-interface SnoozeSweepJob {
-  type: 'wake-due-snoozed'
+/**
+ * When this tenant's snooze tick next has anything to do — or null, if it never
+ * does.
+ *
+ * Three independent clocks ride this one job, so the answer is the earliest of
+ * three, and **all three must be here**. A deadline source left out would be one
+ * whose work is silently deferred to the rescan interval on an idle tenant,
+ * which is the failure mode this whole mechanism has to not have. Each arm
+ * mirrors its sweep's own predicate exactly:
+ *
+ * - `sweepDueSnoozedConversations` wakes `status='snoozed' AND snoozed_until <= now`
+ * - `finalizeStaleAssistantInvolvements` closes `status='active'` involvements
+ *   whose `last_assistant_answer_at` is older than the inactivity threshold, so
+ *   the deadline is that timestamp *plus* the threshold
+ * - `expireStalePendingActions` expires `status='proposed' AND expires_at < now`
+ *
+ * One statement rather than three round trips, each arm on the partial index its
+ * sweep already scans. `LEAST` ignores NULLs, so a tenant with only one kind of
+ * pending work gets that one's instant rather than null.
+ */
+async function nextSnoozeTickAt(): Promise<Date | null> {
+  const result = await db.execute(sql`
+    SELECT LEAST(
+      (SELECT min(snoozed_until) FROM conversations
+        WHERE status = 'snoozed' AND snoozed_until IS NOT NULL),
+      (SELECT min(last_assistant_answer_at)
+              + make_interval(mins => ${ASSUMED_RESOLUTION_INACTIVITY_MINUTES})
+         FROM assistant_involvements WHERE status = 'active'),
+      (SELECT min(expires_at) FROM assistant_pending_actions WHERE status = 'proposed')
+    ) AS due_at
+  `)
+  const rows = getExecuteRows<{ due_at: Date | string | null }>(result)
+  const value = rows[0]?.due_at ?? null
+  return value === null ? null : value instanceof Date ? value : new Date(value)
 }
 
-let initPromise: Promise<{
-  queue: Queue<SnoozeSweepJob>
-  worker: Worker<SnoozeSweepJob> | null
-}> | null = null
+registerTenantDeadline('snooze-sweep', nextSnoozeTickAt)
 
-async function initializeQueue() {
-  const connection = getQueueRedis()
+/**
+ * The cron gate: is any of the three clocks due inside the next slot?
+ *
+ * The window is the schedule's own minute, so this can only ever suppress a tick
+ * that would have found nothing — a snooze still reopens within a minute of its
+ * timer elapsing, exactly as before.
+ */
+export function isSnoozeSweepDue(): Promise<boolean> {
+  return dueWithin('snooze-sweep', 60_000)
+}
 
-  const queue = new Queue<SnoozeSweepJob>(QUEUE_NAME, {
-    connection,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: 'exponential' as const, delay: 5000 },
-      removeOnComplete: { count: 100, age: 7 * 86400 },
-      removeOnFail: { age: 7 * 86400 },
-    },
-  })
+export async function runSnoozeSweep(): Promise<void> {
+  const result = await sweepDueSnoozedConversations()
+  if (result.woken > 0) {
+    log.debug({ woken: result.woken }, 'snooze-sweep run complete')
+  }
 
-  // Consumer side is role-gated: web-role replicas enqueue and register
-  // schedules but never construct a Worker (see queue/role.ts).
-  const worker = shouldRunWorkers()
-    ? new Worker<SnoozeSweepJob>(
-        QUEUE_NAME,
-        async (job) => {
-          if (job.data.type === 'wake-due-snoozed') {
-            const { sweepDueSnoozedConversations } = await import('./conversation.service')
-            const result = await sweepDueSnoozedConversations()
-            if (result.woken > 0) {
-              log.debug({ woken: result.woken }, 'snooze-sweep run complete')
-            }
-            // Ride the same per-minute tick to close out assistant involvements that
-            // have gone quiet (assumed resolution). Best-effort: an assistant sweep
-            // failure must not fail the snooze wake.
-            try {
-              const { finalizeStaleAssistantInvolvements } =
-                await import('@/lib/server/domains/assistant')
-              const { resolved } = await finalizeStaleAssistantInvolvements()
-              if (resolved > 0) {
-                log.debug({ resolved }, 'assistant assumed-resolution sweep complete')
-              }
-            } catch (err) {
-              log.warn({ err }, 'assistant assumed-resolution sweep failed')
-            }
-            // Also expire pending actions nobody approved in time, and let the
-            // customer know the request timed out rather than leaving them
-            // hanging. Best-effort, same as the involvement sweep above.
-            try {
-              const { sweepAndNotifyExpiredPendingActions } =
-                await import('@/lib/server/domains/assistant/pending-actions.service')
-              const expired = await sweepAndNotifyExpiredPendingActions()
-              if (expired.length > 0) {
-                log.debug(
-                  { expired: expired.length },
-                  'assistant pending-action expiry sweep complete'
-                )
-              }
-            } catch (err) {
-              log.warn({ err }, 'assistant pending-action expiry sweep failed')
-            }
-          }
-        },
-        { connection, concurrency: CONCURRENCY }
-      )
-    : null
-
-  // Every minute. Stable jobId so worker reboots dedupe instead of stacking
-  // duplicate cron entries.
-  await queue.add(
-    'snooze-sweep:minutely',
-    { type: 'wake-due-snoozed' },
-    {
-      jobId: 'snooze-sweep:minutely',
-      repeat: { pattern: '* * * * *' },
-      removeOnComplete: { count: 100 },
-      removeOnFail: { age: 7 * 86400 },
-    }
-  )
-
+  // Ride the same per-minute tick to close out assistant involvements that have
+  // gone quiet (assumed resolution). Best-effort: an assistant sweep failure
+  // must not fail the snooze wake.
   try {
-    await Promise.race([
-      queue.waitUntilReady(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
-      ),
-    ])
-  } catch (error) {
-    await queue.close().catch(() => {})
-    await worker?.close().catch(() => {})
-    throw error
+    const { resolved } = await finalizeStaleAssistantInvolvements()
+    if (resolved > 0) {
+      log.debug({ resolved }, 'assistant assumed-resolution sweep complete')
+    }
+  } catch (err) {
+    log.warn({ err }, 'assistant assumed-resolution sweep failed')
   }
 
-  worker?.on('failed', (job, error) => {
-    if (!job) return
-    const isPermanent =
-      job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
-    const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    log.error({ err: error, status: prefix }, 'snooze-sweep job failed')
-  })
-
-  return { queue, worker }
-}
-
-/** Initialize the snooze-sweep worker eagerly (called from startup). */
-export async function initSnoozeSweepWorker(): Promise<void> {
-  if (!initPromise) {
-    initPromise = initializeQueue().catch((err) => {
-      initPromise = null
-      throw err
-    })
+  // Also expire pending actions nobody approved in time, and let the customer
+  // know the request timed out rather than leaving them hanging. Best-effort,
+  // same as the involvement sweep above.
+  try {
+    const expired = await sweepAndNotifyExpiredPendingActions()
+    if (expired.length > 0) {
+      log.debug({ expired: expired.length }, 'assistant pending-action expiry sweep complete')
+    }
+  } catch (err) {
+    log.warn({ err }, 'assistant pending-action expiry sweep failed')
   }
-  await initPromise
-  log.info('snooze-sweep worker initialized')
-}
-
-export async function closeSnoozeSweepQueue(): Promise<void> {
-  if (!initPromise) return
-  const { worker, queue } = await initPromise
-  initPromise = null
-  await worker?.close().catch(() => {})
-  await queue.close().catch(() => {})
 }

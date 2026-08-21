@@ -1,14 +1,18 @@
+/**
+ * `computeVisitorHash` and the UTC day key are pure; the salt's store behaviour
+ * is pinned here only for its failure direction (a store outage must return
+ * null so the caller DROPS the event rather than persisting a key derived from
+ * raw identifiers).
+ *
+ * Salt uniqueness per tenant, the get-or-create race and the 48h expiry are
+ * properties of the statement and of the heap cache together, and live in
+ * `visitor-hash-tenant-isolation.db.test.ts` against a real server.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockSet = vi.fn()
-const mockGet = vi.fn()
+const hoisted = vi.hoisted(() => ({ getOrCreate: vi.fn() }))
 
-vi.mock('@/lib/server/redis', () => ({
-  getRedis: () => ({
-    set: mockSet,
-    get: mockGet,
-  }),
-}))
+vi.mock('@/lib/server/kv/pg-kv', () => ({ kvGetOrCreate: hoisted.getOrCreate }))
 
 const { utcDateKey, getDailySalt, computeVisitorHash } = await import('../visitor-hash')
 
@@ -28,27 +32,25 @@ describe('utcDateKey', () => {
 })
 
 describe('getDailySalt', () => {
-  it('creates the salt with NX + 48h TTL and returns the stored value', async () => {
-    mockSet.mockResolvedValue(null) // another writer won the race
-    mockGet.mockResolvedValue('stored-salt')
+  it('asks the store for the day-keyed salt with a 48h TTL, and returns what it gets', async () => {
+    // The winner of a concurrent race may not be this caller, so the value
+    // returned is the store's, never the freshly minted one.
+    hoisted.getOrCreate.mockResolvedValueOnce('stored-salt')
 
     const salt = await getDailySalt(new Date('2026-07-01T10:00:00Z'))
 
     expect(salt).toBe('stored-salt')
-    expect(mockSet).toHaveBeenCalledWith(
+    expect(hoisted.getOrCreate).toHaveBeenCalledWith(
       'visitor:salt:2026-07-01',
       expect.any(String),
-      'EX',
-      48 * 60 * 60,
-      'NX'
+      48 * 60 * 60
     )
-    expect(mockGet).toHaveBeenCalledWith('visitor:salt:2026-07-01')
   })
 
-  it('returns null when Redis is unavailable (caller drops the event)', async () => {
-    mockSet.mockRejectedValue(new Error('down'))
+  it('returns null when the store is unavailable (caller drops the event)', async () => {
+    hoisted.getOrCreate.mockRejectedValueOnce(new Error('down'))
 
-    expect(await getDailySalt()).toBeNull()
+    expect(await getDailySalt(new Date('2026-09-09T10:00:00Z'))).toBeNull()
   })
 })
 

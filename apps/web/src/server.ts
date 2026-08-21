@@ -1,7 +1,7 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
 import { logStartupBanner } from '@/lib/server/startup'
 
-// Cold-start optimization: eagerly warm DB + Redis connections AND preload
+// Cold-start optimization: eagerly warm the database connection AND preload
 // the modules that bootstrap.ts dynamically imports on first SSR. The
 // underlying TCP+TLS handshakes happen in parallel with Bun's module load
 // + Knative's pod-readiness propagation, so by the time the first request
@@ -11,13 +11,12 @@ import { logStartupBanner } from '@/lib/server/startup'
 if (process.env.QUACKBACK_BUILD !== '1') {
   Promise.all([
     import('@/lib/server/db').then(({ db, sql }) => db.execute(sql`SELECT 1`)),
-    import('@/lib/server/redis').then(({ cacheGet }) => cacheGet('__warmup__')),
     import('@/lib/server/auth/index'),
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
   ]).catch(() => {
-    // Pool initialization happens inside getDatabase()/getRedis(); if the
+    // Pool initialization happens inside getDatabase(); if the
     // first probe fails the next real query will retry from cold.
   })
 }

@@ -7,8 +7,8 @@
  * An empty `q` returns the first page of eligible users in the workspace so
  * the picker has something to show the moment the user types `@`.
  *
- * Rate-limited per session: 60 requests / 60s on a single Redis bucket.
- * Fails open on Redis errors (the limiter returns `null` count then).
+ * Rate-limited per session: 60 requests / 60s on a single rate bucket.
+ * Fails open on store errors (the limiter returns `null` count then).
  */
 import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
@@ -16,7 +16,7 @@ import type { SQL } from 'drizzle-orm'
 import { auth } from '@/lib/server/auth'
 import { db, principal, user, eq, and, inArray, sql } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
-import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
+import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
 const MENTION_ELIGIBLE_ROLES = ['admin', 'member', 'user'] as const
@@ -72,7 +72,7 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
   }
 
   // 60 req / minute per session principal. Single-bucket; fails open on
-  // Redis error (count === null). We block when count > limit so the 60th
+  // a store error (count === null). We block when count > limit so the 60th
   // request still goes through and the 61st returns 429.
   const bucket = await incrementBucket({
     key: `mention-suggest:${principalRecord.id}`,

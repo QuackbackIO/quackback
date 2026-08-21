@@ -18,7 +18,7 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'integration-destinations' })
 
 // NOTE: the registry is imported DYNAMICALLY inside the handler — a top-level
-// import pulls the whole provider graph (db/redis/bullmq) into the client
+// import pulls the whole provider graph (db/kv/jobs) into the client
 // bundle via the createServerFn stub, which import-protection rejects.
 
 const fetchDestinationsSchema = z.object({

@@ -50,7 +50,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: mockIsFeatureEnabled,
 }))
 
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: mockIncrementBucket,
 }))
 

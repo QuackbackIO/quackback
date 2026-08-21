@@ -28,7 +28,7 @@ vi.mock('@/lib/server/storage/s3', async () => {
 const { incrementBucket } = vi.hoisted(() => ({
   incrementBucket: vi.fn().mockResolvedValue({ count: 1 }),
 }))
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => incrementBucket(...args),
   bucketRetryAfter: vi.fn().mockResolvedValue(60),
 }))

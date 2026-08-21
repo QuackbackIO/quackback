@@ -4,7 +4,6 @@
  * env guards and connection lifecycles the scripts would otherwise repeat.
  */
 import postgres from 'postgres'
-import Redis from 'ioredis'
 
 /** Open a postgres client, exiting with an error when DATABASE_URL is unset. */
 export function openDb(): postgres.Sql {
@@ -17,19 +16,28 @@ export function openDb(): postgres.Sql {
 }
 
 /**
- * Drop the Redis-cached tenant settings ('settings:tenant') so a running dev
- * server sees a raw-SQL settings mutation immediately instead of after the
- * cache TTL. No-op when REDIS_URL is unset.
+ * Drop the cached tenant settings ('settings:tenant') so a running dev server
+ * sees a raw-SQL settings mutation immediately instead of after the cache TTL.
+ *
+ * The cache is `kv_store` in the workspace's own database, so this is a DELETE
+ * on the same connection the mutation used — no second service to reach, and
+ * nothing to skip when an environment variable is unset.
  */
-export async function bustTenantSettings(): Promise<void> {
-  if (!process.env.REDIS_URL) return
-  const redis = new Redis(process.env.REDIS_URL, { lazyConnect: true, connectTimeout: 5000 })
-  try {
-    await redis.connect()
-    await redis.del('settings:tenant')
-  } finally {
-    redis.disconnect()
-  }
+export async function bustTenantSettings(sql: postgres.Sql): Promise<void> {
+  await deleteCacheKeys(sql, ['settings:tenant'])
+}
+
+/**
+ * Delete cache rows by logical key, across every tenant in this database.
+ *
+ * Not filtered by `tenant_id`: e2e runs one workspace, and a filter here would
+ * need the namespace rule (`'_'` single-tenant, the tenant id otherwise)
+ * duplicated in a test helper, where getting it wrong fails as a silent no-op
+ * — a cache that was never busted looks exactly like a cache that was.
+ */
+export async function deleteCacheKeys(sql: postgres.Sql, keys: string[]): Promise<number> {
+  const rows = await sql`DELETE FROM kv_store WHERE key = ANY(${sql.array(keys)}) RETURNING key`
+  return rows.length
 }
 
 /** Parse a settings JSON text column, treating null/invalid as an empty object. */

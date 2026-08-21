@@ -1073,7 +1073,7 @@ export async function getTicketExternalStatusChangedTargets(
  * which additionally requires `type: 'user'` and would silently narrow the
  * recipient set. The anti-spam presence gate is NOT applied here — it runs
  * in the notification hook itself (events/handlers/notification.ts), since
- * `isAnyAgentOnline` is a single global Redis check, not a per-recipient one,
+ * `isAnyAgentOnline` is a single global presence-store check, not a per-recipient one,
  * and the hook is where the config's `isFirstMessage` flag is read back out.
  */
 export async function getMessageCreatedTargets(event: EventData): Promise<HookTarget | null> {

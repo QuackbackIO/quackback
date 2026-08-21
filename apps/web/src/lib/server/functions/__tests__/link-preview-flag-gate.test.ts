@@ -17,7 +17,7 @@ const hoisted = vi.hoisted(() => ({
   mockUnfurlExternalUrl: vi.fn(),
   mockCacheGet: vi.fn(),
   mockCacheSet: vi.fn(),
-  mockGetRedis: vi.fn(),
+  mockIncrementBuckets: vi.fn(),
   mockGetClientIp: vi.fn(),
 }))
 
@@ -39,10 +39,13 @@ vi.mock('@/lib/server/content/unfurl', () => ({
   unfurlExternalUrl: hoisted.mockUnfurlExternalUrl,
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheGet: hoisted.mockCacheGet,
   cacheSet: hoisted.mockCacheSet,
-  getRedis: hoisted.mockGetRedis,
+}))
+
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
+  incrementBuckets: hoisted.mockIncrementBuckets,
 }))
 
 vi.mock('@/lib/server/domains/api/rate-limit', () => ({
@@ -86,10 +89,8 @@ beforeEach(async () => {
     principal: { id: 'prn_1', role: 'admin' },
   })
   hoisted.mockGetClientIp.mockReturnValue('203.0.113.7')
-  hoisted.mockGetRedis.mockReturnValue({
-    incr: vi.fn().mockResolvedValue(1),
-    expire: vi.fn().mockResolvedValue(1),
-  })
+  // Inside both windows: the flag gate, not the throttle, is this file's subject.
+  hoisted.mockIncrementBuckets.mockResolvedValue([1, 1])
   hoisted.mockCacheGet.mockResolvedValue(null)
   hoisted.mockCacheSet.mockResolvedValue(undefined)
   if (handlers.length === 0) await import('../link-preview')

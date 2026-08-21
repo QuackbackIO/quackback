@@ -7,7 +7,7 @@ import {
   type Transaction,
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import {
@@ -308,7 +308,7 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
         .where(eq(settings.id, org.id))
       await bumpAuthConfigVersionInTx(tx)
     })
-    // invalidateSettingsCache drops the Redis cache entry so other pods
+    // invalidateSettingsCache drops the shared cache entry so other pods
     // re-read the bumped version on next request. The local resetAuth
     // skips the next-request wait on the calling pod.
     resetAuth()
@@ -957,7 +957,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
 
     // 1h TTL: settings change rarely and every mutation in this file
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
-    // the per-request cost of getTenantSettings to a single Redis GET.
+    // the per-request cost of getTenantSettings to a single cache GET.
     await cacheSet(CACHE_KEYS.TENANT_SETTINGS, result, 3600)
     return result
   } catch (error) {
@@ -989,8 +989,8 @@ export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolea
 /**
  * Whether the Copilot Q&A capability is enabled in the v3 assistant config.
  * Reads the cached tenant settings (`getTenantSettings`) — the same
- * single-Redis-GET path `isFeatureEnabled` uses — so gating the copilot route
- * on its hot path costs no extra DB round-trip; every config mutation calls
+ * single-cache-GET path `isFeatureEnabled` uses — so gating the copilot route
+ * on its hot path costs no extra round-trip; every config mutation calls
  * `invalidateSettingsCache()`. Fails OPEN to the v3 default (on): a
  * missing/invalid/unreadable config must not silently disable a working
  * default, mirroring how the route already degrades.

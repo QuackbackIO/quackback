@@ -11,16 +11,13 @@ const mockHybridSearch = vi.fn()
 vi.mock('@/lib/server/domains/help-center/help-center-search.service', () => ({
   hybridSearchForLocale: (query: string, _locale: string, limit: number) =>
     mockHybridSearch(query, limit),
-  resolveSearchLocale: (
-    requested: string | undefined,
-    enabled: string[],
-    defaultLocale: string
-  ) => (requested && enabled.includes(requested) ? requested : defaultLocale),
+  resolveSearchLocale: (requested: string | undefined, enabled: string[], defaultLocale: string) =>
+    requested && enabled.includes(requested) ? requested : defaultLocale,
 }))
 
 const mockIncrementBucket = vi.fn()
 const mockBucketRetryAfter = vi.fn()
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: (...args: unknown[]) => mockIncrementBucket(...args),
   bucketRetryAfter: (...args: unknown[]) => mockBucketRetryAfter(...args),
 }))

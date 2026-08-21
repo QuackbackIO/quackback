@@ -4,3 +4,6 @@ apps/web/src/lib/server/policy/authz-matrix/MATRIX.md
 
 # Generated dependency-graph snapshot — same file-snapshot contract as MATRIX.md.
 apps/web/src/lib/server/policy/dep-graph/GRAPH.md
+
+# Generated migration-contract ledger — same file-snapshot contract as MATRIX.md.
+apps/web/src/lib/server/policy/migration-contract/CONTRACT.md

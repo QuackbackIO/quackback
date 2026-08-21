@@ -7,6 +7,9 @@ import prettier from 'eslint-config-prettier'
 // Files that ARE the re-export layer or standalone scripts — they must import @quackback/db directly
 const dbReexportFiles = [
   '**/src/lib/server/db.ts',
+  '**/src/lib/server/fleet/schema-floor.ts',
+  '**/src/lib/server/tenancy/pool-cache.ts',
+  '**/src/lib/server/tenancy/tenant-context.ts',
   '**/src/lib/shared/db-types.ts',
   '**/scripts/**',
 ]
@@ -23,6 +26,20 @@ const noDirectDbImport = {
 const noComponentsFromLib = {
   group: ['@/components/*', '@/components/**'],
   message: 'lib/ must not import from components/.',
+}
+// The Redis queue and kv clients left the dependency tree when both moved to
+// Postgres. The manifest already fails any import at install/typecheck; this
+// keeps the packages from being quietly re-added.
+const redisMovedToPostgresMessage =
+  'The background queue and kv store live in Postgres now (see src/lib/server/jobs/ and src/lib/server/kv/); do not reintroduce bullmq or ioredis.'
+const noRedisQueueImport = {
+  group: ['bullmq', 'bullmq/*', 'ioredis', 'ioredis/*'],
+  message: redisMovedToPostgresMessage,
+}
+// `require()` form of the same ban, for the no-restricted-syntax blocks below.
+const noRedisQueueRequire = {
+  selector: "CallExpression[callee.name='require'] > Literal[value=/^(bullmq|ioredis)(\\/|$)/]",
+  message: redisMovedToPostgresMessage,
 }
 
 // Existing domain hotspots are an explicit, shrink-only debt baseline. New
@@ -118,7 +135,7 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
-      'no-restricted-imports': ['error', { patterns: [noDirectDbImport] }],
+      'no-restricted-imports': ['error', { patterns: [noDirectDbImport, noRedisQueueImport] }],
       // Sizing standard (MENU-FILTER-SIZING-STANDARD.md): menu items render at
       // 13px via the shadcn primitives, so a smaller text override on one of
       // them is drift. Catches text-xs / text-[<=12px] on the item components.
@@ -134,10 +151,12 @@ export default tseslint.config(
           selector: "JSXAttribute[name.name='className'] Literal[value=/text-\\[(?:8|9|10)px\\]/]",
           message: 'Production text must be at least 11px; use a design-system text variant.',
         },
+        noRedisQueueRequire,
       ],
     },
   },
-  // The exempted files still need the base TS rules, just without the import restriction
+  // The exempted files still need the base TS rules, just without the db import
+  // restriction — the Redis-client ban has no exemptions.
   {
     files: dbReexportFiles,
     rules: {
@@ -146,6 +165,8 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
+      'no-restricted-imports': ['error', { patterns: [noRedisQueueImport] }],
+      'no-restricted-syntax': ['error', noRedisQueueRequire],
     },
   },
   // lib/ must not import from components/
@@ -155,7 +176,7 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [noDirectDbImport, noComponentsFromLib] },
+        { patterns: [noDirectDbImport, noComponentsFromLib, noRedisQueueImport] },
       ],
     },
   },
@@ -186,12 +207,13 @@ export default tseslint.config(
           message:
             'withErrorLog was replaced by the global functionMiddleware in src/start.ts. Handlers should throw and let it log.',
         },
+        noRedisQueueRequire,
       ],
     },
   },
   // Page routes are client-bundled (via routeTree.gen), so server logic must
   // cross through createServerFn bridges in lib/server/functions. Anything
-  // else drags server modules (db/redis/settings) into the client graph, which
+  // else drags server modules (db/cache/settings) into the client graph, which
   // import-protection rejects at request time — this rule fails it at lint
   // time instead. Pure helpers belong in lib/shared.
   {

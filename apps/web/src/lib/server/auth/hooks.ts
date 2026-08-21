@@ -451,7 +451,7 @@ export async function handleSsoCallbackAfter(
   })
 
   if (bootstrapCacheKeys.length) {
-    const { cacheDel } = await import('@/lib/server/redis')
+    const { cacheDel } = await import('@/lib/server/cache')
     await cacheDel(...bootstrapCacheKeys)
   }
 }
@@ -1101,7 +1101,7 @@ export async function handleSignInSuccessAudit(ctx: {
  * fingerprint; on success we fire the email + audit row in parallel
  * and refresh the SET's 90-day TTL. On failure we roll back the
  * claim so the next sign-in re-fires the alert rather than losing
- * it to a transient SMTP outage. All errors swallowed — Redis/SMTP
+ * it to a transient SMTP outage. All errors swallowed — store/SMTP
  * outages must not break sign-in.
  */
 export async function handleNewDeviceNotification(

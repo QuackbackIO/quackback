@@ -1,100 +1,33 @@
 /**
- * Durable workflow waits (support platform §4.6, Slice 5e). A 'wait' node parks a
- * run; this is the BullMQ delayed job that resumes it when the timer fires. The
- * job id is keyed by run id plus a per-run wait sequence number, so re-scheduling
- * the same wait (e.g. after a retry) dedupes rather than stacking, while a later
- * wait in the same run gets its own job instead of colliding with an earlier one
- * that is still active or retained. The worker re-loads the run and calls
- * resumeWorkflowRun, which itself no-ops if a reply/close interrupted the run in
- * the meantime.
+ * Durable workflow waits (support platform §4.6, Slice 5e). A 'wait' node parks
+ * a run; this is the delayed job that resumes it when the timer fires.
  *
- * Registered in the worker registry so boot/drain manage it like every other
- * queue; it initializes lazily on the first scheduled wait.
+ * On the Postgres queue a delayed job is just a row whose `run_at` is the
+ * wait's fire time, so a parked run costs one row rather than a live timer, and
+ * a process restart cannot lose it. The dedupe key is the run id plus a per-run
+ * wait sequence number, so re-scheduling the same wait (after a retry, or by
+ * the sweeper) is a no-op while a later wait in the same run gets its own row.
+ * The handler re-loads the run and calls `resumeWorkflowRun`, which itself
+ * no-ops if a reply or close interrupted the run in the meantime.
  */
-import { Queue, Worker, type Job } from 'bullmq'
-import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
+import {
+  cancelJob,
+  enqueueJob,
+  findJobByDedupeKey,
+  type ClaimedJob,
+} from '@/lib/server/jobs/job-queue'
 import { logger } from '@/lib/server/logger'
 import type { WorkflowRun, WorkflowBlockKind } from '@/lib/server/db'
+// Statically imported, not deferred: a call-time import inside the tier would
+// execute this module's graph under whichever tenant reached it first. The
+// engine imports back into this module, so the two form a cycle — safe because
+// neither touches the other at module top level, only inside a function.
+import { resumeWorkflowRun } from './workflow.engine'
 
 const log = logger.child({ component: 'workflow-wait-queue' })
 
-const QUEUE_NAME = '{workflow-wait}'
-const CONCURRENCY = 4
-
-interface WorkflowWaitJob {
-  runId: string
-  waitSeq: number
-}
-
-let initPromise: Promise<{
-  queue: Queue<WorkflowWaitJob>
-  worker: Worker<WorkflowWaitJob> | null
-}> | null = null
-
-async function initializeQueue() {
-  const connection = getQueueRedis()
-
-  const queue = new Queue<WorkflowWaitJob>(QUEUE_NAME, {
-    connection,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: 'exponential' as const, delay: 5000 },
-      removeOnComplete: { count: 100, age: 7 * 86400 },
-      removeOnFail: { age: 7 * 86400 },
-    },
-  })
-
-  // Consumer side is role-gated: web-role replicas enqueue and register
-  // schedules but never construct a Worker (see queue/role.ts).
-  const worker = shouldRunWorkers()
-    ? new Worker<WorkflowWaitJob>(
-        QUEUE_NAME,
-        async (job) => {
-          const { resumeWorkflowRun } = await import('./workflow.engine')
-          await resumeWorkflowRun(job.data.runId as Parameters<typeof resumeWorkflowRun>[0], {
-            expectedWaitSeq: job.data.waitSeq,
-          })
-        },
-        { connection, concurrency: CONCURRENCY }
-      )
-    : null
-
-  try {
-    await Promise.race([
-      queue.waitUntilReady(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
-      ),
-    ])
-  } catch (error) {
-    await queue.close().catch(() => {})
-    await worker?.close().catch(() => {})
-    throw error
-  }
-
-  worker?.on('failed', (job, error) => {
-    if (!job) return
-    const isPermanent =
-      job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
-    log.error(
-      { err: error, runId: job.data.runId, permanent: isPermanent },
-      'workflow-wait resume failed'
-    )
-  })
-
-  return { queue, worker }
-}
-
-async function ensureQueue() {
-  if (!initPromise) {
-    initPromise = initializeQueue().catch((err) => {
-      initPromise = null
-      throw err
-    })
-  }
-  return initPromise
-}
+/** The logical queue name. Matches the definition in `jobs/definitions.ts`. */
+export const WORKFLOW_WAIT_QUEUE = 'workflow-wait'
 
 /** The three kinds of wait a run can park at — a plain timer, an interactive
  *  block awaiting a structured reply (input), or a `let_assistant_answer` park
@@ -179,10 +112,10 @@ export function readCursor(run: Pick<WorkflowRun, 'cursor'>): AnyWaitCursor {
   return (run.cursor ?? {}) as AnyWaitCursor
 }
 
-/** The BullMQ job id for a given run's Nth wait; exported so the run cursor's
- *  waitSeq is enough to reconstruct the id a scheduled job was keyed under
+/** The dedupe key for a given run's Nth wait; exported so the run cursor's
+ *  waitSeq is enough to reconstruct the key a scheduled job was written under
  *  (the sweeper reconciles stuck runs against the queue this way). A nullish
- *  waitSeq yields the id keyed by run id alone, for runs parked before waits
+ *  waitSeq yields the key keyed by run id alone, for runs parked before waits
  *  were sequence-keyed. */
 export function workflowWaitJobId(runId: string, waitSeq: number | null | undefined): string {
   return waitSeq == null ? `workflow-wait:${runId}` : `workflow-wait:${runId}:${waitSeq}`
@@ -190,41 +123,57 @@ export function workflowWaitJobId(runId: string, waitSeq: number | null | undefi
 
 /**
  * Schedule a run to resume after `waitSeconds`. `waitSeq` is the run's per-wait
- * sequence number (from its cursor), so each wait in a run gets a distinct job
- * id instead of dedupe-colliding with an earlier one. A zero/negative wait
- * resumes on the next tick.
+ * sequence number (from its cursor), so each wait in a run gets a distinct
+ * dedupe key instead of colliding with an earlier one. A zero/negative wait
+ * resumes on the next pass.
  */
 export async function scheduleWorkflowResume(
   runId: string,
   waitSeconds: number,
   waitSeq: number
 ): Promise<void> {
-  const { queue } = await ensureQueue()
-  await queue.add(
-    'workflow-wait:resume',
-    { runId, waitSeq },
-    { jobId: workflowWaitJobId(runId, waitSeq), delay: Math.max(0, waitSeconds) * 1000 }
-  )
+  const delayMs = Math.max(0, waitSeconds) * 1000
+  await enqueueJob({
+    queue: WORKFLOW_WAIT_QUEUE,
+    payload: { runId, waitSeq },
+    dedupeKey: workflowWaitJobId(runId, waitSeq),
+    runAt: new Date(Date.now() + delayMs),
+    maxAttempts: 3,
+  })
 }
 
-/** Look up a scheduled wait job by id, for the sweeper to check whether a
- *  waiting run's durable timer is still live. Exported narrowly (rather than
- *  the queue itself) to keep BullMQ internals out of the sweep module. */
-export async function getWorkflowWaitJob(jobId: string): Promise<Job<WorkflowWaitJob> | undefined> {
-  const { queue } = await ensureQueue()
-  return queue.getJob(jobId)
+/** What the sweeper needs to know about a scheduled wait: does it still exist,
+ *  and is it still going to fire? Exported narrowly (rather than the queue
+ *  itself) to keep queue internals out of the sweep module. */
+export interface WorkflowWaitJobState {
+  status: string
+  /** True once the job can no longer fire on its own. */
+  terminal: boolean
 }
 
-/** Eager init (called from startup via the worker registry). */
-export async function initWorkflowWaitWorker(): Promise<void> {
-  await ensureQueue()
-  log.info('workflow-wait worker initialized')
+/** Look up a scheduled wait by its dedupe key. */
+export async function getWorkflowWaitJob(dedupeKey: string): Promise<WorkflowWaitJobState | null> {
+  const found = await findJobByDedupeKey(WORKFLOW_WAIT_QUEUE, dedupeKey)
+  if (!found) return null
+  return {
+    status: found.status,
+    terminal: found.status === 'succeeded' || found.status === 'failed',
+  }
 }
 
-export async function closeWorkflowWaitQueue(): Promise<void> {
-  if (!initPromise) return
-  const { worker, queue } = await initPromise
-  initPromise = null
-  await worker?.close().catch(() => {})
-  await queue.close().catch(() => {})
+/** Free a dedupe key held by a terminal wait job, so a fresh one can be written. */
+export async function removeWorkflowWaitJob(dedupeKey: string): Promise<void> {
+  await cancelJob(WORKFLOW_WAIT_QUEUE, dedupeKey)
+}
+
+/** Resume one parked run. */
+export async function runWorkflowWait(job: ClaimedJob): Promise<void> {
+  const { runId, waitSeq } = job.payload as { runId?: string; waitSeq?: number }
+  if (!runId) {
+    log.error({ jobId: job.jobId }, 'workflow-wait job carried no run id')
+    return
+  }
+  await resumeWorkflowRun(runId as Parameters<typeof resumeWorkflowRun>[0], {
+    expectedWaitSeq: waitSeq as number,
+  })
 }

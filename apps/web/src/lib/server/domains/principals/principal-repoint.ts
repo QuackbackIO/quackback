@@ -491,6 +491,8 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'derived preference state; cascades with the anon principal by design (target keeps its own)',
   'unsubscribe_tokens.principal_id':
     'derived token state; cascades with the anon principal by design',
+  'presence_stream.principal_id':
+    'one row per live SSE stream, not a fact about the principal row (hence text, not an FK). Re-pointing it would be incoherent: the stream is a live request still authenticated as the source principal, so its next heartbeat (20s) would simply re-insert the row under the old id. Nothing is stranded either — rows are swept by heartbeat age (PRESENCE_TTL_SECONDS), never by principal. The whole cost of skipping it is that isPrincipalOnline() reads false for the target for up to 45s, whose only effect is an offline-reply notification the visitor may not have needed; that is the direction presence already fails in deliberately.',
   'conversation_views.created_by_principal_id':
     'saved views are created by team members; the merge source is always anonymous',
   'post_views.created_by_principal_id':

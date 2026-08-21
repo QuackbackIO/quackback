@@ -206,8 +206,8 @@ export const Route = createFileRoute('/api/chat/stream')({
         }
 
         const isAgentStream = scope === 'inbox' || scope === 'presence'
-        // Unique per stream so presence is tracked per-connection in Redis
-        // (cross-replica), not by a per-process count.
+        // Unique per stream so presence is tracked per-connection in the shared
+        // Postgres presence store (cross-replica), not by a per-process count.
         const streamId = crypto.randomUUID()
         const lastEventId = request.headers.get('last-event-id')
 
@@ -241,8 +241,8 @@ export const Route = createFileRoute('/api/chat/stream')({
             const wentOffline = await clearPresence(me.principalId, streamId, isAgentStream)
             // When an inbox agent's last stream closes cluster-wide, return
             // their unanswered conversations to the queue so they aren't
-            // stranded. wentOffline is now Redis-backed, so an agent still
-            // live on another replica is not treated as offline here.
+            // stranded. wentOffline reads the shared presence store, so an agent
+            // still live on another replica is not treated as offline here.
             if (wentOffline && isAgentStream) {
               const { requeueUnansweredOnAgentOffline } =
                 await import('@/lib/server/domains/conversation/conversation.service')
@@ -299,8 +299,8 @@ export const Route = createFileRoute('/api/chat/stream')({
             // where the stream opens after the turn already started) would
             // otherwise miss every "thinking" / "searching" frame published
             // before it subscribed. Kicked off AFTER subscribing (no gap) but
-            // awaited past the backfill below so the Redis read overlaps the
-            // DB round trips; sent before the live-buffer flush so an activity
+            // awaited past the backfill below so the snapshot read overlaps the
+            // backfill round trips; sent before the live-buffer flush so an activity
             // frame that arrived during backfill is flushed after it and wins.
             // Only for a conversation-scoped stream — the trace is never
             // inbox-wide.

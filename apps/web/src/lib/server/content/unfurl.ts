@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto'
 import { safeFetch, SsrfError, TimeoutError } from './ssrf-guard'
 import { sniffImageMime, ALLOWED_REHOST_MIMES, canonicalizeImageMime } from './magic-bytes'
 import { uploadImageBuffer } from '@/lib/server/storage/s3'
-import { cacheGet, cacheSet } from '@/lib/server/redis'
+import { cacheGet, cacheSet } from '@/lib/server/cache'
 import { parseOpenGraph } from './og-parse'
 
 export interface LinkPreview {
@@ -150,9 +150,9 @@ function faviconCacheKey(rawFaviconUrl: string): string {
 }
 
 /**
- * Proxy a favicon, memoized by its source URL in Redis so every page of a site
- * reuses the first page's proxied favicon instead of re-fetching + re-uploading.
- * Caching is best-effort: a Redis miss/error just falls through to proxyFavicon.
+ * Proxy a favicon, memoized by its source URL in the KV cache so every page of a
+ * site reuses the first page's proxied favicon instead of re-fetching + re-uploading.
+ * Caching is best-effort: a cache miss/error just falls through to proxyFavicon.
  */
 async function proxyFaviconCached(rawFaviconUrl: string): Promise<string | null> {
   const key = faviconCacheKey(rawFaviconUrl)

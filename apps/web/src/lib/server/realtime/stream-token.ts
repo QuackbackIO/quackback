@@ -11,7 +11,7 @@
  * subscription (the conversation-level access check still runs server-side).
  */
 import { createHmac, timingSafeEqual } from 'crypto'
-import { config } from '../config'
+import { activeSecretKey } from '../secret-key'
 import type { PrincipalId } from '@quackback/ids'
 
 // Short TTL: the token only authorizes the initial SSE handshake, and the
@@ -30,7 +30,7 @@ function b64url(input: Buffer | string): string {
 }
 
 function sign(payload: string): string {
-  return createHmac('sha256', config.secretKey)
+  return createHmac('sha256', activeSecretKey())
     .update(DOMAIN_TAG + payload)
     .digest('base64url')
 }

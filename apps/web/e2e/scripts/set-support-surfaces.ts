@@ -53,7 +53,7 @@ try {
     WHERE id = ${id}`
 
   // Bust the tenant-settings cache so the change is visible on the next request.
-  await bustTenantSettings()
+  await bustTenantSettings(sql)
 
   console.log(JSON.stringify({ supportSurfaces: mode }))
   await sql.end()

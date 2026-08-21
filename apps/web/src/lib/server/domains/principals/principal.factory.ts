@@ -35,7 +35,7 @@ import {
 import { generateId, type PrincipalId, type RoleId, type UserId } from '@quackback/ids'
 import { isTeamMember, type Role, type PrincipalType } from '@/lib/shared/roles'
 import { presetForLegacyRole } from '@/lib/shared/permissions'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { addPrincipalToDefaultTeam } from '@/lib/server/domains/teams'
 import { ForbiddenError } from '@/lib/shared/errors'
 

@@ -66,7 +66,7 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
     throw new ValidationError('VALIDATION_ERROR', 'Color must be in hex format (e.g., #3b82f6)')
   }
 
-  // Check if slug already exists (moved outside transaction for neon-http compatibility)
+  // Check if slug already exists (sequential statements, no transaction needed)
   const existingStatus = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.slug, input.slug),
   })
@@ -101,7 +101,7 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
  */
 export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): Promise<Status> {
   log.debug({ status_id: id }, 'update status')
-  // Get existing status (moved outside transaction for neon-http compatibility)
+  // Get existing status (sequential statements, no transaction needed)
   const existingStatus = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.id, id),
   })
@@ -160,7 +160,7 @@ export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): 
  */
 export async function deleteStatus(id: PostStatusId): Promise<void> {
   log.debug({ status_id: id }, 'delete status')
-  // Get existing status (moved outside transaction for neon-http compatibility)
+  // Get existing status (sequential statements, no transaction needed)
   const existingStatus = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)),
   })
@@ -258,7 +258,7 @@ export async function reorderStatuses(ids: PostStatusId[]): Promise<void> {
  */
 export async function setDefaultStatus(id: PostStatusId): Promise<Status> {
   log.debug({ status_id: id }, 'set default status')
-  // Get existing status to verify it exists (moved outside transaction for neon-http compatibility)
+  // Get existing status to verify it exists (sequential statements, no transaction needed)
   const existingStatus = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.id, id),
   })

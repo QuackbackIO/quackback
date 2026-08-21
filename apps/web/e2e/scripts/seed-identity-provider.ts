@@ -27,7 +27,7 @@
  * }
  *
  * After mutating, the caller (access-helpers) drops the tenant-settings +
- * configured-types Redis caches so the running dev server sees the change.
+ * configured-types caches so the running dev server sees the change.
  */
 import postgres from 'postgres'
 import { hkdfSync, randomBytes, createCipheriv, randomUUID } from 'crypto'
@@ -74,7 +74,7 @@ const sql = postgres(connectionString)
 
 /**
  * A server process caches the auth instance it built and only rebuilds when
- * `settings.auth_config_version` moves, so dropping Redis keys alone leaves a
+ * `settings.auth_config_version` moves, so dropping the cache rows alone leaves a
  * warm process serving a provider list that predates this write. The app's own
  * write path bumps the version in the same transaction; a raw-SQL write has to
  * mirror that or it is invisible until the process restarts.

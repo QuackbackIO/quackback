@@ -8,7 +8,7 @@
  * test DB is left clean.
  */
 
-// Satisfy the config schema (secretKey/baseUrl/redisUrl) the encryption + db
+// Satisfy the config schema (secretKey/baseUrl) the encryption + db
 // layers validate on first access. Config loads lazily inside the test body, so
 // setting these at module-eval time — after the hoisted imports but before any
 // test runs — is in time. Only DATABASE_URL is injected by the vitest config;
@@ -16,7 +16,6 @@
 // force-set a valid value rather than conditionally defaulting it.
 process.env.SECRET_KEY = 'test-secret-key-that-is-at-least-32-characters-long'
 process.env.BASE_URL = 'http://localhost:3000'
-process.env.REDIS_URL = 'redis://localhost:6379'
 
 import { describe, it, expect } from 'vitest'
 import {

@@ -3,7 +3,7 @@ import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, eq, principal } from '@/lib/server/db'
 import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
-import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/redis-rate-bucket'
+import { incrementBucket, bucketRetryAfter } from '@/lib/server/utils/rate-bucket'
 
 export async function handlePortalUpload({ request }: { request: Request }): Promise<Response> {
   const session = await auth.api.getSession({ headers: request.headers })

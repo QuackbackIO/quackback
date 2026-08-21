@@ -6,7 +6,7 @@
  * target shape are preserved; only the event access (payload vs data) changes.
  */
 import { db, integrations, integrationEventMappings, eq, and } from '@/lib/server/db'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/cache'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
 import { buildHookContext } from '../hook-context'
 import { logger } from '@/lib/server/logger'

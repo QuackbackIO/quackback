@@ -27,16 +27,18 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
-// The durable-timer queue is BullMQ; both of its accessors used by the sweep
-// are spied here, keeping workflowWaitJobId real so tests can rebuild the job
-// id a scheduled call would have used.
-const { getWorkflowWaitJob, scheduleWorkflowResume } = vi.hoisted(() => ({
+// The durable timer is a row on the Postgres job queue; the three accessors
+// the sweep uses are spied here, keeping workflowWaitJobId real so tests can
+// rebuild the dedupe key a scheduled call would have used.
+const { getWorkflowWaitJob, removeWorkflowWaitJob, scheduleWorkflowResume } = vi.hoisted(() => ({
   getWorkflowWaitJob: vi.fn(),
+  removeWorkflowWaitJob: vi.fn().mockResolvedValue(undefined),
   scheduleWorkflowResume: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('../workflow-wait-queue', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../workflow-wait-queue')>()),
   getWorkflowWaitJob,
+  removeWorkflowWaitJob,
   scheduleWorkflowResume,
 }))
 
@@ -493,10 +495,8 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
     })
 
     it('leaves a waiting run whose durable timer job still exists untouched', async () => {
-      getWorkflowWaitJob.mockResolvedValue({
-        id: 'live-job',
-        getState: async () => 'delayed',
-      } as never) // job is queued, just late
+      // Pending with a future run_at: queued, just late.
+      getWorkflowWaitJob.mockResolvedValue({ status: 'pending', terminal: false } as never)
       const conversationId = await seedConversation()
       const wf = await seedWorkflow()
       // Overdue (fire time in the past) so the due-filter selects it — this is
@@ -529,14 +529,11 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
 
     it('removes a settled failed job before rescheduling (frees the jobId reused by scheduleWorkflowResume)', async () => {
       const callOrder: string[] = []
-      const removeJob = vi.fn(async () => {
+      removeWorkflowWaitJob.mockClear()
+      removeWorkflowWaitJob.mockImplementationOnce(async () => {
         callOrder.push('remove')
       })
-      getWorkflowWaitJob.mockResolvedValue({
-        id: 'failed-job',
-        getState: async () => 'failed',
-        remove: removeJob,
-      } as never)
+      getWorkflowWaitJob.mockResolvedValue({ status: 'failed', terminal: true } as never)
       scheduleWorkflowResume.mockImplementationOnce(async () => {
         callOrder.push('reschedule')
       })
@@ -556,12 +553,12 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       const count = await sweepOrphanedWaitingRuns(new Date())
       expect(count).toBe(1)
 
-      expect(removeJob).toHaveBeenCalledTimes(1)
+      expect(removeWorkflowWaitJob).toHaveBeenCalledTimes(1)
       expect(scheduleWorkflowResume).toHaveBeenCalledTimes(1)
-      // A settled job (removeOnFail/removeOnComplete still holding the id)
-      // must be freed before scheduleWorkflowResume reuses the same
-      // waitSeq-keyed jobId — otherwise BullMQ's add-with-existing-id is a
-      // silent no-op and the run never actually gets a fresh timer.
+      // A settled job (retention still holding the key) must be freed before
+      // scheduleWorkflowResume reuses the same waitSeq-keyed dedupe key —
+      // otherwise the enqueue is a silent no-op against the unique index and
+      // the run never actually gets a fresh timer.
       expect(callOrder).toEqual(['remove', 'reschedule'])
 
       const events = await testDb
@@ -573,14 +570,11 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
 
     it('removes a settled completed job before rescheduling, same as the failed case', async () => {
       const callOrder: string[] = []
-      const removeJob = vi.fn(async () => {
+      removeWorkflowWaitJob.mockClear()
+      removeWorkflowWaitJob.mockImplementationOnce(async () => {
         callOrder.push('remove')
       })
-      getWorkflowWaitJob.mockResolvedValue({
-        id: 'completed-job',
-        getState: async () => 'completed',
-        remove: removeJob,
-      } as never)
+      getWorkflowWaitJob.mockResolvedValue({ status: 'succeeded', terminal: true } as never)
       scheduleWorkflowResume.mockImplementationOnce(async () => {
         callOrder.push('reschedule')
       })
@@ -600,7 +594,7 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       const count = await sweepOrphanedWaitingRuns(new Date())
       expect(count).toBe(1)
 
-      expect(removeJob).toHaveBeenCalledTimes(1)
+      expect(removeWorkflowWaitJob).toHaveBeenCalledTimes(1)
       expect(scheduleWorkflowResume).toHaveBeenCalledTimes(1)
       expect(callOrder).toEqual(['remove', 'reschedule'])
 
@@ -671,10 +665,7 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(after.cursor).toMatchObject({ resumeNodeId: 'a2', waitSeq: 1, waitSeconds: 0 })
 
       getWorkflowWaitJob.mockClear()
-      getWorkflowWaitJob.mockResolvedValue({
-        id: 'live-job',
-        getState: async () => 'delayed',
-      } as never)
+      getWorkflowWaitJob.mockResolvedValue({ status: 'pending', terminal: false } as never)
       expect(await sweepOrphanedWaitingRuns(new Date())).toBe(0)
       expect(getWorkflowWaitJob).toHaveBeenCalledWith(workflowWaitJobId(run.id, 1))
 

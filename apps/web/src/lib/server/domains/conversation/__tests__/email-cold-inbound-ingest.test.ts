@@ -15,7 +15,6 @@ import type { TeamId } from '@quackback/ids'
 // absolute one unconditionally for this file's config load.
 process.env.BASE_URL = 'https://quackback.test'
 process.env.SECRET_KEY ||= 'x'.repeat(32)
-process.env.REDIS_URL ||= 'redis://localhost:6379'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -40,12 +39,12 @@ vi.mock('../conversation.webhooks', async (orig) => ({
   emitConversationCreated: vi.fn().mockResolvedValue(undefined),
   emitMessageCreated: vi.fn().mockResolvedValue(undefined),
 }))
-// The cold-inbound throttle is a real Redis bucket keyed on the sender address,
+// The cold-inbound throttle is a real rate bucket keyed on the sender address,
 // which this file's fixture hardcodes. Left live, the cases below would burn a
 // shared 10-per-hour budget and start failing as 'rate_limited' on repeated
 // local runs — a red suite that points nowhere near its cause. Count the calls
 // instead; the bucket arithmetic is pinned in conversation-ratelimit.test.ts.
-vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+vi.mock('@/lib/server/utils/rate-bucket', () => ({
   incrementBucket: vi.fn().mockResolvedValue({ count: 1 }),
   incrementBuckets: vi.fn().mockResolvedValue([1]),
   bucketRetryAfter: vi.fn().mockResolvedValue(60),
@@ -67,7 +66,7 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
 
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
 import { emitMessageCreated } from '../conversation.webhooks'
-import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
+import { incrementBucket } from '@/lib/server/utils/rate-bucket'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {

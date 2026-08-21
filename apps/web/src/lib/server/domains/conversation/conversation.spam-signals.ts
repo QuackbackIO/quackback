@@ -15,7 +15,7 @@
  *                           types (a tighter window than the hard cold-inbound
  *                           cap, which drops rather than files).
  *
- * Every signal fails open: a Redis error, a missing header, or any thrown
+ * Every signal fails open: a store error, a missing header, or any thrown
  * error resolves to "no signal", leaving the thread in triage — the same
  * failure contract as the AI filter, whose trust-list bypass the caller also
  * applies before any of these run.

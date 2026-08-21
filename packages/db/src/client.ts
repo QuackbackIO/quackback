@@ -27,6 +27,19 @@ export function createDb(connectionString: string, options?: CreateDbOptions): D
 }
 
 /**
+ * Wrap an existing postgres.js handle.
+ *
+ * A pooled multi-tenant process cannot use {@link createDb}: a tenant pool needs
+ * options a connection string cannot carry — chiefly a `password` *function*, so
+ * a rotated credential is picked up on the next connection rather than wedging
+ * the pool. Building the handle at the call site and wrapping it here keeps the
+ * schema wiring in one place, which is the part that must not be duplicated.
+ */
+export function createDbFromSql(sql: postgres.Sql): Database {
+  return drizzle(sql, { schema })
+}
+
+/**
  * Create a database client for migrations.
  * Uses DATABASE_URL directly, only works in Node.js.
  */

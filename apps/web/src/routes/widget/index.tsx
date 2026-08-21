@@ -156,7 +156,7 @@ export const Route = createFileRoute('/widget/')({
       // below. Skipped when Messenger isn't shown. A presence read failure must
       // never break the whole widget load — leave the seed empty and let the
       // client query fetch presence on mount. Call the server fn (not an
-      // unwrapped helper): its handler — and the ioredis-reaching presence
+      // unwrapped helper): its handler — and the database-reaching presence
       // import inside it — is stripped from the client bundle.
       messengerTabEnabled
         ? import('@/lib/server/functions/conversation')

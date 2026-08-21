@@ -1,7 +1,7 @@
 /**
  * SSO Test sign-in callback handler. Invoked by the auth catch-all for any
  * genericOAuth callback path before Better-Auth — a hit on the
- * `sso-test:<state>` Redis key dispatches the diagnostic handshake;
+ * `sso-test:<state>` KV key dispatches the diagnostic handshake;
  * a miss falls through to a real OAuth sign-in.
  *
  * On a successful handshake this stamps the tested provider's
@@ -41,7 +41,7 @@ export interface SsoTestCallbackHandled {
 
 /**
  * Returns null when the request is NOT a Test sign-in callback (no
- * state, or state has no matching session in Redis). The caller should
+ * state, or state has no matching session in the KV store). The caller should
  * fall through to Better-Auth in that case.
  *
  * Otherwise loads the per-state session, deletes it BEFORE running the
@@ -55,7 +55,7 @@ export async function handleSsoTestCallback(
 ): Promise<SsoTestCallbackHandled | null> {
   if (!input.state) return null
 
-  const { cacheGet, cacheSet, cacheDel } = await import('@/lib/server/redis')
+  const { cacheGet, cacheSet, cacheDel } = await import('@/lib/server/cache')
 
   const sessionKey = ssoTestSessionKey(input.state)
   const session = await cacheGet<TestSession>(sessionKey)

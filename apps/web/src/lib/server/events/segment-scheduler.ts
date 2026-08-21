@@ -1,254 +1,188 @@
 /**
- * Segment evaluation scheduler — repeatable BullMQ jobs for auto-evaluating
- * dynamic segments on a cron schedule.
+ * Segment evaluation scheduler — cron-scheduled re-evaluation of dynamic
+ * segments.
  *
- * Each dynamic segment with an evaluationSchedule gets a repeatable job
- * keyed by segment ID. When fired, the worker re-evaluates the segment's
+ * Each dynamic segment with an `evaluationSchedule` gets a slot on its own cron
+ * pattern. When the slot comes due the handler re-evaluates that segment's
  * rules and syncs membership.
  *
- * Uses a dedicated queue (separate from event-hooks) so segment evaluation
- * doesn't compete with webhook delivery for worker slots.
+ * ## The schedules are derived, not registered
+ *
+ * Under BullMQ each segment's schedule was a *repeatable job written into
+ * Redis*, which meant the truth lived in two places — the `segments` row and
+ * the Redis key — and had to be reconciled: `restoreAllEvaluationSchedules()`
+ * ran at boot precisely because Redis could have been cleared, and every
+ * create/update/delete had to remember to call the upsert or the remove.
+ *
+ * Here the scheduler derives the schedules from the rows
+ * (`segmentEvaluationSchedules()`) and there is no second copy. A deleted or
+ * disabled segment stops being scheduled with no removal call at all. That
+ * deletes the restore step and the whole class of drift it existed to repair.
+ * The upsert/remove functions are the derivation's invalidation hooks: their
+ * call sites are exactly the admin actions that change the derived list, so
+ * they drop the memo below (and log the intent, because a silent removal would
+ * leave "who schedules this?" unanswerable from the create path).
  */
 
-import { Queue, Worker, UnrecoverableError } from 'bullmq'
-import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
 import type { SegmentId } from '@quackback/ids'
-import type { EvaluationSchedule } from '@/lib/server/db'
+import { db, segments, eq, and, isNull, type EvaluationSchedule } from '@/lib/server/db'
+import { TerminalJobError, type DynamicSchedule } from '@/lib/server/jobs/definitions'
+import { nextSlotAfter, parseCron } from '@/lib/server/jobs/cron'
+import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
+import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
+import { evaluateDynamicSegment } from '@/lib/server/domains/segments/segment.evaluation'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'segment-scheduler' })
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface SegmentEvalJobData {
-  segmentId: string
-}
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-// Hashtag pins all keys to a single Dragonfly thread for Lua script compat.
-const QUEUE_NAME = '{segment-evaluation}'
-
-// Segment evaluation is DB-heavy but not network-heavy. Keep concurrency low
-// to avoid overwhelming the database during bulk re-evaluations.
-const CONCURRENCY = 2
-
-const DEFAULT_JOB_OPTS = {
-  attempts: 3,
-  backoff: { type: 'exponential' as const, delay: 2000 },
-  // Last 1000 completed (or 24h) — see events/process.ts for rationale.
-  removeOnComplete: { count: 1000, age: 86400 },
-  removeOnFail: { age: 7 * 86400 }, // keep failed jobs 7 days
-}
-
-// ============================================================================
-// Lazy initialization
-// ============================================================================
-
-let initPromise: Promise<{
-  queue: Queue<SegmentEvalJobData>
-  worker: Worker<SegmentEvalJobData> | null
-}> | null = null
-
-function ensureQueue(): Promise<Queue<SegmentEvalJobData>> {
-  if (!initPromise) {
-    initPromise = initializeQueue().catch((err) => {
-      initPromise = null
-      throw err
-    })
-  }
-  return initPromise.then(({ queue }) => queue)
-}
-
-async function initializeQueue() {
-  const connection = getQueueRedis()
-
-  const queue = new Queue<SegmentEvalJobData>(QUEUE_NAME, {
-    connection,
-    defaultJobOptions: DEFAULT_JOB_OPTS,
-  })
-
-  // Consumer side is role-gated: web-role replicas enqueue and register
-  // schedules but never construct a Worker (see queue/role.ts).
-  const worker = shouldRunWorkers()
-    ? new Worker<SegmentEvalJobData>(
-        QUEUE_NAME,
-        async (job) => {
-          const { segmentId } = job.data
-          log.debug({ segment_id: segmentId }, 'evaluating segment')
-
-          // Lazy import to avoid circular deps
-          const { evaluateDynamicSegment } =
-            await import('@/lib/server/domains/segments/segment.evaluation')
-
-          try {
-            const result = await evaluateDynamicSegment(segmentId as SegmentId)
-            log.info(
-              { segment_id: segmentId, added: result.added, removed: result.removed },
-              'segment evaluated'
-            )
-          } catch (error) {
-            // If segment was deleted or isn't dynamic anymore, don't retry
-            if (
-              error instanceof Error &&
-              (error.message.includes('not found') || error.message.includes('not dynamic'))
-            ) {
-              throw new UnrecoverableError(error.message)
-            }
-            throw error
-          }
-        },
-        { connection, concurrency: CONCURRENCY }
-      )
-    : null
-
-  // Verify Redis is reachable
-  try {
-    await Promise.race([
-      queue.waitUntilReady(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
-      ),
-    ])
-  } catch (error) {
-    await queue.close().catch(() => {})
-    await worker?.close().catch(() => {})
-    throw error
-  }
-
-  worker?.on('failed', (job, error) => {
-    if (!job) return
-    const isPermanent =
-      job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
-    log.error(
-      {
-        err: error,
-        segment_id: job.data.segmentId,
-        permanent: isPermanent,
-        attempt: job.attemptsMade,
-      },
-      'segment evaluation failed'
-    )
-  })
-
-  return { queue, worker }
-}
-
-// ============================================================================
-// Public API
-// ============================================================================
+/** The logical queue name. Matches the definition in `jobs/definitions.ts`. */
+export const SEGMENT_EVALUATION_QUEUE = 'segment-evaluation'
 
 /**
- * Create or update a repeatable evaluation job for a dynamic segment.
- * If a job already exists for this segment, it is replaced with the new schedule.
+ * Memo of the derived schedule list, one entry per tenant.
+ *
+ * The schedule tick asks every minute per tenant for a list that only changes
+ * on admin action, so the derivation's table read is memoised. Keyed by the
+ * active tenant (`TenantKeyedCache` namespaces by the current tenant scope; a
+ * single-tenant install lands on its one fixed namespace) and dropped by the
+ * upsert/remove hooks, so an admin change on this process lands on the next
+ * tick. The TTL covers writes whose hook ran elsewhere — another replica, or a
+ * web process while the tier runs in a worker.
+ */
+const SCHEDULE_MEMO_TTL_MS = 5 * 60_000
+const SCHEDULE_MEMO_KEY = 'schedules'
+const scheduleMemo = new TenantKeyedCache<{ schedules: DynamicSchedule[]; expiresAt: number }>()
+
+function invalidateScheduleMemo(): void {
+  scheduleMemo.delete(SCHEDULE_MEMO_KEY)
+}
+
+/** Test seam: forget every tenant's memoised schedule list. */
+export function __clearSegmentScheduleMemoForTests(): void {
+  scheduleMemo.clear()
+}
+
+/**
+ * Every dynamic segment's live schedule, read from this tenant's own database.
+ *
+ * Called on each schedule tick inside the tenant's scope, so the answer is per
+ * tenant by construction (and memoised per tenant — see the memo above). A
+ * pattern the cron parser rejects is dropped with a loud log rather than
+ * defaulting to some permissive reading: a mis-parsed expression changes a
+ * segment's cadence with no error anywhere.
+ */
+export async function segmentEvaluationSchedules(): Promise<DynamicSchedule[]> {
+  const hit = scheduleMemo.get(SCHEDULE_MEMO_KEY)
+  if (hit && hit.expiresAt > Date.now()) return hit.schedules
+
+  const rows = await db
+    .select({ id: segments.id, evaluationSchedule: segments.evaluationSchedule })
+    .from(segments)
+    .where(and(eq(segments.type, 'dynamic'), isNull(segments.deletedAt)))
+
+  const out: DynamicSchedule[] = []
+  for (const row of rows) {
+    const schedule = row.evaluationSchedule as EvaluationSchedule | null
+    if (!schedule?.enabled || !schedule.pattern) continue
+    try {
+      parseCron(schedule.pattern)
+    } catch (err) {
+      log.error(
+        { err, segment_id: row.id, pattern: schedule.pattern },
+        'segment evaluation schedule has an unparseable cron pattern; not scheduled'
+      )
+      continue
+    }
+    out.push({
+      key: String(row.id),
+      cron: schedule.pattern,
+      payload: { segmentId: String(row.id) },
+    })
+  }
+  scheduleMemo.set(SCHEDULE_MEMO_KEY, {
+    schedules: out,
+    expiresAt: Date.now() + SCHEDULE_MEMO_TTL_MS,
+  })
+  return out
+}
+
+/** Re-evaluate one dynamic segment. */
+export async function runSegmentEvaluation(job: ClaimedJob): Promise<void> {
+  const segmentId = (job.payload as { segmentId?: string }).segmentId
+  if (!segmentId) {
+    throw new TerminalJobError('segment evaluation job carried no segment id')
+  }
+  log.debug({ segment_id: segmentId }, 'evaluating segment')
+
+  try {
+    const result = await evaluateDynamicSegment(segmentId as SegmentId)
+    log.info(
+      { segment_id: segmentId, added: result.added, removed: result.removed },
+      'segment evaluated'
+    )
+  } catch (error) {
+    // If the segment was deleted or is no longer dynamic, retrying reaches the
+    // same answer three times.
+    if (
+      error instanceof Error &&
+      (error.message.includes('not found') || error.message.includes('not dynamic'))
+    ) {
+      throw new TerminalJobError(error.message)
+    }
+    throw error
+  }
+}
+
+/**
+ * Record that a segment's evaluation schedule changed.
+ *
+ * There is nothing to write — the row the caller just saved *is* the schedule —
+ * but there is something to forget: the memoised derivation of it. Invalidated
+ * on every path through here, including a disable, because any of them changes
+ * the derived list.
  */
 export async function upsertSegmentEvaluationSchedule(
   segmentId: SegmentId,
   schedule: EvaluationSchedule
 ): Promise<void> {
-  const queue = await ensureQueue()
-  const jobKey = `segment-eval:${segmentId}`
-
-  await removeSegmentEvaluationSchedule(segmentId)
-
-  if (!schedule.enabled) return
-
-  await queue.add(
-    jobKey,
-    { segmentId },
-    {
-      repeat: {
-        pattern: schedule.pattern,
-      },
-      jobId: jobKey,
-    }
-  )
-
+  invalidateScheduleMemo()
+  if (!schedule.enabled) {
+    log.info({ segment_id: segmentId }, 'segment evaluation schedule disabled')
+    return
+  }
+  try {
+    parseCron(schedule.pattern)
+  } catch (err) {
+    // Loud, because the segment will simply never evaluate and nothing else
+    // would say so.
+    log.error(
+      { err, segment_id: segmentId, pattern: schedule.pattern },
+      'segment evaluation schedule has an unparseable cron pattern and will not run'
+    )
+    return
+  }
   log.info({ segment_id: segmentId, pattern: schedule.pattern }, 'scheduled segment evaluation')
 }
 
-/**
- * Remove the repeatable evaluation job for a segment.
- * No-op if no schedule exists.
- */
+/** Counterpart to the above; likewise nothing to unwrite, one memo to drop. */
 export async function removeSegmentEvaluationSchedule(segmentId: SegmentId): Promise<void> {
-  const queue = await ensureQueue()
-  const jobKey = `segment-eval:${segmentId}`
-  const repeatableJobs = await queue.getRepeatableJobs()
-  for (const job of repeatableJobs) {
-    if (job.name === jobKey) {
-      await queue.removeRepeatableByKey(job.key)
-      log.info({ segment_id: segmentId }, 'removed segment schedule')
-      break
-    }
-  }
+  invalidateScheduleMemo()
+  log.info({ segment_id: segmentId }, 'removed segment schedule')
 }
 
 /**
- * Restore evaluation schedules for all dynamic segments that have them.
- * Call this on server startup to re-register repeatable jobs that may have
- * been lost if Redis was cleared.
- */
-export async function restoreAllEvaluationSchedules(): Promise<void> {
-  try {
-    const { db, segments, eq, and, isNull } = await import('@/lib/server/db')
-
-    const dynamicSegments = await db
-      .select({
-        id: segments.id,
-        evaluationSchedule: segments.evaluationSchedule,
-      })
-      .from(segments)
-      .where(and(eq(segments.type, 'dynamic'), isNull(segments.deletedAt)))
-
-    let restored = 0
-    for (const seg of dynamicSegments) {
-      const schedule = seg.evaluationSchedule as EvaluationSchedule | null
-      if (schedule?.enabled) {
-        await upsertSegmentEvaluationSchedule(seg.id as SegmentId, schedule)
-        restored++
-      }
-    }
-
-    if (restored > 0) {
-      log.info({ restored }, 'restored segment schedules')
-    }
-  } catch (error) {
-    log.error({ err: error }, 'failed to restore segment schedules')
-  }
-}
-
-/**
- * List all active repeatable evaluation jobs.
- * Useful for admin diagnostics.
+ * List the live evaluation schedules, for admin diagnostics.
+ *
+ * `next` is computed from the pattern rather than read back from a scheduler,
+ * which is the same answer with one fewer place to be stale.
  */
 export async function listEvaluationSchedules(): Promise<
   Array<{ segmentId: string; pattern: string; next: number | undefined }>
 > {
-  const queue = await ensureQueue()
-  const jobs = await queue.getRepeatableJobs()
-  return jobs
-    .filter((j) => j.name.startsWith('segment-eval:'))
-    .map((j) => ({
-      segmentId: j.name.replace('segment-eval:', ''),
-      pattern: j.pattern ?? '',
-      next: j.next,
-    }))
-}
-
-/**
- * Gracefully shut down the segment evaluation queue.
- */
-export async function closeSegmentScheduler(): Promise<void> {
-  if (!initPromise) return
-  const { worker, queue } = await initPromise
-  initPromise = null
-
-  await worker?.close().catch((e) => log.error({ err: e }, 'worker close error'))
-  await queue.close().catch((e) => log.error({ err: e }, 'queue close error'))
+  const now = new Date()
+  return (await segmentEvaluationSchedules()).map((s) => ({
+    segmentId: s.key,
+    pattern: s.cron,
+    next: nextSlotAfter(parseCron(s.cron), now)?.getTime(),
+  }))
 }

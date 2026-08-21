@@ -33,7 +33,7 @@ vi.mock('../ticket.webhooks', () => ({
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Neutralize the real Redis-backed realtime publish; this suite doesn't
+// Neutralize the real Postgres-backed realtime publish; this suite doesn't
 // exercise it.
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
 

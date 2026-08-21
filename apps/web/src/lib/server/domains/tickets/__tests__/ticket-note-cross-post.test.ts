@@ -24,7 +24,7 @@
  *    channel alone; the customer's thread never shows internal work.
  *
  * The webhook bridges, realtime and notify are mocked (spy bags), so no event
- * pipeline, Redis, or email runs.
+ * pipeline, pub/sub, or email runs.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import {

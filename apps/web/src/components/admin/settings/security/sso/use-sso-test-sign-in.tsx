@@ -54,7 +54,7 @@ import type { SsoTestCapture } from '@/lib/shared/sso-test-capture'
 export type { SsoTestCapture }
 
 const POLL_INTERVAL_MS = 2000
-// 150 polls * 2s = 5 minutes. Redis test-session TTL is 10 minutes;
+// 150 polls * 2s = 5 minutes. The stored test-session TTL is 10 minutes;
 // bail well before that so we don't poll an expired session forever.
 const MAX_POLLS = 150
 

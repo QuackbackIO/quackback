@@ -78,11 +78,11 @@ export function setPortalAuthMethods(action: 'disable' | 'restore' | 'enable-mag
 }
 
 /**
- * Flush the magic-link per-email rate-limit keys from Redis/Dragonfly so that
- * repeated e2e runs on the same email addresses don't hit the sign-in limiter.
- * No-op when no keys exist. Delegates to db-helpers' script-backed
- * implementation (the single owner of the signin:magiclink:* key prefix),
- * which uses ioredis directly and so also works in CI.
+ * Flush the magic-link per-email rate-limit buckets so that repeated e2e runs
+ * on the same email addresses don't hit the sign-in limiter. No-op when no rows
+ * exist. Delegates to db-helpers' script-backed implementation (the single
+ * owner of the signin:magiclink:* key prefix), which goes straight to the
+ * database and so also works in CI.
  */
 export function flushMagicLinkRateLimit(): void {
   clearSigninRateLimit()
@@ -101,7 +101,7 @@ export interface SeedIdpConfig {
 }
 
 /**
- * Drop the tenant-settings + configured-integration-types Redis caches so the
+ * Drop the tenant-settings + configured-integration-types caches so the
  * running dev server immediately reflects a raw-SQL provider mutation (these
  * caches normally only invalidate via the app's own write paths).
  *

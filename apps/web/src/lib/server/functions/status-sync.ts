@@ -21,7 +21,7 @@ const log = logger.child({ component: 'status-sync' })
 
 // NOTE: the registry (`@/lib/server/integrations`) is imported DYNAMICALLY
 // inside the handlers below — a top-level import would pull the whole
-// provider graph (and its db/redis/bullmq packages) into the client bundle
+// provider graph (and its db/kv/jobs packages) into the client bundle
 // via the createServerFn client stub, which import-protection rejects. The
 // webhook-setup split is derived from the registry directly in the coverage
 // test, so nothing outside a handler references it here.

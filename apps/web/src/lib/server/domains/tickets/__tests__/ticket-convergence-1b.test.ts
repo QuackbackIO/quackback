@@ -27,7 +27,7 @@
  *
  * The two webhook bridges, realtime, and the notify layer are fully mocked
  * (spy bags — same pattern as ticket-convergence-1a.test.ts), so no event
- * pipeline, Redis, or email runs; the assistant orchestrator is a spy so the
+ * pipeline, pub/sub, or email runs; the assistant orchestrator is a spy so the
  * Quinn gate is assertable at the dispatch site.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
@@ -52,7 +52,7 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-// Neutralize the Redis-backed realtime fan-out on BOTH channels.
+// Neutralize the Postgres-backed realtime fan-out on BOTH channels.
 const realtime = vi.hoisted(() => ({
   publishTicketEvent: vi.fn(),
   publishConversationEvent: vi.fn(),

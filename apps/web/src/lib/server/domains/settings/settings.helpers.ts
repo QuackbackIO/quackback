@@ -3,7 +3,7 @@
  * NOT part of the public API — import from settings.service instead.
  */
 import { db, eq, settings } from '@/lib/server/db'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { logger } from '@/lib/server/logger'
@@ -70,8 +70,8 @@ export async function requireSettings(): Promise<SettingsRecord> {
 }
 
 /**
- * The raw settings row for READ-ONLY paths, served through the Redis-cached
- * tenant-settings blob (a single Redis GET when warm; the miss path is the
+ * The raw settings row for READ-ONLY paths, served through the KV-cached
+ * tenant-settings blob (a single cache GET when warm; the miss path is the
  * same DB read as {@link requireSettings}). Every settings mutation calls
  * invalidateSettingsCache(), so reads here are effectively fresh.
  *

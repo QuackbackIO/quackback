@@ -19,7 +19,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 // Neutralize createTicketCore's fire-and-forget side channels (they resolve
-// hook targets / Redis mid-rollback) — mirrors ticket.service.test.ts.
+// hook targets / cache mid-rollback) — mirrors ticket.service.test.ts.
 const webhooks = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),

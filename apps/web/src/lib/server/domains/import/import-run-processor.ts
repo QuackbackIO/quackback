@@ -2,8 +2,8 @@
  * Async import commit job (§I1).
  *
  * Owns an import run's running -> completed|failed transition. Kept separate
- * from the BullMQ wrapper (`import-queue.ts`) so the orchestration itself is
- * unit-testable without Redis: the worker's job handler is a thin call into
+ * from the queue wrapper (`import-queue.ts`) so the orchestration itself is
+ * unit-testable without the job queue: the queue's job handler is a thin call into
  * `runImportCommitJob`.
  */
 import type { ImportRunId } from '@quackback/ids'

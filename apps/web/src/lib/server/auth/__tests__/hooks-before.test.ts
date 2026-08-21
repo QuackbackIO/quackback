@@ -491,7 +491,7 @@ describe('handleSignInPreCheck — sign-in rate-limit', () => {
   })
 
   it('omits Retry-After header when the limiter did not provide one', async () => {
-    // Defensive: bucketRetryAfter can return undefined in some Redis edge
+    // Defensive: bucketRetryAfter can return undefined in some store edge
     // cases. The header should be omitted entirely (not set to "undefined").
     mockCheckSignInRateLimit.mockResolvedValueOnce({ allowed: false })
     const ctx = ctxFor('/sign-in/email', { email: 'a@b.com' })

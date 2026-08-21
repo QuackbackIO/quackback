@@ -3,7 +3,7 @@
  * is durable only at wait boundaries, which leaves two stranding modes with
  * no recovery path otherwise: a process crash mid-run leaves a row stuck in
  * state 'running' forever, holding the customer_facing exclusive lock on its
- * conversation; and if Redis was down when a wait was scheduled, or its job
+ * conversation; and if the queue was down when a wait was scheduled, or its job
  * was lost, a 'waiting' row has no timer and never resumes. This module scans
  * for both and reconciles them, plus a third pass (abandoned-journey
  * auto-close) below; workflow-sweep-queue runs it on a repeating timer.
@@ -43,6 +43,7 @@ import { resolveReplyRecipient } from '@/lib/server/domains/conversation/convers
 import { getWorkflowAbandonedAutoCloseSettings } from '@/lib/server/domains/settings/settings.workflows'
 import {
   getWorkflowWaitJob,
+  removeWorkflowWaitJob,
   scheduleWorkflowResume,
   workflowWaitJobId,
   readCursor,
@@ -178,17 +179,16 @@ export async function sweepOrphanedWaitingRuns(now: Date): Promise<number> {
   let rescheduled = 0
   for (const run of candidates) {
     const cursor = readCursor(run)
-    const job = await getWorkflowWaitJob(workflowWaitJobId(run.id, cursor.waitSeq))
+    const waitKey = workflowWaitJobId(run.id, cursor.waitSeq)
+    const job = await getWorkflowWaitJob(waitKey)
     if (job) {
-      const state = await job.getState()
-      if (state !== 'failed' && state !== 'completed') continue
-      // A failed/completed job is retained by removeOnFail/removeOnComplete
-      // (7-day age), so it still occupies its jobId. BullMQ treats
-      // queue.add() with an existing jobId as a no-op, so scheduleWorkflowResume
-      // below (which reuses the same waitSeq-keyed jobId) would silently never
-      // re-enqueue — leaving the run parked until the stale job ages out.
-      // Remove it first to free the id for the fresh resume.
-      await job.remove()
+      if (!job.terminal) continue
+      // A terminal job is retained by the queue's retention window (7 days), so
+      // it still occupies its dedupe key, and enqueueing that key again is a
+      // no-op — scheduleWorkflowResume below reuses the same waitSeq-keyed key,
+      // so it would silently never write, leaving the run parked until the
+      // stale row ages out. Remove it first to free the key for the resume.
+      await removeWorkflowWaitJob(waitKey)
     }
 
     const remainingSeconds = Math.max(0, waitFireTimeMs(run, cursor) - now.getTime()) / 1000

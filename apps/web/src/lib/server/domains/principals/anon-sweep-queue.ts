@@ -1,113 +1,20 @@
 /**
- * Anonymous-principal sweep queue — a daily repeatable job that reclaims
- * abandoned empty anon principals (see anon-sweep.service).
+ * Anonymous-principal sweep — a daily job that reclaims abandoned empty anon
+ * principals (see anon-sweep.service).
+ *
+ * Runs on the Postgres job queue (`lib/server/jobs`) rather than on Redis. The
+ * schedule and the retry policy live in `jobs/definitions.ts`; this module is
+ * just the handler, which is the whole point of the move — the queue mechanism
+ * is no longer duplicated in every sweep module.
  */
-import { Queue, Worker } from 'bullmq'
-import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
-import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { logger } from '@/lib/server/logger'
 import { sweepAnonymousPrincipals } from './anon-sweep.service'
 
-const log = logger.child({ component: 'anon-sweep-queue' })
+const log = logger.child({ component: 'anon-sweep' })
 
-const QUEUE_NAME = '{anon-sweep}'
-const CONCURRENCY = 1
-
-interface AnonSweepJob {
-  type: 'sweep-anonymous'
-}
-
-let initPromise: Promise<{
-  queue: Queue<AnonSweepJob>
-  worker: Worker<AnonSweepJob> | null
-}> | null = null
-
-async function initializeQueue() {
-  const connection = getQueueRedis()
-
-  const queue = new Queue<AnonSweepJob>(QUEUE_NAME, {
-    connection,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: 'exponential' as const, delay: 5000 },
-      removeOnComplete: { count: 100, age: 7 * 86400 },
-      removeOnFail: { age: 7 * 86400 },
-    },
-  })
-
-  // Consumer side is role-gated: web-role replicas enqueue and register
-  // schedules but never construct a Worker (see queue/role.ts).
-  const worker = shouldRunWorkers()
-    ? new Worker<AnonSweepJob>(
-        QUEUE_NAME,
-        async (job) => {
-          if (job.data.type === 'sweep-anonymous') {
-            const result = await sweepAnonymousPrincipals()
-            if (result.deleted > 0 || result.candidates > 0) {
-              log.debug(
-                { candidates: result.candidates, deleted: result.deleted },
-                'anon-sweep run complete'
-              )
-            }
-          }
-        },
-        { connection, concurrency: CONCURRENCY }
-      )
-    : null
-
-  // Daily at 03:00. Stable jobId so worker reboots dedupe instead of stacking
-  // duplicate cron entries.
-  await queue.add(
-    'anon-sweep:daily',
-    { type: 'sweep-anonymous' },
-    {
-      jobId: 'anon-sweep:daily',
-      repeat: { pattern: '0 3 * * *' },
-      removeOnComplete: { count: 100 },
-      removeOnFail: { age: 7 * 86400 },
-    }
-  )
-
-  try {
-    await Promise.race([
-      queue.waitUntilReady(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
-      ),
-    ])
-  } catch (error) {
-    await queue.close().catch(() => {})
-    await worker?.close().catch(() => {})
-    throw error
+export async function runAnonSweep(): Promise<void> {
+  const result = await sweepAnonymousPrincipals()
+  if (result.deleted > 0 || result.candidates > 0) {
+    log.debug({ candidates: result.candidates, deleted: result.deleted }, 'anon-sweep run complete')
   }
-
-  worker?.on('failed', (job, error) => {
-    if (!job) return
-    const isPermanent =
-      job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
-    const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    log.error({ err: error, status: prefix }, 'anon-sweep job failed')
-  })
-
-  return { queue, worker }
-}
-
-/** Initialize the anonymous-sweep worker eagerly (called from startup). */
-export async function initAnonSweepWorker(): Promise<void> {
-  if (!initPromise) {
-    initPromise = initializeQueue().catch((err) => {
-      initPromise = null
-      throw err
-    })
-  }
-  await initPromise
-  log.info('anon-sweep worker initialized')
-}
-
-export async function closeAnonSweepQueue(): Promise<void> {
-  if (!initPromise) return
-  const { worker, queue } = await initPromise
-  initPromise = null
-  await worker?.close().catch(() => {})
-  await queue.close().catch(() => {})
 }

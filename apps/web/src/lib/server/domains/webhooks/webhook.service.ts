@@ -9,7 +9,7 @@ import { db, webhooks, eq, and, isNull, sql } from '@/lib/server/db'
 import { createId, type PrincipalId, type WebhookId } from '@quackback/ids'
 import { encryptWebhookSecret } from './encryption'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { isValidWebhookUrl } from '@/lib/server/events/integrations/webhook/constants'
 import { logger } from '@/lib/server/logger'
 import type {
@@ -39,10 +39,7 @@ export async function createWebhook(
   input: CreateWebhookInput,
   createdById: PrincipalId
 ): Promise<CreateWebhookResult> {
-  log.debug(
-    { event_count: input.events.length, created_by_id: createdById },
-    'create webhook'
-  )
+  log.debug({ event_count: input.events.length, created_by_id: createdById }, 'create webhook')
   const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
   await assertTierFeature('webhooks', 'Webhooks')
 

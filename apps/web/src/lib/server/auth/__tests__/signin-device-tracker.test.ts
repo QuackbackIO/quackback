@@ -1,25 +1,25 @@
 /**
- * Tests for the Redis-backed device-fingerprint tracker. Two-phase
- * API (isDeviceUnseen → markDeviceSeen | forgetDevice) so notification
- * failures can roll back the claim and re-fire on the next sign-in.
+ * Tests for the device-fingerprint tracker. Two-phase API (isDeviceUnseen →
+ * markDeviceSeen | forgetDevice) so notification failures can roll back the
+ * claim and re-fire on the next sign-in.
+ *
+ * The tracker's subject is that two-phase protocol, so the set primitives it
+ * delegates to (`kv/pg-kv.ts`) are stubbed here. Their own guarantees — one
+ * statement per claim, and the tenant discriminator on every row — are proved
+ * against a real database in `kv/__tests__/pg-kv-semantics.db.test.ts` and
+ * `kv/__tests__/tenant-separation.db.test.ts`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockExec = vi.fn()
-const mockExpire = vi.fn()
-const mockSrem = vi.fn()
-const mockMulti = vi.fn(() => ({
-  sadd: vi.fn().mockReturnThis(),
-  expire: vi.fn().mockReturnThis(),
-  exec: mockExec,
-}))
+const mockClaim = vi.fn()
+const mockTouch = vi.fn()
+const mockRemove = vi.fn()
 
-vi.mock('@/lib/server/redis', () => ({
-  getRedis: () => ({
-    multi: mockMulti,
-    expire: mockExpire,
-    srem: mockSrem,
-  }),
+vi.mock('@/lib/server/kv/pg-kv', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/kv/pg-kv')>()),
+  kvSetMemberClaim: mockClaim,
+  kvSetTouch: mockTouch,
+  kvSetMemberRemove: mockRemove,
 }))
 
 const { computeDeviceFingerprint, isDeviceUnseen, markDeviceSeen, forgetDevice } =
@@ -60,47 +60,27 @@ describe('computeDeviceFingerprint', () => {
 })
 
 describe('isDeviceUnseen', () => {
-  it('returns true when SADD adds a new member (pipeline reply 1)', async () => {
-    mockExec.mockResolvedValueOnce([
-      [null, 1],
-      [null, 1],
-    ])
+  it('returns true when the claim takes the member', async () => {
+    mockClaim.mockResolvedValueOnce(true)
     expect(await isDeviceUnseen('user_abc', 'fp')).toBe(true)
   })
 
-  it('returns false when SADD reports the member was already present (reply 0)', async () => {
-    mockExec.mockResolvedValueOnce([
-      [null, 0],
-      [null, 0],
-    ])
+  it('returns false when the member was already present', async () => {
+    mockClaim.mockResolvedValueOnce(false)
     expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
   })
 
-  it('issues SADD + EXPIRE NX in a single pipeline (TTL set on first claim)', async () => {
-    mockExec.mockResolvedValueOnce([
-      [null, 1],
-      [null, 1],
-    ])
+  it('claims the fingerprint under the user set key with the 90-day TTL', async () => {
+    mockClaim.mockResolvedValueOnce(true)
     await isDeviceUnseen('user_abc', 'fp')
-    const pipeline = mockMulti.mock.results[0]!.value as {
-      sadd: ReturnType<typeof vi.fn>
-      expire: ReturnType<typeof vi.fn>
-    }
-    expect(pipeline.sadd).toHaveBeenCalledWith('user:devices:user_abc', 'fp')
-    // 90 days, NX so existing TTL is preserved
-    expect(pipeline.expire).toHaveBeenCalledWith('user:devices:user_abc', 7_776_000, 'NX')
+    // One call, so the claim and the expiry cannot separate: a caller that
+    // crashes before markDeviceSeen still leaves an expiring member.
+    expect(mockClaim).toHaveBeenCalledTimes(1)
+    expect(mockClaim).toHaveBeenCalledWith('user:devices:user_abc', 'fp', 7_776_000)
   })
 
   it('atomic across concurrent first-sights — only one caller gets true', async () => {
-    mockExec
-      .mockResolvedValueOnce([
-        [null, 1],
-        [null, 1],
-      ])
-      .mockResolvedValueOnce([
-        [null, 0],
-        [null, 0],
-      ])
+    mockClaim.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
     const [a, b] = await Promise.all([
       isDeviceUnseen('user_abc', 'fp'),
       isDeviceUnseen('user_abc', 'fp'),
@@ -108,34 +88,34 @@ describe('isDeviceUnseen', () => {
     expect([a, b].sort()).toEqual([false, true])
   })
 
-  it('fails closed on Redis error (returns false, no notification spam)', async () => {
-    mockExec.mockRejectedValueOnce(new Error('redis down'))
+  it('fails closed on a store error (returns false, no notification spam)', async () => {
+    mockClaim.mockRejectedValueOnce(new Error('store down'))
     expect(await isDeviceUnseen('user_abc', 'fp')).toBe(false)
   })
 })
 
 describe('markDeviceSeen', () => {
   it('slides the 90-day TTL forward', async () => {
-    mockExpire.mockResolvedValueOnce(1)
+    mockTouch.mockResolvedValueOnce(undefined)
     await markDeviceSeen('user_abc')
-    expect(mockExpire).toHaveBeenCalledWith('user:devices:user_abc', 7_776_000)
+    expect(mockTouch).toHaveBeenCalledWith('user:devices:user_abc', 7_776_000)
   })
 
-  it('swallows Redis errors', async () => {
-    mockExpire.mockRejectedValueOnce(new Error('redis down'))
+  it('swallows store errors', async () => {
+    mockTouch.mockRejectedValueOnce(new Error('store down'))
     await expect(markDeviceSeen('user_abc')).resolves.toBeUndefined()
   })
 })
 
 describe('forgetDevice', () => {
-  it('SREMs the fingerprint from the user SET', async () => {
-    mockSrem.mockResolvedValueOnce(1)
+  it('removes the fingerprint from the user set', async () => {
+    mockRemove.mockResolvedValueOnce(undefined)
     await forgetDevice('user_abc', 'fp')
-    expect(mockSrem).toHaveBeenCalledWith('user:devices:user_abc', 'fp')
+    expect(mockRemove).toHaveBeenCalledWith('user:devices:user_abc', 'fp')
   })
 
-  it('swallows Redis errors', async () => {
-    mockSrem.mockRejectedValueOnce(new Error('redis down'))
+  it('swallows store errors', async () => {
+    mockRemove.mockRejectedValueOnce(new Error('store down'))
     await expect(forgetDevice('user_abc', 'fp')).resolves.toBeUndefined()
   })
 })

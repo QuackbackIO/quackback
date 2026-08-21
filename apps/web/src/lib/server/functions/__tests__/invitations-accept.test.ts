@@ -124,7 +124,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
   getPublicUrlOrNull: () => null,
 }))
 
-vi.mock('@/lib/server/redis', () => ({
+vi.mock('@/lib/server/cache', () => ({
   cacheDel: hoisted.mockCacheDel,
 }))
 

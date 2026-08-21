@@ -4,7 +4,7 @@
  *  - startSsoTestFn: validates that the specified OIDC provider is
  *    configured + a client secret exists, fetches the IdP discovery
  *    document with an SSRF check + 5s timeout, persists a `TestSession`
- *    to Redis under `sso-test:<state>` (10-min TTL), and returns the
+ *    to the KV store under `sso-test:<state>` (10-min TTL), and returns the
  *    authorize URL the admin UI opens in a popup. PKCE (S256) — production
  *    genericOAuth runs with `pkce: true`, so the test flow mints a
  *    verifier/challenge pair to mirror that exactly.
@@ -12,7 +12,7 @@
  *    The redirect_uri matches the provider's own production callback
  *    (`/api/auth/oauth2/callback/<registrationId>`) so admins register
  *    exactly one URL with their IdP. The auth catch-all intercepts test
- *    sign-ins by looking up `sso-test:<state>` in Redis before handing
+ *    sign-ins by looking up `sso-test:<state>` in the KV store before handing
  *    off to Better-Auth — see `sso-test-callback.ts`.
  *
  *  - getSsoTestResultFn: polls the `sso-test:result:<testId>` key
@@ -156,7 +156,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     const { config } = await import('@/lib/server/config')
     // Use the provider's own production callback so admins register exactly
     // one redirect URI with their IdP. The catch-all dispatches test vs prod
-    // by looking up the OAuth `state` in Redis (miss → fall through to
+    // by looking up the OAuth `state` in the KV store (miss → fall through to
     // Better-Auth), so the same URL handles both flows.
     const redirectUri = `${config.baseUrl.replace(/\/$/, '')}/api/auth/oauth2/callback/${data.registrationId}`
     const testId = `ssotest_${randomBytes(15).toString('base64url')}`
@@ -202,7 +202,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       detailsChangedAt: provider.detailsChangedAt,
     }
 
-    const { cacheSet } = await import('@/lib/server/redis')
+    const { cacheSet } = await import('@/lib/server/cache')
     await cacheSet(ssoTestSessionKey(state), session, TTL_SECONDS)
 
     // Mirror production: genericOAuth runs with pkce: true, so the
@@ -286,7 +286,7 @@ export const getSsoTestResultFn = createServerFn({ method: 'POST' })
   .validator(z.object({ testId: z.string() }))
   .handler(async ({ data }): Promise<SsoTestDiagnostic | null> => {
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-    const { cacheGet } = await import('@/lib/server/redis')
+    const { cacheGet } = await import('@/lib/server/cache')
     return (await cacheGet<SsoTestDiagnostic>(ssoTestResultKey(data.testId))) ?? null
   })
 
