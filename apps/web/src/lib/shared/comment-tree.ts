@@ -65,6 +65,7 @@ export interface CommentWithReactions {
   deletedByPrincipalId?: string | null
   avatarUrl?: string | null
   statusChange?: CommentStatusChange | null
+  moderationState?: 'published' | 'pending' | string | null
   reactions: Array<{
     emoji: string
     principalId: string
@@ -90,6 +91,7 @@ export interface CommentTreeNode {
   deletedByPrincipalId: string | null
   avatarUrl?: string | null
   statusChange?: CommentStatusChange | null
+  moderationState?: 'published' | 'pending' | string | null
   replies: CommentTreeNode[]
   reactions: CommentReactionCount[]
 }
@@ -184,6 +186,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       deletedByPrincipalId: comment.deletedByPrincipalId ?? null,
       avatarUrl: comment.avatarUrl,
       statusChange: comment.statusChange,
+      moderationState: comment.moderationState ?? 'published',
       replies: [],
       reactions: aggregateReactions(comment.reactions, principalId),
     }

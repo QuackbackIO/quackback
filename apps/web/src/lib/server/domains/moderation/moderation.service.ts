@@ -20,6 +20,7 @@ import {
   postComments,
   boards,
   principal,
+  auditLog,
   eq,
   and,
   isNull,
@@ -36,6 +37,25 @@ import { logger } from '@/lib/server/logger'
 import { adjustCanonicalCommentCount } from '@/lib/server/domains/posts/post.merge-ids'
 
 const log = logger.child({ component: 'moderation' })
+
+async function latestHoldWasPreviouslyPublished(
+  eventType: 'post.moderation.held' | 'comment.moderation.held',
+  targetId: string
+): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ metadata: auditLog.metadata })
+      .from(auditLog)
+      .where(and(eq(auditLog.eventType, eventType), eq(auditLog.targetId, targetId)))
+      .orderBy(desc(auditLog.occurredAt))
+      .limit(1)
+    const metadata = row?.metadata as { previouslyPublished?: boolean } | null
+    return metadata?.previouslyPublished === true
+  } catch (err) {
+    log.error({ err, eventType, targetId }, 'lookup hold audit failed')
+    return false
+  }
+}
 
 /** Audit context a caller threads through so both the session and the API-key
  *  path record a correctly-attributed row. `metadata` is merged into the audit
@@ -60,6 +80,7 @@ export interface PendingPostRow {
 export interface PendingCommentRow {
   id: string
   content: string
+  contentJson: import('@/lib/shared/db-types').TiptapContent | null
   createdAt: Date
   postId: string
   postTitle: string
@@ -127,6 +148,7 @@ export async function listPendingComments(): Promise<PendingCommentRow[]> {
     .select({
       id: postComments.id,
       content: postComments.content,
+      contentJson: postComments.contentJson,
       createdAt: postComments.createdAt,
       postId: postComments.postId,
       postTitle: posts.title,
@@ -197,7 +219,15 @@ export async function approvePost(postId: PostId, audit: ModerationAudit): Promi
   // here would surface a 500 to the moderator and the retry path is blocked
   // by the POST_NOT_PENDING guard above, permanently losing webhooks/mentions.
   try {
-    await announcePublishedPost(postId)
+    const skipCreatedWebhook = await latestHoldWasPreviouslyPublished(
+      'post.moderation.held',
+      postId
+    )
+    if (skipCreatedWebhook) {
+      await announcePublishedPost(postId, undefined, { skipCreatedWebhook: true })
+    } else {
+      await announcePublishedPost(postId)
+    }
   } catch (err) {
     log.error({ err }, 'announce published post failed')
   }
@@ -297,7 +327,11 @@ export async function approveComment(
   // comment is already published and audited, so swallow failures rather
   // than surface a 500 to the moderator with no retry path.
   try {
-    await announcePublishedComment(commentId)
+    const skipCreatedWebhook = await latestHoldWasPreviouslyPublished(
+      'comment.moderation.held',
+      commentId
+    )
+    if (!skipCreatedWebhook) await announcePublishedComment(commentId)
   } catch (err) {
     log.error({ err }, 'announce published comment failed')
   }

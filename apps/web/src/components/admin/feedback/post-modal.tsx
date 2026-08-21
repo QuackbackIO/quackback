@@ -14,7 +14,7 @@ import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePostImageUpload, usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { postOwnerQueries } from '@/lib/client/queries/post-owner'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
@@ -69,6 +69,8 @@ import {
 } from '@quackback/ids'
 import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
 import { useLoadMoreAdminComments } from '@/lib/client/mutations/load-more-comments'
+import { InlineModerationActions } from '@/components/shared/inline-moderation-actions'
+import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import {
   toPortalComments,
@@ -105,6 +107,9 @@ function PostModalContent({
   // via the same post.set_owner-gated fn the portal uses; the current owner is
   // resolved from it against the post's ownerPrincipalId (already in payload).
   const canSetOwner = usePermission(PERMISSIONS.POST_SET_OWNER)
+  const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
+  const approvePost = useApprovePost(postId)
+  const rejectPost = useRejectPost(postId)
   const { data: ownerCandidates } = useQuery({
     ...postOwnerQueries.candidates(),
     enabled: canSetOwner,
@@ -122,6 +127,7 @@ function PostModalContent({
 
   // Image upload
   const { upload: uploadImage } = usePostImageUpload()
+  const { upload: uploadCommentImage } = usePortalImageUpload()
 
   // Form state - always in edit mode
   const [title, setTitle] = useState(post.title)
@@ -373,6 +379,16 @@ function PostModalContent({
           <div className="flex-1 min-w-0">
             {/* Editor area */}
             <div className="p-6" onKeyDown={handleKeyDown}>
+              {post.moderationState === 'pending' && (
+                <InlineModerationActions
+                  pending
+                  noun="post"
+                  className="mb-4"
+                  busy={approvePost.isPending || rejectPost.isPending}
+                  onApprove={canModerate ? () => approvePost.mutate(postId) : undefined}
+                  onReject={canModerate ? () => rejectPost.mutate({ postId }) : undefined}
+                />
+              )}
               {/* Title input */}
               <input
                 type="text"
@@ -484,6 +500,8 @@ function PostModalContent({
                     onRestoreComment={(commentId: PostCommentId) =>
                       restoreCommentMutation.mutate(commentId)
                     }
+                    onImageUpload={uploadCommentImage}
+                    canModerate={canModerate}
                     restoringCommentId={
                       restoreCommentMutation.isPending
                         ? (restoreCommentMutation.variables as PostCommentId)

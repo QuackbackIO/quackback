@@ -23,6 +23,7 @@ import { WidgetCommentForm } from './widget-comment-form'
 import { WidgetPortalTitle } from './widget-portal-title'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
+import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
 
 interface StatusInfo {
   id: string
@@ -37,6 +38,7 @@ interface WidgetPostDetailProps {
 
 export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const intl = useIntl()
+  const { upload: uploadImage } = useWidgetImageUpload()
   const { isIdentified, hmacRequired, user, ensureSessionThen, emitEvent, sessionVersion } =
     useWidgetAuth()
   const queryClient = useQueryClient()
@@ -293,7 +295,12 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
           {/* Root comment form — unified: textarea + email (when anonymous) + single Post.
               For an anonymous viewer the email field escalates them to a real user. */}
           {!post.isCommentsLocked && !commentNoAccess && !hmacRequired && (
-            <WidgetCommentForm isIdentified={isIdentified} user={user} onSubmit={submitComment} />
+            <WidgetCommentForm
+              isIdentified={isIdentified}
+              user={user}
+              onSubmit={submitComment}
+              onImageUpload={uploadImage}
+            />
           )}
 
           {!post.isCommentsLocked && !commentNoAccess && hmacRequired && !canComment && (
@@ -323,6 +330,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             pinnedCommentId={post.pinnedCommentId}
             canComment={canComment && !post.isCommentsLocked}
             onSubmitComment={handleSubmitReply}
+            onImageUpload={uploadImage}
           />
 
           {hasMoreComments && (

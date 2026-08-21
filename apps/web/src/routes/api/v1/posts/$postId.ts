@@ -76,7 +76,11 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             pinnedComment: post.pinnedComment
               ? {
                   id: post.pinnedComment.id,
-                  content: post.pinnedComment.content,
+                  content: contentJsonToMarkdown(
+                    post.pinnedComment.contentJson,
+                    post.pinnedComment.content
+                  ),
+                  contentJson: post.pinnedComment.contentJson ?? null,
                   authorName: post.pinnedComment.authorName,
                   createdAt: post.pinnedComment.createdAt.toISOString(),
                 }

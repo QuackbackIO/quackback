@@ -27,6 +27,7 @@ export function toPortalComments(post: PostDetails): PublicCommentView[] {
     isEdited: !!c.updatedAt,
     avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
     statusChange: c.statusChange ?? null,
+    moderationState: c.moderationState ?? 'published',
     reactions: c.reactions,
     replies: c.replies.map(mapComment),
   })

@@ -37,6 +37,9 @@ import { isValidTypeId, type PostCommentId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { isProductEnabled } from '@/lib/shared/types/settings'
+import { usePortalPermissions } from '@/lib/client/hooks/use-portal-permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
   loader: async ({ params, context }) => {
@@ -155,9 +158,14 @@ function PostDetailPage() {
   // author rights go through the permission-enforced admin path.
   const effectiveCanEdit = canEdit || team.canTeamEdit
   const effectiveCanDelete = canDelete || team.canTeamDelete
+  const { can } = usePortalPermissions()
+  const canModerate = can(PERMISSIONS.POST_APPROVE)
+  const approvePost = useApprovePost(postId)
+  const rejectPost = useRejectPost(postId)
 
   const isAnonymousSession = session?.user?.principalType === 'anonymous'
   const canUploadImages = effectiveCanEdit && !isAnonymousSession && !!session?.user
+  const canUploadCommentImages = !isAnonymousSession && !!session?.user
   const { upload: uploadImage } = usePortalImageUpload()
 
   const {
@@ -311,6 +319,10 @@ function PostDetailPage() {
             onEditCancel={() => setIsEditingPost(false)}
             onImageUpload={canUploadImages ? uploadImage : undefined}
             isSaving={isSavingEdit || team.isTeamSavingEdit}
+            canModerate={canModerate}
+            moderationBusy={approvePost.isPending || rejectPost.isPending}
+            onApprove={() => approvePost.mutate(postId)}
+            onReject={() => rejectPost.mutate({ postId })}
           />
 
           <Suspense fallback={<MetadataSidebarSkeleton />}>
@@ -385,6 +397,8 @@ function PostDetailPage() {
                 ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
                 : undefined
             }
+            onImageUpload={canUploadCommentImages ? uploadImage : undefined}
+            canModerate={canModerate}
           />
         </Suspense>
       </div>

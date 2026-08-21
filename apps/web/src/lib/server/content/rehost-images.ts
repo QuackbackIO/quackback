@@ -29,12 +29,13 @@ const FETCH_TIMEOUT_MS = Number(process.env.REHOST_FETCH_TIMEOUT_MS) || 10_000
 
 const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage'])
 
-export type RehostContentType = 'post' | 'changelog' | 'help-center'
+export type RehostContentType = 'post' | 'changelog' | 'help-center' | 'comment'
 
 const PREFIX_BY_CONTENT_TYPE: Record<RehostContentType, string> = {
   post: 'post-images',
   changelog: 'changelog-images',
   'help-center': 'help-center',
+  comment: 'comment-images',
 }
 
 export interface RehostOptions {

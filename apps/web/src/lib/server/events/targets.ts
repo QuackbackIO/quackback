@@ -44,7 +44,8 @@ import {
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
 import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-types'
-import { stripHtml, truncate } from './hook-utils'
+import { truncate } from './hook-utils'
+import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { type HookContext } from './hook-context'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { logger } from '@/lib/server/logger'
@@ -451,7 +452,7 @@ async function buildEmailEventConfig(
       postTitle: post.title,
       postUrl: `${buildPostUrl(rootUrl, post)}#comment-${comment.id}`,
       commenterName: resolveCommenterName(comment),
-      commentPreview: truncate(stripHtml(comment.content), 200),
+      commentPreview: truncate(commentPlainText(comment), 200),
       isTeamMember: await isActorTeamMember(event.actor),
     }
   }
@@ -507,7 +508,7 @@ async function buildNotificationConfig(
       postUrl: `${buildPostUrl(rootUrl, post)}#comment-${comment.id}`,
       commentId: comment.id,
       commenterName: resolveCommenterName(comment),
-      commentPreview: truncate(stripHtml(comment.content), 200),
+      commentPreview: truncate(commentPlainText(comment), 200),
       isTeamMember: await isActorTeamMember(event.actor),
     }
   }

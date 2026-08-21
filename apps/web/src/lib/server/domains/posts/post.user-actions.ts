@@ -28,6 +28,9 @@ import {
 } from '@/lib/server/events/dispatch'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { UserEditPostInput } from './post.types'
+import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { contentHoldReason } from '@/lib/server/content/content-holds'
+import { recordAuditEvent } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
 import { recalculateCanonicalVoteCount } from './post.merge-ids'
 
@@ -57,6 +60,10 @@ async function getPortalConfig(): Promise<PortalConfig> {
     features: {
       ...DEFAULT_PORTAL_CONFIG.features,
       ...(config?.features ?? {}),
+    },
+    moderationDefault: {
+      ...DEFAULT_PORTAL_CONFIG.moderationDefault,
+      ...(config?.moderationDefault ?? {}),
     },
   }
 }
@@ -177,6 +184,18 @@ export async function userEditPost(
     })
   }
 
+  const authorIsTeam = isTeamMember(actor.role)
+  const nextJson = input.contentJson ?? markdownToTiptapJson(input.content.trim())
+  const holdReason = authorIsTeam
+    ? null
+    : contentHoldReason(
+        config.moderationDefault,
+        nextJson,
+        `${input.title.trim()}\n${input.content.trim()}`
+      )
+  const wasPublished = existingPost.moderationState === 'published'
+  const rehold = Boolean(holdReason && wasPublished)
+
   // Update the post
   const [updatedPost] = await db
     .update(posts)
@@ -185,12 +204,23 @@ export async function userEditPost(
       content: input.content.trim(),
       contentJson: input.contentJson,
       updatedAt: new Date(),
+      ...(rehold ? { moderationState: 'pending' as const } : {}),
     })
     .where(eq(posts.id, postId))
     .returning()
 
   if (!updatedPost) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  if (rehold) {
+    await recordAuditEvent({
+      event: 'post.moderation.held',
+      actor: { role: actor.role, type: 'user' },
+      target: { type: 'post', id: postId },
+      after: { moderationState: 'pending' },
+      metadata: { reason: holdReason, previouslyPublished: true },
+    })
   }
 
   // Regenerate embedding (and cascade to merge check) after user edit

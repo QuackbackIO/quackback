@@ -22,6 +22,7 @@ import type { TiptapContent } from '@/lib/server/db'
 import type { JSONContent } from '@tiptap/core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { lookupEmoji } from '@/lib/shared/content-emoji'
+import { parseEmbedUrl } from '@/lib/shared/embeds/parse-embed-url'
 
 /**
  * Server-safe extensions for markdown conversion.
@@ -171,7 +172,8 @@ export function projectContentJsonToMarkdown(
  * tree. Runs before the serialize try/catch, so it must stay total: a malformed
  * row whose `content` is present but not an array must not throw.
  */
-function hasImageNode(node: JSONContent): boolean {
+export function hasImageNode(node: JSONContent | null | undefined): boolean {
+  if (!node || typeof node !== 'object') return false
   if (typeof node.type === 'string' && IMAGE_NODE_TYPES.has(node.type)) return true
   return Array.isArray(node.content) ? node.content.some(hasImageNode) : false
 }
@@ -228,31 +230,11 @@ function normalizeForMarkdown(node: JSONContent): JSONContent {
 }
 
 /**
- * Slim extension set for comments — no images, no tables, no YouTube.
- * Comments are short, dense, and inline; we want the safe subset only.
- */
-const COMMENT_EXTENSIONS = [
-  StarterKit.configure({
-    heading: { levels: [1, 2, 3] },
-    hardBreak: { keepMarks: true },
-  }),
-  Link.configure({ openOnClick: false, autolink: true }),
-  Underline,
-  TaskList,
-  TaskItem.configure({ nested: true }),
-]
-
-const commentManager = new MarkdownManager({
-  extensions: COMMENT_EXTENSIONS,
-  markedOptions: { gfm: true, breaks: true },
-})
-
-/**
- * Parse a comment-style markdown string into TipTap JSON.
+ * Parse comment markdown with the same extension set as posts, then sanitize.
+ * API/MCP callers post markdown; UI clients send contentJson directly.
  */
 export function commentMarkdownToTiptapJson(markdown: string): TiptapContent {
-  const json = commentManager.parse(markdown) as TiptapContent
-  return sanitizeTiptapContent(json) as TiptapContent
+  return sanitizeTiptapContent(markdownToTiptapJson(markdown)) as TiptapContent
 }
 
 /**
@@ -325,4 +307,87 @@ export function hasTextLeaf(json: TiptapContent | null | undefined): boolean {
     return (node.content ?? []).some(visit)
   }
   return visit(json)
+}
+
+const HTTP_URL_RE = /https?:\/\/[^\s<>"']+/gi
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function isSameOriginUrl(href: string, origin?: string): boolean {
+  if (!origin) return false
+  try {
+    return new URL(href).origin === new URL(origin).origin
+  } catch {
+    return false
+  }
+}
+
+function hrefIsExternalLink(href: string, origin?: string): boolean {
+  if (!isHttpUrl(href)) return false
+  if (isSameOriginUrl(href, origin)) return false
+  // Internal product URLs (post / changelog / article / ticket) are first-class
+  // embeds, not the external-link spam vector.
+  return parseEmbedUrl(href) === null
+}
+
+function nodeHasExternalLink(node: JSONContent, origin?: string): boolean {
+  if (node.type === 'youtube' && typeof node.attrs?.src === 'string') {
+    return hrefIsExternalLink(String(node.attrs.src), origin)
+  }
+  if (Array.isArray(node.marks)) {
+    for (const mark of node.marks) {
+      if (mark && typeof mark === 'object' && mark.type === 'link') {
+        const href = (mark as { attrs?: { href?: unknown } }).attrs?.href
+        if (typeof href === 'string' && hrefIsExternalLink(href, origin)) return true
+      }
+    }
+  }
+  return Array.isArray(node.content)
+    ? node.content.some((child) => nodeHasExternalLink(child, origin))
+    : false
+}
+
+/**
+ * True when the doc (or fallback markdown/title) contains an external http(s)
+ * link. Mentions, same-origin URLs, and internal product URLs are not links.
+ */
+export function hasExternalLink(
+  node: JSONContent | null | undefined,
+  fallbackText?: string,
+  origin?: string
+): boolean {
+  if (node && typeof node === 'object' && nodeHasExternalLink(node, origin)) return true
+  if (typeof fallbackText !== 'string' || fallbackText.length === 0) return false
+  const matches = fallbackText.match(HTTP_URL_RE) ?? []
+  return matches.some((href) => hrefIsExternalLink(href.replace(/[),.;]+$/, ''), origin))
+}
+
+/**
+ * Plain-text preview of a comment. Prefers the TipTap tree (so image-only
+ * comments become `[image]`); falls back to parsing stored markdown.
+ */
+export function commentPlainText(comment: {
+  content: string
+  contentJson?: TiptapContent | JSONContent | null
+}): string {
+  if (comment.contentJson) {
+    const fromJson = tiptapJsonToText(comment.contentJson as TiptapContent)
+    if (fromJson) return fromJson
+  }
+  const markdown = comment.content?.trim()
+  if (!markdown) return ''
+  try {
+    const fromMd = tiptapJsonToText(commentMarkdownToTiptapJson(markdown))
+    if (fromMd) return fromMd
+  } catch {
+    // fall through
+  }
+  return markdown
 }

@@ -23,7 +23,7 @@ import { db, eq, posts } from '@/lib/server/db'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { getMemberById } from '@/lib/server/domains/principals/principal.service'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
-import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
+import { listInboxPosts, countInboxFilterFacets } from '@/lib/server/domains/posts/post.inbox'
 import {
   getPostWithDetails,
   getPaginatedCommentsWithReplies,
@@ -94,6 +94,12 @@ const listInboxPostsSchema = z.object({
   showDeleted: z.boolean().optional(),
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
+})
+
+const inboxFilterCountsSchema = listInboxPostsSchema.omit({
+  cursor: true,
+  limit: true,
+  sort: true,
 })
 
 const createPostSchema = z.object({
@@ -221,6 +227,34 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         contentJson: (p.contentJson ?? {}) as TiptapContent,
       })),
     }
+  })
+
+/**
+ * Facet counts for the admin inbox filter pane. Same filter shape as the
+ * list, minus pagination/sort. Each dimension omits its own filter so the
+ * count next to an option is "currently applied filters + posts that would
+ * newly match this option".
+ */
+export const fetchInboxFilterCounts = createServerFn({ method: 'GET' })
+  .validator(inboxFilterCountsSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
+    return countInboxFilterFacets({
+      boardIds: data.boardIds as BoardId[] | undefined,
+      statusIds: data.statusIds as PostStatusId[] | undefined,
+      statusSlugs: data.statusSlugs,
+      tagIds: data.tagIds as PostTagId[] | undefined,
+      segmentIds: data.segmentIds as SegmentId[] | undefined,
+      ownerId: data.ownerId as PrincipalId | null | undefined,
+      search: data.search,
+      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+      minVotes: data.minVotes,
+      minComments: data.minComments,
+      responded: data.responded,
+      updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
+      showDeleted: data.showDeleted,
+    })
   })
 
 /**

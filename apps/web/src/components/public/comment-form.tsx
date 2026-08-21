@@ -58,6 +58,8 @@ interface CommentFormProps {
   isTeamMember?: boolean
   /** Default the private toggle to on (e.g. replying to a private comment) */
   defaultPrivate?: boolean
+  /** When set, the comment editor exposes image insert (toolbar, slash, paste, drop). */
+  onImageUpload?: (file: File) => Promise<string>
 }
 
 export function CommentForm({
@@ -71,6 +73,7 @@ export function CommentForm({
   currentStatusId,
   isTeamMember,
   defaultPrivate,
+  onImageUpload,
 }: CommentFormProps) {
   const intl = useIntl()
   const router = useRouter()
@@ -222,6 +225,7 @@ export function CommentForm({
                         minHeight="72px"
                         disabled={isSubmitting}
                         features={COMMENT_EDITOR_FEATURES}
+                        onImageUpload={onImageUpload}
                         placeholder={intl.formatMessage({
                           id: 'portal.commentForm.placeholder',
                           defaultMessage: 'Write a comment...',
@@ -455,6 +459,7 @@ export function CommentForm({
                     minHeight="80px"
                     disabled={isSubmitting}
                     features={COMMENT_EDITOR_FEATURES}
+                    onImageUpload={onImageUpload}
                     placeholder={intl.formatMessage({
                       id: 'portal.commentForm.placeholder',
                       defaultMessage: 'Write a comment...',

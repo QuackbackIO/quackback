@@ -1,7 +1,11 @@
 import { FilterList, StatusFilterList, BoardFilterList } from './single-select-filter-list'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { FilterSection } from '@/components/shared/filter-section'
+import { MENU_ROW } from '@/components/ui/menu'
+import { cn } from '@/lib/shared/utils'
+import { useInboxFacetCounts } from '@/lib/client/hooks/use-inbox-query'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import type { InboxFilterCounts } from '@/lib/shared/types'
 import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 
@@ -14,6 +18,11 @@ interface InboxFiltersProps {
   segments?: SegmentListItem[]
 }
 
+function countFor(counts: Record<string, number> | undefined, id: string): number | undefined {
+  if (!counts) return undefined
+  return counts[id] ?? 0
+}
+
 export function InboxFiltersPanel({
   filters,
   onFiltersChange,
@@ -22,6 +31,8 @@ export function InboxFiltersPanel({
   statuses,
   segments,
 }: InboxFiltersProps) {
+  const { data: facetCounts } = useInboxFacetCounts(filters)
+
   // Handle filter selection with multi-select support
   // - Regular click: select only this item (replace), or clear if already the only one selected
   // - Ctrl/Cmd+click: add/remove from selection (toggle)
@@ -54,6 +65,9 @@ export function InboxFiltersPanel({
   const handleSegmentSelect = (id: string, addToSelection: boolean) =>
     handleFilterSelect('segmentIds', filters.segmentIds, id, addToSelection)
 
+  const respondedCounts = respondedCountMap(facetCounts)
+  const deletedCounts = deletedCountMap(facetCounts)
+
   return (
     <div className="space-y-0">
       {/* Status Filter */}
@@ -62,6 +76,7 @@ export function InboxFiltersPanel({
           statuses={statuses}
           selectedSlugs={filters.status || []}
           onSelect={handleStatusSelect}
+          counts={facetCounts?.statuses}
         />
       </FilterSection>
 
@@ -72,6 +87,7 @@ export function InboxFiltersPanel({
             boards={boards}
             selectedIds={filters.board || []}
             onSelect={handleBoardSelect}
+            counts={facetCounts?.boards}
           />
         </FilterSection>
       )}
@@ -82,11 +98,13 @@ export function InboxFiltersPanel({
           <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => {
               const isSelected = filters.tags?.includes(tag.id)
+              const count = countFor(facetCounts?.tags, tag.id)
               return (
                 <button
                   key={tag.id}
                   type="button"
                   onClick={() => handleTagToggle(tag.id)}
+                  aria-label={count == null ? tag.name : `${tag.name}, ${count}`}
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
                     isSelected
                       ? 'bg-foreground text-background'
@@ -94,6 +112,9 @@ export function InboxFiltersPanel({
                   }`}
                 >
                   {tag.name}
+                  {count != null && (
+                    <span className="ml-1 text-[11px] tabular-nums opacity-70">{count}</span>
+                  )}
                 </button>
               )
             })}
@@ -104,28 +125,32 @@ export function InboxFiltersPanel({
       {/* Segments Filter */}
       {segments && segments.length > 0 && (
         <FilterSection title="Segments" defaultOpen={true}>
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {segments.map((segment) => {
               const isSelected = filters.segmentIds?.includes(segment.id)
+              const count = countFor(facetCounts?.segments, segment.id)
               return (
                 <button
                   key={segment.id}
                   type="button"
                   onClick={(e) => handleSegmentSelect(segment.id, e.ctrlKey || e.metaKey)}
-                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
+                  aria-label={count == null ? segment.name : `${segment.name}, ${count}`}
+                  className={cn(
+                    MENU_ROW,
+                    'w-full',
                     isSelected
-                      ? 'bg-foreground/10 text-foreground font-medium'
+                      ? 'bg-muted text-foreground font-medium'
                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                  }`}
+                  )}
                 >
                   <span
                     className="h-2.5 w-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: segment.color }}
                   />
-                  <span className="truncate">{segment.name}</span>
-                  {segment.memberCount != null && (
-                    <span className="ml-auto text-[11px] text-muted-foreground">
-                      {segment.memberCount}
+                  <span className="min-w-0 flex-1 truncate text-left">{segment.name}</span>
+                  {count != null && (
+                    <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {count}
                     </span>
                   )}
                 </button>
@@ -149,6 +174,7 @@ export function InboxFiltersPanel({
               responded: isAlreadySelected ? undefined : (id as 'responded' | 'unresponded'),
             })
           }}
+          counts={respondedCounts}
         />
       </FilterSection>
 
@@ -160,8 +186,26 @@ export function InboxFiltersPanel({
           onSelect={() => {
             onFiltersChange({ showDeleted: !filters.showDeleted || undefined })
           }}
+          counts={deletedCounts}
         />
       </FilterSection>
     </div>
   )
+}
+
+function respondedCountMap(
+  counts: InboxFilterCounts | undefined
+): Record<string, number> | undefined {
+  if (!counts) return undefined
+  return {
+    responded: counts.responded.responded,
+    unresponded: counts.responded.unresponded,
+  }
+}
+
+function deletedCountMap(
+  counts: InboxFilterCounts | undefined
+): Record<string, number> | undefined {
+  if (!counts) return undefined
+  return { deleted: counts.deleted }
 }

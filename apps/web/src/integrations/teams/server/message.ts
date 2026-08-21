@@ -12,6 +12,7 @@
 
 import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate, formatStatus, getStatusEmoji } from '@/lib/server/events/hook-utils'
+import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { getAuthorName, buildPostUrl } from '@/lib/server/integrations/message-utils'
 
 interface TeamsMessage {
@@ -138,7 +139,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
     case 'comment.created': {
       const { comment, post } = event.data
       const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
-      const content = truncate(stripHtml(comment.content), 300)
+      const content = truncate(commentPlainText(comment), 300)
       const author = getAuthorName(comment)
 
       return buildCard(

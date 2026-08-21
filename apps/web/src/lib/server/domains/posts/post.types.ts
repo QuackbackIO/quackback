@@ -106,6 +106,7 @@ export interface PublicPostListItem {
   commentCount: number
   tags: Array<{ id: PostTagId; name: string; color: string }>
   board?: { id: BoardId; name: string; slug: string }
+  moderationState?: 'published' | 'pending' | string
 }
 
 /**
@@ -152,6 +153,22 @@ export interface InboxPostListResult {
   items: PostListItem[]
   nextCursor: string | null
   hasMore: boolean
+}
+
+/**
+ * Per-option counts for the admin inbox filter pane. Each map is keyed by the
+ * same id the filter UI uses (status slug, board/tag/segment id). Counts for
+ * a dimension omit that dimension's own filter so an unselected option shows
+ * how many posts would newly match if it were selected, given every other
+ * currently applied filter.
+ */
+export interface InboxFilterCounts {
+  statuses: Record<string, number>
+  boards: Record<string, number>
+  tags: Record<string, number>
+  segments: Record<string, number>
+  responded: { responded: number; unresponded: number }
+  deleted: number
 }
 
 /**
@@ -238,6 +255,7 @@ export interface PublicComment {
   isEdited: boolean
   avatarUrl: string | null
   statusChange?: CommentStatusChange | null
+  moderationState?: 'published' | 'pending' | string | null
   replies: PublicComment[]
   reactions: CommentReactionCount[]
 }
@@ -286,6 +304,7 @@ export interface PublicPostDetail {
   pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked: boolean
+  moderationState?: 'published' | 'pending' | string
 }
 
 /**

@@ -25,7 +25,12 @@ export type {
 } from './inbox'
 
 // Post domain types
-export type { CreatePostInput, AdminEditPostInput, PublicPostListItem } from './posts'
+export type {
+  CreatePostInput,
+  AdminEditPostInput,
+  PublicPostListItem,
+  InboxFilterCounts,
+} from './posts'
 
 // User domain types
 export type {

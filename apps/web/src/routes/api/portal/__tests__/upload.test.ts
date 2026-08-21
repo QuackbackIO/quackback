@@ -25,6 +25,14 @@ vi.mock('@/lib/server/storage/s3', async () => {
   return createS3MockFactory()
 })
 
+const { incrementBucket } = vi.hoisted(() => ({
+  incrementBucket: vi.fn().mockResolvedValue({ count: 1 }),
+}))
+vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+  incrementBucket: (...args: unknown[]) => incrementBucket(...args),
+  bucketRetryAfter: vi.fn().mockResolvedValue(60),
+}))
+
 import { auth } from '@/lib/server/auth'
 import { db } from '@/lib/server/db'
 import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
@@ -118,6 +126,16 @@ describe('POST /api/portal/upload', () => {
       expect.any(Buffer),
       'image/jpeg'
     )
+  })
+
+  it('returns 429 when the per-principal upload quota is exceeded', async () => {
+    incrementBucket.mockResolvedValueOnce({ count: 21 })
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
+    const file = mockImageFile('photo.jpg', 'image/jpeg')
+    const res = await handlePortalUpload({ request: makeRequest(file) })
+    expect(res.status).toBe(429)
+    expect(await res.json()).toMatchObject({ error: expect.stringContaining('Too many uploads') })
   })
 
   it('uses portal-images prefix for storage key', async () => {

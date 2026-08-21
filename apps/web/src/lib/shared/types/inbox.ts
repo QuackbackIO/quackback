@@ -64,6 +64,7 @@ export interface PostDetails {
   pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
+  moderationState?: 'published' | 'pending' | string
   /** Map of principalId to avatar URL (base64 or external URL) */
   avatarUrls?: Record<string, string | null>
   /** AI-generated post summary */

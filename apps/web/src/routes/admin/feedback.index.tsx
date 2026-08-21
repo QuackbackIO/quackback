@@ -1,7 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { inboxPostsInfiniteOptions, defaultInboxFilters } from '@/lib/client/hooks/use-inbox-query'
+import {
+  inboxPostsInfiniteOptions,
+  inboxFacetCountsOptions,
+  defaultInboxFilters,
+} from '@/lib/client/hooks/use-inbox-query'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -38,6 +42,7 @@ export const Route = createFileRoute('/admin/feedback/')({
       // prefetched; a filtered URL on first load falls through to the client
       // fetch inside InboxContainer.
       queryClient.ensureInfiniteQueryData(inboxPostsInfiniteOptions(defaultInboxFilters)),
+      queryClient.ensureQueryData(inboxFacetCountsOptions(defaultInboxFilters)),
       queryClient.ensureQueryData(adminQueries.boards()),
       queryClient.ensureQueryData(adminQueries.tags()),
       queryClient.ensureQueryData(adminQueries.statuses()),

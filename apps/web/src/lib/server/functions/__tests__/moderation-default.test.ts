@@ -211,6 +211,18 @@ describe('updateModerationDefaultFn — happy path (admin)', () => {
     expect(result).toEqual({ moderationDefault: { requireApproval: 'authenticated' } })
   })
 
+  it('accepts holdImages and holdLinks flags', async () => {
+    mockUpdatePortalConfig.mockResolvedValue({
+      moderationDefault: { requireApproval: 'none', holdImages: true, holdLinks: true },
+    })
+    await getUpdateModerationDefaultFn()({
+      data: { requireApproval: 'none', holdImages: true, holdLinks: true },
+    })
+    expect(mockUpdatePortalConfig).toHaveBeenCalledWith({
+      moderationDefault: { requireApproval: 'none', holdImages: true, holdLinks: true },
+    })
+  })
+
   it.each(['none', 'anonymous', 'authenticated', 'all'] as const)(
     'accepts requireApproval=%s',
     async (ra) => {
