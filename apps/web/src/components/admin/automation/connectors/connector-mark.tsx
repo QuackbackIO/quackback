@@ -1,4 +1,7 @@
 import { cn } from '@/lib/shared/utils'
+import { connectorInitials } from '@/lib/shared/assistant/connectors'
+
+export { connectorInitials }
 
 const PALETTE = [
   { bg: 'bg-indigo-600', fg: 'text-white' },
@@ -10,14 +13,6 @@ const PALETTE = [
   { bg: 'bg-orange-600', fg: 'text-white' },
   { bg: 'bg-cyan-600', fg: 'text-white' },
 ] as const
-
-export function connectorInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) {
-    return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase()
-  }
-  return name.trim().slice(0, 2).toUpperCase() || '?'
-}
 
 export function connectorMarkTone(name: string): { bg: string; fg: string } {
   let hash = 0

@@ -16,6 +16,15 @@ export const CONNECTOR_REQUEST_TIMEOUT_MS = 10_000
 export const CONNECTOR_MAX_RESPONSE_BYTES = 256 * 1024
 export const CONNECTOR_TOOL_NAME_MAX = 64
 
+/** Two-letter mark from a connector name. Schema-reachable names are min(1). */
+export function connectorInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase()
+  }
+  return name.trim().slice(0, 2).toUpperCase() || '?'
+}
+
 export const CONNECTOR_AUTH_MODES = ['none', 'bearer', 'oauth'] as const
 export const connectorAuthModeSchema = z.enum(CONNECTOR_AUTH_MODES)
 export type ConnectorAuthMode = z.infer<typeof connectorAuthModeSchema>
