@@ -25,7 +25,7 @@ beforeEach(() => {
   getJobTierStatus.mockReturnValue({
     running: true,
     workspaces: [
-      { workspaceKey: 't1', inFlight: 0, schemaMissing: false, attached: true, refusedCode: null },
+      { workspaceKey: 't1', inFlight: 0, schemaMissing: false, refusedCode: null },
     ],
   })
 })
@@ -67,12 +67,8 @@ describe('GET /api/health/ready', () => {
       loops: 1,
       inFlight: 0,
       schemaMissing: 0,
-      // Two counters the cost model needs and nothing else reports. `attached`
-      // is how an operator sees that idle workspaces really did let go — detaching
-      // has no other symptom. `refused` is how a workspace that has stopped being
-      // retried stays visible; it deliberately does not fail the probe, because
-      // a bad registry record is not this replica's fault.
-      attached: 1,
+      // How many workspaces the tier has stopped retrying. Deliberately does
+      // not fail the probe: a bad registry record is not this replica's fault.
       refused: 0,
     })
   })

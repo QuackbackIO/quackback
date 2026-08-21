@@ -202,9 +202,8 @@ export async function handleReadinessProbe(): Promise<Response> {
       workers: workersCheck,
     },
   }
-  // Request-pool LRU stats. Same operator surface as the job tier's
-  // attached/detaches: entries currently held, evictions since boot. Only
-  // meaningful under pooled tenancy; the cache is empty otherwise.
+  // Request-pool LRU stats: entries currently held, evictions since boot.
+  // Only meaningful under pooled tenancy; the cache is empty otherwise.
   if (isPooledTenancy()) {
     const { getPoolCacheStats } = await import('@/lib/server/workspaces/pool-cache')
     const pools = getPoolCacheStats()
