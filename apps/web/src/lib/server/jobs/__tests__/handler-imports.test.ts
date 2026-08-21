@@ -35,13 +35,19 @@
  * when such a module captures scope-dependent state at its top level, and is
  * then shared process-wide.
  *
- * **The boundary, stated plainly:** this file covers exactly one property — the
- * registered handler wrappers contain no call-time `import()`, so their static
- * graph loads at prime time. It does NOT scan for module-scope mutable state:
- * a module that captures scope-dependent state at its top level and is then
- * shared process-wide is outside this file's reach wherever it loads from, and
- * no automated scan owns that hazard today — it is held by review, not by a
- * test.
+ * **That makes the boundary a cross-piece contract rather than a self-contained
+ * guarantee, so name where the other half lives:**
+ * `lib/server/policy/module-state/` — the §4.4 scanner — owns every
+ * module-scope mutable-state site *it can see* under `lib/server/**`, reconciled
+ * against a checked-in ledger, with its recall limits recorded in that module's
+ * README. It is a *source* scan, so load order is irrelevant to it: it sees a
+ * captured singleton whether the module was imported at prime time, at call
+ * time, or never.
+ *
+ * **This test's boundary is therefore sound to exactly the degree that scanner's
+ * recall is** — not absolutely. And one gap is invisible from its ledger:
+ * `walkSourceFiles` skips `__tests__` and `*.test.ts`, so a captured singleton
+ * in a server-side test helper is outside the contract entirely.
  *
  * A source scan is the right instrument because the property is about *when* a
  * module loads, which no runtime assertion in this process can observe after the

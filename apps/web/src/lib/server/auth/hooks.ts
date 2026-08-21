@@ -1176,7 +1176,7 @@ export async function handleSignInSuccessAudit(ctx: {
  * fingerprint; on success we fire the email + audit row in parallel
  * and refresh the SET's 90-day TTL. On failure we roll back the
  * claim so the next sign-in re-fires the alert rather than losing
- * it to a transient SMTP outage. All errors swallowed — store/SMTP
+ * it to a transient SMTP outage. All errors swallowed — Redis/SMTP
  * outages must not break sign-in.
  */
 export async function handleNewDeviceNotification(

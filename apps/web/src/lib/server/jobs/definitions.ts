@@ -142,7 +142,7 @@ export const DEFAULT_CONCURRENCY = 1
 const DAY_MS = 86_400_000
 
 /**
- * Every queue in the process.
+ * Every queue in the process (SAAS-HOSTING-STACK.md §7.1).
  *
  * The first seven were BullMQ repeatable jobs with `concurrency: 1`,
  * `attempts: 3`, exponential backoff from 5s, and a payload carrying nothing
@@ -262,7 +262,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/domains/analytics/analytics-queue').then((m) => m.runAnalyticsRefresh),
   },
 
-  // ── The eight moved off BullMQ ─────────────────────────────────────────────
+  // ── The eight moved off BullMQ (SAAS-HOSTING-STACK.md §7.1) ────────────────
 
   {
     // Was `{event-hooks}`. The highest-volume queue and the widest surface:
@@ -304,9 +304,9 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       import('@/lib/server/events/segment-scheduler').then((m) => m.runSegmentEvaluation),
   },
   {
-    // Was `{help-center-translate}`. The 120s lease is the case the lease
-    // primitive was built for, and the reason this tier runs a bounded pool
-    // instead of one serial drain — see runner.ts.
+    // Was `{help-center-translate}`. The 120s lease is the case §7.2 was built
+    // for, and the reason this tier runs a bounded pool instead of one serial
+    // drain — see runner.ts.
     name: 'help-center-translate',
     concurrency: 1,
     maxAttempts: 3,

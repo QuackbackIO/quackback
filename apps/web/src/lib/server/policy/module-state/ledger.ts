@@ -662,6 +662,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'workspace data; the worst a wrong value does is repeat or delay one report.',
   },
   {
+    file: 'apps/web/src/lib/server/workspaces/idle.ts',
+    name: 'subscribers',
+    category: 'process-lifetime',
+    reason:
+      'The in-process workspace-activity listeners — the two tiers, registered once at boot. The workspace ' +
+      'is an ARGUMENT to each callback rather than state held here, so there is nothing keyed and ' +
+      'nothing to leak across workspaces.',
+  },
+  {
     file: 'apps/web/src/lib/server/jobs/deadlines.ts',
     name: 'providers',
     category: 'process-lifetime',
@@ -669,6 +678,23 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Queue name to deadline function, registered at module load before any workspace scope is open. ' +
       "The functions are pure code; every call runs inside the caller's scope and reads that " +
       "workspace's own database, so the ambient scope supplies the workspace rather than this map.",
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'lastFleetReadAt',
+    category: 'fleet-wide',
+    reason:
+      "When this process last read the FLEET's workspace list from the control database. Fleet-wide by " +
+      'definition — it is about the one shared registry, not about any workspace. It exists so an idle ' +
+      'fleet stops re-reading a control database that is trying to suspend.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    name: 'unsubscribeActivity',
+    category: 'process-lifetime',
+    reason:
+      "The job tier's handle for detaching its activity listener at shutdown. One closure per " +
+      'process, carrying no workspace.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/tier.ts',
@@ -831,12 +857,12 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
     file: 'apps/web/src/lib/server/jobs/tier.ts',
     name: 'stats',
     category: 'workspace-scoped-key',
-    keyedBy: 'opts.tenantId',
+    keyedBy: 'opts.workspaceKey',
     owner: 'Piece 6 (saas/queue-lease)',
     reason:
-      'Per-workspace loop counters (passes, claimed, succeeded, failed) keyed by tenant id, for ' +
-      'the readiness and diagnostics surfaces. Shared, one workspace s throughput would be ' +
-      'reported as another s, which is the kind of wrong number an operator acts on.',
+      'Per-workspace loop counters (passes, claimed, succeeded, failed, wake latency) keyed by ' +
+      'workspace id, for the readiness and diagnostics surfaces. Shared, one workspace s throughput ' +
+      'would be reported as another s, which is the kind of wrong number an operator acts on.',
   },
   {
     file: 'apps/web/src/lib/server/jobs/tier.ts',
@@ -949,6 +975,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The process-level list of after-commit listeners (the job scheduler). Not workspace data: ' +
       'each sink is a function this replica registered at start. A second workspace hitting the ' +
       'same list is the point — one scheduler serves every workspace.',
+  },
+  {
+    file: 'apps/web/src/lib/server/jobs/scheduler.ts',
+    name: 'processScheduler',
+    category: 'process-lifetime',
+    reason:
+      'The one in-process deadline scheduler for this replica. It holds no tenant connection; ' +
+      'the heap is keyed by workspaceKey so two workspaces cannot share a timer generation. A ' +
+      'cross-workspace hit on this binding would mean two schedulers, which is what the latch ' +
+      'prevents.',
   },
   {
     file: 'apps/web/src/lib/server/domains/channels/registry.ts',

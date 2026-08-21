@@ -30,9 +30,10 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-let currentTenantId: string | null = null
-vi.mock('@/lib/server/tenancy/tenant-context', () => ({
-  getCurrentTenant: () => (currentTenantId === null ? null : { tenantId: currentTenantId }),
+let currentWorkspaceKey: string | null = null
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () =>
+    currentWorkspaceKey === null ? null : { workspaceKey: currentWorkspaceKey },
 }))
 
 import { TerminalJobError, __setJobDefinitionsForTests } from '../definitions'
@@ -68,7 +69,7 @@ beforeAll(async () => {
 })
 
 afterEach(() => {
-  currentTenantId = null
+  currentWorkspaceKey = null
   __setJobDefinitionsForTests(null)
   resetJobHandlers()
 })
@@ -140,10 +141,34 @@ describe('the schedule tick', () => {
     ])
     const tick = await runScheduleTick(state, new Date(2026, 7, 9, 14, 37, 0))
     expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 40, 0))
+    expect(tick.nextEnabledSlotAt).toEqual(new Date(2026, 7, 9, 14, 40, 0))
   })
 
-  it('still reports a gated-off cron so the poll loop re-asks the gate', async () => {
+  it('does not report a gated-off per-minute cron as the next enabled slot', async () => {
     const gated = queue('gated-min')
+    const daily = queue('ungated-daily')
+    __setJobDefinitionsForTests([
+      {
+        name: gated,
+        cron: '* * * * *',
+        cronEnabled: async () => false,
+        handler: async () => async () => {},
+      },
+      {
+        name: daily,
+        cron: '0 3 * * *',
+        handler: async () => async () => {},
+      },
+    ])
+    const tick = await runScheduleTick(createScheduleState(), new Date(2026, 7, 9, 14, 37, 0))
+    // The attached listener may still ask the gate next minute.
+    expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 38, 0))
+    // The process scheduler must heap the ungated daily, not the gated minute.
+    expect(tick.nextEnabledSlotAt).toEqual(new Date(2026, 7, 10, 3, 0, 0))
+  })
+
+  it('reports no enabled slot when every cron is gated off', async () => {
+    const gated = queue('gated-only')
     __setJobDefinitionsForTests([
       {
         name: gated,
@@ -154,6 +179,7 @@ describe('the schedule tick', () => {
     ])
     const tick = await runScheduleTick(createScheduleState(), new Date(2026, 7, 9, 14, 37, 0))
     expect(tick.nextSlotAt).toEqual(new Date(2026, 7, 9, 14, 38, 0))
+    expect(tick.nextEnabledSlotAt).toBeNull()
   })
 
   it('does not backfill missed slots after an outage', async () => {
@@ -172,18 +198,18 @@ describe('the schedule tick', () => {
     expect(rows[0].payload.scheduledFor).toBe(new Date(2026, 7, 9, 17, 0).toISOString())
   })
 
-  it("gives every tenant every slot — one scheduler must not consume another's", async () => {
+  it("gives every workspace every slot — one scheduler must not consume another's", async () => {
     // The defect this pins: a module-scope `seen` map keyed on the schedule name
-    // alone is shared by every tenant loop in the process, so whichever tenant
+    // alone is shared by every workspace loop in the process, so whichever workspace
     // reached a slot first advanced a counter the rest read as "already done".
-    // Measured live on a two-tenant fleet before the fix: each minute's sweep
-    // landed on exactly one tenant, never both.
-    const q = queue('sched-two-tenants')
+    // Measured live on two workspaces before the fix: each minute's sweep
+    // landed on exactly one workspace, never both.
+    const q = queue('sched-two-workspaces')
     __setJobDefinitionsForTests([
       { name: q, cron: '* * * * *', handler: async () => async () => {} },
     ])
 
-    // Two schedulers, as `tier.ts` builds one per tenant loop.
+    // Two schedulers, as `tier.ts` builds one per workspace loop.
     const alpha = createScheduleState()
     const bravo = createScheduleState()
     const minute = (m: number) => new Date(2026, 7, 9, 14, m, 5)
@@ -198,7 +224,7 @@ describe('the schedule tick', () => {
     for (const m of [1, 2, 3]) {
       // `attempted`, not `enqueued`: both schedulers share one test database, so
       // the second writer of each slot is legitimately deduped by the unique
-      // index. Production gives each tenant its own database and both insert.
+      // index. Production gives each workspace its own database and both insert.
       // What must hold either way is that each scheduler DECIDED the slot was
       // due — which is exactly what shared state destroys.
       //
@@ -206,12 +232,12 @@ describe('the schedule tick', () => {
       // boolean leaves the whole guard hanging on a counter nothing pins: an
       // `attempted` hardcoded to 1 passed this file, and passed it even with the
       // shared-state defect restored underneath.
-      currentTenantId = 'tenant-alpha'
+      currentWorkspaceKey = 'workspace-alpha'
       const a = await runScheduleTick(alpha, minute(m))
       expect(a.attempted, `alpha attempted at minute ${m}`).toBe(1)
       alphaKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
 
-      currentTenantId = 'tenant-bravo'
+      currentWorkspaceKey = 'workspace-bravo'
       const b = await runScheduleTick(bravo, minute(m))
       expect(b.attempted, `bravo attempted at minute ${m}`).toBe(1)
       bravoKeys.push(slotKey(q, new Date(2026, 7, 9, 14, m)))
@@ -220,11 +246,11 @@ describe('the schedule tick', () => {
     // The other pole, and the reason the count is asserted at all: a tick with
     // no new slot due must attempt NOTHING. Without this, `attempted` could be
     // any always-truthy value and the guard above would still pass.
-    currentTenantId = 'tenant-alpha'
+    currentWorkspaceKey = 'workspace-alpha'
     expect((await runScheduleTick(alpha, minute(3))).attempted).toBe(0)
-    currentTenantId = 'tenant-bravo'
+    currentWorkspaceKey = 'workspace-bravo'
     expect((await runScheduleTick(bravo, minute(3))).attempted).toBe(0)
-    currentTenantId = null
+    currentWorkspaceKey = null
 
     // Each scheduler saw all three slots. With shared state the second caller of
     // each minute finds the counter already advanced and never attempts.
@@ -234,10 +260,8 @@ describe('the schedule tick', () => {
 
     // Only one row per slot survives here because both schedulers write to the
     // same test database; in production each workspace has its own. The rows prove
-    // the enqueue was attempted for every slot by both. Sorted: which scheduler's
-    // insert wins each slot's race decides row order, and the claim is coverage,
-    // not order.
-    expect((await rowsFor(q)).map((r) => r.dedupe_key).sort()).toEqual([...expected].sort())
+    // the enqueue was attempted for every slot by both.
+    expect((await rowsFor(q)).map((r) => r.dedupe_key)).toEqual(expected)
   })
 
   it('carries the definition maxAttempts onto the enqueued row', async () => {
@@ -633,7 +657,7 @@ describe('schedule gating and dynamic schedules', () => {
     // and a first pass adopts rather than runs (or a restart would replay one of
     // everything). Losing one minute of a per-minute cron was invisible. Losing
     // the first slot of a gate that can now stay shut for hours means the work
-    // never runs at all — measured against a real tenant, a snooze due in ninety
+    // never runs at all — measured against a real workspace, a snooze due in ninety
     // seconds was never swept.
     enabled = true
     const open = await runScheduleTick(state, new Date(base.getTime() + 180_000))

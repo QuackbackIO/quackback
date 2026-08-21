@@ -62,13 +62,10 @@ function refusal(status: number, body: string, extra?: Record<string, string>): 
  * they arrive on a workspace hostname like everything else. Resolving a workspace for
  * them would open a pool — and therefore **wake a suspended workspace
  * database** — once per probe, forever, which silently destroys the idle-cost
- * model the pooling exists for. Liveness and readiness under pooled tenancy
- * assert only that the process is up / can reach the control store, so they
- * need no workspace either.
+ * model the pooling exists for. Readiness under pooled tenancy asserts only that
+ * the process can reach the control store, so it needs no workspace either.
  */
-function isFleetHealthPath(pathname: string): boolean {
-  return pathname === '/api/health' || pathname.startsWith('/api/health/')
-}
+const FLEET_PATHS = ['/api/health', '/api/health/ready']
 
 export { requestWorkspaceHost } from './saas-edge-host'
 
@@ -81,7 +78,7 @@ export async function resolveWorkspaceAndContinue<T>({
   next: () => Promise<T>
   log?: Pick<typeof logger, 'warn' | 'error' | 'info'>
 }): Promise<T | Response> {
-  if (isFleetHealthPath(new URL(request.url).pathname)) return next()
+  if (FLEET_PATHS.includes(new URL(request.url).pathname)) return next()
 
   const host = requestWorkspaceHost(request)
   const acquisition = await acquireScopeForHost(host, 'request')

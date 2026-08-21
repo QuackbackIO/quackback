@@ -126,7 +126,7 @@ export function makeWorkspaceDescriptor(
     },
     email: { from: `support@${host}`, mailSlug: mailSlugFor(workspaceKey) },
     features: { aiEnabled: true },
-    physical: { catalogName: null, catalogOid: null },
+    physical: { catalogName: null, catalogOid: null, clusterId: null },
   }
 }
 

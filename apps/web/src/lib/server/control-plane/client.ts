@@ -87,7 +87,7 @@ function controlPlaneOrigin(): URL {
   return origin
 }
 
-async function callWorkspaceControlPlane<T>(path: string, body: unknown): Promise<T> {
+export async function callWorkspaceControlPlane<T>(path: string, body: unknown): Promise<T> {
   return requestWorkspaceControlPlane<T>(path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -95,7 +95,7 @@ async function callWorkspaceControlPlane<T>(path: string, body: unknown): Promis
   })
 }
 
-async function getWorkspaceControlPlane<T>(path: string): Promise<T> {
+export async function getWorkspaceControlPlane<T>(path: string): Promise<T> {
   return requestWorkspaceControlPlane<T>(path, { method: 'GET' })
 }
 
@@ -213,6 +213,8 @@ export type OwnerWorkspace = {
   displayName: string
   url: string | null
 }
+
+export type OwnerSiblingWorkspace = OwnerWorkspace
 
 function isGeneratedSystemUrl(value: string): boolean {
   return /(?:^|\.|\/\/)ws-[0-9a-f]{24}(?:\.|$|\/)/i.test(value)

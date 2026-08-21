@@ -23,14 +23,14 @@
  * ## Where the stamp is read from
  *
  * Preferentially from `settings.cloud_workspace_key`, a dedicated column
- * (migration 0256). The stamp's original home is the `settings.metadata` JSON
+ * (migration 0251). The stamp's original home is the `settings.metadata` JSON
  * bag, and `telemetry/instance-id.ts` performs an unlocked, unattended **hourly**
  * read-modify-write of that same bag which never invalidates the settings cache —
  * so it can interleave with a stamp write and drop it. A column removes the whole
  * class rather than narrowing the window.
  *
  * The column is read through `to_jsonb(s) ->> 'cloud_workspace_key'` rather than by
- * name, so this query still runs against a database that predates 0256 and
+ * name, so this query still runs against a database that predates 0251 and
  * simply reports the column as absent. That matters because the fingerprint is
  * the *first* thing a pooled process does with a workspace database — refusing to
  * even look because of an ordering problem would turn an expand-only migration
@@ -361,10 +361,11 @@ export async function observeWorkspaceIdentity(
  */
 const CUSTODY_REPAIR_ADVICE =
   `Stamp the canary under the key this workspace's appSecretsRef ALREADY names — do not let a ` +
-  `tool pick the key. Re-establishing workspace secrets is a control-plane-side operation, and ` +
-  `only for a workspace already on derived+hkdf://: it computes a derived ref and replaces ` +
-  `whatever the record named, so running it against an env:// or openbao+kv:// workspace points ` +
-  `the record at a THIRD key and stamps a canary under it.\n` +
+  `tool pick the key. The control plane's establish-workspace-secrets script is only that tool ` +
+  `for a workspace already on derived+hkdf://: it computes a derived ref and replaces whatever ` +
+  `the record named, so running it against an env:// or openbao+kv:// workspace points the ` +
+  `record at a THIRD key and stamps a canary under it.\n` +
+  `  bun run src/scripts/establish-workspace-secrets.ts --workspace-key <id>   # derived+hkdf:// only\n` +
   `Provisioning will not do it either: it returns early on an already-registered workspace, ` +
   `before the custody step.`
 

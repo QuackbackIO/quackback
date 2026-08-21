@@ -138,7 +138,9 @@ describe('the storage-credential consumer still works', () => {
     // The failure that matters is not "throws" — `s3.ts` turns this into a 503 —
     // it is that the operator-readable reason survives and no credential does.
     expect(
-      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), { secrets: NO_STORAGE })
+      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), {
+        secrets: NO_STORAGE,
+      })
     ).toEqual({ ok: false, problem: NO_STORAGE.storageProblem })
   })
 
@@ -165,7 +167,9 @@ describe('the storage-credential consumer still works', () => {
     // workspace whose reference failed would be served the fleet credential.
     expect(getWorkspaceStorageCredential()).toBeNull()
     expect(
-      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), { secrets: NO_STORAGE })
+      withWorkspace('workspace-alpha', () => getWorkspaceStorageCredential(), {
+        secrets: NO_STORAGE,
+      })
     ).not.toBeNull()
   })
 
@@ -223,9 +227,9 @@ describe('neither accessor is a complete addressing capability on its own', () =
     const bucket = withWorkspace('workspace-alpha', () => getCurrentWorkspace()?.storage.bucket)
 
     expect(bucket).toBe(ALPHA_BUCKET)
-    expect(reachableStrings(withWorkspace('workspace-alpha', () => getCurrentWorkspace()))).not.toContain(
-      ALPHA_STORAGE.secretAccessKey
-    )
+    expect(
+      reachableStrings(withWorkspace('workspace-alpha', () => getCurrentWorkspace()))
+    ).not.toContain(ALPHA_STORAGE.secretAccessKey)
   })
 })
 
@@ -355,7 +359,9 @@ describe('a scope cannot exist without its SECRET_KEY having resolved', () => {
       origin: 'test',
     } as never
 
-    expect(() => runWithWorkspaceScope(literal, () => 'ran')).toThrow(WorkspaceScopeSecretsMissingError)
+    expect(() => runWithWorkspaceScope(literal, () => 'ran')).toThrow(
+      WorkspaceScopeSecretsMissingError
+    )
   })
 
   it('throws rather than reading the fleet key for a scope planted onto the store', () => {
@@ -422,13 +428,17 @@ describe('the export surface cannot re-widen', () => {
     expect(exercised).toBe(allowed.size)
   })
 
-  it('keeps the two accessors off any workspaces public face', async () => {
+  it('keeps the two accessors off the workspaces module’s public face', async () => {
     // `secret-key.ts` and `storage/s3.ts` import them from `workspace-context`
-    // directly. A barrel would put the storage credential one
+    // directly. Adding them to the barrel would put the storage credential one
     // `@/lib/server/workspaces` import away from anything, which is the shape of
-    // the leak being closed. The barrel is gone.
-    const { existsSync } = await import('node:fs')
-    const { fileURLToPath } = await import('node:url')
-    expect(existsSync(fileURLToPath(new URL('../index.ts', import.meta.url)))).toBe(false)
+    // the leak being closed.
+    const barrel = await import('../index')
+
+    expect(barrel).not.toHaveProperty('getWorkspaceSecretKey')
+    expect(barrel).not.toHaveProperty('getWorkspaceStorageCredential')
+    expect(barrel).not.toHaveProperty('getCurrentWorkspaceSecrets')
+    // CONTROL: the barrel is the real one and does re-export the scope itself.
+    expect(barrel).toHaveProperty('getWorkspaceScope')
   })
 })

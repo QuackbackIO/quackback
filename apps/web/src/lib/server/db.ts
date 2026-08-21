@@ -92,8 +92,8 @@ declare global {
  *   has always had.
  * - **`pooled`**: the connection belongs to whichever workspace the request
  *   resolved to, and there is no fleet-wide fallback. A missing scope throws.
- *   That is deliberate and it is the point — the underlying
- *   observation is that a *wrong* pool passes every RBAC and permission check,
+ *   That is deliberate and it is the point — SAAS-HOSTING-STACK.md §3 is the
+ *   observation that a *wrong* pool passes every RBAC and permission check,
  *   because that database's own rows are self-consistent. A silent default
  *   would be the same failure with a friendlier name.
  */

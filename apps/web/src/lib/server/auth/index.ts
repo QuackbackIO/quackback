@@ -198,7 +198,7 @@ async function createAuth() {
   const genericOAuthConfigs: GenericOAuthConfig[] = []
 
   // Tier limits + workspace settings are independent reads — fire them
-  // together to avoid stacking cache round-trips on every auth-instance
+  // together to avoid stacking Redis round-trips on every auth-instance
   // rebuild. workspaceSettings still drives the social-provider surface
   // filter below; OIDC config now comes from the identity_provider list.
   const [tierLimits, workspaceSettings] = await Promise.all([
@@ -847,7 +847,7 @@ async function createAuth() {
  * Get the auth instance (lazy-initialized).
  *
  * Cross-pod invalidation: every call reads the cached settings row's
- * `authConfigVersion` (one cache hit, already happens for everything
+ * `authConfigVersion` (one Redis hit, already happens for everything
  * else). If the cached _auth was built against an older version, drop
  * it and rebuild. This guarantees that a write on pod A propagates to
  * pod B no later than its next request after pod A's commit. The

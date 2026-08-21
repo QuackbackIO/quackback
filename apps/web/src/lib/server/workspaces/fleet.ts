@@ -147,3 +147,6 @@ export async function withWorkspaceScopeById<T>(
   }
   return runWithWorkspaceScope(acquisition.scope, body)
 }
+
+/** Alias kept for the barrel's naming symmetry with `runFleetPass`. */
+export const withScopedWorkspaces = runFleetPass
