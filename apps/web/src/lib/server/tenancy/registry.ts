@@ -75,96 +75,11 @@ interface RegistryRow {
 let controlSql: postgres.Sql | null = null
 
 /**
- * How long the control socket survives with nothing to do.
- *
- * Derived from the registry cache TTL rather than picked, and it has to be
- * *above* it. A read happens on a cache miss, so on a fleet with any traffic at
- * all the misses arrive one TTL apart; a shorter idle timeout would tear the
- * socket down and rebuild it between every pair of them, putting a connect on
- * the request path for no saving. Above the TTL, a fleet that is being used
- * keeps one warm socket, and a fleet that has genuinely stopped drops it.
- *
- * The 15s margin is slack for a miss that arrives a little late — a TTL that
- * expires at 30s is not read again at exactly 30s.
- */
-function controlIdleSeconds(): number {
-  return Math.ceil(config.tenantRegistryTtlMs / 1000) + 15
-}
-
-/**
- * Observability for the control connection, without connecting to get it.
- *
- * The readiness probe used to answer "is the control database reachable?" by
- * running `SELECT 1` on every poll, and a probe that runs every few seconds is a
- * client that is always connected — which is the whole reason this database
- * never suspended. So the last real read is recorded here and readiness reads
- * *that*. See `health.ready.ts` for what it does when there has been no read.
- */
-interface ControlReadState {
-  lastOkAt: number
-  lastErrorAt: number
-  lastError: string | null
-}
-const controlRead: ControlReadState = { lastOkAt: 0, lastErrorAt: 0, lastError: null }
-
-export function getControlReadState(): Readonly<ControlReadState> {
-  return controlRead
-}
-
-/**
- * Connect and ask the control database whether it is there.
- *
- * The fallback for the readiness probe when observation has nothing recent to
- * report. Recorded like a real read, so a probe that succeeds after a failure
- * clears the failure instead of leaving the fleet permanently probing.
- */
-export async function probeControlDatabase(): Promise<void> {
-  await recordControlRead(getControlSql()`SELECT 1`)
-}
-
-function recordControlRead<T>(promise: Promise<T>): Promise<T> {
-  return promise.then(
-    (value) => {
-      controlRead.lastOkAt = Date.now()
-      controlRead.lastError = null
-      return value
-    },
-    (err: unknown) => {
-      controlRead.lastErrorAt = Date.now()
-      controlRead.lastError = err instanceof Error ? err.message : String(err)
-      throw err
-    }
-  )
-}
-
-/**
  * The control-plane connection.
  *
  * Tiny and shared: one read path for the whole instance, the only database a
  * pooled process may touch without a tenant scope, and never to be confused with
  * a tenant pool.
- *
- * ## It releases between reads, and that is a decision with a cost
- *
- * This connection used to be held open on the grounds that a control database is
- * always warm anyway. Measured, "always warm" meant **95% active for 23 hours**
- * — a compute billed continuously so that a cache miss could save a connect. It
- * is not exempt from the cost model just because it is not per tenant, so
- * `idle_timeout` now lets the socket go and the compute suspend.
- *
- * The cost, stated rather than discovered: the registry read happens on a cache
- * miss *before* the tenant connection is opened, so the first request to a
- * fleet that has been idle long enough for both computes to suspend pays a
- * control wake and then a tenant wake, **in series**. Two cold starts, not one.
- *
- * What keeps that off the common path is that the control database is shared.
- * Every hostname's miss lands on it, so it stays warm while *any* tenant in the
- * fleet is being served; it can only suspend after the entire fleet has been
- * silent. The serial double wake is therefore the first request to the whole
- * fleet after fleet-wide idleness, which is the one moment nobody is waiting.
- * The `Sql` object itself is kept — `postgres.js` holds no socket while idle, so
- * the singleton is a handle rather than a connection, and dropping it would only
- * mean rebuilding the pool object.
  */
 export function getControlSql(): postgres.Sql {
   if (controlSql) return controlSql
@@ -174,7 +89,6 @@ export function getControlSql(): postgres.Sql {
   }
   controlSql = postgres(url, {
     max: 2,
-    idle_timeout: controlIdleSeconds(),
     connect_timeout: 10,
     onnotice: () => {},
   })
@@ -190,9 +104,6 @@ export async function closeControlSql(): Promise<void> {
 /** Test seam. Swaps the control connection without touching config. */
 export function __setControlSqlForTests(sql: postgres.Sql | null): void {
   controlSql = sql
-  controlRead.lastOkAt = 0
-  controlRead.lastErrorAt = 0
-  controlRead.lastError = null
 }
 
 const SELECT_COLUMNS = `
@@ -242,15 +153,13 @@ export async function resolveTenantByHostname(
   const hostname = normalizeHostHeader(hostHeader)
   if (hostname === null) return { kind: 'unknown_host', hostname: String(hostHeader) }
 
-  const rows = (await recordControlRead(
-    sql.unsafe(
-      `SELECT ${SELECT_COLUMNS}
+  const rows = (await sql.unsafe(
+    `SELECT ${SELECT_COLUMNS}
        FROM cp_tenant_hostnames h
        JOIN cp_tenant_registry r ON r.tenant_id = h.tenant_id
       WHERE h.hostname = $1
       LIMIT 1`,
-      [hostname]
-    )
+    [hostname]
   )) as unknown as RegistryRow[]
 
   const row = rows[0]
@@ -268,11 +177,9 @@ export async function resolveTenantById(
   tenantId: string,
   sql: postgres.Sql = getControlSql()
 ): Promise<TenantLookup> {
-  const rows = (await recordControlRead(
-    sql.unsafe(
-      `SELECT ${SELECT_COLUMNS} FROM cp_tenant_registry r WHERE r.tenant_id = $1 LIMIT 1`,
-      [tenantId]
-    )
+  const rows = (await sql.unsafe(
+    `SELECT ${SELECT_COLUMNS} FROM cp_tenant_registry r WHERE r.tenant_id = $1 LIMIT 1`,
+    [tenantId]
   )) as unknown as RegistryRow[]
 
   const row = rows[0]
@@ -290,10 +197,8 @@ export async function listActiveTenants(sql: postgres.Sql = getControlSql()): Pr
   tenants: TenantDescriptor[]
   refused: Array<{ tenantId: string; problems: string[] }>
 }> {
-  const rows = (await recordControlRead(
-    sql.unsafe(
-      `SELECT ${SELECT_COLUMNS} FROM cp_tenant_registry r WHERE r.state = 'active' ORDER BY r.tenant_id`
-    )
+  const rows = (await sql.unsafe(
+    `SELECT ${SELECT_COLUMNS} FROM cp_tenant_registry r WHERE r.state = 'active' ORDER BY r.tenant_id`
   )) as unknown as RegistryRow[]
 
   const tenants: TenantDescriptor[] = []

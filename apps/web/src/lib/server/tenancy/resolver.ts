@@ -10,8 +10,7 @@
  *   hand-run `UPDATE` during an incident — so it is a safe invalidation key, and
  *   the pool cache rebuilds on a revision change even inside the TTL window.
  * - **The pool cache** is keyed by tenant id and holds the sockets. Its lifetime
- *   is governed by idle eviction, not by the registry TTL, because eviction is
- *   the cost model (see `pool-cache.ts`).
+ *   is governed by idle eviction, not by the registry TTL (see `pool-cache.ts`).
  *
  * Negative results are cached too, and for the same reason: an unknown host is
  * exactly what a scanner sends, and an uncached miss makes the control database
@@ -20,7 +19,6 @@
 import { config } from '@/lib/server/config'
 import { SCHEMA_FLOOR_REFUSAL_CODE } from '@/lib/server/fleet/schema-floor'
 import { logger } from '@/lib/server/logger'
-import { noteTenantActivity, type TenantActivitySource } from './idle'
 import { acquireTenantPool } from './pool-cache'
 import {
   normalizeHostHeader,
@@ -104,34 +102,12 @@ export type TenantAcquisition =
   | Exclude<TenantLookup, { kind: 'ok' }>
   | { kind: 'refused'; tenantId: string; code: string; detail: string }
 
-/**
- * Which scope origins count as "somebody is using this tenant".
- *
- * `queue` and `relay` are the always-warm tiers themselves. Counting their own
- * polling as activity would make every tenant permanently busy, which is exactly
- * the state `idle.ts` exists to end — so the exclusion is the load-bearing part
- * of this map, not the inclusions. `test` is excluded so a suite cannot signal a
- * tier it did not mean to start.
- */
-const ACTIVITY_ORIGINS: Partial<Record<TenantScopeOrigin, TenantActivitySource>> = {
-  request: 'request',
-  sweep: 'sweep',
-  script: 'script',
-  migration: 'migration',
-}
-
 export async function acquireTenantScope(
   tenant: TenantDescriptor,
   origin: TenantScopeOrigin
 ): Promise<TenantAcquisition> {
   try {
     const pool = await acquireTenantPool(tenant)
-    // After the pool is built, not before: a scope that was refused is not
-    // evidence that this tenant is being used, and telling a detached tier to
-    // re-attach to a tenant nothing can serve is how the retry storm gets a
-    // second entrance.
-    const source = ACTIVITY_ORIGINS[origin]
-    if (source) noteTenantActivity(tenant.tenantId, source)
     return {
       kind: 'ok',
       scope: createTenantScope({

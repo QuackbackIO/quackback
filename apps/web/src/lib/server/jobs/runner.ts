@@ -59,7 +59,7 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
 }
 
 export interface RunnerConfig {
-  /** Poll fallback interval. The correctness floor when a NOTIFY is lost. */
+  /** Claim cadence. A job starts within one poll interval of being enqueued. */
   pollIntervalMs: number
   /** Ceiling on rows claimed from ONE queue in a single pass. */
   batchSize: number
@@ -77,20 +77,6 @@ export interface RunnerConfig {
    * a fleet operator sizing connections cares about the product, not the term.
    */
   maxConcurrency: number
-}
-
-/**
- * Skip the NOTIFY doorbell and run on the poll interval alone.
- *
- * A real operational switch, not a test hook: §7.3's measurement is that a
- * pooled DSN accepts the `LISTEN` registration and then delivers nothing, so an
- * operator who knows their connection is pooled can turn the listener off
- * rather than have it retry and log. It is also what makes the poll floor
- * measurable end to end — a harness that fakes the fallback with its own timer
- * measures its own timer.
- */
-export function wakeDisabled(): boolean {
-  return process.env.JOB_WAKE_DISABLED === '1'
 }
 
 /** Sum of every registered queue's concurrency — the reference's own ceiling. */

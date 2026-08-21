@@ -33,16 +33,6 @@
 -- -> terminal `failed`) refuses to hand it back. Incrementing on completion
 -- instead would leave a killed job at `attempts = 0` and re-run it, which is
 -- exactly the defect this comment exists to prevent. Do not move it.
---
--- ## Wake
---
--- The trigger below NOTIFYs on any write that leaves a row runnable now, so a
--- listener on a session-mode connection wakes in milliseconds instead of
--- waiting out the poll interval. `LISTEN` does not survive a transaction-mode
--- pooler (measured: 0 of 10 notifies delivered through Neon's pooler, at any
--- concurrency, while `pg_listening_channels()` reported the registration as
--- present) — so the listener must terminate at the DIRECT endpoint, and the
--- poll interval remains the correctness floor rather than an optimisation.
 CREATE TABLE IF NOT EXISTS "job_queue" (
   "id" bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   -- App-facing branded id ('job_...'), stable across attempts so logs correlate.
@@ -118,20 +108,3 @@ COMMENT ON COLUMN "job_queue"."attempts" IS
   'Incremented by the CLAIM, never by completion. This is what makes max_attempts=1 mean at-most-once across a process death.';
 COMMENT ON COLUMN "job_queue"."lease_token" IS
   'Fencing token. Every write after the claim is guarded by it, so a reaped owner cannot overwrite its successor.';
-
--- Low-latency wake. Fires only when the row is runnable NOW; a delayed job is
--- picked up by the poller, which is the fallback that makes a lost notify a
--- latency problem rather than a correctness one.
-CREATE OR REPLACE FUNCTION "quackback_job_queue_wake"() RETURNS trigger AS $fn$
-BEGIN
-  IF NEW.status = 'pending' AND NEW.run_at <= now() THEN
-    PERFORM pg_notify('quackback_job_wake', NEW.queue);
-  END IF;
-  RETURN NULL;
-END;
-$fn$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS "job_queue_wake_trg" ON "job_queue";
-CREATE TRIGGER "job_queue_wake_trg"
-  AFTER INSERT OR UPDATE OF "status", "run_at" ON "job_queue"
-  FOR EACH ROW EXECUTE FUNCTION "quackback_job_queue_wake"();

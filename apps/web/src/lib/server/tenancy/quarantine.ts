@@ -1,32 +1,24 @@
 /**
  * Refusals a retry cannot fix, and what to do instead of retrying.
  *
- * ## The measurement
- *
- * Two tenants on a live fleet were refused with `app_secret_no_resolver` — their
- * `appSecretsRef` names a secret store this build has no resolver for. The tiers
- * reconnected anyway. One of them was the **most active database in the fleet at
- * 70%**, its newest connection 1.6 seconds old, doing no work of any kind. A
- * configuration-terminal refusal was being answered by a reconnect loop at the
- * poll interval, and the cost was a compute that could never suspend.
- *
- * ## The rule
- *
- * Classify, then choose the wait. `fingerprint.ts` already draws the line
- * between the two subjects of a refusal (wrong database vs wrong key) and now
- * also answers the second question — can a retry change this? Everything it
- * calls terminal is an accusation about a record or a key, and this module adds
- * the codes the secret resolver raises before a fingerprint is ever taken.
+ * A tenant whose record names a secret store this build has no resolver for is
+ * refused for a reason no reconnect can change, and answering that with a
+ * retry loop at the poll interval is pure churn and log noise. Classify, then
+ * choose the wait. `fingerprint.ts` already draws the line between the two
+ * subjects of a refusal (wrong database vs wrong key) and now also answers the
+ * second question — can a retry change this? Everything it calls terminal is an
+ * accusation about a record or a key, and this module adds the codes the secret
+ * resolver raises before a fingerprint is ever taken.
  *
  * - **Terminal** → stop retrying. Resume when the tenant's registry `revision`
  *   changes, because the control plane's trigger bumps it on any write to the
  *   record — including the hand-run `UPDATE` that fixes it. Re-probe once per
- *   `rescanIntervalMs` regardless, because not every repair is a registry
+ *   `TERMINAL_REPROBE_MS` regardless, because not every repair is a registry
  *   change: a custody repair writes the *tenant* database and leaves the record
  *   untouched, and a tenant that could only ever be freed by a revision bump
  *   would stay refused after being fixed.
- * - **Transient** → exponential backoff, capped. A compute that is still
- *   starting, a schema floor the migrator has not reached yet, a credential
+ * - **Transient** → exponential backoff, capped. A database restarting behind a
+ *   failover, a schema floor the migrator has not reached yet, a credential
  *   mid-rotation: all of these heal on their own, and all of them are made worse
  *   by a tight loop.
  *
@@ -41,7 +33,6 @@
  */
 import { logger } from '@/lib/server/logger'
 import { isTerminalRefusalCode } from './fingerprint'
-import { tenantIdlePolicy } from './idle'
 
 const log = logger.child({ component: 'tenant-quarantine' })
 
@@ -79,7 +70,7 @@ const TERMINAL_SECRET_CODES: ReadonlySet<string> = new Set([
  *
  * Deliberately short. `28P01` (bad password) is absent because a rotation heals
  * it without any record change, and `57P03` (cannot connect now) is absent
- * because it is what a starting compute says.
+ * because it is what a database says while restarting or failing over.
  */
 const TERMINAL_SQLSTATES: ReadonlySet<string> = new Set([
   '3D000', // invalid_catalog_name — no such database
@@ -130,6 +121,15 @@ export interface QuarantineEntry {
 const TRANSIENT_BACKOFF_FLOOR_MS = 1_000
 const TRANSIENT_BACKOFF_CEILING_MS = 60_000
 
+/**
+ * How long a terminally refused tenant waits before being re-probed anyway.
+ *
+ * The revision-change path is the fast one; this bounds the wait for repairs
+ * that never touch the registry record (a custody repair writes the tenant
+ * database only).
+ */
+const TERMINAL_REPROBE_MS = 900_000
+
 /** How often the quarantine heartbeat repeats itself while anything is in it. */
 const REPORT_INTERVAL_MS = 300_000
 
@@ -162,7 +162,7 @@ export function noteTenantRefusal(
 
   const retryAfter =
     disposition === 'terminal'
-      ? now + tenantIdlePolicy().rescanIntervalMs
+      ? now + TERMINAL_REPROBE_MS
       : now +
         Math.min(TRANSIENT_BACKOFF_CEILING_MS, TRANSIENT_BACKOFF_FLOOR_MS * 2 ** (attempts - 1))
 
@@ -231,9 +231,8 @@ export function isTenantQuarantined(tenant: TenantIdentity, now = Date.now()): b
 /**
  * When this tenant may next be tried, or null if it is not quarantined.
  *
- * Exported so a detached loop can sleep exactly that long instead of waking on
- * a timer to be told "not yet" — a refused tenant should cost this process
- * nothing at all, including timers.
+ * Exported so a refused loop can sleep exactly that long instead of waking on
+ * a timer to be told "not yet".
  */
 export function quarantineRetryAt(tenantId: string): number | null {
   return quarantined.get(tenantId)?.retryAfter ?? null

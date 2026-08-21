@@ -24,9 +24,7 @@ beforeEach(() => {
   getMigrationStatus.mockResolvedValue({ upToDate: true, bundledCount: 1, appliedCount: 1 })
   getJobTierStatus.mockReturnValue({
     running: true,
-    tenants: [
-      { tenantId: 't1', inFlight: 0, schemaMissing: false, attached: true, refusedCode: null },
-    ],
+    tenants: [{ tenantId: 't1', inFlight: 0, schemaMissing: false, refusedCode: null }],
   })
 })
 
@@ -67,12 +65,9 @@ describe('GET /api/health/ready', () => {
       loops: 1,
       inFlight: 0,
       schemaMissing: 0,
-      // Two counters the cost model needs and nothing else reports. `attached`
-      // is how an operator sees that idle tenants really did let go — detaching
-      // has no other symptom. `refused` is how a tenant that has stopped being
-      // retried stays visible; it deliberately does not fail the probe, because
-      // a bad registry record is not this replica's fault.
-      attached: 1,
+      // `refused` is how a tenant that has stopped being retried stays visible;
+      // it deliberately does not fail the probe, because a bad registry record
+      // is not this replica's fault.
       refused: 0,
     })
   })
