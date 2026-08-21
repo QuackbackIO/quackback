@@ -33,6 +33,7 @@ import {
 } from './fingerprint'
 import type { TenantDescriptor } from './registry'
 import { clearTenantSecretsCache, resolveTenantSecrets } from './tenant-secrets'
+import { openTenantSecret } from './vendor/fleet-secrets'
 import { parseSecretRef, redactRef } from './vendor/secret-ref'
 import type { ResolvedTenantSecrets } from './vendor/tenant-secret-resolution'
 
@@ -185,12 +186,14 @@ export async function resolveTenantPassword(tenant: TenantDescriptor): Promise<s
   return resolvePassword(tenant)
 }
 
-/** A credential ref naming a scheme this build cannot dereference. Terminal. */
-class DbCredentialUnresolvable extends Error {
-  readonly code = 'db_credential_no_resolver'
-  constructor(message: string) {
+/** A database-credential refusal that carries its quarantine code. */
+class DbCredentialError extends Error {
+  constructor(
+    readonly code: string,
+    message: string
+  ) {
     super(message)
-    this.name = 'DbCredentialUnresolvable'
+    this.name = 'DbCredentialError'
   }
 }
 
@@ -198,6 +201,34 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
   const ref = tenant.database.credentialRef
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
+    case 'sealed+aead': {
+      // The control plane issues the role password (`CREATE ROLE … PASSWORD`)
+      // and seals it under the fleet root, in the same registry row as the DSN.
+      if (parsed.purpose !== 'db') {
+        throw new DbCredentialError(
+          'ref_purpose_mismatch',
+          `${redactRef(ref)} is sealed for '${parsed.purpose}', not a database password`
+        )
+      }
+      if (parsed.tenantId !== tenant.tenantId) {
+        throw new DbCredentialError(
+          'ref_tenant_mismatch',
+          `${redactRef(ref)} is sealed for ${parsed.tenantId} but sits on ${tenant.tenantId}`
+        )
+      }
+      const rootKey = config.fleetRootKey
+      if (!rootKey) {
+        throw new DbCredentialError(
+          'root_key_missing',
+          `${redactRef(ref)} needs QUACKBACK_FLEET_ROOT_KEY to open, and it is unset`
+        )
+      }
+      return openTenantSecret(
+        rootKey,
+        { generation: parsed.generation, tenantId: parsed.tenantId, purpose: 'db' },
+        parsed.blob
+      )
+    }
     case 'env': {
       const value = process.env[parsed.variable]
       if (!value) {
@@ -206,10 +237,11 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
       return value
     }
     default:
-      // The contract still parses other schemes, but this build has no resolver
-      // for them as DATABASE credentials. Refusing by name keeps the failure
-      // terminal (quarantine, not a reconnect loop) and honest about the cause.
-      throw new DbCredentialUnresolvable(
+      // The contract parses this scheme, but not as a DATABASE credential.
+      // Refusing by name keeps the failure terminal (quarantine, not a
+      // reconnect loop) and honest about the cause.
+      throw new DbCredentialError(
+        'db_credential_no_resolver',
         `${redactRef(ref)}: no database-credential resolver for ${parsed.scheme}:// in this build`
       )
   }
