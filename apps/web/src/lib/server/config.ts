@@ -107,7 +107,7 @@ const configSchema = z
      */
     tenantPoolMax: envInt.pipe(z.number().int().min(1).max(20)).default(3),
     /** Seconds a tenant pool may sit idle before it is closed. Hygiene only. */
-    tenantPoolIdleSeconds: envInt.pipe(z.number().int().min(5).max(86_400)).default(45),
+    tenantPoolIdleSeconds: envInt.pipe(z.number().int().min(5).max(86_400)).default(3_600),
     /** LRU cap on live tenant pools per instance. */
     tenantPoolMaxEntries: envInt.pipe(z.number().int().min(1).max(500)).default(50),
     /** TTL for the in-process hostname → tenant record cache, milliseconds. */

@@ -42,11 +42,15 @@ export interface FleetPassResult {
 }
 
 /**
- * Run `body` once per active tenant, each inside its own tenant scope.
+ * How many tenants one fleet pass works on at once.
  *
- * Serial: these are periodic sweeps, so wall time per pass is bounded by the
- * fleet size and nothing here is latency-sensitive.
+ * Bounded so a pass cannot open a connection burst proportional to fleet size
+ * against the shared server; concurrent so a pass's wall time is not N times
+ * the slowest tenant.
  */
+const FLEET_PASS_CONCURRENCY = 6
+
+/** Run `body` once per active tenant, each inside its own tenant scope. */
 export async function runFleetPass(
   origin: TenantScopeOrigin,
   body: (tenant: TenantDescriptor | null) => Promise<void>
@@ -63,7 +67,7 @@ export async function runFleetPass(
 
   const result: FleetPassResult = { succeeded: 0, failed: 0, skipped: refused.length }
 
-  for (const tenant of tenants) {
+  const runOne = async (tenant: TenantDescriptor): Promise<void> => {
     const acquisition = await acquireTenantScope(tenant, origin)
     if (acquisition.kind !== 'ok') {
       result.skipped += 1
@@ -71,7 +75,7 @@ export async function runFleetPass(
         { tenantId: tenant.tenantId, kind: acquisition.kind },
         'fleet pass could not scope tenant'
       )
-      continue
+      return
     }
     try {
       await runWithTenantScope(acquisition.scope, () => body(tenant))
@@ -81,6 +85,19 @@ export async function runFleetPass(
       log.error({ err, tenantId: tenant.tenantId }, 'fleet pass body failed for tenant')
     }
   }
+
+  let next = 0
+  const workers = Array.from(
+    { length: Math.min(FLEET_PASS_CONCURRENCY, tenants.length) },
+    async () => {
+      while (next < tenants.length) {
+        const tenant = tenants[next]!
+        next += 1
+        await runOne(tenant)
+      }
+    }
+  )
+  await Promise.all(workers)
 
   return result
 }

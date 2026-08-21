@@ -51,7 +51,8 @@ import {
   primeJobHandlers,
   resetJobHandlers,
   runJob,
-  runMaintenanceTick,
+  runPruneTick,
+  runReapTick,
   runScheduleTick,
   runnerConfig,
   type RunnerConfig,
@@ -139,7 +140,8 @@ function startLoop(opts: {
   let stopped = false
   let wakeResolve: (() => void) | null = null
   let nextScheduleAt = 0
-  let nextMaintenanceAt = 0
+  let nextReapAt = 0
+  let nextPruneAt = 0
   let descriptor: TenantDescriptor | null = opts.tenant
   /** True once the tenant has been proven servable. Cleared when a pass fails. */
   let servable = false
@@ -231,11 +233,15 @@ function startLoop(opts: {
             // traffic against a per-tenant database.
             nextScheduleAt = tick.nextSlotAt ? tick.nextSlotAt.getTime() : now + 60_000
           }
-          if (now >= nextMaintenanceAt) {
-            const maintenance = await runMaintenanceTick(opts.config)
-            s.requeued += maintenance.requeued
-            s.terminated += maintenance.terminated
-            nextMaintenanceAt = now + opts.config.reapIntervalMs
+          if (now >= nextReapAt) {
+            const reaped = await runReapTick()
+            s.requeued += reaped.requeued
+            s.terminated += reaped.terminated
+            nextReapAt = now + opts.config.reapIntervalMs
+          }
+          if (now >= nextPruneAt) {
+            await runPruneTick(opts.config)
+            nextPruneAt = now + opts.config.pruneIntervalMs
           }
           return dispatchPass({
             pool,

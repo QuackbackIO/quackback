@@ -102,6 +102,9 @@ async function loadCache() {
   vi.stubEnv('QUACKBACK_CONTROL_DATABASE_URL', 'postgresql://u@localhost:5432/control')
   vi.stubEnv('QUACKBACK_TENANT_SECRET_TEST', 'hunter2')
   vi.stubEnv('QUACKBACK_FLEET_ROOT_KEY', ROOT_KEY)
+  // Pinned rather than defaulted: the idle-sweep cases below advance the clock
+  // by fixed amounts and must not silently pass or fail when the default moves.
+  vi.stubEnv('TENANT_POOL_IDLE_SECONDS', '45')
   vi.stubEnv(STORAGE_ENV_VAR, '{"accessKeyId":"AK","secretAccessKey":"SK-0123456789abcdef"}')
   return import('../pool-cache')
 }
@@ -183,7 +186,7 @@ describe('tenant pool cache', () => {
     expect(await cache.sweepIdlePools(Date.now())).toBe(0)
     expect(cache.getPoolCacheStats().live).toBe(2)
 
-    // Both are, a minute later (the default threshold is 45s).
+    // Both are, a minute later (the pinned threshold is 45s).
     expect(await cache.sweepIdlePools(Date.now() + 60_000)).toBe(2)
     const stats = cache.getPoolCacheStats()
     expect(stats.live).toBe(0)

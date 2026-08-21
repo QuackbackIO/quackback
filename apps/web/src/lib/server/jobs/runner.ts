@@ -65,6 +65,8 @@ export interface RunnerConfig {
   batchSize: number
   /** How often expired leases are reclaimed. */
   reapIntervalMs: number
+  /** How often terminal rows past retention are deleted. */
+  pruneIntervalMs: number
   /** How long terminal rows are kept. Must exceed any live cron slot key. */
   retentionMs: number
   /**
@@ -86,9 +88,15 @@ export function totalDeclaredConcurrency(): number {
 
 export function runnerConfig(): RunnerConfig {
   return {
-    pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 1_000, 50, 600_000),
+    // 5s: fast enough that background work feels immediate, cheap enough that
+    // an idle tenant costs a handful of indexed claim queries per minute.
+    pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 5_000, 50, 600_000),
     batchSize: envInt('JOB_BATCH_SIZE', 5, 1, 100),
-    reapIntervalMs: envInt('JOB_REAP_INTERVAL_MS', 15_000, 500, 3_600_000),
+    // The lease minimum is 60s, so reaping more often than that is resolution
+    // no lease can use.
+    reapIntervalMs: envInt('JOB_REAP_INTERVAL_MS', 60_000, 500, 3_600_000),
+    // Retention ages at day granularity; hourly pruning is already generous.
+    pruneIntervalMs: envInt('JOB_PRUNE_INTERVAL_MS', 3_600_000, 15_000, 86_400_000),
     retentionMs: envInt('JOB_RETENTION_MS', 7 * 24 * 60 * 60 * 1000, 60_000, 365 * 86_400_000),
     maxConcurrency: envInt('JOB_MAX_CONCURRENCY', totalDeclaredConcurrency(), 1, 512),
   }
@@ -618,9 +626,19 @@ export interface MaintenanceResult extends ReapResult {
   pruned: number
 }
 
-/** Reclaim expired leases, then drop terminal rows past retention. */
+/** Reclaim expired leases. */
+export async function runReapTick(): Promise<ReapResult> {
+  return reapExpiredLeases()
+}
+
+/** Drop terminal rows past retention. */
+export async function runPruneTick(config: RunnerConfig): Promise<number> {
+  return pruneTerminalJobs(config.retentionMs, retentionOverrides())
+}
+
+/** Both maintenance halves in one call, for tests and one-shot drains. */
 export async function runMaintenanceTick(config: RunnerConfig): Promise<MaintenanceResult> {
-  const reaped = await reapExpiredLeases()
-  const pruned = await pruneTerminalJobs(config.retentionMs, retentionOverrides())
+  const reaped = await runReapTick()
+  const pruned = await runPruneTick(config)
   return { ...reaped, pruned }
 }
