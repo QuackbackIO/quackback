@@ -102,7 +102,7 @@ export function logStartupBanner(): void {
   } else {
     Promise.all([
       import('@/integrations/segment/server/user-sync'),
-      import('@/lib/server/tenancy/fleet'),
+      import('@/lib/server/workspaces/fleet'),
     ])
       .then(([{ warnIfSegmentInboundIsInsecure }, { runFleetPass }]) =>
         runFleetPass('sweep', () => warnIfSegmentInboundIsInsecure())
@@ -123,7 +123,7 @@ export function logStartupBanner(): void {
   } else {
     Promise.all([
       import('@/lib/server/auth/backfill-custom-oidc-provider'),
-      import('@/lib/server/tenancy/fleet'),
+      import('@/lib/server/workspaces/fleet'),
     ])
       .then(([{ runStartupBackfills }, { runFleetPass }]) =>
         runFleetPass('sweep', () => runStartupBackfills())
@@ -176,7 +176,7 @@ function startBackgroundProcessing(): void {
   // constructed, and scope it across the fleet when pooling is enabled.
   Promise.all([
     import('./domains/analytics/partition-maintenance-queue'),
-    import('@/lib/server/tenancy/fleet'),
+    import('@/lib/server/workspaces/fleet'),
   ])
     .then(([{ ensurePageViewPartitionsAtBoot }, { runFleetPass }]) =>
       runFleetPass('sweep', () => ensurePageViewPartitionsAtBoot())

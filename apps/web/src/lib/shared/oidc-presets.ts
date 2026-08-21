@@ -2,7 +2,7 @@ export interface OidcPreset {
   id: string
   label: string
   issuerPattern: RegExp
-  issuerTemplate?: string // shown in the preset picker; user fills in the tenant/org id
+  issuerTemplate?: string // shown in the preset picker; user fills in the workspace/org id
 }
 
 export const OIDC_PRESETS: OidcPreset[] = [
@@ -10,7 +10,7 @@ export const OIDC_PRESETS: OidcPreset[] = [
     id: 'entra',
     label: 'Microsoft Entra ID',
     issuerPattern: /^https:\/\/login\.microsoftonline\.com\//i,
-    issuerTemplate: 'https://login.microsoftonline.com/{tenant-id}/v2.0',
+    issuerTemplate: 'https://login.microsoftonline.com/{workspace-id}/v2.0',
   },
   {
     id: 'okta',

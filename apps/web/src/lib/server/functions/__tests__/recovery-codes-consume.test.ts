@@ -85,7 +85,7 @@ vi.mock('@quackback/email', () => ({
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getTenantSettings: vi.fn().mockResolvedValue(null),
+  getWorkspaceSettings: vi.fn().mockResolvedValue(null),
 }))
 
 // Spread the real db module so tables/operators stay current; override only what this suite drives.

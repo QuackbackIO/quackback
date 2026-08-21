@@ -82,10 +82,10 @@ export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(a
 export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch auth config')
   await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const tenant = await getTenantSettings()
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const workspace = await getWorkspaceSettings()
   return (
-    tenant?.authConfig ?? {
+    workspace?.authConfig ?? {
       oauth: { google: true, github: true, password: false },
       openSignup: false,
     }

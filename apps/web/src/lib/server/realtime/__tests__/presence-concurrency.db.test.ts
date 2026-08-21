@@ -20,9 +20,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
   ensureKvSchema,
-  withRealTenant,
-  tenantPair,
-  cleanupTenants,
+  withRealWorkspace,
+  workspacePair,
+  cleanupWorkspaces,
   closeHarness,
   testSql,
 } from '@/lib/server/kv/__tests__/harness'
@@ -36,7 +36,7 @@ import {
 } from '../presence'
 import type { PrincipalId } from '@quackback/ids'
 
-const [T] = tenantPair()
+const [T] = workspacePair()
 const AGENT = 'principal_01concurrentagent' as PrincipalId
 
 beforeAll(async () => {
@@ -44,12 +44,12 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await cleanupTenants(T)
+  await cleanupWorkspaces(T)
   await closeHarness()
 })
 
 async function reset(): Promise<void> {
-  await testSql()`DELETE FROM presence_stream WHERE tenant_id = ${T}`
+  await testSql()`DELETE FROM presence_stream WHERE workspace_key = ${T}`
 }
 
 describe('clearPresence is indivisible', () => {
@@ -58,11 +58,11 @@ describe('clearPresence is indivisible', () => {
     for (let attempt = 0; attempt < 5; attempt++) {
       await reset()
       const streams = Array.from({ length: N }, (_, i) => `stream-${attempt}-${i}`)
-      await Promise.all(streams.map((s) => withRealTenant(T, () => markPresent(AGENT, s, true))))
+      await Promise.all(streams.map((s) => withRealWorkspace(T, () => markPresent(AGENT, s, true))))
 
       // All N tear down at once, on N separate connections.
       const results = await Promise.all(
-        streams.map((s) => withRealTenant(T, () => clearPresence(AGENT, s, true)))
+        streams.map((s) => withRealWorkspace(T, () => clearPresence(AGENT, s, true)))
       )
 
       const wentOffline = results.filter(Boolean).length
@@ -70,7 +70,7 @@ describe('clearPresence is indivisible', () => {
         wentOffline,
         `attempt ${attempt}: ${wentOffline} of ${N} claimed the offline edge`
       ).toBe(1)
-      expect(await withRealTenant(T, () => isPrincipalOnline(AGENT))).toBe(false)
+      expect(await withRealWorkspace(T, () => isPrincipalOnline(AGENT))).toBe(false)
     }
   })
 
@@ -79,22 +79,22 @@ describe('clearPresence is indivisible', () => {
     // "nobody is left" while another tab has already registered.
     for (let attempt = 0; attempt < 8; attempt++) {
       await reset()
-      await withRealTenant(T, () => markPresent(AGENT, 'old-tab', true))
+      await withRealWorkspace(T, () => markPresent(AGENT, 'old-tab', true))
 
       const [offline] = await Promise.all([
-        withRealTenant(T, () => clearPresence(AGENT, 'old-tab', true)),
-        withRealTenant(T, () => markPresent(AGENT, 'new-tab', true)),
+        withRealWorkspace(T, () => clearPresence(AGENT, 'old-tab', true)),
+        withRealWorkspace(T, () => markPresent(AGENT, 'new-tab', true)),
       ])
 
       // Either ordering is legitimate — what is NOT legitimate is reporting
       // offline while the new tab's row is live, because the caller re-queues
       // the agent's conversations on that signal.
-      const stillOnline = await withRealTenant(T, () => isPrincipalOnline(AGENT))
+      const stillOnline = await withRealWorkspace(T, () => isPrincipalOnline(AGENT))
       expect(stillOnline).toBe(true)
       if (offline) {
         // Allowed only when the reconnect landed after the decision, which the
         // Redis version permitted too. Recorded rather than asserted away.
-        expect(await withRealTenant(T, () => listOnlineAgentIds())).toContain(AGENT)
+        expect(await withRealWorkspace(T, () => listOnlineAgentIds())).toContain(AGENT)
       }
     }
   })
@@ -102,14 +102,16 @@ describe('clearPresence is indivisible', () => {
   it('N concurrent heartbeats for one stream do not duplicate or lose the row', async () => {
     await reset()
     await Promise.all(
-      Array.from({ length: 30 }, () => withRealTenant(T, () => refreshPresence(AGENT, 'one', true)))
+      Array.from({ length: 30 }, () =>
+        withRealWorkspace(T, () => refreshPresence(AGENT, 'one', true))
+      )
     )
     const rows = await testSql()<{ n: string }[]>`
       SELECT count(*)::text AS n FROM presence_stream
-      WHERE tenant_id = ${T} AND principal_id = ${AGENT}
+      WHERE workspace_key = ${T} AND principal_id = ${AGENT}
     `
     expect(rows[0].n).toBe('1')
-    expect(await withRealTenant(T, () => isPrincipalOnline(AGENT))).toBe(true)
+    expect(await withRealWorkspace(T, () => isPrincipalOnline(AGENT))).toBe(true)
   })
 
   it('heartbeats and teardowns interleaved across many streams settle correctly', async () => {
@@ -117,12 +119,12 @@ describe('clearPresence is indivisible', () => {
     const live = ['a', 'b', 'c', 'd']
     const doomed = ['x', 'y', 'z']
     await Promise.all(
-      [...live, ...doomed].map((s) => withRealTenant(T, () => markPresent(AGENT, s, true)))
+      [...live, ...doomed].map((s) => withRealWorkspace(T, () => markPresent(AGENT, s, true)))
     )
 
-    const teardowns = doomed.map((s) => withRealTenant(T, () => clearPresence(AGENT, s, true)))
+    const teardowns = doomed.map((s) => withRealWorkspace(T, () => clearPresence(AGENT, s, true)))
     const beats = live.flatMap((s) =>
-      Array.from({ length: 4 }, () => withRealTenant(T, () => refreshPresence(AGENT, s, true)))
+      Array.from({ length: 4 }, () => withRealWorkspace(T, () => refreshPresence(AGENT, s, true)))
     )
     const results = await Promise.all([...teardowns, ...beats])
 
@@ -130,7 +132,7 @@ describe('clearPresence is indivisible', () => {
     expect(results.slice(0, doomed.length).filter(Boolean)).toEqual([])
     const rows = await testSql()<{ stream_id: string }[]>`
       SELECT stream_id FROM presence_stream
-      WHERE tenant_id = ${T} AND principal_id = ${AGENT} ORDER BY stream_id
+      WHERE workspace_key = ${T} AND principal_id = ${AGENT} ORDER BY stream_id
     `
     expect(rows.map((r) => r.stream_id)).toEqual(live)
   })
@@ -139,29 +141,29 @@ describe('clearPresence is indivisible', () => {
 describe('staleness', () => {
   it('a ghost stream from a crashed replica cannot keep a principal online', async () => {
     await reset()
-    await withRealTenant(T, () => markPresent(AGENT, 'ghost', true))
+    await withRealWorkspace(T, () => markPresent(AGENT, 'ghost', true))
     await testSql()`
       UPDATE presence_stream
       SET heartbeat_at = now() - make_interval(secs => ${PRESENCE_TTL_SECONDS + 5})
-      WHERE tenant_id = ${T} AND principal_id = ${AGENT}
+      WHERE workspace_key = ${T} AND principal_id = ${AGENT}
     `
-    expect(await withRealTenant(T, () => isPrincipalOnline(AGENT))).toBe(false)
-    expect(await withRealTenant(T, () => listOnlineAgentIds())).toEqual([])
+    expect(await withRealWorkspace(T, () => isPrincipalOnline(AGENT))).toBe(false)
+    expect(await withRealWorkspace(T, () => listOnlineAgentIds())).toEqual([])
   })
 
   it('tearing down a live stream ignores ghosts when deciding "went offline"', async () => {
     await reset()
-    await withRealTenant(T, () => markPresent(AGENT, 'ghost', true))
-    await withRealTenant(T, () => markPresent(AGENT, 'live', true))
+    await withRealWorkspace(T, () => markPresent(AGENT, 'ghost', true))
+    await withRealWorkspace(T, () => markPresent(AGENT, 'live', true))
     await testSql()`
       UPDATE presence_stream
       SET heartbeat_at = now() - make_interval(secs => ${PRESENCE_TTL_SECONDS + 5})
-      WHERE tenant_id = ${T} AND stream_id = 'ghost'
+      WHERE workspace_key = ${T} AND stream_id = 'ghost'
     `
     // The ghost must not count as "someone is still here".
-    expect(await withRealTenant(T, () => clearPresence(AGENT, 'live', true))).toBe(true)
+    expect(await withRealWorkspace(T, () => clearPresence(AGENT, 'live', true))).toBe(true)
     const rows = await testSql()<{ n: string }[]>`
-      SELECT count(*)::text AS n FROM presence_stream WHERE tenant_id = ${T}
+      SELECT count(*)::text AS n FROM presence_stream WHERE workspace_key = ${T}
     `
     // Both rows gone: the one asked for, and the ghost pruned alongside it.
     expect(rows[0].n).toBe('0')
@@ -169,15 +171,15 @@ describe('staleness', () => {
 
   it('a new heartbeat prunes the principal’s own abandoned streams', async () => {
     await reset()
-    await withRealTenant(T, () => markPresent(AGENT, 'abandoned', true))
+    await withRealWorkspace(T, () => markPresent(AGENT, 'abandoned', true))
     await testSql()`
       UPDATE presence_stream
       SET heartbeat_at = now() - make_interval(secs => ${PRESENCE_TTL_SECONDS + 5})
-      WHERE tenant_id = ${T} AND stream_id = 'abandoned'
+      WHERE workspace_key = ${T} AND stream_id = 'abandoned'
     `
-    await withRealTenant(T, () => markPresent(AGENT, 'fresh', true))
+    await withRealWorkspace(T, () => markPresent(AGENT, 'fresh', true))
     const rows = await testSql()<{ stream_id: string }[]>`
-      SELECT stream_id FROM presence_stream WHERE tenant_id = ${T}
+      SELECT stream_id FROM presence_stream WHERE workspace_key = ${T}
     `
     expect(rows.map((r) => r.stream_id)).toEqual(['fresh'])
   })

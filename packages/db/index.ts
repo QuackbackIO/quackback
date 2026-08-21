@@ -32,6 +32,26 @@ export {
 // Migration ledger status (bundled journal vs applied rows; readiness probe)
 export { getMigrationStatus, type MigrationStatus } from './src/migration-status'
 
+// The schema steps that run OUTSIDE drizzle's migration transaction, and the
+// post-condition sweep that checks the database rather than the ledger.
+// Exported so the fleet migrator role reuses them instead of shelling out to
+// the CLI or duplicating the index list (SAAS-HOSTING-STACK.md §10.2).
+export {
+  CONCURRENT_INDEX_SPECS,
+  MIGRATION_LOCK_KEY,
+  REQUIRED_EXTENSIONS,
+  dropInvalidIndexes,
+  ensureConcurrentIndexes,
+  ensureExtensions,
+  listInvalidIndexes,
+  verifySchemaPostconditions,
+  type ConcurrentIndexSpec,
+  type DropInvalidResult,
+  type InvalidIndex,
+  type PostconditionReport,
+  type PostconditionViolation,
+} from './src/schema-ops'
+
 // System-data reconcile (statuses, RBAC catalogue, preset bundles, assignment
 // backfill + heal) — exported so integration tests can exercise the heal.
 export { seedSystemData } from './src/seed-system'

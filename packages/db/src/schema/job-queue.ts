@@ -1,17 +1,17 @@
 /**
- * The Postgres job queue.
+ * The Postgres job queue (SAAS-HOSTING-STACK.md §7).
  *
- * One table per tenant database, which is what makes the queue per-tenant
+ * One table per workspace database, which is what makes the queue per-workspace
  * without a routing layer: there is no shared queue to route out of. The
- * `tenantId` column restates the same fact so a claim can assert it rather than
- * assume it — a wrong-tenant answer passes every other
+ * `workspaceKey` column restates the same fact so a claim can assert it rather than
+ * assume it — §3's observation is that a wrong-workspace answer passes every other
  * check in the system, so the queue asserts its own boundary rather than
  * inheriting confidence from the connection.
  *
  * The lease semantics live in `apps/web/src/lib/server/jobs/job-queue.ts`; the
  * SQL migration `0250_job_queue.sql` carries the reasoning for the columns that
- * are easy to get wrong (`attempts` incremented at claim, the fencing
- * token). Read that first if you are changing this.
+ * are easy to get wrong (`attempts` incremented at claim, the fencing token,
+ * the wake trigger). Read that first if you are changing this.
  */
 import {
   pgTable,
@@ -31,10 +31,13 @@ import { sql } from 'drizzle-orm'
 export const JOB_STATUSES = ['pending', 'running', 'succeeded', 'failed'] as const
 export type JobStatus = (typeof JOB_STATUSES)[number]
 
+/** A job is finished, for better or worse, in these states. */
+export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ['succeeded', 'failed']
+
 export const jobQueue = pgTable(
   'job_queue',
   {
-    /** Insertion order within a tenant — also the claim tiebreaker. */
+    /** Insertion order within a workspace — also the claim tiebreaker. */
     id: bigint('id', { mode: 'bigint' }).generatedAlwaysAsIdentity().primaryKey(),
     /** App-facing branded id ('job_...'), stable across attempts. */
     jobId: text('job_id').notNull(),
@@ -42,8 +45,8 @@ export const jobQueue = pgTable(
     queue: text('queue').notNull(),
     /** Idempotency handle. Unique per queue across every status. */
     dedupeKey: text('dedupe_key'),
-    /** Tenant this row belongs to, or NULL on a single-tenant install. */
-    tenantId: text('tenant_id'),
+    /** Workspace this row belongs to, or NULL on a single-workspace install. */
+    workspaceKey: text('workspace_key'),
     payload: jsonb('payload').notNull().default({}),
     status: text('status').$type<JobStatus>().notNull().default('pending'),
     /** Earliest instant the job may be claimed. */

@@ -7,9 +7,26 @@ import prettier from 'eslint-config-prettier'
 // Files that ARE the re-export layer or standalone scripts — they must import @quackback/db directly
 const dbReexportFiles = [
   '**/src/lib/server/db.ts',
+  // The tenancy module is the layer that BUILDS `Database` handles — it is what
+  // `db.ts` resolves through under pooled tenancy, so it necessarily imports the
+  // client factory the rest of the app is kept away from.
+  '**/src/lib/server/workspaces/pool-cache.ts',
+  '**/src/lib/server/workspaces/workspace-context.ts',
+  // The fleet migrator operates ON databases rather than through one. It builds
+  // its own direct, session-mode connection per workspace (the pooled handle
+  // `db.ts` resolves cannot run `pg_advisory_lock` or `CREATE INDEX
+  // CONCURRENTLY`), reads the bundled migration journal, and runs the executor —
+  // none of which is expressible through the re-export layer. Named file by file
+  // rather than by directory so a fourth module has to justify itself.
+  '**/src/lib/server/fleet/migrator.ts',
+  '**/src/lib/server/fleet/schema-state.ts',
   '**/src/lib/server/fleet/schema-floor.ts',
-  '**/src/lib/server/tenancy/pool-cache.ts',
-  '**/src/lib/server/tenancy/tenant-context.ts',
+  // Its tests assert against the same layer, and a test forced through the
+  // re-export would be asserting about a different object than the one shipped.
+  '**/src/lib/server/fleet/__tests__/**',
+  '**/src/lib/server/events/__tests__/changelog-segment-targets.db.test.ts',
+  '**/src/lib/server/jobs/__tests__/harness.ts',
+  '**/src/lib/server/kv/__tests__/harness.ts',
   '**/src/lib/shared/db-types.ts',
   '**/scripts/**',
 ]

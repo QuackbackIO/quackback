@@ -6,7 +6,7 @@
  * carries:
  *   - service_name                 (static binding)
  *   - level (string), time, msg    (Pino, string level for level detection)
- *   - request_id, route, tenant_id, user_id   (from the shared ALS context)
+ *   - request_id, route, workspace_key, user_id   (from the shared ALS context)
  *   - trace_id, span_id            (from the active OpenTelemetry span, if any)
  *
  * `service_name` defaults from OTEL_SERVICE_NAME (else "quackback"); each app

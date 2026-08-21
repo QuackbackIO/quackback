@@ -1,7 +1,7 @@
 /**
  * Authenticate a request to a /api/v1/admin/* endpoint.
  *
- * Auth is the simplest thing that works: a per-tenant
+ * Auth is the simplest thing that works: a per-workspace
  * `ADMIN_API_TOKEN` env var, projected into the pod by whatever
  * deploy automation owns secret distribution. The request bearer
  * must match.
@@ -37,7 +37,7 @@ export async function authenticateAdminToken(request: Request): Promise<Response
 /**
  * Length-preserving constant-time string compare. Falls back to a
  * normal compare if lengths differ — leaking length is acceptable
- * (the env var is fixed-length per-tenant) and lets us avoid the
+ * (the env var is fixed-length per-workspace) and lets us avoid the
  * crypto buffer dance for what's a hot path on every admin call.
  */
 function timingSafeStringEquals(a: string, b: string): boolean {

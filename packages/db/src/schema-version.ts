@@ -1,8 +1,8 @@
 /**
  * Schema versions, and the compatibility floor a pooled fleet gates on.
  *
- * Under pooled compute one code version serves tenants on two schema versions
- * for the duration of every rollout. Expand-only is
+ * Under pooled compute one code version serves workspaces on two schema versions
+ * for the duration of every rollout (SAAS-HOSTING-STACK.md §10). Expand-only is
  * necessary but **not sufficient**, and the reason is specific: Drizzle emits
  * explicit column lists, so a build that postdates an additive migration issues
  * `select "id", …, "cloud", … from "settings"` and `findFirst()` *throws* on a
@@ -11,13 +11,13 @@
  *
  * So the rule is an ordering rule: additive change must be applied **before**
  * the code that reads it. `MIN_SCHEMA_VERSION` is where a build states the
- * oldest schema it tolerates, and the tenant middleware refuses a tenant below
- * it — 503 for that tenant only, never for the fleet.
+ * oldest schema it tolerates, and the workspace middleware refuses a workspace below
+ * it — 503 for that workspace only, never for the fleet (§10.5).
  *
  * ## Why the floor is a prefix check and not a high-water mark
  *
  * A ledger is a *set*, not a counter, and this fleet has proved it: five live
- * gauntlet tenant databases have every one of their 226 ledger rows and are
+ * gauntlet workspace databases have every one of their 226 ledger rows and are
  * physically carrying migrations 0251/0252/0253 that no row records, because
  * they were applied with `psql -f`. A high-water comparison
  * (`max(created_at) >= floor`) would read a database with a gap as satisfied.
@@ -25,8 +25,8 @@
  * {@link evaluateSchemaFloor} therefore asks the only question that is
  * actually load-bearing: *is every bundled migration at or below the floor
  * present in this database's ledger?* Extra rows above the floor are ignored,
- * which is deliberate and is the second half of keeping
- * `getMigrationStatus()`'s semantics: **a tenant ahead of the code must keep
+ * which is deliberate and is the second half of §10.2's instruction to keep
+ * `getMigrationStatus()`'s semantics: **a workspace ahead of the code must keep
  * being served by the code it is ahead of**, because that is precisely what
  * happens to every not-yet-restarted replica during a rollout.
  */
@@ -61,7 +61,7 @@ export const BUNDLED_MIGRATIONS: readonly BundledMigration[] = (
   journal as { entries: BundledMigration[] }
 ).entries.map((e) => ({ when: e.when, tag: e.tag }))
 
-/** The newest migration this build ships. What a reconciler drives tenants toward. */
+/** The newest migration this build ships. What a reconciler drives workspaces toward. */
 export function latestBundledVersion(): number {
   return BUNDLED_MIGRATIONS.reduce((max, e) => (e.when > max ? e.when : max), 0)
 }
@@ -71,7 +71,7 @@ export class UnknownSchemaVersion extends Error {
    * Carried so the refusal path can tell "this process is misconfigured" from
    * "this database failed its identity check". Without it the error funnels
    * into the generic `pool_unavailable` bucket and gets reported as a
-   * fingerprint refusal — the cross-tenant alarm — while the real fault is a
+   * fingerprint refusal — the cross-workspace alarm — while the real fault is a
    * typo in an environment variable.
    */
   readonly code = 'schema_floor_misconfigured'
@@ -144,7 +144,7 @@ function rowsOf(result: unknown): { created_at: string | number }[] {
 }
 
 /**
- * Read a tenant database's applied ledger.
+ * Read a workspace database's applied ledger.
  *
  * A database with no `drizzle` schema at all — a genuinely fresh one — reports
  * an empty ledger rather than throwing, because "never migrated" is a state the
@@ -215,9 +215,9 @@ export interface SchemaFloorVerdict {
  * Is this database at or above the compatibility floor?
  *
  * The check is over the *prefix* of the bundled journal up to and including the
- * floor. Migrations above the floor are not consulted at all, so a tenant that
+ * floor. Migrations above the floor are not consulted at all, so a workspace that
  * a newer image has already migrated past this build reads as satisfied — the
- * "serve a tenant ahead of the code normally" half of the gate, and the reason
+ * "serve a workspace ahead of the code normally" half of the gate, and the reason
  * `getMigrationStatus()`'s bundled-⊆-applied semantics are kept rather than
  * "fixed".
  */

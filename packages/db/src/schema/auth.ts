@@ -318,7 +318,7 @@ export const oneTimeToken = pgTable('one_time_token', {
 /**
  * Settings table - Application settings and branding configuration
  *
- * For single-tenant OSS deployments, this table has one row containing
+ * For single-workspace OSS deployments, this table has one row containing
  * all application settings. The id, name, and slug are kept for display
  * and branding purposes.
  */
@@ -620,7 +620,7 @@ export const identityProvider = pgTable(
  *  - `enforced=true` = hard-binds emails at this domain to SSO (blocks
  *    password / magic-link / non-SSO OAuth).
  *
- * Single-tenant per deployment so no settings_id FK is needed. The
+ * Single-workspace per deployment so no settings_id FK is needed. The
  * UNIQUE constraint on `name` keeps each domain on one row regardless
  * of pending/verified state.
  */
@@ -1002,7 +1002,7 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }))
 
-// Settings is a singleton table in single-tenant mode, no relations needed
+// Settings is a singleton table in single-workspace mode, no relations needed
 export const settingsRelations = relations(settings, () => ({}))
 
 export const principalRelations = relations(principal, ({ one, many }) => ({

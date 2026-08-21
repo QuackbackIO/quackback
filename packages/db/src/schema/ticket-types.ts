@@ -23,8 +23,8 @@
  * package cannot import from apps/web).
  *
  * Soft-deleted (`deleted_at`): an in-use type archives and stays on ticket
- * history forever; it is never hard-deleted. Scoped to the tenant by the
- * database connection (database-per-tenant); no workspace column.
+ * history forever; it is never hard-deleted. Scoped to the workspace by the
+ * database connection (database-per-workspace); no workspace column.
  */
 import { pgTable, text, integer, boolean, timestamp, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'

@@ -54,9 +54,10 @@ export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler
       // domain is verified at all: those emails are routed to SSO by
       // default; without the secret, the redirect would 4xx. Force the
       // admin to explicitly remove the affected domains first.
-      const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-      const tenant = await getTenantSettings()
-      const enforcedRow = tenant?.verifiedDomains.find((d) => d.enforced)
+      const { getWorkspaceSettings } =
+        await import('@/lib/server/domains/settings/settings.service')
+      const workspace = await getWorkspaceSettings()
+      const enforcedRow = workspace?.verifiedDomains.find((d) => d.enforced)
       if (enforcedRow) {
         const { ValidationError } = await import('@/lib/shared/errors')
         throw new ValidationError(
@@ -64,7 +65,7 @@ export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler
           `Disable SSO enforcement on ${enforcedRow.name} before removing the client secret.`
         )
       }
-      const verifiedRow = tenant?.verifiedDomains.find((d) => d.verifiedAt !== null)
+      const verifiedRow = workspace?.verifiedDomains.find((d) => d.verifiedAt !== null)
       if (verifiedRow) {
         const { ValidationError } = await import('@/lib/shared/errors')
         throw new ValidationError(
@@ -103,12 +104,12 @@ export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler
 
 /**
  * Per-domain rate-limit (set-if-absent, 10s window). Throws when
- * throttled. Keyed on tenant+domain so admins can verify multiple
+ * throttled. Keyed on workspace+domain so admins can verify multiple
  * pending domains in parallel without throttling each other.
  */
-async function assertVerifyDomainRateLimit(tenantId: string, domainId: string): Promise<void> {
+async function assertVerifyDomainRateLimit(workspaceKey: string, domainId: string): Promise<void> {
   const { kvSetNx } = await import('@/lib/server/kv/pg-kv')
-  const took = await kvSetNx(`verify-domain:${tenantId}:${domainId}`, 1, 10)
+  const took = await kvSetNx(`verify-domain:${workspaceKey}:${domainId}`, 1, 10)
   if (!took) {
     throw new ConflictError(
       'VERIFY_RATE_LIMITED',
@@ -136,9 +137,9 @@ export type VerifyDomainResult =
 /** Read-only listing of the workspace's verified-domain rows. */
 export const getVerifiedDomainsFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const tenant = await getTenantSettings()
-  return tenant?.verifiedDomains ?? []
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const workspace = await getWorkspaceSettings()
+  return workspace?.verifiedDomains ?? []
 })
 
 // =============================================================================
@@ -433,19 +434,19 @@ export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<VerifyDomainResult> => {
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
-    const { getTenantSettings, stampVerifiedDomain } =
+    const { getWorkspaceSettings, stampVerifiedDomain } =
       await import('@/lib/server/domains/settings/settings.service')
-    const tenant = await getTenantSettings()
-    if (!tenant?.settings?.id) {
+    const workspace = await getWorkspaceSettings()
+    if (!workspace?.settings?.id) {
       return { verified: false, reason: 'no-pending-domain' }
     }
-    const dom = tenant.verifiedDomains.find(
+    const dom = workspace.verifiedDomains.find(
       (d) => d.id === data.id && d.providerId === data.providerId
     )
     if (!dom) {
       return { verified: false, reason: 'no-pending-domain' }
     }
-    await assertVerifyDomainRateLimit(tenant.settings.id, dom.id)
+    await assertVerifyDomainRateLimit(workspace.settings.id, dom.id)
 
     const { lookupVerificationTxt } = await import('@/lib/server/auth/dns-verify')
     const expected = `qb-domain-verify=${dom.verificationToken}`

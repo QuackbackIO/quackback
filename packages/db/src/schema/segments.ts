@@ -112,7 +112,7 @@ export interface EvaluationSchedule {
 // ============================================
 
 /**
- * Segments table — tenant-scoped user groups
+ * Segments table — workspace-scoped user groups
  *
  * type='manual': Members are assigned/removed by admins.
  * type='dynamic': Members are computed from `rules` JSON and cached in user_segments.

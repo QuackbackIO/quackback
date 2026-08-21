@@ -13,8 +13,8 @@
  *
  * The sweep modules are imported STATICALLY. They used to be `await import(...)`
  * inside the handler, which is a scope hazard rather than a style choice: the
- * tier opens a tenant scope around every pass, so a call-time import runs the
- * imported module's top level under whichever tenant happened to trigger it
+ * tier opens a workspace scope around every pass, so a call-time import runs the
+ * imported module's top level under whichever workspace happened to trigger it
  * first. `primeJobHandlers()` loads this module before any scope is open, and
  * static imports are what make that cover the modules the work actually lives
  * in. `__tests__/handler-imports.test.ts` keeps it that way.
@@ -23,14 +23,14 @@ import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
-import { dueWithin, registerTenantDeadline } from '@/lib/server/jobs/deadlines'
+import { dueWithin, registerWorkspaceDeadline } from '@/lib/server/jobs/deadlines'
 import { sweepOverdueSlaBreaches } from './sla.sweep'
 import { sweepOverdueTicketSlaBreaches } from './ticket-sla.sweep'
 
 const log = logger.child({ component: 'sla-breach-sweep' })
 
 /**
- * The earliest SLA clock this tenant has that is still running unsettled — or
+ * The earliest SLA clock this workspace has that is still running unsettled — or
  * null, if it has none.
  *
  * Four clocks across two tables, and each arm restates its sweep's own eligible
@@ -78,7 +78,7 @@ async function nextSlaBreachAt(): Promise<Date | null> {
   return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed
 }
 
-registerTenantDeadline('sla-breach-sweep', nextSlaBreachAt)
+registerWorkspaceDeadline('sla-breach-sweep', nextSlaBreachAt)
 
 /**
  * The cron gate: is any clock due inside the next slot?

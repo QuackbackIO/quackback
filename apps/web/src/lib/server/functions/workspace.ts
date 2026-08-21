@@ -22,7 +22,7 @@ const log = logger.child({ component: 'workspace' })
  *
  * Returns the RAW settings row: JSON config columns (featureFlags, authConfig,
  * portalConfig, ...) come back as unparsed text. For parsed, default-merged
- * reads use the settings domain service (getTenantSettings / isFeatureEnabled)
+ * reads use the settings domain service (getWorkspaceSettings / isFeatureEnabled)
  * instead of casting a column off this row.
  */
 export async function getSettings() {

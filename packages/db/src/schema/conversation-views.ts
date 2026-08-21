@@ -30,7 +30,7 @@ export interface ConversationViewFilters {
  * translates the rules into the ordinary list filter client-side (it is not a
  * server-side query object). Shared by default; soft-deleted so a removed view
  * keeps history. `createdByPrincipalId` is a team actor (set null on delete so
- * a shared view outlives its creator). Scoped to the tenant by the connection.
+ * a shared view outlives its creator). Scoped to the workspace by the connection.
  */
 export const conversationViews = pgTable(
   'conversation_views',

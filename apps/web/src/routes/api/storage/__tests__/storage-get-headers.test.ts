@@ -16,14 +16,15 @@ const getS3Object = vi.fn(async (_key: string) => ({
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 vi.mock('@/lib/server/storage/s3', () => ({
-  isS3Configured: vi.fn(() => true),
-  getS3Config: vi.fn(() => ({ secretAccessKey: 'test-secret' })),
+  isS3Usable: vi.fn(() => true),
+  getStorageSigningSecret: vi.fn(() => 'test-secret'),
   isPublicStorageKey: vi.fn((key: string) => key.startsWith('logos/')),
   verifyStorageReadToken: vi.fn(
     (_secret: string, _key: string, sig: string | null) => sig === 'ok'
   ),
   getS3Object,
   generatePresignedGetUrl: vi.fn(async () => 'https://s3.example.com/presigned'),
+  StorageUnavailableError: class StorageUnavailableError extends Error {},
 }))
 
 const { handleStorageGet } = await import('../$')
@@ -34,6 +35,31 @@ const get = (path: string) =>
 beforeEach(() => {
   mockConfig.s3Proxy = false
   getS3Object.mockClear()
+})
+
+describe('handleStorageGet — a key that will not decode', () => {
+  it('answers 400 rather than 500 for a malformed percent escape', async () => {
+    // `decodeURIComponent` throws URIError on `%c0%ae`, and the decode sits
+    // OUTSIDE this route's try/catch, so a caller-controlled path produced a
+    // 500. It also meant the storage boundary's own "malformed
+    // percent-encoding" refusal was unreachable from the one route that
+    // decodes — the refusal existed and nothing could ever reach it.
+    for (const path of ['/api/storage/%c0%ae', '/api/storage/logos/%', '/api/storage/logos/%2']) {
+      const res = await get(path)
+      expect(res.status, path).toBe(400)
+      await expect(res.json(), path).resolves.toEqual({ error: 'Invalid storage key' })
+    }
+    expect(getS3Object).not.toHaveBeenCalled()
+  })
+
+  it('still serves a key that decodes', async () => {
+    // The positive control: without it the assertion above passes against a
+    // route that 400s on everything.
+    mockConfig.s3Proxy = true
+    const res = await get('/api/storage/logos/decodes%20fine.gif')
+    expect(res.status).toBe(200)
+    expect(getS3Object).toHaveBeenCalledWith('logos/decodes fine.gif')
+  })
 })
 
 describe('handleStorageGet — proxy response headers', () => {
@@ -75,5 +101,27 @@ describe('handleStorageGet — proxy response headers', () => {
     const res = await get('/api/storage/chat-images/private.gif?read=ok')
     expect(res.status).toBe(200)
     expect(res.headers.get('Cache-Control')).toContain('private')
+  })
+})
+
+describe('handleStorageGet — the three states a caller must tell apart', () => {
+  it('answers 404 for an object that is not there, not 500', async () => {
+    getS3Object.mockRejectedValueOnce(Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' }))
+    mockConfig.s3Proxy = true
+    const res = await handleStorageGet({
+      request: new Request('http://localhost/api/storage/logos/missing.png'),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('still answers 500 for a fault that is not a missing object', async () => {
+    // The discriminator. Without this the 404 branch could swallow everything
+    // and the test above would pass for the wrong reason.
+    getS3Object.mockRejectedValueOnce(new Error('connection reset'))
+    mockConfig.s3Proxy = true
+    const res = await handleStorageGet({
+      request: new Request('http://localhost/api/storage/logos/broken.png'),
+    })
+    expect(res.status).toBe(500)
   })
 })

@@ -46,7 +46,7 @@ vi.mock('@tanstack/react-start/server', () => ({
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   updateAuthConfig: hoisted.mockUpdateAuthConfig,
   getAuthConfig: hoisted.mockGetAuthConfig,
-  getTenantSettings: vi.fn(),
+  getWorkspaceSettings: vi.fn(),
   setVerifiedDomainEnforced: vi.fn(),
   listVerifiedDomains: vi.fn(),
   setSsoDomainSubtree: vi.fn(),

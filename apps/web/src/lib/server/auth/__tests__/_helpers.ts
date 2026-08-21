@@ -1,8 +1,8 @@
 /**
  * Shared test factories for the auth hook suite.
  *
- * The Better-Auth hooks consume a fully-typed `TenantSettings` returned
- * by `getTenantSettings()`. Only a handful of fields are load-bearing
+ * The Better-Auth hooks consume a fully-typed `WorkspaceSettings` returned
+ * by `getWorkspaceSettings()`. Only a handful of fields are load-bearing
  * (`authConfig` + `verifiedDomains`); everything else is required by
  * the type signature but ignored at runtime. These factories give us a
  * single place to hold the inert defaults so individual tests only
@@ -12,7 +12,7 @@
  */
 import type {
   AuthConfig,
-  TenantSettings,
+  WorkspaceSettings,
   VerifiedDomain,
 } from '@/lib/server/domains/settings/settings.types'
 
@@ -65,7 +65,7 @@ const PORTAL_FEATURES_DEFAULTS = {
   allowAnonymous: true,
 }
 
-export function makeTenant(overrides: Partial<TenantSettings> = {}): TenantSettings {
+export function makeWorkspace(overrides: Partial<WorkspaceSettings> = {}): WorkspaceSettings {
   return {
     settings: {},
     name: 'test',
@@ -75,17 +75,17 @@ export function makeTenant(overrides: Partial<TenantSettings> = {}): TenantSetti
       features: PORTAL_FEATURES_DEFAULTS,
       moderationDefault: { requireApproval: 'none' },
     },
-    brandingConfig: {} as TenantSettings['brandingConfig'],
-    developerConfig: {} as TenantSettings['developerConfig'],
-    helpCenterConfig: {} as TenantSettings['helpCenterConfig'],
-    changelogConfig: {} as TenantSettings['changelogConfig'],
-    statusConfig: {} as TenantSettings['statusConfig'],
+    brandingConfig: {} as WorkspaceSettings['brandingConfig'],
+    developerConfig: {} as WorkspaceSettings['developerConfig'],
+    helpCenterConfig: {} as WorkspaceSettings['helpCenterConfig'],
+    changelogConfig: {} as WorkspaceSettings['changelogConfig'],
+    statusConfig: {} as WorkspaceSettings['statusConfig'],
     customCss: '',
     publicAuthConfig: { oauth: {}, openSignup: false },
     publicPortalConfig: { features: PORTAL_FEATURES_DEFAULTS },
-    publicWidgetConfig: {} as TenantSettings['publicWidgetConfig'],
-    featureFlags: {} as TenantSettings['featureFlags'],
-    brandingData: {} as TenantSettings['brandingData'],
+    publicWidgetConfig: {} as WorkspaceSettings['publicWidgetConfig'],
+    featureFlags: {} as WorkspaceSettings['featureFlags'],
+    brandingData: {} as WorkspaceSettings['brandingData'],
     faviconData: null,
     managedFieldPaths: [],
     verifiedDomains: [],

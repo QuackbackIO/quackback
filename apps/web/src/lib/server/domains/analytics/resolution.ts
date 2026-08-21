@@ -2,7 +2,7 @@
  * Resolution rate: the share of current posts that have reached a terminal
  * status. Status categories are fixed (`active` | `complete` | `closed`), so a
  * post counts as resolved when its status is `complete` or `closed` — this works
- * for any tenant's custom statuses without hardcoding status names.
+ * for any workspace's custom statuses without hardcoding status names.
  */
 const TERMINAL_CATEGORIES = new Set(['complete', 'closed'])
 

@@ -4,9 +4,9 @@
  * null so the caller DROPS the event rather than persisting a key derived from
  * raw identifiers).
  *
- * Salt uniqueness per tenant, the get-or-create race and the 48h expiry are
+ * Salt uniqueness per workspace, the get-or-create race and the 48h expiry are
  * properties of the statement and of the heap cache together, and live in
- * `visitor-hash-tenant-isolation.db.test.ts` against a real server.
+ * `visitor-hash-workspace-isolation.db.test.ts` against a real server.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

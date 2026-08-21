@@ -1,99 +1,93 @@
 import { config } from 'dotenv'
 config({ path: '../../.env', quiet: true })
 
-import { drizzle } from 'drizzle-orm/postgres-js'
-import { migrate } from 'drizzle-orm/postgres-js/migrator'
-import postgres from 'postgres'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import * as schema from './schema'
-import { seedSystemData } from './seed-system'
+import { runMigrations } from './migrate-runtime'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Arbitrary application-chosen key identifying "quackback migrations" for
-// Postgres advisory locks. Any int8-range value works as long as it's stable
-// across processes; this one is just a readable literal, not derived from
-// anything. Cast explicitly to bigint below since it exceeds Postgres' int4
-// range and postgres-js has no bigint parameter type.
-const MIGRATION_LOCK_KEY = 4_820_231_099
-
-async function ensureConcurrentIndexes(sql: ReturnType<typeof postgres>): Promise<void> {
-  await sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`
-  const statements = [
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_embedding_hnsw_idx ON posts USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS kb_articles_embedding_hnsw_idx ON kb_articles USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_snippets_embedding_hnsw_idx ON assistant_snippets USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_summaries_embedding_hnsw_idx ON conversation_summaries USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS principal_display_name_trgm_idx ON principal USING gin (display_name gin_trgm_ops) WHERE display_name IS NOT NULL',
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_messages_content_trgm_idx ON conversation_messages USING gin (content gin_trgm_ops) WHERE deleted_at IS NULL',
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS user_name_trgm_idx ON "user" USING gin (name gin_trgm_ops)',
-  ]
-  for (const statement of statements) await sql.unsafe(statement)
-
-  // page_views is range-partitioned (see 0137), and Postgres rejects
-  // CREATE INDEX CONCURRENTLY on a partitioned parent ("cannot create index on
-  // partitioned table ... concurrently"). Build it non-concurrently on the
-  // parent, matching how 0137 creates the table's other parent indexes; the
-  // index recurses to existing partitions. IF NOT EXISTS keeps re-runs a no-op.
-  await sql.unsafe(
-    'CREATE INDEX IF NOT EXISTS page_views_principal_id_idx ON page_views (principal_id) WHERE principal_id IS NOT NULL'
-  )
-}
-
-async function runMigrations() {
+/**
+ * The CLI entrypoint. `docker-entrypoint.sh` runs this at boot, and the control
+ * plane's provisioning path shells out to it.
+ *
+ * It is deliberately a thin wrapper over {@link runMigrations} rather than a
+ * second implementation. The extension creation, the invalid-index heal, the
+ * concurrent index build and the post-condition sweep all used to live here as
+ * private code, which is exactly why a migrator role could not reuse them:
+ * importing this file to reach them ran migrations as a side effect. One
+ * executor, two entrypoints.
+ *
+ * Two deliberate differences from the fleet migrator role:
+ *
+ * - **Session-mode is not enforced here.** This CLI has always run against
+ *   whatever `DATABASE_URL` names, including a self-hosted install behind a
+ *   connection pooler. Refusing that at boot would turn a working deployment
+ *   into a crash loop over a property it has been getting away with for years.
+ *   The fleet migrator does enforce it, because there the direct endpoint is a
+ *   field on the workspace record and there is no excuse for using the other one.
+ * - **A post-condition violation is loud but not fatal.** This process's job is
+ *   to make the database servable, and an absent HNSW index makes a workspace slow,
+ *   not broken; exiting non-zero would refuse to boot over a performance
+ *   regression. The reconciler treats the same violation as a failed reconcile,
+ *   because there it has somewhere to record it and something else to try.
+ */
+async function main() {
   const connectionString = process.env.DATABASE_URL
-
   if (!connectionString) {
     throw new Error('DATABASE_URL environment variable is required')
   }
 
-  // Allow overriding migrations folder via env var (for Docker)
-  // Default to ./drizzle relative to this script
+  // Allow overriding migrations folder via env var (for Docker); default to
+  // ./drizzle relative to this script.
   const migrationsFolder = process.env.MIGRATIONS_FOLDER || path.resolve(__dirname, '../drizzle')
 
   console.log('🔄 Running migrations...')
   console.log(`   Migrations folder: ${migrationsFolder}`)
 
-  // Use a single connection for migrations
-  const sql = postgres(connectionString, { max: 1 })
-  const db = drizzle(sql, { schema })
+  const result = await runMigrations(connectionString, {
+    migrationsFolder,
+    requireSessionMode: false,
+    onStep: (step) => {
+      if (step === 'lock') console.log('🔒 Waiting for migration lock...')
+      if (step === 'extensions') console.log('🔓 Acquired migration lock')
+    },
+  })
 
-  try {
-    // Serialize concurrent replicas racing to migrate on startup: the first
-    // container to grab the lock runs the extension/migrate/seed steps,
-    // every other container blocks here until it releases, then finds the
-    // drizzle ledger already up to date and the seed already applied (both
-    // are idempotent), so it does nothing.
-    console.log('🔒 Waiting for migration lock...')
-    await sql`SELECT pg_advisory_lock(${MIGRATION_LOCK_KEY}::bigint)`
-    console.log('🔓 Acquired migration lock')
+  if (result.healed.length > 0) {
+    console.log(
+      `🩹 Dropped ${result.healed.length} invalid index(es) before rebuilding: ` +
+        result.healed.map((i) => i.name).join(', ')
+    )
+  }
+  for (const idx of result.unhealable) {
+    console.error(
+      `⚠️  ${idx.schema}.${idx.name} is INVALID and owned by a constraint; DROP INDEX cannot ` +
+        'remove it. Repair by hand (the usual cause is a failed ALTER TABLE ... ADD CONSTRAINT ... USING INDEX).'
+    )
+  }
 
-    // Ensure pgvector extension is available before running migrations
-    await sql`CREATE EXTENSION IF NOT EXISTS vector`
-    await migrate(db, { migrationsFolder })
-    // Drizzle executes migration files transactionally; large production
-    // indexes need their own non-transactional concurrent path.
-    await ensureConcurrentIndexes(sql)
-    console.log('✅ Migrations completed successfully!')
+  console.log('✅ Migrations completed successfully!')
+  console.log('✅ Seeded system data (statuses, roles, permissions)')
 
-    // Seed the reference data every workspace needs (post statuses, the RBAC
-    // permission catalogue, the system-role presets and their bundles).
-    // Cloud-provisioned tenants boot empty; idempotent, so re-running on a
-    // pod that is already seeded is a no-op.
-    await seedSystemData(db)
-    console.log('✅ Seeded system data (statuses, roles, permissions)')
-  } catch (error) {
-    console.error('❌ Migration failed:', error)
-    process.exit(1)
-  } finally {
-    // Session-level advisory locks are also released automatically when the
-    // connection closes, but release explicitly for clarity and so the lock
-    // doesn't linger if this connection is ever reused.
-    await sql`SELECT pg_advisory_unlock(${MIGRATION_LOCK_KEY}::bigint)`
-    await sql.end()
+  const post = result.postconditions
+  if (post && !post.ok) {
+    // Loud, and separate from the ledger. Every migration applied and the
+    // database is still not right — which is precisely the state the ledger
+    // cannot express.
+    console.error('❌ POST-CONDITIONS VIOLATED (the migration ledger reads complete anyway):')
+    for (const v of post.violations) console.error(`   [${v.kind}] ${v.detail}`)
+  } else if (post) {
+    // Listed rather than summarised, because a green verdict is only as good as
+    // its scope and this line is where a reader forms a belief about what green
+    // covered.
+    console.log('✅ Post-conditions verified:')
+    for (const check of post.covers) console.log(`   ${check}`)
   }
 }
 
-runMigrations()
+main().catch((error) => {
+  console.error('❌ Migration failed:', error)
+  process.exit(1)
+})

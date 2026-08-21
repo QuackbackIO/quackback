@@ -18,11 +18,11 @@
  * moving these paths onto Postgres (measured in `KV.md`), and it is why none of
  * these is expressed as a transaction with two statements in it.
  *
- * **The tenant is in the key.** `currentTenantNamespace()` is the same function
- * that built the `t:<tenantId>:` prefix on the Redis wire key, so the
+ * **The workspace is in the key.** `currentWorkspaceNamespace()` is the same function
+ * that built the `t:<workspaceKey>:` prefix on the Redis wire key, so the
  * discriminator is not merely equivalent — it is the same value, moved from a
  * string prefix into a key column. Under pooled tenancy the row is additionally
- * in the tenant's own database. See `0251_pg_kv_presence_realtime.sql`.
+ * in the workspace's own database. See `0251_pg_kv_presence_realtime.sql`.
  *
  * ## Expiry
  *
@@ -33,7 +33,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
-import { currentTenantNamespace } from '@/lib/server/tenancy/tenant-keyed'
+import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
 
 /**
  * Reject a TTL that Postgres would accept and Redis would not.
@@ -57,7 +57,7 @@ function ttlSeconds(seconds: number): number {
 export async function kvGet<T>(key: string): Promise<T | null> {
   const result = await db.execute(sql`
     SELECT value FROM kv_store
-    WHERE tenant_id = ${currentTenantNamespace()} AND key = ${key} AND expires_at > now()
+    WHERE workspace_key = ${currentWorkspaceNamespace()} AND key = ${key} AND expires_at > now()
   `)
   const rows = getExecuteRows<{ value: T }>(result)
   return rows.length > 0 ? rows[0].value : null
@@ -66,14 +66,14 @@ export async function kvGet<T>(key: string): Promise<T | null> {
 /** SET … EX. Overwrites value and TTL unconditionally, as Redis does. */
 export async function kvSet(key: string, value: unknown, seconds: number): Promise<void> {
   await db.execute(sql`
-    INSERT INTO kv_store (tenant_id, key, value, expires_at)
+    INSERT INTO kv_store (workspace_key, key, value, expires_at)
     VALUES (
-      ${currentTenantNamespace()},
+      ${currentWorkspaceNamespace()},
       ${key},
       ${JSON.stringify(value ?? null)}::jsonb,
       now() + make_interval(secs => ${ttlSeconds(seconds)})
     )
-    ON CONFLICT (tenant_id, key) DO UPDATE
+    ON CONFLICT (workspace_key, key) DO UPDATE
       SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
   `)
 }
@@ -83,7 +83,7 @@ export async function kvDel(...keys: string[]): Promise<void> {
   if (keys.length === 0) return
   await db.execute(sql`
     DELETE FROM kv_store
-    WHERE tenant_id = ${currentTenantNamespace()}
+    WHERE workspace_key = ${currentWorkspaceNamespace()}
       AND key IN (SELECT jsonb_array_elements_text(${JSON.stringify(keys)}::jsonb))
   `)
 }
@@ -98,14 +98,14 @@ export async function kvDel(...keys: string[]): Promise<void> {
  */
 export async function kvSetNx(key: string, value: unknown, seconds: number): Promise<boolean> {
   const result = await db.execute(sql`
-    INSERT INTO kv_store (tenant_id, key, value, expires_at)
+    INSERT INTO kv_store (workspace_key, key, value, expires_at)
     VALUES (
-      ${currentTenantNamespace()},
+      ${currentWorkspaceNamespace()},
       ${key},
       ${JSON.stringify(value ?? null)}::jsonb,
       now() + make_interval(secs => ${ttlSeconds(seconds)})
     )
-    ON CONFLICT (tenant_id, key) DO UPDATE
+    ON CONFLICT (workspace_key, key) DO UPDATE
       SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
       WHERE kv_store.expires_at <= now()
     RETURNING key
@@ -124,14 +124,14 @@ export async function kvSetNx(key: string, value: unknown, seconds: number): Pro
  */
 export async function kvGetOrCreate<T>(key: string, create: T, seconds: number): Promise<T> {
   const result = await db.execute(sql`
-    INSERT INTO kv_store (tenant_id, key, value, expires_at)
+    INSERT INTO kv_store (workspace_key, key, value, expires_at)
     VALUES (
-      ${currentTenantNamespace()},
+      ${currentWorkspaceNamespace()},
       ${key},
       ${JSON.stringify(create)}::jsonb,
       now() + make_interval(secs => ${ttlSeconds(seconds)})
     )
-    ON CONFLICT (tenant_id, key) DO UPDATE
+    ON CONFLICT (workspace_key, key) DO UPDATE
       SET value = CASE WHEN kv_store.expires_at <= now() THEN EXCLUDED.value ELSE kv_store.value END,
           expires_at = CASE WHEN kv_store.expires_at <= now() THEN EXCLUDED.expires_at ELSE kv_store.expires_at END
     RETURNING value
@@ -160,14 +160,14 @@ export async function kvSetMemberClaim(
   seconds: number
 ): Promise<boolean> {
   const result = await db.execute(sql`
-    INSERT INTO kv_set_member (tenant_id, set_key, member, expires_at)
+    INSERT INTO kv_set_member (workspace_key, set_key, member, expires_at)
     VALUES (
-      ${currentTenantNamespace()},
+      ${currentWorkspaceNamespace()},
       ${setKey},
       ${member},
       now() + make_interval(secs => ${ttlSeconds(seconds)})
     )
-    ON CONFLICT (tenant_id, set_key, member) DO UPDATE
+    ON CONFLICT (workspace_key, set_key, member) DO UPDATE
       SET expires_at = EXCLUDED.expires_at
       WHERE kv_set_member.expires_at <= now()
     RETURNING member
@@ -180,7 +180,7 @@ export async function kvSetTouch(setKey: string, seconds: number): Promise<void>
   await db.execute(sql`
     UPDATE kv_set_member
     SET expires_at = now() + make_interval(secs => ${ttlSeconds(seconds)})
-    WHERE tenant_id = ${currentTenantNamespace()} AND set_key = ${setKey}
+    WHERE workspace_key = ${currentWorkspaceNamespace()} AND set_key = ${setKey}
   `)
 }
 
@@ -188,7 +188,7 @@ export async function kvSetTouch(setKey: string, seconds: number): Promise<void>
 export async function kvSetMemberRemove(setKey: string, member: string): Promise<void> {
   await db.execute(sql`
     DELETE FROM kv_set_member
-    WHERE tenant_id = ${currentTenantNamespace()} AND set_key = ${setKey} AND member = ${member}
+    WHERE workspace_key = ${currentWorkspaceNamespace()} AND set_key = ${setKey} AND member = ${member}
   `)
 }
 
@@ -218,14 +218,14 @@ export interface BucketState {
  */
 export async function incrementRateBucket(spec: BucketIncrement): Promise<BucketState> {
   const result = await db.execute(sql`
-    INSERT INTO rate_bucket (tenant_id, key, count, window_expires_at)
+    INSERT INTO rate_bucket (workspace_key, key, count, window_expires_at)
     VALUES (
-      ${currentTenantNamespace()},
+      ${currentWorkspaceNamespace()},
       ${spec.key},
       1,
       now() + make_interval(secs => ${ttlSeconds(spec.windowSeconds)})
     )
-    ON CONFLICT (tenant_id, key) DO UPDATE
+    ON CONFLICT (workspace_key, key) DO UPDATE
       SET count = CASE WHEN rate_bucket.window_expires_at <= now() THEN 1 ELSE rate_bucket.count + 1 END,
           window_expires_at = CASE
             WHEN rate_bucket.window_expires_at <= now() THEN EXCLUDED.window_expires_at
@@ -270,14 +270,14 @@ export async function incrementRateBuckets(
   const unique = [...byKey.entries()].map(([key, windowSeconds]) => ({ key, windowSeconds }))
 
   const result = await db.execute(sql`
-    INSERT INTO rate_bucket (tenant_id, key, count, window_expires_at)
+    INSERT INTO rate_bucket (workspace_key, key, count, window_expires_at)
     SELECT
-      ${currentTenantNamespace()},
+      ${currentWorkspaceNamespace()},
       spec->>'key',
       1,
       now() + make_interval(secs => (spec->>'windowSeconds')::numeric)
     FROM jsonb_array_elements(${JSON.stringify(unique)}::jsonb) AS spec
-    ON CONFLICT (tenant_id, key) DO UPDATE
+    ON CONFLICT (workspace_key, key) DO UPDATE
       SET count = CASE WHEN rate_bucket.window_expires_at <= now() THEN 1 ELSE rate_bucket.count + 1 END,
           window_expires_at = CASE
             WHEN rate_bucket.window_expires_at <= now() THEN EXCLUDED.window_expires_at
@@ -302,7 +302,7 @@ export async function rateBucketRetryAfter(spec: BucketIncrement): Promise<numbe
   const result = await db.execute(sql`
     SELECT GREATEST(1, CEIL(EXTRACT(EPOCH FROM (window_expires_at - now()))))::int AS retry_after
     FROM rate_bucket
-    WHERE tenant_id = ${currentTenantNamespace()} AND key = ${spec.key} AND window_expires_at > now()
+    WHERE workspace_key = ${currentWorkspaceNamespace()} AND key = ${spec.key} AND window_expires_at > now()
   `)
   const rows = getExecuteRows<{ retry_after: number }>(result)
   return rows.length > 0 ? Number(rows[0].retry_after) : spec.windowSeconds

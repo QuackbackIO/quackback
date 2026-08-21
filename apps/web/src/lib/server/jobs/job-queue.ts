@@ -1,5 +1,5 @@
 /**
- * The lease primitive.
+ * The lease primitive (SAAS-HOSTING-STACK.md §7.2).
  *
  * `FOR UPDATE SKIP LOCKED` releases the instant the claiming transaction
  * commits, so it cannot on its own hold a job through a multi-minute AI call or
@@ -51,18 +51,19 @@
  *
  * ## Where the statements live
  *
- * The claim/heartbeat/complete/fail/reap statements moved to `lease.ts`, keyed
- * by table, so any second queue-shaped consumer shares the primitive rather
- * than growing a rival one. Nothing about the semantics moved with them — this file
- * still owns the queue's shape, the tenant assertion and the enqueue path, and
+ * The claim/heartbeat/complete/fail/reap statements moved to `lease.ts` so the
+ * fleet migrator's claim loop is the same primitive rather than a second one
+ * (SAAS-HOSTING-STACK.md §10.3: *"Fleet migration is its second consumer, not a
+ * new subsystem"*). Nothing about the semantics moved with them — this file
+ * still owns the queue's shape, the workspace assertion and the enqueue path, and
  * the kill-matrix proof still runs through here, which is what keeps `lease.ts`
  * honest.
  *
- * ## The tenant assertion
+ * ## The workspace assertion
  *
- * The queue is per-tenant because the table lives in the tenant's own database —
- * there is no shared queue to route out of. That is a structural property, but a
- * wrong-tenant answer passes every other check in the
+ * The queue is per-workspace because the table lives in the workspace's own database —
+ * there is no shared queue to route out of. That is a structural property, but
+ * §3's whole point is that a wrong-workspace answer passes every other check in the
  * system without erroring, so structure alone is not evidence. Every claimed row
  * is checked against the ambient scope and a mismatch is refused loudly and made
  * terminal, never executed. The check lives inside `claimJobs` rather than in
@@ -73,12 +74,11 @@ import { hostname } from 'node:os'
 import { sql, type SQL } from 'drizzle-orm'
 import { generateId } from '@quackback/ids'
 import { db } from '@/lib/server/db'
-import { getExecuteCount, getExecuteRows } from '@/lib/server/utils/execute-rows'
-import { hasPgErrorCode } from '@/lib/server/utils/pg-error'
+import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
-import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
-import { isPooledTenancy } from '@/lib/server/tenancy/mode'
-import { noteDurableWork, SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
+import { noteDurableWork, SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
 import {
   leaseClaimGroupedSql,
   leaseCompleteSql,
@@ -93,12 +93,49 @@ const log = logger.child({ component: 'job-queue' })
 /** The table the lease statements operate on. */
 const TABLE = 'job_queue'
 
-/** Postgres `undefined_table`. The tenant has not run migration 0250 yet. */
+/** Postgres `undefined_table`. The workspace has not run migration 0250 yet. */
 export const UNDEFINED_TABLE = '42P01'
+
+export class JobQueueMissingError extends Error {
+  constructor() {
+    super(
+      'job_queue does not exist in this database. Migration 0250 has not been applied here; ' +
+        'the queue tier skips this workspace rather than crash-looping (expand lands before the ' +
+        'code that reads it — SAAS-HOSTING-STACK.md §5, §10.5).'
+    )
+    this.name = 'JobQueueMissingError'
+  }
+}
 
 /** True when an error is Postgres complaining that `job_queue` is absent. */
 export function isMissingJobQueue(err: unknown): boolean {
-  return hasPgErrorCode(err, UNDEFINED_TABLE)
+  const code = (err as { code?: unknown } | null)?.code
+  return code === UNDEFINED_TABLE
+}
+
+/**
+ * The earliest instant this workspace's queue has work waiting for.
+ *
+ * Read by the tier on the connection it is **about to drop**, which is the point
+ * of it: a tier that goes idle has to know when to come back, and the only
+ * honest answer is the one the database gives before the lights go out. Without
+ * this a delayed job — a hook retry five minutes out, a scheduled publish —
+ * would sit until whatever generic rescan happened to fire, turning "runs at
+ * 14:05" into "runs some time after 14:05".
+ *
+ * Null means nothing is pending at all, which is the only state in which the
+ * tier may sleep on its safety-net interval alone. A row already due comes back
+ * as a past timestamp rather than as null, and the caller treats that as "wake
+ * immediately" — the fail-safe direction, since the alternative is a due job
+ * that nobody is coming back for.
+ */
+export async function earliestPendingJobAt(): Promise<Date | null> {
+  const result = await db.execute(sql`
+    SELECT min(run_at) AS run_at FROM job_queue WHERE status = 'pending'
+  `)
+  const rows = getExecuteRows<{ run_at: Date | string | null }>(result)
+  const value = rows[0]?.run_at ?? null
+  return value === null ? null : asDate(value)
 }
 
 export interface EnqueueJobInput {
@@ -170,7 +207,7 @@ export interface ClaimedJob {
    */
   dedupeKey: string | null
   payload: Record<string, unknown>
-  tenantId: string | null
+  workspaceKey: string | null
   attempts: number
   maxAttempts: number
   leaseToken: string
@@ -183,7 +220,7 @@ interface ClaimRow {
   queue: string
   dedupe_key: string | null
   payload: Record<string, unknown> | null
-  tenant_id: string | null
+  workspace_key: string | null
   attempts: number
   max_attempts: number
   lease_token: string
@@ -197,13 +234,18 @@ export function jobWorkerId(): string {
   return workerIdMemo
 }
 
-function currentTenantId(): string | null {
-  return getCurrentTenant()?.tenantId ?? null
+/** Test seam — a fresh identity makes two in-process runners distinguishable. */
+export function __resetJobWorkerIdForTests(): void {
+  workerIdMemo = null
 }
 
-/** Tenant the after-commit scheduler should ring for this insert. */
+function currentWorkspaceKey(): string | null {
+  return getCurrentWorkspace()?.workspaceKey ?? null
+}
+
+/** Workspace the after-commit scheduler should ring for this insert. */
 function workKeyForSignal(): string | null {
-  return currentTenantId() ?? (isPooledTenancy() ? null : SINGLE_TENANT_ID)
+  return currentWorkspaceKey() ?? (isPooledTenancy() ? null : SINGLE_WORKSPACE_KEY)
 }
 
 function noteInsertedWork(executor?: JobSqlExecutor): void {
@@ -215,12 +257,12 @@ function asDate(value: Date | string): Date {
 }
 
 /**
- * Put a job on this tenant's queue.
+ * Put a job on this workspace's queue.
  *
- * `tenant_id` is stamped from the ambient scope, which is also what the claim
- * asserts against. There is no way to enqueue for a different tenant, because
- * there is no shared queue and no tenant parameter — you would have to open that
- * tenant's scope, at which point you are writing into its own database.
+ * `workspace_key` is stamped from the ambient scope, which is also what the claim
+ * asserts against. There is no way to enqueue for a different workspace, because
+ * there is no shared queue and no workspace parameter — you would have to open that
+ * workspace's scope, at which point you are writing into its own database.
  */
 export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResult> {
   const jobId = generateId('job')
@@ -231,12 +273,12 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
 
   const executor = input.executor ?? db
   const result = await executor.execute(sql`
-    INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
+    INSERT INTO job_queue (job_id, queue, dedupe_key, workspace_key, payload, run_at, max_attempts)
     VALUES (
       ${jobId},
       ${input.queue},
       ${input.dedupeKey ?? null},
-      ${currentTenantId()},
+      ${currentWorkspaceKey()},
       ${JSON.stringify(input.payload ?? {})}::jsonb,
       ${input.runAt ? input.runAt.toISOString() : sql`now()`},
       ${maxAttempts}
@@ -247,7 +289,7 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
 
   const rows = getExecuteRows<{ job_id: string }>(result)
   const inserted = rows.length > 0
-  // Transactional inserts record the tenant and flush only after the
+  // Transactional inserts record the workspace and flush only after the
   // outer commit. Auto-commit inserts are already visible, so they signal now.
   if (inserted) noteInsertedWork(input.executor)
   return { jobId, inserted }
@@ -297,8 +339,8 @@ export async function enqueueJobs(
 
   const executor = opts?.executor ?? db
   const result = await executor.execute(sql`
-    INSERT INTO job_queue (job_id, queue, dedupe_key, tenant_id, payload, run_at, max_attempts)
-    SELECT x.job_id, x.queue, x.dedupe_key, ${currentTenantId()}, x.payload, x.run_at, x.max_attempts
+    INSERT INTO job_queue (job_id, queue, dedupe_key, workspace_key, payload, run_at, max_attempts)
+    SELECT x.job_id, x.queue, x.dedupe_key, ${currentWorkspaceKey()}, x.payload, x.run_at, x.max_attempts
     FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(
       job_id text, queue text, dedupe_key text, payload jsonb,
       run_at timestamptz, max_attempts int
@@ -314,6 +356,16 @@ export async function enqueueJobs(
   }
 }
 
+export interface CancelJobOpts {
+  /** Caller's transaction. When set, the DELETE participates in it. */
+  executor?: JobSqlExecutor
+  /**
+   * Only free a spent row (`succeeded` / `failed`). Pending and running stay,
+   * which is what a coalescing enqueue wants: in-flight work is one job.
+   */
+  terminalOnly?: boolean
+}
+
 /**
  * Cancel a job by its dedupe key, so the key is free to be scheduled again.
  *
@@ -326,14 +378,30 @@ export async function enqueueJobs(
  * and a caller that could not re-schedule a key it had already used would be a
  * silent behaviour change.
  *
+ * `terminalOnly` narrows that: only spent rows go, so a later enqueue can
+ * reuse the key after success without cancelling an in-flight job.
+ *
  * Returns how many rows were removed.
  */
-export async function cancelJob(queue: string, dedupeKey: string): Promise<number> {
-  const result = await db.execute(sql`
-    DELETE FROM job_queue
-    WHERE queue = ${queue} AND dedupe_key = ${dedupeKey} AND status <> 'running'
-    RETURNING id
-  `)
+export async function cancelJob(
+  queue: string,
+  dedupeKey: string,
+  opts?: CancelJobOpts
+): Promise<number> {
+  const executor = opts?.executor ?? db
+  const result = opts?.terminalOnly
+    ? await executor.execute(sql`
+        DELETE FROM job_queue
+        WHERE queue = ${queue}
+          AND dedupe_key = ${dedupeKey}
+          AND status IN ('succeeded', 'failed')
+        RETURNING id
+      `)
+    : await executor.execute(sql`
+        DELETE FROM job_queue
+        WHERE queue = ${queue} AND dedupe_key = ${dedupeKey} AND status <> 'running'
+        RETURNING id
+      `)
   return getExecuteRows(result).length
 }
 
@@ -410,7 +478,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
         runnable.map((s) => [s.queue, { limit: s.limit, leaseMs: s.leaseMs }])
       ),
       workerId: jobWorkerId(),
-      returning: sql`j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.tenant_id,
+      returning: sql`j.id, j.job_id, j.queue, j.dedupe_key, j.payload, j.workspace_key,
               j.attempts, j.max_attempts, j.lease_token, j.locked_until`,
     })
   )
@@ -422,7 +490,7 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
   const rows = getExecuteRows<ClaimRow>(result).sort((a, b) =>
     BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0
   )
-  const expected = currentTenantId()
+  const expected = currentWorkspaceKey()
   const claimed: ClaimedJob[] = []
 
   for (const row of rows) {
@@ -432,30 +500,30 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
       queue: row.queue,
       dedupeKey: row.dedupe_key,
       payload: row.payload ?? {},
-      tenantId: row.tenant_id,
+      workspaceKey: row.workspace_key,
       attempts: row.attempts,
       maxAttempts: row.max_attempts,
       leaseToken: row.lease_token,
       lockedUntil: asDate(row.locked_until),
     }
 
-    if (job.tenantId !== expected) {
-      // Refuse loudly and terminally. This row is not another tenant's job —
-      // it is a corrupt row in THIS tenant's database — but running it would be
-      // a cross-tenant execution, which is the one outcome the whole design
+    if (job.workspaceKey !== expected) {
+      // Refuse loudly and terminally. This row is not another workspace's job —
+      // it is a corrupt row in THIS workspace's database — but running it would be
+      // a cross-workspace execution, which is the one outcome the whole design
       // exists to make impossible.
       log.error(
         {
           jobId: job.jobId,
           queue: job.queue,
-          rowTenantId: job.tenantId,
-          scopeTenantId: expected,
+          rowWorkspaceKey: job.workspaceKey,
+          scopeWorkspaceKey: expected,
         },
-        'job REFUSED: row tenant does not match the tenant scope that claimed it'
+        'job REFUSED: row workspace does not match the workspace scope that claimed it'
       )
       await terminate(
         job,
-        `tenant mismatch: row is stamped ${job.tenantId ?? 'null'}, scope is ${expected ?? 'null'}`
+        `workspace mismatch: row is stamped ${job.workspaceKey ?? 'null'}, scope is ${expected ?? 'null'}`
       )
       continue
     }
@@ -606,8 +674,6 @@ export async function pruneTerminalJobs(
       ])
     )
   )
-  // No RETURNING: the caller only needs the count, and materializing every
-  // deleted row over the wire is pure waste. The driver reports it directly.
   const result = await db.execute(sql`
     DELETE FROM job_queue
     WHERE status IN ('succeeded', 'failed')
@@ -617,8 +683,9 @@ export async function pruneTerminalJobs(
           ${olderThanMs / 1000}
         )
       )
+    RETURNING id
   `)
-  return getExecuteCount(result)
+  return getExecuteRows(result).length
 }
 
 /** Counts by status, for the readiness payload and for tests. */

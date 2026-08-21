@@ -1,9 +1,9 @@
 /**
- * The `MIN_SCHEMA_VERSION` compatibility gate.
+ * The `MIN_SCHEMA_VERSION` compatibility gate (SAAS-HOSTING-STACK.md §10.5).
  *
  * ```
- * resolve tenant → assert fingerprint matches → assert schema >= MIN_SCHEMA_VERSION
- *   → else: this workspace is updating (503 for THIS tenant only)
+ * resolve workspace → assert fingerprint matches → assert schema >= MIN_SCHEMA_VERSION
+ *   → else: this workspace is updating (503 for THIS workspace only)
  * ```
  *
  * ## Why a gate is needed at all when migrations are expand-only
@@ -18,28 +18,28 @@
  *
  * ## Two properties, and the second is the one people get wrong
  *
- * **A tenant mid-migration degrades alone.** The check runs per tenant, on pool
- * checkout, and produces a refusal for that tenant only. Nothing about it is
+ * **A workspace mid-migration degrades alone.** The check runs per workspace, on pool
+ * checkout, and produces a refusal for that workspace only. Nothing about it is
  * fleet-wide, which is the difference between one workspace showing "updating"
  * and an outage.
  *
- * **A tenant *ahead* of the code is served normally.** During a rollout the new
- * image migrates a tenant that old replicas are still serving; refusing it there
+ * **A workspace *ahead* of the code is served normally.** During a rollout the new
+ * image migrates a workspace that old replicas are still serving; refusing it there
  * would turn every rollout into an outage on the way *in*. So the floor is a
  * prefix check — every bundled migration up to the floor must be applied — and
- * migrations above it are not consulted. This is the same reason
- * `getMigrationStatus()`'s bundled-⊆-applied semantics are kept deliberately
- * rather than "fixed".
+ * migrations above it are not consulted. This is the same reason §10.2 says to
+ * keep `getMigrationStatus()`'s bundled-⊆-applied semantics deliberately rather
+ * than "fixing" them.
  *
  * With expand/contract discipline the gate **should essentially never fire**. It
  * is a safety net, not the normal path, which is why it is off unless
  * `MIN_SCHEMA_VERSION` is set: a self-hosted install ships code and schema
  * together and has nothing to gate.
  *
- * ## Why it reads the tenant database and not the control plane
+ * ## Why it reads the workspace database and not the control plane
  *
- * The control plane's `cp_tenant_schema_state.current_version` is a *belief*,
- * only as fresh as the last reconcile. The tenant's own
+ * The control plane's `cp_workspace_schema_state.current_version` is a *belief*,
+ * only as fresh as the last reconcile. The workspace's own
  * `drizzle.__drizzle_migrations` is the thing the failing query will actually be
  * issued against. Reading the belief would let a stale control row certify a
  * database that cannot serve — a gate that is switched off while looking
@@ -60,26 +60,26 @@ export const SCHEMA_FLOOR_REFUSAL_CODE = 'schema_below_floor'
 
 /**
  * A `MIN_SCHEMA_VERSION` this build cannot resolve. Distinct from both of the
- * above: the tenant is fine, the process is not.
+ * above: the workspace is fine, the process is not.
  */
 export const SCHEMA_FLOOR_MISCONFIGURED_CODE = 'schema_floor_misconfigured'
 
-export class TenantSchemaFloorRefusal extends Error {
+export class WorkspaceSchemaFloorRefusal extends Error {
   readonly code = SCHEMA_FLOOR_REFUSAL_CODE
-  readonly tenantId: string
+  readonly workspaceKey: string
   readonly missing: string[]
   readonly floorTag: string
 
-  constructor(tenantId: string, verdict: SchemaFloorVerdict) {
+  constructor(workspaceKey: string, verdict: SchemaFloorVerdict) {
     super(
       `REFUSED [${SCHEMA_FLOOR_REFUSAL_CODE}] this database is below MIN_SCHEMA_VERSION ` +
         `${verdict.floorTag}; missing ${verdict.missing.length} migration(s): ` +
         `${verdict.missing.slice(0, 5).join(', ')}${verdict.missing.length > 5 ? ', …' : ''}. ` +
         'This build issues explicit column lists that the schema cannot satisfy, so serving it ' +
-        'would throw on ordinary reads. Migrate this tenant before serving it here.'
+        'would throw on ordinary reads. Migrate this workspace before serving it here.'
     )
-    this.name = 'TenantSchemaFloorRefusal'
-    this.tenantId = tenantId
+    this.name = 'WorkspaceSchemaFloorRefusal'
+    this.workspaceKey = workspaceKey
     this.missing = verdict.missing
     this.floorTag = verdict.floorTag
   }
@@ -117,15 +117,15 @@ export function __resetSchemaFloorMemo(): void {
  * a fleet-wide outage discovered by customers.
  *
  * `configuredSchemaFloor` is otherwise read lazily on pool checkout, and that
- * placement has a nasty property: an unresolvable value throws *per tenant*,
- * inside the acquisition path, where it is indistinguishable from the tenant's
+ * placement has a nasty property: an unresolvable value throws *per workspace*,
+ * inside the acquisition path, where it is indistinguishable from the workspace's
  * own database failing. Measured before this existed: `MIN_SCHEMA_VERSION=9999`
- * 503'd **every tenant including healthy ones**, logged the cross-tenant
+ * 503'd **every workspace including healthy ones**, logged the cross-workspace
  * fingerprint alarm, and left the readiness probe green.
  *
  * Called from `startup.ts` and from the readiness probe. The probe deliberately
- * asserts nothing about *tenant* schemas under pooled tenancy — but
- * this is not a tenant schema, it is this process's own configuration, and a
+ * asserts nothing about *workspace* schemas under pooled tenancy (§10.5) — but
+ * this is not a workspace schema, it is this process's own configuration, and a
  * process that cannot resolve its own serving floor is not ready.
  */
 export function assertSchemaFloorConfigured(env: NodeJS.ProcessEnv = process.env): void {
@@ -135,16 +135,16 @@ export function assertSchemaFloorConfigured(env: NodeJS.ProcessEnv = process.env
 export { UnknownSchemaVersion }
 
 /**
- * Assert a tenant database meets the floor. No-op when the gate is off.
+ * Assert a workspace database meets the floor. No-op when the gate is off.
  *
- * Throws {@link TenantSchemaFloorRefusal} rather than returning a verdict,
+ * Throws {@link WorkspaceSchemaFloorRefusal} rather than returning a verdict,
  * because the one caller is the pool-cache verification promise and its
  * contract is "resolve or refuse".
  */
-export async function assertSchemaFloor(tenantId: string, sql: Sql): Promise<void> {
+export async function assertSchemaFloor(workspaceKey: string, sql: Sql): Promise<void> {
   const floor = configuredSchemaFloor()
   if (floor === null) return
   const applied = await readAppliedLedger(sql)
   const verdict = evaluateSchemaFloor(applied, floor)
-  if (!verdict.ok) throw new TenantSchemaFloorRefusal(tenantId, verdict)
+  if (!verdict.ok) throw new WorkspaceSchemaFloorRefusal(workspaceKey, verdict)
 }

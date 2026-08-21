@@ -2,7 +2,7 @@
  * Discovery inputs for a provider, in two parts.
  *
  * `<IdpDiscoveryFields>` is IdP-aware: per-kind shortcut fields (Okta domain,
- * Entra tenant, Keycloak base+realm) build the canonical discovery URL;
+ * Entra workspace, Keycloak base+realm) build the canonical discovery URL;
  * `other` takes the raw URL; `google` is a fixed URL with no input.
  *
  * `<ManualEndpointsSection>` is the escape hatch for an IdP with no discovery

@@ -125,11 +125,11 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
         'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade'
       ),
       {
-        key: 'tenantId',
-        label: 'Tenant ID',
+        key: 'workspaceKey',
+        label: 'Workspace ID',
         placeholder: 'common (optional)',
         sensitive: false,
-        helpText: 'Defaults to "common" for multi-tenant apps',
+        helpText: 'Defaults to "common" for multi-workspace apps',
       },
     ],
   },

@@ -24,7 +24,11 @@ export default defineConfig({
       'src/routes/admin/automation.test.tsx',
     ],
     env: {
-      DATABASE_URL: 'postgresql://postgres:password@localhost:5432/quackback_test',
+      // Overridable, because `quackback_test` is shared with every other
+      // checkout on the machine and a branch mid-rename needs a schema the
+      // others would fail against. Default unchanged.
+      DATABASE_URL:
+        process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test',
     },
   },
   resolve: {

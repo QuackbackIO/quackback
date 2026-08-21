@@ -2,7 +2,7 @@
  * Platform credential cache invalidation tests.
  *
  * Verifies that savePlatformCredentials and deletePlatformCredentials
- * invalidate the TENANT_SETTINGS cache key.
+ * invalidate the WORKSPACE_SETTINGS cache key.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -19,7 +19,7 @@ vi.mock('@/lib/server/cache', () => ({
   cacheGet: (...args: unknown[]) => mockCacheGet(...args),
   cacheSet: (...args: unknown[]) => mockCacheSet(...args),
   CACHE_KEYS: {
-    TENANT_SETTINGS: 'settings:tenant',
+    WORKSPACE_SETTINGS: 'settings:workspace',
     PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
     REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
   },
@@ -96,7 +96,7 @@ beforeEach(() => {
 })
 
 describe('platform credential cache invalidation', () => {
-  it('savePlatformCredentials invalidates TENANT_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
+  it('savePlatformCredentials invalidates WORKSPACE_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
     await savePlatformCredentials({
       integrationType: 'slack',
       credentials: { clientId: 'id', clientSecret: 'secret' },
@@ -104,17 +104,17 @@ describe('platform credential cache invalidation', () => {
     })
 
     expect(mockCacheDel).toHaveBeenCalledWith(
-      'settings:tenant',
+      'settings:workspace',
       'platform-cred:configured-types',
       'auth:registered-providers'
     )
   })
 
-  it('deletePlatformCredentials invalidates TENANT_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
+  it('deletePlatformCredentials invalidates WORKSPACE_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
     await deletePlatformCredentials('slack')
 
     expect(mockCacheDel).toHaveBeenCalledWith(
-      'settings:tenant',
+      'settings:workspace',
       'platform-cred:configured-types',
       'auth:registered-providers'
     )

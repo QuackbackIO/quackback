@@ -2,7 +2,7 @@
  * Favicon server functions — the admin upload flow ends at saveFaviconKeyFn
  * (persists the storage key) and deleteFaviconFn (clears it). Both are gated
  * on the branding permission; the portal <link rel="icon"> already reads the
- * key through TenantSettings.faviconData.
+ * key through WorkspaceSettings.faviconData.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { PERMISSIONS } from '@/lib/shared/permissions'

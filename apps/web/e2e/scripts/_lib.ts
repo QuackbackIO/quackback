@@ -16,22 +16,22 @@ export function openDb(): postgres.Sql {
 }
 
 /**
- * Drop the cached tenant settings ('settings:tenant') so a running dev server
+ * Drop the cached workspace settings ('settings:workspace') so a running dev server
  * sees a raw-SQL settings mutation immediately instead of after the cache TTL.
  *
  * The cache is `kv_store` in the workspace's own database, so this is a DELETE
  * on the same connection the mutation used — no second service to reach, and
  * nothing to skip when an environment variable is unset.
  */
-export async function bustTenantSettings(sql: postgres.Sql): Promise<void> {
-  await deleteCacheKeys(sql, ['settings:tenant'])
+export async function bustWorkspaceSettings(sql: postgres.Sql): Promise<void> {
+  await deleteCacheKeys(sql, ['settings:workspace'])
 }
 
 /**
- * Delete cache rows by logical key, across every tenant in this database.
+ * Delete cache rows by logical key, across every workspace in this database.
  *
- * Not filtered by `tenant_id`: e2e runs one workspace, and a filter here would
- * need the namespace rule (`'_'` single-tenant, the tenant id otherwise)
+ * Not filtered by `workspace_key`: e2e runs one workspace, and a filter here would
+ * need the namespace rule (`'_'` single-workspace, the workspace id otherwise)
  * duplicated in a test helper, where getting it wrong fails as a silent no-op
  * — a cache that was never busted looks exactly like a cache that was.
  */

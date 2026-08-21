@@ -61,7 +61,7 @@ export async function enforcePerIpLimit(
 /** Bound widget abuse across IP, bearer session, and workspace. */
 export async function enforceWidgetQuota(
   request: Request,
-  spec: PerIpLimitSpec & { tenantId: string }
+  spec: PerIpLimitSpec & { workspaceKey: string }
 ): Promise<Response | null> {
   const auth = request.headers.get('authorization') ?? ''
   const sessionKey = auth
@@ -70,7 +70,7 @@ export async function enforceWidgetQuota(
   const buckets = [
     { key: `${spec.keyPrefix}:ip:${getClientIp(request)}`, windowSeconds: spec.windowSeconds },
     { key: `${spec.keyPrefix}:session:${sessionKey}`, windowSeconds: spec.windowSeconds },
-    { key: `${spec.keyPrefix}:tenant:${spec.tenantId}`, windowSeconds: spec.windowSeconds },
+    { key: `${spec.keyPrefix}:workspace:${spec.workspaceKey}`, windowSeconds: spec.windowSeconds },
   ]
   const results = await Promise.all(buckets.map((bucket) => incrementBucket(bucket)))
   const blockedIndex = results.findIndex(

@@ -109,7 +109,7 @@ async function buildBoardPermissions(
  * Reads the RAW config (not getPortalConfig's permissive merged default) so a
  * missing `features.allowAnonymous` denies — keeping the advertised capability
  * in lockstep with the fail-closed write gates, so the UI can't out-advertise
- * what the server permits (#191). Existing tenants carry an explicit value from
+ * what the server permits (#191). Existing workspaces carry an explicit value from
  * migration 0084.
  */
 async function loadAllowAnonymous(): Promise<boolean> {

@@ -28,7 +28,7 @@ export default defineConfig({
 
   /* Shared settings for all the projects below */
   use: {
-    /* Base URL for tenant subdomain (acme workspace from seed data) */
+    /* Base URL for workspace subdomain (acme workspace from seed data) */
     baseURL,
 
     /* Collect trace when retrying the failed test */

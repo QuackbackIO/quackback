@@ -122,9 +122,9 @@ describe('POST /api/widget/upload', () => {
     expect(mockIncrementBucket).not.toHaveBeenCalled()
   })
 
-  it('keys the tenant bucket off the resolved workspace id, not the Host header', async () => {
+  it('keys the workspace bucket off the resolved workspace id, not the Host header', async () => {
     // A caller could vary the Host header per request to dodge a Host-keyed
-    // bucket. Since Round 2, the tenant bucket is keyed on settings.id, so
+    // bucket. Since Round 2, the workspace bucket is keyed on settings.id, so
     // the bucket key stays fixed regardless of what Host is sent.
     authAs()
     mockGetSettings.mockResolvedValue({ id: 'settings_fixed' })
@@ -132,14 +132,14 @@ describe('POST /api/widget/upload', () => {
       request: makeRequest(undefined, 'valid-token', { Host: 'attacker-controlled.example' }),
     })
     const keys = mockIncrementBucket.mock.calls.map((call) => (call[0] as { key: string }).key)
-    expect(keys).toContain('widget-upload:tenant:settings_fixed')
+    expect(keys).toContain('widget-upload:workspace:settings_fixed')
     expect(keys.some((k: string) => k.includes('attacker-controlled.example'))).toBe(false)
   })
 
-  it('429s when the tenant bucket is over the limit, even from a fresh session/IP', async () => {
+  it('429s when the workspace bucket is over the limit, even from a fresh session/IP', async () => {
     authAs()
     mockIncrementBucket.mockImplementation(async (spec: { key: string }) => ({
-      count: spec.key.includes(':tenant:') ? 21 : 1,
+      count: spec.key.includes(':workspace:') ? 21 : 1,
     }))
     const file = mockImageFile('shot.webp', 'image/webp')
     const res = await handleWidgetUpload({

@@ -19,7 +19,7 @@
  * the login UI would render a button that 404s on click.
  */
 
-import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
+import { getWorkspaceSettings } from '@/lib/server/domains/settings/settings.service'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { getConfiguredIntegrationTypes } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import {
@@ -96,8 +96,8 @@ export async function getRegisteredAuthProviders(): Promise<string[]> {
 }
 
 async function computeRegisteredAuthProviders(): Promise<string[]> {
-  const [tenantSettings, configuredTypes, identityProviders] = await Promise.all([
-    getTenantSettings(),
+  const [workspaceSettings, configuredTypes, identityProviders] = await Promise.all([
+    getWorkspaceSettings(),
     getConfiguredIntegrationTypes(),
     listIdentityProviders(),
   ])
@@ -111,7 +111,7 @@ async function computeRegisteredAuthProviders(): Promise<string[]> {
   // on the Better-Auth instance only when `authConfig.oauth` has it enabled.
   // Default-false: if the admin hasn't opted in, the runtime skips
   // registration even if creds exist, and we mirror that here.
-  const unifiedOAuth = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
+  const unifiedOAuth = (workspaceSettings?.authConfig?.oauth ?? {}) as Record<
     string,
     boolean | undefined
   >

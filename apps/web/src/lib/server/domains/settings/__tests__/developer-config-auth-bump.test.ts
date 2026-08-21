@@ -14,7 +14,7 @@ vi.mock('@/lib/server/cache', () => ({
   cacheGet: (...args: unknown[]) => mockCacheGet(...args),
   cacheSet: (...args: unknown[]) => mockCacheSet(...args),
   cacheDel: (...args: unknown[]) => mockCacheDel(...args),
-  CACHE_KEYS: { TENANT_SETTINGS: 'settings:tenant' },
+  CACHE_KEYS: { WORKSPACE_SETTINGS: 'settings:workspace' },
 }))
 
 const mockFindFirst = vi.fn()

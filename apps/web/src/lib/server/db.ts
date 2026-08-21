@@ -10,9 +10,11 @@
 
 import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
-import { isPooledTenancy } from '@/lib/server/tenancy/mode'
-import { getScopedDatabase, TenantScopeMissingError } from '@/lib/server/tenancy/tenant-context'
-import { wrapDbTransaction } from '@/lib/server/tenancy/after-commit'
+import { isPooledTenancy } from '@/lib/server/workspaces/mode'
+import {
+  getScopedDatabase,
+  WorkspaceScopeMissingError,
+} from '@/lib/server/workspaces/workspace-context'
 
 // Import drizzle-orm operators explicitly to work around Nitro bundler issues
 // with nested barrel exports. If we use `export { asc } from 'drizzle-orm'`,
@@ -87,7 +89,7 @@ declare global {
  * - **`single`** (the default, and every self-hosted install): one memoized
  *   connection from `DATABASE_URL`. Byte-for-byte the behaviour this function
  *   has always had.
- * - **`pooled`**: the connection belongs to whichever tenant the request
+ * - **`pooled`**: the connection belongs to whichever workspace the request
  *   resolved to, and there is no fleet-wide fallback. A missing scope throws.
  *   That is deliberate and it is the point — the underlying
  *   observation is that a *wrong* pool passes every RBAC and permission check,
@@ -105,7 +107,7 @@ function getDatabase(): Database {
   // config. `tenancy/mode.ts` documents the pairing, and a test pins the two
   // readings together.
   if (isPooledTenancy()) {
-    throw new TenantScopeMissingError('A `db` call was made with no tenant resolved.')
+    throw new WorkspaceScopeMissingError('A `db` call was made with no workspace resolved.')
   }
 
   if (!globalThis.__db) {
@@ -130,7 +132,7 @@ function getDatabase(): Database {
  * singleton, which made `this.session` re-derive the same object anyway. Once
  * the trap can resolve *different* handles, an unbound method called on the
  * proxy would re-enter the trap for its own internals and could pick up a
- * different tenant's session part-way through a statement. So functions are
+ * different workspace's session part-way through a statement. So functions are
  * bound to the handle they came from, and `Reflect.get` is given that same
  * handle as the receiver so getters resolve against the real object rather than
  * the proxy. The pattern is not new to the codebase —
@@ -141,12 +143,7 @@ export const db: Database = new Proxy({} as Database, {
   get(_target, prop) {
     const database = getDatabase()
     const value = Reflect.get(database as object, prop, database)
-    if (typeof value !== 'function') return value
-    const bound = value.bind(database)
-    // Every domain transaction participates in after-commit tenant
-    // signaling. Nested calls are savepoints; only the outer commit flushes.
-    if (prop === 'transaction') return wrapDbTransaction(bound)
-    return bound
+    return typeof value === 'function' ? value.bind(database) : value
   },
 })
 

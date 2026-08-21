@@ -14,14 +14,14 @@
  * ran at boot precisely because Redis could have been cleared, and every
  * create/update/delete had to remember to call the upsert or the remove.
  *
- * Here the scheduler derives the schedules from the rows
- * (`segmentEvaluationSchedules()`) and there is no second copy. A deleted or
- * disabled segment stops being scheduled with no removal call at all. That
- * deletes the restore step and the whole class of drift it existed to repair.
- * The upsert/remove functions are the derivation's invalidation hooks: their
- * call sites are exactly the admin actions that change the derived list, so
- * they drop the memo below (and log the intent, because a silent removal would
- * leave "who schedules this?" unanswerable from the create path).
+ * Here the scheduler reads the rows every tick (`segmentEvaluationSchedules()`)
+ * and there is no second copy. A segment created a second ago is scheduled on
+ * the next tick; a deleted or disabled one stops being scheduled with no
+ * removal call at all. That deletes the restore step and the whole class of
+ * drift it existed to repair, so the upsert/remove functions become
+ * announcements rather than state changes — kept because their call sites are
+ * the right places to log an intent, and because their absence would read as
+ * "nobody scheduled this".
  */
 
 import type { SegmentId } from '@quackback/ids'
@@ -29,7 +29,6 @@ import { db, segments, eq, and, isNull, type EvaluationSchedule } from '@/lib/se
 import { TerminalJobError, type DynamicSchedule } from '@/lib/server/jobs/definitions'
 import { nextSlotAfter, parseCron } from '@/lib/server/jobs/cron'
 import type { ClaimedJob } from '@/lib/server/jobs/job-queue'
-import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
 import { evaluateDynamicSegment } from '@/lib/server/domains/segments/segment.evaluation'
 import { logger } from '@/lib/server/logger'
 
@@ -39,42 +38,14 @@ const log = logger.child({ component: 'segment-scheduler' })
 export const SEGMENT_EVALUATION_QUEUE = 'segment-evaluation'
 
 /**
- * Memo of the derived schedule list, one entry per tenant.
+ * Every dynamic segment's live schedule, read from this workspace's own database.
  *
- * The schedule tick asks every minute per tenant for a list that only changes
- * on admin action, so the derivation's table read is memoised. Keyed by the
- * active tenant (`TenantKeyedCache` namespaces by the current tenant scope; a
- * single-tenant install lands on its one fixed namespace) and dropped by the
- * upsert/remove hooks, so an admin change on this process lands on the next
- * tick. The TTL covers writes whose hook ran elsewhere — another replica, or a
- * web process while the tier runs in a worker.
- */
-const SCHEDULE_MEMO_TTL_MS = 5 * 60_000
-const SCHEDULE_MEMO_KEY = 'schedules'
-const scheduleMemo = new TenantKeyedCache<{ schedules: DynamicSchedule[]; expiresAt: number }>()
-
-function invalidateScheduleMemo(): void {
-  scheduleMemo.delete(SCHEDULE_MEMO_KEY)
-}
-
-/** Test seam: forget every tenant's memoised schedule list. */
-export function __clearSegmentScheduleMemoForTests(): void {
-  scheduleMemo.clear()
-}
-
-/**
- * Every dynamic segment's live schedule, read from this tenant's own database.
- *
- * Called on each schedule tick inside the tenant's scope, so the answer is per
- * tenant by construction (and memoised per tenant — see the memo above). A
- * pattern the cron parser rejects is dropped with a loud log rather than
- * defaulting to some permissive reading: a mis-parsed expression changes a
- * segment's cadence with no error anywhere.
+ * Called on each schedule tick inside the workspace's scope, so the answer is per
+ * workspace by construction. A pattern the cron parser rejects is dropped with a
+ * loud log rather than defaulting to some permissive reading: a mis-parsed
+ * expression changes a segment's cadence with no error anywhere.
  */
 export async function segmentEvaluationSchedules(): Promise<DynamicSchedule[]> {
-  const hit = scheduleMemo.get(SCHEDULE_MEMO_KEY)
-  if (hit && hit.expiresAt > Date.now()) return hit.schedules
-
   const rows = await db
     .select({ id: segments.id, evaluationSchedule: segments.evaluationSchedule })
     .from(segments)
@@ -99,10 +70,6 @@ export async function segmentEvaluationSchedules(): Promise<DynamicSchedule[]> {
       payload: { segmentId: String(row.id) },
     })
   }
-  scheduleMemo.set(SCHEDULE_MEMO_KEY, {
-    schedules: out,
-    expiresAt: Date.now() + SCHEDULE_MEMO_TTL_MS,
-  })
   return out
 }
 
@@ -136,16 +103,15 @@ export async function runSegmentEvaluation(job: ClaimedJob): Promise<void> {
 /**
  * Record that a segment's evaluation schedule changed.
  *
- * There is nothing to write — the row the caller just saved *is* the schedule —
- * but there is something to forget: the memoised derivation of it. Invalidated
- * on every path through here, including a disable, because any of them changes
- * the derived list.
+ * There is nothing to write: the scheduler reads `segments.evaluationSchedule`
+ * on every tick, so the row the caller just saved *is* the schedule. Kept as
+ * the call site's statement of intent, and because a silent removal would leave
+ * "who schedules this?" unanswerable from the create path.
  */
 export async function upsertSegmentEvaluationSchedule(
   segmentId: SegmentId,
   schedule: EvaluationSchedule
 ): Promise<void> {
-  invalidateScheduleMemo()
   if (!schedule.enabled) {
     log.info({ segment_id: segmentId }, 'segment evaluation schedule disabled')
     return
@@ -164,9 +130,8 @@ export async function upsertSegmentEvaluationSchedule(
   log.info({ segment_id: segmentId, pattern: schedule.pattern }, 'scheduled segment evaluation')
 }
 
-/** Counterpart to the above; likewise nothing to unwrite, one memo to drop. */
+/** Counterpart to the above; likewise nothing to unwrite. */
 export async function removeSegmentEvaluationSchedule(segmentId: SegmentId): Promise<void> {
-  invalidateScheduleMemo()
   log.info({ segment_id: segmentId }, 'removed segment schedule')
 }
 

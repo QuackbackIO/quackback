@@ -16,7 +16,7 @@ import { isEntitled } from '../entitlements'
 const hoisted = vi.hoisted(() => ({ mockGetWorkspaceSettings: vi.fn() }))
 
 vi.mock('../../settings.service', () => ({
-  getTenantSettings: hoisted.mockGetWorkspaceSettings,
+  getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
 }))
 
 describe('resolveCloudConfig — every "not configured" input resolves to disabled', () => {

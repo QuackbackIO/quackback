@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { gzipSync, brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 import { config } from '@/lib/server/config'
+import { publicWorkspaceCacheHeaders } from '@/lib/server/workspaces/http-cache'
 // Vite `?raw` imports ship the bundle content as a string at build time.
 // packages/widget/dist/browser.js must exist — produced by `bun run --filter
 // @quackback/widget build` before the web app builds.
@@ -25,7 +26,7 @@ function encodeBody(body: string): { gzip: Uint8Array; br: Uint8Array } {
       params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 9 },
     }),
   }
-  // The body varies only with the tenant's base URL + widget config; a tiny
+  // The body varies only with the workspace's base URL + widget config; a tiny
   // cap guards against unbounded growth if that assumption ever breaks.
   if (encodedCache.size > 8) encodedCache.clear()
   encodedCache.set(body, encoded)
@@ -36,8 +37,9 @@ function jsResponse(body: string, maxAge: number, acceptEncoding: string): Respo
   const headers: Record<string, string> = {
     'Content-Type': 'application/javascript; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Cache-Control': `public, max-age=${maxAge}`,
-    Vary: 'Accept-Encoding',
+    // The body bakes in the workspace's base URL and widget config, so it varies by
+    // Host as well as by encoding — see tenancy/http-cache.ts.
+    ...publicWorkspaceCacheHeaders(maxAge, 'Accept-Encoding'),
   }
   if (/\bbr\b/.test(acceptEncoding)) {
     return new Response(encodeBody(body).br as BodyInit, {
@@ -66,7 +68,7 @@ export const Route = createFileRoute('/api/widget/sdk.js')({
             acceptEncoding
           )
         }
-        // Prepend the tenant URL and the public server config. The bundle
+        // Prepend the workspace URL and the public server config. The bundle
         // reads window.__QUACKBACK_URL__ during browser-queue init to
         // auto-fire Quackback.init when the script loads via a raw
         // <script src="/api/widget/sdk.js"> tag; window.__QUACKBACK_CONFIG__

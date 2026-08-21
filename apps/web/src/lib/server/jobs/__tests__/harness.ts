@@ -18,7 +18,7 @@ import postgres from 'postgres'
 // The lint rule reserves @quackback/db/client for db.ts; test fixtures that
 // need their own short-lived connection are sanctioned callers, same as
 // db-test-fixture.ts.
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import { createDbFromSql, type Database } from '@quackback/db/client'
 
 const URL =
@@ -105,7 +105,7 @@ export interface RowSnapshot {
   locked_until: Date | null
   locked_by: string | null
   last_error: string | null
-  tenant_id: string | null
+  workspace_key: string | null
   run_at: Date
   finished_at: Date | null
 }
@@ -113,7 +113,7 @@ export interface RowSnapshot {
 export async function rowsFor(queue: string): Promise<RowSnapshot[]> {
   const rows = (await testSql()`
     SELECT id::text, dedupe_key, payload, status, attempts, max_attempts,
-           lease_token::text, locked_until, locked_by, last_error, tenant_id,
+           lease_token::text, locked_until, locked_by, last_error, workspace_key,
            run_at, finished_at
     FROM job_queue WHERE queue = ${queue} ORDER BY id
   `) as unknown as Array<Record<string, unknown>>

@@ -36,7 +36,7 @@ const workspaceSchema = z
       .optional(),
     useCase: useCaseSchema.optional(),
     // Force the in-app onboarding wizard to be skipped. Set by the
-    // control-plane on CP-provisioned tenants where the operator did
+    // control-plane on CP-provisioned workspaces where the operator did
     // the equivalent of the wizard out-of-band (named the workspace,
     // picked a plan) before the user ever sees the OSS portal. The
     // reconciler records a managed starting point and completion time so the

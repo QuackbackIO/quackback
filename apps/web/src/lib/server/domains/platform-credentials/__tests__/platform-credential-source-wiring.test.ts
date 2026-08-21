@@ -27,7 +27,7 @@ vi.mock('@/lib/server/cache', () => ({
   cacheSet: (...a: unknown[]) => mockCacheSet(...a),
   cacheDel: (...a: unknown[]) => mockCacheDel(...a),
   CACHE_KEYS: {
-    TENANT_SETTINGS: 'settings:tenant',
+    WORKSPACE_SETTINGS: 'settings:workspace',
     PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
   },
 }))

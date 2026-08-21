@@ -5,9 +5,9 @@
  *
  * The tracker's subject is that two-phase protocol, so the set primitives it
  * delegates to (`kv/pg-kv.ts`) are stubbed here. Their own guarantees — one
- * statement per claim, and the tenant discriminator on every row — are proved
+ * statement per claim, and the workspace discriminator on every row — are proved
  * against a real database in `kv/__tests__/pg-kv-semantics.db.test.ts` and
- * `kv/__tests__/tenant-separation.db.test.ts`.
+ * `kv/__tests__/workspace-separation.db.test.ts`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

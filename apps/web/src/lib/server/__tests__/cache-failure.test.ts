@@ -6,9 +6,9 @@
  * were written for that; this pins the same contract on the Postgres one.
  *
  * The direction has a sharper edge now: under pooled tenancy `db` throws
- * `TenantScopeMissingError` where Redis would quietly have used the `_`
+ * `WorkspaceScopeMissingError` where Redis would quietly have used the `_`
  * namespace, so an unscoped background caller degrades to a permanent miss.
- * That is the correct trade — a miss is slow, a shared namespace is one tenant's
+ * That is the correct trade — a miss is slow, a shared namespace is one workspace's
  * settings served to another — and the last case pins it explicitly.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -45,10 +45,10 @@ describe('when the store throws', () => {
     await expect(cacheDel('k')).resolves.toBeUndefined()
   })
 
-  it('a missing tenant scope is swallowed the same way — a miss, not a 500', async () => {
-    class TenantScopeMissingError extends Error {}
-    hoisted.get.mockRejectedValueOnce(new TenantScopeMissingError('no scope'))
-    expect(await cacheGet('settings:tenant')).toBeNull()
+  it('a missing workspace scope is swallowed the same way — a miss, not a 500', async () => {
+    class WorkspaceScopeMissingError extends Error {}
+    hoisted.get.mockRejectedValueOnce(new WorkspaceScopeMissingError('no scope'))
+    expect(await cacheGet('settings:workspace')).toBeNull()
   })
 })
 

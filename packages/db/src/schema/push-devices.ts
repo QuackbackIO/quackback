@@ -4,8 +4,8 @@ import { principal } from './auth'
 
 /**
  * Push notification devices for the mobile agent app. One row per APNs/FCM
- * registration token, owned by the agent's principal. Scoped to the tenant by
- * the database connection (database-per-tenant); no workspace column.
+ * registration token, owned by the agent's principal. Scoped to the workspace by
+ * the database connection (database-per-workspace); no workspace column.
  *
  * Generic by design: registering a device says nothing about "cloud" or any
  * specific app — a self-hoster who never ships an app simply never writes here.

@@ -1,9 +1,7 @@
 # Event dispatch (the outbox relay is gone)
 
-The outbox relay — its LISTEN loop, leader lease, and `drainOnce()` — no longer runs. Domain events are
-dispatched by the Postgres job queue.
-
-This file records that cutover; it does not define a second architecture.
+The former outbox relay no longer runs. Domain events are dispatched by the
+Postgres job queue. This file is the cutover record, not a second architecture.
 
 ## What replaced it
 

@@ -24,6 +24,84 @@ export interface MinimalThemeConfig {
   dark?: MinimalThemeVariables
 }
 
+/** The variables an expansion cannot do without; the rest derive from these. */
+type ThemeColorBase = Omit<
+  MinimalThemeVariables,
+  'ring' | 'secondary' | 'accent' | 'fontSans' | 'radius'
+>
+
+/**
+ * Palette used for any variable a theme leaves out. These are the values
+ * globals.css already ships as the un-branded defaults, so filling a gap emits
+ * the value the page would otherwise have inherited. The `default` preset is
+ * built from these same constants, which keeps the two from drifting apart.
+ */
+export const DEFAULT_LIGHT_BASE: ThemeColorBase = {
+  primary: 'oklch(0.886 0.176 86)',
+  background: 'oklch(1 0 0)',
+  foreground: 'oklch(0.145 0 0)',
+  card: 'oklch(1 0 0)',
+  muted: 'oklch(0.97 0 0)',
+  mutedForeground: 'oklch(0.556 0 0)',
+  border: 'oklch(0.922 0 0)',
+  destructive: 'oklch(0.577 0.245 27)',
+  success: 'oklch(0.696 0.149 163)',
+}
+
+export const DEFAULT_DARK_BASE: ThemeColorBase = {
+  primary: 'oklch(0.886 0.176 86)',
+  background: 'oklch(0.145 0 0)',
+  foreground: 'oklch(0.985 0 0)',
+  card: 'oklch(0.17 0 0)',
+  muted: 'oklch(0.269 0 0)',
+  mutedForeground: 'oklch(0.708 0 0)',
+  border: 'oklch(0.269 0 0)',
+  destructive: 'oklch(0.396 0.141 25)',
+  success: 'oklch(0.696 0.149 163)',
+}
+
+/** Every variable a theme may carry. Anything else on the object is derived. */
+const MINIMAL_KEYS = [
+  'primary',
+  'background',
+  'foreground',
+  'card',
+  'muted',
+  'mutedForeground',
+  'border',
+  'destructive',
+  'success',
+  'ring',
+  'secondary',
+  'accent',
+  'fontSans',
+  'radius',
+] as const
+
+/**
+ * Fill the gaps in a theme with the base palette for that mode.
+ *
+ * Branding is stored as a loose JSON blob written one variable at a time, so a
+ * workspace that picks a brand colour and stops saves `{ primary }` and nothing
+ * else — an ordinary shape the expander has to survive. Only a usable value
+ * counts as a choice: an absent key, a null (JSON's way of carrying "cleared")
+ * and an empty string all fall through to the base, while anything the
+ * workspace did set is passed on untouched.
+ */
+function resolveMinimal(
+  minimal: Partial<MinimalThemeVariables>,
+  mode: 'light' | 'dark'
+): MinimalThemeVariables {
+  const resolved: MinimalThemeVariables = {
+    ...(mode === 'light' ? DEFAULT_LIGHT_BASE : DEFAULT_DARK_BASE),
+  }
+  for (const key of MINIMAL_KEYS) {
+    const value = minimal[key]
+    if (typeof value === 'string' && value.trim() !== '') resolved[key] = value
+  }
+  return resolved
+}
+
 const LIGHT_SHADOWS = {
   shadow2xs: '0 1px oklch(0 0 0 / 0.05)',
   shadowXs: '0 1px 2px 0 oklch(0 0 0 / 0.05)',
@@ -92,10 +170,16 @@ export function generateChartColors(primary: string): [string, string, string, s
   ]
 }
 
+/**
+ * Expand a theme into the full variable set. The input is whatever the
+ * workspace saved, complete or not: gaps resolve to the base palette first, so
+ * every variable read below is a real value.
+ */
 export function expandTheme(
-  minimal: MinimalThemeVariables,
+  partial: Partial<MinimalThemeVariables>,
   options: { mode: 'light' | 'dark' }
 ): ThemeVariables {
+  const minimal = resolveMinimal(partial, options.mode)
   const shadows = options.mode === 'light' ? LIGHT_SHADOWS : DARK_SHADOWS
   const primaryForeground = computeContrastForeground(minimal.primary)
   const destructiveForeground = computeContrastForeground(minimal.destructive)
@@ -133,17 +217,23 @@ export function expandTheme(
   }
 }
 
-export function extractMinimal(vars: ThemeVariables): MinimalThemeVariables {
+/**
+ * Project a full variable set back down to the ones worth storing. The input is
+ * an all-optional theme, so the result is too — a variable that was never set
+ * stays unset rather than being asserted into existence, and expandTheme
+ * resolves it from the base palette when the theme is next rendered.
+ */
+export function extractMinimal(vars: ThemeVariables): Partial<MinimalThemeVariables> {
   return {
-    primary: vars.primary!,
-    background: vars.background!,
-    foreground: vars.foreground!,
-    card: vars.card!,
-    muted: vars.muted!,
-    mutedForeground: vars.mutedForeground!,
-    border: vars.border!,
-    destructive: vars.destructive!,
-    success: vars.success!,
+    primary: vars.primary,
+    background: vars.background,
+    foreground: vars.foreground,
+    card: vars.card,
+    muted: vars.muted,
+    mutedForeground: vars.mutedForeground,
+    border: vars.border,
+    destructive: vars.destructive,
+    success: vars.success,
     ring: vars.ring !== vars.primary ? vars.ring : undefined,
     fontSans: vars.fontSans,
     radius: vars.radius,

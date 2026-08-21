@@ -214,12 +214,12 @@ async function sendRecoveryCodeAlert(opts: {
       return
     }
 
-    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-    const tenant = await getTenantSettings()
+    const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const workspace = await getWorkspaceSettings()
 
     await sendRecoveryCodeUsedEmail({
       to,
-      workspaceName: tenant?.settings?.name,
+      workspaceName: workspace?.settings?.name,
       ipAddress: getClientIp(opts.headers) || null,
       userAgent: opts.headers.get('user-agent'),
       occurredAt: opts.occurredAt.toUTCString(),

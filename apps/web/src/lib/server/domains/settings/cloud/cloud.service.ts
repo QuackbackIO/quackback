@@ -45,8 +45,8 @@ export function resolveCloudConfig(
  */
 export async function getCloudConfig(): Promise<CloudConfig> {
   try {
-    const { getTenantSettings } = await import('../settings.service')
-    const workspace = await getTenantSettings()
+    const { getWorkspaceSettings } = await import('../settings.service')
+    const workspace = await getWorkspaceSettings()
     const stored = (workspace?.settings as { cloud?: StoredCloudConfig | null } | undefined)?.cloud
     return resolveCloudConfig(stored ?? null)
   } catch (error) {

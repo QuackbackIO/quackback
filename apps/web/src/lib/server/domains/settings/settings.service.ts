@@ -29,7 +29,7 @@ import type {
   DeveloperConfig,
   UpdateDeveloperConfigInput,
   FeatureFlags,
-  TenantSettings,
+  WorkspaceSettings,
   SettingsBrandingData,
   HelpCenterConfig,
   HelpCenterLocalesConfig,
@@ -308,7 +308,7 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
         .where(eq(settings.id, org.id))
       await bumpAuthConfigVersionInTx(tx)
     })
-    // invalidateSettingsCache drops the shared cache entry so other pods
+    // invalidateSettingsCache drops the Redis cache entry so other pods
     // re-read the bumped version on next request. The local resetAuth
     // skips the next-request wait on the calling pod.
     resetAuth()
@@ -831,12 +831,12 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   }
 }
 
-// TenantSettings and SettingsBrandingData are defined in settings.types.ts
+// WorkspaceSettings and SettingsBrandingData are defined in settings.types.ts
 // to prevent client-side barrel imports from pulling in this server-only module.
 
-export async function getTenantSettings(): Promise<TenantSettings | null> {
+export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> {
   try {
-    const cached = await cacheGet<TenantSettings>(CACHE_KEYS.TENANT_SETTINGS)
+    const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
     if (cached) {
       log.debug('tenant settings cache hit')
       // The same repair resolveFeatureFlags applies. This path returns flags
@@ -890,7 +890,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       headerDisplayName: org.headerDisplayName,
     }
 
-    const result: TenantSettings = {
+    const result: WorkspaceSettings = {
       settings: org,
       name: org.name,
       slug: org.slug,
@@ -957,11 +957,11 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
 
     // 1h TTL: settings change rarely and every mutation in this file
     // calls invalidateSettingsCache(), so a long TTL is safe and keeps
-    // the per-request cost of getTenantSettings to a single cache GET.
-    await cacheSet(CACHE_KEYS.TENANT_SETTINGS, result, 3600)
+    // the per-request cost of getWorkspaceSettings to a single Redis GET.
+    await cacheSet(CACHE_KEYS.WORKSPACE_SETTINGS, result, 3600)
     return result
   } catch (error) {
-    log.error({ err: error }, 'get tenant settings failed')
+    log.error({ err: error }, 'get workspace settings failed')
     wrapDbError('fetch settings with all configs', error)
   }
 }
@@ -974,7 +974,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
  * Get current feature flags, merged with defaults
  */
 export async function getFeatureFlags(): Promise<FeatureFlags> {
-  const settings = await getTenantSettings()
+  const settings = await getWorkspaceSettings()
   return settings?.featureFlags ?? DEFAULT_FEATURE_FLAGS
 }
 
@@ -988,9 +988,9 @@ export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolea
 
 /**
  * Whether the Copilot Q&A capability is enabled in the v3 assistant config.
- * Reads the cached tenant settings (`getTenantSettings`) — the same
- * single-cache-GET path `isFeatureEnabled` uses — so gating the copilot route
- * on its hot path costs no extra round-trip; every config mutation calls
+ * Reads the cached workspace settings (`getWorkspaceSettings`) — the same
+ * single-Redis-GET path `isFeatureEnabled` uses — so gating the copilot route
+ * on its hot path costs no extra DB round-trip; every config mutation calls
  * `invalidateSettingsCache()`. Fails OPEN to the v3 default (on): a
  * missing/invalid/unreadable config must not silently disable a working
  * default, mirroring how the route already degrades.
@@ -998,8 +998,8 @@ export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolea
 export async function isCopilotCapabilityEnabled(
   capability: keyof AssistantCopilotCapabilities
 ): Promise<boolean> {
-  const tenant = await getTenantSettings()
-  const parsed = assistantConfigSchema.safeParse(tenant?.settings.assistantConfig)
+  const workspace = await getWorkspaceSettings()
+  const parsed = assistantConfigSchema.safeParse(workspace?.settings.assistantConfig)
   const capabilities = parsed.success
     ? parsed.data.agents.copilot.capabilities
     : DEFAULT_ASSISTANT_CONFIG.agents.copilot.capabilities

@@ -7,7 +7,6 @@
  * a disabled or deleted segment simply stops appearing.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SegmentId } from '@quackback/ids'
 
 interface SegmentRow {
   id: string
@@ -15,7 +14,6 @@ interface SegmentRow {
 }
 
 let rows: SegmentRow[] = []
-let tableReads = 0
 
 vi.mock('@/lib/server/db', () => {
   const chain = {
@@ -23,10 +21,7 @@ vi.mock('@/lib/server/db', () => {
     from: () => chain,
     // The scheduler filters `type = 'dynamic' AND deleted_at IS NULL` in SQL;
     // the fixture stands in for the rows that survive it.
-    where: async () => {
-      tableReads += 1
-      return rows
-    },
+    where: async () => rows,
   }
   return {
     db: chain,
@@ -43,17 +38,12 @@ vi.mock('@/lib/server/db', () => {
 })
 
 import {
-  __clearSegmentScheduleMemoForTests,
   listEvaluationSchedules,
-  removeSegmentEvaluationSchedule,
   segmentEvaluationSchedules,
-  upsertSegmentEvaluationSchedule,
 } from '../segment-scheduler'
 
 beforeEach(() => {
   rows = []
-  tableReads = 0
-  __clearSegmentScheduleMemoForTests()
 })
 
 afterEach(() => {
@@ -90,62 +80,6 @@ describe('segmentEvaluationSchedules', () => {
     ]
     const schedules = await segmentEvaluationSchedules()
     expect(schedules.map((s) => s.key)).toEqual(['segment_ok'])
-  })
-})
-
-describe('schedule memo', () => {
-  it('does not re-read the table within the TTL', async () => {
-    rows = [{ id: 'segment_a', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } }]
-    const first = await segmentEvaluationSchedules()
-
-    // The table changes underneath, with no invalidation hook fired: within
-    // the TTL the memo answers, so the read count is what proves the memo is
-    // real — a memo that silently re-read every time would still return equal
-    // lists here.
-    rows = [{ id: 'segment_b', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } }]
-    const second = await segmentEvaluationSchedules()
-
-    expect(tableReads).toBe(1)
-    expect(second).toEqual(first)
-  })
-
-  it('re-reads after the upsert hook invalidates', async () => {
-    rows = [{ id: 'segment_a', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } }]
-    await segmentEvaluationSchedules()
-
-    rows = [{ id: 'segment_b', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } }]
-    await upsertSegmentEvaluationSchedule('segment_b' as SegmentId, {
-      enabled: true,
-      pattern: '0 * * * *',
-    })
-
-    const after = await segmentEvaluationSchedules()
-    expect(tableReads).toBe(2)
-    expect(after.map((s) => s.key)).toEqual(['segment_b'])
-  })
-
-  it('re-reads after the remove hook invalidates', async () => {
-    rows = [{ id: 'segment_a', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } }]
-    await segmentEvaluationSchedules()
-
-    rows = []
-    await removeSegmentEvaluationSchedule('segment_a' as SegmentId)
-
-    expect(await segmentEvaluationSchedules()).toEqual([])
-    expect(tableReads).toBe(2)
-  })
-
-  it('re-reads once the TTL lapses', async () => {
-    vi.useFakeTimers()
-    rows = [{ id: 'segment_a', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } }]
-    await segmentEvaluationSchedules()
-
-    rows = [{ id: 'segment_b', evaluationSchedule: { enabled: true, pattern: '0 * * * *' } }]
-    vi.setSystemTime(Date.now() + 5 * 60_000 + 1)
-
-    const after = await segmentEvaluationSchedules()
-    expect(tableReads).toBe(2)
-    expect(after.map((s) => s.key)).toEqual(['segment_b'])
   })
 })
 

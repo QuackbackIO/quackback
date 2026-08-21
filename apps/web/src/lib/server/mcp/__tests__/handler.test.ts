@@ -56,11 +56,11 @@ vi.mock('@/lib/server/domains/api/rate-limit', () => ({
 }))
 
 // Mock settings service so getDeveloperConfig doesn't hit the real DB.
-// `getTenantSettings` is consumed lazily by the suspension guard (which the
+// `getWorkspaceSettings` is consumed lazily by the suspension guard (which the
 // API auth chokepoint invokes); returning `null` keeps the workspace 'active'.
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getDeveloperConfig: vi.fn().mockResolvedValue(devConfig({ mcpPortalAccessEnabled: false })),
-  getTenantSettings: vi.fn().mockResolvedValue(null),
+  getWorkspaceSettings: vi.fn().mockResolvedValue(null),
   isFeatureEnabled: vi.fn().mockResolvedValue(true),
 }))
 

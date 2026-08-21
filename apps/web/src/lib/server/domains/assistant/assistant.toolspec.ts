@@ -193,7 +193,7 @@ export function makeAssistantToolLedger(): AssistantToolLedger {
 
 /**
  * Request-local context threaded to server tools (and middleware). Carries the
- * tenant db handle, Quinn's service principal, the viewer audience for
+ * workspace db handle, Quinn's service principal, the viewer audience for
  * retrieval scoping, the linked conversation (null in the sandbox), and a
  * mutable `ledger` of sources surfaced and decisions emitted this run. It is
  * passed to `chat({ context })` and NEVER serialized into the model prompt.

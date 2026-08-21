@@ -17,7 +17,7 @@
  * including a worker process that has not loaded the full application config.
  */
 import { logger } from '@/lib/server/logger'
-import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import {
   claimJobs,
   completeJob,
@@ -120,20 +120,20 @@ export function runnerConfig(): RunnerConfig {
  * whichever tenant's scope happened to trigger the first import.
  *
  * `primeJobHandlers()` closes that by importing every module once, at tier
- * start, **before any tenant scope is open**. The memo is then a pure function
+ * start, **before any workspace scope is open**. The memo is then a pure function
  * lookup. A miss still resolves rather than failing — a direct `runJob` in a
  * test must work — but it says so, because a miss in a running tier means a
- * module is being imported under a tenant scope.
+ * module is being imported under a workspace scope.
  */
 const handlerMemo = new Map<string, JobHandler>()
 
 export async function primeJobHandlers(): Promise<void> {
-  if (getCurrentTenant()) {
+  if (getCurrentWorkspace()) {
     // Priming is the thing that must happen OUTSIDE a scope. If a caller has one
     // open, priming here would defeat its own purpose silently.
     log.error(
-      'primeJobHandlers() was called inside a tenant scope — handler modules would ' +
-        'be imported under that tenant. Prime before opening any scope.'
+      'primeJobHandlers() was called inside a workspace scope — handler modules would ' +
+        'be imported under that workspace. Prime before opening any scope.'
     )
     return
   }
@@ -157,10 +157,10 @@ export function resetJobHandlers(): void {
 async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
   const memo = handlerMemo.get(def.name)
   if (memo) return memo
-  if (getCurrentTenant()) {
+  if (getCurrentWorkspace()) {
     log.warn(
       { queue: def.name },
-      'job handler module imported inside a tenant scope — prime handlers at tier start'
+      'job handler module imported inside a workspace scope — prime handlers at tier start'
     )
   }
   const handler = await def.handler()

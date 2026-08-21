@@ -21,6 +21,16 @@ const mockConfig = {
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
+/**
+ * The self-hosted install's own workspace. Storage composes every object name
+ * from `settings.id`, which an unscoped process reads from the one database it
+ * has — so these deployment-matrix cases need that read to answer.
+ */
+const LOCAL_WORKSPACE = 'workspace_01kzf9848he8h86ct48hanask6'
+vi.mock('@/lib/server/db', () => ({
+  db: { query: { settings: { findFirst: async () => ({ id: LOCAL_WORKSPACE }) } } },
+}))
+
 const mockSend = vi.fn(async () => ({}))
 
 vi.mock('@aws-sdk/client-s3', () => ({
@@ -105,7 +115,10 @@ describe('uploadImageBuffer — content-addressed keys', () => {
     await uploadImageBuffer(PNG, 'image/png', 'link-previews', { contentAddressed: true })
     await uploadImageBuffer(PNG, 'image/png', 'link-previews', { contentAddressed: true })
     expect(keyOf(0)).toBe(keyOf(1))
-    expect(keyOf(0)).toMatch(/^link-previews\/[0-9a-f]{64}\.png$/)
+    // The stored key is still `link-previews/<sha256>.png` — content-addressing
+    // is what makes duplicates collapse, and the namespace is a prefix composed
+    // at the boundary rather than part of the key the hash produces.
+    expect(keyOf(0)).toMatch(new RegExp(`^w/${LOCAL_WORKSPACE}/link-previews/[0-9a-f]{64}\\.png$`))
   })
 
   it('uses a timestamped key by default', async () => {

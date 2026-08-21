@@ -1,7 +1,7 @@
 /**
  * Fixed semantic colors + labels for the public Status page.
  *
- * These are intentionally NOT theme `--primary` tokens: tenant brands
+ * These are intentionally NOT theme `--primary` tokens: workspace brands
  * recolor `--primary`, but incident severity needs to read the same way on
  * every workspace (emerald=ok, amber=degraded, orange=partial, red=major,
  * blue=maintenance) — mirroring the approved mockup's fixed status ramp.

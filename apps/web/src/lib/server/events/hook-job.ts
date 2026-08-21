@@ -26,8 +26,8 @@
 import { getHook } from './registry'
 import { isRetryableError } from './hook-utils'
 // Every module this handler reaches is imported statically, not at call time.
-// The tier opens a tenant scope around every pass, so a deferred import would
-// execute its target's top level under whichever tenant reached it first
+// The tier opens a workspace scope around every pass, so a deferred import would
+// execute its target's top level under whichever workspace reached it first
 // (`jobs/JOBS.md` §9); `__tests__/handler-imports.test.ts` enforces it.
 import { db, webhooks, integrations, postExternalLinks, eq, sql } from '@/lib/server/db'
 import { getValidAccessToken } from '@/lib/server/integrations/token-refresh'

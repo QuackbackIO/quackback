@@ -1,5 +1,14 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
+import { assertBootConfigurationOrExit } from '@/lib/server/boot-config'
 import { logStartupBanner } from '@/lib/server/startup'
+
+// FIRST, and above the warmup below on purpose. A misconfigured process must
+// refuse before it opens a single socket, and the warmup opens several. This
+// used to live inside logStartupBanner() — after the warmup — where it was
+// correct only because a synchronous throw beat a microtask by 115 ms. It now
+// exits non-zero instead of throwing: a throw at module scope is cached by ESM,
+// so every route 500s forever while the process stays up and keeps dialling.
+assertBootConfigurationOrExit()
 
 // Cold-start optimization: eagerly warm the database connection AND preload
 // the modules that bootstrap.ts dynamically imports on first SSR. The

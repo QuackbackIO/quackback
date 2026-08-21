@@ -1,18 +1,19 @@
 /**
- * Real-time fan-out bus for conversations, on Postgres `LISTEN`/`NOTIFY`.
+ * Real-time fan-out bus for conversations, on Postgres `LISTEN`/`NOTIFY`
+ * (SAAS-HOSTING-STACK.md §7.4).
  *
  * Postgres is the durable source of truth; this layer is fire-and-forget
  * delivery only. A message written on one app replica must reach an SSE
  * connection pinned to another replica. Redis pub/sub did that; `pg_notify`
- * does it now, from the tenant's own database.
+ * does it now, from the workspace's own database.
  *
  * ## Three differences from the Redis version, all deliberate
  *
  * **One wire channel per database, logical channels inside the payload.**
  * A NOTIFY channel is an identifier capped at 63 bytes, and
- * `conversation:<uuid>` under a tenant prefix does not fit. So every message
+ * `conversation:<uuid>` under a workspace prefix does not fit. So every message
  * travels on `quackback_realtime` and names its logical channel in the
- * envelope. Every subscriber on a replica sees its own tenant's whole realtime
+ * envelope. Every subscriber on a replica sees its own workspace's whole realtime
  * stream and filters in process — which is what the previous in-process
  * listener registry already did, one level down.
  *
@@ -22,22 +23,22 @@
  * agent never sees, so it is written to `realtime_overflow` and the NOTIFY
  * carries the row id. Steady state on a normal install is zero rows.
  *
- * **The subscriber connection is direct, and per tenant.** `LISTEN` through a
- * transaction-mode pooler registers and never delivers (measured). See
+ * **The subscriber connection is direct, and per workspace.** `LISTEN` through a
+ * transaction-mode pooler registers and never delivers (§7.3, measured). See
  * `pg-listener.ts` for the connection, and for why it is verified by a real
  * notify round trip rather than by reading `pg_listening_channels()`.
  *
- * ## Tenant isolation
+ * ## Workspace isolation
  *
  * Stated three times, on purpose. The in-process registry is keyed by
- * `(tenant namespace, logical channel)`; each tenant's messages arrive on that
- * tenant's own connection to that tenant's own database; and every envelope
- * names its publishing tenant, which `dispatch` refuses if it disagrees with the
+ * `(workspace namespace, logical channel)`; each workspace's messages arrive on that
+ * workspace's own connection to that workspace's own database; and every envelope
+ * names its publishing workspace, which `dispatch` refuses if it disagrees with the
  * connection.
  *
  * The third one is not decoration. Without it the whole property rested on the
  * database boundary, and `pubsub.db.test.ts` proved that is not enough: two
- * scopes on one database delivered one tenant's inbox events to the other's
+ * scopes on one database delivered one workspace's inbox events to the other's
  * subscriber. That configuration is not supposed to exist, which is exactly why
  * nothing else would have caught it.
  */
@@ -45,11 +46,10 @@ import { sql } from 'drizzle-orm'
 import { config } from '../config'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
-import { currentTenantNamespace } from '../tenancy/tenant-keyed'
-import { getTenantScope } from '../tenancy/tenant-context'
-import { isPooledTenancy } from '../tenancy/mode'
-import { assertTenantDirectDatabase, resolveTenantPassword } from '../tenancy/pool-cache'
-import type { Sql as PgSql } from 'postgres'
+import { currentWorkspaceNamespace } from '../workspaces/workspace-keyed'
+import { getWorkspaceScope } from '../workspaces/workspace-context'
+import { isPooledTenancy } from '../workspaces/mode'
+import { resolveWorkspacePassword } from '../workspaces/pool-cache'
 import { openRealtimeListener, type RealtimeListener } from './pg-listener'
 import { logger } from '@/lib/server/logger'
 
@@ -65,16 +65,16 @@ const NOTIFY_PAYLOAD_LIMIT = 7_800
 const OVERFLOW_TTL_SECONDS = 60
 
 /**
- * Wire envelope. `t` is the publishing tenant, `c` the logical channel, `p` the
+ * Wire envelope. `t` is the publishing workspace, `c` the logical channel, `p` the
  * payload inline, `o` the id of an overflow row when the payload was too large.
  *
- * `t` is the second, independent statement of the tenant — the same redundancy
- * `kv_store.tenant_id` carries next to the database boundary, and it is here
+ * `t` is the second, independent statement of the workspace — the same redundancy
+ * `kv_store.workspace_key` carries next to the database boundary, and it is here
  * because the first version of this file did NOT have it. With isolation resting
  * on the database boundary alone, two scopes sharing one database (a
- * single-tenant install, a misconfigured registry record, a test) delivered one
- * tenant's inbox events to the other's subscriber. Measured, not imagined:
- * `pubsub.db.test.ts`'s cross-tenant case failed before this field existed.
+ * single-workspace install, a misconfigured registry record, a test) delivered one
+ * workspace's inbox events to the other's subscriber. Measured, not imagined:
+ * `pubsub.db.test.ts`'s cross-workspace case failed before this field existed.
  */
 interface Envelope {
   t: string
@@ -86,9 +86,9 @@ interface Envelope {
 type Handler = (message: string) => void
 
 /**
- * `(tenantNamespace, logical channel)` -> in-process handlers.
+ * `(workspaceNamespace, logical channel)` -> in-process handlers.
  *
- * A plain Map rather than a `TenantKeyedCache`: that class is a bounded LRU, and
+ * A plain Map rather than a `WorkspaceKeyedCache`: that class is a bounded LRU, and
  * evicting a live SSE stream's handler because 5,000 other entries arrived would
  * silently stop delivering to a connection that is still open. Bounded by the
  * number of live SSE streams on this replica, which is bounded by the
@@ -96,25 +96,25 @@ type Handler = (message: string) => void
  */
 const listeners = new Map<string, Set<Handler>>()
 
-interface TenantConnection {
+interface WorkspaceConnection {
   listener: RealtimeListener
-  /** Number of registered handlers across all of this tenant's channels. */
+  /** Number of registered handlers across all of this workspace's channels. */
   refs: number
 }
 
 /**
- * Tenant namespace -> its dedicated LISTEN connection. Same reasoning as
+ * Workspace namespace -> its dedicated LISTEN connection. Same reasoning as
  * `listeners`: an LRU here would close a connection out from under live
- * streams. Entries are removed when the last handler for that tenant leaves.
+ * streams. Entries are removed when the last handler for that workspace leaves.
  */
-const connections = new Map<string, TenantConnection>()
+const connections = new Map<string, WorkspaceConnection>()
 
 /** In-flight opens, so N concurrent subscribes share one connection. */
-const opening = new Map<string, Promise<TenantConnection>>()
+const opening = new Map<string, Promise<WorkspaceConnection>>()
 
 function registryKey(namespace: string, channel: string): string {
-  // NUL cannot occur in a tenant id or a channel name, so no two pairs can
-  // compose to the same string. Same reasoning as `TenantKeyedCache.SEPARATOR`.
+  // NUL cannot occur in a workspace id or a channel name, so no two pairs can
+  // compose to the same string. Same reasoning as `WorkspaceKeyedCache.SEPARATOR`.
   return `${namespace}\u0000${channel}`
 }
 
@@ -128,14 +128,14 @@ function dispatch(namespace: string, listener: RealtimeListener, raw: string): v
   }
   if (typeof envelope.c !== 'string') return
 
-  // The connection's own tenant is the authority. A message that names a
-  // different one arrived on a database this tenant should not be sharing, and
+  // The connection's own workspace is the authority. A message that names a
+  // different one arrived on a database this workspace should not be sharing, and
   // delivering it would put another workspace's conversation on this agent's
   // inbox stream. Refuse loudly rather than filter quietly.
   if (envelope.t !== namespace) {
     log.error(
       { expected: namespace, received: envelope.t, channel: envelope.c },
-      'refusing a realtime message published under a different tenant'
+      'refusing a realtime message published under a different workspace'
     )
     return
   }
@@ -171,38 +171,27 @@ function emit(handlers: Set<Handler>, message: string): void {
 }
 
 /**
- * The direct DSN for the active tenant.
+ * The direct DSN for the active workspace.
  *
- * Single-tenant installs use `DATABASE_URL`, which for a self-hosted deployment
+ * Single-workspace installs use `DATABASE_URL`, which for a self-hosted deployment
  * already is a direct session-mode connection. Pooled installs must reach for
  * the registry's `directUrl` — the pooled URL would register the LISTEN and
  * deliver nothing.
  */
-async function directConnection(): Promise<{
-  url: string
-  password?: () => Promise<string>
-  verifyIdentity?: (sql: PgSql) => Promise<void>
-}> {
+async function directConnection(): Promise<{ url: string; password?: () => Promise<string> }> {
   if (!isPooledTenancy()) return { url: config.databaseUrl }
-  const scope = getTenantScope()
+  const scope = getWorkspaceScope()
   if (!scope) {
     throw new Error(
-      'realtime subscribe requires a tenant scope under QUACKBACK_TENANCY=pooled: ' +
-        "the LISTEN connection is built from this tenant's direct DSN."
+      'realtime subscribe requires a workspace scope under QUACKBACK_TENANCY=pooled: ' +
+        "the LISTEN connection is built from this workspace's direct DSN."
     )
   }
-  const tenant = scope.tenant
-  return {
-    url: tenant.database.directUrl,
-    password: () => resolveTenantPassword(tenant),
-    // The pool cache's own fail-closed identity assertion, run on the listener
-    // connection before anything is delivered: the direct path must not be
-    // weaker than the request path it rides beside.
-    verifyIdentity: (sql) => assertTenantDirectDatabase(tenant, sql),
-  }
+  const workspace = scope.workspace
+  return { url: workspace.database.directUrl, password: () => resolveWorkspacePassword(workspace) }
 }
 
-async function acquireConnection(namespace: string): Promise<TenantConnection> {
+async function acquireConnection(namespace: string): Promise<WorkspaceConnection> {
   const existing = connections.get(namespace)
   if (existing) {
     existing.refs += 1
@@ -216,7 +205,7 @@ async function acquireConnection(namespace: string): Promise<TenantConnection> {
   }
 
   const promise = (async () => {
-    const { url, password, verifyIdentity } = await directConnection()
+    const { url, password } = await directConnection()
     // `dispatch` needs the listener to read overflow rows back on its own
     // connection, and the listener needs `onPayload` to construct. The box
     // closes the cycle without a partially-initialised binding.
@@ -224,21 +213,13 @@ async function acquireConnection(namespace: string): Promise<TenantConnection> {
     const listener = await openRealtimeListener({
       directUrl: url,
       password,
-      verifyIdentity,
       label: namespace,
       onPayload: (raw) => {
         if (box.listener) dispatch(namespace, box.listener, raw)
       },
     })
     box.listener = listener
-    // Deliberately not awaited: the check exists to make a misconfigured DSN
-    // loud, not to gate the stream. A listener pointed at a transaction-mode
-    // pooler accepts the LISTEN and silently delivers nothing — verify() is
-    // the only check that catches it, and it must not delay the first stream.
-    void listener
-      .verify()
-      .catch((err) => log.warn({ err, namespace }, 'could not verify the realtime listener'))
-    const conn: TenantConnection = { listener, refs: 0 }
+    const conn: WorkspaceConnection = { listener, refs: 0 }
     connections.set(namespace, conn)
     return conn
   })()
@@ -266,9 +247,9 @@ async function releaseConnection(namespace: string): Promise<void> {
  * Subscribe to one or more channels. The handler is invoked with the raw
  * string payload for every published message on any of those channels.
  * Returns an async unsubscribe function that removes this handler and drops
- * the underlying connection once no listeners remain for the tenant.
+ * the underlying connection once no listeners remain for the workspace.
  *
- * The tenant namespace is captured HERE, while the request scope that named it
+ * The workspace namespace is captured HERE, while the request scope that named it
  * is still open — an SSE stream outlives that scope by minutes, so a namespace
  * read at delivery time would read whatever request happened to be in flight.
  */
@@ -276,8 +257,12 @@ export async function subscribe(
   channels: string[],
   onMessage: (channel: string, message: string) => void
 ): Promise<() => Promise<void>> {
-  const namespace = currentTenantNamespace()
-  await acquireConnection(namespace)
+  const namespace = currentWorkspaceNamespace()
+  // A presence-only stream subscribes to no logical channels. Opening a
+  // session-mode LISTEN for it would pin the tenant compute for the life of
+  // a heartbeat. The connection is acquired only when there is something to hear.
+  const needsListener = channels.length > 0
+  if (needsListener) await acquireConnection(namespace)
 
   const registered: Array<{ key: string; fn: Handler }> = []
   for (const channel of channels) {
@@ -306,7 +291,7 @@ export async function subscribe(
     }
     if (released) return
     released = true
-    await releaseConnection(namespace)
+    if (needsListener) await releaseConnection(namespace)
   }
 }
 
@@ -324,7 +309,7 @@ export function publish(channel: string, payload: unknown): void {
 
 /** The awaitable form, for tests and for callers that want back-pressure. */
 export async function publishAsync(channel: string, payload: unknown): Promise<void> {
-  const namespace = currentTenantNamespace()
+  const namespace = currentWorkspaceNamespace()
   const inline = JSON.stringify({ t: namespace, c: channel, p: payload } satisfies Envelope)
   if (Buffer.byteLength(inline, 'utf8') <= NOTIFY_PAYLOAD_LIMIT) {
     await db.execute(sql`SELECT pg_notify(${'quackback_realtime'}, ${inline})`)
@@ -332,7 +317,7 @@ export async function publishAsync(channel: string, payload: unknown): Promise<v
   }
 
   const result = await db.execute(sql`
-    INSERT INTO realtime_overflow (tenant_id, channel, payload, expires_at)
+    INSERT INTO realtime_overflow (workspace_key, channel, payload, expires_at)
     VALUES (
       ${namespace},
       ${channel},

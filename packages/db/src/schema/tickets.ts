@@ -25,8 +25,8 @@
  * Three kinds share one table (`type`): a `customer` ticket is the
  * customer-visible request (at most one per conversation); a `back_office`
  * ticket is an internal task; a `tracker` is an umbrella that fans work out to
- * other tickets via `ticket_links`. Scoped to the tenant by the database
- * connection (database-per-tenant); no workspace column.
+ * other tickets via `ticket_links`. Scoped to the workspace by the database
+ * connection (database-per-workspace); no workspace column.
  */
 import {
   pgTable,

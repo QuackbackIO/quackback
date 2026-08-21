@@ -6,19 +6,19 @@ import { isPathManaged } from './managed-paths'
  * workspace's managed-fields list.
  *
  * Threaded through every settings mutator that owns a managed-eligible
- * field. The managed-paths read goes via getTenantSettings() so the
- * settings cache backing it absorbs the per-mutator cost.
+ * field. The managed-paths read goes via getWorkspaceSettings() so the
+ * Redis cache backing it absorbs the per-mutator cost.
  */
 export async function assertNotManaged(path: string): Promise<void> {
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   await _internalAssertNotManaged(path, async () => {
-    const s = await getTenantSettings()
+    const s = await getWorkspaceSettings()
     return s?.managedFieldPaths ?? []
   })
 }
 
 /** Internal entry point exposed for direct testing without the
- *  getTenantSettings() round-trip. Production callers use
+ *  getWorkspaceSettings() round-trip. Production callers use
  *  `assertNotManaged`. */
 export async function _internalAssertNotManaged(
   path: string,

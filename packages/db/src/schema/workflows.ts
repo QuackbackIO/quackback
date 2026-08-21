@@ -4,7 +4,7 @@
  * runs are exclusive per conversation (first match by sortOrder wins, locked
  * while running); background runs go in parallel. `workflow_runs.cursor` + a
  * BullMQ delayed job per wait is the durable state machine; `workflow_run_events`
- * is the audit + per-person frequency-cap ledger. Per-tenant DB, no workspace
+ * is the audit + per-person frequency-cap ledger. Per-workspace DB, no workspace
  * column.
  */
 import {

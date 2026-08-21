@@ -96,37 +96,37 @@ Status legend:
 - **Status:** `TODO: live-verify`. Confirm the metric name matches what
   the CP exposes — the OSS pod's webhook handler does not exist (Stripe
   webhooks are CP-only), so this metric has to be exported from
-  `quackback-cp`'s `/metrics` endpoint, not from the per-tenant pod.
+  `quackback-cp`'s `/metrics` endpoint, not from the per-workspace pod.
 
-## Tenant pod HTTP
+## Workspace pod HTTP
 
 ### `http_responses_total`
 
-- **Source:** the per-tenant Quackback pod's `/metrics` (scraped via the
-  per-tenant scrape-target ConfigMap rendered by the controller — see
-  `src/controller/render.ts`'s `renderTenantScrapeConfig`).
-- **Used by:** `TenantPod5xxRate`.
+- **Source:** the per-workspace Quackback pod's `/metrics` (scraped via the
+  per-workspace scrape-target ConfigMap rendered by the controller — see
+  `src/controller/render.ts`'s `renderWorkspaceScrapeConfig`).
+- **Used by:** `WorkspacePod5xxRate`.
 - **Verification:**
   ```promql
-  sum by (tenant) (rate(http_responses_total{app="quackback"}[5m]))
+  sum by (workspace) (rate(http_responses_total{app="quackback"}[5m]))
   ```
 - **Status:** `TODO: live-verify`. The OSS app has to actually expose a
   Prometheus-format `/metrics` endpoint with this counter. If it does
   not, this is a launch-blocking gap — none of the HTTP-facing alerts
-  fire without it. The Alloy scrape config relabels `tenant` and
-  `namespace` from the per-tenant ConfigMap labels onto the scraped
+  fire without it. The Alloy scrape config relabels `workspace` and
+  `namespace` from the per-workspace ConfigMap labels onto the scraped
   series.
 
 ### `http_request_duration_seconds_bucket`
 
-- **Source:** the per-tenant Quackback pod's `/metrics`, histogram
+- **Source:** the per-workspace Quackback pod's `/metrics`, histogram
   buckets for request latency.
-- **Used by:** `TenantPodLatencyP99`.
+- **Used by:** `WorkspacePodLatencyP99`.
 - **Verification:**
   ```promql
   histogram_quantile(
     0.99,
-    sum by (tenant, le) (
+    sum by (workspace, le) (
       rate(http_request_duration_seconds_bucket{app="quackback"}[5m])
     )
   )
@@ -136,7 +136,7 @@ Status legend:
   (need at least one bucket above 2s for the 2s p99 alert to be
   meaningful).
 
-## CNPG (per-tenant Postgres)
+## CNPG (per-workspace Postgres)
 
 ### `cnpg_cluster_status_conditions`
 

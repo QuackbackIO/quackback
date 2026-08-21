@@ -12,7 +12,7 @@ import { createDb, type Database } from '../client'
 // This is a one-time data migration, so we keep a SINGLE regression pin rather
 // than an exhaustive per-branch suite: the fail-open the access-matrix audit
 // found. The original SQL gated both passes on `portal_config IS NOT NULL`, so a
-// tenant whose single settings row had a NULL/empty portal_config (config-file
+// workspace whose single settings row had a NULL/empty portal_config (config-file
 // installs, half-onboarded rows, the dev/test seed) got neither the per-board
 // tier bump nor an allowAnonymous write — and the runtime then resolved
 // allowAnonymous to its fail-open default, silently re-opening anonymous

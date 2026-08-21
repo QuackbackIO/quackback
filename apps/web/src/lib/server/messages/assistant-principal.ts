@@ -12,14 +12,27 @@
  */
 import type { PrincipalId } from '@quackback/ids'
 import { getAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 
-let cachedAssistantPrincipalId: PrincipalId | null = null
-let assistantPrincipalCheckedAt = 0
+/**
+ * Per workspace: a principal id is a row in one workspace's database, so a shared
+ * memo flags a foreign id as "this is the assistant" in every other workspace —
+ * mislabelling human agents' turns as the assistant's and vice versa.
+ */
+const cachedAssistantPrincipalId = new WorkspaceKeyedCache<PrincipalId>(256)
+const checkedAt = new WorkspaceKeyedCache<number>(256)
+const MEMO_KEY = 'assistant-principal'
 
 export async function assistantPrincipalIdOnce(): Promise<PrincipalId | null> {
-  if (cachedAssistantPrincipalId === null && Date.now() - assistantPrincipalCheckedAt > 60_000) {
-    cachedAssistantPrincipalId = (await getAssistantPrincipal())?.id ?? null
-    assistantPrincipalCheckedAt = Date.now()
+  const cached = cachedAssistantPrincipalId.get(MEMO_KEY)
+  if (cached) return cached
+  if (Date.now() - (checkedAt.get(MEMO_KEY) ?? 0) > 60_000) {
+    const resolved = (await getAssistantPrincipal())?.id ?? null
+    checkedAt.set(MEMO_KEY, Date.now())
+    if (resolved) {
+      cachedAssistantPrincipalId.set(MEMO_KEY, resolved)
+      return resolved
+    }
   }
-  return cachedAssistantPrincipalId
+  return null
 }

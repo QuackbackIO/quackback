@@ -9,7 +9,7 @@
  *      next sign-in re-fires the notification.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { makeAuthConfig, makeTenant } from './_helpers'
+import { makeAuthConfig, makeWorkspace } from './_helpers'
 
 vi.mock('@/lib/server/config', () => ({ config: { trustedProxyHops: 1 } }))
 
@@ -53,7 +53,7 @@ vi.mock('@tanstack/react-start/server', () => ({
 const { handleNewDeviceNotification } = await import('../hooks')
 
 type Ctx = Parameters<typeof handleNewDeviceNotification>[0]
-type Tenant = Parameters<typeof handleNewDeviceNotification>[1]
+type Workspace = Parameters<typeof handleNewDeviceNotification>[1]
 
 const buildCtx = (overrides: Partial<Ctx> = {}): Ctx => ({
   path: '/sign-in/email',
@@ -66,11 +66,11 @@ const buildCtx = (overrides: Partial<Ctx> = {}): Ctx => ({
   ...overrides,
 })
 
-const tenant = () =>
-  makeTenant({
+const workspace = () =>
+  makeWorkspace({
     name: 'Acme',
     authConfig: makeAuthConfig(),
-  }) as Tenant
+  }) as Workspace
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -87,7 +87,7 @@ beforeEach(() => {
 describe('handleNewDeviceNotification — happy path', () => {
   it('sends email + audits + markDeviceSeen on first-seen device', async () => {
     mockIsDeviceUnseen.mockResolvedValueOnce(true)
-    await handleNewDeviceNotification(buildCtx(), tenant())
+    await handleNewDeviceNotification(buildCtx(), workspace())
 
     expect(mockSendNewSignInEmail).toHaveBeenCalledTimes(1)
     const emailArgs = mockSendNewSignInEmail.mock.calls[0][0] as {
@@ -112,7 +112,7 @@ describe('handleNewDeviceNotification — happy path', () => {
 
   it('no-ops when the device is already known', async () => {
     mockIsDeviceUnseen.mockResolvedValueOnce(false)
-    await handleNewDeviceNotification(buildCtx(), tenant())
+    await handleNewDeviceNotification(buildCtx(), workspace())
 
     expect(mockSendNewSignInEmail).not.toHaveBeenCalled()
     expect(mockRecordAuditEvent).not.toHaveBeenCalled()
@@ -124,7 +124,7 @@ describe('handleNewDeviceNotification — happy path', () => {
 describe('handleNewDeviceNotification — guards', () => {
   it('bails when newSession is missing (sign-in was revoked upstream)', async () => {
     const ctx = buildCtx({ context: { newSession: null } })
-    await handleNewDeviceNotification(ctx, tenant())
+    await handleNewDeviceNotification(ctx, workspace())
     expect(mockIsDeviceUnseen).not.toHaveBeenCalled()
   })
 
@@ -132,7 +132,7 @@ describe('handleNewDeviceNotification — guards', () => {
     const ctx = buildCtx({
       context: { newSession: { user: { id: 'user_x' }, session: { token: 'tok' } } },
     })
-    await handleNewDeviceNotification(ctx, tenant())
+    await handleNewDeviceNotification(ctx, workspace())
     expect(mockIsDeviceUnseen).not.toHaveBeenCalled()
   })
 })
@@ -140,7 +140,7 @@ describe('handleNewDeviceNotification — guards', () => {
 describe('handleNewDeviceNotification — failure tolerance', () => {
   it('swallows isDeviceUnseen errors (Redis outage should not block sign-in)', async () => {
     mockIsDeviceUnseen.mockRejectedValueOnce(new Error('redis down'))
-    await expect(handleNewDeviceNotification(buildCtx(), tenant())).resolves.toBeUndefined()
+    await expect(handleNewDeviceNotification(buildCtx(), workspace())).resolves.toBeUndefined()
     // Tracker errored before claiming → no rollback needed.
     expect(mockForgetDevice).not.toHaveBeenCalled()
   })
@@ -151,7 +151,7 @@ describe('handleNewDeviceNotification — failure tolerance', () => {
     mockIsDeviceUnseen.mockResolvedValueOnce(true)
     mockSendNewSignInEmail.mockRejectedValueOnce(new Error('smtp down'))
 
-    await expect(handleNewDeviceNotification(buildCtx(), tenant())).resolves.toBeUndefined()
+    await expect(handleNewDeviceNotification(buildCtx(), workspace())).resolves.toBeUndefined()
 
     expect(mockForgetDevice).toHaveBeenCalledWith('user_abc', expect.stringMatching(/^fp-/))
     expect(mockMarkDeviceSeen).not.toHaveBeenCalled()
@@ -161,7 +161,7 @@ describe('handleNewDeviceNotification — failure tolerance', () => {
     mockIsDeviceUnseen.mockResolvedValueOnce(true)
     mockRecordAuditEvent.mockRejectedValueOnce(new Error('audit store down'))
 
-    await expect(handleNewDeviceNotification(buildCtx(), tenant())).resolves.toBeUndefined()
+    await expect(handleNewDeviceNotification(buildCtx(), workspace())).resolves.toBeUndefined()
 
     expect(mockForgetDevice).toHaveBeenCalled()
     expect(mockMarkDeviceSeen).not.toHaveBeenCalled()
@@ -180,7 +180,7 @@ describe('handleNewDeviceNotification — account with no deliverable address', 
       email: 'sso-oidc-abc-deadbeef@anon.quackback.io',
     } as never)
 
-    await handleNewDeviceNotification(buildCtx(), tenant())
+    await handleNewDeviceNotification(buildCtx(), workspace())
 
     expect(mockSendNewSignInEmail).not.toHaveBeenCalled()
     expect(mockRecordAuditEvent).toHaveBeenCalled()

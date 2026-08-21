@@ -29,7 +29,7 @@ vi.mock('@/lib/server/cache', () => ({
   cacheGet: vi.fn().mockResolvedValue(null),
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),
-  CACHE_KEYS: { TENANT_SETTINGS: 'tenant' },
+  CACHE_KEYS: { WORKSPACE_SETTINGS: 'workspace' },
 }))
 
 vi.mock('@/lib/server/config-file/managed-guard', () => ({ assertNotManaged: vi.fn() }))
@@ -181,7 +181,7 @@ describe('updateAuthConfig — 2FA requires password (Option A coupling)', () =>
   })
 
   it('treats absent password key as enabled (default-true per DEFAULT_AUTH_CONFIG)', async () => {
-    // Pre-migration tenant: oauth has no `password` key. Per the
+    // Pre-migration workspace: oauth has no `password` key. Per the
     // existing default-true contract, password is considered ON, so
     // enabling 2FA is permitted.
     const { db } = await import('@/lib/server/db')

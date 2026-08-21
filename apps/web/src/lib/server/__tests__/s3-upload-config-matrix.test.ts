@@ -39,6 +39,16 @@ const mockConfig = {
 
 vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
 
+/**
+ * The self-hosted install's own workspace. Storage composes every object name
+ * from `settings.id`, which an unscoped process reads from the one database it
+ * has — so these deployment-matrix cases need that read to answer.
+ */
+const LOCAL_WORKSPACE = 'workspace_01kzf9848he8h86ct48hanask6'
+vi.mock('@/lib/server/db', () => ({
+  db: { query: { settings: { findFirst: async () => ({ id: LOCAL_WORKSPACE }) } } },
+}))
+
 // ── Mock AWS SDK modules ─────────────────────────────────────────────────────
 
 const mockGetSignedUrl = vi.fn(async (_client: unknown, cmd: { input: { Key: string } }) => {
@@ -100,6 +110,18 @@ describe('Case A — S3_PROXY=false, no S3_PUBLIC_URL (local MinIO / Railway / A
     expect(uploadUrl).toContain('s3.amazonaws.com')
     expect(uploadUrl).toContain('X-Amz-Signature')
     expect(mockGetSignedUrl).toHaveBeenCalledOnce()
+  })
+
+  it('presigns the workspace-namespaced object while returning the bare key', async () => {
+    // The two halves of the design in one assertion. What the browser PUTs to is
+    // namespaced; what the caller stores, and what every absolute URL in
+    // contentJson is built from, is not.
+    const { key } = await generatePresignedUploadUrl(KEY, CT)
+
+    expect(mockGetSignedUrl).toHaveBeenCalledOnce()
+    const presigned = mockGetSignedUrl.mock.calls[0]![1] as { input: { Key: string } }
+    expect(presigned.input.Key).toBe(`w/${LOCAL_WORKSPACE}/${KEY}`)
+    expect(key).toBe(KEY)
   })
 
   it('returns a BASE_URL/api/storage publicUrl (presigned redirect route)', async () => {

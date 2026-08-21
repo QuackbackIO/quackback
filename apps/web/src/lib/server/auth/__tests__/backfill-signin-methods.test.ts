@@ -5,7 +5,7 @@
  *   - additive: portal-only social enables are OR-ed into authConfig.oauth;
  *   - monotonic: team methods are never removed;
  *   - magic-link-safe: explicit false is preserved, while passwordless legacy
- *     tenants keep the old absent-key team fallback;
+ *     workspaces keep the old absent-key team fallback;
  *   - idempotent: a second run changes nothing.
  *
  * Each test runs inside a transaction that is rolled back so the shared test

@@ -11,7 +11,7 @@ interface HelpCenterHeroProps {
 }
 
 // A soft brand-tinted glow, driven by the theme's --primary so it follows
-// per-tenant branding and light/dark automatically. Sits top-center behind the
+// per-workspace branding and light/dark automatically. Sits top-center behind the
 // heading, the way the design pools light above the fold.
 const BRAND_GLOW =
   'radial-gradient(ellipse at center, color-mix(in oklch, var(--primary) 20%, transparent), transparent 70%)'

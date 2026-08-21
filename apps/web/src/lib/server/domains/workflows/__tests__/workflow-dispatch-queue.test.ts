@@ -36,8 +36,8 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
-vi.mock('@/lib/server/tenancy/tenant-context', () => ({
-  getCurrentTenant: () => null,
+vi.mock('@/lib/server/workspaces/workspace-context', () => ({
+  getCurrentWorkspace: () => null,
 }))
 
 const dispatched: EventData[] = []
@@ -68,7 +68,7 @@ function bareJob(): ClaimedJob {
     queue: WORKFLOW_DISPATCH_QUEUE,
     dedupeKey: null,
     payload: {},
-    tenantId: null,
+    workspaceKey: null,
     attempts: 1,
     maxAttempts: 3,
     leaseToken: '00000000-0000-0000-0000-000000000000',

@@ -1625,6 +1625,20 @@
       "when": 1785700000012,
       "tag": "0254_event_dispatch_owner_default_job",
       "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "7",
+      "when": 1785700000013,
+      "tag": "0255_settings_cloud_tenant_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 233,
+      "version": "7",
+      "when": 1785700000014,
+      "tag": "0256_workspace_key_columns",
+      "breakpoints": true
     }
   ]
 }

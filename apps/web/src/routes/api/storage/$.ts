@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
+import { currentWorkspaceNamespace } from '@/lib/server/workspaces/workspace-keyed'
 
 const log = logger.child({ component: 'storage' })
 
@@ -72,17 +73,60 @@ const proxyCache = createProxyCache({
   maxTotalBytes: 32 * 1024 * 1024,
 })
 
+/**
+ * The proxy cache holds file BYTES keyed by storage key, in process memory.
+ *
+ * Storage keys are per-bucket and the bucket is the workspace boundary, so two
+ * workspaces' keys share a namespace in this heap the moment one process serves
+ * both — and a hit returns the other workspace's file with a 200 and no error.
+ * That is worse than the edge-cache case below: it needs no CDN and no
+ * misconfiguration, only a key that appears in two buckets, which is exactly
+ * what an import or a migration produces.
+ */
+export function proxyCacheKey(key: string): string {
+  return `${currentWorkspaceNamespace()} ${key}`
+}
+
+/**
+ * The S3 client reports a missing object two ways depending on the operation and
+ * the provider, so both are checked rather than whichever one this provider
+ * happened to send today.
+ */
+function isNotFound(error: unknown): boolean {
+  const e = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } }
+  return e?.name === 'NoSuchKey' || e?.name === 'NotFound' || e?.$metadata?.httpStatusCode === 404
+}
+
 const KEY_PREFIX = '/api/storage/'
 
+/**
+ * The stored key this request is asking for, or null if it is not one.
+ *
+ * `decodeURIComponent` throws `URIError` on a malformed escape — `%c0%ae`, a
+ * lone `%`, a truncated `%2` — and this runs *outside* the try/catch below, so
+ * the route answered 500 for input a caller controls. Worse for this change: a
+ * 500 here means the storage boundary's own "malformed percent-encoding"
+ * refusal is never reached from the only route that decodes, so the refusal
+ * looked covered and was unreachable.
+ *
+ * Undecodable is not a server fault and not a missing object; it is a key that
+ * does not name anything, which is the same answer as `..` — null, and the
+ * caller sends 400.
+ */
 function extractKey(url: URL): string | null {
-  const key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  let key: string
+  try {
+    key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  } catch {
+    return null
+  }
   return key && !key.includes('..') ? key : null
 }
 
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
   const {
-    isS3Configured,
-    getS3Config,
+    isS3Usable,
+    getStorageSigningSecret,
     uploadObject,
     verifyProxyUploadToken,
     isAllowedImageType,
@@ -91,8 +135,15 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   const { sniffImageMime } = await import('@/lib/server/content/magic-bytes')
   const { config } = await import('@/lib/server/config')
 
-  if (!isS3Configured() || !config.s3Proxy) {
+  // Two different refusals, deliberately not one. "This deployment does not do
+  // proxy uploads" is a permanent 403; "this workspace's storage credentials do
+  // not resolve" is a 503 an operator can fix. Collapsing them would report a
+  // configuration outage as a policy decision.
+  if (!config.s3Proxy) {
     return Response.json({ error: 'Proxy uploads not enabled' }, { status: 403 })
+  }
+  if (!isS3Usable()) {
+    return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
 
   const url = new URL(request.url)
@@ -104,7 +155,10 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
 
   const exp = url.searchParams.get('exp')
   const sig = url.searchParams.get('sig')
-  const { secretAccessKey } = getS3Config()
+  // Only the signing secret, never the bucket. This route is the surface an
+  // unauthenticated request reaches, and it needs an HMAC key, not a capability
+  // to address every object in the bucket.
+  const secretAccessKey = getStorageSigningSecret()
 
   if (!verifyProxyUploadToken(secretAccessKey, key, ct, exp, sig)) {
     return Response.json({ error: 'Invalid or expired upload token' }, { status: 401 })
@@ -123,7 +177,7 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   }
 
   await uploadObject(key, body, ct)
-  proxyCache.delete(key)
+  proxyCache.delete(proxyCacheKey(key))
   return new Response(null, { status: 200 })
 }
 
@@ -139,16 +193,25 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
  */
 export async function handleStorageGet({ request }: { request: Request }): Promise<Response> {
   const {
-    isS3Configured,
+    isS3Usable,
     generatePresignedGetUrl,
     getS3Object,
-    getS3Config,
+    getStorageSigningSecret,
     isPublicStorageKey,
+    StorageUnavailableError,
     verifyStorageReadToken,
   } = await import('@/lib/server/storage/s3')
   const { config } = await import('@/lib/server/config')
 
-  if (!isS3Configured()) {
+  // Usability, not addressability. A pooled workspace record always names a bucket,
+  // so the addressability question answers `true` while the credential read
+  // throws a few lines later — and because that call sits outside the try/catch,
+  // the whole route answered **500** for every key of every workspace. A workspace
+  // whose storage credentials do not resolve is a configuration state, not a
+  // crash, and it has to be distinguishable from one: a 500 tells a caller
+  // nothing, and it cost the isolation probe its P03 verdict on top of the
+  // feature.
+  if (!isS3Usable()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })
   }
 
@@ -161,7 +224,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
 
   if (
     !isPublicStorageKey(key) &&
-    !verifyStorageReadToken(getS3Config().secretAccessKey, key, url.searchParams.get('read'))
+    !verifyStorageReadToken(getStorageSigningSecret(), key, url.searchParams.get('read'))
   ) {
     return Response.json({ error: 'Invalid storage read token' }, { status: 403 })
   }
@@ -171,7 +234,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
 
   try {
     if (config.s3Proxy || forceProxy) {
-      const cached = proxyCache.get(key)
+      const cached = proxyCache.get(proxyCacheKey(key))
       if (cached) {
         return new Response(cached.data, {
           status: 200,
@@ -180,6 +243,9 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
             'Cache-Control': isPublicStorageKey(key)
               ? 'public, max-age=31536000, immutable'
               : 'private, max-age=3600, immutable',
+            // The key namespace is per-bucket and the bucket is the workspace
+            // boundary, so the same path can name a different object per host.
+            Vary: 'Host',
             // Stored Content-Types originate from upload requests — never
             // let a browser second-guess them on a same-origin response.
             'X-Content-Type-Options': 'nosniff',
@@ -190,7 +256,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       const { body, contentType } = await getS3Object(key)
       const data = await new Response(body).arrayBuffer()
 
-      proxyCache.set(key, data, contentType)
+      proxyCache.set(proxyCacheKey(key), data, contentType)
 
       return new Response(data, {
         status: 200,
@@ -199,6 +265,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
           'Cache-Control': isPublicStorageKey(key)
             ? 'public, max-age=31536000, immutable'
             : 'private, max-age=3600, immutable',
+          Vary: 'Host',
           'X-Content-Type-Options': 'nosniff',
         },
       })
@@ -211,9 +278,26 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       headers: {
         Location: presignedUrl,
         'Cache-Control': isPublicStorageKey(key) ? 'public, max-age=86400' : 'private, no-store',
+        Vary: 'Host',
       },
     })
   } catch (error) {
+    // Second barrier behind the gate above. The gate is the one that fires in
+    // practice; this is here so that a credential that becomes unresolvable
+    // between the two still reports as a refusal rather than as a crash.
+    if (error instanceof StorageUnavailableError) {
+      log.error({ err: error }, 'storage credentials unresolvable')
+      return Response.json({ error: 'Storage not configured' }, { status: 503 })
+    }
+    // An object that is not there is not a server fault. It reached this branch
+    // as a 500 before, which under pooled workspaces is actively misleading: the
+    // three states a caller has to tell apart are "this workspace has no
+    // storage" (503), "this object does not exist" (404) and "something broke"
+    // (500), and collapsing the middle one into the last makes an ordinary
+    // missing asset look like an outage.
+    if (isNotFound(error)) {
+      return Response.json({ error: 'Not found' }, { status: 404 })
+    }
     log.error({ err: error }, 'storage object serve failed')
     return Response.json({ error: 'Failed to resolve storage URL' }, { status: 500 })
   }

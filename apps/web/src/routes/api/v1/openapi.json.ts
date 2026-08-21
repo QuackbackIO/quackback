@@ -21,6 +21,7 @@ export const Route = createFileRoute('/api/v1/openapi/json')({
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+            Vary: 'Host',
           },
         })
       },

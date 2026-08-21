@@ -31,16 +31,16 @@ import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 import { shouldRunWorkers } from '@/lib/server/process-role'
-import { listActiveTenants, type TenantDescriptor } from '@/lib/server/tenancy/registry'
-import { withTenantScopeById } from '@/lib/server/tenancy/fleet'
+import { listActiveWorkspaces, type WorkspaceDescriptor } from '@/lib/server/workspaces/registry'
+import { withWorkspaceScopeById } from '@/lib/server/workspaces/fleet'
 import {
-  isTenantQuarantined,
-  noteTenantRefusal,
-  noteTenantServed,
+  isWorkspaceQuarantined,
+  noteWorkspaceRefusal,
+  noteWorkspaceServed,
   quarantineRetryAt,
   refusalCode,
   reportQuarantine,
-} from '@/lib/server/tenancy/quarantine'
+} from '@/lib/server/workspaces/quarantine'
 import { isMissingJobQueue } from './job-queue'
 import {
   awaitPool,
@@ -57,7 +57,7 @@ import {
   runnerConfig,
   type RunnerConfig,
 } from './runner'
-import { onDurableWorkCommitted, SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
+import { onDurableWorkCommitted, SINGLE_WORKSPACE_KEY } from '@/lib/server/workspaces/after-commit'
 import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 
 const log = logger.child({ component: 'job-tier' })
@@ -71,7 +71,7 @@ interface TenantLoop {
   /** End the current poll wait so an after-commit enqueue is claimed now. */
   signal(): void
   /** Latest registry view, so a revision change is seen without a restart. */
-  observe(tenant: TenantDescriptor): void
+  observe(tenant: WorkspaceDescriptor): void
 }
 
 interface LoopStats {
@@ -133,7 +133,7 @@ function startLoop(opts: {
   tenantId: string
   config: RunnerConfig
   /** Latest registry view. Null under single tenancy. */
-  tenant: TenantDescriptor | null
+  tenant: WorkspaceDescriptor | null
   scoped: <T>(body: () => Promise<T>) => Promise<T>
 }): TenantLoop {
   const s = emptyStats()
@@ -144,7 +144,7 @@ function startLoop(opts: {
   let nextScheduleAt = 0
   let nextReapAt = 0
   let nextPruneAt = 0
-  let descriptor: TenantDescriptor | null = opts.tenant
+  let descriptor: WorkspaceDescriptor | null = opts.tenant
   /** True once the tenant has been proven servable. Cleared when a pass fails. */
   let servable = false
   // This loop's own scheduler memory. Per tenant by construction: the state is
@@ -184,7 +184,7 @@ function startLoop(opts: {
    * the poll interval forever.
    */
   const prove = async (): Promise<boolean> => {
-    if (descriptor && isTenantQuarantined(descriptor)) return false
+    if (descriptor && isWorkspaceQuarantined(descriptor)) return false
     try {
       // An empty body still builds and verifies the pool, which is the whole
       // question being asked. Under single tenancy `scoped` is identity and this
@@ -194,7 +194,7 @@ function startLoop(opts: {
       const code = refusalCode(err)
       s.refusedCode = code
       if (descriptor) {
-        const entry = noteTenantRefusal(descriptor, code, errText(err))
+        const entry = noteWorkspaceRefusal(descriptor, code, errText(err))
         if (entry.disposition === 'transient') {
           log.warn(
             { tenantId: opts.tenantId, code, attempts: entry.attempts },
@@ -206,7 +206,7 @@ function startLoop(opts: {
       }
       return false
     }
-    if (descriptor) noteTenantServed(descriptor.tenantId)
+    if (descriptor) noteWorkspaceServed(descriptor.workspaceKey)
     s.refusedCode = null
     servable = true
     return true
@@ -217,7 +217,7 @@ function startLoop(opts: {
       if (!servable) {
         if (!(await prove())) {
           if (!running || stopped) break
-          const retryAt = descriptor ? quarantineRetryAt(descriptor.tenantId) : null
+          const retryAt = descriptor ? quarantineRetryAt(descriptor.workspaceKey) : null
           await waitForWork(retryAt ? Math.max(250, retryAt - Date.now()) : 1_000)
           continue
         }
@@ -284,7 +284,7 @@ function startLoop(opts: {
             log.warn(
               { tenantId: opts.tenantId },
               'job_queue is absent in this database (migration 0250 not applied); ' +
-                'skipping this tenant rather than crash-looping'
+                'skipping this workspace rather than crash-looping'
             )
           }
         } else {
@@ -340,30 +340,30 @@ function errText(err: unknown): string {
 
 function startSingleTenantLoop(cfg: RunnerConfig): void {
   const loop = startLoop({
-    tenantId: SINGLE_TENANT_ID,
+    tenantId: SINGLE_WORKSPACE_KEY,
     config: cfg,
     tenant: null,
     scoped: (body) => body(),
   })
-  loops.set(SINGLE_TENANT_ID, loop)
+  loops.set(SINGLE_WORKSPACE_KEY, loop)
 }
 
-function startTenantLoop(tenant: TenantDescriptor, cfg: RunnerConfig): void {
+function startTenantLoop(workspace: WorkspaceDescriptor, cfg: RunnerConfig): void {
   const loop = startLoop({
-    tenantId: tenant.tenantId,
+    tenantId: workspace.workspaceKey,
     config: cfg,
-    tenant,
-    scoped: (body) => withTenantScopeById(tenant.tenantId, 'queue', body),
+    tenant: workspace,
+    scoped: (body) => withWorkspaceScopeById(workspace.workspaceKey, 'queue', body),
   })
-  loops.set(tenant.tenantId, loop)
+  loops.set(workspace.workspaceKey, loop)
 }
 
 async function refreshTenantLoops(cfg: RunnerConfig): Promise<void> {
-  const { tenants, refused } = await listActiveTenants()
+  const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) {
     log.error({ refused }, 'job tier skipping tenants with invalid registry records')
   }
-  const wanted = new Set(tenants.map((t) => t.tenantId))
+  const wanted = new Set(workspaces.map((w) => w.workspaceKey))
 
   // Departing tenants drain in parallel, and only after the new loops are
   // started: `stop()` waits out the tenant's in-flight jobs, so awaiting each
@@ -377,16 +377,16 @@ async function refreshTenantLoops(cfg: RunnerConfig): Promise<void> {
     stopping.push({ tenantId, done: loop.stop() })
   }
 
-  for (const tenant of tenants) {
-    const existing = loops.get(tenant.tenantId)
+  for (const workspace of workspaces) {
+    const existing = loops.get(workspace.workspaceKey)
     if (existing) {
       // The revision the loop compares against when deciding whether a refusal
       // is still the same refusal. Without this a record repaired by the control
       // plane would stay quarantined until the process restarted.
-      existing.observe(tenant)
+      existing.observe(workspace)
       continue
     }
-    startTenantLoop(tenant, cfg)
+    startTenantLoop(workspace, cfg)
   }
 
   // On the one cadence that exists whether or not anything is wrong.
@@ -436,7 +436,7 @@ export async function startJobTier(): Promise<void> {
   // doorbell: Neon is gone, and a transaction-mode pooler would not deliver
   // NOTIFY anyway. The poll is the mechanism; this only cuts the wait.
   unsubscribeCommit = onDurableWorkCommitted((tenantId) => {
-    signalTenant(tenantId)
+    signalWorkspace(tenantId)
   })
 
   if (!config.isPooledTenancy) {
@@ -472,21 +472,21 @@ export async function stopJobTier(): Promise<void> {
 
 export interface JobTierStatus {
   running: boolean
-  tenants: Array<{ tenantId: string } & LoopStats>
+  workspaces: Array<{ workspaceKey: string } & LoopStats>
 }
 
 export function getJobTierStatus(): JobTierStatus {
   return {
     running,
-    tenants: [...stats.entries()].map(([tenantId, s]) => ({ tenantId, ...s })),
+    workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),
   }
 }
 
 /**
- * End this tenant's current poll wait so an after-commit enqueue is claimed now.
+ * End this workspace's current poll wait so an after-commit enqueue is claimed now.
  */
-export function signalTenant(tenantId: string): boolean {
-  const loop = loops.get(tenantId)
+export function signalWorkspace(workspaceKey: string): boolean {
+  const loop = loops.get(workspaceKey)
   if (!loop) return false
   loop.signal()
   return true

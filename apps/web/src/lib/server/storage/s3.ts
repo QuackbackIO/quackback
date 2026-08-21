@@ -15,17 +15,85 @@
  * interfaces for the exact SDK surface we use, with `as unknown as S3Module`
  * applied at the two dynamic import boundaries. All downstream code is fully
  * typed with no `any`.
+ *
+ * ## Every object name is composed for one workspace
+ *
+ * Nothing below addresses the bucket directly. {@link currentWorkspaceStorage}
+ * returns the only thing that can issue a command; its methods take the *stored*
+ * key and compose `w/<selfReportedWorkspaceId>/` internally. It is the only export that
+ * yields a client, and the factory behind it is deliberately private — see
+ * `workspace-scope.ts` for the hole that was, and `namespace.ts` for why the
+ * identifier is `settings.id` and not something else.
+ *
+ * The exported helpers (`uploadObject`, `getS3Object`, `deleteObject`, the two
+ * presigners) keep the signatures ~20 call sites already use and resolve the
+ * workspace themselves. Threading a workspace id through those call sites is the
+ * convention this design exists to replace: a convention survives until the next
+ * call site is added by someone who has not read this file.
+ *
+ * ## Relocating objects that predate the namespace
+ *
+ * An install that has been serving before this change holds its objects at bare
+ * keys, and composing a namespace makes them unreachable. There is deliberately
+ * **no read-time fallback to the bare key.** Under one fleet bucket a bare key
+ * is nobody's namespace, so reading it is the §3 failure exactly; and any
+ * "…except when the bucket is not shared" carve-out would have to be gated on a
+ * configuration value, which is the class of thing nobody checks and everybody
+ * eventually gets wrong. The fallback is not merely unsafe by default, it is
+ * unsafe in a way nothing in this process can detect.
+ *
+ * The relocation is instead a one-time move inside the bucket, run by the
+ * operator with the credentials they already hold, before the new build serves
+ * traffic:
+ *
+ * ```
+ * aws s3 mv s3://<bucket>/ s3://<bucket>/w/<settings.id>/ --recursive --exclude 'w/*'
+ * ```
+ *
+ * It is a server-side copy: no bytes leave the bucket, the stored keys do not
+ * change, and no content is rewritten, because the namespace appears in neither
+ * the database nor any URL. Every affected install holds exactly one workspace
+ * per bucket, so `<settings.id>` is unambiguous — `SELECT id FROM settings`.
+ *
+ * **Note what this repository must NOT grow to make that convenient.** Listing
+ * and deleting at the bucket root is correct against a bucket that holds one
+ * workspace and catastrophic against one that holds the fleet, so the app has no
+ * such capability and gains none here, not even for its own migration. The cost
+ * is that an operator who deploys without moving the objects serves 404s for
+ * pre-existing assets until they do — visible, reversible, and self-announcing,
+ * which is the opposite of what the fallback would have been.
  */
 
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import type { WorkspaceId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { sniffImageMime } from '@/lib/server/content/magic-bytes'
+import {
+  getCurrentWorkspace,
+  getWorkspaceStorageCredential,
+  requireWorkspaceScope,
+} from '@/lib/server/workspaces/workspace-context'
+import {
+  currentWorkspaceNamespace,
+  SINGLE_WORKSPACE_NAMESPACE,
+} from '@/lib/server/workspaces/workspace-keyed'
+import { composeNamespacedKey, workspaceNamespace } from './namespace'
+import { currentWorkspaceId } from './workspace-scope'
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-export interface S3Config {
+/**
+ * Bucket, endpoint and credentials together: a complete capability to address
+ * any object in the bucket.
+ *
+ * **Module-private, and that is the point.** It used to be exported, which made
+ * the one thing this design removes — an un-namespaced way to reach the bucket —
+ * an import away for any file in the app. Nothing outside this module now
+ * receives a bucket name and a credential in the same value.
+ */
+interface S3Config {
   endpoint?: string
   bucket: string
   region: string
@@ -36,33 +104,190 @@ export interface S3Config {
 }
 
 /**
- * Check if S3 storage is configured.
- * Returns true if all required environment variables are set.
+ * Where a workspace's objects live and how their URLs are formed. Deliberately
+ * carries no credentials: rendering a public asset URL must not depend on
+ * resolving a secret, so the two are split and only the paths that actually
+ * talk to storage pay for credential resolution.
  */
-export function isS3Configured(): boolean {
-  return !!(config.s3Bucket && config.s3Region && config.s3AccessKeyId && config.s3SecretAccessKey)
+interface StoragePlacement {
+  endpoint?: string
+  bucket: string
+  region: string
+  forcePathStyle: boolean
+  publicUrl?: string
+  /**
+   * Origin the `/api/storage` fallback URL is built from. Pinned to the
+   * workspace's canonical base URL, never derived from the request: contentJson
+   * stores ABSOLUTE image URLs, so an origin that followed whichever hostname
+   * the visitor happened to use would bake that hostname into stored content.
+   */
+  originUrl: string
 }
 
 /**
- * Get S3 configuration from environment variables.
- * Throws if required variables are missing.
+ * The active workspace's placement, or the process-wide one when unscoped.
+ * Returns null when storage is not configured at all.
  */
-export function getS3Config(): S3Config {
-  if (!config.s3Bucket || !config.s3Region || !config.s3AccessKeyId || !config.s3SecretAccessKey) {
-    throw new Error(
-      'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
-    )
+function getStoragePlacementOrNull(): StoragePlacement | null {
+  const workspace = getCurrentWorkspace()
+  if (workspace) {
+    const storage = workspace.storage
+    return {
+      endpoint: storage.endpoint || undefined,
+      bucket: storage.bucket,
+      region: storage.region,
+      forcePathStyle: storage.forcePathStyle,
+      publicUrl: storage.publicUrl || undefined,
+      originUrl: workspace.routing.baseUrl,
+    }
   }
-
+  if (!config.s3Bucket || !config.s3Region) return null
   return {
     endpoint: config.s3Endpoint || undefined,
     bucket: config.s3Bucket,
     region: config.s3Region,
-    accessKeyId: config.s3AccessKeyId,
-    secretAccessKey: config.s3SecretAccessKey,
     forcePathStyle: config.s3ForcePathStyle ?? true,
     publicUrl: config.s3PublicUrl || undefined,
+    originUrl: config.baseUrl,
   }
+}
+
+function getStoragePlacement(): StoragePlacement {
+  const placement = getStoragePlacementOrNull()
+  if (!placement) {
+    throw new Error(
+      'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
+    )
+  }
+  return placement
+}
+
+/** Credentials for one bucket. Never logged, never cached to disk. */
+export interface StorageCredentials {
+  accessKeyId: string
+  secretAccessKey: string
+}
+
+/** Storage is addressable but its credentials could not be resolved. */
+export class StorageUnavailableError extends Error {
+  readonly workspaceKey: string
+  constructor(workspaceKey: string, detail: string) {
+    super(`Storage is not usable for workspace ${workspaceKey}: ${detail}`)
+    this.name = 'StorageUnavailableError'
+    this.workspaceKey = workspaceKey
+  }
+}
+
+/**
+ * The active workspace's storage keys, or the process-wide ones when unscoped.
+ *
+ * Under a workspace scope these were resolved on pool checkout from the record's
+ * `storage.credentialRef` (`workspaces/workspace-secrets.ts`) and carried on the
+ * scope, which is what lets this stay synchronous — `buildPublicUrl` and every
+ * gate below are called from hundreds of places that cannot await.
+ *
+ * Read through `getWorkspaceStorageCredential()`, which yields the credential
+ * and nothing else. The scope no longer exposes a `secrets` field at all, so
+ * this module holds the storage keys and never the workspace `SECRET_KEY`, and
+ * the bucket still arrives separately from {@link getStoragePlacement}. Nothing
+ * here receives both halves in one call.
+ *
+ * When a workspace's credentials did not resolve this throws
+ * {@link StorageUnavailableError}, and it never falls back to the fleet-wide
+ * environment keys. That fallback is the specific thing this must not do: it
+ * would hand one workspace a client pointed at another workspace's bucket, holding
+ * credentials that might well open it.
+ */
+function resolveStorageCredentials(): StorageCredentials {
+  const resolved = getWorkspaceStorageCredential()
+  if (!resolved) {
+    if (!config.s3AccessKeyId || !config.s3SecretAccessKey) {
+      throw new Error(
+        'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
+      )
+    }
+    return { accessKeyId: config.s3AccessKeyId, secretAccessKey: config.s3SecretAccessKey }
+  }
+  if (resolved.ok) return resolved.credential
+  // A credential result at all means a scope is active, so the identity read is
+  // total. Asserted rather than defaulted: a placeholder workspace id in this
+  // message would be indistinguishable from a real one nobody recognises.
+  throw new StorageUnavailableError(
+    requireWorkspaceScope().workspace.workspaceKey,
+    resolved.problem
+  )
+}
+
+/**
+ * Whether a bucket can be *addressed*. Deliberately does NOT ask about
+ * credentials: `buildPublicUrl` needs a placement and nothing else, and a
+ * public asset URL must keep resolving for a workspace whose credentials this
+ * process cannot dereference.
+ */
+export function isS3Configured(): boolean {
+  if (getCurrentWorkspace()) return true
+  return !!(config.s3Bucket && config.s3Region && config.s3AccessKeyId && config.s3SecretAccessKey)
+}
+
+/**
+ * Whether an operation that actually touches the bucket can be attempted.
+ *
+ * Addressability and usability are different questions, and under pooled
+ * workspaces they diverge: a workspace record always names a bucket, so
+ * {@link isS3Configured} is true while every upload throws, because the
+ * credential reference is an `openbao+kv://` ref no resolver has been
+ * registered for.
+ *
+ * Callers that gate an upload want this one. Both of them already handle
+ * "storage is off" by skipping, so asking the addressability question there
+ * turned a clean skip into an exception.
+ */
+export function isS3Usable(): boolean {
+  if (!isS3Configured()) return false
+  // `null` is "no scope", where addressability was already the whole question.
+  const resolved = getWorkspaceStorageCredential()
+  return resolved === null || resolved.ok
+}
+
+/**
+ * Full storage configuration including credentials. Only for the paths that
+ * actually sign or send a request; use {@link getStoragePlacement} for anything
+ * that just needs to name a bucket or build a URL.
+ */
+function getS3Config(): S3Config {
+  const placement = getStoragePlacement()
+  const credentials = resolveStorageCredentials()
+  return {
+    endpoint: placement.endpoint,
+    bucket: placement.bucket,
+    region: placement.region,
+    accessKeyId: credentials.accessKeyId,
+    secretAccessKey: credentials.secretAccessKey,
+    forcePathStyle: placement.forcePathStyle,
+    publicUrl: placement.publicUrl,
+  }
+}
+
+/**
+ * The key the storage read and proxy-upload tokens are signed with.
+ *
+ * This exists so the `/api/storage` route can verify a token without being
+ * handed a bucket name and a credential pair. It asked for `getS3Config()` and
+ * used the one field, which meant a route — the surface reachable by an
+ * unauthenticated GET — held a complete capability to address any object in the
+ * bucket for the sake of an HMAC. Both of its uses take exactly this.
+ *
+ * Still the storage secret rather than a purpose-derived one: the tokens it
+ * verifies are embedded in absolute URLs already written into `contentJson`, so
+ * changing the signing key is a fleet of dead asset links rather than a
+ * rotation. The narrowing here is of who can *see* the value, not of what it is.
+ *
+ * Throws {@link StorageUnavailableError} for a workspace whose credentials did not
+ * resolve, exactly as `getS3Config()` did. Both callers gate on
+ * {@link isS3Usable} first.
+ */
+export function getStorageSigningSecret(): string {
+  return resolveStorageCredentials().secretAccessKey
 }
 
 // ============================================================================
@@ -118,9 +343,52 @@ interface PresignerModule {
   ) => Promise<string>
 }
 
+/*
+ * These two hold the SDK's own module namespace objects, not configuration or
+ * credentials — the same value the ESM loader hands every importer. They stay
+ * process-wide because partitioning them by workspace would store N references to
+ * one object and buy nothing.
+ */
 let _s3Module: S3Module | null = null
 let _presignerModule: PresignerModule | null = null
-let _s3Client: S3ClientInstance | null = null
+
+/**
+ * One client per set of connection parameters.
+ *
+ * This used to be keyed by the ambient workspace, which was correct only while a
+ * client was built and used inside one scope. It is not a property of the
+ * client: an SDK client is a signer and a connection pool built from a region,
+ * an endpoint and a credential pair, and nothing else. Keying it by *who was
+ * asking* meant a `WorkspaceStorage` captured under one scope and used under
+ * another picked up the other scope's client — its own bucket reached through
+ * somebody else's endpoint and credentials.
+ *
+ * Keyed by the parameters instead, the value is a pure function of the key, so
+ * a hit across two scopes is byte-identical to what the asking scope would have
+ * built. Under §9's one fleet credential that is one client for the fleet, which
+ * is the correct number; under per-workspace credentials the keys differ and so do
+ * the clients.
+ *
+ * The bound is a client count, not a correctness limit: eviction only costs a
+ * rebuild on the next command.
+ */
+const s3Clients = new Map<string, S3ClientInstance>()
+const MAX_S3_CLIENTS = 256
+
+/**
+ * A stable name for one set of connection parameters.
+ *
+ * The non-secret half is spelled out so a cache key is legible during an
+ * incident; the credential pair is hashed rather than embedded, because this
+ * string is a Map key that a future debug log would be all too willing to print.
+ */
+function connectionKey(cfg: S3Config): string {
+  const credential = createHash('sha256')
+    .update(`${cfg.accessKeyId}\u0000${cfg.secretAccessKey}`)
+    .digest('hex')
+    .slice(0, 16)
+  return `${cfg.region}|${cfg.endpoint ?? ''}|${cfg.forcePathStyle}|${credential}`
+}
 
 /**
  * Get the AWS S3 module singleton.
@@ -143,16 +411,20 @@ async function getPresignerModule(): Promise<PresignerModule> {
 }
 
 /**
- * Get the S3 client singleton.
- * Creates a new client on first call, reuses on subsequent calls.
+ * The S3 client for one set of connection parameters, building it on first use.
+ *
+ * Takes the config rather than resolving it, so the caller decides *when* the
+ * ambient scope was read. {@link workspaceStorage} reads it once, at
+ * construction; nothing re-reads it mid-operation.
  */
-async function getS3Client(): Promise<S3ClientInstance> {
-  if (_s3Client) return _s3Client
+async function getS3Client(s3Config: S3Config): Promise<S3ClientInstance> {
+  const key = connectionKey(s3Config)
+  const existing = s3Clients.get(key)
+  if (existing) return existing
 
-  const s3Config = getS3Config()
   const { S3Client } = await getS3Module()
 
-  _s3Client = new S3Client({
+  const client = new S3Client({
     region: s3Config.region,
     endpoint: s3Config.endpoint,
     forcePathStyle: s3Config.forcePathStyle,
@@ -161,8 +433,170 @@ async function getS3Client(): Promise<S3ClientInstance> {
       secretAccessKey: s3Config.secretAccessKey,
     },
   })
+  s3Clients.set(key, client)
+  while (s3Clients.size > MAX_S3_CLIENTS) {
+    const oldest = s3Clients.keys().next()
+    if (oldest.done) break
+    s3Clients.delete(oldest.value)
+  }
 
-  return _s3Client
+  return client
+}
+
+// ============================================================================
+// The workspace-scoped client — the only way to reach the bucket
+// ============================================================================
+
+/**
+ * Every operation this application performs on an object, for one workspace.
+ *
+ * The methods take the **stored** key — `uploads/2026/08/…`, exactly what the
+ * database holds — and compose `w/<selfReportedWorkspaceId>/` themselves. There is no method
+ * that accepts a finished object name, and no accessor that hands out the bucket
+ * with a credential, so "address something outside my namespace" is not a
+ * request that can be expressed rather than one that is checked for.
+ */
+export interface WorkspaceStorage {
+  readonly selfReportedWorkspaceId: WorkspaceId
+  /** Everything every object name this client produces begins with. */
+  readonly namespace: string
+  /**
+   * What a stored key composes to. Exposed because it is the fact worth
+   * asserting about — a caller that wants it for anything other than an
+   * assertion is reaching for the capability this type exists to withhold.
+   */
+  objectName(key: string): string
+  presignPut(key: string, contentType: string, expiresIn: number): Promise<string>
+  put(key: string, body: Buffer | Uint8Array, contentType: string): Promise<void>
+  get(key: string): Promise<S3ObjectResult>
+  presignGet(key: string, expiresIn: number, downloadName?: string): Promise<string>
+  remove(key: string): Promise<void>
+}
+
+/**
+ * A client bound to one workspace and to one set of connection parameters.
+ *
+ * **Not exported, and that is the fix for the hole this function used to be.**
+ * An earlier revision exported it and guarded it by comparing `selfReportedWorkspaceId`
+ * against the ambient scope — which skipped the comparison when there was no
+ * scope, so an unscoped caller in a pooled process could name any workspace and
+ * reach the fleet bucket with the fleet credential. The refusal that makes an
+ * unscoped access safe lives in {@link currentWorkspaceId}, and this function
+ * did not call it.
+ *
+ * A guard cannot repair that, because "no scope" is a legitimate state: it is
+ * every self-hosted install, and that path resolves correctly by reading its own
+ * `settings.id`. So the fix is to remove the choice rather than to police it —
+ * {@link currentWorkspaceStorage} is the only door, and it always resolves.
+ *
+ * Nor could the type system have carried it. `TypeId<'workspace'>` is
+ * `` `workspace_${string}` ``, a template-literal type and not a nominal brand,
+ * so `` workspaceStorage(`workspace_${req.params.ws}`) `` compiles with no cast
+ * and no error. The branded parameter is a real constraint on a *literal*
+ * mistake and no constraint at all on an interpolated one.
+ *
+ * Placement and credentials are read **once, here**, from the scope that is
+ * active at construction. They used to be re-read inside every method, so a
+ * client held across a scope boundary composed its own workspace's prefix
+ * against whichever bucket the *later* scope named — which in one shared bucket
+ * is somebody else's objects. Capturing them binds the whole client, not just
+ * its prefix, to the scope that built it.
+ */
+function workspaceStorage(selfReportedWorkspaceId: WorkspaceId): WorkspaceStorage {
+  const connection = getS3Config()
+
+  /**
+   * Compose, then verify — in one place, before the name reaches any command.
+   *
+   * Doing it here rather than at each call site is what makes traversal,
+   * absolute keys, empty keys and encoding tricks one refusal rather than five
+   * that each command has to remember. A name that fails throws; there is no
+   * branch in which a command runs against the un-namespaced key.
+   */
+  const objectName = (key: string): string => composeNamespacedKey(selfReportedWorkspaceId, key)
+
+  return {
+    selfReportedWorkspaceId,
+    namespace: workspaceNamespace(selfReportedWorkspaceId),
+    objectName,
+
+    async presignPut(key, contentType, expiresIn) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { PutObjectCommand } = await getS3Module()
+      const { getSignedUrl } = await getPresignerModule()
+      const command = new PutObjectCommand({
+        Bucket: connection.bucket,
+        Key,
+        ContentType: contentType,
+      })
+      return getSignedUrl(client, command, { expiresIn })
+    },
+
+    async put(key, body, contentType) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { PutObjectCommand } = await getS3Module()
+      await client.send(
+        new PutObjectCommand({
+          Bucket: connection.bucket,
+          Key,
+          ContentType: contentType,
+          Body: body,
+        })
+      )
+    },
+
+    async get(key) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { GetObjectCommand } = await getS3Module()
+      const response = (await client.send(
+        new GetObjectCommand({ Bucket: connection.bucket, Key })
+      )) as {
+        Body?: { transformToWebStream(): ReadableStream<Uint8Array> }
+        ContentType?: string
+      }
+      if (!response.Body) throw new Error(`S3 object not found: ${key}`)
+      return {
+        body: response.Body.transformToWebStream(),
+        contentType: response.ContentType || 'application/octet-stream',
+      }
+    },
+
+    async presignGet(key, expiresIn, downloadName) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { GetObjectCommand } = await getS3Module()
+      const { getSignedUrl } = await getPresignerModule()
+      const command = new GetObjectCommand({
+        Bucket: connection.bucket,
+        Key,
+        ...(downloadName
+          ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
+          : {}),
+      })
+      return getSignedUrl(client, command, { expiresIn })
+    },
+
+    async remove(key) {
+      const Key = objectName(key)
+      const client = await getS3Client(connection)
+      const { DeleteObjectCommand } = await getS3Module()
+      await client.send(new DeleteObjectCommand({ Bucket: connection.bucket, Key }))
+    },
+  }
+}
+
+/**
+ * The client for the workspace this call is running as.
+ *
+ * The one place the workspace id is resolved, so that the ~20 call sites below
+ * and outside this module keep taking a bare key. What an unscoped call does —
+ * and why it needs no guard of its own — is in `workspace-scope.ts`.
+ */
+export async function currentWorkspaceStorage(): Promise<WorkspaceStorage> {
+  return workspaceStorage(await currentWorkspaceId())
 }
 
 // ============================================================================
@@ -170,15 +604,19 @@ async function getS3Client(): Promise<S3ClientInstance> {
 // ============================================================================
 
 /**
- * Build a public URL for a storage key based on the S3 configuration.
+ * Build a public URL for a storage key based on the resolved placement.
  *
  * Priority:
- * 1. S3_PUBLIC_URL — explicit CDN, custom domain, or proxy URL
- * 2. BASE_URL/api/storage — presigned URL redirect (works with any bucket)
+ * 1. the placement's public URL — explicit CDN, custom domain, or proxy URL
+ * 2. <origin>/api/storage — presigned URL redirect (works with any bucket)
  *
  * The /api/storage route generates presigned GET URLs and returns a 302 redirect,
- * so it works with both public and private buckets (e.g., Railway Buckets).
- * Users who want direct endpoint URLs can set S3_PUBLIC_URL to their endpoint.
+ * so it works with both public and private buckets. Deployments that want direct
+ * endpoint URLs set S3_PUBLIC_URL to their endpoint.
+ *
+ * Which prefixes are public is fleet-wide policy, not workspace data: the set below
+ * names the key spaces this application serves without a capability token, and
+ * it means the same thing in every workspace.
  */
 const PUBLIC_STORAGE_PREFIXES = new Set([
   'assistant-avatars',
@@ -198,8 +636,30 @@ export function isPublicStorageKey(key: string): boolean {
   return PUBLIC_STORAGE_PREFIXES.has(key.split('/', 1)[0] ?? '')
 }
 
+/**
+ * The signed message binds the workspace as well as the object key.
+ *
+ * Object keys are per-bucket, so `attachments/<uuid>` names a different object
+ * in every workspace while reading identically here. If the signing secret is ever
+ * shared across workspaces — which it is whenever the fleet-wide environment keys
+ * are in play — a read token minted for one workspace would verify against
+ * another's object without the binding.
+ *
+ * The single-workspace namespace signs the historical message byte for byte:
+ * these tokens are embedded in absolute URLs stored in contentJson, so a
+ * changed message invalidates every private asset link already written.
+ */
+function workspaceBind(message: string): string {
+  const namespace = currentWorkspaceNamespace()
+  if (namespace === SINGLE_WORKSPACE_NAMESPACE) return message
+  return `t:${namespace}|${message}`
+}
+
 function storageReadSig(secret: string, key: string): string {
-  return createHmac('sha256', secret).update(`read|${key}`).digest('hex').slice(0, 32)
+  return createHmac('sha256', secret)
+    .update(workspaceBind(`read|${key}`))
+    .digest('hex')
+    .slice(0, 32)
 }
 
 /** Verify the capability attached to a private storage URL. */
@@ -213,16 +673,21 @@ export function verifyStorageReadToken(secret: string, key: string, sig: string 
   }
 }
 
-function buildPublicUrl(s3Config: S3Config, key: string): string {
-  if (s3Config.publicUrl && isPublicStorageKey(key)) {
-    return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
+function buildPublicUrl(placement: StoragePlacement, key: string): string {
+  if (placement.publicUrl && isPublicStorageKey(key)) {
+    return `${placement.publicUrl.replace(/\/$/, '')}/${key}`
   }
 
   // Private objects always pass through the application with an unforgeable
   // read capability, even when a public CDN endpoint is configured.
-  const base = `${config.baseUrl.replace(/\/$/, '')}/api/storage/${key}`
+  const base = `${placement.originUrl.replace(/\/$/, '')}/api/storage/${key}`
   if (isPublicStorageKey(key)) return base
-  return `${base}?read=${storageReadSig(s3Config.secretAccessKey, key)}`
+  // Only the private branch needs a secret, so a public asset URL still renders
+  // on a workspace whose credential reference has no resolver. The private branch
+  // cannot: minting a read capability requires the signing secret, so a workspace
+  // whose credentials are unresolvable has no URL to offer rather than a broken
+  // one. `getPublicUrlOrNull` turns that into null; `getPublicUrl` still throws.
+  return `${base}?read=${storageReadSig(resolveStorageCredentials().secretAccessKey, key)}`
 }
 
 // ============================================================================
@@ -251,25 +716,18 @@ export async function generatePresignedUploadUrl(
   contentType: string,
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
-  const s3Config = getS3Config()
-  const publicUrl = buildPublicUrl(s3Config, key)
+  // `key` stays bare in everything that leaves here: the returned `key` is what
+  // the caller stores in the database, and `publicUrl` is built from it. Only
+  // the presigned URL names the object, and only the client composes that.
+  const publicUrl = buildPublicUrl(getStoragePlacement(), key)
 
   if (config.s3Proxy) {
-    const uploadUrl = buildProxyUploadUrl(s3Config.secretAccessKey, key, contentType, expiresIn)
+    const uploadUrl = buildProxyUploadUrl(getStorageSigningSecret(), key, contentType, expiresIn)
     return { uploadUrl, publicUrl, key }
   }
 
-  const client = await getS3Client()
-  const { PutObjectCommand } = await getS3Module()
-  const { getSignedUrl } = await getPresignerModule()
-
-  const command = new PutObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-    ContentType: contentType,
-  })
-
-  const uploadUrl = await getSignedUrl(client, command, { expiresIn })
+  const storage = await currentWorkspaceStorage()
+  const uploadUrl = await storage.presignPut(key, contentType, expiresIn)
   return { uploadUrl, publicUrl, key }
 }
 
@@ -279,8 +737,10 @@ export async function generatePresignedUploadUrl(
 
 function proxyUploadSig(secret: string, key: string, contentType: string, exp: number): string {
   // truncated to 128 bits; sufficient for short-lived upload auth
+  // Workspace-bound for the same reason as the read token: the object key alone
+  // does not say which bucket the write lands in.
   return createHmac('sha256', secret)
-    .update(`${key}|${contentType}|${exp}`)
+    .update(workspaceBind(`${key}|${contentType}|${exp}`))
     .digest('hex')
     .slice(0, 32)
 }
@@ -291,10 +751,11 @@ function buildProxyUploadUrl(
   contentType: string,
   expiresIn: number
 ): string {
-  if (!config.baseUrl) throw new Error('BASE_URL must be set to use S3_PROXY upload')
+  const origin = getStoragePlacement().originUrl
+  if (!origin) throw new Error('BASE_URL must be set to use S3_PROXY upload')
   const exp = Date.now() + expiresIn * 1000
   const sig = proxyUploadSig(secret, key, contentType, exp)
-  const base = config.baseUrl.replace(/\/$/, '')
+  const base = origin.replace(/\/$/, '')
   return `${base}/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
 }
 
@@ -333,20 +794,9 @@ export async function uploadObject(
   body: Buffer | Uint8Array,
   contentType: string
 ): Promise<string> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { PutObjectCommand } = await getS3Module()
-
-  const command = new PutObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-    ContentType: contentType,
-    Body: body,
-  })
-
-  await client.send(command)
-
-  return buildPublicUrl(s3Config, key)
+  const storage = await currentWorkspaceStorage()
+  await storage.put(key, body, contentType)
+  return buildPublicUrl(getStoragePlacement(), key)
 }
 
 // ============================================================================
@@ -483,8 +933,13 @@ export async function uploadImageBuffer(
 export function getPublicUrlOrNull(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
+  // A private key needs a signature, and a workspace whose storage credentials are
+  // unresolvable cannot produce one. Returning null degrades an avatar or an
+  // attachment link; letting the throw escape would take down every page that
+  // renders one, which is a much larger blast radius for the same fault.
+  if (!isPublicStorageKey(key) && !isS3Usable()) return null
 
-  return buildPublicUrl(getS3Config(), key)
+  return buildPublicUrl(getStoragePlacement(), key)
 }
 
 /**
@@ -496,10 +951,11 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
 export function getEmailSafeUrl(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
+  if (!isPublicStorageKey(key) && !isS3Usable()) return null
 
-  const s3Config = getS3Config()
-  const storageUrl = buildPublicUrl(s3Config, key)
-  if (s3Config.publicUrl && isPublicStorageKey(key)) return storageUrl
+  const placement = getStoragePlacement()
+  const storageUrl = buildPublicUrl(placement, key)
+  if (placement.publicUrl && isPublicStorageKey(key)) return storageUrl
 
   // Force proxy mode so email clients get bytes directly (no 302 redirect)
   const url = new URL(storageUrl)
@@ -543,20 +999,8 @@ export async function generatePresignedGetUrl(
   expiresIn: number = 172800,
   downloadName?: string
 ): Promise<string> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { GetObjectCommand } = await getS3Module()
-  const { getSignedUrl } = await getPresignerModule()
-
-  const command = new GetObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-    ...(downloadName
-      ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
-      : {}),
-  })
-
-  return getSignedUrl(client, command, { expiresIn })
+  const storage = await currentWorkspaceStorage()
+  return storage.presignGet(key, expiresIn, downloadName)
 }
 
 // ============================================================================
@@ -574,28 +1018,8 @@ export interface S3ObjectResult {
  * Used when S3_PROXY is enabled to stream file bytes through the server.
  */
 export async function getS3Object(key: string): Promise<S3ObjectResult> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { GetObjectCommand } = await getS3Module()
-
-  const command = new GetObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-  })
-
-  const response = (await client.send(command)) as {
-    Body?: { transformToWebStream(): ReadableStream<Uint8Array> }
-    ContentType?: string
-  }
-
-  if (!response.Body) {
-    throw new Error(`S3 object not found: ${key}`)
-  }
-
-  return {
-    body: response.Body.transformToWebStream(),
-    contentType: response.ContentType || 'application/octet-stream',
-  }
+  const storage = await currentWorkspaceStorage()
+  return storage.get(key)
 }
 
 // ============================================================================
@@ -608,14 +1032,6 @@ export async function getS3Object(key: string): Promise<S3ObjectResult> {
  * @param key - Storage key (path within bucket) to delete
  */
 export async function deleteObject(key: string): Promise<void> {
-  const s3Config = getS3Config()
-  const client = await getS3Client()
-  const { DeleteObjectCommand } = await getS3Module()
-
-  const command = new DeleteObjectCommand({
-    Bucket: s3Config.bucket,
-    Key: key,
-  })
-
-  await client.send(command)
+  const storage = await currentWorkspaceStorage()
+  await storage.remove(key)
 }

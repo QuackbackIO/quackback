@@ -4,16 +4,18 @@ import { getThemeCookie, parsePrefersColorScheme, type Theme } from '@/lib/share
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
-import type { TenantSettings } from '@/lib/server/domains/settings'
+import type { WorkspaceSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
+import { runWithoutLogContext } from '@/lib/server/log-context'
+import { shouldRunWorkers } from '@/lib/server/process-role'
 
 const log = logger.child({ component: 'bootstrap' })
 
 export interface BootstrapData {
   baseUrl: string
   session: Session | null
-  settings: TenantSettings | null
+  settings: WorkspaceSettings | null
   userRole: Role | null
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
@@ -126,7 +128,7 @@ let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
   const [
-    { getTenantSettings },
+    { getWorkspaceSettings },
     { getRegisteredAuthProviders },
     { config },
     { getRequestHeaders, setResponseHeader },
@@ -143,22 +145,53 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // run in parallel with the settings fetch.
   const [{ session, role: userRole }, settings, registeredAuthProviders] = await Promise.all([
     getSessionAndRole(),
-    getTenantSettings(),
+    getWorkspaceSettings(),
     getRegisteredAuthProviders(),
   ])
 
-  // One-time initialization on first request
-  if (!_initialized) {
+  // One-time initialization on first request.
+  //
+  // Role-gated, and the gate is not cosmetic. Telemetry is default-on and this
+  // path had none, so a `role=web` replica walked every workspace in the registry
+  // once an hour — which is precisely what SAAS-HOSTING-STACK.md §1's
+  // scale-to-zero argument says a web replica does not do ("a QUACKBACK_ROLE=web
+  // replica runs none of them"), and what Piece 2 measured. Fixing the
+  // wrong-workspace problem by making the sweep fleet-wide widened its blast
+  // radius from one workspace's database to every workspace's, including on replicas
+  // that must stay silent to let their computes suspend.
+  //
+  // `shouldRunWorkers()` is the same predicate `startup.ts` gates the sweepers
+  // and the relay behind, so telemetry now lives on the same side of the split
+  // as the rest of the background work.
+  if (!_initialized && shouldRunWorkers()) {
     _initialized = true
 
     // Delay telemetry to let the DB connection initialize
-    setTimeout(async () => {
-      try {
-        const { startTelemetry } = await import('@/lib/server/telemetry')
-        await startTelemetry()
-      } catch {
-        // Silent failure -- telemetry must never affect the application
-      }
+    setTimeout(() => {
+      // Detached from the request that happened to arm it.
+      //
+      // AsyncLocalStorage carries the arming request's store into this timer,
+      // into `startTelemetry`, and into the hourly `setInterval` it arms — for
+      // the life of the process. Under pooled tenancy that store carries the
+      // WORKSPACE SCOPE, and `withSweepLock` fans a tick across the fleet only
+      // when no scope is active. So without this, whichever workspace rendered the
+      // pod's first page would own the fleet's telemetry forever: the hourly
+      // claim would take the lock in *its* database, no other workspace would ever
+      // be pinged, and `telemetry/instance-id.ts` would keep issuing an
+      // unlocked read-modify-write of *its* `settings.metadata` — the write
+      // SAAS-HOSTING-STACK.md §3 names as able to drop the fingerprint stamp.
+      //
+      // `_initialized` itself is fine shared: it is a once-per-process latch,
+      // and process-lifetime is exactly what it should mean. The bug was that
+      // the work it gates inherited a request's identity.
+      void runWithoutLogContext(async () => {
+        try {
+          const { startTelemetry } = await import('@/lib/server/telemetry')
+          await startTelemetry()
+        } catch {
+          // Silent failure -- telemetry must never affect the application
+        }
+      })
     }, 10_000)
   }
 

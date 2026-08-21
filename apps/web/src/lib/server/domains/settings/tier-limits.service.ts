@@ -1,4 +1,5 @@
 import { db, settings } from '@/lib/server/db'
+import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
 
 type StoredTierLimits = Partial<Omit<TierLimits, 'features'>> & {
@@ -17,7 +18,17 @@ export function mergeTierLimits(stored: StoredTierLimits | null): TierLimits {
   }
 }
 
-let cachedLimits: TierLimits | null = null
+/**
+ * Per workspace, because this is the billing ceiling.
+ *
+ * A shared entry means whichever workspace is read first sets everyone's
+ * limits: a paid plan's allowances leak to a free one, or a free plan's caps
+ * are enforced against a customer who paid to be rid of them. It is also
+ * silent — nothing errors, the wrong number is simply believed — so it can only
+ * be caught by asserting the separation directly.
+ */
+const cachedLimits = new WorkspaceKeyedCache<TierLimits>()
+const LIMITS_KEY = 'limits'
 
 /**
  * Resolve the active TierLimits for this workspace. Self-hosters with no
@@ -25,17 +36,19 @@ let cachedLimits: TierLimits | null = null
  * The cache is invalidated when the row is written.
  */
 export async function getTierLimits(): Promise<TierLimits> {
-  if (cachedLimits) return cachedLimits
+  const cached = cachedLimits.get(LIMITS_KEY)
+  if (cached) return cached
 
   const rows = await db.select({ tierLimits: settings.tierLimits }).from(settings).limit(1)
   const raw = rows[0]?.tierLimits
   const stored: StoredTierLimits | null = raw ? (JSON.parse(raw) as StoredTierLimits) : null
 
-  cachedLimits = mergeTierLimits(stored)
-  return cachedLimits
+  const limits = mergeTierLimits(stored)
+  cachedLimits.set(LIMITS_KEY, limits)
+  return limits
 }
 
-/** Invalidate the in-process cache. Call when settings.tier_limits is written. */
+/** Invalidate the active workspace's cache. Call when settings.tier_limits is written. */
 export function invalidateTierLimitsCache(): void {
-  cachedLimits = null
+  cachedLimits.delete(LIMITS_KEY)
 }

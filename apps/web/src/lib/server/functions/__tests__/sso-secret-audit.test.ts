@@ -33,7 +33,7 @@ const hoisted = vi.hoisted(() => ({
   mockRecordAuditEvent: vi.fn(),
   mockSavePlatformCredentials: vi.fn(),
   mockDeletePlatformCredentials: vi.fn(),
-  mockGetTenantSettings: vi.fn(),
+  mockGetWorkspaceSettings: vi.fn(),
   mockHasSsoClientSecret: vi.fn(),
 }))
 
@@ -79,7 +79,7 @@ vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service',
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getTenantSettings: hoisted.mockGetTenantSettings,
+  getWorkspaceSettings: hoisted.mockGetWorkspaceSettings,
   setVerifiedDomainEnforced: vi.fn(),
   listVerifiedDomains: vi.fn(),
   updateAuthConfig: vi.fn(),
@@ -123,7 +123,7 @@ beforeEach(() => {
   hoisted.mockHasSsoClientSecret.mockResolvedValue(false)
   hoisted.mockSavePlatformCredentials.mockResolvedValue(undefined)
   hoisted.mockDeletePlatformCredentials.mockResolvedValue(undefined)
-  hoisted.mockGetTenantSettings.mockResolvedValue({
+  hoisted.mockGetWorkspaceSettings.mockResolvedValue({
     authConfig: { ssoOidc: { enabled: true } },
     verifiedDomains: [],
   })
@@ -148,7 +148,7 @@ describe('clearSsoClientSecretFn audit-log wiring', () => {
   })
 
   it('records a failure event when a verified domain blocks the clear', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
+    hoisted.mockGetWorkspaceSettings.mockResolvedValue({
       authConfig: { ssoOidc: { enabled: true } },
       verifiedDomains: [
         {

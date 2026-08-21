@@ -49,7 +49,7 @@ import {
   userSegments,
   type Database,
 } from '@/lib/server/db'
-// eslint-disable-next-line no-restricted-imports -- legitimate createDb caller: this file owns the global db for its worker (see help-center-segment-gate.integration.test.ts)
+
 import { createDb } from '@quackback/db/client'
 import { createId, type ChangelogId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import { getChangelogSubscriberTargets } from '../targets'

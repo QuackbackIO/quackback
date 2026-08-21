@@ -517,7 +517,7 @@ BullMQ worker was never started under pooled tenancy either.
 **Domain events are dispatched through this queue.** `emit()` writes an
 `event-dispatch` job in the same transaction as the outbox row. The former
 relay is gone; see `events/RELAY.md`. Leftover `dispatch_owner = relay` rows
-are converted onto the job path at job-tier / scheduler start.
+are converted onto the job path when the job tier starts.
 
 ## 11. The evidence
 

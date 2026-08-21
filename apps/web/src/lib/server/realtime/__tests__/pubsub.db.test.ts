@@ -13,7 +13,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 
-// `directConnection()` reads config.databaseUrl in single-tenant mode. The real
+// `directConnection()` reads config.databaseUrl in single-workspace mode. The real
 // config schema needs these to load at all; this is the same DSN vitest.config
 // already points every suite at.
 vi.stubEnv(
@@ -25,15 +25,15 @@ vi.stubEnv('SECRET_KEY', 'test-secret-key-0123456789abcdef0123456789abcdef')
 
 import {
   ensureKvSchema,
-  withRealTenant,
-  tenantPair,
-  cleanupTenants,
+  withRealWorkspace,
+  workspacePair,
+  cleanupWorkspaces,
   closeHarness,
   testSql,
 } from '@/lib/server/kv/__tests__/harness'
 import { subscribe, publishAsync, closeSubscriber, openListenerCount } from '../pubsub'
 
-const [T, OTHER] = tenantPair()
+const [T, OTHER] = workspacePair()
 
 /** Wait for a condition, or fail loudly rather than silently timing out green. */
 async function until(predicate: () => boolean, ms = 4_000): Promise<void> {
@@ -51,18 +51,20 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeSubscriber()
-  await cleanupTenants(T, OTHER)
+  await cleanupWorkspaces(T, OTHER)
   await closeHarness()
 })
 
 describe('publish → subscribe', () => {
   it('delivers a payload to a subscriber on the logical channel it asked for', async () => {
     const seen: Array<[string, string]> = []
-    const off = await withRealTenant(T, () =>
+    const off = await withRealWorkspace(T, () =>
       subscribe(['conversation:inbox'], (c, m) => seen.push([c, m]))
     )
     try {
-      await withRealTenant(T, () => publishAsync('conversation:inbox', { kind: 'message', id: 7 }))
+      await withRealWorkspace(T, () =>
+        publishAsync('conversation:inbox', { kind: 'message', id: 7 })
+      )
       await until(() => seen.length > 0)
       expect(seen[0][0]).toBe('conversation:inbox')
       expect(JSON.parse(seen[0][1])).toEqual({ kind: 'message', id: 7 })
@@ -73,14 +75,14 @@ describe('publish → subscribe', () => {
 
   it('does not deliver a channel the subscriber did not ask for', async () => {
     const seen: string[] = []
-    const off = await withRealTenant(T, () =>
+    const off = await withRealWorkspace(T, () =>
       subscribe(['conversation:inbox'], (_c, m) => seen.push(m))
     )
     try {
-      await withRealTenant(T, () => publishAsync('conversation:other', { n: 1 }))
+      await withRealWorkspace(T, () => publishAsync('conversation:other', { n: 1 }))
       // Publish a second message the subscriber IS listening for, so "nothing
       // arrived" cannot be explained by the bus being broken.
-      await withRealTenant(T, () => publishAsync('conversation:inbox', { n: 2 }))
+      await withRealWorkspace(T, () => publishAsync('conversation:inbox', { n: 2 }))
       await until(() => seen.length > 0)
       expect(seen.map((m) => JSON.parse(m))).toEqual([{ n: 2 }])
     } finally {
@@ -93,14 +95,14 @@ describe('publish → subscribe', () => {
     // exceed it. Dropping it would be a message the agent never sees.
     const body = 'x'.repeat(40_000)
     const seen: string[] = []
-    const off = await withRealTenant(T, () => subscribe(['big'], (_c, m) => seen.push(m)))
+    const off = await withRealWorkspace(T, () => subscribe(['big'], (_c, m) => seen.push(m)))
     try {
-      await withRealTenant(T, () => publishAsync('big', { body }))
+      await withRealWorkspace(T, () => publishAsync('big', { body }))
       await until(() => seen.length > 0)
       expect(JSON.parse(seen[0])).toEqual({ body })
       // And it spilled to a row rather than being truncated.
       const rows = await testSql()<{ n: string }[]>`
-        SELECT count(*)::text AS n FROM realtime_overflow WHERE tenant_id = ${T}
+        SELECT count(*)::text AS n FROM realtime_overflow WHERE workspace_key = ${T}
       `
       expect(rows[0].n).toBe('1')
     } finally {
@@ -118,12 +120,12 @@ describe('publish → subscribe', () => {
 })
 
 describe('connection lifecycle', () => {
-  it('opens one connection for a tenant and closes it when the last subscriber leaves', async () => {
+  it('opens one connection for a workspace and closes it when the last subscriber leaves', async () => {
     await closeSubscriber()
     expect(openListenerCount()).toBe(0)
 
-    const offA = await withRealTenant(T, () => subscribe(['a'], () => {}))
-    const offB = await withRealTenant(T, () => subscribe(['b'], () => {}))
+    const offA = await withRealWorkspace(T, () => subscribe(['a'], () => {}))
+    const offB = await withRealWorkspace(T, () => subscribe(['b'], () => {}))
     expect(openListenerCount()).toBe(1)
 
     await offA()
@@ -132,10 +134,10 @@ describe('connection lifecycle', () => {
     expect(openListenerCount()).toBe(0)
   })
 
-  it('two tenants get two connections, not one shared bus', async () => {
+  it('two workspaces get two connections, not one shared bus', async () => {
     await closeSubscriber()
-    const off1 = await withRealTenant(T, () => subscribe(['x'], () => {}))
-    const off2 = await withRealTenant(OTHER, () => subscribe(['x'], () => {}))
+    const off1 = await withRealWorkspace(T, () => subscribe(['x'], () => {}))
+    const off2 = await withRealWorkspace(OTHER, () => subscribe(['x'], () => {}))
     try {
       expect(openListenerCount()).toBe(2)
     } finally {
@@ -144,16 +146,16 @@ describe('connection lifecycle', () => {
     }
   })
 
-  it('a subscriber only receives messages published inside its own tenant scope', async () => {
+  it('a subscriber only receives messages published inside its own workspace scope', async () => {
     await closeSubscriber()
     const mine: string[] = []
     const theirs: string[] = []
-    const offMine = await withRealTenant(T, () => subscribe(['shared'], (_c, m) => mine.push(m)))
-    const offTheirs = await withRealTenant(OTHER, () =>
+    const offMine = await withRealWorkspace(T, () => subscribe(['shared'], (_c, m) => mine.push(m)))
+    const offTheirs = await withRealWorkspace(OTHER, () =>
       subscribe(['shared'], (_c, m) => theirs.push(m))
     )
     try {
-      await withRealTenant(T, () => publishAsync('shared', { from: 'T' }))
+      await withRealWorkspace(T, () => publishAsync('shared', { from: 'T' }))
       await until(() => mine.length > 0)
       // Give the other side the same wall-clock chance to receive it.
       await new Promise((r) => setTimeout(r, 300))
@@ -161,7 +163,7 @@ describe('connection lifecycle', () => {
       expect(theirs).toEqual([])
 
       // And the reverse direction, so this is not an artefact of write order.
-      await withRealTenant(OTHER, () => publishAsync('shared', { from: 'OTHER' }))
+      await withRealWorkspace(OTHER, () => publishAsync('shared', { from: 'OTHER' }))
       await until(() => theirs.length > 0)
       await new Promise((r) => setTimeout(r, 300))
       expect(theirs.map((m) => JSON.parse(m))).toEqual([{ from: 'OTHER' }])

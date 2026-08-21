@@ -2,7 +2,7 @@
  * Real-Postgres harness for the KV / presence / realtime suites.
  *
  * These substrates replaced Redis, and the properties that matter about them —
- * atomicity under concurrency, TTL semantics, and tenant separation — are
+ * atomicity under concurrency, TTL semantics, and workspace separation — are
  * properties of *statements executing against a real server*. A fake `db` would
  * let every one of these suites pass while the shipped SQL was wrong, which is
  * exactly the shape this run has caught nineteen times.
@@ -19,10 +19,16 @@ import postgres from 'postgres'
 // The lint rule reserves @quackback/db/client for db.ts; test fixtures that
 // need their own short-lived connection are sanctioned callers, same as
 // db-test-fixture.ts and jobs/__tests__/harness.ts.
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import { createDbFromSql, type Database } from '@quackback/db/client'
-import { createTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
-import { makeTenantDescriptor, makeTenantSecrets } from '@/lib/server/__tests__/tenant-scope'
+import {
+  createWorkspaceScope,
+  runWithWorkspaceScope,
+} from '@/lib/server/workspaces/workspace-context'
+import {
+  makeWorkspaceDescriptor,
+  makeWorkspaceSecrets,
+} from '@/lib/server/__tests__/workspace-scope'
 
 const URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback_test'
@@ -66,19 +72,19 @@ export async function ensureKvSchema(): Promise<void> {
 }
 
 /**
- * Run `fn` with `tenantId` as the ambient tenant AND a real database handle in
+ * Run `fn` with `workspaceKey` as the ambient workspace AND a real database handle in
  * the scope, so `db` inside the code under test reaches Postgres.
  *
- * Deliberately not `__tests__/tenant-scope.ts`'s `withTenant`, which stubs the
+ * Deliberately not `__tests__/workspace-scope.ts`'s `withWorkspace`, which stubs the
  * handles: these suites exist to observe what the statements do.
  */
-export function withRealTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
-  return runWithTenantScope(
-    createTenantScope({
-      tenant: makeTenantDescriptor(tenantId),
+export function withRealWorkspace<T>(workspaceKey: string, fn: () => Promise<T>): Promise<T> {
+  return runWithWorkspaceScope(
+    createWorkspaceScope({
+      workspace: makeWorkspaceDescriptor(workspaceKey),
       db: testDb(),
       sql: testSql() as never,
-      secrets: makeTenantSecrets(tenantId),
+      secrets: makeWorkspaceSecrets(workspaceKey),
       origin: 'test',
     }),
     fn
@@ -90,21 +96,21 @@ export function uniqueKey(prefix: string): string {
   return `${prefix}:${randomUUID()}`
 }
 
-/** Two tenant ids for one test, distinct and unique across concurrent runs. */
-export function tenantPair(): [string, string] {
+/** Two workspace ids for one test, distinct and unique across concurrent runs. */
+export function workspacePair(): [string, string] {
   const run = randomUUID().slice(0, 8)
   return [`kvt-a-${run}`, `kvt-b-${run}`]
 }
 
-/** Remove everything this test wrote, by tenant id. Never by table. */
-export async function cleanupTenants(...tenantIds: string[]): Promise<void> {
+/** Remove everything this test wrote, by workspace id. Never by table. */
+export async function cleanupWorkspaces(...workspaceKeys: string[]): Promise<void> {
   const sql = testSql()
-  for (const t of tenantIds) {
-    await sql`DELETE FROM kv_store WHERE tenant_id = ${t}`
-    await sql`DELETE FROM rate_bucket WHERE tenant_id = ${t}`
-    await sql`DELETE FROM kv_set_member WHERE tenant_id = ${t}`
-    await sql`DELETE FROM presence_stream WHERE tenant_id = ${t}`
-    await sql`DELETE FROM realtime_overflow WHERE tenant_id = ${t}`
+  for (const t of workspaceKeys) {
+    await sql`DELETE FROM kv_store WHERE workspace_key = ${t}`
+    await sql`DELETE FROM rate_bucket WHERE workspace_key = ${t}`
+    await sql`DELETE FROM kv_set_member WHERE workspace_key = ${t}`
+    await sql`DELETE FROM presence_stream WHERE workspace_key = ${t}`
+    await sql`DELETE FROM realtime_overflow WHERE workspace_key = ${t}`
   }
 }
 
