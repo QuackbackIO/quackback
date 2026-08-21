@@ -35,7 +35,7 @@ vi.mock('@/lib/server/utils/rate-bucket', () => ({
 
 import { auth } from '@/lib/server/auth'
 import { db } from '@/lib/server/db'
-import { isS3Usable, uploadObject } from '@/lib/server/storage/s3'
+import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
 import { handlePortalUpload } from '../upload'
 
 function makeRequest(file?: File, headers?: Record<string, string>): Request {
@@ -58,7 +58,7 @@ const anonymousPrincipal = mockPrincipal({ type: 'anonymous' })
 describe('POST /api/portal/upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(isS3Usable).mockReturnValue(true)
+    vi.mocked(isS3Configured).mockReturnValue(true)
   })
 
   it('returns 401 when no session', async () => {
@@ -79,7 +79,7 @@ describe('POST /api/portal/upload', () => {
   it('returns 503 when S3 is not configured', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
-    vi.mocked(isS3Usable).mockReturnValue(false)
+    vi.mocked(isS3Configured).mockReturnValue(false)
     const res = await handlePortalUpload({ request: makeRequest() })
     expect(res.status).toBe(503)
   })

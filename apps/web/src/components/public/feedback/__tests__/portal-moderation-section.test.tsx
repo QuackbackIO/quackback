@@ -78,7 +78,7 @@ describe('PortalModerationSection — render gate', () => {
   it('renders the banner for a post.approve holder without duplicating the post as a card', async () => {
     mockList.mockResolvedValue(PENDING)
     renderSection(true)
-    expect(await screen.findByText(/waiting for review/i)).toBeInTheDocument()
+    expect(await screen.findByText(/waiting for approval/i)).toBeInTheDocument()
     expect(screen.queryByText('Dark mode please')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /open queue/i })).toBeInTheDocument()
   })

@@ -339,19 +339,6 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
-    // Daily demotion safety net: re-ask both authorities about every
-    // customer-owned sending domain. Same cronEnabled shape as email-imap
-    // is unnecessary here — the sweep no-ops when nothing is configured,
-    // and a daily empty pass is cheaper than a gate query.
-    name: 'sending-domain-recheck',
-    cron: '0 6 * * *',
-    maxAttempts: 3,
-    handler: () =>
-      import('@/lib/server/domains/channel-accounts/sending-domain-recheck-queue').then(
-        (m) => m.runSendingDomainRecheck
-      ),
-  },
-  {
     // Was `{workflow-dispatch}`. `concurrency: 1` is a deliberate global FIFO,
     // not a throughput default — two events on one conversation (a reply then
     // a close) are two jobs, and only a serial queue keeps their dispatch in
