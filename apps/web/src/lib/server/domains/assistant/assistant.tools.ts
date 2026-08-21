@@ -69,8 +69,9 @@ export type ToolExecutionMode = 'autonomous' | 'propose' | 'simulate'
 /**
  * Resolve a spec's execution branch for this turn from its risk class and the
  * turn's write policy (`ctx.writeToolPolicy`, selected from the role policy).
- * There is no saved per-tool configuration: end-user-triggered write tools
- * execute autonomously, with no approval step.
+ * Built-in write tools also honor the per-agent dial this harvest adds
+ * (`allow` / `ask` / `deny` on `config.agents.*.toolRules`). An absent key
+ * leaves the turn's role policy deciding, which is the pre-dial behavior.
  *
  * - Control tools are agent-protocol primitives: always autonomous, on every
  *   deployment (the model must express handoff/inability as tool calls).

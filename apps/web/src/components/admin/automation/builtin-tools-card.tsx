@@ -64,7 +64,7 @@ export function BuiltInToolsCard({ agent }: { agent: AssistantAgentKind }) {
   if (settingsQuery.isPending || toolsQuery.isPending) return null
 
   const revision = settingsQuery.data.revision
-  const rules = settingsQuery.data.config.agents[agent].toolRules ?? {}
+  const rules = settingsQuery.data.config.agents[agent].toolRules
   const writeTools = toolsQuery.data.filter((tool) => tool.risk === 'write')
   const hasExplicitRules = Object.keys(rules).length > 0
 
@@ -100,7 +100,7 @@ export function BuiltInToolsCard({ agent }: { agent: AssistantAgentKind }) {
       description={intl.formatMessage({
         id: 'automation.builtinTools.description',
         defaultMessage:
-          'What each built-in write tool may do on this agent. Never removes the tool from its turns entirely.',
+          'What each built-in write tool may do on this agent. "Never" removes the tool from its turns entirely.',
       })}
       action={
         hasExplicitRules ? (

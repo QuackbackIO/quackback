@@ -47,7 +47,11 @@ import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from './citation
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { TICKET_TYPES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
-import { DEFAULT_ASSISTANT_CONFIG, type AssistantRole } from '@/lib/shared/assistant/config'
+import {
+  DEFAULT_ASSISTANT_CONFIG,
+  type AssistantRole,
+  type AssistantToolRules,
+} from '@/lib/shared/assistant/config'
 import { SKILL_LOADS_PER_TURN } from '@/lib/shared/assistant/skills'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
@@ -1496,7 +1500,7 @@ export function getToolSpecByName(name: string): AssistantToolSpec | null {
  */
 export function applyBuiltInToolRules(
   specs: readonly AssistantToolSpec[],
-  toolRules: Readonly<Record<string, 'allow' | 'ask' | 'deny'>> | undefined
+  toolRules: Readonly<AssistantToolRules> | undefined
 ): AssistantToolSpec[] {
   if (!toolRules || Object.keys(toolRules).length === 0) return [...specs]
   const out: AssistantToolSpec[] = []
