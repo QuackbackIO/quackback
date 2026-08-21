@@ -1,5 +1,19 @@
 # First-customer Loop Progress
 
+## 2026-08-21 — workspace list looks visitable
+
+Customer-visible CP dashboard polish. Live rows are Slack-style
+visits (avatar, pointer cursor, hover, Visit workspace). Suspended
+and deleted rows stay listed but are not a door.
+
+- CP `b088efa` on `saas`. Tests: `one-screen.test.tsx` 13/13.
+- `railway up` control-plane `37996878` **SUCCESS**
+  `sha256:0207a11c…` `us-east4-eqdc4a` only.
+- Live: `/dashboard` 307 `/login`; `/login` 200. Hydrated chunk
+  `dashboard.index-96QjSxES.js` contains `Visit workspace` and
+  `cursor-pointer`. Did not sign in this fire (no critic mailbox).
+- Unrelated CP schema/runbook WIP left uncommitted.
+
 ## 2026-08-17 — auth on every registered workspace host
 
 Signing in on `walk-cd.mortondev.com` returned Better Auth
