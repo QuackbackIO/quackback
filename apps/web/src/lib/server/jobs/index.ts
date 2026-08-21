@@ -20,7 +20,6 @@ export {
   jobWorkerId,
   pruneTerminalJobs,
   reapExpiredLeases,
-  JobQueueMissingError,
   type ClaimedJob,
   type EnqueueJobInput,
   type EnqueueJobResult,

@@ -31,9 +31,6 @@ import { sql } from 'drizzle-orm'
 export const JOB_STATUSES = ['pending', 'running', 'succeeded', 'failed'] as const
 export type JobStatus = (typeof JOB_STATUSES)[number]
 
-/** A job is finished, for better or worse, in these states. */
-export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ['succeeded', 'failed']
-
 export const jobQueue = pgTable(
   'job_queue',
   {

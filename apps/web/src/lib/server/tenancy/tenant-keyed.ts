@@ -45,19 +45,6 @@ export function currentTenantNamespace(): string {
 }
 
 /**
- * Namespace an external key (a shared store, a channel, a lock name) by tenant.
- *
- * `tenantKey('settings:tenant')` → `t:<tenantId>:settings:tenant`.
- *
- * The `t:` marker is deliberate: a key in a shared store has to be readable by
- * a human during an incident, and "which tenant is this" must not require
- * knowing the id format.
- */
-export function tenantKey(key: string): string {
-  return `t:${currentTenantNamespace()}:${key}`
-}
-
-/**
  * A bounded, tenant-partitioned map.
  *
  * Bounded because the maps this replaces are not: `magicLinkStash` and friends
@@ -73,12 +60,9 @@ export class TenantKeyedCache<V> {
   /**
    * The namespace/key separator, named once.
    *
-   * It was spelled inline in three methods, and two of them said `\u0000` while
-   * `tenantKeys()` said a space -- so `tenantKeys()` matched nothing, the
-   * relay's retry-ledger prune silently stopped pruning, and the test covering
-   * it asserted a negative that held either way. A literal three methods must
-   * agree on is a drift waiting to happen; there is now one spelling, and
-   * `prefix()` is the only thing that builds from it.
+   * It was spelled inline in several methods. A literal they must agree on
+   * is a drift waiting to happen; there is now one spelling, and `prefix()`
+   * is the only thing that builds from it.
    *
    * NUL because it cannot occur in a tenant id or in any key composed here, so
    * no two (namespace, key) pairs can compose to the same string. Written as an
@@ -136,15 +120,6 @@ export class TenantKeyedCache<V> {
    * Iterating `entries` directly is what a caller would otherwise reach for,
    * and that walks every tenant.
    */
-  tenantKeys(): string[] {
-    const prefix = this.prefix()
-    const out: string[] = []
-    for (const key of this.entries.keys()) {
-      if (key.startsWith(prefix)) out.push(key.slice(prefix.length))
-    }
-    return out
-  }
-
   /** Forget everything for the active tenant. */
   clearTenant(): void {
     const prefix = this.prefix()

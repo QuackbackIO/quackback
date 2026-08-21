@@ -46,18 +46,6 @@ import { sql, type SQL } from 'drizzle-orm'
 export const REAP_REQUEUED_REASON = 'lease expired; requeued (attempt '
 export const REAP_TERMINAL_REASON = 'lease expired with no attempts remaining; not retried'
 
-export interface LeaseClaimInput {
-  /** Table holding the leased rows. A module constant, never input. */
-  table: string
-  limit: number
-  /** How long the claim holds the row before the reaper may take it back. */
-  leaseMs: number
-  /** Stable per-process identity, written to `locked_by`. */
-  workerId: string
-  /** Columns to return, qualified with the `j` alias. */
-  returning: SQL
-}
-
 export interface LeaseClaimGroupInput {
   /** Table holding the leased rows. A module constant, never input. */
   table: string

@@ -24,7 +24,9 @@ import { runWithLogContext } from '@/lib/server/log-context'
  * completion line for healthy probes only — an unhealthy probe (status >= 400)
  * or a thrown error is still logged, since those are the signal we care about.
  */
-const HEALTH_PATH = '/api/health'
+function isHealthPath(pathname: string): boolean {
+  return pathname === '/api/health' || pathname.startsWith('/api/health/')
+}
 
 function deriveRequestId(request: Request): string {
   const header = request.headers.get('x-request-id') ?? request.headers.get('x-correlation-id')
@@ -82,9 +84,9 @@ export async function handleRequestWithContext<T extends NextResult>({
         // via the logged request_id.
       }
       const status = response?.status
-      // Suppress the completion line for successful health probes (see
-      // HEALTH_PATH). Everything else — and unhealthy probes — still logs.
-      if (!(pathname === HEALTH_PATH && status !== undefined && status < 400)) {
+      // Suppress the completion line for successful health probes. Everything
+      // else — and unhealthy probes — still logs.
+      if (!(isHealthPath(pathname) && status !== undefined && status < 400)) {
         log.info({ status, duration_ms: durationMs }, 'request completed')
       }
       return result

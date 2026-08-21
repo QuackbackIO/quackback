@@ -92,18 +92,21 @@ describe('handleRequestWithContext', () => {
     expect(cap.records().some((r) => r.msg === 'request failed')).toBe(false)
   })
 
-  it('does NOT log completion for a healthy /api/health probe', async () => {
-    const cap = capture()
-    const request = new Request('http://localhost/api/health')
+  it.each(['/api/health', '/api/health/live', '/api/health/ready'])(
+    'does NOT log completion for a healthy %s probe',
+    async (path) => {
+      const cap = capture()
+      const request = new Request(`http://localhost${path}`)
 
-    await handleRequestWithContext({
-      request,
-      log: cap.log,
-      next: async () => ({ response: new Response('ok', { status: 200 }) }),
-    })
+      await handleRequestWithContext({
+        request,
+        log: cap.log,
+        next: async () => ({ response: new Response('ok', { status: 200 }) }),
+      })
 
-    expect(cap.records().find((r) => r.msg === 'request completed')).toBeUndefined()
-  })
+      expect(cap.records().find((r) => r.msg === 'request completed')).toBeUndefined()
+    }
+  )
 
   it('still logs /api/health when the probe is unhealthy (status >= 400)', async () => {
     const cap = capture()

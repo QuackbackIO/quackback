@@ -94,17 +94,6 @@ const TABLE = 'job_queue'
 /** Postgres `undefined_table`. The tenant has not run migration 0250 yet. */
 export const UNDEFINED_TABLE = '42P01'
 
-export class JobQueueMissingError extends Error {
-  constructor() {
-    super(
-      'job_queue does not exist in this database. Migration 0250 has not been applied here; ' +
-        'the queue tier skips this tenant rather than crash-looping (the expand migration ' +
-        'lands before the code that reads it).'
-    )
-    this.name = 'JobQueueMissingError'
-  }
-}
-
 /** True when an error is Postgres complaining that `job_queue` is absent. */
 export function isMissingJobQueue(err: unknown): boolean {
   return hasPgErrorCode(err, UNDEFINED_TABLE)
@@ -184,11 +173,6 @@ let workerIdMemo: string | null = null
 export function jobWorkerId(): string {
   if (!workerIdMemo) workerIdMemo = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`
   return workerIdMemo
-}
-
-/** Test seam — a fresh identity makes two in-process runners distinguishable. */
-export function __resetJobWorkerIdForTests(): void {
-  workerIdMemo = null
 }
 
 function currentTenantId(): string | null {
