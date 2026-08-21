@@ -8,7 +8,7 @@
  * an `audit_log` row in the same transaction when the definition opts in, and
  * inserts an `event-dispatch` job_queue row in that same transaction. The
  * job_queue trigger NOTIFYs on commit. Leftover unpublished rows may still
- * carry `dispatch_owner = relay`; job-tier / scheduler start converts them.
+ * carry `dispatch_owner = relay`; job-worker / scheduler start converts them.
  */
 import { db, events, auditLog, type Database, type Transaction } from '@/lib/server/db'
 import { createId, type EvtId } from '@quackback/ids'
@@ -36,7 +36,7 @@ export interface EmitInput<P> {
 
 /**
  * Validate + persist one event on the caller's transaction, then signal the
- * job tier after commit. Returns the new event's TypeID.
+ * job worker after commit. Returns the new event's TypeID.
  */
 export async function emit<P>(
   tx: DbOrTx,

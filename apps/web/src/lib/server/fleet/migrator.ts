@@ -702,7 +702,7 @@ export interface ReconcilePassResult {
  *
  * Claims through the lease, so two migrator replicas take disjoint workspaces and a
  * killed one is reclaimed by the reaper rather than blocking the rollout. The
- * reaper runs first for the same reason the job tier runs it on a timer: an
+ * reaper runs first for the same reason the job worker runs it on a timer: an
  * expired lease is the commonest thing standing between a resumed rollout and a
  * stalled one.
  */

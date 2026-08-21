@@ -616,6 +616,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the moment that promise settles, so it can never outlive the entry it is standing in for.',
   },
   {
+    file: 'apps/web/src/lib/server/telemetry/index.ts',
+    name: 'started',
+    category: 'process-lifetime',
+    reason:
+      'Once-per-process latch so startTelemetry() from the worker boot path and from bootstrap.ts ' +
+      'on the first page cannot arm two hourly intervals. The ping itself is already ' +
+      'cross-replica-deduped by withSweepLock; this only stops a second timer in the same process.',
+  },
+  {
     file: 'apps/web/src/lib/server/startup.ts',
     name: '_logged',
     category: 'process-lifetime',
@@ -662,15 +671,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'workspace data; the worst a wrong value does is repeat or delay one report.',
   },
   {
-    file: 'apps/web/src/lib/server/workspaces/idle.ts',
-    name: 'subscribers',
-    category: 'process-lifetime',
-    reason:
-      'The in-process workspace-activity listeners — the two tiers, registered once at boot. The workspace ' +
-      'is an ARGUMENT to each callback rather than state held here, so there is nothing keyed and ' +
-      'nothing to leak across workspaces.',
-  },
-  {
     file: 'apps/web/src/lib/server/jobs/deadlines.ts',
     name: 'providers',
     category: 'process-lifetime',
@@ -678,31 +678,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Queue name to deadline function, registered at module load before any workspace scope is open. ' +
       "The functions are pure code; every call runs inside the caller's scope and reads that " +
       "workspace's own database, so the ambient scope supplies the workspace rather than this map.",
-  },
-  {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
-    name: 'lastFleetReadAt',
-    category: 'fleet-wide',
-    reason:
-      "When this process last read the FLEET's workspace list from the control database. Fleet-wide by " +
-      'definition — it is about the one shared registry, not about any workspace. It exists so an idle ' +
-      'fleet stops re-reading a control database that is trying to suspend.',
-  },
-  {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
-    name: 'unsubscribeActivity',
-    category: 'process-lifetime',
-    reason:
-      "The job tier's handle for detaching its activity listener at shutdown. One closure per " +
-      'process, carrying no workspace.',
-  },
-  {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
-    name: 'unsubscribeCommit',
-    category: 'process-lifetime',
-    reason:
-      "The job tier's handle for detaching its after-commit listener at shutdown. One closure per " +
-      'process, carrying no workspace.',
   },
   {
     file: 'apps/web/src/lib/server/workspaces/registry.ts',
@@ -841,7 +816,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'a second .exec() site, or an await inside that loop, is a visible diff.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'loops',
     category: 'workspace-scoped-key',
     keyedBy: 'workspace.workspaceKey',
@@ -850,11 +825,11 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'One drain loop per workspace, keyed by workspace id, each pass wrapped in ' +
       'withWorkspaceScopeById(...) so a handler always runs inside the scope of the workspace whose ' +
       'row it claimed. The per-workspace partition IS the design here rather than a retrofit - ' +
-      'this is the pooled-safe job tier that replaced the BullMQ workers whose run loops ' +
+      'this is the pooled-safe job worker that replaced the BullMQ workers whose run loops ' +
       'inherited whichever request armed them.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'stats',
     category: 'workspace-scoped-key',
     keyedBy: 'opts.workspaceKey',
@@ -865,16 +840,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'would be reported as another s, which is the kind of wrong number an operator acts on.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'running',
     category: 'process-lifetime',
     owner: 'Piece 6 (saas/queue-lease)',
     reason:
-      'Start-once latch for the job tier. Holds a boolean that is a fact about this process, ' +
-      'and startJobTier() returns early on it so a second call cannot double-start the loops.',
+      'Start-once latch for the job worker. Holds a boolean that is a fact about this process, ' +
+      'and startJobWorker() returns early on it so a second call cannot double-start the loops.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'refreshTimer',
     category: 'process-lifetime',
     owner: 'Piece 6 (saas/queue-lease)',
@@ -975,16 +950,6 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'The process-level list of after-commit listeners (the job scheduler). Not workspace data: ' +
       'each sink is a function this replica registered at start. A second workspace hitting the ' +
       'same list is the point — one scheduler serves every workspace.',
-  },
-  {
-    file: 'apps/web/src/lib/server/jobs/scheduler.ts',
-    name: 'processScheduler',
-    category: 'process-lifetime',
-    reason:
-      'The one in-process deadline scheduler for this replica. It holds no tenant connection; ' +
-      'the heap is keyed by workspaceKey so two workspaces cannot share a timer generation. A ' +
-      'cross-workspace hit on this binding would mean two schedulers, which is what the latch ' +
-      'prevents.',
   },
   {
     file: 'apps/web/src/lib/server/domains/channels/registry.ts',

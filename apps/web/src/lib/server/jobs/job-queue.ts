@@ -116,7 +116,7 @@ export function isMissingJobQueue(err: unknown): boolean {
 /**
  * The earliest instant this workspace's queue has work waiting for.
  *
- * Read by the tier on the connection it is **about to drop**, which is the point
+ * Read by the job worker on the connection it is **about to drop**, which is the point
  * of it: a tier that goes idle has to know when to come back, and the only
  * honest answer is the one the database gives before the lights go out. Without
  * this a delayed job — a hook retry five minutes out, a scheduled publish —
@@ -514,10 +514,11 @@ export async function claimJobs(input: ClaimJobsInput): Promise<ClaimedJob[]> {
       // exists to make impossible.
       log.error(
         {
-          jobId: job.jobId,
+          event: 'job.refused',
+          job_id: job.jobId,
           queue: job.queue,
-          rowWorkspaceKey: job.workspaceKey,
-          scopeWorkspaceKey: expected,
+          row_workspace_key: job.workspaceKey,
+          scope_workspace_key: expected,
         },
         'job REFUSED: row workspace does not match the workspace scope that claimed it'
       )
@@ -614,29 +615,24 @@ export async function reapExpiredLeases(): Promise<ReapResult> {
   }>(result)
 
   const out: ReapResult = { requeued: 0, terminated: 0 }
+  const workspace_key = currentWorkspaceKey()
   for (const row of rows) {
+    const fields = {
+      event: 'job.lease_expired' as const,
+      workspace_key,
+      job_id: row.job_id,
+      queue: row.queue,
+      attempt: row.attempts,
+      max_attempts: row.max_attempts,
+      lost_by: row.locked_by,
+    }
     if (row.status === 'pending') {
       out.requeued += 1
-      log.warn(
-        {
-          jobId: row.job_id,
-          queue: row.queue,
-          attempts: row.attempts,
-          maxAttempts: row.max_attempts,
-          lostBy: row.locked_by,
-        },
-        'expired lease requeued'
-      )
+      log.warn({ ...fields, outcome: 'requeued' }, 'expired lease requeued')
     } else {
       out.terminated += 1
       log.error(
-        {
-          jobId: row.job_id,
-          queue: row.queue,
-          attempts: row.attempts,
-          maxAttempts: row.max_attempts,
-          lostBy: row.locked_by,
-        },
+        { ...fields, outcome: 'terminated' },
         'expired lease on a job with no attempts remaining — failed terminally, NOT retried'
       )
     }

@@ -99,7 +99,7 @@ describe('at-most-once is stated at the enqueue site too', () => {
     expect(rows[0].max_attempts).toBe(1)
   })
 
-  it('and on the definitions the tier reads', () => {
+  it('and on the definitions the job worker reads', () => {
     expect(maxAttemptsFor(findJobDefinition(IMPORT_QUEUE)!)).toBe(1)
     expect(maxAttemptsFor(findJobDefinition(EXPORT_QUEUE)!)).toBe(1)
   })

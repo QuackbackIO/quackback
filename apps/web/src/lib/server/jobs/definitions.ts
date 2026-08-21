@@ -3,14 +3,14 @@
  * and its retry policy.
  *
  * One list drives boot, drain and the readiness payload, so a queue cannot exist
- * that the tier does not know how to run or stop. Definitions are declared as
+ * that the job worker does not know how to run or stop. Definitions are declared as
  * data rather than discovered, and `noRetry` is expressed here rather than at
  * each enqueue site so the property that matters most — `import` and `export`
  * run at most once — is visible in one screen instead of inferred from call
  * sites.
  *
  * Handlers are dynamic imports so the underlying domain modules stay lazy until
- * the tier actually runs.
+ * the job worker actually runs.
  */
 import { HOOK_RETRY_ATTEMPTS, hookRetryDelayMs } from '@/lib/server/events/retry-schedule'
 import type { ClaimedJob } from './job-queue'
@@ -67,11 +67,11 @@ export interface JobDefinition {
    * How many jobs from this queue may run at once, in this process.
    *
    * This is the reference's per-`Worker` `concurrency`, and it is the reason
-   * the tier runs a bounded pool rather than a serial drain — see runner.ts.
+   * the job worker runs a bounded pool rather than a serial drain — see runner.ts.
    * `workflow-dispatch` pins 1 deliberately: it is a global FIFO.
    */
   concurrency?: number
-  /** How long succeeded rows are kept. Defaults to the tier-wide setting. */
+  /** How long succeeded rows are kept. Defaults to the process-wide setting. */
   retentionMs?: number
   /**
    * How long failed rows are kept. Defaults to `retentionMs`.
@@ -414,7 +414,7 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
 
 let overrides: readonly JobDefinition[] | null = null
 
-/** The definitions the tier will run. */
+/** The definitions the job worker will run. */
 export function jobDefinitions(): readonly JobDefinition[] {
   return overrides ?? JOB_DEFINITIONS
 }

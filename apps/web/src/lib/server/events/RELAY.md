@@ -28,7 +28,7 @@ See `jobs/JOBS.md` for the remaining always-warm tier.
 
 - **`dispatch_owner`** remains on `events`. New rows default to `'job'`.
   Leftover unpublished `'relay'` rows are converted onto the job path at
-  job-tier / scheduler start (`convertRelayOwnedEvents`) and then drained
+  job-worker / scheduler start (`convertRelayOwnedEvents`) and then drained
   like any other `event-dispatch` job. The column stays for one more soak;
   it is not a feature flag.
 - **`outbox_relay_leader`** (migration 0256) stays in the schema for
@@ -46,4 +46,4 @@ See `jobs/JOBS.md` for the remaining always-warm tier.
 - Relay readiness fields (`relayRunning`, `relayLoops`, `relayAttached`)
 - Relay startup from `startup.ts` and the internal wake route
 
-Self-host `QUACKBACK_ROLE=all` starts the job tier only.
+Self-host `QUACKBACK_ROLE=all` starts the job worker only.

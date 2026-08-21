@@ -165,7 +165,7 @@ slot spendable exactly once, decided by the database rather than by a lock.
 
 Two properties follow, and both match what the repeatable jobs did:
 
-- **No backfill.** A tier down for three hours runs an hourly sweep once on
+- **No backfill.** A worker down for three hours runs an hourly sweep once on
   restart, not three times.
 - **No duplicate on a race.** Two replicas ticking the same slot produce one row.
 
@@ -235,25 +235,19 @@ never boots. What actually makes it harmless is that `ensurePageViewPartitions`
 builds a **week ahead**, so a missed day costs one of seven days of runway and
 the next day's run restores it.
 
-## 7. Shape of the tier
+## 7. Shape of the worker
 
-`tier.ts` runs **one loop per workspace**, each with its own listener.
-`workspaces/fleet.ts` already answers "iterate all workspaces per tick", and that is the
-right answer for a periodic sweep and the wrong one for a queue: the latency of an
-on-demand job would become the tick interval times the workspace count, and the whole
-point of the doorbell is that a job enqueued now starts now.
+`loops.ts` runs **one poll loop per workspace**. `workspaces/fleet.ts` already
+answers "iterate all workspaces per tick", and that is the right answer for a
+periodic sweep and the wrong one for a queue: the latency of an on-demand job
+would become the tick interval times the workspace count.
 
-The cost is one session-mode connection per workspace, permanently. That is the tier
-§7.3 describes — always warm, direct connections, physically separate from the
-pooled web tier — and it carries §6's corollary: **this tier holds connections
-open by design, so it must never share a compute with workspaces you expect to
-suspend.** Sizing it for a large fleet belongs with the detach policy in
-`workspaces/idle.ts`.
+`QUACKBACK_ROLE=web` does not start the job worker. Cloud runs a dedicated
+`QUACKBACK_ROLE=worker` replica with a loop per active workspace. Unset
+`QUACKBACK_ROLE` still means `all` (self-host).
 
-A workspace whose database has not yet run migration `0253` is **skipped with a
-warning**, not crash-looped. §5's ordering rule is that expand lands before the
-code that reads it; a queue tier that died on a mid-rollout fleet would turn that
-ordering into an outage.
+A workspace whose database has not yet run the job-queue migration is
+**skipped with a warning**, not crash-looped.
 
 ## 8. Configuration
 
@@ -263,14 +257,33 @@ has not loaded the full application config.
 
 | Variable               | Default | Meaning                                                             |
 | ---------------------- | ------- | ------------------------------------------------------------------- |
-| `JOB_POLL_INTERVAL_MS` | 1000    | Poll fallback. The correctness floor when a NOTIFY is lost          |
+| `JOB_POLL_INTERVAL_MS` | 1000    | How often each workspace loop claims work                           |
 | `JOB_BATCH_SIZE`       | 5       | Jobs claimed per drain pass                                         |
 | `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
 | `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
 
-`QUACKBACK_ROLE=web` does not start the tier. Cloud `quackback` runs `all`
-with `QUACKBACK_WAKE_MODE=scheduler`; unset still means `all` and defaults
-the wake mode to `listener` (self-host).
+### Worker job logs
+
+Every execution is one structured NDJSON line on stdout. A worker replica
+(`QUACKBACK_ROLE=worker`) binds `service_name=quackback-worker`. Filter on
+`event` plus `workspace_key` / `queue`. **Payloads are never logged** — IDs
+only (`job_id`, `dedupe_key`, `attempt`, `max_attempts`, `duration_ms`).
+
+| `event`              | level        | `msg`                    | when                                              |
+| -------------------- | ------------ | ------------------------ | ------------------------------------------------- |
+| `job.started`        | info         | `job started`            | handler begins                                    |
+| `job.finished`       | info         | `job finished`           | handler succeeded and the lease completed         |
+| `job.retrying`       | warn         | `job retrying`           | handler threw, attempts remain                    |
+| `job.failed`         | error        | `job failed`             | terminal failure, no handler, or lost lease       |
+| `job.loop_started`   | info         | `job loop started`       | a workspace's poll loop armed                     |
+| `job.loop_stopped`   | info         | `job loop stopped`       | that loop drained (workspace left, or shutdown)   |
+| `job.worker_started` | info         | `job worker started (…)` | worker process has loops running                  |
+| `job.worker_stopped` | info         | `job worker stopped`     | worker process drained the loops                  |
+| `job.lease_expired`  | warn / error | `expired lease …`        | reaper requeued or terminally failed a dead lease |
+
+`outcome` on a finish/fail line is `succeeded`, `failed`, `retrying`, or
+`lease_lost`. A Railway search on `event:"job.failed"` is the pageable set;
+retries are `job.retrying` so they do not sit in the same bucket.
 
 ## 9. Workspace scope, and the shape this must not reproduce
 
@@ -284,7 +297,7 @@ is what outlived them.
 This queue does not have that shape, and it is worth being precise about why
 rather than asserting it:
 
-- **`tier.ts` opens a fresh `withWorkspaceScopeById(...)` around every pass.** The
+- **`loops.ts` opens a fresh `withWorkspaceScopeById(...)` around every pass.** The
   scope a handler runs in belongs to the pass that is running it. There is no
   long-lived worker object holding one.
 - **The heartbeat timer is created inside that scope and cleared before the pass
@@ -301,7 +314,7 @@ rather than asserting it:
   time, which is inside the per-pass workspace scope — and `resolveHandler`'s
   warning could not see it, because it only guards the outer import. Proven on
   the pooled fleet with a top-level probe in `sla.sweep.ts`: `(module not
-imported)` after priming, `inst_gauntlet_alpha` after the tier ran the sweep.
+imported)` after priming, `inst_gauntlet_alpha` after the job worker ran the sweep.
 
   Those imports are now static, and `__tests__/handler-imports.test.ts` scans
   every registered handler module and fails on a call-time `import(`. A source
@@ -395,16 +408,16 @@ drain had its 11:10 slot **simply absent**, and took every slot after.
 That was negligible while every sweep was sub-second. It stopped being
 negligible with `help-center-translate`, whose lease is 120 s.
 
-**The tier now runs a bounded worker pool.** `dispatchPass` claims what the pool
+**Each loop now runs a bounded worker pool.** `dispatchPass` claims what the pool
 has room for, starts it, and returns; the loop's next act is the schedule tick,
 so a running job never stands between a per-minute sweep and its slot. Three
 shapes were available and the other two were rejected for reasons worth keeping:
 
 - **Per-queue loops** multiply the poll traffic by the queue count against a
-  per-workspace database, and this tier already holds a connection per workspace open
+  per-workspace database, and this loop already holds a connection per workspace open
   by design (§7). One loop keeps one poll, one listener and one claim query per
   pass whatever the queue count.
-- **A separate tier for the slow queues** splits the deployment on a property
+- **A separate process for the slow queues** splits the deployment on a property
   ("slow") that is not stable — an AI call's duration is not a queue attribute —
   and doubles the always-warm connection count.
 - **One undifferentiated pool** loses the reference's per-queue `concurrency`,
@@ -453,7 +466,7 @@ workspace, and an operator sizing connections cares about the product.
 - **Readiness could not see a missing consumer.** `ok = failed === 0` over
   eagerly-initialised workers reported `workers ok:true total:0` on a replica
   that had constructed none, because a worker never built is not _failed_. A
-  worker-role process whose tier is not running is now unready, and the payload
+  worker-role process whose loops are not running is now unready, and the payload
   reports how many workspace loops it is serving.
 - **`segment-evaluation`'s schedules stopped being a second copy.** They were
   repeatable jobs written into Redis, which had to be _restored_ at boot in case
@@ -465,16 +478,16 @@ workspace, and an operator sizing connections cares about the product.
 Same seeded database, same script, one run each
 (`scripts/queue-parity-probe.ts`):
 
-|                                      | reference `8310ee89d`  | this branch       |
-| ------------------------------------ | ---------------------- | ----------------- |
-| consumer                             | bullmq worker registry | postgres job tier |
-| import: terminal status              | completed              | completed         |
-| import: posts visible afterwards     | 2                      | 2                 |
-| export: terminal status              | completed              | completed         |
-| export: sizeBytes                    | 212258                 | 212198            |
-| events: outbox rows published        | 1                      | 1                 |
-| events: outbox rows left unpublished | 0                      | 0                 |
-| events: hook deliveries              | 3                      | 2                 |
+|                                      | reference `8310ee89d`  | this branch         |
+| ------------------------------------ | ---------------------- | ------------------- |
+| consumer                             | bullmq worker registry | postgres job worker |
+| import: terminal status              | completed              | completed           |
+| import: posts visible afterwards     | 2                      | 2                   |
+| export: terminal status              | completed              | completed           |
+| export: sizeBytes                    | 212258                 | 212198              |
+| events: outbox rows published        | 1                      | 1                   |
+| events: outbox rows left unpublished | 0                      | 0                   |
+| events: hook deliveries              | 3                      | 2                   |
 
 The byte and delivery counts differ because each run adds rows the next one
 exports and fans out; the statuses and the post count are the like-for-like
@@ -515,7 +528,7 @@ BullMQ worker was never started under pooled tenancy either.
 `event-dispatch` job in the same transaction as the outbox row. The former
 outbox relay (`LISTEN outbox_wake`, `outbox_relay_leader`, `relay-tier.ts`)
 is gone; see `events/RELAY.md`. Leftover `dispatch_owner = relay` rows are
-converted onto the job path at job-tier / scheduler start.
+converted onto the job path when the job worker start.
 
 ## 11. Running the evidence
 
@@ -526,11 +539,7 @@ DATABASE_URL=... bun run scripts/job-lease-proof.ts kill-matrix
 # a job held across minutes of work with no transaction open, then SIGKILL
 DATABASE_URL=... bun run scripts/job-lease-proof.ts long-lease --work-seconds 180
 
-# wake latency, measured through the real tier
-DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
-JOB_WAKE_DISABLED=1 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
-
-# the workspace boundary and the per-workspace scheduler, on a real pooled fleet.
+# the workspace boundary, on a real pooled fleet.
 # This is the only harness with a cron schedule — job-lease-proof.ts is
 # single-workspace and could not see a cross-workspace scheduler defect at all.
 env $(cat pooled.env) bun run scripts/job-workspace-proof.ts run --a <id> --b <id>

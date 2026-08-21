@@ -1,11 +1,9 @@
 /**
- * The Postgres job queue — the substrate that replaces Redis for background work
- * (SAAS-HOSTING-STACK.md §7).
+ * The Postgres job queue — the substrate that replaces Redis for background work.
  *
  * Read `JOBS.md` in this directory first. It states the lease contract, why
- * `attempts` is incremented by the claim rather than by completion, what the
- * reaper is allowed to do with a no-retry job, and why the wake listener must
- * never terminate at a pooled endpoint.
+ * `attempts` is incremented by the claim rather than by completion, and what
+ * the reaper is allowed to do with a no-retry job.
  */
 export {
   cancelJob,
@@ -64,7 +62,6 @@ export {
   runScheduleTick,
   runnerConfig,
   totalDeclaredConcurrency,
-  wakeDisabled,
   type DispatchResult,
   type DrainResult,
   type JobPool,
@@ -81,26 +78,4 @@ export {
   type ParsedCron,
 } from './cron'
 
-export { JOB_WAKE_CHANNEL, openWakeListener, type WakeListener } from './wake'
-
-export {
-  getJobTierStatus,
-  requestWorkspaceLoopRefresh,
-  signalWorkspace,
-  startJobTier,
-  stopJobTier,
-  type JobTierStatus,
-} from './tier'
-
-export {
-  NODE_MAX_TIMEOUT_MS,
-  createWorkspaceScheduler,
-  getProcessScheduler,
-  recoverPendingWork,
-  runWorkspaceUntilQuiescent,
-  startWorkspaceScheduler,
-  stopWorkspaceScheduler,
-  wakeMode,
-  type SchedulerClock,
-  type WorkspaceScheduler,
-} from './scheduler'
+export { getJobWorkerStatus, startJobWorker, stopJobWorker, type JobWorkerStatus } from './worker'

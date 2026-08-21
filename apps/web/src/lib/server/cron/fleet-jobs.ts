@@ -1,41 +1,15 @@
 /**
- * The scheduled sweeps, as jobs a Railway cron service runs and exits from.
+ * The scheduled sweeps.
  *
- * SAAS-HOSTING-STACK.md §9: *"`deploy.cronSchedule` — Railway runs a service on
- * a cron and lets it exit. The daily and hourly sweeps belong here rather than
- * on `setInterval` inside an always-warm worker. Keep the always-warm worker
- * only for what needs a live `LISTEN` connection."*
+ * `startup.ts` arms these on the always-on worker (`QUACKBACK_ROLE=worker` or
+ * `all`) under both tenancy modes. `QUACKBACK_CRON_JOB` is a one-shot entry
+ * point for the same bodies — run one named job and exit — not the live
+ * topology. Compute and Postgres stay up, so fanning a tick across the fleet
+ * through `withSweepLock` is just the work.
  *
- * ## Why this is not merely tidier
- *
- * Under pooled tenancy every one of these sweeps funnels through
- * `withSweepLock`, which fans the tick out across the **whole fleet** — one
- * connection to every workspace database per tick. So the interval is not a
- * scheduling preference, it is the floor on how often every suspended
- * workspace database is woken:
- *
- * | Timer in `startup.ts` | Fan-out interval | Against a 300 s suspend timeout |
- * | --- | --- | --- |
- * | changelog / status / maintenance reconcilers | 5 min | **no workspace ever suspends** |
- * | summary + merge sweeps | 30 min | wakes every workspace twice an hour |
- * | kv sweep, telemetry claim | 1 h | wakes every workspace hourly |
- * | daily audit maintenance | 24 h | fine |
- *
- * The 5-minute row is the one that matters: 300 s of fan-out against a 300 s
- * (measured 337 s) suspend timeout means the compute is woken at almost exactly
- * the rate it would otherwise sleep, and the whole idle-cost model is gone with
- * no functional symptom at all. That is the same shape as the job tier's
- * 1-second poll, only slower — and it is why a pooled worker tier runs none of
- * these timers.
- *
- * ## The tradeoff, stated
- *
- * Moving the reconcilers from 5 minutes to hourly is a real reduction in
- * timeliness for a pooled fleet. They are
- * backstops — the primary paths are a synchronous publish, a delayed job and a
- * provider webhook — so what lengthens is the recovery window after a dropped
- * delivery, not the normal case. Nothing changes for a single-workspace install:
- * `startup.ts` keeps its original timers there, calling exactly these functions.
+ * Serial rather than concurrent when a one-shot job runs several bodies:
+ * each already fans out across the whole fleet, and running them at once
+ * would open several connections to every workspace database instead of one.
  */
 import { logger } from '@/lib/server/logger'
 
@@ -210,21 +184,16 @@ async function runMigratorConvergence(): Promise<void> {
 }
 
 /**
- * The cron jobs a service can name via `QUACKBACK_CRON_JOB`.
+ * One-shot jobs a process can name via `QUACKBACK_CRON_JOB`.
  *
- * `hourly` and `daily` stay as ad-hoc / rollback entry points. `housekeeping`
- * is the live hourly service: the six hourly bodies, then the daily set +
- * telemetry once per 23 h window, then migrator convergence.
+ * The live worker runs the same bodies on timers in `startup.ts`. These names
+ * stay as an ad-hoc / rollback entry point: one pass, then exit.
  *
  * There is no outbox backstop here. `emit()` writes an `event-dispatch` job in
- * the same transaction as the outbox row, and the job tier drains it — so an
- * event whose NOTIFY was lost is picked up by the poll floor, not an hour later
- * by a sweep. A cron pass over every workspace's outbox would be a second
- * drainer racing the job claim for no reachable failure.
- *
- * Serial rather than concurrent: each of these already fans out across the whole
- * fleet, and running the seven at once would open seven connections to every
- * workspace database instead of one.
+ * the same transaction as the outbox row, and the job worker drains it — so a
+ * delayed claim is picked up by the poll floor, not an hour later by a sweep.
+ * A pass over every workspace's outbox would be a second drainer racing the
+ * job claim for no reachable failure.
  */
 export const FLEET_CRON_JOBS = {
   daily: async () => {
@@ -261,9 +230,9 @@ export function isFleetCronJobName(value: string): value is FleetCronJobName {
 /**
  * Run one job and report whether it completed.
  *
- * The caller exits the process on the result. A cron service that exited 0 on a
- * failed sweep would report a green cron history over a fleet that has stopped
- * sweeping, which is the only failure mode a cron service really has.
+ * The caller exits the process on the result. A one-shot container that
+ * exited 0 on a failed sweep would report a green run over a fleet that
+ * has stopped sweeping, which is the only failure mode that path has.
  */
 export async function runFleetCronJob(name: FleetCronJobName): Promise<boolean> {
   const startedAt = Date.now()

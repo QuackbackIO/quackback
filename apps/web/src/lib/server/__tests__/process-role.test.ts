@@ -41,7 +41,7 @@ describe('getProcessRole', () => {
   it('returns migrator for QUACKBACK_ROLE=migrator, and starts NO workers', () => {
     // The reason `shouldRunWorkers` is an allowlist and not `!== 'web'`: the
     // negative form answers "true" for every role added after it, so this role
-    // would have quietly booted the job tier's fifteen queues and six sweepers
+    // would have quietly booted the job worker's fifteen queues and six sweepers
     // alongside a fleet migration.
     vi.stubEnv('QUACKBACK_ROLE', 'migrator')
     expect(getProcessRole()).toBe('migrator')
@@ -57,7 +57,7 @@ describe('getProcessRole', () => {
   })
 
   // The measured failure: `banana`, `MIGRATOR`, `Migrator` and `'migrator '`
-  // all returned 'all' and booted the Postgres job tier AND the sweepers. The
+  // all returned 'all' and booted the job worker AND the sweepers. The
   // allowlist was over the ProcessRole union rather than over the
   // environment string, so a case typo missed every comparison and fell through
   // to a default that starts everything.

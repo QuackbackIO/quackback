@@ -362,7 +362,7 @@ export const themePresets: Record<string, ThemePreset> = {
 
   cyberpunk: createPreset({
     name: 'Cyberpunk',
-    description: 'Neon and bold',
+    description: 'Bright and bold',
     color: '#ff00ff',
     font: FONTS.mono,
     radius: '0rem',

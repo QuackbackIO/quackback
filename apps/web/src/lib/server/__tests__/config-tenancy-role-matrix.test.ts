@@ -3,19 +3,19 @@
  *
  * This file used to assert the opposite. An earlier fix put a refusal in the
  * config schema — pooled tenancy would only boot with `QUACKBACK_ROLE=web` —
- * and that composed with the pooled job tier, which is gated ON
+ * and that composed with the pooled job worker, which is gated ON
  * `shouldRunWorkers()` and therefore never starts on `web`, into a fleet with
  * **no runnable pooled configuration at all**. Two guards, each correct alone,
  * jointly specifying an impossible system.
  *
- * It also contradicted the architecture it was implementing: the job tier
+ * It also contradicted the architecture it was implementing: the job worker
  * must be allowed to boot under pooled tenancy. Cloud now runs that tier
  * in the tenant-facing process (`QUACKBACK_ROLE=all` + scheduler). `worker`
  * remains a valid role for leftover soak capacity and for optional scale-out.
  *
  * So the role is free again, and the refusal moved to the noun it was always
  * about. It first became a seam that would not construct a `Worker` under
- * pooled tenancy; now that the queues it guarded run on the Postgres job tier,
+ * pooled tenancy; now that the queues it guarded run on the job worker,
  * it is the stricter and simpler property that no file under `apps/web/src`
  * imports the queue package at all — you cannot construct a `Worker` without
  * importing it. Pinned in `policy/no-bullmq/__tests__/no-bullmq.test.ts`.
@@ -86,7 +86,7 @@ const ROLES = ['web', 'worker', 'all', 'migrator', undefined] as const
 
 describe('every role boots under pooled tenancy', () => {
   // The five-row matrix, asserted as PERMITTED. `all` and `worker` are the
-  // ones that matter: the pooled job tier only starts when shouldRunWorkers()
+  // ones that matter: the pooled job worker only starts when shouldRunWorkers()
   // is true, so refusing those roles left the fleet with nothing that could
   // drain a queue.
   for (const role of ROLES) {

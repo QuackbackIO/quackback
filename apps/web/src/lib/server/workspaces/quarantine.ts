@@ -35,17 +35,19 @@
  * A workspace that stops being retried and says nothing is worse than the retry
  * storm, because the storm at least had a symptom. So quarantine is loud on
  * entry, loud again on a fixed heartbeat for as long as it lasts, and readable
- * from the tier status the readiness probe already publishes. The heartbeat is
+ * from the job-worker status the readiness probe already publishes. The heartbeat is
  * the part that matters: entry logs scroll away, and the operator who needs this
  * is the one arriving hours later asking why a workspace is not being served.
  */
 import { logger } from '@/lib/server/logger'
 import { isTerminalRefusalCode } from './fingerprint'
-import { workspaceIdlePolicy } from './idle'
 
 const log = logger.child({ component: 'workspace-quarantine' })
 
 export type RefusalDisposition = 'terminal' | 'transient'
+
+/** How often a terminal refusal is re-probed even if the registry revision is unchanged. */
+const TERMINAL_RETRY_MS = 15 * 60_000
 
 /**
  * Refusal codes raised before a fingerprint is ever taken.
@@ -162,7 +164,7 @@ export function noteWorkspaceRefusal(
 
   const retryAfter =
     disposition === 'terminal'
-      ? now + workspaceIdlePolicy().rescanIntervalMs
+      ? now + TERMINAL_RETRY_MS
       : now +
         Math.min(TRANSIENT_BACKOFF_CEILING_MS, TRANSIENT_BACKOFF_FLOOR_MS * 2 ** (attempts - 1))
 
@@ -249,7 +251,7 @@ export function listQuarantinedWorkspaces(): QuarantineEntry[] {
 }
 
 /**
- * The heartbeat. Called from the tiers' refresh pass, so it runs on a cadence
+ * The heartbeat. Called from the job worker's refresh pass, so it runs on a cadence
  * that exists whether or not anything is wrong.
  *
  * Silent when the set is empty — a periodic "nothing is refused" line is how a

@@ -104,7 +104,7 @@ notifies inverts the reason for pooling; that warning is about a process that
 listens for _every_ workspace. The bound here is _workspaces with a live SSE stream on
 this replica_, which is already proportional to a long-lived resource.
 
-**Seam with the job tier:** the queue polls; it does not LISTEN. The realtime
+**Seam with the job worker:** the queue polls; it does not LISTEN. The realtime
 bus is the only remaining session-mode listener.
 
 ## 6. The two regressions §7.4 names, measured

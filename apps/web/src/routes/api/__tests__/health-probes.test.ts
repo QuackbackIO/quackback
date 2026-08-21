@@ -8,10 +8,10 @@ vi.mock('@/lib/server/db', () => ({
   getMigrationStatus: (...a: unknown[]) => getMigrationStatus(...a),
 }))
 
-// Background work is the Postgres job tier.
-const getJobTierStatus = vi.fn()
-vi.mock('@/lib/server/jobs/tier', () => ({
-  getJobTierStatus: (...a: unknown[]) => getJobTierStatus(...a),
+// Background work is the job worker.
+const getJobWorkerStatus = vi.fn()
+vi.mock('@/lib/server/jobs/worker', () => ({
+  getJobWorkerStatus: (...a: unknown[]) => getJobWorkerStatus(...a),
 }))
 
 import { handleLivenessProbe } from '../health.live'
@@ -22,11 +22,9 @@ beforeEach(() => {
   resetReadinessCache()
   execute.mockResolvedValue([])
   getMigrationStatus.mockResolvedValue({ upToDate: true, bundledCount: 1, appliedCount: 1 })
-  getJobTierStatus.mockReturnValue({
+  getJobWorkerStatus.mockReturnValue({
     running: true,
-    workspaces: [
-      { workspaceKey: 't1', inFlight: 0, schemaMissing: false, refusedCode: null },
-    ],
+    workspaces: [{ workspaceKey: 't1', inFlight: 0, schemaMissing: false, refusedCode: null }],
   })
 })
 
@@ -44,7 +42,7 @@ describe('GET /api/health/live', () => {
     // turns into a cluster-wide restart loop.
     expect(execute).not.toHaveBeenCalled()
     expect(getMigrationStatus).not.toHaveBeenCalled()
-    expect(getJobTierStatus).not.toHaveBeenCalled()
+    expect(getJobWorkerStatus).not.toHaveBeenCalled()
   })
 })
 
@@ -67,7 +65,7 @@ describe('GET /api/health/ready', () => {
       loops: 1,
       inFlight: 0,
       schemaMissing: 0,
-      // How many workspaces the tier has stopped retrying. Deliberately does
+      // How many workspaces the job worker has stopped retrying. Deliberately does
       // not fail the probe: a bad registry record is not this replica's fault.
       refused: 0,
     })
@@ -123,22 +121,22 @@ describe('GET /api/health/ready', () => {
     expect(body.checks.migrations).toEqual({ ok: true })
   })
 
-  it('returns 503 on a worker-role process whose job tier is not running', async () => {
+  it('returns 503 on a worker-role process whose job worker is not running', async () => {
     // The old check computed `ok = failed === 0` over eagerly-initialised BullMQ
     // workers, and a worker that was never CONSTRUCTED is not failed — so a
     // pooled replica running no consumer at all reported
     // `workers ok:true total:0` while every queue accumulated silently. This is
     // the case that reading has to fail.
-    getJobTierStatus.mockReturnValue({ running: false, workspaces: [] })
+    getJobWorkerStatus.mockReturnValue({ running: false, workspaces: [] })
     const res = await handleReadinessProbe()
     expect(res.status).toBe(503)
     const body = await res.json()
     expect(body.checks.workers).toMatchObject({ ok: false, expected: true, running: false })
   })
 
-  it('stays ready on a web-role replica, which is not supposed to run the tier', async () => {
+  it('stays ready on a web-role replica, which is not supposed to run the job worker', async () => {
     vi.stubEnv('QUACKBACK_ROLE', 'web')
-    getJobTierStatus.mockReturnValue({ running: false, workspaces: [] })
+    getJobWorkerStatus.mockReturnValue({ running: false, workspaces: [] })
     const res = await handleReadinessProbe()
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -146,8 +144,8 @@ describe('GET /api/health/ready', () => {
     vi.unstubAllEnvs()
   })
 
-  it('reports how many workspace loops the tier is serving', async () => {
-    getJobTierStatus.mockReturnValue({
+  it('reports how many workspace loops the job worker is serving', async () => {
+    getJobWorkerStatus.mockReturnValue({
       running: true,
       workspaces: [
         { workspaceKey: 'a', inFlight: 2, schemaMissing: false },

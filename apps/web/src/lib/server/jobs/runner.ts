@@ -3,7 +3,7 @@
  * transaction.
  *
  * Everything in this module assumes an open workspace scope: `db` resolves to the
- * workspace's pool, and `job_queue` is that workspace's own table. `tier.ts` owns
+ * workspace's pool, and `job_queue` is that workspace's own table. `loops.ts` owns
  * opening the scope and the timers; this file owns what happens inside one.
  *
  * The load-bearing property is that **no transaction is open while a handler
@@ -52,7 +52,7 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
   if (!raw) return fallback
   const n = Number(raw)
   if (!Number.isInteger(n) || n < min || n > max) {
-    log.warn({ [name]: raw, fallback }, 'invalid job-tier setting, using the default')
+    log.warn({ [name]: raw, fallback }, 'invalid job-loop setting, using the default')
     return fallback
   }
   return n
@@ -79,20 +79,6 @@ export interface RunnerConfig {
   maxConcurrency: number
 }
 
-/**
- * Skip the NOTIFY doorbell and run on the poll interval alone.
- *
- * A real operational switch, not a test hook: §7.3's measurement is that a
- * pooled DSN accepts the `LISTEN` registration and then delivers nothing, so an
- * operator who knows their connection is pooled can turn the listener off
- * rather than have it retry and log. It is also what makes the poll floor
- * measurable end to end — a harness that fakes the fallback with its own timer
- * measures its own timer.
- */
-export function wakeDisabled(): boolean {
-  return process.env.JOB_WAKE_DISABLED === '1'
-}
-
 /** Sum of every registered queue's concurrency — the reference's own ceiling. */
 export function totalDeclaredConcurrency(): number {
   return jobDefinitions().reduce((n, def) => n + concurrencyFor(def), 0)
@@ -108,7 +94,7 @@ export function runnerConfig(): RunnerConfig {
   }
 }
 
-/** All queue names the tier will claim for. */
+/** All queue names the job worker will claim for. */
 export function activeQueueNames(): string[] {
   return jobDefinitions().map((d) => d.name)
 }
@@ -123,7 +109,7 @@ export function activeQueueNames(): string[] {
  * that armed lazily on first enqueue armed inside whatever request reached them
  * first. No such module is left, but the *import* hazard below outlives them.
  *
- * This queue does not have that shape — `tier.ts` opens a fresh
+ * This queue does not have that shape — `loops.ts` opens a fresh
  * `withWorkspaceScopeById(...)` around every pass, so a handler always runs inside
  * the scope of the job it is running, never one captured earlier. But the
  * *import* is a second, quieter version of the same risk: `def.handler()` is a
@@ -178,6 +164,30 @@ async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
 }
 
 /**
+ * Stable fields on every job-execution line. IDs only — never `payload`.
+ *
+ * `event` is the filter key (`job.started`, `job.finished`, `job.retrying`,
+ * `job.failed`). `QUACKBACK_ROLE=worker` already binds `service_name` to
+ * `quackback-worker`, so a Railway search on `event` + `workspace_key` is the
+ * whole execution trace.
+ */
+function jobFields(job: ClaimedJob, extra: Record<string, unknown> = {}) {
+  return {
+    workspace_key: job.workspaceKey ?? getCurrentWorkspace()?.workspaceKey ?? null,
+    queue: job.queue,
+    job_id: job.jobId,
+    attempt: job.attempts,
+    max_attempts: job.maxAttempts,
+    dedupe_key: job.dedupeKey,
+    ...extra,
+  }
+}
+
+function failOutcome(outcome: 'retrying' | 'failed' | 'lease-lost'): string {
+  return outcome === 'lease-lost' ? 'lease_lost' : outcome
+}
+
+/**
  * Run one job to completion, with a heartbeat holding the lease open.
  *
  * The heartbeat runs at a third of the lease so two consecutive misses still
@@ -189,7 +199,10 @@ async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
 export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 'retrying'> {
   const def = findJobDefinition(job.queue)
   if (!def) {
-    log.error({ jobId: job.jobId, queue: job.queue }, 'no handler registered for queue')
+    log.error(
+      jobFields(job, { event: 'job.failed', outcome: 'failed' }),
+      'job has no handler registered'
+    )
     await failJob(job, `no handler registered for queue "${job.queue}"`)
     return 'failed'
   }
@@ -203,17 +216,20 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
           if (held) return
           leaseLost = true
           log.error(
-            { jobId: job.jobId, queue: job.queue },
+            jobFields(job, { event: 'job.lease_lost' }),
             'lease lost while the handler was still running — another worker may now own this job'
           )
         })
-        .catch((err) => log.warn({ err, jobId: job.jobId }, 'heartbeat failed'))
+        .catch((err) =>
+          log.warn(jobFields(job, { event: 'job.heartbeat_failed', err }), 'job heartbeat failed')
+        )
     },
     Math.max(1_000, Math.floor(leaseMs / 3))
   )
   heartbeat.unref?.()
 
   const startedAt = Date.now()
+  log.info(jobFields(job, { event: 'job.started' }), 'job started')
   try {
     const handler = await resolveHandler(def)
     await handler(job)
@@ -228,18 +244,17 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
       backoffMs: retryBackoffMs(def, job.attempts),
       terminal,
     })
-    log.error(
-      {
-        err,
-        jobId: job.jobId,
-        queue: job.queue,
-        attempts: job.attempts,
-        maxAttempts: job.maxAttempts,
-        terminal,
-        outcome,
-      },
-      'job handler failed'
-    )
+    const fields = jobFields(job, {
+      event: outcome === 'retrying' ? 'job.retrying' : 'job.failed',
+      err,
+      duration_ms: Date.now() - startedAt,
+      terminal,
+      outcome: failOutcome(outcome),
+    })
+    // Retries are expected; a filter on `event:"job.failed"` should be the
+    // terminal cases an operator wants to page on.
+    if (outcome === 'retrying') log.warn(fields, 'job retrying')
+    else log.error(fields, 'job failed')
     // The reference expressed this as `worker.on('failed')`, and the webhook
     // auto-disable counter depends on the `permanent` distinction: counting a
     // retry would disable a flaky endpoint after ~17 events instead of 50.
@@ -250,7 +265,7 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
         .onFailure(job, err, outcome === 'failed')
         .catch((hookErr) =>
           log.error(
-            { err: hookErr, jobId: job.jobId, queue: job.queue },
+            jobFields(job, { event: 'job.on_failure_threw', err: hookErr }),
             'job onFailure hook threw'
           )
         )
@@ -260,16 +275,22 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
   clearInterval(heartbeat)
 
   const completed = await completeJob(job)
+  const duration_ms = Date.now() - startedAt
   if (!completed) {
     log.error(
-      { jobId: job.jobId, queue: job.queue, leaseLost, duration_ms: Date.now() - startedAt },
+      jobFields(job, {
+        event: 'job.failed',
+        duration_ms,
+        lease_lost: leaseLost,
+        outcome: 'lease_lost',
+      }),
       'job finished but its lease was gone — the result was NOT recorded'
     )
     return 'failed'
   }
-  log.debug(
-    { jobId: job.jobId, queue: job.queue, duration_ms: Date.now() - startedAt },
-    'job complete'
+  log.info(
+    jobFields(job, { event: 'job.finished', duration_ms, outcome: 'succeeded' }),
+    'job finished'
   )
   return 'succeeded'
 }
@@ -296,7 +317,7 @@ export interface DrainResult {
  *
  * **Why a pool rather than per-queue loops.** Fifteen loops per workspace would
  * multiply the poll traffic by fifteen against a per-workspace database, and the
- * database is the scarce thing here — §6's corollary is that this tier already
+ * database is the scarce thing here — §6's corollary is that this loop already
  * holds a connection per workspace open by design. One loop keeps one poll, one
  * listener and one claim query per pass, whatever the queue count.
  *
@@ -377,7 +398,10 @@ export async function dispatchPass(opts: {
         // runJob already records every handler failure on the row; reaching
         // here means the queue machinery itself threw, which must still free
         // the slot rather than wedge the pool at its cap forever.
-        log.error({ err, jobId: job.jobId, queue: job.queue }, 'job runner threw outside runJob')
+        log.error(
+          jobFields(job, { event: 'job.runner_threw', err }),
+          'job runner threw outside runJob'
+        )
         return 'failed'
       })
       .then((outcome) => {
@@ -400,7 +424,7 @@ export async function awaitPool(pool: JobPool): Promise<void> {
 /**
  * Claim one pass and run it to completion.
  *
- * The same claim and the same execution path the tier uses — this is
+ * The same claim and the same execution path the job worker uses — this is
  * `dispatchPass` plus a wait, not a second implementation — so a harness or a
  * test that drives this is exercising the shipped mechanism. Per-queue
  * concurrency still applies, so a queue declared `concurrency: 1` yields one

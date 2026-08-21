@@ -244,7 +244,7 @@ signal at all**. That absence of symptom is why `getPoolCacheStats()` exposes
 rather than debug logs: the counter is the only thing that distinguishes
 "working" from "quietly costing money".
 
-**Eviction is necessary but not sufficient.** The job tier polls each tenant
+**Eviction is necessary but not sufficient.** The job worker polls each tenant
 database on its own interval, so `ROLE=all` keeps a quiet workspace's compute
 awake even after the request pool evicts. Idle saving requires
 `QUACKBACK_ROLE=web`. The role split is optional scale-out for that cost
@@ -511,14 +511,14 @@ guessing.
 
 ### Scoped
 
-| Subsystem                                                                                                                                                                                                       | How                                                                                                                                                                              | Note                                                                                                                                                                                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **All 10 periodic sweeps** — `audit_prune`, `invite_sweep`, `events_prune`, `logs_retention`, `summary_sweep`, `merge_sweep`, `changelog_notify`, `status_notify`, `status_maintenance_sweep`, `telemetry_ping` | `withSweepLock` fans a tick out across the fleet with a real workspace scope each time                                                                                           | One seam covers all ten; **no caller changed**. The lock needs no workspace segment because `sweep_lock` lives in the workspace's own database — so once `db` is scoped the lock is already per-workspace, which is exactly the semantics wanted                                                                 |
-| **Startup OIDC backfill**                                                                                                                                                                                       | `runFleetPass`, and **only on a replica that already runs background work**                                                                                                      | A fleet-wide backfill on every web boot would open a connection to every workspace database and wake every suspended compute — precisely the cost the pooling exists to avoid                                                                                                                                    |
-| **Readiness probe**                                                                                                                                                                                             | Probes the control store instead of a workspace database; stops asserting workspace schema state entirely                                                                        | §10.5. The old `migrationsKnownUpToDate` memo is actively misleading under pooling: it caches "migrations OK" forever after the first workspace it saw, going blind during exactly the rolling migration it exists to catch. Probing a workspace would also wake a suspended compute every few seconds           |
-| **Anything holding a workspace id**                                                                                                                                                                             | `withWorkspaceScopeById(workspaceKey, origin, fn)`                                                                                                                               | Throws rather than degrading — a caller that named a workspace and got a different one has no safe fallback                                                                                                                                                                                                      |
-| **The 15 background queues**                                                                                                                                                                                    | `jobs/tier.ts` runs one loop per workspace and opens a real workspace scope around every claim; `claimJobs` then re-asserts the claimed row's `workspace_key` against that scope | Both of these were refusals until the queues moved. The old in-process consumers carried no workspace on a job, so every processor resolved `db` with no scope and threw on its first query. A queue is now a table in the workspace's own database, so there is no shared queue to route out of. `jobs/JOBS.md` |
-| **Event dispatch**                                                                                                                                                                                              | `emit()` writes an `event-dispatch` job in the same transaction; `jobs/tier.ts` drains it like any other queue                                                                   | `events/RELAY.md` (the outbox relay is gone) and `jobs/JOBS.md`                                                                                                                                                                                                                                                  |
+| Subsystem                                                                                                                                                                                                       | How                                                                                                                                                                                | Note                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **All 10 periodic sweeps** — `audit_prune`, `invite_sweep`, `events_prune`, `logs_retention`, `summary_sweep`, `merge_sweep`, `changelog_notify`, `status_notify`, `status_maintenance_sweep`, `telemetry_ping` | `withSweepLock` fans a tick out across the fleet with a real workspace scope each time                                                                                             | One seam covers all ten; **no caller changed**. The lock needs no workspace segment because `sweep_lock` lives in the workspace's own database — so once `db` is scoped the lock is already per-workspace, which is exactly the semantics wanted                                                                 |
+| **Startup OIDC backfill**                                                                                                                                                                                       | `runFleetPass`, and **only on a replica that already runs background work**                                                                                                        | A fleet-wide backfill on every web boot would open a connection to every workspace database and wake every suspended compute — precisely the cost the pooling exists to avoid                                                                                                                                    |
+| **Readiness probe**                                                                                                                                                                                             | Probes the control store instead of a workspace database; stops asserting workspace schema state entirely                                                                          | §10.5. The old `migrationsKnownUpToDate` memo is actively misleading under pooling: it caches "migrations OK" forever after the first workspace it saw, going blind during exactly the rolling migration it exists to catch. Probing a workspace would also wake a suspended compute every few seconds           |
+| **Anything holding a workspace id**                                                                                                                                                                             | `withWorkspaceScopeById(workspaceKey, origin, fn)`                                                                                                                                 | Throws rather than degrading — a caller that named a workspace and got a different one has no safe fallback                                                                                                                                                                                                      |
+| **The 15 background queues**                                                                                                                                                                                    | `jobs/worker.ts` runs one loop per workspace and opens a real workspace scope around every claim; `claimJobs` then re-asserts the claimed row's `workspace_key` against that scope | Both of these were refusals until the queues moved. The old in-process consumers carried no workspace on a job, so every processor resolved `db` with no scope and threw on its first query. A queue is now a table in the workspace's own database, so there is no shared queue to route out of. `jobs/JOBS.md` |
+| **Event dispatch**                                                                                                                                                                                              | `emit()` writes an `event-dispatch` job in the same transaction; `jobs/worker.ts` drains it like any other queue                                                                   | `events/RELAY.md` (the outbox relay is gone) and `jobs/JOBS.md`                                                                                                                                                                                                                                                  |
 
 `runFleetPass` is serial on purpose: running per-workspace sweeps concurrently would
 wake every suspended compute at once. One workspace's failure never ends the pass —
@@ -535,7 +535,7 @@ would turn one bad record into a fleet-wide outage of every sweeper.
 
 ### 5.1 The worker tier
 
-`jobs/tier.ts`, started by `startup.ts` under `QUACKBACK_ROLE=worker` (or `all`).
+`jobs/worker.ts`, started by `startup.ts` under `QUACKBACK_ROLE=worker` (or `all`).
 One poll loop per workspace, each claiming jobs with `FOR UPDATE SKIP LOCKED`
 on that workspace's pooled connection. After-commit only nudges the in-process
 poll wait; there is no job-queue `LISTEN`. Domain events no longer have their
@@ -543,39 +543,26 @@ own relay loop: `emit()` writes an `event-dispatch` job in the same transaction
 as the outbox row. `events/RELAY.md` records the deletion; `jobs/JOBS.md` is
 the account of the remaining tier.
 
-**The corollary is a running cost.** A live poll loop keeps the tenant database
-awake. That is why `quackback-worker` can be its own service rather than a
-role on the pooled web tier: the web tier's idle-cost model survives only if
-nothing in that process keeps talking to a quiet workspace.
+The worker is its own always-on service (`QUACKBACK_ROLE=worker`) rather than
+a role on the web tier so HTTP replicas stay producer-only: they enqueue, they
+do not claim. Compute and Postgres stay up, so a live poll loop is the
+intended cost of running jobs, not a reason to detach.
 
-### 5.2 The scheduled sweeps run on cron services, not on the worker
+### 5.2 The scheduled sweeps run on the worker
 
 Every sweep in `startup.ts` funnels through `withSweepLock`, which under pooled
-tenancy fans the tick out across the whole fleet. So a sweep's interval is the
-rate at which every suspended compute is woken:
+tenancy fans the tick out across the whole fleet. Compute and Postgres stay
+up, so the always-on worker arms the same timers as a single-workspace
+install. `cron/fleet-jobs.ts` holds the bodies; `QUACKBACK_CRON_JOB` remains a
+one-shot entry point for the same functions, not the live topology.
 
-| Timer                                        | Interval | Against a ~337 s suspend timeout         |
-| -------------------------------------------- | -------- | ---------------------------------------- |
-| changelog / status / maintenance reconcilers | 5 min    | **no workspace ever suspends**           |
-| billing reconcile                            | 15 min   | every workspace woken four times an hour |
-| summary + merge sweeps                       | 30 min   | every workspace woken twice an hour      |
-| kv sweep, telemetry claim                    | 1 h      | every workspace woken hourly             |
+`QUACKBACK_ROLE=web` starts none of this. The job worker, the boot-time
+partition ensure, telemetry, and the sweep schedule all live in
+`startBackgroundProcessing()`, which only runs on `worker` and `all`.
 
-`startBackgroundProcessing()` therefore returns immediately after starting the
-job tier when tenancy is pooled, and `cron/fleet-jobs.ts` holds the bodies so the
-`deploy.cronSchedule` services and the single-workspace schedule run the same code.
-The Postgres job tier and the boot-time partition ensure sit **above** that
-return, because both run under either tenancy mode.
-
-The cost, stated: the reconcilers go from 5-minutely, and the billing reconcile
-from 15-minutely, to hourly on a pooled fleet. They are backstops behind a
-synchronous publish, a delayed job and a provider webhook, so what lengthens is
-the recovery window after a dropped delivery. Nothing changes for a single-workspace
-install.
-
-There is no outbox backstop among the cron jobs. `event-dispatch` is a job
-queue row, so a lost NOTIFY costs a poll interval rather than an hour, and a
-cron pass over every workspace's outbox would be a second drainer racing the
+There is no outbox backstop among the sweeps. `event-dispatch` is a job
+queue row, so a delayed claim costs a poll interval rather than an hour, and a
+pass over every workspace's outbox would be a second drainer racing the
 job claim.
 
 ### 5.3 `BASE_URL` is the workspace's, not the fleet's
