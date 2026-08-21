@@ -57,7 +57,6 @@ import {
   runnerConfig,
   type RunnerConfig,
 } from './runner'
-import { getProcessScheduler, stopTenantScheduler } from './scheduler'
 import { onDurableWorkCommitted, SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
 import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 
@@ -462,7 +461,6 @@ export async function stopJobTier(): Promise<void> {
   }
   unsubscribeCommit?.()
   unsubscribeCommit = null
-  await stopTenantScheduler()
   const all = [...loops.values()]
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
@@ -485,12 +483,11 @@ export function getJobTierStatus(): JobTierStatus {
 }
 
 /**
- * Ring this tenant's loop or process scheduler if it exists.
+ * End this tenant's current poll wait so an after-commit enqueue is claimed now.
  */
 export function signalTenant(tenantId: string): boolean {
   const loop = loops.get(tenantId)
-  if (loop) loop.signal()
-  const scheduler = getProcessScheduler()
-  if (scheduler) scheduler.signal(tenantId)
-  return Boolean(loop || scheduler)
+  if (!loop) return false
+  loop.signal()
+  return true
 }

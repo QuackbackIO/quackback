@@ -429,12 +429,6 @@ export interface ScheduleTickResult {
   enqueued: number
   /** Earliest next slot across all schedules, including gated-off ones. */
   nextSlotAt: Date | null
-  /**
-   * Earliest next slot of schedules that actually ran this tick.
-   * Gated-off `* * * * *` must not appear here — the process scheduler
-   * heaps this, and a snooze/SLA gate that is off must not wake every minute.
-   */
-  nextEnabledSlotAt: Date | null
 }
 
 // Bounded: patterns include user-supplied segment crons across all tenants, so
@@ -513,7 +507,6 @@ export async function runScheduleTick(
   let attempted = 0
   let enqueued = 0
   let nextSlotAt: Date | null = null
-  let nextEnabledSlotAt: Date | null = null
 
   // Every schedule name this tick considered. Anything in the state that is no
   // longer here belonged to a schedule that has gone away — a deleted segment,
@@ -553,7 +546,6 @@ export async function runScheduleTick(
 
     const next = nextSlotAfter(cron, now)
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
-    if (next && (!nextEnabledSlotAt || next < nextEnabledSlotAt)) nextEnabledSlotAt = next
   }
 
   /**
@@ -573,9 +565,8 @@ export async function runScheduleTick(
    * once a gate can stay shut for hours.
    *
    * `live` and `nextSlotAt` are maintained for the same reason: a gated-off
-   * schedule is not one that has gone away, and the attached listener loop
-   * still asks the gate on that slot. `nextEnabledSlotAt` deliberately omits
-   * this — the process scheduler must not heap a gated-off per-minute cron.
+   * schedule is not one that has gone away, and the poll loop still asks the
+   * gate on that slot.
    */
   const adopt = (stateKey: string, pattern: string): void => {
     const cron = cronFor(pattern)
@@ -631,7 +622,7 @@ export async function runScheduleTick(
     if (!live.has(key)) state.seen.delete(key)
   }
 
-  return { attempted, enqueued, nextSlotAt, nextEnabledSlotAt }
+  return { attempted, enqueued, nextSlotAt }
 }
 
 export interface MaintenanceResult extends ReapResult {

@@ -35,8 +35,8 @@ export interface EmitInput<P> {
 }
 
 /**
- * Validate + persist one event on the caller's transaction, then ring the
- * commit-time doorbell. Returns the new event's TypeID.
+ * Validate + persist one event on the caller's transaction, then signal the
+ * job tier after commit. Returns the new event's TypeID.
  */
 export async function emit<P>(
   tx: DbOrTx,
