@@ -182,7 +182,7 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
     // the number the cost model rests on.
     idle_timeout: config.workspacePoolIdleSeconds,
     connect_timeout: 15,
-    password: () => resolvePassword(workspace),
+    password: () => resolveWorkspacePassword(workspace),
     onnotice: () => {},
   })
 
@@ -212,10 +212,6 @@ function createEntry(workspace: WorkspaceDescriptor): PoolEntry {
  * so a rotation cannot be picked up by one path and missed by the other.
  */
 export async function resolveWorkspacePassword(workspace: WorkspaceDescriptor): Promise<string> {
-  return resolvePassword(workspace)
-}
-
-async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> {
   const ref = workspace.database.credentialRef
   const parsed = parseSecretRef(ref)
   switch (parsed.scheme) {
@@ -259,10 +255,10 @@ async function resolvePassword(workspace: WorkspaceDescriptor): Promise<string> 
  * stale password memoised would make the retry fail for a second, unrelated
  * reason.
  *
- * Shared by the request pool cache and by `openWorkspaceDirectPool` below, so the
- * pooled and direct paths cannot disagree about whether a database really is the
- * workspace the registry named. A second copy of a fail-closed identity check is a
- * second copy that can drift open.
+ * Shared by the request pool cache and by the direct-connection builders that
+ * resolve the same password, so those paths cannot disagree about whether a
+ * database really is the workspace the registry named. A second copy of a
+ * fail-closed identity check is a second copy that can drift open.
  */
 async function verifyWorkspaceDatabase(
   workspace: WorkspaceDescriptor,
@@ -273,7 +269,7 @@ async function verifyWorkspaceDatabase(
   // for the error. A password provider that throws is swallowed by the driver
   // and reported as `CONNECT_TIMEOUT` fifteen seconds later, which is both slow
   // and names the wrong cause; a missing secret should say so immediately.
-  await resolvePassword(workspace)
+  await resolveWorkspacePassword(workspace)
 
   // Before the first query, and before the fingerprint. An unresolvable
   // `SECRET_KEY` is not a degraded workspace, it is a workspace this process must not
@@ -356,67 +352,6 @@ async function enforceCap(keepWorkspaceKey: string): Promise<void> {
     }
     if (victim === null) return
     await evict(victim, 'lru')
-  }
-}
-
-/**
- * A workspace's own **direct** (session-mode) pool, outside this cache.
- *
- * The outbox relay tier needs three things this cache cannot give it: the
- * *direct* endpoint (a transaction pooler accepts a `LISTEN` and delivers
- * nothing, and a session advisory lock is worse than useless through one), a
- * connection that is never evicted by request-traffic LRU pressure, and a
- * lifetime it controls. So it opens its own — but through this module, because
- * this is the layer that builds `Database` handles and, more importantly,
- * because the §3 assertion must be the *same* assertion. A second copy of a
- * fail-closed identity check is a second copy that can drift open.
- *
- * Deliberately NOT registered in `pools`: this handle is not a request pool, it
- * must not be handed to a request, and it must not be counted in the eviction
- * metric that measures whether idle workspaces can suspend. §6's corollary is that
- * the tier holding it must never share a compute with workspaces you expect to
- * suspend, and keeping it out of that counter is what keeps the counter honest.
- *
- * Throws on refusal, exactly as `acquireWorkspacePool` does. The caller decides
- * what a refused workspace costs; for the relay tier it costs that workspace its relay
- * and nothing else.
- */
-export interface DirectWorkspacePool {
-  sql: postgres.Sql
-  db: Database
-  secrets: ResolvedWorkspaceSecrets
-  close(): Promise<void>
-}
-
-export async function openWorkspaceDirectPool(
-  workspace: WorkspaceDescriptor,
-  opts: { max?: number } = {}
-): Promise<DirectWorkspacePool> {
-  const sql = postgres(workspace.database.directUrl, {
-    max: opts.max ?? 1,
-    // An always-warm tier: letting the connection lapse would pay a reconnect on
-    // every wake, and the whole point of the doorbell is that work starts now.
-    idle_timeout: 0,
-    connect_timeout: 15,
-    prepare: true,
-    password: () => resolvePassword(workspace),
-    onnotice: () => {},
-  })
-  try {
-    const secrets = await verifyWorkspaceDatabase(workspace, sql)
-    return {
-      sql,
-      db: createDbFromSql(sql),
-      secrets,
-      close: () =>
-        sql
-          .end({ timeout: 5 })
-          .then(() => undefined)
-          .catch(() => undefined),
-    }
-  } catch (err) {
-    await sql.end({ timeout: 5 }).catch(() => {})
-    throw err
   }
 }
 
