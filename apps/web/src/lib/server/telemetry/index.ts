@@ -42,19 +42,23 @@ async function claimPing(): Promise<void> {
   }
 }
 
+let started = false
+
 /**
- * @param opts.once - claim the ping and return, arming no interval. A Railway
- *   cron service is itself the schedule, and a process that armed an hourly
- *   timer would never exit — the one thing a cron service must do.
+ * @param opts.once - claim the ping and return, arming no interval. A
+ *   `QUACKBACK_CRON_JOB=daily` one-shot is itself the schedule, and a
+ *   process that armed an hourly timer would never exit.
  */
 export async function startTelemetry(opts: { once?: boolean } = {}): Promise<void> {
   try {
     if (!isTelemetryEnabled()) return
+    if (!opts.once && started) return
 
     log.info('anonymous usage statistics enabled; disable with DISABLE_TELEMETRY=true')
 
     await claimPing()
     if (opts.once) return
+    started = true
     setInterval(() => void claimPing(), ONE_HOUR)
   } catch {
     // Silent failure — telemetry must never affect application functionality

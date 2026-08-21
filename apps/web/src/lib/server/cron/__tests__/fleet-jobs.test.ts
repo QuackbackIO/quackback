@@ -1,14 +1,13 @@
 /**
- * The cron services and the worker's timers must stay one list.
+ * The worker's timers and the one-shot `QUACKBACK_CRON_JOB` bodies must stay
+ * one list.
  *
  * Under pooled tenancy every scheduled sweep funnels through `withSweepLock`,
- * which fans the tick out across the fleet — so the interval is the rate at
- * which every suspended workspace database is woken. That is why `startup.ts` starts
- * no sweep timers on a pooled worker and the cron services own them instead.
- *
- * The hazard that creates is drift: a sweep added to `startup.ts`'s schedule but
- * not to a cron job would simply stop running on the pooled fleet, silently. So
- * this suite reads both sources and asserts they name the same work.
+ * which fans the tick out across the fleet. The always-on worker arms those
+ * timers itself — the same schedule as a single-workspace install. A sweep
+ * added to `fleet-jobs.ts` but not to `startup.ts`'s schedule would silently
+ * stop running on the live fleet. So this suite reads both sources and
+ * asserts they name the same work.
  *
  * Reading source text is a weak instrument, and this run has caught nineteen
  * tests that could not have failed — so every assertion below is paired with a
@@ -61,9 +60,9 @@ describe('the sweep inventory', () => {
   })
 
   it('is not duplicated back into startup.ts', () => {
-    // startup.ts used to hold these bodies inline. If a sweep reappears there it
-    // will run on the worker's timer and never on the cron service, which is the
-    // drift this whole arrangement exists to avoid.
+    // startup.ts used to hold these bodies inline. The schedule must keep
+    // calling `jobs.run…()` rather than taking the lock itself, or a one-shot
+    // `QUACKBACK_CRON_JOB` run would drift from the live timers.
     expect(sweepLockNames(startupSource).size).toBe(0)
   })
 
@@ -80,33 +79,23 @@ describe('the sweep inventory', () => {
   })
 })
 
-describe('the pooled worker starts no fleet-fanning timers', () => {
+describe('the worker arms the sweep schedule under either tenancy mode', () => {
   const startupSource = read('startup.ts')
 
-  it('returns before the sweep schedule when tenancy is pooled', () => {
-    // The structural claim: the job tier is started BEFORE the pooled branch
-    // (it runs under either tenancy mode), the branch ends in a `return`, and
-    // the whole sweep schedule sits after it — so nothing that fans out
-    // across the fleet on a timer can arm on a pooled worker.
+  it('does not skip the sweep schedule when tenancy is pooled', () => {
+    // Compute and Postgres stay up, so a pooled worker runs the same timers
+    // as a single-workspace install. An early return gated on pooled tenancy
+    // would silently park the fleet's sweeps on cron containers we no longer
+    // run.
     const fn = startupSource.slice(startupSource.indexOf('function startBackgroundProcessing'))
     expect(fn).not.toBe('')
 
     const jobTier = fn.indexOf('startJobTier')
-    const branch = fn.indexOf('if (config.isPooledTenancy)')
-    // The import expression, not the bare path — the branch's own comment and
-    // its log line both name `cron/fleet-jobs.ts`, and matching those would
-    // measure the prose rather than the schedule.
     const scheduleStart = fn.indexOf("import('@/lib/server/cron/fleet-jobs')")
     expect(jobTier).toBeGreaterThan(-1)
     expect(fn).not.toContain('startRelayTier')
-    expect(branch).toBeGreaterThan(jobTier)
-    expect(scheduleStart).toBeGreaterThan(branch)
-
-    // The `return` belongs to the pooled branch, not to something after the
-    // schedule: it must fall between the branch opening and the schedule.
-    const earlyReturn = fn.indexOf('return', branch)
-    expect(earlyReturn).toBeGreaterThan(branch)
-    expect(earlyReturn).toBeLessThan(scheduleStart)
+    expect(scheduleStart).toBeGreaterThan(jobTier)
+    expect(fn).not.toMatch(/if\s*\(\s*config\.isPooledTenancy\s*\)/)
   })
 })
 

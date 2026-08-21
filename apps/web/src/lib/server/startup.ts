@@ -40,11 +40,11 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        // Stop the Postgres job tier's loops and release its LISTEN
-        // connections. Jobs already running are awaited within the budget
-        // below; anything still in flight when the process dies is NOT
-        // re-run blindly — its lease lapses and the reaper adjudicates it,
-        // which for a no-retry job means terminal rather than a second run.
+        // Stop the Postgres job tier's loops. Jobs already running are awaited
+        // within the budget below; anything still in flight when the process
+        // dies is NOT re-run blindly — its lease lapses and the reaper
+        // adjudicates it, which for a no-retry job means terminal rather than
+        // a second run.
         await import('./jobs/tier').then(({ stopJobTier }) => stopJobTier())
 
         // Drain the conversation pub/sub subscriber connection before the
@@ -113,12 +113,10 @@ export function logStartupBanner(): void {
     'server started'
   )
 
-  // A cron service is this same image with `QUACKBACK_CRON_JOB` set and a
-  // `deploy.cronSchedule`: the platform starts the container, waits for it to
-  // exit, and reports the exit code. So run the named job and exit — and start
-  // none of the long-lived background work below, because a process holding a
-  // job-tier session or an interval would never exit, and the platform would
-  // report a cron run that "succeeded" by still running.
+  // One-shot override: run a named fleet job and exit. The live fleet does
+  // not use this — hourly and daily sweeps run on the always-on worker — but
+  // a container that should do one pass and stop still needs a way to say so.
+  // Start none of the long-lived work below, or the process would never exit.
   const cronJob = process.env.QUACKBACK_CRON_JOB?.trim()
   if (cronJob) {
     void runCronJobAndExit(cronJob)
@@ -150,8 +148,8 @@ export function logStartupBanner(): void {
 
   // Reads the workspace's integration rows, so it is per-database work. Under
   // pooled tenancy it runs once per workspace — and, like the startup backfill
-  // below, only on a replica that already does background work, because a
-  // fleet-wide read on every web boot would wake every suspended compute.
+  // below, only on a replica that already does background work. A fleet-wide
+  // read on every web boot would be extra connections from the HTTP tier.
   //
   // This one was found by the `db` proxy's own scope tripwire rather than by the
   // sweep that preceded it: it is a boot-time configuration warning, which is
@@ -182,9 +180,8 @@ export function logStartupBanner(): void {
   //
   // Per-database work, so under pooled tenancy it runs once per workspace — but
   // only on a replica that already runs background work. A fleet-wide backfill
-  // on every web boot would open a connection to every workspace database and wake
-  // every suspended compute, which is precisely the cost the pooling exists to
-  // avoid; one-shot per-database work belongs with the migrator role. The
+  // on every web boot would open a connection to every workspace database from
+  // the HTTP tier; one-shot per-database work belongs with the worker. The
   // backfill is idempotent and advisory-locked, which is what makes fanning it
   // out safe rather than merely convenient.
   if (config.isPooledTenancy && !shouldRunWorkers()) {
@@ -240,36 +237,27 @@ export function logStartupBanner(): void {
 }
 
 /**
- * Boot the background tiers, and — on a single-workspace install only — the
- * periodic sweepers. Runs under QUACKBACK_ROLE=worker and the single-process
- * default ('all'), never on web-role replicas. Every sweeper additionally holds
- * a cross-instance sweep lock, so multiple worker replicas stay safe.
+ * Boot the background tiers and the periodic sweepers. Runs under
+ * `QUACKBACK_ROLE=worker` and the single-process default (`all`), never on
+ * web-role replicas. Every sweeper holds a cross-instance sweep lock, so
+ * multiple worker replicas stay safe.
  *
- * Under pooled tenancy this starts the job tier and stops there: the sweeps
- * run on cron services instead, for the reason stated at the branch below.
+ * Under pooled tenancy the same timers run: compute and Postgres stay up, so
+ * fanning a tick across the fleet is just the work, not a reason to park it
+ * on a cron container that starts, sweeps, and exits.
  */
 function startBackgroundProcessing(): void {
   // The Postgres job tier — every background queue in the process. It runs
   // under BOTH tenancy modes, because a job row lives in the workspace's own
-  // database and the tier opens a real workspace scope around every claim. Those
-  // are exactly the two properties BullMQ lacked: a Redis job carries no
-  // workspace, so its processor resolved `db` with no scope and threw on its first
-  // query, and one un-namespaced Redis list per queue held every workspace's
-  // payloads.
-  //
-  // The periodic sweepers below funnel through `withSweepLock`, which fans a
-  // tick out across the fleet with a real workspace scope each time — which is why
-  // a pooled worker does not arm them at all; see the branch below.
+  // database and the tier opens a real workspace scope around every claim.
   import('./jobs/tier')
     .then(({ startJobTier }) => startJobTier())
     .catch((err) => log.error({ err }, 'failed to start the job tier'))
 
-  // Boot-time page_views partition ensure. This used to ride along inside the
-  // BullMQ queue's construction; it needs a real workspace scope now, so it runs as
-  // a fleet pass instead. It stays at boot rather than waiting for the 02:30
-  // slot because beacons are dropped while a day has no partition, and an
-  // instance that was down long enough to exhaust its week-ahead window would
-  // otherwise lose a day of them.
+  // Boot-time page_views partition ensure. It stays at boot rather than
+  // waiting for the 02:30 slot because beacons are dropped while a day has no
+  // partition, and an instance that was down long enough to exhaust its
+  // week-ahead window would otherwise lose a day of them.
   Promise.all([
     import('./domains/analytics/partition-maintenance-queue'),
     import('@/lib/server/workspaces/fleet'),
@@ -279,41 +267,20 @@ function startBackgroundProcessing(): void {
     )
     .catch((err) => log.error({ err }, 'boot-time partition ensure failed'))
 
-  // The job tier above is everything a pooled worker runs, and the timers
-  // below are the reason there is a branch here at all.
-  //
-  // Every one of them funnels through `withSweepLock`, which under pooled
-  // tenancy fans the tick out across the WHOLE fleet — one connection to every
-  // workspace database, per tick. So the interval stops being a scheduling
-  // preference and becomes the floor on how often every suspended workspace
-  // compute is woken, and the 5-minute reconcilers sit almost exactly on the
-  // 300 s (measured 337 s) suspend timeout: the compute is woken at very nearly
-  // the rate it would otherwise sleep, with no functional symptom at all. That
-  // is the same shape as a poll loop, only slower.
-  //
-  // So under pooled tenancy they move off this process entirely, onto
-  // `deploy.cronSchedule` services that run one job and exit
-  // (`cron/fleet-jobs.ts`, SAAS-HOSTING-STACK.md §9). The bodies are the same
-  // functions this branch calls below — only the trigger differs — which leaves
-  // the always-warm worker holding the job tier and nothing else.
-  //
-  // There is deliberately no BullMQ branch left. It used to hold a warning and
-  // an eager worker boot, refused under pooled tenancy because a Redis job
-  // carries no workspace; every queue is now a table in the workspace's own database,
-  // drained by the job tier above.
-  if (config.isPooledTenancy) {
-    log.info(
-      'pooled tenancy — the scheduled sweeps are not on this process. They fan out across the ' +
-        'whole fleet, so their intervals would set the rate at which every suspended workspace ' +
-        'compute is woken; they run on the cron services instead (cron/fleet-jobs.ts)'
+  // Telemetry used to live on the daily cron container (a web replica does
+  // not arm it from bootstrap). The always-on worker owns it now. Detach
+  // from any inherited request scope so withSweepLock fans out fleet-wide.
+  import('@/lib/server/log-context')
+    .then(({ runWithoutLogContext }) =>
+      runWithoutLogContext(async () => {
+        const { startTelemetry } = await import('@/lib/server/telemetry')
+        await startTelemetry()
+      })
     )
-    return
-  }
+    .catch((err) => log.error({ err }, 'failed to start telemetry'))
 
-  // The scheduled sweeps. Each body lives in `cron/fleet-jobs.ts` so this
-  // single-workspace schedule and the pooled fleet's cron services run the same
-  // code; only the trigger differs. The delays and intervals here are the ones
-  // these sweeps have always had.
+  // The scheduled sweeps. Bodies live in `cron/fleet-jobs.ts` so a one-shot
+  // `QUACKBACK_CRON_JOB` run and this timer schedule execute the same code.
   import('@/lib/server/cron/fleet-jobs')
     .then((jobs) => {
       // Space reclamation for the tables that replaced Redis (kv_store,
@@ -350,6 +317,8 @@ function startBackgroundProcessing(): void {
       // idempotent, so overlap with a live delayed job is harmless.
       setTimeout(() => void jobs.runStatusMaintenanceSweep(), 31_000)
       setInterval(() => void jobs.runStatusMaintenanceSweep(), 5 * 60 * 1000)
+
+      log.info({ event: 'sweeps.armed' }, 'scheduled sweeps armed')
     })
     .catch((err) => log.error({ err }, 'failed to init the scheduled sweeps'))
 }

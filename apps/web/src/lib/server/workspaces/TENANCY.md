@@ -543,39 +543,26 @@ own relay loop: `emit()` writes an `event-dispatch` job in the same transaction
 as the outbox row. `events/RELAY.md` records the deletion; `jobs/JOBS.md` is
 the account of the remaining tier.
 
-**The corollary is a running cost.** A live poll loop keeps the tenant database
-awake. That is why `quackback-worker` can be its own service rather than a
-role on the pooled web tier: the web tier's idle-cost model survives only if
-nothing in that process keeps talking to a quiet workspace.
+The worker is its own always-on service (`QUACKBACK_ROLE=worker`) rather than
+a role on the web tier so HTTP replicas stay producer-only: they enqueue, they
+do not claim. Compute and Postgres stay up, so a live poll loop is the
+intended cost of running jobs, not a reason to detach.
 
-### 5.2 The scheduled sweeps run on cron services, not on the worker
+### 5.2 The scheduled sweeps run on the worker
 
 Every sweep in `startup.ts` funnels through `withSweepLock`, which under pooled
-tenancy fans the tick out across the whole fleet. So a sweep's interval is the
-rate at which every suspended compute is woken:
+tenancy fans the tick out across the whole fleet. Compute and Postgres stay
+up, so the always-on worker arms the same timers as a single-workspace
+install. `cron/fleet-jobs.ts` holds the bodies; `QUACKBACK_CRON_JOB` remains a
+one-shot entry point for the same functions, not the live topology.
 
-| Timer                                        | Interval | Against a ~337 s suspend timeout         |
-| -------------------------------------------- | -------- | ---------------------------------------- |
-| changelog / status / maintenance reconcilers | 5 min    | **no workspace ever suspends**           |
-| billing reconcile                            | 15 min   | every workspace woken four times an hour |
-| summary + merge sweeps                       | 30 min   | every workspace woken twice an hour      |
-| kv sweep, telemetry claim                    | 1 h      | every workspace woken hourly             |
+`QUACKBACK_ROLE=web` starts none of this. The job tier, the boot-time
+partition ensure, telemetry, and the sweep schedule all live in
+`startBackgroundProcessing()`, which only runs on `worker` and `all`.
 
-`startBackgroundProcessing()` therefore returns immediately after starting the
-job tier when tenancy is pooled, and `cron/fleet-jobs.ts` holds the bodies so the
-`deploy.cronSchedule` services and the single-workspace schedule run the same code.
-The Postgres job tier and the boot-time partition ensure sit **above** that
-return, because both run under either tenancy mode.
-
-The cost, stated: the reconcilers go from 5-minutely, and the billing reconcile
-from 15-minutely, to hourly on a pooled fleet. They are backstops behind a
-synchronous publish, a delayed job and a provider webhook, so what lengthens is
-the recovery window after a dropped delivery. Nothing changes for a single-workspace
-install.
-
-There is no outbox backstop among the cron jobs. `event-dispatch` is a job
-queue row, so a lost NOTIFY costs a poll interval rather than an hour, and a
-cron pass over every workspace's outbox would be a second drainer racing the
+There is no outbox backstop among the sweeps. `event-dispatch` is a job
+queue row, so a delayed claim costs a poll interval rather than an hour, and a
+pass over every workspace's outbox would be a second drainer racing the
 job claim.
 
 ### 5.3 `BASE_URL` is the workspace's, not the fleet's

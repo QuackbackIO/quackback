@@ -616,6 +616,15 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'the moment that promise settles, so it can never outlive the entry it is standing in for.',
   },
   {
+    file: 'apps/web/src/lib/server/telemetry/index.ts',
+    name: 'started',
+    category: 'process-lifetime',
+    reason:
+      'Once-per-process latch so startTelemetry() from the worker boot path and from bootstrap.ts ' +
+      'on the first page cannot arm two hourly intervals. The ping itself is already ' +
+      'cross-replica-deduped by withSweepLock; this only stops a second timer in the same process.',
+  },
+  {
     file: 'apps/web/src/lib/server/startup.ts',
     name: '_logged',
     category: 'process-lifetime',
