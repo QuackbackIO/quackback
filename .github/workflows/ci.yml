@@ -49,8 +49,16 @@ jobs:
       - run: bun run --cwd packages/db typecheck
       - run: bunx tsc --noEmit -p packages/email/tsconfig.json
 
-  test:
+  # Four shards on four-core runners. The ~1,300-file suite was ~8–9 min of
+  # wall clock on one job; splitting files plus isolate:false in vitest.config
+  # is what makes the unit gate finish in a couple of minutes.
+  unit:
+    name: test (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -66,13 +74,28 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bun run db:migrate
-      # Applies every migration to a scratch DB on the postgres service and
-      # diffs the result against the Drizzle TS schema (packages/db/README.md).
+      # Drift only needs to run once; shard 1 owns it so the other three start
+      # the suite immediately after migrate.
       - name: Check migration/schema drift
+        if: matrix.shard == 1
         run: bun run db:check-drift
-      - run: bun run test --run
+      - run: bun run test --run --shard=${{ matrix.shard }}/4 --reporter=dot --reporter=github-actions
+
+  # Single check name so existing "test" required-status wiring still matches.
+  test:
+    needs: unit
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All unit shards passed
+        run: test "${{ needs.unit.result }}" = "success"
 
   e2e-smoke:
     runs-on: ubuntu-latest
