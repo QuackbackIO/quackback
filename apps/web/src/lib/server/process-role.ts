@@ -3,7 +3,7 @@
  *
  * QUACKBACK_ROLE=web     Serve HTTP only. Queue modules stay producer-only:
  *                        they can enqueue, but nothing claims a job.
- * QUACKBACK_ROLE=worker  Run the job tier — one poll loop per workspace.
+ * QUACKBACK_ROLE=worker  Run the job worker — one poll loop per workspace.
  *                        Still serves HTTP (health probes work unchanged);
  *                        don't route user traffic to it.
  * QUACKBACK_ROLE=all     Both — the default. Unset means `all`, which is the
@@ -34,7 +34,7 @@ export type ProcessRole = (typeof PROCESS_ROLES)[number]
  *
  * **Not `all`.** The old code warned and returned `all`, which is fail-OPEN
  * into the exact topology the design forbids: measured, `QUACKBACK_ROLE=banana`
- * — and `MIGRATOR`, and `Migrator` — booted the Postgres job tier and the
+ * — and `MIGRATOR`, and `Migrator` — booted the job worker and the
  * sweepers together. A typo in a deployment manifest is not a licence to run
  * every background subsystem against every workspace.
  *
@@ -91,7 +91,7 @@ export class InvalidProcessRole extends Error {
   constructor(raw: string) {
     super(
       `QUACKBACK_ROLE='${raw}' is not one of ${PROCESS_ROLES.join(' | ')}. Refusing to start: ` +
-        'the previous behaviour was to fall back to `all`, which boots the job tier and the ' +
+        'the previous behaviour was to fall back to `all`, which boots the job worker and the ' +
         'sweepers — so a typo silently produced the one topology pooled tenancy forbids.'
     )
     this.name = 'InvalidProcessRole'
@@ -115,7 +115,7 @@ export function assertProcessRoleConfigured(env: NodeJS.ProcessEnv = process.env
  *
  * An allowlist rather than `!== 'web'`, and that is load-bearing: the old form
  * would have said *true* for every role added after it, so `migrator` would have
- * silently booted the job tier's fifteen queues and six sweepers alongside a
+ * silently booted the job worker's fifteen queues and six sweepers alongside a
  * fleet migration. A negative test over an open set answers for values it has
  * never heard of.
  */

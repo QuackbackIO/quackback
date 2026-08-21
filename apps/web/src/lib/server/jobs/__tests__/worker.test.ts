@@ -1,5 +1,5 @@
 /**
- * The job tier starts one always-on poll loop per workspace and does not
+ * The job worker starts one always-on poll loop per workspace and does not
  * detach it.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -20,7 +20,7 @@ interface ClaimPlan {
   claimed: number
 }
 
-async function bootJobTier(plan: ClaimPlan) {
+async function bootJobWorker(plan: ClaimPlan) {
   vi.resetModules()
   const savedPoll = process.env.JOB_POLL_INTERVAL_MS
   process.env.JOB_POLL_INTERVAL_MS = String(POLL_MS)
@@ -59,18 +59,18 @@ async function bootJobTier(plan: ClaimPlan) {
     awaitPool: async () => {},
   }))
 
-  const mod = await import('../tier')
-  await mod.startJobTier()
+  const mod = await import('../worker')
+  await mod.startJobWorker()
   await vi.advanceTimersByTimeAsync(0)
 
   return {
     status: () => {
-      const row = mod.getJobTierStatus().workspaces.find((t) => t.workspaceKey === WORKSPACE_KEY)
+      const row = mod.getJobWorkerStatus().workspaces.find((t) => t.workspaceKey === WORKSPACE_KEY)
       if (!row) throw new Error('job loop missing from status')
       return row
     },
     stop: async () => {
-      await mod.stopJobTier()
+      await mod.stopJobWorker()
       vi.resetModules()
       if (savedPoll === undefined) delete process.env.JOB_POLL_INTERVAL_MS
       else process.env.JOB_POLL_INTERVAL_MS = savedPoll
@@ -78,7 +78,7 @@ async function bootJobTier(plan: ClaimPlan) {
   }
 }
 
-let handle: Awaited<ReturnType<typeof bootJobTier>> | null = null
+let handle: Awaited<ReturnType<typeof bootJobWorker>> | null = null
 
 afterEach(async () => {
   if (handle) {
@@ -88,11 +88,11 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-describe('pooled job tier', () => {
+describe('pooled job worker', () => {
   it('starts a loop per workspace and keeps polling', async () => {
     vi.useFakeTimers()
     const plan = { claimed: 0 }
-    handle = await bootJobTier(plan)
+    handle = await bootJobWorker(plan)
     expect(handle.status().passes).toBeGreaterThanOrEqual(1)
 
     const before = handle.status().passes
@@ -102,15 +102,15 @@ describe('pooled job tier', () => {
     expect(handle.status().claimed).toBeGreaterThanOrEqual(2)
   })
 
-  it('does not start the tier on a web replica', async () => {
+  it('does not start the job worker on a web replica', async () => {
     vi.resetModules()
     vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
     vi.doMock('@/lib/server/config', () => ({
       config: { isPooledTenancy: true, databaseUrl: 'postgres://direct/single' },
     }))
-    const mod = await import('../tier')
-    await mod.startJobTier()
-    expect(mod.getJobTierStatus()).toEqual({ running: false, workspaces: [] })
+    const mod = await import('../worker')
+    await mod.startJobWorker()
+    expect(mod.getJobWorkerStatus()).toEqual({ running: false, workspaces: [] })
     vi.resetModules()
   })
 })

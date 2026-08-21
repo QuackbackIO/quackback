@@ -33,7 +33,7 @@
  * That removes the trade rather than repricing it:
  *
  * - a workspace with nothing pending contributes **no wakes at all** — the schedule
- *   is inert, the tiers detach, and the compute suspends;
+ *   is inert, the loops detach, and the compute suspends;
  * - a workspace with a deadline three days out is inert for three days and wakes
  *   once, at the deadline;
  * - a workspace with a deadline in the next minute ticks exactly as it does today,
@@ -45,7 +45,7 @@
  *
  * ## Two consumers, one query
  *
- * The same provider answers both questions the tier asks, which is the reason
+ * The same provider answers both questions the job worker asks, which is the reason
  * they cannot disagree:
  *
  * 1. `dueWithin()` gates the cron — is the next deadline inside the next slot?
@@ -77,7 +77,10 @@ const providers = new Map<string, WorkspaceDeadlineProvider>()
  * imports before any workspace scope is open — so registration is process-wide and
  * scope-free, while every call to the provider happens inside a scope.
  */
-export function registerWorkspaceDeadline(queue: string, provider: WorkspaceDeadlineProvider): void {
+export function registerWorkspaceDeadline(
+  queue: string,
+  provider: WorkspaceDeadlineProvider
+): void {
   providers.set(queue, provider)
 }
 
@@ -128,7 +131,7 @@ export async function dueWithin(
  * The earliest deadline across every registered queue for this workspace, rounded
  * up to the next whole minute.
  *
- * What a detaching tier records so it knows when to come back. Null means no
+ * What a detaching loop records so it knows when to come back. Null means no
  * clock-driven work exists at all, which is the only state in which sleeping
  * until the safety-net rescan is the whole answer.
  *

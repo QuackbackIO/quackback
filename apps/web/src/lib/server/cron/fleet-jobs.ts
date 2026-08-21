@@ -190,7 +190,7 @@ async function runMigratorConvergence(): Promise<void> {
  * stay as an ad-hoc / rollback entry point: one pass, then exit.
  *
  * There is no outbox backstop here. `emit()` writes an `event-dispatch` job in
- * the same transaction as the outbox row, and the job tier drains it — so a
+ * the same transaction as the outbox row, and the job worker drains it — so a
  * delayed claim is picked up by the poll floor, not an hour later by a sweep.
  * A pass over every workspace's outbox would be a second drainer racing the
  * job claim for no reachable failure.

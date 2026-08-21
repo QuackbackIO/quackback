@@ -209,7 +209,7 @@ describe('the schedule tick', () => {
   })
 
   it('does not backfill missed slots after an outage', async () => {
-    // A tier down for three hours must run an hourly sweep ONCE on restart, not
+    // A worker down for three hours must run an hourly sweep ONCE on restart, not
     // three times — the behaviour the repeatable jobs had.
     const q = queue('sched-outage')
     __setJobDefinitionsForTests([
@@ -235,7 +235,7 @@ describe('the schedule tick', () => {
       { name: q, cron: '* * * * *', handler: async () => async () => {} },
     ])
 
-    // Two schedulers, as `tier.ts` builds one per workspace loop.
+    // Two schedulers, as `loops.ts` builds one per workspace loop.
     const alpha = createScheduleState()
     const bravo = createScheduleState()
     const minute = (m: number) => new Date(2026, 7, 9, 14, m, 5)
@@ -582,7 +582,7 @@ describe('the bounded pool', () => {
     expect(claimSpecsFor(pool, CONFIG)).toEqual([])
   })
 
-  it('honours the tier-wide ceiling, which defaults to the sum of the parts', () => {
+  it('honours the process-wide ceiling, which defaults to the sum of the parts', () => {
     __setJobDefinitionsForTests([
       { name: 'ceil-a', concurrency: 3, handler: async () => async () => {} },
       { name: 'ceil-b', concurrency: 4, handler: async () => async () => {} },

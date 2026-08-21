@@ -360,7 +360,7 @@ async function enforceCap(keepWorkspaceKey: string): Promise<void> {
 /**
  * A workspace's own **direct** (session-mode) pool, outside this cache.
  *
- * The job tier needs three things this cache cannot give it: the *direct*
+ * The job worker needs three things this cache cannot give it: the *direct*
  * endpoint (a transaction pooler accepts a `LISTEN` and delivers nothing), a
  * connection that is never evicted by request-traffic LRU pressure, and a
  * lifetime it controls. So it opens its own — but through this module, because
@@ -373,7 +373,7 @@ async function enforceCap(keepWorkspaceKey: string): Promise<void> {
  * metric that measures whether idle workspaces can suspend.
  *
  * Throws on refusal, exactly as `acquireWorkspacePool` does. The caller decides
- * what a refused workspace costs; for the job tier it costs that workspace its
+ * what a refused workspace costs; for the job worker it costs that workspace its
  * loop and nothing else.
  */
 export interface DirectWorkspacePool {

@@ -96,7 +96,7 @@ export async function runFleetPass(
  * and the loss was not cosmetic: `acquireWorkspaceScope` classifies every refusal
  * with a `code`, and a caller that has to parse prose to recover it cannot tell
  * `app_secret_no_resolver` — which no retry will ever fix — from a compute that
- * is merely still starting. The job tier reconnecting once per second to a
+ * is merely still starting. The job worker reconnecting once per second to a
  * workspace refused for the former is precisely what this class exists to let it
  * stop doing.
  */

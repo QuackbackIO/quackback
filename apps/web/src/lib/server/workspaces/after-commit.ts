@@ -41,7 +41,7 @@ export function __resetAfterCommitForTests(): void {
 /**
  * Called after a durable job (or equivalent) is visible.
  *
- * The job tier registers here so an after-commit flush rings the in-process
+ * The job worker registers here so an after-commit flush rings the in-process
  * scheduler. Cloud and self-host `ROLE=all` both use this path; there is no
  * cross-process HTTP nudge.
  */

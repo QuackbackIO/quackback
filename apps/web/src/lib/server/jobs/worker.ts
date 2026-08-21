@@ -1,5 +1,5 @@
 /**
- * The job tier — one always-on poll loop per workspace.
+ * The job worker — one always-on poll loop per workspace.
  *
  * `runner.ts` decides what happens inside a workspace scope. This file owns
  * the scopes, the timers, and the workspace list. There is no LISTEN doorbell
@@ -41,9 +41,9 @@ import {
 } from './runner'
 import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 
-const log = logger.child({ component: 'job-tier' })
+const log = logger.child({ component: 'job-worker' })
 
-/** How often the pooled tier re-reads the active workspace list. */
+/** How often the pooled worker re-reads the active workspace list. */
 const WORKSPACE_REFRESH_MS = 60_000
 
 /** Sentinel workspace id for a single-workspace install. Never a real workspace id. */
@@ -150,11 +150,11 @@ function startLoop(opts: {
         if (entry.disposition === 'transient') {
           log.warn(
             { workspace_key: opts.workspaceKey, code, attempts: entry.attempts },
-            'job tier could not open a scope for this workspace; backing off and retrying'
+            'job loop could not open a scope for this workspace; backing off and retrying'
           )
         }
       } else {
-        log.error({ err, workspace_key: opts.workspaceKey }, 'job tier could not open a scope')
+        log.error({ err, workspace_key: opts.workspaceKey }, 'job loop could not open a scope')
       }
       return false
     }
@@ -220,7 +220,7 @@ function startLoop(opts: {
             )
           }
         } else {
-          log.error({ err, workspace_key: opts.workspaceKey }, 'job tier pass failed')
+          log.error({ err, workspace_key: opts.workspaceKey }, 'job loop pass failed')
         }
       }
       if (!running || stopped) break
@@ -229,7 +229,7 @@ function startLoop(opts: {
   }
 
   void runWithLogContext(
-    { request_id: crypto.randomUUID(), route: 'jobs:tier', workspace_key: opts.workspaceKey },
+    { request_id: crypto.randomUUID(), route: 'jobs:worker', workspace_key: opts.workspaceKey },
     loop
   ).catch((err) =>
     log.error(
@@ -291,7 +291,7 @@ function startWorkspaceLoop(workspace: WorkspaceDescriptor, cfg: RunnerConfig): 
 async function refreshWorkspaceLoops(cfg: RunnerConfig): Promise<void> {
   const { workspaces, refused } = await listActiveWorkspaces()
   if (refused.length > 0) {
-    log.error({ refused }, 'job tier skipping workspaces with invalid registry records')
+    log.error({ refused }, 'job worker skipping workspaces with invalid registry records')
   }
   const wanted = new Set(workspaces.map((t) => t.workspaceKey))
 
@@ -318,20 +318,20 @@ function scheduleWorkspaceRefresh(cfg: RunnerConfig): void {
   refreshTimer = setTimeout(() => {
     if (!running) return
     void refreshWorkspaceLoops(cfg)
-      .catch((err) => log.error({ err }, 'job tier workspace refresh failed'))
+      .catch((err) => log.error({ err }, 'job worker workspace refresh failed'))
       .finally(() => scheduleWorkspaceRefresh(cfg))
   }, WORKSPACE_REFRESH_MS)
   refreshTimer.unref?.()
 }
 
 /**
- * Start the job tier. Runs under `worker` and `all`. A `web` replica is a
+ * Start the job worker. Runs under `worker` and `all`. A `web` replica is a
  * no-op so HTTP-only scale-out stays producer-only.
  */
-export async function startJobTier(): Promise<void> {
+export async function startJobWorker(): Promise<void> {
   if (running) return
   if (!shouldRunWorkers()) {
-    log.info('QUACKBACK_ROLE=web — job tier not started')
+    log.info('QUACKBACK_ROLE=web — job worker not started')
     return
   }
   running = true
@@ -342,8 +342,8 @@ export async function startJobTier(): Promise<void> {
   if (!config.isPooledTenancy) {
     startSingleWorkspaceLoop(cfg)
     log.info(
-      { event: 'job.tier_started', workspaces: 1, poll_interval_ms: cfg.pollIntervalMs },
-      'job tier started (single workspace)'
+      { event: 'job.worker_started', workspaces: 1, poll_interval_ms: cfg.pollIntervalMs },
+      'job worker started (single workspace)'
     )
     return
   }
@@ -352,15 +352,15 @@ export async function startJobTier(): Promise<void> {
   scheduleWorkspaceRefresh(cfg)
   log.info(
     {
-      event: 'job.tier_started',
+      event: 'job.worker_started',
       workspaces: loops.size,
       poll_interval_ms: cfg.pollIntervalMs,
     },
-    'job tier started (pooled)'
+    'job worker started (pooled)'
   )
 }
 
-export async function stopJobTier(): Promise<void> {
+export async function stopJobWorker(): Promise<void> {
   const wasRunning = running
   running = false
   if (refreshTimer) {
@@ -371,15 +371,15 @@ export async function stopJobTier(): Promise<void> {
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
   resetJobHandlers()
-  if (wasRunning) log.info({ event: 'job.tier_stopped' }, 'job tier stopped')
+  if (wasRunning) log.info({ event: 'job.worker_stopped' }, 'job worker stopped')
 }
 
-export interface JobTierStatus {
+export interface JobWorkerStatus {
   running: boolean
   workspaces: Array<{ workspaceKey: string } & LoopStats>
 }
 
-export function getJobTierStatus(): JobTierStatus {
+export function getJobWorkerStatus(): JobWorkerStatus {
   return {
     running,
     workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),

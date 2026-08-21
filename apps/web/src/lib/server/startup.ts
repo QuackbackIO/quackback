@@ -12,7 +12,7 @@ let _logged = false
 let _shutdownWired = false
 
 /**
- * Wire SIGTERM/SIGINT to drain the job tier and close the remaining Postgres
+ * Wire SIGTERM/SIGINT to drain the job worker and close the remaining Postgres
  * connections cleanly. A job left mid-flight is not lost — its lease lapses and
  * the reaper adjudicates it — but draining avoids abandoning work that was
  * seconds from finishing, and avoids double-billing an AI call.
@@ -40,12 +40,12 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        // Stop the Postgres job tier's loops. Jobs already running are awaited
+        // Stop the job worker. Jobs already running are awaited
         // within the budget below; anything still in flight when the process
         // dies is NOT re-run blindly — its lease lapses and the reaper
         // adjudicates it, which for a no-retry job means terminal rather than
         // a second run.
-        await import('./jobs/tier').then(({ stopJobTier }) => stopJobTier())
+        await import('./jobs/worker').then(({ stopJobWorker }) => stopJobWorker())
 
         // Drain the conversation pub/sub subscriber connection before the
         // shared client closes — it's a separate long-lived socket.
@@ -247,12 +247,12 @@ export function logStartupBanner(): void {
  * on a cron container that starts, sweeps, and exits.
  */
 function startBackgroundProcessing(): void {
-  // The Postgres job tier — every background queue in the process. It runs
+  // The job worker — every background queue in the process. It runs
   // under BOTH tenancy modes, because a job row lives in the workspace's own
-  // database and the tier opens a real workspace scope around every claim.
-  import('./jobs/tier')
-    .then(({ startJobTier }) => startJobTier())
-    .catch((err) => log.error({ err }, 'failed to start the job tier'))
+  // database and the job worker opens a real workspace scope around every claim.
+  import('./jobs/worker')
+    .then(({ startJobWorker }) => startJobWorker())
+    .catch((err) => log.error({ err }, 'failed to start the job worker'))
 
   // Boot-time page_views partition ensure. It stays at boot rather than
   // waiting for the 02:30 slot because beacons are dropped while a day has no

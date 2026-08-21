@@ -816,7 +816,7 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'a second .exec() site, or an await inside that loop, is a visible diff.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'loops',
     category: 'workspace-scoped-key',
     keyedBy: 'workspace.workspaceKey',
@@ -825,11 +825,11 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'One drain loop per workspace, keyed by workspace id, each pass wrapped in ' +
       'withWorkspaceScopeById(...) so a handler always runs inside the scope of the workspace whose ' +
       'row it claimed. The per-workspace partition IS the design here rather than a retrofit - ' +
-      'this is the pooled-safe job tier that replaced the BullMQ workers whose run loops ' +
+      'this is the pooled-safe job worker that replaced the BullMQ workers whose run loops ' +
       'inherited whichever request armed them.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'stats',
     category: 'workspace-scoped-key',
     keyedBy: 'opts.workspaceKey',
@@ -840,16 +840,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'would be reported as another s, which is the kind of wrong number an operator acts on.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'running',
     category: 'process-lifetime',
     owner: 'Piece 6 (saas/queue-lease)',
     reason:
-      'Start-once latch for the job tier. Holds a boolean that is a fact about this process, ' +
-      'and startJobTier() returns early on it so a second call cannot double-start the loops.',
+      'Start-once latch for the job worker. Holds a boolean that is a fact about this process, ' +
+      'and startJobWorker() returns early on it so a second call cannot double-start the loops.',
   },
   {
-    file: 'apps/web/src/lib/server/jobs/tier.ts',
+    file: 'apps/web/src/lib/server/jobs/worker.ts',
     name: 'refreshTimer',
     category: 'process-lifetime',
     owner: 'Piece 6 (saas/queue-lease)',

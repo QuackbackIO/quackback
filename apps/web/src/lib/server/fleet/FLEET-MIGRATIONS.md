@@ -580,12 +580,12 @@ times.
 
 ### Environment
 
-| Variable                         | Meaning                                                                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `QUACKBACK_ROLE=migrator`        | serves nothing, runs no queues. `shouldRunWorkers()` is an allowlist, so this role starts neither the job tier nor the sweepers |
-| `QUACKBACK_TENANCY=pooled`       | required; the registry is the workspace source                                                                                  |
-| `QUACKBACK_CONTROL_DATABASE_URL` | where `cp_workspace_schema_state` lives                                                                                         |
-| `MIN_SCHEMA_VERSION`             | the serving floor. Read by the **web** role, not by this one                                                                    |
+| Variable                         | Meaning                                                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `QUACKBACK_ROLE=migrator`        | serves nothing, runs no queues. `shouldRunWorkers()` is an allowlist, so this role starts neither the job worker nor the sweepers |
+| `QUACKBACK_TENANCY=pooled`       | required; the registry is the workspace source                                                                                    |
+| `QUACKBACK_CONTROL_DATABASE_URL` | where `cp_workspace_schema_state` lives                                                                                           |
+| `MIN_SCHEMA_VERSION`             | the serving floor. Read by the **web** role, not by this one                                                                      |
 
 ### Connections
 

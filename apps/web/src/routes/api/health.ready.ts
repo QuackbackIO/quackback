@@ -4,7 +4,7 @@ import { db, sql, getMigrationStatus } from '@/lib/server/db'
 // readiness probe must not fail because some unrelated variable is missing —
 // that would report the process unhealthy for a reason it is not.
 import { isPooledTenancy } from '@/lib/server/workspaces/mode'
-import { getJobTierStatus } from '@/lib/server/jobs/tier'
+import { getJobWorkerStatus } from '@/lib/server/jobs/worker'
 import { getProcessRole, shouldRunWorkers } from '@/lib/server/process-role'
 import { logger } from '@/lib/server/logger'
 
@@ -155,7 +155,7 @@ async function checkMigrations(): Promise<void> {
  *               one, so this build's queries can hit columns that do not exist
  *               yet ⇒ 503 `behind`. Pooled skips it deliberately (§10.5).
  *   workers     a process that should run workers (`worker` or `all`) but
- *               is not running the job tier ⇒ 503. `web` does not expect it.
+ *               is not running the job worker ⇒ 503. `web` does not expect it.
  *
  * A hung dependency still degrades rather than hangs: `runCheck` gives each one
  * `CHECK_TIMEOUT_MS` and reports `timeout`.
@@ -165,32 +165,32 @@ export async function handleReadinessProbe(): Promise<Response> {
     runCheck('db', checkDb),
     runCheck('migrations', checkMigrations),
   ])
-  // Background work is now one tier rather than a registry of BullMQ workers,
-  // so readiness reports the tier.
+  // Background work is now the job worker rather than a registry of BullMQ
+  // workers, so readiness reports those loops.
   //
   // **`ok` asserts something now.** The old check computed
   // `ok = bootStatus.failed === 0` over eagerly-initialised workers, and a
   // worker that was never *constructed* is not failed — so a pooled replica
   // that started no consumer at all reported `workers ok:true total:0` while
   // every queue silently accumulated. Here a worker-role process that is not
-  // running the tier is NOT ready, and `loops` says how many workspaces it is
+  // running the job worker is NOT ready, and `loops` says how many workspaces it is
   // actually serving, which zero would have made obvious.
-  const tier = getJobTierStatus()
+  const jobWorker = getJobWorkerStatus()
   const expected = shouldRunWorkers()
   const workersCheck = {
-    ok: expected ? tier.running : true,
+    ok: expected ? jobWorker.running : true,
     expected,
-    running: tier.running,
-    loops: tier.workspaces.length,
-    inFlight: tier.workspaces.reduce((n, t) => n + t.inFlight, 0),
-    schemaMissing: tier.workspaces.filter((t) => t.schemaMissing).length,
+    running: jobWorker.running,
+    loops: jobWorker.workspaces.length,
+    inFlight: jobWorker.workspaces.reduce((n, t) => n + t.inFlight, 0),
+    schemaMissing: jobWorker.workspaces.filter((t) => t.schemaMissing).length,
     // Workspaces being refused. Deliberately reported here and NOT allowed to fail
     // the probe: a bad registry record is not this replica's fault, and taking
     // the pod out of rotation for it would turn one workspace's misconfiguration
     // into a fleet-wide outage. The detail — which workspace, which code, how long
     // — is on the quarantine heartbeat in the logs; this is the number that says
     // to go and read it.
-    refused: tier.workspaces.filter((t) => Boolean(t.refusedCode)).length,
+    refused: jobWorker.workspaces.filter((t) => Boolean(t.refusedCode)).length,
   }
 
   const ready = dbCheck.ok && migrationsCheck.ok && workersCheck.ok

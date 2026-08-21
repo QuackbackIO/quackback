@@ -78,4 +78,4 @@ export {
   type ParsedCron,
 } from './cron'
 
-export { getJobTierStatus, startJobTier, stopJobTier, type JobTierStatus } from './tier'
+export { getJobWorkerStatus, startJobWorker, stopJobWorker, type JobWorkerStatus } from './worker'

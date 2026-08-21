@@ -14,7 +14,7 @@
  * extended by heartbeat while the handler works, with no transaction open for
  * any of it.
  *
- * It is also the job that forced the tier's bounded pool. On a serial drain a
+ * It is also the job that forced the runner's bounded pool. On a serial drain a
  * two-minute translation would have cost the per-minute sweeps two runs each,
  * and those runs would have been *dropped, not delayed* — see `jobs/JOBS.md`
  * §10.

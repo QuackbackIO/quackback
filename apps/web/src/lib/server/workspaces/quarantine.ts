@@ -35,7 +35,7 @@
  * A workspace that stops being retried and says nothing is worse than the retry
  * storm, because the storm at least had a symptom. So quarantine is loud on
  * entry, loud again on a fixed heartbeat for as long as it lasts, and readable
- * from the tier status the readiness probe already publishes. The heartbeat is
+ * from the job-worker status the readiness probe already publishes. The heartbeat is
  * the part that matters: entry logs scroll away, and the operator who needs this
  * is the one arriving hours later asking why a workspace is not being served.
  */
@@ -251,7 +251,7 @@ export function listQuarantinedWorkspaces(): QuarantineEntry[] {
 }
 
 /**
- * The heartbeat. Called from the tiers' refresh pass, so it runs on a cadence
+ * The heartbeat. Called from the job worker's refresh pass, so it runs on a cadence
  * that exists whether or not anything is wrong.
  *
  * Silent when the set is empty — a periodic "nothing is refused" line is how a

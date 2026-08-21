@@ -3,7 +3,7 @@
  * transaction.
  *
  * Everything in this module assumes an open workspace scope: `db` resolves to the
- * workspace's pool, and `job_queue` is that workspace's own table. `tier.ts` owns
+ * workspace's pool, and `job_queue` is that workspace's own table. `loops.ts` owns
  * opening the scope and the timers; this file owns what happens inside one.
  *
  * The load-bearing property is that **no transaction is open while a handler
@@ -52,7 +52,7 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
   if (!raw) return fallback
   const n = Number(raw)
   if (!Number.isInteger(n) || n < min || n > max) {
-    log.warn({ [name]: raw, fallback }, 'invalid job-tier setting, using the default')
+    log.warn({ [name]: raw, fallback }, 'invalid job-loop setting, using the default')
     return fallback
   }
   return n
@@ -94,7 +94,7 @@ export function runnerConfig(): RunnerConfig {
   }
 }
 
-/** All queue names the tier will claim for. */
+/** All queue names the job worker will claim for. */
 export function activeQueueNames(): string[] {
   return jobDefinitions().map((d) => d.name)
 }
@@ -109,7 +109,7 @@ export function activeQueueNames(): string[] {
  * that armed lazily on first enqueue armed inside whatever request reached them
  * first. No such module is left, but the *import* hazard below outlives them.
  *
- * This queue does not have that shape — `tier.ts` opens a fresh
+ * This queue does not have that shape — `loops.ts` opens a fresh
  * `withWorkspaceScopeById(...)` around every pass, so a handler always runs inside
  * the scope of the job it is running, never one captured earlier. But the
  * *import* is a second, quieter version of the same risk: `def.handler()` is a
@@ -317,7 +317,7 @@ export interface DrainResult {
  *
  * **Why a pool rather than per-queue loops.** Fifteen loops per workspace would
  * multiply the poll traffic by fifteen against a per-workspace database, and the
- * database is the scarce thing here — §6's corollary is that this tier already
+ * database is the scarce thing here — §6's corollary is that this loop already
  * holds a connection per workspace open by design. One loop keeps one poll, one
  * listener and one claim query per pass, whatever the queue count.
  *
@@ -424,7 +424,7 @@ export async function awaitPool(pool: JobPool): Promise<void> {
 /**
  * Claim one pass and run it to completion.
  *
- * The same claim and the same execution path the tier uses — this is
+ * The same claim and the same execution path the job worker uses — this is
  * `dispatchPass` plus a wait, not a second implementation — so a harness or a
  * test that drives this is exercising the shipped mechanism. Per-queue
  * concurrency still applies, so a queue declared `concurrency: 1` yields one

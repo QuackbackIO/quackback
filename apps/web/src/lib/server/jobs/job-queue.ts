@@ -116,7 +116,7 @@ export function isMissingJobQueue(err: unknown): boolean {
 /**
  * The earliest instant this workspace's queue has work waiting for.
  *
- * Read by the tier on the connection it is **about to drop**, which is the point
+ * Read by the job worker on the connection it is **about to drop**, which is the point
  * of it: a tier that goes idle has to know when to come back, and the only
  * honest answer is the one the database gives before the lights go out. Without
  * this a delayed job — a hook retry five minutes out, a scheduled publish —

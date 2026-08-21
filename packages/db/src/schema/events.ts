@@ -59,7 +59,7 @@ export const events = pgTable(
     publishedAt: timestamp('published_at', { withTimezone: true }),
     /**
      * Who may drain this unpublished row. New rows default to `job`.
-     * Leftover `relay` rows are converted onto the job path at job-tier /
+     * Leftover `relay` rows are converted onto the job path at job-worker /
      * scheduler start.
      */
     dispatchOwner: text('dispatch_owner').notNull().default('job'),
