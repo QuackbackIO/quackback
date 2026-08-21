@@ -1,9 +1,8 @@
-import { isDeepStrictEqual } from 'node:util'
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { invalidateSettingsCache } from '../settings.helpers'
 import { parseIdentityProjection, type IdentityProjection } from './identity-projection'
+import { decideProjectionWrite, expectedWorkspaceKey } from './projection-write'
 
 const log = logger.child({ component: 'identity-projection' })
 
@@ -25,15 +24,7 @@ export function decideIdentityProjectionWrite(
   current: IdentityProjection | null,
   incoming: IdentityProjection
 ): 'apply' | 'idempotent' {
-  if (!current) return 'apply'
-  if (incoming.version < current.version) throw new IdentityProjectionWriteError('stale_version')
-  if (incoming.version > current.version) return 'apply'
-  if (isDeepStrictEqual(incoming, current)) return 'idempotent'
-  throw new IdentityProjectionWriteError('version_conflict')
-}
-
-function expectedWorkspaceKey(): string | null {
-  return getCurrentWorkspace()?.workspaceKey ?? process.env.QUACKBACK_INSTANCE_ID ?? null
+  return decideProjectionWrite(current, incoming, (code) => new IdentityProjectionWriteError(code))
 }
 
 export async function writeIdentityProjection(

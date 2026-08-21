@@ -1,11 +1,10 @@
-import { isDeepStrictEqual } from 'node:util'
 import type { StoredCloudConfig } from '@/lib/shared/db-types'
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { getCurrentWorkspace } from '@/lib/server/workspaces/workspace-context'
 import { invalidateSettingsCache } from '../settings.helpers'
 import { invalidateTierLimitsCache } from '../tier-limits.service'
 import { parseBillingProjection, type BillingProjection } from './billing-projection'
+import { decideProjectionWrite, expectedWorkspaceKey } from './projection-write'
 
 const log = logger.child({ component: 'billing-projection' })
 
@@ -27,15 +26,7 @@ export function decideBillingProjectionWrite(
   current: BillingProjection | null,
   incoming: BillingProjection
 ): 'apply' | 'idempotent' {
-  if (!current) return 'apply'
-  if (incoming.version < current.version) throw new BillingProjectionWriteError('stale_version')
-  if (incoming.version > current.version) return 'apply'
-  if (isDeepStrictEqual(incoming, current)) return 'idempotent'
-  throw new BillingProjectionWriteError('version_conflict')
-}
-
-function expectedWorkspaceKey(): string | null {
-  return getCurrentWorkspace()?.workspaceKey ?? process.env.QUACKBACK_INSTANCE_ID ?? null
+  return decideProjectionWrite(current, incoming, (code) => new BillingProjectionWriteError(code))
 }
 
 export async function writeBillingProjection(
