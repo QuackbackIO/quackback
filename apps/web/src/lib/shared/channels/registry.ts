@@ -41,10 +41,3 @@ export function channelFromVisitorTransport(source: string | undefined | null): 
   if (source && isChannel(source)) return source
   return 'messenger'
 }
-
-export function channelLabelMap(): Record<Channel, string> {
-  return Object.fromEntries(listChannelDescriptors().map((d) => [d.id, d.label])) as Record<
-    Channel,
-    string
-  >
-}
