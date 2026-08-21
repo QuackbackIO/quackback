@@ -106,12 +106,12 @@ export const ACTION_TONE: Record<ActionType, Tone> = {
   send_webhook: 'green',
 }
 
-function assistantEscalatePhrase(minutes: number): string {
+export function assistantEscalatePhrase(minutes: number): string {
   return `${minutes} min`
 }
 
 /** Ref -> display name, tolerant of an unset or needs-setup-template ref. */
-function named(
+export function named(
   id: string,
   lookup: ReadonlyMap<string, string> | undefined,
   missing: string
