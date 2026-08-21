@@ -19,6 +19,10 @@ import { request as httpsRequest } from 'node:https'
 import { request as httpRequest } from 'node:http'
 import { checkServerIdentity } from 'node:tls'
 import type { IncomingMessage } from 'node:http'
+import {
+  CONNECTOR_MAX_RESPONSE_BYTES,
+  CONNECTOR_REQUEST_TIMEOUT_MS,
+} from '@/lib/shared/assistant/connectors'
 
 const ALLOWED_SCHEMES = new Set(['http:', 'https:'])
 
@@ -455,11 +459,8 @@ export async function safePinnedFetch(
     method: request.method,
     headers,
     body: bodyBuffer ? bodyBuffer.toString('utf8') : undefined,
-    timeoutMs: CONNECTOR_FETCH_TIMEOUT_MS,
-    maxResponseBytes: CONNECTOR_FETCH_MAX_BYTES,
+    timeoutMs: CONNECTOR_REQUEST_TIMEOUT_MS,
+    maxResponseBytes: CONNECTOR_MAX_RESPONSE_BYTES,
     onOverflow: 'error',
   })
 }
-
-const CONNECTOR_FETCH_TIMEOUT_MS = 10_000
-const CONNECTOR_FETCH_MAX_BYTES = 256 * 1024

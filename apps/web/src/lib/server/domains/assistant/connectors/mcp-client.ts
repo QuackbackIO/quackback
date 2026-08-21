@@ -17,7 +17,6 @@ import {
   CONNECTOR_REQUEST_TIMEOUT_MS,
   CONNECTOR_RESPONSE_CHAR_LIMIT,
 } from '@/lib/shared/assistant/connectors'
-import { capSerializedResponse } from './cap-response'
 
 const log = logger.child({ component: 'assistant-connectors-mcp' })
 
@@ -47,7 +46,16 @@ export interface ConnectorToolCallResult {
   note?: string
 }
 
-export function serializeConnectorResult(value: unknown): ConnectorToolCallResult {
+function capSerializedResponse(
+  projection: Record<string, unknown>,
+  charLimit: number
+): { data: string; truncated: boolean } {
+  const serialized = JSON.stringify(projection)
+  if (serialized.length <= charLimit) return { data: serialized, truncated: false }
+  return { data: serialized.slice(0, charLimit), truncated: true }
+}
+
+function serializeConnectorResult(value: unknown): ConnectorToolCallResult {
   const payload =
     value && typeof value === 'object' ? (value as Record<string, unknown>) : { result: value }
   const { data, truncated } = capSerializedResponse(payload, CONNECTOR_RESPONSE_CHAR_LIMIT)
@@ -147,5 +155,3 @@ function extractResultText(result: { content?: unknown }): string {
     .join('\n')
     .slice(0, CONNECTOR_MAX_RESPONSE_BYTES)
 }
-
-export { CONNECTOR_MAX_RESPONSE_BYTES, CONNECTOR_REQUEST_TIMEOUT_MS }

@@ -17,11 +17,6 @@
  *   wrap the throw shape: its parse and budget steps interleave the shared
  *   steps, so the two share `assertCopilotAvailable` and
  *   `resolveViewableItem` instead of one wrapping the other.
- *
- * sandbox.ts is deliberately NOT a caller: it has no conversation to assert
- * viewability against and gates on a different permission (`settings.manage`,
- * not `copilot.use`), so its shape genuinely differs rather than merely
- * duplicating these.
  */
 import type { z } from 'zod'
 import { chatParamsFromRequestBody } from '@tanstack/ai'
@@ -175,8 +170,7 @@ export interface CopilotAguiEnvelope {
 }
 
 export type CopilotAguiGateResult<T> =
-  | (CopilotGateOk<T> & { agui: CopilotAguiEnvelope })
-  | CopilotGateFailed
+  (CopilotGateOk<T> & { agui: CopilotAguiEnvelope }) | CopilotGateFailed
 
 /**
  * The Response-shaped gate for the AG-UI streaming routes: the body is an

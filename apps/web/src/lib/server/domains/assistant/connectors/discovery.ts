@@ -20,7 +20,7 @@ export interface CatalogDiff {
   removed: string[]
 }
 
-export function hashInputSchema(schema: Record<string, unknown> | undefined): string | undefined {
+function hashInputSchema(schema: Record<string, unknown> | undefined): string | undefined {
   if (!schema) return undefined
   return createHash('sha256').update(JSON.stringify(schema)).digest('hex').slice(0, 16)
 }
@@ -29,8 +29,7 @@ export function applyCatalogDiff(
   previous: readonly CachedConnectorTool[],
   discovered: readonly DiscoveredMcpTool[],
   previousPolicies:
-    | ConnectorToolPoliciesInput
-    | ConnectorToolPolicies = DEFAULT_CONNECTOR_TOOL_POLICIES
+    ConnectorToolPoliciesInput | ConnectorToolPolicies = DEFAULT_CONNECTOR_TOOL_POLICIES
 ): CatalogDiff {
   const now = new Date().toISOString()
   const previousByName = new Map(previous.map((tool) => [tool.name, tool]))
