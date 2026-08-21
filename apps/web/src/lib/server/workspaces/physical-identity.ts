@@ -8,9 +8,10 @@
  * unless something that is a property of the *catalog* is compared too.
  *
  * On the fleet Postgres that comparison is `current_database()` plus
- * `pg_database.oid`, recorded at provision. A restore into a new database
- * keeps the stamp and `settings.id` and gets a new oid. A `TEMPLATE` clone
- * does the same. Refusing an oid mismatch is the anti-clone half.
+ * `pg_database.oid`, recorded at provision, plus the cluster id the registry
+ * named. A restore into a new database keeps the stamp and `settings.id` and
+ * gets a new oid. A `TEMPLATE` clone does the same. Refusing an oid mismatch is
+ * the anti-clone half.
  *
  * A record that claims no catalog oid (self-host) skips this check.
  *
@@ -24,6 +25,8 @@ export type PhysicalExpectation = {
   catalogName: string | null
   /** Expected `pg_database.oid` as decimal text, or null when not recorded. */
   catalogOid: string | null
+  /** Fleet catalog cluster id, or null when not recorded. */
+  clusterId: string | null
 }
 
 /** What the connected database says about itself. */
@@ -40,7 +43,9 @@ export type PhysicalVerdict = { ok: true } | { ok: false; code: PhysicalFailure;
  * Assert the connected catalog is the one the registry named.
  *
  * Fleet-PG placement is the catalog name + oid. A record claiming neither
- * skips the check — that is self-host.
+ * skips the check — that is self-host. `clusterId` is carried on the
+ * expectation so the descriptor names the cluster; it is not a property the
+ * connected database can report.
  */
 export function evaluatePhysicalIdentity(
   expected: PhysicalExpectation,

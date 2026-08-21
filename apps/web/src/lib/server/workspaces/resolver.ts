@@ -20,6 +20,7 @@
 import { config } from '@/lib/server/config'
 import { SCHEMA_FLOOR_REFUSAL_CODE } from '@/lib/server/fleet/schema-floor'
 import { logger } from '@/lib/server/logger'
+import { noteWorkspaceActivity, type WorkspaceActivitySource } from './idle'
 import { acquireWorkspacePool } from './pool-cache'
 import {
   normalizeHostHeader,
@@ -107,12 +108,34 @@ export type WorkspaceAcquisition =
   | Exclude<WorkspaceLookup, { kind: 'ok' }>
   | { kind: 'refused'; workspaceKey: string; code: string; detail: string }
 
+/**
+ * Which scope origins count as "somebody is using this workspace".
+ *
+ * `queue` is the always-warm job tier itself. Counting its own polling as
+ * activity would make every workspace permanently busy, which is exactly the
+ * state `idle.ts` exists to end — so the exclusion is the load-bearing part
+ * of this map, not the inclusions. `test` is excluded so a suite cannot signal a
+ * tier it did not mean to start.
+ */
+const ACTIVITY_ORIGINS: Partial<Record<WorkspaceScopeOrigin, WorkspaceActivitySource>> = {
+  request: 'request',
+  sweep: 'sweep',
+  script: 'script',
+  migration: 'migration',
+}
+
 export async function acquireWorkspaceScope(
   workspace: WorkspaceDescriptor,
   origin: WorkspaceScopeOrigin
 ): Promise<WorkspaceAcquisition> {
   try {
     const pool = await acquireWorkspacePool(workspace)
+    // After the pool is built, not before: a scope that was refused is not
+    // evidence that this workspace is being used, and telling a detached tier to
+    // re-attach to a workspace nothing can serve is how the retry storm gets a
+    // second entrance.
+    const source = ACTIVITY_ORIGINS[origin]
+    if (source) noteWorkspaceActivity(workspace.workspaceKey, source)
     return {
       kind: 'ok',
       scope: createWorkspaceScope({

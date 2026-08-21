@@ -76,14 +76,14 @@ export async function getRegisteredOidcProviderIds(
 
 /**
  * The registered-provider id list surfaced to the login UI on every app
- * bootstrap. Cached in the KV cache (~5min TTL) because it runs on a hot bootstrap
+ * bootstrap. Cached in Redis (~5min TTL) because it runs on a hot bootstrap
  * path and otherwise issues DB reads against identity_provider +
  * sso_verified_domain on every request. Invalidated eagerly by every write
  * that can change the list (via `invalidateSettingsCache()` and the
  * platform-credential save/delete flows), so a stale list can only survive the
  * TTL window if an invalidation is ever missed.
  *
- * Cache outages degrade gracefully: `cacheGet` returns null on failure, so we
+ * Redis outages degrade gracefully: `cacheGet` returns null on failure, so we
  * fall through to a fresh compute, and `cacheSet` swallows its own errors.
  */
 export async function getRegisteredAuthProviders(): Promise<string[]> {

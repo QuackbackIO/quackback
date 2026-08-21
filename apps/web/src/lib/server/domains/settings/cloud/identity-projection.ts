@@ -77,3 +77,7 @@ export function parseIdentityProjection(value: unknown): IdentityProjection | nu
   }
   return projection as unknown as IdentityProjection
 }
+
+export function isCloudIdentityEnabled(value: unknown): value is IdentityProjection {
+  return parseIdentityProjection(value) !== null
+}

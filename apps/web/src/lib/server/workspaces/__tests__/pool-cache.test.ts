@@ -91,7 +91,7 @@ function descriptor(id: string, revision = 1) {
     storage: { credentialRef: `env://${STORAGE_ENV_VAR}` },
     email: { from: '' },
     features: { aiEnabled: false },
-    physical: { catalogName: null, catalogOid: null },
+    physical: { catalogName: null, catalogOid: null, clusterId: null },
   } as never
 }
 

@@ -41,6 +41,7 @@
  */
 import { logger } from '@/lib/server/logger'
 import { isTerminalRefusalCode } from './fingerprint'
+import { workspaceIdlePolicy } from './idle'
 
 const log = logger.child({ component: 'workspace-quarantine' })
 
@@ -161,7 +162,7 @@ export function noteWorkspaceRefusal(
 
   const retryAfter =
     disposition === 'terminal'
-      ? now + 900_000
+      ? now + workspaceIdlePolicy().rescanIntervalMs
       : now +
         Math.min(TRANSIENT_BACKOFF_CEILING_MS, TRANSIENT_BACKOFF_FLOOR_MS * 2 ** (attempts - 1))
 
@@ -219,7 +220,12 @@ export function isWorkspaceQuarantined(workspace: WorkspaceIdentity, now = Date.
   if (entry.revision !== workspace.revision) {
     quarantined.delete(workspace.workspaceKey)
     log.info(
-      { workspaceKey: workspace.workspaceKey, from: entry.revision, to: workspace.revision, code: entry.code },
+      {
+        workspaceKey: workspace.workspaceKey,
+        from: entry.revision,
+        to: workspace.revision,
+        code: entry.code,
+      },
       'quarantined workspace record changed — retrying it now'
     )
     return false

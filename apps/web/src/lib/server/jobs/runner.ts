@@ -2,8 +2,8 @@
  * Running claimed work — the half of the queue that executes outside a
  * transaction.
  *
- * Everything in this module assumes an open tenant scope: `db` resolves to the
- * tenant's pool, and `job_queue` is that tenant's own table. `tier.ts` owns
+ * Everything in this module assumes an open workspace scope: `db` resolves to the
+ * workspace's pool, and `job_queue` is that workspace's own table. `tier.ts` owns
  * opening the scope and the timers; this file owns what happens inside one.
  *
  * The load-bearing property is that **no transaction is open while a handler
@@ -59,26 +59,38 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
 }
 
 export interface RunnerConfig {
-  /** Claim cadence. A job starts within one poll interval of being enqueued. */
+  /** Poll fallback interval. The correctness floor when a NOTIFY is lost. */
   pollIntervalMs: number
   /** Ceiling on rows claimed from ONE queue in a single pass. */
   batchSize: number
   /** How often expired leases are reclaimed. */
   reapIntervalMs: number
-  /** How often terminal rows past retention are deleted. */
-  pruneIntervalMs: number
   /** How long terminal rows are kept. Must exceed any live cron slot key. */
   retentionMs: number
   /**
-   * Ceiling on jobs running at once in one tenant's loop.
+   * Ceiling on jobs running at once in one workspace's loop.
    *
    * Defaults to the sum of every definition's `concurrency`, which is exactly
    * what the reference allowed (one BullMQ `Worker` per queue, each at its own
-   * concurrency), so the default binds nothing and single-tenant behaviour does
-   * not move. It exists because a pooled process runs one loop per tenant, and
+   * concurrency), so the default binds nothing and single-workspace behaviour does
+   * not move. It exists because a pooled process runs one loop per workspace, and
    * a fleet operator sizing connections cares about the product, not the term.
    */
   maxConcurrency: number
+}
+
+/**
+ * Skip the NOTIFY doorbell and run on the poll interval alone.
+ *
+ * A real operational switch, not a test hook: §7.3's measurement is that a
+ * pooled DSN accepts the `LISTEN` registration and then delivers nothing, so an
+ * operator who knows their connection is pooled can turn the listener off
+ * rather than have it retry and log. It is also what makes the poll floor
+ * measurable end to end — a harness that fakes the fallback with its own timer
+ * measures its own timer.
+ */
+export function wakeDisabled(): boolean {
+  return process.env.JOB_WAKE_DISABLED === '1'
 }
 
 /** Sum of every registered queue's concurrency — the reference's own ceiling. */
@@ -88,36 +100,35 @@ export function totalDeclaredConcurrency(): number {
 
 export function runnerConfig(): RunnerConfig {
   return {
-    // 5s: fast enough that background work feels immediate, cheap enough that
-    // an idle tenant costs a handful of indexed claim queries per minute.
-    pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 5_000, 50, 600_000),
+    pollIntervalMs: envInt('JOB_POLL_INTERVAL_MS', 1_000, 50, 600_000),
     batchSize: envInt('JOB_BATCH_SIZE', 5, 1, 100),
-    // The lease minimum is 60s, so reaping more often than that is resolution
-    // no lease can use.
-    reapIntervalMs: envInt('JOB_REAP_INTERVAL_MS', 60_000, 500, 3_600_000),
-    // Retention ages at day granularity; hourly pruning is already generous.
-    pruneIntervalMs: envInt('JOB_PRUNE_INTERVAL_MS', 3_600_000, 15_000, 86_400_000),
+    reapIntervalMs: envInt('JOB_REAP_INTERVAL_MS', 15_000, 500, 3_600_000),
     retentionMs: envInt('JOB_RETENTION_MS', 7 * 24 * 60 * 60 * 1000, 60_000, 365 * 86_400_000),
     maxConcurrency: envInt('JOB_MAX_CONCURRENCY', totalDeclaredConcurrency(), 1, 512),
   }
+}
+
+/** All queue names the tier will claim for. */
+export function activeQueueNames(): string[] {
+  return jobDefinitions().map((d) => d.name)
 }
 
 /**
  * Handler modules, imported once and memoised.
  *
  * The reason this exists is a hazard measured on the BullMQ side of the house: a
- * `Worker` constructed inside a request's tenant scope inherits that scope for
+ * `Worker` constructed inside a request's workspace scope inherits that scope for
  * every job it ever processes, because the scope is AsyncLocalStorage and the
  * constructor captured it. It was not a theoretical shape — the queue modules
  * that armed lazily on first enqueue armed inside whatever request reached them
  * first. No such module is left, but the *import* hazard below outlives them.
  *
  * This queue does not have that shape — `tier.ts` opens a fresh
- * `withTenantScopeById(...)` around every pass, so a handler always runs inside
+ * `withWorkspaceScopeById(...)` around every pass, so a handler always runs inside
  * the scope of the job it is running, never one captured earlier. But the
  * *import* is a second, quieter version of the same risk: `def.handler()` is a
  * dynamic import, and a module executing top-level work would run it inside
- * whichever tenant's scope happened to trigger the first import.
+ * whichever workspace's scope happened to trigger the first import.
  *
  * `primeJobHandlers()` closes that by importing every module once, at tier
  * start, **before any workspace scope is open**. The memo is then a pure function
@@ -137,16 +148,14 @@ export async function primeJobHandlers(): Promise<void> {
     )
     return
   }
-  await Promise.all(
-    jobDefinitions().map(async (def) => {
-      if (handlerMemo.has(def.name)) return
-      try {
-        handlerMemo.set(def.name, await def.handler())
-      } catch (err) {
-        log.error({ err, queue: def.name }, 'could not load job handler')
-      }
-    })
-  )
+  for (const def of jobDefinitions()) {
+    if (handlerMemo.has(def.name)) continue
+    try {
+      handlerMemo.set(def.name, await def.handler())
+    } catch (err) {
+      log.error({ err, queue: def.name }, 'could not load job handler')
+    }
+  }
 }
 
 /** Test/shutdown seam: drop the memo so a new definition list is picked up. */
@@ -285,10 +294,11 @@ export interface DrainResult {
  * the slot bracketing now, so a two-minute job costs the per-minute
  * `snooze-sweep` and `sla-breach-sweep` two runs each, silently.
  *
- * **Why a pool rather than per-queue loops.** Fifteen loops per tenant would
- * multiply the poll traffic by fifteen against a per-tenant database, and the
- * database is the scarce thing here. One loop keeps one poll and one claim
- * query per pass, whatever the queue count.
+ * **Why a pool rather than per-queue loops.** Fifteen loops per workspace would
+ * multiply the poll traffic by fifteen against a per-workspace database, and the
+ * database is the scarce thing here — §6's corollary is that this tier already
+ * holds a connection per workspace open by design. One loop keeps one poll, one
+ * listener and one claim query per pass, whatever the queue count.
  *
  * **Why per-queue caps rather than one pool size.** The reference gave each
  * queue its own `Worker` with its own `concurrency`, and one of those numbers
@@ -349,7 +359,7 @@ export interface DispatchResult {
 export async function dispatchPass(opts: {
   pool: JobPool
   config: RunnerConfig
-  /** Runs one job, in whatever tenant scope the caller owns. */
+  /** Runs one job, in whatever workspace scope the caller owns. */
   run: (job: ClaimedJob) => Promise<'succeeded' | 'failed' | 'retrying'>
   /** Called as each job settles, so the loop can claim the freed slot at once. */
   onSettled?: (queue: string, outcome: 'succeeded' | 'failed' | 'retrying') => void
@@ -423,27 +433,26 @@ export interface ScheduleTickResult {
    * healthy race. `attempted` is this scheduler's own decision, and it is the
    * only way to tell "another replica got there first" apart from "this
    * scheduler never considered the slot due at all", which is what shared
-   * scheduler state produced across tenants.
+   * scheduler state produced across workspaces.
    */
   attempted: number
   enqueued: number
   /** Earliest next slot across all schedules, including gated-off ones. */
   nextSlotAt: Date | null
+  /**
+   * Earliest next slot of schedules that actually ran this tick.
+   * Gated-off `* * * * *` must not appear here — the process scheduler
+   * heaps this, and a snooze/SLA gate that is off must not wake every minute.
+   */
+  nextEnabledSlotAt: Date | null
 }
 
-// Bounded: patterns include user-supplied segment crons across all tenants, so
-// an uncapped memo would grow without limit. Oldest entry is evicted at the cap.
 const cronCache = new Map<string, ParsedCron>()
-const CRON_CACHE_MAX = 256
 
 function cronFor(pattern: string): ParsedCron {
   let parsed = cronCache.get(pattern)
   if (!parsed) {
     parsed = parseCron(pattern)
-    if (cronCache.size >= CRON_CACHE_MAX) {
-      const oldest = cronCache.keys().next()
-      if (!oldest.done) cronCache.delete(oldest.value)
-    }
     cronCache.set(pattern, parsed)
   }
   return parsed
@@ -452,16 +461,16 @@ function cronFor(pattern: string): ParsedCron {
 /**
  * One scheduler's memory of the last slot it has accounted for, per schedule.
  *
- * **This is per tenant, and it is passed in rather than held here, because the
- * module-scope version of it was a real cross-tenant defect.** One process runs
- * one loop per tenant; a `Map` keyed on the schedule name alone is shared by all
- * of them, so whichever tenant's loop reached a slot first advanced a counter
- * every other tenant then read as "already done" — and the rest silently never
- * enqueued that slot. Measured live on a two-tenant fleet: each minute's sweep
- * landed on one tenant, never both. It affected all seven sweeps.
+ * **This is per workspace, and it is passed in rather than held here, because the
+ * module-scope version of it was a real cross-workspace defect.** One process runs
+ * one loop per workspace; a `Map` keyed on the schedule name alone is shared by all
+ * of them, so whichever workspace's loop reached a slot first advanced a counter
+ * every other workspace then read as "already done" — and the rest silently never
+ * enqueued that slot. Measured live on two workspaces: each minute's sweep
+ * landed on one workspace, never both. It affected all seven sweeps.
  *
- * That is the classic process-global-state hazard, introduced by the piece meant to
- * remove it. Keying the map by tenant would fix the instance; making the state a
+ * That is the §4.1 process-global-state hazard, introduced by the piece meant to
+ * remove it. Keying the map by workspace would fix the instance; making the state a
  * parameter fixes the class, because there is no longer a shared object for the
  * next scheduler to key wrongly.
  *
@@ -484,7 +493,7 @@ export interface ScheduleState {
   readonly seen: Map<string, number>
 }
 
-/** A scheduler's own state. One per tenant loop — never shared between them. */
+/** A scheduler's own state. One per workspace loop — never shared between them. */
 export function createScheduleState(): ScheduleState {
   return { seen: new Map<string, number>() }
 }
@@ -507,6 +516,7 @@ export async function runScheduleTick(
   let attempted = 0
   let enqueued = 0
   let nextSlotAt: Date | null = null
+  let nextEnabledSlotAt: Date | null = null
 
   // Every schedule name this tick considered. Anything in the state that is no
   // longer here belonged to a schedule that has gone away — a deleted segment,
@@ -546,6 +556,7 @@ export async function runScheduleTick(
 
     const next = nextSlotAfter(cron, now)
     if (next && (!nextSlotAt || next < nextSlotAt)) nextSlotAt = next
+    if (next && (!nextEnabledSlotAt || next < nextEnabledSlotAt)) nextEnabledSlotAt = next
   }
 
   /**
@@ -560,13 +571,14 @@ export async function runScheduleTick(
    * first pass, and a first pass deliberately adopts the current slot rather
    * than running it (or every process restart would replay one of everything).
    * A gate that opens is therefore always a first pass, and the work never runs
-   * — measured against a real tenant, a snooze due in ninety seconds was never
+   * — measured against a real workspace, a snooze due in ninety seconds was never
    * swept at all. Harmless while gates flipped for a minute at a time; fatal
    * once a gate can stay shut for hours.
    *
    * `live` and `nextSlotAt` are maintained for the same reason: a gated-off
-   * schedule is not one that has gone away, and the poll loop still asks the
-   * gate on that slot.
+   * schedule is not one that has gone away, and the attached listener loop
+   * still asks the gate on that slot. `nextEnabledSlotAt` deliberately omits
+   * this — the process scheduler must not heap a gated-off per-minute cron.
    */
   const adopt = (stateKey: string, pattern: string): void => {
     const cron = cronFor(pattern)
@@ -622,26 +634,16 @@ export async function runScheduleTick(
     if (!live.has(key)) state.seen.delete(key)
   }
 
-  return { attempted, enqueued, nextSlotAt }
+  return { attempted, enqueued, nextSlotAt, nextEnabledSlotAt }
 }
 
 export interface MaintenanceResult extends ReapResult {
   pruned: number
 }
 
-/** Reclaim expired leases. */
-export async function runReapTick(): Promise<ReapResult> {
-  return reapExpiredLeases()
-}
-
-/** Drop terminal rows past retention. */
-export async function runPruneTick(config: RunnerConfig): Promise<number> {
-  return pruneTerminalJobs(config.retentionMs, retentionOverrides())
-}
-
-/** Both maintenance halves in one call, for tests and one-shot drains. */
+/** Reclaim expired leases, then drop terminal rows past retention. */
 export async function runMaintenanceTick(config: RunnerConfig): Promise<MaintenanceResult> {
-  const reaped = await runReapTick()
-  const pruned = await runPruneTick(config)
+  const reaped = await reapExpiredLeases()
+  const pruned = await pruneTerminalJobs(config.retentionMs, retentionOverrides())
   return { ...reaped, pruned }
 }

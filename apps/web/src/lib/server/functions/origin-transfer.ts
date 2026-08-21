@@ -70,11 +70,54 @@ async function consumeOrContinueExistingSession(
   return existing.kind === 'redirect' ? existing : verified
 }
 
+type OpenHandoffOttSnapshot = { ott: string; value: string; expiresAt: Date }
+
+/**
+ * Better Auth deletes the verification row on first verify. Open is a GET
+ * the browser (and a prefetch) can hit twice, so we snapshot the row and
+ * put it back for the rest of its TTL. Rename-transfer stays single-use.
+ */
+async function snapshotOpenHandoffOtt(ott: string): Promise<OpenHandoffOttSnapshot | null> {
+  try {
+    const { db, verification, eq } = await import('@/lib/server/db')
+    const [row] = await db
+      .select({ value: verification.value, expiresAt: verification.expiresAt })
+      .from(verification)
+      .where(eq(verification.identifier, `one-time-token:${ott}`))
+      .limit(1)
+    if (!row || row.expiresAt <= new Date()) return null
+    return { ott, value: row.value, expiresAt: row.expiresAt }
+  } catch {
+    return null
+  }
+}
+
+async function restoreOpenHandoffOtt(snapshot: OpenHandoffOttSnapshot): Promise<void> {
+  try {
+    const { db, verification, eq } = await import('@/lib/server/db')
+    const [existing] = await db
+      .select({ id: verification.id })
+      .from(verification)
+      .where(eq(verification.identifier, `one-time-token:${snapshot.ott}`))
+      .limit(1)
+    if (existing) return
+    await db.insert(verification).values({
+      id: crypto.randomUUID(),
+      identifier: `one-time-token:${snapshot.ott}`,
+      value: snapshot.value,
+      expiresAt: snapshot.expiresAt,
+    })
+  } catch {
+    // A missed restore still fails closed on the next GET; the first
+    // response already carries the session cookie.
+  }
+}
+
 /**
  * Consume the control-plane Open handoff. First arrival uses the immutable
  * system host and may happen before the identity projection lands, so this
- * path must not require a verified projection. Replay and expiry fail closed
- * inside Better Auth's verify.
+ * path must not require a verified projection. The token stays redeemable
+ * until it expires: Visit is a GET, and a second load must still sign in.
  */
 export async function consumeOpenHandoff(input: {
   ott?: string
@@ -86,7 +129,21 @@ export async function consumeOpenHandoff(input: {
   // caller returnTo — Open must not drop a finished workspace into the
   // wizard or /admin.
   if (!input.ott) return { kind: 'error', status: 'invalid' }
-  return consumeOrContinueExistingSession(input.ott, '/', input.headers)
+  const snapshot = await snapshotOpenHandoffOtt(input.ott)
+  const first = await consumeOrContinueExistingSession(input.ott, '/', input.headers)
+  if (first.kind === 'redirect') {
+    if (snapshot) await restoreOpenHandoffOtt(snapshot)
+    return first
+  }
+  if (snapshot) {
+    await restoreOpenHandoffOtt(snapshot)
+    const retry = await verifyOttCookies(input.ott, '/', input.headers)
+    if (retry.kind === 'redirect') {
+      await restoreOpenHandoffOtt(snapshot)
+      return retry
+    }
+  }
+  return first
 }
 
 /**

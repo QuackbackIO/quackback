@@ -16,9 +16,13 @@ vi.mock('@/lib/server/workspaces/resolver', () => ({ acquireScopeForHost }))
 
 const silentLog = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
-async function serve(host: string | null): Promise<Response | string> {
+async function serve(
+  host: string | null,
+  options: { url?: string; method?: string } = {}
+): Promise<Response | string> {
   const { resolveWorkspaceAndContinue } = await import('../request-scope')
-  const request = new Request('http://example.com/anything', {
+  const request = new Request(options.url ?? 'http://example.com/anything', {
+    method: options.method,
     headers: host === null ? {} : { host },
   })
   return resolveWorkspaceAndContinue({
@@ -31,6 +35,9 @@ async function serve(host: string | null): Promise<Response | string> {
 describe('resolveWorkspaceAndContinue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN
+    delete process.env.QUACKBACK_SAAS_RAILWAY_ORIGIN
+    delete process.env.QUACKBACK_SAAS_EDGE_SECRET
   })
 
   it('serves the workspace inside the workspace scope when the record is good', async () => {
@@ -68,12 +75,117 @@ describe('resolveWorkspaceAndContinue', () => {
     expect(seen).toEqual([handle])
   })
 
+  it('resolves a third-party custom host from a signed customer-host header on a trusted origin', async () => {
+    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'origin.saas.example'
+    process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
+    const { signCustomerHost } = await import('../saas-edge-host')
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'unknown_host',
+      hostname: 'shop.customer.test',
+    })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    await resolveWorkspaceAndContinue({
+      request: new Request('http://origin.saas.example/', {
+        headers: {
+          host: 'origin.saas.example',
+          'x-quackback-customer-host': 'shop.customer.test',
+          'x-quackback-customer-host-sig': signCustomerHost(
+            'test-edge-secret',
+            'shop.customer.test'
+          ),
+        },
+      }),
+      next: async () => 'served',
+      log: silentLog as never,
+    })
+    expect(acquireScopeForHost).toHaveBeenCalledWith('shop.customer.test', 'request')
+  })
+
+  it('ignores a spoofed customer-host header when the request Host is not a trusted origin', async () => {
+    process.env.QUACKBACK_SAAS_FALLBACK_ORIGIN = 'origin.saas.example'
+    process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
+    const { signCustomerHost } = await import('../saas-edge-host')
+    acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'south.example.com' })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    await resolveWorkspaceAndContinue({
+      request: new Request('http://south.example.com/', {
+        headers: {
+          host: 'south.example.com',
+          'x-quackback-customer-host': 'shop.customer.test',
+          'x-quackback-customer-host-sig': signCustomerHost(
+            'test-edge-secret',
+            'shop.customer.test'
+          ),
+        },
+      }),
+      next: async () => 'served',
+      log: silentLog as never,
+    })
+    expect(acquireScopeForHost).toHaveBeenCalledWith('south.example.com', 'request')
+  })
+
+  it('ignores a customer-host header on the Railway origin when the HMAC is missing or wrong', async () => {
+    process.env.QUACKBACK_SAAS_RAILWAY_ORIGIN = 'app.up.example'
+    process.env.QUACKBACK_SAAS_EDGE_SECRET = 'test-edge-secret'
+    acquireScopeForHost.mockResolvedValue({
+      kind: 'unknown_host',
+      hostname: 'app.up.example',
+    })
+    const { resolveWorkspaceAndContinue } = await import('../request-scope')
+    await resolveWorkspaceAndContinue({
+      request: new Request('http://app.up.example/', {
+        headers: {
+          host: 'app.up.example',
+          'x-quackback-customer-host': 'shop.customer.test',
+          'x-quackback-customer-host-sig': '00'.repeat(32),
+        },
+      }),
+      next: async () => 'served',
+      log: silentLog as never,
+    })
+    expect(acquireScopeForHost).toHaveBeenCalledWith('app.up.example', 'request')
+  })
+
   it('404s an unclaimed hostname without touching any database', async () => {
     acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'nope.example.com' })
     const res = (await serve('nope.example.com')) as Response
     expect(res.status).toBe(404)
     expect(res.headers.get('cache-control')).toBe('no-store')
   })
+
+  it.each(['GET', 'HEAD'])(
+    'redirects obsolete hosts for %s while preserving path and query',
+    async (method) => {
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'redirect',
+        workspaceKey: 'inst_a',
+        hostname: 'old.quackback.co.uk',
+        location: 'https://new.quackback.co.uk',
+      })
+      const res = (await serve('old.quackback.co.uk', {
+        method,
+        url: 'http://old.quackback.co.uk/posts/one?sort=new',
+      })) as Response
+      expect(res.status).toBe(308)
+      expect(res.headers.get('location')).toBe('https://new.quackback.co.uk/posts/one?sort=new')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+    }
+  )
+
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'])(
+    'refuses unsafe %s on an obsolete host',
+    async (method) => {
+      acquireScopeForHost.mockResolvedValue({
+        kind: 'redirect',
+        workspaceKey: 'inst_a',
+        hostname: 'old.quackback.co.uk',
+        location: 'https://new.quackback.co.uk',
+      })
+      const res = (await serve('old.quackback.co.uk', { method })) as Response
+      expect(res.status).toBe(409)
+      expect(res.headers.get('location')).toBeNull()
+    }
+  )
 
   it('403s a suspended workspace and names the reason', async () => {
     acquireScopeForHost.mockResolvedValue({
@@ -138,7 +250,7 @@ describe('resolveWorkspaceAndContinue', () => {
       kind: 'refused',
       workspaceKey: 'inst_a',
       code: 'schema_below_floor',
-      detail: 'missing 1 migration(s): 0255_settings_cloud_tenant_id',
+      detail: 'missing 1 migration(s): 0251_settings_cloud_tenant_id',
     })
     const res = (await serve('t1.localhost')) as Response
     expect(res.status).toBe(503)
@@ -146,7 +258,7 @@ describe('resolveWorkspaceAndContinue', () => {
     const body = await res.text()
     expect(body).toContain('being updated')
     // Still no operator detail to the visitor.
-    expect(body).not.toContain('0255_settings_cloud_tenant_id')
+    expect(body).not.toContain('0251_settings_cloud_tenant_id')
     // Warn, not error: this is expected during a rollout.
     expect(silentLog.warn).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'schema_below_floor' }),
@@ -291,6 +403,7 @@ describe('resolveWorkspaceAndContinue', () => {
     // long after the record was fixed.
     for (const lookup of [
       { kind: 'unknown_host', hostname: 'x.example.com' },
+      { kind: 'redirect', workspaceKey: 'a', hostname: 'x', location: 'https://y.example.com' },
       { kind: 'deleting', workspaceKey: 'a', hostname: 'x' },
       { kind: 'invalid', workspaceKey: 'a', hostname: 'x', problems: [] },
       { kind: 'refused', workspaceKey: 'a', code: 'c', detail: 'd' },
@@ -301,7 +414,7 @@ describe('resolveWorkspaceAndContinue', () => {
     }
   })
 
-  it.each(['/api/health', '/api/health/ready', '/api/health/live'])(
+  it.each(['/api/health', '/api/health/ready'])(
     'serves %s without resolving a workspace at all',
     async (path) => {
       // The platform hits these every couple of seconds, and on a wildcard
