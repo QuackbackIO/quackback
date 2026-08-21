@@ -183,11 +183,6 @@ export async function handleReadinessProbe(): Promise<Response> {
     loops: tier.workspaces.length,
     inFlight: tier.workspaces.reduce((n, t) => n + t.inFlight, 0),
     schemaMissing: tier.workspaces.filter((t) => t.schemaMissing).length,
-    // Workspaces this process currently holds connections for. `attached: 0` with
-    // `loops` non-zero is the healthy idle fleet, and the two together are the
-    // only place an operator can see that the cost model is working — detaching
-    // has no other symptom.
-    attached: tier.workspaces.filter((t) => t.attached).length,
     // Workspaces being refused. Deliberately reported here and NOT allowed to fail
     // the probe: a bad registry record is not this replica's fault, and taking
     // the pod out of rotation for it would turn one workspace's misconfiguration

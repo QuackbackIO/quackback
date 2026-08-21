@@ -436,7 +436,7 @@ export async function startJobTier(): Promise<void> {
   // doorbell: Neon is gone, and a transaction-mode pooler would not deliver
   // NOTIFY anyway. The poll is the mechanism; this only cuts the wait.
   unsubscribeCommit = onDurableWorkCommitted((tenantId) => {
-    signalTenant(tenantId)
+    signalWorkspace(tenantId)
   })
 
   if (!config.isPooledTenancy) {
@@ -472,21 +472,21 @@ export async function stopJobTier(): Promise<void> {
 
 export interface JobTierStatus {
   running: boolean
-  tenants: Array<{ tenantId: string } & LoopStats>
+  workspaces: Array<{ workspaceKey: string } & LoopStats>
 }
 
 export function getJobTierStatus(): JobTierStatus {
   return {
     running,
-    tenants: [...stats.entries()].map(([tenantId, s]) => ({ tenantId, ...s })),
+    workspaces: [...stats.entries()].map(([workspaceKey, s]) => ({ workspaceKey, ...s })),
   }
 }
 
 /**
- * End this tenant's current poll wait so an after-commit enqueue is claimed now.
+ * End this workspace's current poll wait so an after-commit enqueue is claimed now.
  */
-export function signalTenant(tenantId: string): boolean {
-  const loop = loops.get(tenantId)
+export function signalWorkspace(workspaceKey: string): boolean {
+  const loop = loops.get(workspaceKey)
   if (!loop) return false
   loop.signal()
   return true
