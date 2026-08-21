@@ -17,6 +17,14 @@ vi.mock('@quackback/email', () => ({
 
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceEmailBudget: () => enforceEmailBudget(),
+  emailBudgetAvailable: async () => {
+    try {
+      await enforceEmailBudget()
+      return true
+    } catch {
+      return false
+    }
+  },
 }))
 
 vi.mock('@/lib/server/events/hook-context', () => ({

@@ -27,6 +27,14 @@ vi.mock('@/lib/server/utils/rate-bucket', () => ({
 
 vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceEmailBudget: () => hoisted.enforceEmailBudget(),
+  emailBudgetAvailable: async () => {
+    try {
+      await hoisted.enforceEmailBudget()
+      return true
+    } catch {
+      return false
+    }
+  },
 }))
 
 vi.mock('@quackback/email', () => ({

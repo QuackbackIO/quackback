@@ -14,7 +14,6 @@ import { visitorConversationLink } from './conversation.notify'
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { logger } from '@/lib/server/logger'
 import { ensureEmailLogSink } from '@/lib/server/email/email-log.sink'
-import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 const log = logger.child({ component: 'conversation-notify-closed' })
 
@@ -57,18 +56,13 @@ export async function notifyConversationClosed(opts: {
     const ctx = await buildHookContext()
     if (!ctx) return
 
-    try {
-      const { enforceEmailBudget } = await import('@/lib/server/domains/settings/tier-enforce')
-      await enforceEmailBudget()
-    } catch (err) {
-      if (err instanceof TierLimitError) {
-        log.warn(
-          { conversation_id: opts.conversationId },
-          'email budget exhausted; close mail skipped'
-        )
-        return
-      }
-      throw err
+    const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
+    if (!(await emailBudgetAvailable())) {
+      log.warn(
+        { conversation_id: opts.conversationId },
+        'email budget exhausted; close mail skipped'
+      )
+      return
     }
 
     const { isPortalSupportEnabled } =

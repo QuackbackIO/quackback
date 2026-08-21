@@ -152,6 +152,18 @@ export async function enforceAiTokenBudget(): Promise<void> {
   })
 }
 
+/** True when {@link enforceEmailBudget} would not throw. */
+export async function emailBudgetAvailable(): Promise<boolean> {
+  try {
+    await enforceEmailBudget()
+    return true
+  } catch (err) {
+    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+    if (err instanceof TierLimitError) return false
+    throw err
+  }
+}
+
 /** Pre-compose gate for billable outbound mail. Null = unlimited. */
 export async function enforceEmailBudget(): Promise<void> {
   const limits = await getTierLimits()

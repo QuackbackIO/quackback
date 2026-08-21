@@ -74,16 +74,10 @@ export async function maybeSendColdInboundAck(opts: {
     return 'rate_capped'
   }
 
-  try {
-    const { enforceEmailBudget } = await import('@/lib/server/domains/settings/tier-enforce')
-    await enforceEmailBudget()
-  } catch (err) {
-    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
-    if (err instanceof TierLimitError) {
-      log.warn({ reason: 'budget' }, 'auto-ack skipped')
-      return 'skipped'
-    }
-    throw err
+  const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
+  if (!(await emailBudgetAvailable())) {
+    log.warn({ reason: 'budget' }, 'auto-ack skipped')
+    return 'skipped'
   }
 
   try {
