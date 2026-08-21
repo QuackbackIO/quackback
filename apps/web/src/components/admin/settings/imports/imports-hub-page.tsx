@@ -6,6 +6,8 @@ import { ImportCsv } from './import-csv'
 import { ImportHistoryList } from './import-history-list'
 import { ExportWorkspaceAction } from './export-workspace-action'
 import { ExportHistoryList } from './export-history-list'
+import { MIGRATION_PACKS } from '@/lib/shared/migration-packs'
+import { Badge } from '@/components/ui/badge'
 
 export function ImportsHubPage() {
   return (
@@ -20,19 +22,51 @@ export function ImportsHubPage() {
       />
 
       <SettingsCard
-        title="Imports"
-        description="Upload a CSV of posts using the template — new boards, statuses, and tags are created as part of the import."
+        title="Migration packs"
+        description="Start from a guided pack for the kind of product you are leaving. Each pack points at the CSV shape Quackback accepts today."
       >
-        <ImportCsv />
-        <div className="mt-6 border-t border-border/50 pt-4 space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">Moving from another tool</p>
-          <p className="text-xs text-muted-foreground">
-            Export your data from the old tool, map it onto the template columns (only title and
-            content are required), and upload it above. Keep the source_id column filled to re-run
-            an import later without duplicating posts.
-          </p>
+        <div className="divide-y divide-border/60">
+          {MIGRATION_PACKS.map((pack) => (
+            <div
+              key={pack.id}
+              className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-medium">{pack.title}</h3>
+                  <Badge size="sm" variant="secondary" shape="pill">
+                    CSV
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{pack.description}</p>
+                <a
+                  href={pack.href}
+                  className="mt-1 inline-block text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Use the CSV import below
+                </a>
+              </div>
+            </div>
+          ))}
         </div>
       </SettingsCard>
+
+      <div id="import-csv">
+        <SettingsCard
+          title="Imports"
+          description="Upload a CSV of posts using the template — new boards, statuses, and tags are created as part of the import."
+        >
+          <ImportCsv />
+          <div className="mt-6 border-t border-border/50 pt-4 space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Moving from another tool</p>
+            <p className="text-xs text-muted-foreground">
+              Export your data from the old tool, map it onto the template columns (only title and
+              content are required), and upload it above. Keep the source_id column filled to re-run
+              an import later without duplicating posts.
+            </p>
+          </div>
+        </SettingsCard>
+      </div>
 
       <SettingsCard
         title="Export workspace data"

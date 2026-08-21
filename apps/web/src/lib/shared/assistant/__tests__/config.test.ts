@@ -77,6 +77,7 @@ describe('assistantConfigSchema', () => {
             documents: true,
             status: false,
           },
+          toolRules: {},
         },
         copilot: {
           capabilities: { qa: true },
@@ -90,6 +91,7 @@ describe('assistantConfigSchema', () => {
             documents: true,
             status: true,
           },
+          toolRules: {},
         },
       },
     })

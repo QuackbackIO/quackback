@@ -1160,5 +1160,14 @@
   "automation.workflows.closeSpamHint": "When Quinn classifies a conversation as spam",
   "settings.sla.defaultPolicy": "Default policy",
   "settings.sla.defaultPolicyHint": "Applied when a conversation starts",
-  "settings.sla.defaultPolicyNone": "None"
+  "settings.sla.defaultPolicyNone": "None",
+  "automation.builtinTools.title": "Built-in actions",
+  "automation.builtinTools.titleAgent": "Built-in actions (Agent)",
+  "automation.builtinTools.titleCopilot": "Built-in actions (Copilot)",
+  "automation.builtinTools.description": "What each built-in write tool may do on this agent. \"Never\" removes the tool from its turns entirely.",
+  "automation.builtinTools.reset": "Reset to defaults",
+  "automation.builtinTools.default": "Default",
+  "automation.builtinTools.saving": "Saving…",
+  "automation.builtinTools.saveError": "Tool permissions could not be updated.",
+  "automation.builtinTools.loadError": "Could not load the tool catalogue."
 }

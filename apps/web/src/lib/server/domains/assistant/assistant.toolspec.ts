@@ -47,7 +47,11 @@ import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from './citation
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { TICKET_TYPES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
-import { DEFAULT_ASSISTANT_CONFIG, type AssistantRole } from '@/lib/shared/assistant/config'
+import {
+  DEFAULT_ASSISTANT_CONFIG,
+  type AssistantRole,
+  type AssistantToolRules,
+} from '@/lib/shared/assistant/config'
 import { SKILL_LOADS_PER_TURN } from '@/lib/shared/assistant/skills'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { classifyConversationAttributes } from '@/lib/server/domains/conversation-attributes/ai-classification.service'
@@ -1483,4 +1487,33 @@ export function resolveToolSpecs(): AssistantToolSpec[] {
 /** Look up a built-in tool by the name persisted on a pending action. */
 export function getToolSpecByName(name: string): AssistantToolSpec | null {
   return ASSISTANT_TOOL_SPECS[name] ?? null
+}
+
+/**
+ * Overlay the workspace's saved per-tool rules onto the built-in catalogue for
+ * one agent. Read/control tools are untouchable — the dial exists for writes.
+ * `deny` removes the spec before the model ever sees it; `ask`/`allow` stamp
+ * the same `approvalPolicy` the remote-connector dial rides, so mode
+ * resolution and the approval pipeline treat both dials identically. An
+ * absent key leaves the spec untouched and the turn's role policy deciding,
+ * which is exactly the pre-dial behavior.
+ */
+export function applyBuiltInToolRules(
+  specs: readonly AssistantToolSpec[],
+  toolRules: Readonly<AssistantToolRules> | undefined
+): AssistantToolSpec[] {
+  if (!toolRules || Object.keys(toolRules).length === 0) return [...specs]
+  const out: AssistantToolSpec[] = []
+  for (const spec of specs) {
+    if (spec.risk !== 'write') {
+      out.push(spec)
+      continue
+    }
+    const rule = toolRules[spec.name]
+    if (rule === 'deny') continue
+    if (rule === 'ask') out.push({ ...spec, approvalPolicy: 'approval' })
+    else if (rule === 'allow') out.push({ ...spec, approvalPolicy: 'always' })
+    else out.push(spec)
+  }
+  return out
 }

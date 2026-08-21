@@ -41,7 +41,7 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { resolveContentAudience } from './audience'
 import { assembleAssistantToolset } from './assistant.tools'
-import { makeAssistantToolContext, makeAssistantToolLedger } from './assistant.toolspec'
+import { applyBuiltInToolRules, resolveToolSpecs, makeAssistantToolContext, makeAssistantToolLedger } from './assistant.toolspec'
 import { listConversationAttributes } from '@/lib/server/domains/conversation-attributes/conversation-attribute.service'
 import type {
   AssistantCitation,
@@ -1023,9 +1023,17 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // flip gating mid-turn, and shares the same tool set across every attempt.
   // `activeSpecs` (the specs behind `tools`, index-aligned) is what the
   // system prompt's per-tool guidance composes from below.
+  // The workspace's saved per-tool dials for this agent overlay the built-in
+  // catalogue before assembly: deny never reaches the model, ask/allow ride
+  // the same approvalPolicy seam the connector dial uses, and an empty map
+  // leaves role policy deciding exactly as before the dial existed.
+  const builtInSpecs = applyBuiltInToolRules(
+    resolveToolSpecs(),
+    runtimeConfig.config.agents[agentKind].toolRules
+  )
   let { tools, activeSpecs } = await assembleAssistantToolset(
     toolContext,
-    undefined,
+    builtInSpecs,
     connectorSpecs
   )
   let toolNames = new Set(tools.map((t) => t.name))

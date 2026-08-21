@@ -38,6 +38,7 @@ export const ASSISTANT_CONFIG_EVENT_LABELS: Record<
   'assistant.instructions.changed': 'Writing guidelines changed',
   'assistant.knowledge.changed': 'Knowledge sources changed',
   'assistant.capabilities.changed': 'Copilot capabilities changed',
+  'assistant.tools.changed': 'Tool permissions changed',
   'assistant.channels.changed': 'Channel guidance changed',
   'assistant.deployment.changed': 'Automatic replies changed',
 }

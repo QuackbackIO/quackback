@@ -142,6 +142,7 @@ export type AuditEventType =
   | 'assistant.instructions.changed'
   | 'assistant.knowledge.changed'
   | 'assistant.capabilities.changed'
+  | 'assistant.tools.changed'
   | 'assistant.channels.changed'
   | 'assistant.deployment.changed'
   // Verified-email assertion. `emailVerified: true` is a trust decision, not a

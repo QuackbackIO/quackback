@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { actorFromAuth } from '@/lib/server/audit/log'
 import {
+  assistantToolRulesUpdateSchema,
   assistantIdentityUpdateSchema,
   assistantVoiceUpdateSchema,
   assistantAgentKnowledgeUpdateSchema,
@@ -79,6 +80,19 @@ export const updateAssistantCopilotCapabilitiesFn = createServerFn({ method: 'PO
     return updateAssistantCopilotCapabilities(
       data.expectedRevision,
       data.capabilities,
+      configActor(ctx)
+    )
+  })
+
+export const updateAssistantToolRulesFn = createServerFn({ method: 'POST' })
+  .validator(assistantToolRulesUpdateSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const { updateAssistantToolRules } =
+      await import('@/lib/server/domains/settings/settings.assistant')
+    return updateAssistantToolRules(
+      data.expectedRevision,
+      { agent: data.agent, toolRules: data.toolRules },
       configActor(ctx)
     )
   })

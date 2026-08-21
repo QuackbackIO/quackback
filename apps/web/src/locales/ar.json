@@ -1160,5 +1160,14 @@
   "automation.workflows.closeSpamHint": "عندما يصنّف كوين المحادثة كرسالة مزعجة",
   "settings.sla.defaultPolicy": "السياسة الافتراضية",
   "settings.sla.defaultPolicyHint": "تُطبَّق عند بدء محادثة",
-  "settings.sla.defaultPolicyNone": "لا شيء"
+  "settings.sla.defaultPolicyNone": "لا شيء",
+  "automation.builtinTools.title": "الإجراءات المدمجة",
+  "automation.builtinTools.titleAgent": "الإجراءات المدمجة (الوكيل)",
+  "automation.builtinTools.titleCopilot": "الإجراءات المدمجة (Copilot)",
+  "automation.builtinTools.description": "ما يمكن لكل أداة كتابة مدمجة فعله لدى هذا الوكيل. «أبدًا» يزيل الأداة كليًا من جولاته.",
+  "automation.builtinTools.reset": "إعادة التعيين إلى الافتراضي",
+  "automation.builtinTools.default": "افتراضي",
+  "automation.builtinTools.saving": "جارٍ الحفظ…",
+  "automation.builtinTools.saveError": "تعذّر تحديث أذونات الأدوات.",
+  "automation.builtinTools.loadError": "تعذّر تحميل قائمة الأدوات."
 }

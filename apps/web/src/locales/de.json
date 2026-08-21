@@ -1160,5 +1160,14 @@
   "automation.workflows.closeSpamHint": "Wenn Quinn eine Unterhaltung als Spam einstuft",
   "settings.sla.defaultPolicy": "Standardrichtlinie",
   "settings.sla.defaultPolicyHint": "Wird angewendet, wenn eine Unterhaltung startet",
-  "settings.sla.defaultPolicyNone": "Keine"
+  "settings.sla.defaultPolicyNone": "Keine",
+  "automation.builtinTools.title": "Integrierte Aktionen",
+  "automation.builtinTools.titleAgent": "Integrierte Aktionen (Agent)",
+  "automation.builtinTools.titleCopilot": "Integrierte Aktionen (Copilot)",
+  "automation.builtinTools.description": "Was jedes integrierte Schreibwerkzeug auf diesem Agenten tun darf. „Nie“ entfernt das Werkzeug vollständig aus seinen Antworten.",
+  "automation.builtinTools.reset": "Auf Standard zurücksetzen",
+  "automation.builtinTools.default": "Standard",
+  "automation.builtinTools.saving": "Wird gespeichert…",
+  "automation.builtinTools.saveError": "Werkzeugberechtigungen konnten nicht aktualisiert werden.",
+  "automation.builtinTools.loadError": "Werkzeugkatalog konnte nicht geladen werden."
 }

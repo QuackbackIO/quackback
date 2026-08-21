@@ -1160,5 +1160,14 @@
   "automation.workflows.closeSpamHint": "Cuando Quinn clasifica una conversación como spam",
   "settings.sla.defaultPolicy": "Política predeterminada",
   "settings.sla.defaultPolicyHint": "Se aplica cuando empieza una conversación",
-  "settings.sla.defaultPolicyNone": "Ninguna"
+  "settings.sla.defaultPolicyNone": "Ninguna",
+  "automation.builtinTools.title": "Acciones integradas",
+  "automation.builtinTools.titleAgent": "Acciones integradas (Agente)",
+  "automation.builtinTools.titleCopilot": "Acciones integradas (Copilot)",
+  "automation.builtinTools.description": "Qué puede hacer cada herramienta de escritura integrada en este agente. «Nunca» retira la herramienta por completo de sus turnos.",
+  "automation.builtinTools.reset": "Restablecer valores predeterminados",
+  "automation.builtinTools.default": "Predeterminado",
+  "automation.builtinTools.saving": "Guardando…",
+  "automation.builtinTools.saveError": "No se pudieron actualizar los permisos de la herramienta.",
+  "automation.builtinTools.loadError": "No se pudo cargar el catálogo de herramientas."
 }
