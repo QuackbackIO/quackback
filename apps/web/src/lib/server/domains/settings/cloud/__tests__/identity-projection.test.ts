@@ -5,11 +5,7 @@ import {
   IDENTITY_PROJECTION_TYPE,
   verifyIdentityProjectionToken,
 } from '../identity-projection.signature'
-import {
-  isCloudIdentityEnabled,
-  parseIdentityProjection,
-  type IdentityProjection,
-} from '../identity-projection'
+import { parseIdentityProjection, type IdentityProjection } from '../identity-projection'
 import {
   decideIdentityProjectionWrite,
   IdentityProjectionWriteError,
@@ -48,8 +44,8 @@ async function signedToken(
 describe('identity projection validation', () => {
   it('accepts only the customer-safe allowlisted shape', () => {
     expect(parseIdentityProjection(PROJECTION)).toEqual(PROJECTION)
-    expect(isCloudIdentityEnabled(PROJECTION)).toBe(true)
-    expect(isCloudIdentityEnabled(null)).toBe(false)
+    expect(parseIdentityProjection(PROJECTION)).not.toBeNull()
+    expect(parseIdentityProjection(null)).toBeNull()
     expect(parseIdentityProjection({ ...PROJECTION, platformHostname: null })).toEqual({
       ...PROJECTION,
       platformHostname: null,

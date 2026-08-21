@@ -1,10 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import {
-  ENTITLEMENT_KEYS,
-  isEntitlementKey,
-  type EntitlementKey,
-} from '@/lib/server/domains/settings'
+import { isEntitlementKey, type EntitlementKey } from '@/lib/server/domains/settings'
 
 const entitlementKeySchema = z
   .string()
@@ -44,5 +40,3 @@ export const hasTierFeatureFn = createServerFn({ method: 'GET' })
     const limits = await getTierLimits()
     return limits.features[data.feature]
   })
-
-export const ENTITLEMENT_STATUS_KEYS = ENTITLEMENT_KEYS

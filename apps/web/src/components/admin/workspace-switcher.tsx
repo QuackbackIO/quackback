@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
-import type { OwnerSiblingWorkspace } from '@/lib/server/control-plane/client'
+import type { OwnerWorkspace } from '@/lib/server/control-plane/client'
 
 const GENERATED_SYSTEM_LABEL = /^ws-[0-9a-f]{24}$/i
 
@@ -29,7 +29,7 @@ export function WorkspaceSwitcher({
   onOpen,
   defaultOpen = false,
 }: {
-  siblings: OwnerSiblingWorkspace[]
+  siblings: OwnerWorkspace[]
   onOpen: (instanceId: string) => void
   defaultOpen?: boolean
 }) {
