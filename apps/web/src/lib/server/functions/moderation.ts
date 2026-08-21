@@ -178,6 +178,8 @@ export const getModerationStatus = createServerFn({ method: 'GET' }).handler(asy
   // items to pending while the workspace default is 'none'), surface it.
   const enabled =
     portalConfig.moderationDefault.requireApproval !== 'none' ||
+    portalConfig.moderationDefault.holdImages === true ||
+    portalConfig.moderationDefault.holdLinks === true ||
     pendingCount > 0 ||
     approvalCount > 0
 

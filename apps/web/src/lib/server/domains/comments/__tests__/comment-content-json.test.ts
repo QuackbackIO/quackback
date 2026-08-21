@@ -137,6 +137,14 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   }),
 }))
 
+vi.mock('@/lib/server/content/rehost-images', () => ({
+  rehostExternalImages: vi.fn(async (json: unknown) => json),
+}))
+
+vi.mock('@/lib/server/audit/log', () => ({
+  recordAuditEvent: vi.fn(),
+}))
+
 const portalActor: Actor = {
   principalId: 'principal_a' as unknown as PrincipalId,
   role: 'user',
@@ -187,6 +195,37 @@ describe('createComment contentJson dual-write', () => {
     )
     expect(insertedComments[0].contentJson).toEqual(providedJson)
   })
+
+  it('stores client markdown verbatim when the comment has no images', async () => {
+    const { createComment } = await import('../comment.service')
+    const markdown = '**bold** body with a [link](https://example.com)'
+    await createComment(
+      { postId: 'post_p' as unknown as PostId, content: markdown },
+      { principalId: 'principal_a' as unknown as PrincipalId, role: 'user' },
+      portalActor,
+      { skipDispatch: true }
+    )
+    expect(insertedComments[0].content).toBe(markdown)
+  })
+
+  it('projects image markdown into content when the doc has an image', async () => {
+    const { createComment } = await import('../comment.service')
+    const providedJson = {
+      type: 'doc',
+      content: [{ type: 'image', attrs: { src: 'https://cdn.example.com/x.png', alt: 'shot' } }],
+    }
+    await createComment(
+      {
+        postId: 'post_p' as unknown as PostId,
+        content: 'see screenshot',
+        contentJson: providedJson,
+      },
+      { principalId: 'principal_a' as unknown as PrincipalId, role: 'user' },
+      portalActor,
+      { skipDispatch: true }
+    )
+    expect(String(insertedComments[0].content)).toMatch(/!\[/)
+  })
 })
 
 describe('userEditComment contentJson dual-write', () => {
@@ -207,5 +246,30 @@ describe('userEditComment contentJson dual-write', () => {
     expect(updatedComments[0].contentJson).not.toBeNull()
     expect(insertedEditHistory[0]).toMatchObject({ previousContent: 'Old content' })
     expect(insertedEditHistory[0]).toHaveProperty('previousContentJson')
+  })
+})
+
+describe('updateComment contentJson-only sanitizes', () => {
+  beforeEach(() => {
+    insertedComments.length = 0
+    updatedComments.length = 0
+  })
+
+  it('strips a hostile image src on a contentJson-only update', async () => {
+    const { updateComment } = await import('../comment.service')
+    await updateComment(
+      'comment_existing' as unknown as PostCommentId,
+      {
+        contentJson: {
+          type: 'doc',
+          content: [
+            { type: 'image', attrs: { src: 'https://evil.example.com/track.gif', alt: 'x' } },
+          ],
+        },
+      },
+      { principalId: 'principal_author' as unknown as PrincipalId, role: 'user' }
+    )
+    const json = JSON.stringify(updatedComments[0].contentJson)
+    expect(json).not.toContain('evil.example.com')
   })
 })

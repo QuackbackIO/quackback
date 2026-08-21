@@ -33,6 +33,7 @@ interface WidgetCommentListProps {
     contentJson: TiptapContent | null,
     parentId: string
   ) => Promise<void>
+  onImageUpload?: (file: File) => Promise<string>
 }
 
 export function WidgetCommentList({
@@ -40,6 +41,7 @@ export function WidgetCommentList({
   pinnedCommentId,
   canComment = false,
   onSubmitComment,
+  onImageUpload,
 }: WidgetCommentListProps) {
   const sortedComments = [...comments].sort((a, b) => {
     if (pinnedCommentId) {
@@ -70,6 +72,7 @@ export function WidgetCommentList({
           depth={0}
           canComment={canComment}
           onSubmitComment={onSubmitComment}
+          onImageUpload={onImageUpload}
         />
       ))}
     </div>
@@ -86,6 +89,7 @@ interface WidgetCommentItemProps {
     contentJson: TiptapContent | null,
     parentId: string
   ) => Promise<void>
+  onImageUpload?: (file: File) => Promise<string>
 }
 
 function WidgetCommentItem({
@@ -94,6 +98,7 @@ function WidgetCommentItem({
   depth,
   canComment,
   onSubmitComment,
+  onImageUpload,
 }: WidgetCommentItemProps) {
   const intl = useIntl()
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -221,6 +226,7 @@ function WidgetCommentItem({
                   depth={depth + 1}
                   canComment={canComment}
                   onSubmitComment={onSubmitComment}
+                  onImageUpload={onImageUpload}
                 />
               ))}
             </div>
@@ -370,6 +376,7 @@ function WidgetCommentItem({
                   borderless
                   minHeight="44px"
                   features={COMMENT_EDITOR_FEATURES}
+                  onImageUpload={onImageUpload}
                   disabled={isSubmitting}
                   placeholder={intl.formatMessage(
                     {

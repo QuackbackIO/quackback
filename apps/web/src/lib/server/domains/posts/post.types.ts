@@ -106,6 +106,7 @@ export interface PublicPostListItem {
   commentCount: number
   tags: Array<{ id: PostTagId; name: string; color: string }>
   board?: { id: BoardId; name: string; slug: string }
+  moderationState?: 'published' | 'pending' | string
 }
 
 /**
@@ -238,6 +239,7 @@ export interface PublicComment {
   isEdited: boolean
   avatarUrl: string | null
   statusChange?: CommentStatusChange | null
+  moderationState?: 'published' | 'pending' | string | null
   replies: PublicComment[]
   reactions: CommentReactionCount[]
 }
@@ -286,6 +288,7 @@ export interface PublicPostDetail {
   pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked: boolean
+  moderationState?: 'published' | 'pending' | string
 }
 
 /**

@@ -135,6 +135,17 @@ describe('rehostExternalImages — happy paths', () => {
     expect(uploadImageBufferMock.mock.calls[0][2]).toBe('post-images')
   })
 
+  it('rehosts comment images under the comment-images prefix', async () => {
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    uploadImageBufferMock.mockResolvedValueOnce({
+      url: 'https://cdn.example.com/comment-images/new.png',
+    })
+
+    const input = docWithImages('https://external.example.com/img.png')
+    await rehostExternalImages(input, { contentType: 'comment' })
+    expect(uploadImageBufferMock.mock.calls[0][2]).toBe('comment-images')
+  })
+
   it('rehosts multiple distinct external images', async () => {
     safeFetchMock
       .mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))

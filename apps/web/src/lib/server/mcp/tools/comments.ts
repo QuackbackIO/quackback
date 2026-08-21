@@ -13,19 +13,26 @@ import { userEditComment } from '@/lib/server/domains/comments/comment.permissio
 import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
 import type { PostId, PostCommentId } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
-import { registerTool, mcpMemberActor, jsonResult, WRITE, DESTRUCTIVE } from './helpers'
+import {
+  registerTool,
+  mcpMemberActor,
+  jsonResult,
+  WRITE,
+  DESTRUCTIVE,
+  CONTENT_FORMAT_BLOCK,
+  CONTENT_FIELD_DESCRIBE,
+} from './helpers'
 
 // ============================================================================
 // Schemas
 // ============================================================================
 
-/** Shared tail for the comment content `.describe()` blurbs. */
-const COMMENT_PLAIN_TEXT_DESCRIBE =
-  'Plain text only (max 5,000 characters). Rich content, markdown, and image embedding are not supported for comments today.'
-
 const addCommentSchema = {
   postId: z.string().describe('Post TypeID to comment on'),
-  content: z.string().max(5000).describe(`Comment text. ${COMMENT_PLAIN_TEXT_DESCRIBE}`),
+  content: z
+    .string()
+    .max(5000)
+    .describe(`Comment content (max 5,000 characters). ${CONTENT_FIELD_DESCRIBE}`),
   parentId: z.string().optional().describe('Parent comment TypeID for threaded reply'),
   isPrivate: z
     .boolean()
@@ -35,7 +42,10 @@ const addCommentSchema = {
 
 const updateCommentSchema = {
   commentId: z.string().describe('Comment TypeID to edit'),
-  content: z.string().max(5000).describe(`New comment text. ${COMMENT_PLAIN_TEXT_DESCRIBE}`),
+  content: z
+    .string()
+    .max(5000)
+    .describe(`New comment content (max 5,000 characters). ${CONTENT_FIELD_DESCRIBE}`),
 }
 
 const deleteCommentSchema = {
@@ -82,6 +92,7 @@ export function registerCommentTools(server: McpServer, auth: McpAuthContext) {
   registerTool<AddCommentArgs>(server, auth, {
     name: 'add_comment',
     description: `Post a comment on a feedback post. Supports threaded replies via parentId. Set isPrivate to create an internal note visible only to team members.
+${CONTENT_FORMAT_BLOCK}
 
 Examples:
 - Top-level comment: add_comment({ postId: "post_01abc...", content: "Thanks for the feedback!" })
@@ -126,6 +137,7 @@ Examples:
   registerTool<UpdateCommentArgs>(server, auth, {
     name: 'update_comment',
     description: `Edit a comment's content. Team members can edit any comment; authors can edit their own.
+${CONTENT_FORMAT_BLOCK}
 
 Examples:
 - Edit: update_comment({ commentId: "post_comment_01abc...", content: "Updated feedback response." })`,

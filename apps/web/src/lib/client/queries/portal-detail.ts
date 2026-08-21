@@ -27,6 +27,7 @@ export interface PublicCommentView {
   isEdited: boolean
   avatarUrl: string | null
   statusChange?: CommentStatusChange | null
+  moderationState?: 'published' | 'pending' | string | null
   replies: PublicCommentView[]
   reactions: CommentReactionCount[]
 }
@@ -80,6 +81,7 @@ export interface PublicPostDetailView {
   pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
+  moderationState?: 'published' | 'pending' | string
   /**
    * Server-computed per-board capability for the requesting viewer (composes
    * the board's vote/comment tier with the workspace anonymous switch). The

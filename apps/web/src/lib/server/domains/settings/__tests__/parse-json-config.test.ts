@@ -9,8 +9,12 @@ import {
 } from '../settings.types'
 
 describe('DEFAULT_PORTAL_CONFIG', () => {
-  it('DEFAULT_PORTAL_CONFIG carries a moderationDefault of none', () => {
-    expect(DEFAULT_PORTAL_CONFIG.moderationDefault).toEqual({ requireApproval: 'none' })
+  it('DEFAULT_PORTAL_CONFIG carries a moderationDefault of none with holds off', () => {
+    expect(DEFAULT_PORTAL_CONFIG.moderationDefault).toEqual({
+      requireApproval: 'none',
+      holdImages: false,
+      holdLinks: false,
+    })
   })
 
   it('DEFAULT_PORTAL_CONFIG has widgetSignIn defaulting to false', () => {

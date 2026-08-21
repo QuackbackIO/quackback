@@ -42,7 +42,8 @@ export async function announcePublishedPost(
     post: PostSnapshot
     board: { slug: string; name: string }
     author: AuthorSnapshot
-  }
+  },
+  opts?: { skipCreatedWebhook?: boolean }
 ): Promise<void> {
   let post: PostSnapshot
   let board: { slug: string; name: string }
@@ -80,16 +81,18 @@ export async function announcePublishedPost(
   }
 
   const actorName = author.displayName ?? author.name
-  await dispatchPostCreated(buildEventActor(author), {
-    id: post.id,
-    title: post.title,
-    content: post.content,
-    boardId: post.boardId,
-    boardSlug: board.slug,
-    authorEmail: realEmail(author.email) ?? undefined,
-    authorName: actorName,
-    voteCount: post.voteCount,
-  })
+  if (!opts?.skipCreatedWebhook) {
+    await dispatchPostCreated(buildEventActor(author), {
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      boardId: post.boardId,
+      boardSlug: board.slug,
+      authorEmail: realEmail(author.email) ?? undefined,
+      authorName: actorName,
+      voteCount: post.voteCount,
+    })
+  }
 
   if (post.contentJson) {
     const mentionedIds = extractMentions(post.contentJson)

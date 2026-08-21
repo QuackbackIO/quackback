@@ -3,6 +3,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Square2StackIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
+import { useApprovePost, useRejectPost } from '@/lib/client/mutations/moderation'
+import { usePermission } from '@/lib/client/hooks/use-permission'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 interface FeedbackRowProps {
   post: PostListItem
@@ -25,6 +28,10 @@ export function FeedbackRow({
   selectionActive = false,
   onSelectChange,
 }: FeedbackRowProps) {
+  const canModerate = usePermission(PERMISSIONS.POST_APPROVE)
+  const approve = useApprovePost(post.id)
+  const reject = useRejectPost(post.id)
+  const pending = post.moderationState === 'pending'
   return (
     <div className="group relative flex items-center">
       {/* Selection gutter: reserves its width for every row so the cards stay
@@ -57,6 +64,11 @@ export function FeedbackRow({
           createdAt={post.createdAt}
           boardSlug={post.board.slug}
           tags={post.tags}
+          moderationState={post.moderationState}
+          canModerate={canModerate && pending}
+          moderationBusy={approve.isPending || reject.isPending}
+          onApprove={() => approve.mutate(post.id)}
+          onReject={() => reject.mutate({ postId: post.id })}
           // Admin mode - click to open modal
           onClick={onClick}
           // Admin doesn't need avatars in list view

@@ -3,6 +3,7 @@
  */
 import type { EventData } from '@/lib/server/events/types'
 import { stripHtml, truncate, formatStatus } from '@/lib/server/events/hook-utils'
+import { commentPlainText } from '@/lib/server/markdown-tiptap'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 
 export interface NtfyPayload {
@@ -44,7 +45,7 @@ export function buildNtfyPayload(
 
     case 'comment.created': {
       const { comment, post } = event.data
-      const body = truncate(stripHtml(comment.content ?? ''), 500)
+      const body = truncate(commentPlainText(comment), 500)
       return {
         topic,
         title: `New comment: ${post.title}`,

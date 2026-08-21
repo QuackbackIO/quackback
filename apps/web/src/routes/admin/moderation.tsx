@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ShieldCheckIcon } from '@heroicons/react/24/outline'
@@ -16,6 +16,8 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
+import { CommentContent } from '@/components/public/comment-content'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 export const Route = createFileRoute('/admin/moderation')({
   // Auth is enforced by the parent `/admin` guard (admin/member wall) plus each
@@ -117,7 +119,15 @@ function ModerationPage() {
                       className="flex items-start justify-between gap-4 rounded-lg border bg-card p-4"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{post.title}</p>
+                        <p className="font-medium truncate">
+                          <Link
+                            to="/admin/feedback"
+                            search={{ post: post.id as string }}
+                            className="hover:underline"
+                          >
+                            {post.title}
+                          </Link>
+                        </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           by {post.authorName ?? 'Anonymous'} in {post.boardName}
                         </p>
@@ -168,15 +178,25 @@ function ModerationPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-muted-foreground">
                           on{' '}
-                          <span className="font-medium text-foreground">{comment.postTitle}</span>{' '}
+                          <Link
+                            to="/admin/feedback"
+                            search={{ post: comment.postId as string }}
+                            hash={`comment-${comment.id}`}
+                            className="font-medium text-foreground hover:underline"
+                          >
+                            {comment.postTitle}
+                          </Link>{' '}
                           in {comment.boardName}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           by {comment.authorName ?? 'Anonymous'}
                         </p>
-                        <p className="mt-1 text-sm text-foreground line-clamp-3">
-                          {comment.content}
-                        </p>
+                        <div className="mt-1 text-sm text-foreground line-clamp-3">
+                          <CommentContent
+                            content={comment.content}
+                            contentJson={comment.contentJson as TiptapContent | null}
+                          />
+                        </div>
                       </div>
                       <div className="flex shrink-0 gap-2">
                         <Button

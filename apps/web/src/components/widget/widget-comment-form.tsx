@@ -16,6 +16,7 @@ interface WidgetCommentFormProps {
   isIdentified: boolean
   user: WidgetUser | null
   onSubmit: (content: string, contentJson: TiptapContent | null) => Promise<void>
+  onImageUpload?: (file: File) => Promise<string>
 }
 
 /**
@@ -23,7 +24,12 @@ interface WidgetCommentFormProps {
  * session — there is no inline email capture; verified identity comes only
  * from host-app SSO identify (see GH issue #300).
  */
-export function WidgetCommentForm({ isIdentified, user, onSubmit }: WidgetCommentFormProps) {
+export function WidgetCommentForm({
+  isIdentified,
+  user,
+  onSubmit,
+  onImageUpload,
+}: WidgetCommentFormProps) {
   const intl = useIntl()
   const { ensureSessionThen } = useWidgetAuth()
   const [commentText, setCommentText] = useState('')
@@ -80,6 +86,7 @@ export function WidgetCommentForm({ isIdentified, user, onSubmit }: WidgetCommen
           borderless
           minHeight="52px"
           features={COMMENT_EDITOR_FEATURES}
+          onImageUpload={onImageUpload}
           disabled={isSubmitting}
           placeholder={intl.formatMessage({
             id: 'widget.commentForm.placeholder',

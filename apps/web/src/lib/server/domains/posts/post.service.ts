@@ -49,7 +49,8 @@ import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
-import { canCreatePost, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
+import { canCreatePost, ANONYMOUS_ACTOR, isTeamActor, type Actor } from '@/lib/server/policy'
+import { contentHoldReason } from '@/lib/server/content/content-holds'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { startOfUtcMonth } from '@/lib/shared/utils/date'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
@@ -175,6 +176,7 @@ export async function createPost(
   let moderationState: 'published' | 'pending' = createDecision.requiresApproval
     ? 'pending'
     : 'published'
+  let holdReason: ReturnType<typeof contentHoldReason> = null
 
   // Determine statusId - either from input or use default "open" status
   let statusId = input.statusId
@@ -227,6 +229,11 @@ export async function createPost(
       throw new ValidationError('POST_CREATE_DENIED', lockedDecision.reason)
     }
     moderationState = lockedDecision.requiresApproval ? 'pending' : 'published'
+    const actor = author.actor ?? ANONYMOUS_ACTOR
+    holdReason = isTeamActor(actor)
+      ? null
+      : contentHoldReason(portalConfig.moderationDefault, contentJson, `${title}\n${content}`)
+    if (holdReason) moderationState = 'pending'
 
     const [newPost] = await tx
       .insert(posts)
@@ -277,7 +284,11 @@ export async function createPost(
       headers: options?.headers,
       target: { type: 'post', id: post.id },
       after: { moderationState: 'pending' },
-      metadata: { principalType: author.actor?.principalType ?? 'anonymous' },
+      metadata: {
+        principalType: author.actor?.principalType ?? 'anonymous',
+        ...(holdReason ? { reason: holdReason } : {}),
+        previouslyPublished: false,
+      },
     })
   }
 

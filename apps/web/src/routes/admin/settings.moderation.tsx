@@ -87,6 +87,12 @@ function ModerationPage() {
   const [moderationToggles, setModerationToggles] = useState<ApprovalToggles>(() =>
     requireApprovalToToggles(portalConfigQuery.data.moderationDefault?.requireApproval ?? 'none')
   )
+  const [holdImages, setHoldImages] = useState(
+    portalConfigQuery.data.moderationDefault?.holdImages === true
+  )
+  const [holdLinks, setHoldLinks] = useState(
+    portalConfigQuery.data.moderationDefault?.holdLinks === true
+  )
 
   const [savingField, setSavingField] = useState<string | null>(null)
 
@@ -116,6 +122,23 @@ function ModerationPage() {
       startTransition(() => router.invalidate())
     } catch {
       setModerationToggles(prev)
+    } finally {
+      setSavingField(null)
+    }
+  }
+
+  async function updateContentHold(key: 'holdImages' | 'holdLinks', checked: boolean) {
+    const setFlag = key === 'holdImages' ? setHoldImages : setHoldLinks
+    setFlag(checked)
+    setSavingField(`moderation-${key}`)
+    try {
+      await updateModerationDefault.mutateAsync({
+        requireApproval: togglesToRequireApproval(moderationToggles),
+        [key]: checked,
+      })
+      startTransition(() => router.invalidate())
+    } catch {
+      setFlag(!checked)
     } finally {
       setSavingField(null)
     }
@@ -175,6 +198,32 @@ function ModerationPage() {
             checked={moderationToggles.authenticated}
             saving={savingField === 'moderation-authenticated'}
             onCheckedChange={(checked) => updateModeration('authenticated', checked)}
+            disabled={isBusy}
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Content review"
+        description="Hold submissions that include media or outbound links, regardless of who authored them."
+      >
+        <div className="divide-y divide-border/50">
+          <PermissionToggle
+            id="moderate-images"
+            label="Hold posts and comments that contain images"
+            description="Submissions with an attached or embedded image wait for review before they appear."
+            checked={holdImages}
+            saving={savingField === 'moderation-holdImages'}
+            onCheckedChange={(checked) => updateContentHold('holdImages', checked)}
+            disabled={isBusy}
+          />
+          <PermissionToggle
+            id="moderate-links"
+            label="Hold posts and comments that contain links"
+            description="Submissions with an external link wait for review before they appear."
+            checked={holdLinks}
+            saving={savingField === 'moderation-holdLinks'}
+            onCheckedChange={(checked) => updateContentHold('holdLinks', checked)}
             disabled={isBusy}
           />
         </div>

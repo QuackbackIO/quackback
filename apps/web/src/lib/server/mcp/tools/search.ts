@@ -22,6 +22,7 @@ import {
 import { getTypeIdPrefix } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import type { CommentTreeNode } from '@/lib/shared/comment-tree'
 import type {
   PostId,
   BoardId,
@@ -417,6 +418,22 @@ async function searchArticles(args: SearchArgs): Promise<CallToolResult> {
 // Get details dispatchers
 // ============================================================================
 
+function serializeMcpComment(c: CommentTreeNode): Record<string, unknown> {
+  return {
+    id: c.id,
+    postId: c.postId,
+    parentId: c.parentId,
+    content: contentJsonToMarkdown(c.contentJson, c.content),
+    authorName: c.authorName,
+    principalId: c.principalId,
+    isTeamMember: c.isTeamMember,
+    isPrivate: c.isPrivate,
+    createdAt: c.createdAt,
+    deletedAt: c.deletedAt,
+    replies: c.replies.map(serializeMcpComment),
+  }
+}
+
 async function getPostDetails(postId: PostId): Promise<CallToolResult> {
   const [post, comments, mergedPosts] = await Promise.all([
     getPostWithDetails(postId),
@@ -440,7 +457,10 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
     pinnedComment: post.pinnedComment
       ? {
           id: post.pinnedComment.id,
-          content: post.pinnedComment.content,
+          content: contentJsonToMarkdown(
+            post.pinnedComment.contentJson,
+            post.pinnedComment.content
+          ),
           authorName: post.pinnedComment.authorName,
           createdAt: post.pinnedComment.createdAt,
         }
@@ -460,7 +480,7 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     deletedAt: post.deletedAt ?? null,
-    comments,
+    comments: comments.map(serializeMcpComment),
   })
 }
 
