@@ -14,7 +14,6 @@ interface SegmentRow {
 }
 
 let rows: SegmentRow[] = []
-let tableReads = 0
 
 vi.mock('@/lib/server/db', () => {
   const chain = {
@@ -22,10 +21,7 @@ vi.mock('@/lib/server/db', () => {
     from: () => chain,
     // The scheduler filters `type = 'dynamic' AND deleted_at IS NULL` in SQL;
     // the fixture stands in for the rows that survive it.
-    where: async () => {
-      tableReads += 1
-      return rows
-    },
+    where: async () => rows,
   }
   return {
     db: chain,
@@ -48,7 +44,6 @@ import {
 
 beforeEach(() => {
   rows = []
-  tableReads = 0
 })
 
 afterEach(() => {
