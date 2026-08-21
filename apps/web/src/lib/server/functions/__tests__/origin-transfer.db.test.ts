@@ -52,7 +52,7 @@ const hoisted = vi.hoisted(() => {
 
 vi.mock('@/lib/server/auth', () => ({ auth: hoisted.auth }))
 
-import { consumeOriginTransfer } from '../origin-transfer'
+import { consumeOpenHandoff, consumeOriginTransfer } from '../origin-transfer'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -230,6 +230,31 @@ describe.skipIf(!fixture.available)('rename-transfer OTT consume', () => {
       ott: 'ott-from-another-workspace',
       host: FRIENDLY_HOST,
     })
+    expect(result).toEqual({ kind: 'error', status: 'invalid' })
+  })
+
+  it('lets Visit replay the Open token until it expires', async () => {
+    const { sessionToken } = await seedSessionUser()
+    const token = await seedOtt({ sessionToken, expiresAt: future() })
+
+    const first = await consumeOpenHandoff({ ott: token })
+    expect(first).toMatchObject({ kind: 'redirect', to: '/' })
+    if (first.kind !== 'redirect') return
+    expect(first.cookies.some((cookie) => cookie.toLowerCase().includes('session'))).toBe(true)
+    expect(await ottRowCount(token)).toBe(1)
+
+    const replay = await consumeOpenHandoff({ ott: token })
+    expect(replay).toMatchObject({ kind: 'redirect', to: '/' })
+    if (replay.kind !== 'redirect') return
+    expect(replay.cookies.some((cookie) => cookie.toLowerCase().includes('session'))).toBe(true)
+    expect(await ottRowCount(token)).toBe(1)
+  })
+
+  it('still refuses an expired Open token', async () => {
+    const { sessionToken } = await seedSessionUser()
+    const token = await seedOtt({ sessionToken, expiresAt: past() })
+
+    const result = await consumeOpenHandoff({ ott: token })
     expect(result).toEqual({ kind: 'error', status: 'invalid' })
   })
 
