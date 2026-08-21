@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Navigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { ChatBubbleLeftRightIcon, EnvelopeIcon } from '@heroicons/react/24/solid'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { assertRoutePermission } from '@/lib/shared/route-permission'
@@ -49,7 +49,6 @@ function ChannelsHubPage() {
   })
   const [routingEnabled, setRoutingEnabled] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
-  const [, startTransition] = useTransition()
 
   const enabled = routingEnabled ?? routingQuery.data?.enabled ?? false
   const messenger = getChannelDescriptor('messenger')
@@ -129,7 +128,6 @@ function ChannelsHubPage() {
                 await updateConversationRoutingFn({
                   data: { enabled: checked, strategy: 'auto_assign_active' },
                 })
-                startTransition(() => undefined)
               } catch {
                 setRoutingEnabled(!checked)
               } finally {

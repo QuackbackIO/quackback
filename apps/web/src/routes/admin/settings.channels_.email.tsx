@@ -16,7 +16,6 @@ import { Label } from '@/components/ui/label'
 import { TrustedSendersCard } from '@/components/admin/settings/trusted-senders-card'
 import { EmailChannelSettings } from '@/components/admin/channels/email-channel-settings'
 import { EmailTransportCard } from '@/components/admin/channels/email-transport-card'
-import { getChannelDescriptor } from '@/lib/shared/channels'
 import { fetchEmailAutoAckFn, updateEmailAutoAckFn } from '@/lib/server/functions/settings'
 import { listRecentEmailLogFn } from '@/lib/server/functions/channel-accounts'
 
@@ -56,12 +55,7 @@ function EmailChannelPage() {
         title="Reopen on reply"
         description="Email replies always reopen a closed conversation."
       >
-        <div className="flex items-center justify-between py-1">
-          <p className="text-sm text-muted-foreground">
-            {getChannelDescriptor('email')?.reopenOnReply === 'always'
-              ? 'Always on'
-              : 'Configurable'}
-          </p>
+        <div className="flex items-center justify-end py-1">
           <Badge size="sm" shape="pill">
             Always on
           </Badge>
