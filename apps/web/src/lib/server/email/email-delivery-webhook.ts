@@ -19,6 +19,7 @@ import {
 } from './sns-signature'
 import { safeFetch } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
+import { timingSafeEqual } from 'crypto'
 
 const log = logger.child({ component: 'email-delivery-webhook' })
 const MAX_BODY = 256 * 1024
@@ -60,7 +61,13 @@ export async function handleEmailDeliveryWebhook(
 ): Promise<Response> {
   const secret = configuredSecret()
   if (!secret) return new Response('Not found', { status: 404 })
-  if (requestToken(request) !== secret) return new Response('Invalid signature', { status: 401 })
+  const token = requestToken(request)
+  if (!token) return new Response('Invalid signature', { status: 401 })
+  const provided = Buffer.from(token)
+  const expected = Buffer.from(secret)
+  if (provided.byteLength !== expected.byteLength || !timingSafeEqual(provided, expected)) {
+    return new Response('Invalid signature', { status: 401 })
+  }
 
   const body = await readTextBodyOr413(request, MAX_BODY)
   if (body instanceof Response) return body
