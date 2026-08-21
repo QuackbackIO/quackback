@@ -17,9 +17,9 @@
 -- ## Renamed in place rather than expanded and contracted
 --
 -- Section 10 requires expand/contract for anything a running older build
--- addresses. Nothing older addresses these. `job_queue` arrives in 0253, the
--- kv, presence and overflow tables in 0257, and `settings.cloud_tenant_id` in
--- 0251 -- none of which exist on `main` or `next`, so no release carries them
+-- addresses. Nothing older addresses these. `job_queue` arrives in 0250, the
+-- kv, presence and overflow tables in 0251, and `settings.cloud_tenant_id` in
+-- 0255 -- none of which exist on `main` or `next`, so no release carries them
 -- and no self-hosted install has ever run them. The only databases holding
 -- these columns are the pooled fleet's, and the fleet migrator rolls them with
 -- the build that reads the new names.
@@ -56,16 +56,16 @@
 --
 -- `settings.cloud_workspace_key` gets a third branch the others do not need.
 -- The five kv tables and `job_queue` were created by `CREATE TABLE IF NOT
--- EXISTS`, which Postgres skips on the relation name alone, so replaying 0253
--- or 0257 cannot bring an old column back. `settings.cloud_tenant_id` came from
--- an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in 0251, and that DOES come
--- back: a heal that replays the span from 0249 runs 0251 again, re-adding the
+-- EXISTS`, which Postgres skips on the relation name alone, so replaying 0250
+-- or 0251 cannot bring an old column back. `settings.cloud_tenant_id` came from
+-- an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in 0255, and that DOES come
+-- back: a heal that replays the span from 0249 runs 0255 again, re-adding the
 -- old column a few statements before this one.
 --
 -- So the state to converge is "both names present", and the resurrected column
 -- is empty by construction -- `ADD COLUMN` with no default writes NULLs, and no
 -- code has referenced the old name since this branch. Dropping it is what makes
--- the pair 0251-then-0258 idempotent, which is the property the whole replay
+-- the pair 0255-then-0256 idempotent, which is the property the whole replay
 -- model rests on.
 --
 -- @contract: safe-after 0.13.1

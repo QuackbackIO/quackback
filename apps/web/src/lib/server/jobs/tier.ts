@@ -284,7 +284,7 @@ function startLoop(opts: {
             log.warn(
               { tenantId: opts.tenantId },
               'job_queue is absent in this database (migration 0250 not applied); ' +
-                'skipping this tenant rather than crash-looping'
+                'skipping this workspace rather than crash-looping'
             )
           }
         } else {

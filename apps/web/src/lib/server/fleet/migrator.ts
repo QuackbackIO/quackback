@@ -61,7 +61,7 @@
  * exactly what the compatibility gate refuses. That split — the reconciler
  * advances the tip, the gate detects holes — has a dead end in it, because the
  * gate can only refuse. Measured on two live workspaces: high-water at `0253` with
- * rows absent for `0249`, `0250`, `0252`, `0256` and `0257`, `settings.cloud`
+ * rows absent for `0249`, `0250`, `0251` and `0252`, `settings.cloud`
  * physically missing, every page 500ing, and both instruments reporting fine —
  * the reconciler `OK [reconciled] post=true`, having applied two migrations and
  * healed nothing.
@@ -278,8 +278,8 @@ export interface MigrationPlan {
  * the bundled entries at or above `from`.
  *
  * The difference is not cosmetic. On the ledger this fleet actually produced —
- * high-water at `0253` with rows absent for `0249`, `0250`, `0252`, `0256` and
- * `0257` — `replaySetFor` reports two tags while seven are missing, so a plan
+ * high-water at `0253` with rows absent for `0249`, `0250`, `0251` and
+ * `0252` — `replaySetFor` reports two tags while four are missing, so a plan
  * built on it tells an operator the workspace is nearly current at the moment it is
  * least current.
  */
