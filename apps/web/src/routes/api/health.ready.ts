@@ -198,18 +198,24 @@ export async function handleReadinessProbe(): Promise<Response> {
   }
 
   const ready = dbCheck.ok && migrationsCheck.ok && workersCheck.ok
-  return Response.json(
-    {
-      status: ready ? 'ok' : 'unavailable',
-      role: getProcessRole(),
-      checks: {
-        db: dbCheck,
-        migrations: migrationsCheck,
-        workers: workersCheck,
-      },
+  const body: Record<string, unknown> = {
+    status: ready ? 'ok' : 'unavailable',
+    role: getProcessRole(),
+    checks: {
+      db: dbCheck,
+      migrations: migrationsCheck,
+      workers: workersCheck,
     },
-    { status: ready ? 200 : 503 }
-  )
+  }
+  // Request-pool LRU stats. Same operator surface as the job tier's
+  // attached/detaches: entries currently held, evictions since boot. Only
+  // meaningful under pooled tenancy; the cache is empty otherwise.
+  if (isPooledTenancy()) {
+    const { getPoolCacheStats } = await import('@/lib/server/workspaces/pool-cache')
+    const pools = getPoolCacheStats()
+    body.pools = { entries: pools.live, evictions: pools.evicted }
+  }
+  return Response.json(body, { status: ready ? 200 : 503 })
 }
 
 export const Route = createFileRoute('/api/health/ready')({
