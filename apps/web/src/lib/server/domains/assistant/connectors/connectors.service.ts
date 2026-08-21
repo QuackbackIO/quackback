@@ -1,5 +1,5 @@
 /** Agent Connectors CRUD. Secrets never leave this module. */
-import { eq } from 'drizzle-orm'
+import { and, eq, ne, sql } from 'drizzle-orm'
 import {
   db as defaultDb,
   connectors,
@@ -9,15 +9,13 @@ import {
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { ConnectorId, PrincipalId } from '@quackback/ids'
 import { encrypt, decrypt } from '@/lib/server/encryption'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { ValidationError } from '@/lib/shared/errors'
+import { validationError } from '@/lib/server/domains/assistant/validation-error'
 import { checkUrlSafety } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
 import {
   connectorCreateInputSchema,
   connectorUpdateInputSchema,
-  connectorToolName,
-  parseConnectorToolName,
   resolveToolPolicy,
   slugifyConnectorName,
   DEFAULT_CONNECTOR_TOOL_POLICIES,
@@ -60,12 +58,8 @@ interface ConnectorSecrets {
   }
 }
 
-function validationError(error: unknown): never {
-  const issueMessage =
-    typeof error === 'object' && error !== null && 'issues' in error
-      ? (error as { issues?: Array<{ message?: string }> }).issues?.[0]?.message
-      : undefined
-  throw new ValidationError('VALIDATION_ERROR', issueMessage ?? 'Invalid connector')
+function invalidConnector(error: unknown): never {
+  return validationError('connector', error)
 }
 
 function encryptSecrets(secrets: ConnectorSecrets): string {
@@ -108,15 +102,20 @@ async function assertSlugUnique(
   excludeId: ConnectorId | null,
   execDb: Executor
 ): Promise<void> {
-  const rows = await execDb.select({ id: connectors.id, slug: connectors.slug }).from(connectors)
-  for (const row of rows) {
-    if (excludeId && row.id === excludeId) continue
-    if (row.slug === slug) {
-      throw new ValidationError(
-        'CONNECTOR_DUPLICATE_SLUG',
-        'Another connector already uses a similar name. Choose a distinct name.'
-      )
-    }
+  const [row] = await execDb
+    .select({ id: connectors.id })
+    .from(connectors)
+    .where(
+      excludeId
+        ? and(sql`lower(${connectors.slug}) = ${slug}`, ne(connectors.id, excludeId))
+        : sql`lower(${connectors.slug}) = ${slug}`
+    )
+    .limit(1)
+  if (row) {
+    throw new ValidationError(
+      'CONNECTOR_DUPLICATE_SLUG',
+      'Another connector already uses a similar name. Choose a distinct name.'
+    )
   }
 }
 
@@ -175,14 +174,6 @@ export async function getConnector(
   return row ?? null
 }
 
-export async function getConnectorBySlug(
-  slug: string,
-  execDb: Executor = defaultDb
-): Promise<ConnectorRow | null> {
-  const rows = await execDb.select().from(connectors)
-  return rows.find((row) => row.slug === slug) ?? null
-}
-
 export async function discoverInto(
   row: Pick<ConnectorRow, 'id' | 'url' | 'authMode' | 'secrets' | 'tools' | 'toolPolicies'>,
   execDb: Executor
@@ -235,7 +226,7 @@ async function insertPendingOAuthRow(
       createdByPrincipalId: input.createdByPrincipalId ?? null,
     })
     .returning()
-  await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
+
   return row
 }
 
@@ -244,7 +235,7 @@ export async function createConnector(
   execDb: Executor = defaultDb
 ): Promise<ConnectorRow> {
   const parsed = connectorCreateInputSchema.safeParse(input)
-  if (!parsed.success) validationError(parsed.error)
+  if (!parsed.success) invalidConnector(parsed.error)
   await assertHttpsPublicUrl(parsed.data.url)
   const slug = slugifyConnectorName(parsed.data.name)
   await assertSlugUnique(slug, null, execDb)
@@ -326,7 +317,7 @@ export async function createConnector(
       createdByPrincipalId: input.createdByPrincipalId ?? null,
     })
     .returning()
-  await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
+
   return row
 }
 
@@ -336,7 +327,7 @@ export async function updateConnector(
   execDb: Executor = defaultDb
 ): Promise<ConnectorRow | null> {
   const parsed = connectorUpdateInputSchema.safeParse({ ...input, id })
-  if (!parsed.success) validationError(parsed.error)
+  if (!parsed.success) invalidConnector(parsed.error)
   const existing = await getConnector(id, execDb)
   if (!existing) return null
 
@@ -366,8 +357,6 @@ export async function updateConnector(
     })
     .where(eq(connectors.id, id))
     .returning()
-  await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
+
   return row ?? null
 }
-
-export { connectorToolName, parseConnectorToolName }

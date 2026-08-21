@@ -4,12 +4,12 @@
  * compileSkillCatalogue — one line per enabled+assigned skill under a char cap.
  * getSkillBody — capped markdown, null when unassigned or disabled.
  */
-import { eq } from 'drizzle-orm'
+import { and, eq, ne, sql } from 'drizzle-orm'
 import { db as defaultDb, agentSkills } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { PrincipalId, SkillId } from '@quackback/ids'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { ValidationError } from '@/lib/shared/errors'
+import { validationError } from '@/lib/server/domains/assistant/validation-error'
 import type { AssistantAgentKind as AgentKind } from '@/lib/shared/assistant/config'
 import {
   skillInputSchema,
@@ -22,12 +22,8 @@ import {
 
 export type SkillRow = typeof agentSkills.$inferSelect
 
-function validationError(error: unknown): never {
-  const issueMessage =
-    typeof error === 'object' && error !== null && 'issues' in error
-      ? (error as { issues?: Array<{ message?: string }> }).issues?.[0]?.message
-      : undefined
-  throw new ValidationError('VALIDATION_ERROR', issueMessage ?? 'Invalid skill')
+function invalidSkill(error: unknown): never {
+  return validationError('skill', error)
 }
 
 export function toSkillDTO(row: SkillRow): SkillDTO {
@@ -60,16 +56,21 @@ async function assertNameUnique(
   excludeId: SkillId | null,
   execDb: Executor
 ): Promise<void> {
-  const rows = await execDb.select({ id: agentSkills.id, name: agentSkills.name }).from(agentSkills)
   const folded = name.trim().toLowerCase()
-  for (const row of rows) {
-    if (excludeId && row.id === excludeId) continue
-    if (row.name.trim().toLowerCase() === folded) {
-      throw new ValidationError(
-        'SKILL_DUPLICATE_NAME',
-        'Another skill already uses this name. Choose a distinct name.'
-      )
-    }
+  const [row] = await execDb
+    .select({ id: agentSkills.id })
+    .from(agentSkills)
+    .where(
+      excludeId
+        ? and(sql`lower(${agentSkills.name}) = ${folded}`, ne(agentSkills.id, excludeId))
+        : sql`lower(${agentSkills.name}) = ${folded}`
+    )
+    .limit(1)
+  if (row) {
+    throw new ValidationError(
+      'SKILL_DUPLICATE_NAME',
+      'Another skill already uses this name. Choose a distinct name.'
+    )
   }
 }
 
@@ -78,7 +79,7 @@ export async function createSkill(
   execDb: Executor = defaultDb
 ): Promise<SkillRow> {
   const parsed = skillInputSchema.safeParse(input)
-  if (!parsed.success) validationError(parsed.error)
+  if (!parsed.success) invalidSkill(parsed.error)
   await assertNameUnique(parsed.data.name, null, execDb)
   const [row] = await execDb
     .insert(agentSkills)
@@ -91,7 +92,7 @@ export async function createSkill(
       createdByPrincipalId: input.createdByPrincipalId ?? null,
     })
     .returning()
-  await cacheDel(CACHE_KEYS.SKILL_CATALOGUE('agent'), CACHE_KEYS.SKILL_CATALOGUE('copilot'))
+
   return row
 }
 
@@ -101,7 +102,7 @@ export async function updateSkill(
   execDb: Executor = defaultDb
 ): Promise<SkillRow | null> {
   const parsed = skillInputSchema.safeParse(input)
-  if (!parsed.success) validationError(parsed.error)
+  if (!parsed.success) invalidSkill(parsed.error)
   const existing = await getSkill(id, execDb)
   if (!existing) return null
   await assertNameUnique(parsed.data.name, id, execDb)
@@ -117,13 +118,12 @@ export async function updateSkill(
     })
     .where(eq(agentSkills.id, id))
     .returning()
-  await cacheDel(CACHE_KEYS.SKILL_CATALOGUE('agent'), CACHE_KEYS.SKILL_CATALOGUE('copilot'))
+
   return row ?? null
 }
 
 export async function deleteSkill(id: SkillId, execDb: Executor = defaultDb): Promise<void> {
   await execDb.delete(agentSkills).where(eq(agentSkills.id, id))
-  await cacheDel(CACHE_KEYS.SKILL_CATALOGUE('agent'), CACHE_KEYS.SKILL_CATALOGUE('copilot'))
 }
 
 export async function compileSkillCatalogue(

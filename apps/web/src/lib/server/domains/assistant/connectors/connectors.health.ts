@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 import { db as defaultDb, connectors } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { ConnectorId } from '@quackback/ids'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { logger } from '@/lib/server/logger'
 import { discoverInto, getConnector } from './connectors.service'
 
@@ -26,7 +25,7 @@ export async function refreshConnector(id: ConnectorId, execDb: Executor = defau
       })
       .where(eq(connectors.id, id))
       .returning()
-    await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
+
     return row ?? null
   } catch (err) {
     log.warn({ err, id }, 'connector refresh failed')
@@ -42,7 +41,7 @@ export async function refreshConnector(id: ConnectorId, execDb: Executor = defau
       })
       .where(eq(connectors.id, id))
       .returning()
-    await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
+
     return row ?? null
   }
 }
@@ -52,7 +51,6 @@ export async function deleteConnector(
   execDb: Executor = defaultDb
 ): Promise<void> {
   await execDb.delete(connectors).where(eq(connectors.id, id))
-  await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
 }
 
 export async function recordConnectorCall(

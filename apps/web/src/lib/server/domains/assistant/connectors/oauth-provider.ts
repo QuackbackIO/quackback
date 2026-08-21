@@ -13,9 +13,8 @@ import type { ConnectorId } from '@quackback/ids'
 import { eq } from 'drizzle-orm'
 import { db as defaultDb, connectors } from '@/lib/server/db'
 import { encrypt, decrypt } from '@/lib/server/encryption'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/cache'
 import { signOAuthState, verifyOAuthState } from '@/lib/server/auth/oauth-state'
-import { createPkcePair } from '@/lib/server/auth/pkce'
+import { createHash, randomBytes } from 'node:crypto'
 import { buildCallbackUri } from '@/lib/server/integrations/oauth'
 import { safePinnedFetch } from '@/lib/server/content/ssrf-guard'
 import { logger } from '@/lib/server/logger'
@@ -24,6 +23,12 @@ import { CONNECTOR_SECRETS_PURPOSE, getConnector, type ConnectorRow } from './co
 
 const log = logger.child({ component: 'assistant-connectors-oauth' })
 const REFRESH_BUFFER_MS = 5 * 60 * 1000
+
+function createPkcePair(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(32).toString('base64url')
+  const challenge = createHash('sha256').update(verifier).digest('base64url')
+  return { verifier, challenge }
+}
 
 export interface ConnectorOAuthSecrets {
   accessToken?: string
@@ -68,7 +73,6 @@ async function writeSecrets(
     .update(connectors)
     .set({ secrets: ciphertext, updatedAt: new Date() })
     .where(eq(connectors.id, id))
-  await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
 }
 
 export function createConnectorOAuthProvider(
@@ -211,7 +215,7 @@ export async function getValidConnectorAccessToken(
         updatedAt: new Date(),
       })
       .where(eq(connectors.id, row.id))
-    await cacheDel(CACHE_KEYS.CONNECTOR_CATALOG)
+
     return oauth.accessToken
   }
 }
@@ -267,5 +271,3 @@ export async function finishConnectorOAuth(request: Request): Promise<Response> 
     return Response.redirect(`${origin}/admin/automation/connectors/${row.id}?oauth=error`, 302)
   }
 }
-
-export { REFRESH_BUFFER_MS }
