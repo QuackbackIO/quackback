@@ -244,13 +244,11 @@ signal at all**. That absence of symptom is why `getPoolCacheStats()` exposes
 rather than debug logs: the counter is the only thing that distinguishes
 "working" from "quietly costing money".
 
-**Eviction is necessary but not sufficient.** A permanently attached LISTEN
-holds the compute awake whether or not the request pool evicted. The
-connectionless scheduler (`QUACKBACK_WAKE_MODE=scheduler`) does not LISTEN
-and does not hold a tenant connection between drains, so `ROLE=all` on the
-HTTP process can still let a quiet workspace suspend. The detach policy in
-`idle.ts` is what lets a listener-mode workspace go. The role split is
-optional scale-out, not the precondition for idle saving.
+**Eviction is necessary but not sufficient.** The job tier polls each tenant
+database on its own interval, so `ROLE=all` keeps a quiet workspace's compute
+awake even after the request pool evicts. Idle saving requires
+`QUACKBACK_ROLE=web`. The role split is optional scale-out for that cost
+model, not a second mechanism.
 
 #### Measured, 2026-08-08
 
@@ -538,23 +536,17 @@ would turn one bad record into a fleet-wide outage of every sweeper.
 ### 5.1 The worker tier
 
 `jobs/tier.ts`, started by `startup.ts` under `QUACKBACK_ROLE=worker` (or `all`).
-One loop per workspace on that workspace's **direct**, session-mode endpoint,
-each holding a `LISTEN quackback_job_wake` doorbell. Domain events no longer
-have their own relay loop: `emit()` writes an `event-dispatch` job in the same
-transaction as the outbox row. `events/RELAY.md` records the deletion;
-`jobs/JOBS.md` is the account of the remaining tier.
+One poll loop per workspace, each claiming jobs with `FOR UPDATE SKIP LOCKED`
+on that workspace's pooled connection. After-commit only nudges the in-process
+poll wait; there is no job-queue `LISTEN`. Domain events no longer have their
+own relay loop: `emit()` writes an `event-dispatch` job in the same transaction
+as the outbox row. `events/RELAY.md` records the deletion; `jobs/JOBS.md` is
+the account of the remaining tier.
 
-**`LISTEN` through the pooler is impossible, not merely unreliable.** Measured
-by **delivery**: pooled **0/1 across 16 runs**, 0/6, 0/10; direct 1/1, 6/6,
-10/10. So the job doorbell must run on a session-mode connection.
-
-**The corollary is a running cost, and it is why this is a separate service.**
-An attached loop holds a session-mode socket with `idle_timeout: 0`. The detach
-policy in `idle.ts` lets a quiet workspace go; a permanently attached listener
-would keep the compute awake. That is the whole reason `quackback-worker` is
-its own service rather than a role on the pooled tier: the pooled tier's
-idle-cost model survives only if nothing in that process holds a connection
-open while the workspace is idle.
+**The corollary is a running cost.** A live poll loop keeps the tenant database
+awake. That is why `quackback-worker` can be its own service rather than a
+role on the pooled web tier: the web tier's idle-cost model survives only if
+nothing in that process keeps talking to a quiet workspace.
 
 ### 5.2 The scheduled sweeps run on cron services, not on the worker
 
