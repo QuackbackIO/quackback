@@ -30,6 +30,31 @@ vi.mock('@/lib/server/db', () => ({
   ),
 }))
 
+const { jobLogLines, stubLogger } = vi.hoisted(() => {
+  const jobLogLines: Array<{
+    level: string
+    msg: string
+    fields: Record<string, unknown>
+  }> = []
+  const capture = (level: string) => (fields: object | string, msg?: string) => {
+    if (typeof fields === 'string') jobLogLines.push({ level, msg: fields, fields: {} })
+    else jobLogLines.push({ level, msg: msg ?? '', fields: fields as Record<string, unknown> })
+  }
+  const stubLogger = {
+    info: capture('info'),
+    warn: capture('warn'),
+    error: capture('error'),
+    debug: capture('debug'),
+    child() {
+      return stubLogger
+    },
+  }
+  return { jobLogLines, stubLogger }
+})
+vi.mock('@/lib/server/logger', () => ({
+  logger: stubLogger,
+}))
+
 let currentWorkspaceKey: string | null = null
 vi.mock('@/lib/server/workspaces/workspace-context', () => ({
   getCurrentWorkspace: () =>
@@ -72,6 +97,7 @@ afterEach(() => {
   currentWorkspaceKey = null
   __setJobDefinitionsForTests(null)
   resetJobHandlers()
+  jobLogLines.length = 0
 })
 
 afterAll(async () => {
@@ -360,6 +386,82 @@ describe('draining', () => {
     const [row] = await rowsFor(q)
     expect(row.status).toBe('failed')
     expect(row.last_error).toMatch(/no handler registered/)
+  })
+})
+
+describe('job execution logs', () => {
+  function linesFor(event: string) {
+    return jobLogLines.filter((line) => line.fields.event === event)
+  }
+
+  it('emits started then finished on success, with ids and no payload', async () => {
+    const q = queue('log-ok')
+    currentWorkspaceKey = 'ws_log_ok'
+    __setJobDefinitionsForTests([{ name: q, handler: async () => async () => {} }])
+    await enqueueJob({ queue: q, payload: { secret: 'must-not-appear' } })
+
+    expect((await drainOnce(CONFIG)).succeeded).toBe(1)
+
+    const started = linesFor('job.started')
+    const finished = linesFor('job.finished')
+    expect(started).toHaveLength(1)
+    expect(finished).toHaveLength(1)
+    expect(started[0].level).toBe('info')
+    expect(started[0].msg).toBe('job started')
+    expect(started[0].fields).toMatchObject({
+      workspace_key: 'ws_log_ok',
+      queue: q,
+      attempt: 1,
+      max_attempts: 1,
+    })
+    expect(typeof started[0].fields.job_id).toBe('string')
+    expect(finished[0].fields).toMatchObject({
+      event: 'job.finished',
+      outcome: 'succeeded',
+      workspace_key: 'ws_log_ok',
+      queue: q,
+    })
+    expect(finished[0].fields.duration_ms).toBeGreaterThanOrEqual(0)
+    expect(JSON.stringify(jobLogLines)).not.toContain('must-not-appear')
+  })
+
+  it('emits retrying at warn while attempts remain, then failed at error', async () => {
+    const q = queue('log-retry')
+    currentWorkspaceKey = 'ws_log_retry'
+    __setJobDefinitionsForTests([
+      {
+        name: q,
+        maxAttempts: 2,
+        retryBackoffMs: 0,
+        handler: async () => async () => {
+          throw new Error('still broken')
+        },
+      },
+    ])
+    await enqueueJob({ queue: q, maxAttempts: 2 })
+
+    expect((await drainOnce(CONFIG)).retrying).toBe(1)
+    const retrying = linesFor('job.retrying')
+    expect(retrying).toHaveLength(1)
+    expect(retrying[0].level).toBe('warn')
+    expect(retrying[0].msg).toBe('job retrying')
+    expect(retrying[0].fields).toMatchObject({
+      outcome: 'retrying',
+      workspace_key: 'ws_log_retry',
+      queue: q,
+    })
+    expect(linesFor('job.failed')).toHaveLength(0)
+
+    expect((await drainOnce(CONFIG)).failed).toBe(1)
+    const failed = linesFor('job.failed')
+    expect(failed).toHaveLength(1)
+    expect(failed[0].level).toBe('error')
+    expect(failed[0].msg).toBe('job failed')
+    expect(failed[0].fields).toMatchObject({
+      outcome: 'failed',
+      workspace_key: 'ws_log_retry',
+      queue: q,
+    })
   })
 })
 

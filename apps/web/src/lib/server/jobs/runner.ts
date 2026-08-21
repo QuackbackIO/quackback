@@ -164,6 +164,30 @@ async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
 }
 
 /**
+ * Stable fields on every job-execution line. IDs only — never `payload`.
+ *
+ * `event` is the filter key (`job.started`, `job.finished`, `job.retrying`,
+ * `job.failed`). `QUACKBACK_ROLE=worker` already binds `service_name` to
+ * `quackback-worker`, so a Railway search on `event` + `workspace_key` is the
+ * whole execution trace.
+ */
+function jobFields(job: ClaimedJob, extra: Record<string, unknown> = {}) {
+  return {
+    workspace_key: job.workspaceKey ?? getCurrentWorkspace()?.workspaceKey ?? null,
+    queue: job.queue,
+    job_id: job.jobId,
+    attempt: job.attempts,
+    max_attempts: job.maxAttempts,
+    dedupe_key: job.dedupeKey,
+    ...extra,
+  }
+}
+
+function failOutcome(outcome: 'retrying' | 'failed' | 'lease-lost'): string {
+  return outcome === 'lease-lost' ? 'lease_lost' : outcome
+}
+
+/**
  * Run one job to completion, with a heartbeat holding the lease open.
  *
  * The heartbeat runs at a third of the lease so two consecutive misses still
@@ -175,7 +199,10 @@ async function resolveHandler(def: JobDefinition): Promise<JobHandler> {
 export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 'retrying'> {
   const def = findJobDefinition(job.queue)
   if (!def) {
-    log.error({ jobId: job.jobId, queue: job.queue }, 'no handler registered for queue')
+    log.error(
+      jobFields(job, { event: 'job.failed', outcome: 'failed' }),
+      'job has no handler registered'
+    )
     await failJob(job, `no handler registered for queue "${job.queue}"`)
     return 'failed'
   }
@@ -189,17 +216,20 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
           if (held) return
           leaseLost = true
           log.error(
-            { jobId: job.jobId, queue: job.queue },
+            jobFields(job, { event: 'job.lease_lost' }),
             'lease lost while the handler was still running — another worker may now own this job'
           )
         })
-        .catch((err) => log.warn({ err, jobId: job.jobId }, 'heartbeat failed'))
+        .catch((err) =>
+          log.warn(jobFields(job, { event: 'job.heartbeat_failed', err }), 'job heartbeat failed')
+        )
     },
     Math.max(1_000, Math.floor(leaseMs / 3))
   )
   heartbeat.unref?.()
 
   const startedAt = Date.now()
+  log.info(jobFields(job, { event: 'job.started' }), 'job started')
   try {
     const handler = await resolveHandler(def)
     await handler(job)
@@ -214,18 +244,17 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
       backoffMs: retryBackoffMs(def, job.attempts),
       terminal,
     })
-    log.error(
-      {
-        err,
-        jobId: job.jobId,
-        queue: job.queue,
-        attempts: job.attempts,
-        maxAttempts: job.maxAttempts,
-        terminal,
-        outcome,
-      },
-      'job handler failed'
-    )
+    const fields = jobFields(job, {
+      event: outcome === 'retrying' ? 'job.retrying' : 'job.failed',
+      err,
+      duration_ms: Date.now() - startedAt,
+      terminal,
+      outcome: failOutcome(outcome),
+    })
+    // Retries are expected; a filter on `event:"job.failed"` should be the
+    // terminal cases an operator wants to page on.
+    if (outcome === 'retrying') log.warn(fields, 'job retrying')
+    else log.error(fields, 'job failed')
     // The reference expressed this as `worker.on('failed')`, and the webhook
     // auto-disable counter depends on the `permanent` distinction: counting a
     // retry would disable a flaky endpoint after ~17 events instead of 50.
@@ -236,7 +265,7 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
         .onFailure(job, err, outcome === 'failed')
         .catch((hookErr) =>
           log.error(
-            { err: hookErr, jobId: job.jobId, queue: job.queue },
+            jobFields(job, { event: 'job.on_failure_threw', err: hookErr }),
             'job onFailure hook threw'
           )
         )
@@ -246,16 +275,22 @@ export async function runJob(job: ClaimedJob): Promise<'succeeded' | 'failed' | 
   clearInterval(heartbeat)
 
   const completed = await completeJob(job)
+  const duration_ms = Date.now() - startedAt
   if (!completed) {
     log.error(
-      { jobId: job.jobId, queue: job.queue, leaseLost, duration_ms: Date.now() - startedAt },
+      jobFields(job, {
+        event: 'job.failed',
+        duration_ms,
+        lease_lost: leaseLost,
+        outcome: 'lease_lost',
+      }),
       'job finished but its lease was gone — the result was NOT recorded'
     )
     return 'failed'
   }
-  log.debug(
-    { jobId: job.jobId, queue: job.queue, duration_ms: Date.now() - startedAt },
-    'job complete'
+  log.info(
+    jobFields(job, { event: 'job.finished', duration_ms, outcome: 'succeeded' }),
+    'job finished'
   )
   return 'succeeded'
 }
@@ -363,7 +398,10 @@ export async function dispatchPass(opts: {
         // runJob already records every handler failure on the row; reaching
         // here means the queue machinery itself threw, which must still free
         // the slot rather than wedge the pool at its cap forever.
-        log.error({ err, jobId: job.jobId, queue: job.queue }, 'job runner threw outside runJob')
+        log.error(
+          jobFields(job, { event: 'job.runner_threw', err }),
+          'job runner threw outside runJob'
+        )
         return 'failed'
       })
       .then((outcome) => {

@@ -149,12 +149,12 @@ function startLoop(opts: {
         const entry = noteWorkspaceRefusal(descriptor, code, errText(err))
         if (entry.disposition === 'transient') {
           log.warn(
-            { workspaceKey: opts.workspaceKey, code, attempts: entry.attempts },
+            { workspace_key: opts.workspaceKey, code, attempts: entry.attempts },
             'job tier could not open a scope for this workspace; backing off and retrying'
           )
         }
       } else {
-        log.error({ err, workspaceKey: opts.workspaceKey }, 'job tier could not open a scope')
+        log.error({ err, workspace_key: opts.workspaceKey }, 'job tier could not open a scope')
       }
       return false
     }
@@ -177,7 +177,7 @@ function startLoop(opts: {
           try {
             await convertRelayOwnedEvents()
           } catch (err) {
-            log.warn({ err, workspaceKey: opts.workspaceKey }, 'relay-owned event convert failed')
+            log.warn({ err, workspace_key: opts.workspaceKey }, 'relay-owned event convert failed')
           }
           if (now >= nextScheduleAt) {
             const tick = await runScheduleTick(schedule, new Date(now))
@@ -215,12 +215,12 @@ function startLoop(opts: {
           if (!s.schemaMissing) {
             s.schemaMissing = true
             log.warn(
-              { workspaceKey: opts.workspaceKey },
+              { workspace_key: opts.workspaceKey },
               'job_queue is absent in this database; skipping this workspace rather than crash-looping'
             )
           }
         } else {
-          log.error({ err, workspaceKey: opts.workspaceKey }, 'job tier pass failed')
+          log.error({ err, workspace_key: opts.workspaceKey }, 'job tier pass failed')
         }
       }
       if (!running || stopped) break
@@ -231,7 +231,21 @@ function startLoop(opts: {
   void runWithLogContext(
     { request_id: crypto.randomUUID(), route: 'jobs:tier', workspace_key: opts.workspaceKey },
     loop
-  ).catch((err) => log.error({ err, workspaceKey: opts.workspaceKey }, 'job tier loop exited'))
+  ).catch((err) =>
+    log.error(
+      { err, event: 'job.loop_exited', workspace_key: opts.workspaceKey },
+      'job loop exited'
+    )
+  )
+
+  log.info(
+    {
+      event: 'job.loop_started',
+      workspace_key: opts.workspaceKey,
+      poll_interval_ms: opts.config.pollIntervalMs,
+    },
+    'job loop started'
+  )
 
   return {
     workspaceKey: opts.workspaceKey,
@@ -245,6 +259,7 @@ function startLoop(opts: {
       nudge()
       await awaitPool(pool)
       stats.delete(opts.workspaceKey)
+      log.info({ event: 'job.loop_stopped', workspace_key: opts.workspaceKey }, 'job loop stopped')
     },
   }
 }
@@ -282,7 +297,6 @@ async function refreshWorkspaceLoops(cfg: RunnerConfig): Promise<void> {
 
   for (const [workspaceKey, loop] of loops) {
     if (wanted.has(workspaceKey)) continue
-    log.info({ workspaceKey }, 'workspace left the active set — stopping its job loop')
     await loop.stop()
     loops.delete(workspaceKey)
   }
@@ -327,19 +341,27 @@ export async function startJobTier(): Promise<void> {
 
   if (!config.isPooledTenancy) {
     startSingleWorkspaceLoop(cfg)
-    log.info({ poll_interval_ms: cfg.pollIntervalMs }, 'job tier started (single workspace)')
+    log.info(
+      { event: 'job.tier_started', workspaces: 1, poll_interval_ms: cfg.pollIntervalMs },
+      'job tier started (single workspace)'
+    )
     return
   }
 
   await refreshWorkspaceLoops(cfg)
   scheduleWorkspaceRefresh(cfg)
   log.info(
-    { workspaces: loops.size, poll_interval_ms: cfg.pollIntervalMs },
+    {
+      event: 'job.tier_started',
+      workspaces: loops.size,
+      poll_interval_ms: cfg.pollIntervalMs,
+    },
     'job tier started (pooled)'
   )
 }
 
 export async function stopJobTier(): Promise<void> {
+  const wasRunning = running
   running = false
   if (refreshTimer) {
     clearTimeout(refreshTimer)
@@ -349,6 +371,7 @@ export async function stopJobTier(): Promise<void> {
   loops.clear()
   await Promise.allSettled(all.map((l) => l.stop()))
   resetJobHandlers()
+  if (wasRunning) log.info({ event: 'job.tier_stopped' }, 'job tier stopped')
 }
 
 export interface JobTierStatus {

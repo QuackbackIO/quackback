@@ -262,6 +262,29 @@ has not loaded the full application config.
 | `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
 | `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
 
+### Worker job logs
+
+Every execution is one structured NDJSON line on stdout. A worker replica
+(`QUACKBACK_ROLE=worker`) binds `service_name=quackback-worker`. Filter on
+`event` plus `workspace_key` / `queue`. **Payloads are never logged** — IDs
+only (`job_id`, `dedupe_key`, `attempt`, `max_attempts`, `duration_ms`).
+
+| `event`             | level        | `msg`                  | when                                              |
+| ------------------- | ------------ | ---------------------- | ------------------------------------------------- |
+| `job.started`       | info         | `job started`          | handler begins                                    |
+| `job.finished`      | info         | `job finished`         | handler succeeded and the lease completed         |
+| `job.retrying`      | warn         | `job retrying`         | handler threw, attempts remain                    |
+| `job.failed`        | error        | `job failed`           | terminal failure, no handler, or lost lease       |
+| `job.loop_started`  | info         | `job loop started`     | a workspace's poll loop armed                     |
+| `job.loop_stopped`  | info         | `job loop stopped`     | that loop drained (workspace left, or shutdown)   |
+| `job.tier_started`  | info         | `job tier started (…)` | worker process has loops running                  |
+| `job.tier_stopped`  | info         | `job tier stopped`     | worker process drained the tier                   |
+| `job.lease_expired` | warn / error | `expired lease …`      | reaper requeued or terminally failed a dead lease |
+
+`outcome` on a finish/fail line is `succeeded`, `failed`, `retrying`, or
+`lease_lost`. A Railway search on `event:"job.failed"` is the pageable set;
+retries are `job.retrying` so they do not sit in the same bucket.
+
 ## 9. Workspace scope, and the shape this must not reproduce
 
 A BullMQ `Worker` constructed inside a request's workspace scope **inherits that
