@@ -41,11 +41,13 @@
  */
 import { logger } from '@/lib/server/logger'
 import { isTerminalRefusalCode } from './fingerprint'
-import { workspaceIdlePolicy } from './idle'
 
 const log = logger.child({ component: 'workspace-quarantine' })
 
 export type RefusalDisposition = 'terminal' | 'transient'
+
+/** How often a terminal refusal is re-probed even if the registry revision is unchanged. */
+const TERMINAL_RETRY_MS = 15 * 60_000
 
 /**
  * Refusal codes raised before a fingerprint is ever taken.
@@ -162,7 +164,7 @@ export function noteWorkspaceRefusal(
 
   const retryAfter =
     disposition === 'terminal'
-      ? now + workspaceIdlePolicy().rescanIntervalMs
+      ? now + TERMINAL_RETRY_MS
       : now +
         Math.min(TRANSIENT_BACKOFF_CEILING_MS, TRANSIENT_BACKOFF_FLOOR_MS * 2 ** (attempts - 1))
 

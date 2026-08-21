@@ -84,7 +84,7 @@ CREATE TABLE "cp_tenant_schema_state" (
   "run_at"           timestamptz NOT NULL DEFAULT now(),
   -- Incremented BY THE CLAIM, never by completion. A migrator killed mid-run
   -- has already spent an attempt, so a crash loop against one poisonous tenant
-  -- terminates instead of waking its Neon compute forever.
+  -- terminates instead of spinning forever.
   "attempts"         integer NOT NULL DEFAULT 0,
   "max_attempts"     integer NOT NULL DEFAULT 3,
   -- Fencing token, regenerated on every claim. A migrator that stalls past its

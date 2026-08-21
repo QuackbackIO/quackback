@@ -1,96 +1,40 @@
 /**
- * The job tier's idle attach/detach, specifically the two properties WS-1
- * added: a rescan that finds nothing must not sit in the linger, and a
- * signal (or deadline, or boot) still must.
+ * The job tier starts one always-on poll loop per workspace and does not
+ * detach it.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-interface FakeWorkspace {
-  workspaceKey: string
-  revision: number
-  database: { directUrl: string; pooledUrl: string }
-}
+const POLL_MS = 50
+const WORKSPACE_KEY = 'job_loop_ws'
 
-const workspace = (id: string): FakeWorkspace => ({
-  workspaceKey: id,
+const workspace = {
+  workspaceKey: WORKSPACE_KEY,
   revision: 1,
-  database: { directUrl: `postgres://direct/${id}`, pooledUrl: `postgres://pooled/${id}` },
-})
-
-const DETACH_MS = 1_000
-const RESCAN_MS = 5_000
-const POLL_MS = 100
-const WORKSPACE_KEY = 'job_idle_ws'
+  database: {
+    directUrl: `postgres://direct/${WORKSPACE_KEY}`,
+    pooledUrl: `postgres://pooled/${WORKSPACE_KEY}`,
+  },
+}
 
 interface ClaimPlan {
   claimed: number
-  enqueued: number
-  poolSize: number
-  pendingAt: Date | null
-  /** Fires inside the claim pass so a mid-pass signal can be injected. */
-  onPass?: () => void
 }
 
-interface JobTierHandle {
-  workspaceKey: string
-  plan: ClaimPlan
-  listenerCloses: { n: number }
-  noteActivity: (source?: 'request' | 'sweep' | 'script' | 'migration') => void
-  nextRescanAt: (now: number) => number
-  status: () => {
-    attached: boolean
-    detaches: number
-    reattaches: number
-    lastReattachReason: string | null
-    claimed: number
-    passes: number
-  }
-  stop: () => Promise<void>
-}
-
-const envKeys = ['TENANT_IDLE_DETACH_MS', 'TENANT_IDLE_RESCAN_MS', 'JOB_POLL_INTERVAL_MS'] as const
-
-async function bootJobTier(): Promise<JobTierHandle> {
+async function bootJobTier(plan: ClaimPlan) {
   vi.resetModules()
-  const saved: Record<string, string | undefined> = {}
-  for (const key of envKeys) saved[key] = process.env[key]
-  process.env.TENANT_IDLE_DETACH_MS = String(DETACH_MS)
-  process.env.TENANT_IDLE_RESCAN_MS = String(RESCAN_MS)
+  const savedPoll = process.env.JOB_POLL_INTERVAL_MS
   process.env.JOB_POLL_INTERVAL_MS = String(POLL_MS)
-
-  const plan: ClaimPlan = { claimed: 0, enqueued: 0, poolSize: 0, pendingAt: null }
-  const listenerCloses = { n: 0 }
-  const ws = workspace(WORKSPACE_KEY)
 
   vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => true }))
   vi.doMock('@/lib/server/config', () => ({
     config: { isPooledTenancy: true, databaseUrl: 'postgres://direct/single' },
   }))
   vi.doMock('@/lib/server/workspaces/registry', () => ({
-    listActiveWorkspaces: async () => ({ workspaces: [ws], refused: [] }),
+    listActiveWorkspaces: async () => ({ workspaces: [workspace], refused: [] }),
   }))
   vi.doMock('@/lib/server/workspaces/fleet', () => ({
     withWorkspaceScopeById: async (_id: string, _origin: string, body: () => Promise<unknown>) =>
       body(),
-  }))
-  vi.doMock('@/lib/server/workspaces/pool-cache', () => ({
-    resolveWorkspacePassword: async () => 'pw',
-  }))
-  vi.doMock('@/lib/server/jobs/wake', () => ({
-    JOB_WAKE_CHANNEL: 'quackback_job_wake',
-    openWakeListener: async () => ({
-      close: async () => {
-        listenerCloses.n += 1
-      },
-      verify: async () => true,
-    }),
-  }))
-  vi.doMock('@/lib/server/jobs/deadlines', () => ({
-    earliestWorkspaceDeadline: async () => null,
-  }))
-  vi.doMock('@/lib/server/jobs/job-queue', () => ({
-    earliestPendingJobAt: async () => plan.pendingAt,
-    isMissingJobQueue: () => false,
   }))
   vi.doMock('@/lib/server/events/event-dispatch-queue', () => ({
     convertRelayOwnedEvents: async () => ({ converted: 0, enqueued: 0 }),
@@ -105,64 +49,36 @@ async function bootJobTier(): Promise<JobTierHandle> {
       retentionMs: 7 * 24 * 60 * 60 * 1000,
       maxConcurrency: 4,
     }),
-    wakeDisabled: () => false,
     createJobPool: () => ({}),
-    poolSize: () => plan.poolSize,
+    poolSize: () => 0,
     createScheduleState: () => ({}),
-    runScheduleTick: async () => ({
-      enqueued: plan.enqueued,
-      attempted: plan.enqueued,
-      nextSlotAt: null,
-    }),
+    runScheduleTick: async () => ({ enqueued: 0, attempted: 0, nextSlotAt: null }),
     runMaintenanceTick: async () => ({ requeued: 0, terminated: 0 }),
-    dispatchPass: async () => {
-      plan.onPass?.()
-      return { claimed: plan.claimed, saturated: true }
-    },
+    dispatchPass: async () => ({ claimed: plan.claimed, saturated: true }),
     runJob: async () => 'succeeded',
     awaitPool: async () => {},
   }))
 
-  const idle = await import('@/lib/server/workspaces/idle')
   const mod = await import('../tier')
   await mod.startJobTier()
   await vi.advanceTimersByTimeAsync(0)
 
-  const policy = idle.workspaceIdlePolicy()
-
   return {
-    workspaceKey: WORKSPACE_KEY,
-    plan,
-    listenerCloses,
-    noteActivity: (source = 'request') => idle.noteWorkspaceActivity(WORKSPACE_KEY, source),
-    nextRescanAt: (now: number) => idle.nextRescanAt(now, policy, WORKSPACE_KEY),
     status: () => {
       const row = mod.getJobTierStatus().workspaces.find((t) => t.workspaceKey === WORKSPACE_KEY)
       if (!row) throw new Error('job loop missing from status')
-      return {
-        attached: row.attached,
-        detaches: row.detaches,
-        reattaches: row.reattaches,
-        lastReattachReason: row.lastReattachReason,
-        claimed: row.claimed,
-        passes: row.passes,
-      }
+      return row
     },
     stop: async () => {
       await mod.stopJobTier()
-      const { __resetQuarantineForTests } = await import('@/lib/server/workspaces/quarantine')
-      idle.__resetWorkspaceActivityForTests()
-      __resetQuarantineForTests()
       vi.resetModules()
-      for (const key of envKeys) {
-        if (saved[key] === undefined) delete process.env[key]
-        else process.env[key] = saved[key]
-      }
+      if (savedPoll === undefined) delete process.env.JOB_POLL_INTERVAL_MS
+      else process.env.JOB_POLL_INTERVAL_MS = savedPoll
     },
   }
 }
 
-let handle: JobTierHandle | null = null
+let handle: Awaited<ReturnType<typeof bootJobTier>> | null = null
 
 afterEach(async () => {
   if (handle) {
@@ -172,139 +88,29 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-async function settle(): Promise<void> {
-  await vi.advanceTimersByTimeAsync(0)
-}
-
-describe('a rescan attach that finds no external work', () => {
-  it('detaches on the first empty pass instead of waiting detachAfterMs', async () => {
+describe('pooled job tier', () => {
+  it('starts a loop per workspace and keeps polling', async () => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
-    handle = await bootJobTier()
-    await settle()
-    expect(handle.status().attached).toBe(true)
+    const plan = { claimed: 0 }
+    handle = await bootJobTier(plan)
+    expect(handle.status().passes).toBeGreaterThanOrEqual(1)
 
-    await vi.advanceTimersByTimeAsync(DETACH_MS - 1)
-    expect(handle.status().attached).toBe(true)
-    await vi.advanceTimersByTimeAsync(POLL_MS + 1)
-    expect(handle.status().attached).toBe(false)
-    expect(handle.status().detaches).toBe(1)
-    expect(handle.listenerCloses.n).toBeGreaterThanOrEqual(1)
-
-    const wait = Math.max(250, handle.nextRescanAt(Date.now()) - Date.now())
-    await vi.advanceTimersByTimeAsync(wait)
-    await settle()
-    expect(handle.status().lastReattachReason).toBe('rescan')
-    expect(handle.status().attached).toBe(false)
-    expect(handle.status().detaches).toBeGreaterThanOrEqual(2)
+    const before = handle.status().passes
+    plan.claimed = 2
+    await vi.advanceTimersByTimeAsync(POLL_MS * 2)
+    expect(handle.status().passes).toBeGreaterThan(before)
+    expect(handle.status().claimed).toBeGreaterThanOrEqual(2)
   })
 
-  it('still fast-detaches when the only claims were this loop’s own enqueue', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
-    handle = await bootJobTier()
-    await settle()
-    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
-    expect(handle.status().detaches).toBe(1)
-    // The first pass after a re-attach always ticks the schedule (`nextScheduleAt`
-    // is reset on attach). Claiming only what that tick enqueued is not
-    // external work and must not keep the linger open.
-    handle.plan.enqueued = 1
-    handle.plan.claimed = 1
-
-    const wait = Math.max(250, handle.nextRescanAt(Date.now()) - Date.now())
-    await vi.advanceTimersByTimeAsync(wait)
-    await settle()
-    expect(handle.status().lastReattachReason).toBe('rescan')
-    expect(handle.status().attached).toBe(false)
-    expect(handle.status().detaches).toBeGreaterThanOrEqual(2)
-  })
-
-  it('does not fast-detach when a signal lands during the first empty pass', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
-    handle = await bootJobTier()
-    await settle()
-    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
-    expect(handle.status().attached).toBe(false)
-
-    handle.plan.onPass = () => {
-      handle!.plan.onPass = undefined
-      // Move the clock so lastExternalAt is observably newer than attach.
-      vi.setSystemTime(Date.now() + 1)
-      handle!.noteActivity('request')
-    }
-
-    const wait = Math.max(250, handle.nextRescanAt(Date.now()) - Date.now())
-    await vi.advanceTimersByTimeAsync(wait)
-    await settle()
-    expect(handle.status().lastReattachReason).toBe('rescan')
-    expect(handle.status().attached).toBe(true)
-    expect(handle.status().detaches).toBe(1)
-
-    await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
-    expect(handle.status().attached).toBe(true)
-    await vi.advanceTimersByTimeAsync(DETACH_MS / 2 + POLL_MS)
-    expect(handle.status().attached).toBe(false)
-  })
-})
-
-describe('a signal attach that finds no external work', () => {
-  it('waits detachAfterMs before letting go', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
-    handle = await bootJobTier()
-    await settle()
-    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
-    expect(handle.status().attached).toBe(false)
-
-    handle.noteActivity('request')
-    await settle()
-    expect(handle.status().attached).toBe(true)
-    expect(handle.status().lastReattachReason).toBe('signal')
-
-    await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
-    expect(handle.status().attached).toBe(true)
-    await vi.advanceTimersByTimeAsync(DETACH_MS / 2 + POLL_MS)
-    expect(handle.status().attached).toBe(false)
-    expect(handle.status().lastReattachReason).toBe('signal')
-  })
-
-  it('signalWorkspace reattaches a detached loop and returns false for an unknown key', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
-    handle = await bootJobTier()
-    await settle()
-    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
-    expect(handle.status().attached).toBe(false)
-
+  it('does not start the tier on a web replica', async () => {
+    vi.resetModules()
+    vi.doMock('@/lib/server/process-role', () => ({ shouldRunWorkers: () => false }))
+    vi.doMock('@/lib/server/config', () => ({
+      config: { isPooledTenancy: true, databaseUrl: 'postgres://direct/single' },
+    }))
     const mod = await import('../tier')
-    expect(mod.signalWorkspace('ws_missing')).toBe(false)
-    expect(mod.signalWorkspace(WORKSPACE_KEY)).toBe(true)
-    await settle()
-    expect(handle.status().attached).toBe(true)
-    expect(handle.status().lastReattachReason).toBe('signal')
-  })
-})
-
-describe('a deadline attach that finds no external work', () => {
-  it('waits detachAfterMs before letting go', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
-    handle = await bootJobTier()
-    handle.plan.pendingAt = new Date(Date.now() + DETACH_MS + POLL_MS + 80)
-    await settle()
-    await vi.advanceTimersByTimeAsync(DETACH_MS + POLL_MS)
-    expect(handle.status().attached).toBe(false)
-
-    await vi.advanceTimersByTimeAsync(250)
-    await settle()
-    expect(handle.status().attached).toBe(true)
-    expect(handle.status().lastReattachReason).toBe('deadline')
-
-    await vi.advanceTimersByTimeAsync(DETACH_MS / 2)
-    expect(handle.status().attached).toBe(true)
-    await vi.advanceTimersByTimeAsync(DETACH_MS / 2 + POLL_MS)
-    expect(handle.status().attached).toBe(false)
+    await mod.startJobTier()
+    expect(mod.getJobTierStatus()).toEqual({ running: false, workspaces: [] })
+    vi.resetModules()
   })
 })

@@ -21,11 +21,8 @@
  * log: it is the only observable that distinguishes "working" from "quietly
  * costing money".
  *
- * Measured caveat, and it is not optional: eviction is **necessary but not
- * sufficient**. A session-mode LISTEN holds the compute awake while attached.
- * Cloud `quackback` runs the connectionless scheduler instead, so idle saving
- * no longer depends on a web/worker split. Listener-mode still depends on the
- * detach policy in `idle.ts`.
+ * Request-path pools still evict after `workspacePoolIdleSeconds`. The job
+ * worker holds its own per-workspace connections for as long as the loop runs.
  *
  * ## Credential rotation
  *

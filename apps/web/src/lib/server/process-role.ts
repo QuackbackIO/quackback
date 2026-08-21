@@ -2,17 +2,12 @@
  * Process role — controls whether this instance consumes background queues.
  *
  * QUACKBACK_ROLE=web     Serve HTTP only. Queue modules stay producer-only:
- *                        they can enqueue and register schedules, but nothing
- *                        claims a job. Optional scale-out, not the cloud
- *                        default: the connectionless scheduler can share the
- *                        HTTP process, so a split is no longer required to
- *                        let tenant computes suspend.
- * QUACKBACK_ROLE=worker  Run the job tier and the periodic sweepers. Still
- *                        serves HTTP (health probes work unchanged); just
+ *                        they can enqueue, but nothing claims a job.
+ * QUACKBACK_ROLE=worker  Run the job tier — one poll loop per workspace.
+ *                        Still serves HTTP (health probes work unchanged);
  *                        don't route user traffic to it.
  * QUACKBACK_ROLE=all     Both — the default. Unset means `all`, which is the
- *                        self-host single-container path and the cloud
- *                        tenant-facing topology.
+ *                        self-host single-container path.
  * QUACKBACK_ROLE=migrator Reconcile workspace schemas toward the control plane's
  *                        recorded intent, then exit (SAAS-HOSTING-STACK.md
  *                        §10.3). Serves no traffic and runs no queues: it holds

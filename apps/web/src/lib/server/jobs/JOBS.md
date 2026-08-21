@@ -237,23 +237,17 @@ the next day's run restores it.
 
 ## 7. Shape of the tier
 
-`tier.ts` runs **one loop per workspace**, each with its own listener.
-`workspaces/fleet.ts` already answers "iterate all workspaces per tick", and that is the
-right answer for a periodic sweep and the wrong one for a queue: the latency of an
-on-demand job would become the tick interval times the workspace count, and the whole
-point of the doorbell is that a job enqueued now starts now.
+`tier.ts` runs **one poll loop per workspace**. `workspaces/fleet.ts` already
+answers "iterate all workspaces per tick", and that is the right answer for a
+periodic sweep and the wrong one for a queue: the latency of an on-demand job
+would become the tick interval times the workspace count.
 
-The cost is one session-mode connection per workspace, permanently. That is the tier
-§7.3 describes — always warm, direct connections, physically separate from the
-pooled web tier — and it carries §6's corollary: **this tier holds connections
-open by design, so it must never share a compute with workspaces you expect to
-suspend.** Sizing it for a large fleet belongs with the detach policy in
-`workspaces/idle.ts`.
+`QUACKBACK_ROLE=web` does not start the tier. Cloud runs a dedicated
+`QUACKBACK_ROLE=worker` replica with a loop per active workspace. Unset
+`QUACKBACK_ROLE` still means `all` (self-host).
 
-A workspace whose database has not yet run migration `0253` is **skipped with a
-warning**, not crash-looped. §5's ordering rule is that expand lands before the
-code that reads it; a queue tier that died on a mid-rollout fleet would turn that
-ordering into an outage.
+A workspace whose database has not yet run the job-queue migration is
+**skipped with a warning**, not crash-looped.
 
 ## 8. Configuration
 
@@ -263,14 +257,10 @@ has not loaded the full application config.
 
 | Variable               | Default | Meaning                                                             |
 | ---------------------- | ------- | ------------------------------------------------------------------- |
-| `JOB_POLL_INTERVAL_MS` | 1000    | Poll fallback. The correctness floor when a NOTIFY is lost          |
+| `JOB_POLL_INTERVAL_MS` | 1000    | How often each workspace loop claims work                           |
 | `JOB_BATCH_SIZE`       | 5       | Jobs claimed per drain pass                                         |
 | `JOB_REAP_INTERVAL_MS` | 15000   | How often expired leases are adjudicated                            |
 | `JOB_RETENTION_MS`     | 7 days  | How long terminal rows are kept. Must exceed any live cron slot key |
-
-`QUACKBACK_ROLE=web` does not start the tier. Cloud `quackback` runs `all`
-with `QUACKBACK_WAKE_MODE=scheduler`; unset still means `all` and defaults
-the wake mode to `listener` (self-host).
 
 ## 9. Workspace scope, and the shape this must not reproduce
 
@@ -526,11 +516,7 @@ DATABASE_URL=... bun run scripts/job-lease-proof.ts kill-matrix
 # a job held across minutes of work with no transaction open, then SIGKILL
 DATABASE_URL=... bun run scripts/job-lease-proof.ts long-lease --work-seconds 180
 
-# wake latency, measured through the real tier
-DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
-JOB_WAKE_DISABLED=1 DATABASE_URL=... bun run scripts/job-lease-proof.ts wake-latency --samples 24
-
-# the workspace boundary and the per-workspace scheduler, on a real pooled fleet.
+# the workspace boundary, on a real pooled fleet.
 # This is the only harness with a cron schedule — job-lease-proof.ts is
 # single-workspace and could not see a cross-workspace scheduler defect at all.
 env $(cat pooled.env) bun run scripts/job-workspace-proof.ts run --a <id> --b <id>

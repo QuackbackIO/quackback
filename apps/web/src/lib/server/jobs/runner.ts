@@ -79,20 +79,6 @@ export interface RunnerConfig {
   maxConcurrency: number
 }
 
-/**
- * Skip the NOTIFY doorbell and run on the poll interval alone.
- *
- * A real operational switch, not a test hook: §7.3's measurement is that a
- * pooled DSN accepts the `LISTEN` registration and then delivers nothing, so an
- * operator who knows their connection is pooled can turn the listener off
- * rather than have it retry and log. It is also what makes the poll floor
- * measurable end to end — a harness that fakes the fallback with its own timer
- * measures its own timer.
- */
-export function wakeDisabled(): boolean {
-  return process.env.JOB_WAKE_DISABLED === '1'
-}
-
 /** Sum of every registered queue's concurrency — the reference's own ceiling. */
 export function totalDeclaredConcurrency(): number {
   return jobDefinitions().reduce((n, def) => n + concurrencyFor(def), 0)
