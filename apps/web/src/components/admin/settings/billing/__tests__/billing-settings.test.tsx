@@ -134,8 +134,8 @@ describe('BillingPlansView', () => {
       />
     )
     expect(screen.getByRole('heading', { name: 'Usage' })).toBeInTheDocument()
-    expect(screen.getByText('1 of 3')).toBeInTheDocument()
-    expect(screen.getByText('1 of 1')).toBeInTheDocument()
+    expect(screen.getByText('1 of 3 boards')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1 seats')).toBeInTheDocument()
   })
 
   it('shows annual monthly equivalent from the catalogue', () => {
