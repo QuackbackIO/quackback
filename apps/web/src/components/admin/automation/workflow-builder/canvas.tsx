@@ -64,7 +64,10 @@ import {
   UserGroupIcon,
   UserPlusIcon,
 } from '@heroicons/react/24/outline'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/shared/utils'
+import { settingsQueries } from '@/lib/client/queries/settings'
+import { assistantWaitMinutes } from '@/lib/shared/workflows/abandoned-auto-close'
 import { useWorkflowEntities } from './entities'
 import { BLOCK_ICONS, ConfirmDeleteDialog, TONE_TILE } from './step-visuals'
 import type { BuilderSelection } from './types'
@@ -131,7 +134,10 @@ function Chip({ chip }: { chip: ChipData }) {
   return (
     <span
       className={cn(
-        'inline-flex h-[22px] items-center rounded-md px-2 text-xs font-medium whitespace-nowrap',
+        'inline-flex items-center rounded-md px-2 text-xs font-medium',
+        chip.wrap
+          ? 'h-auto min-h-[22px] max-w-full whitespace-normal py-0.5 text-left'
+          : 'h-[22px] whitespace-nowrap',
         chip.tone ? TONE_CHIP[chip.tone] : 'bg-muted text-muted-foreground'
       )}
     >
@@ -492,6 +498,8 @@ export function WorkflowBuilderCanvas({
 }) {
   const { labels } = useWorkflowEntities()
   const [showMinimap, setShowMinimap] = useState(true)
+  const autoClose = useQuery(settingsQueries.workflowAbandonedAutoClose())
+  const assistantEscalateMinutes = assistantWaitMinutes(autoClose.data)
 
   const layoutInput = useMemo<FlowLayoutInput>(
     () => ({
@@ -504,6 +512,7 @@ export function WorkflowBuilderCanvas({
       labels,
       stepIssues,
       selectedId: selection?.kind === 'node' ? selection.id : null,
+      assistantEscalateMinutes,
     }),
     [
       tree,
@@ -515,6 +524,7 @@ export function WorkflowBuilderCanvas({
       labels,
       stepIssues,
       selection,
+      assistantEscalateMinutes,
     ]
   )
 

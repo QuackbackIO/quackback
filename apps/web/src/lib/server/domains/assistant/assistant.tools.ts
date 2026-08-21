@@ -5,9 +5,8 @@
  * role policy.
  *
  * Assembly runs once per turn — assistant.runtime.ts calls it before the
- * retry loop, since the feature flag and role-derived write policy are
- * turn-scoped config, not per-attempt state; re-reading them on a retry could
- * flip gating mid-turn.
+ * retry loop, since the role-derived write policy is turn-scoped config, not
+ * per-attempt state; re-reading it on a retry could flip gating mid-turn.
  *
  * Per registered tool the wrapped execute runs: mode resolution (at assembly)
  * -> propose short-circuits to a pending action -> permission check ->
@@ -20,12 +19,7 @@ import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import type { AssistantToolContext, AssistantToolSpec } from './assistant.toolspec'
-import {
-  ASSISTANT_TOOL_SPECS,
-  resolveToolSpecs,
-  isNoParentResult,
-  NO_CONVERSATION_NOTE,
-} from './assistant.toolspec'
+import { resolveToolSpecs, isNoParentResult, NO_CONVERSATION_NOTE } from './assistant.toolspec'
 import {
   claimToolCall,
   finalizeToolCall,
@@ -96,6 +90,8 @@ export function resolveEffectiveToolMode(
   ctx: AssistantToolContext
 ): ToolExecutionMode {
   if (spec.risk === 'control') return 'autonomous'
+  if (spec.approvalPolicy === 'always') return 'autonomous'
+  if (spec.approvalPolicy === 'approval') return 'propose'
   if (spec.risk !== 'write') return 'autonomous'
   // Write-risk from here.
   if (ctx.writeToolPolicy === 'propose') return 'propose'
@@ -115,6 +111,16 @@ function turnParentKind(ctx: AssistantToolContext): 'conversation' | 'ticket' {
   if (ctx.conversationId != null) return 'conversation'
   if (ctx.ticketId != null) return 'ticket'
   return 'conversation'
+}
+
+function previewArgs(args: unknown): Record<string, string> | undefined {
+  if (!args || typeof args !== 'object') return undefined
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+    if (value == null) continue
+    out[key] = typeof value === 'string' ? value : JSON.stringify(value)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 /** JSON.stringify with object keys sorted, so equivalent args always hash the same. */
@@ -219,6 +225,12 @@ async function runWithPipeline(
       toolName: spec.name,
       summary,
       label: spec.label,
+      ...(spec.connector
+        ? {
+            connector: spec.connector,
+            ...(previewArgs(args) ? { argsPreview: previewArgs(args) } : {}),
+          }
+        : {}),
     })
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'proposed' })
     return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
@@ -360,30 +372,14 @@ export async function executeApprovedPendingAction(
     : { status: 'failed', error: settled.error }
 }
 
-/** Bind a spec straight to its own execute, no pipeline — the shape used
- *  when assistant actions are off, byte-identical to the pre-pipeline tools. */
-function toLegacyServerTool(spec: AssistantToolSpec, ctx: AssistantToolContext) {
-  return spec.definition.server<AssistantToolContext>(async (args) => {
-    ctx.ledger.toolCalls.push(spec.name)
-    try {
-      const result = await spec.execute(args, ctx)
-      ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'read' })
-      return result
-    } catch (error) {
-      ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'failed' })
-      throw error
-    }
-  })
-}
+type AssembledServerTool = ReturnType<AssistantToolSpec['definition']['server']>
 
 /**
  * Build this turn's tool set, paired with the specs that produced it
- * (`activeSpecs[i]` is the spec behind `tools[i]`). Assistant actions off
- * means every catalogue tool runs exactly as before the pipeline existed,
- * with no settings read beyond the flag. Actions on resolves each built-in
- * spec's execution mode from the turn's write policy (see
- * `resolveEffectiveToolMode`), drops disabled tools, and wraps the rest in
- * the execution pipeline.
+ * (`activeSpecs[i]` is the spec behind `tools[i]`). Each built-in spec's
+ * execution mode is resolved from the turn's write policy (see
+ * `resolveEffectiveToolMode`). The rest are wrapped in the execution
+ * pipeline.
  *
  * `specs` defaults to the live catalogue; tests inject a fixed list to
  * exercise write-risk behavior the current catalogue doesn't ship yet.
@@ -395,9 +391,8 @@ function toLegacyServerTool(spec: AssistantToolSpec, ctx: AssistantToolContext) 
 export async function assembleAssistantToolset(
   ctx: AssistantToolContext,
   specs?: readonly AssistantToolSpec[],
-  actionsEnabled = false,
-  customActionSpecs: readonly AssistantToolSpec[] = []
-): Promise<{ tools: ReturnType<typeof toLegacyServerTool>[]; activeSpecs: AssistantToolSpec[] }> {
+  connectorSpecs: readonly AssistantToolSpec[] = []
+): Promise<{ tools: AssembledServerTool[]; activeSpecs: AssistantToolSpec[] }> {
   // Unified inbox §2.9/§3.3: never even consider a spec whose `parents`
   // excludes this turn's actual parent kind: a conversation-only write tool
   // must not reach mode resolution, proposal, or the model at all on a
@@ -406,46 +401,25 @@ export async function assembleAssistantToolset(
   const availableForTurn = (spec: AssistantToolSpec) =>
     spec.parents.includes(parentKind) && (spec.availableWhen?.(ctx) ?? true)
 
-  // Custom actions (Phase 5, QUINN-TWO-AGENT-SPEC D6) are write-risk and ALWAYS
-  // run through the execution pipeline — their audit ledger and the copilot
-  // propose path are load-bearing — regardless of the built-in `assistantTools`
-  // flag. The caller only ever passes them when the separate
-  // `assistantCustomActions` flag is on and after resolving them for the turn's
-  // agent, so the two rollout gates stay independent.
-  const customActive = customActionSpecs
+  // Connector specs always ride the execution pipeline — audit and propose
+  // stay load-bearing.
+  const connectorActive = connectorSpecs
     .filter(availableForTurn)
     .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
-  const customTools = customActive.map(({ spec, mode }) =>
+  const connectorTools = connectorActive.map(({ spec, mode }) =>
     spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
   )
-  const customActiveSpecs = customActive.map((entry) => entry.spec)
-
-  if (!actionsEnabled) {
-    // Flag off exposes read tools plus core control tools, unwrapped. Write
-    // specs must never register without the pipeline, while handoff/inability
-    // remain part of Quinn's agent protocol regardless of this feature flag.
-    // Custom actions (when their own flag brought them here) still ride the
-    // pipeline — they are never registered unwrapped.
-    const legacySpecs = (specs ?? Object.values(ASSISTANT_TOOL_SPECS)).filter(
-      (spec) => spec.risk !== 'write' && availableForTurn(spec)
-    )
-    return {
-      tools: [...legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)), ...customTools],
-      activeSpecs: withDynamicPromptGuidance([...legacySpecs, ...customActiveSpecs], ctx),
-    }
-  }
+  const connectorActiveSpecs = connectorActive.map((entry) => entry.spec)
 
   const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableForTurn)
+  const builtInTools = resolvedSpecs.map((spec) => {
+    const mode = resolveEffectiveToolMode(spec, ctx)
+    return spec.definition.server<AssistantToolContext>((args) =>
+      runWithPipeline(spec, mode, args, ctx)
+    )
+  })
   return {
-    tools: [
-      ...resolvedSpecs.map((spec) => {
-        const mode = resolveEffectiveToolMode(spec, ctx)
-        return spec.definition.server<AssistantToolContext>((args) =>
-          runWithPipeline(spec, mode, args, ctx)
-        )
-      }),
-      ...customTools,
-    ],
-    activeSpecs: withDynamicPromptGuidance([...resolvedSpecs, ...customActiveSpecs], ctx),
+    tools: [...builtInTools, ...connectorTools] as AssembledServerTool[],
+    activeSpecs: withDynamicPromptGuidance([...resolvedSpecs, ...connectorActiveSpecs], ctx),
   }
 }

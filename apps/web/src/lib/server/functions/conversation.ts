@@ -35,6 +35,7 @@ import {
 import { officeHoursSnapshot } from '@/lib/shared/office-hours'
 import type { ConversationPresence } from '@/lib/shared/conversation/presence'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { inboxChannelFilterSchema } from '@/lib/shared/channels/inbox-filter'
 import {
   CONVERSATION_STATUSES,
   CONVERSATION_END_REASONS,
@@ -153,6 +154,7 @@ const listConversationsSchema = z.object({
   teamId: z.string().optional(),
   // Inbound source discriminator (e.g. 'widget', 'email').
   source: z.string().max(32).optional(),
+  channel: inboxChannelFilterSchema.optional(),
   // "Waiting" scope: only conversations a customer is currently waiting on.
   waitingOnly: z.boolean().optional(),
   // Inbox ordering; omitted = 'recent'. The canonical list lives in shared
@@ -897,6 +899,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         teamId:
           data.teamId && isValidTypeId(data.teamId, 'team') ? (data.teamId as TeamId) : undefined,
         source: data.source,
+        channel: data.channel,
         waitingOnly: data.waitingOnly,
         sort: data.sort,
         search: data.search,
@@ -1064,8 +1067,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
 
     let content = data.content
     let contentJson = (data.contentJson ?? null) as
-      | import('@/lib/shared/db-types').TiptapContent
-      | null
+      import('@/lib/shared/db-types').TiptapContent | null
     let translatedFrom: import('@/lib/shared/db-types').TranslatedFromMetadata | undefined
 
     // P2-D.1 inbox translation: translate the reply into the customer's
@@ -1127,8 +1129,7 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
         targetPrincipalId: data.targetPrincipalId as PrincipalId,
         content: data.content,
         contentJson: (data.contentJson ?? null) as
-          | import('@/lib/shared/db-types').TiptapContent
-          | null,
+          import('@/lib/shared/db-types').TiptapContent | null,
       },
       {
         principalId: ctx.principal.id,

@@ -171,6 +171,7 @@ describe('avatar URL policy', () => {
       ' http://example.com/avatar.png ',
       'https://cdn.example.com/avatar.webp?size=80',
       'HTTPS://EXAMPLE.COM/avatar.png',
+      '/api/storage/assistant-avatars/2026/08/face.png',
     ]) {
       const config = validConfig()
       config.identity.avatarUrl = avatarUrl

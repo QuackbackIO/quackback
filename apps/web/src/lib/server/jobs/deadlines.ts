@@ -77,10 +77,7 @@ const providers = new Map<string, WorkspaceDeadlineProvider>()
  * imports before any workspace scope is open — so registration is process-wide and
  * scope-free, while every call to the provider happens inside a scope.
  */
-export function registerWorkspaceDeadline(
-  queue: string,
-  provider: WorkspaceDeadlineProvider
-): void {
+export function registerWorkspaceDeadline(queue: string, provider: WorkspaceDeadlineProvider): void {
   providers.set(queue, provider)
 }
 

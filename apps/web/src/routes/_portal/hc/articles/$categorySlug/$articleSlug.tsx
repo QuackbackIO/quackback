@@ -40,7 +40,7 @@ export const Route = createFileRoute('/_portal/hc/articles/$categorySlug/$articl
     const { article } = loaderData
 
     const portalMatch = matches.find((m) => (m.routeId as string) === '/_portal')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const parentLoaderData = portalMatch?.loaderData as Record<string, any> | undefined
     const workspaceName =
       (parentLoaderData?.org as Record<string, string> | undefined)?.name ?? 'Help Center'

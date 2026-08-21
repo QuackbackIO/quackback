@@ -38,11 +38,11 @@ jobs:
       - run: bun run build
         env:
           SKIP_ENV_VALIDATION: true
-      # Server functions only ever called from server code never enter the
-      # build's resolver manifest, so their call sites throw at runtime in
-      # production builds. Catch that here, against the fresh build output.
-      - name: Check server-function manifest
-        run: bun run --filter @quackback/web check:server-fn-manifest
+      # A server function the client graph never references is left out of the
+      # generated manifest, so calling it 500s at request time and only in a
+      # production build. Compare the built bundle's call sites against the
+      # manifest while we still have the output.
+      - run: bun run --cwd apps/web check:server-fn-manifest
       - run: bun run --filter @quackback/web typecheck
       - run: bun run --cwd packages/widget typecheck
       - run: bun run --cwd packages/widget test

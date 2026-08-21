@@ -147,6 +147,7 @@ export const Route = createFileRoute('/widget/')({
             })
           )
         : Promise.resolve(emptyPortalData),
+      // oxlint-disable-next-line no-restricted-imports -- server-loader dynamic import; stripped from the client graph
       import('@/lib/server/config'),
       // Presence is workspace-global (not visitor-specific), so the anonymous SSR
       // baseline value is exactly correct for every visitor — seed the shared

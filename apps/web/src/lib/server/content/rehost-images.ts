@@ -16,7 +16,7 @@
  */
 
 import type { TiptapContent } from '@/lib/server/db'
-import { isS3Configured, uploadImageBuffer } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadImageBuffer } from '@/lib/server/storage/s3'
 import { safeFetch, SsrfError, ResponseTooLargeError, TimeoutError } from './ssrf-guard'
 import { sniffImageMime, ALLOWED_REHOST_MIMES } from './magic-bytes'
 import { logger } from '@/lib/server/logger'
@@ -264,7 +264,7 @@ export async function rehostExternalImages(
 ): Promise<TiptapContent> {
   try {
     if (!json || typeof json !== 'object') return json
-    if (!isS3Configured()) {
+    if (!isS3Usable()) {
       log.debug('s3 not configured, skipping rehost')
       return json
     }

@@ -1,7 +1,7 @@
 /**
  * Unit coverage for the widget entry-point rate limits (Phase 6 R1): under the
  * cap allows, over the cap blocks with a retry-after, and a store error fails
- * open. The rate-bucket primitive is mocked so this pins only the policy.
+ * open. The `utils/rate-bucket` primitive is mocked so this pins only the policy.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 

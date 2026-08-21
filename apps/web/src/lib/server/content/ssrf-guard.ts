@@ -19,6 +19,10 @@ import { request as httpsRequest } from 'node:https'
 import { request as httpRequest } from 'node:http'
 import { checkServerIdentity } from 'node:tls'
 import type { IncomingMessage } from 'node:http'
+import {
+  CONNECTOR_MAX_RESPONSE_BYTES,
+  CONNECTOR_REQUEST_TIMEOUT_MS,
+} from '@/lib/shared/assistant/connectors'
 
 const ALLOWED_SCHEMES = new Set(['http:', 'https:'])
 
@@ -343,5 +347,120 @@ export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<
     req.on('error', reject)
     if (body) req.write(body)
     req.end()
+  })
+}
+
+/**
+ * SSRF-safe fetch that streams the body instead of buffering it.
+ *
+ * Same DNS pin, scheme check, TLS SNI, and no-redirects contract as
+ * `safeFetch`. The MCP streamable-HTTP transport needs a real stream (SSE);
+ * buffering would hold the event stream until the server closed.
+ *
+ * `maxResponseBytes` still applies: the stream is destroyed once the cap is
+ * reached so a hostile peer cannot stream unbounded bytes. Callers that need
+ * a complete body should use `safeFetch` instead.
+ */
+export async function safeFetchStream(url: string, init: SafeFetchInit = {}): Promise<Response> {
+  const safety = await checkUrlSafety(url)
+  if (!safety.safe) throw new SsrfError(safety.reason)
+
+  const parsed = new URL(url)
+  const isHttps = parsed.protocol === 'https:'
+  const requestFn = isHttps ? httpsRequest : httpRequest
+  const {
+    method = 'GET',
+    headers = {},
+    body,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxResponseBytes = DEFAULT_MAX_RESPONSE_BYTES,
+    onOverflow = 'error',
+  } = init
+
+  return new Promise<Response>((resolve, reject) => {
+    const req = requestFn(
+      {
+        hostname: safety.address,
+        family: safety.family,
+        port: Number(parsed.port || (isHttps ? 443 : 80)),
+        path: `${parsed.pathname}${parsed.search}`,
+        method,
+        servername: isHttps ? parsed.hostname : undefined,
+        headers: { ...headers, host: parsed.host },
+        timeout: timeoutMs,
+        signal: AbortSignal.timeout(timeoutMs),
+        checkServerIdentity: isHttps
+          ? (_host: string, cert: Parameters<typeof checkServerIdentity>[1]) =>
+              checkServerIdentity(parsed.hostname, cert)
+          : undefined,
+      },
+      (res: IncomingMessage) => {
+        const status = res.statusCode ?? 502
+        const headerEntries: [string, string][] = []
+        for (const [k, v] of Object.entries(res.headers)) {
+          if (typeof v === 'string') headerEntries.push([k, v])
+          else if (Array.isArray(v)) headerEntries.push([k, v.join(', ')])
+        }
+        let total = 0
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            res.on('data', (chunk: Buffer) => {
+              total += chunk.length
+              if (total > maxResponseBytes) {
+                res.destroy()
+                if (onOverflow === 'error') {
+                  controller.error(new ResponseTooLargeError(maxResponseBytes))
+                  return
+                }
+                controller.close()
+                return
+              }
+              controller.enqueue(new Uint8Array(chunk))
+            })
+            res.on('end', () => controller.close())
+            res.on('error', (err) => controller.error(err))
+          },
+          cancel() {
+            res.destroy()
+          },
+        })
+        const nullBody = status < 200 || status === 204 || status === 304
+        resolve(
+          new Response(nullBody ? null : stream, {
+            status,
+            statusText: res.statusMessage ?? '',
+            headers: headerEntries,
+          })
+        )
+      }
+    )
+    req.on('timeout', () => req.destroy(new TimeoutError(timeoutMs)))
+    req.on('error', reject)
+    if (body) req.write(body)
+    req.end()
+  })
+}
+
+/**
+ * Fetch-compatible wrapper around `safeFetchStream` for MCP transports.
+ * Accepts a Request or URL; never follows redirects.
+ */
+export async function safePinnedFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {}
+): Promise<Response> {
+  const request = input instanceof Request ? input : new Request(input, init)
+  const headers: Record<string, string> = {}
+  request.headers.forEach((value, key) => {
+    headers[key] = value
+  })
+  const bodyBuffer = request.body ? Buffer.from(await request.arrayBuffer()) : undefined
+  return safeFetchStream(request.url, {
+    method: request.method,
+    headers,
+    body: bodyBuffer ? bodyBuffer.toString('utf8') : undefined,
+    timeoutMs: CONNECTOR_REQUEST_TIMEOUT_MS,
+    maxResponseBytes: CONNECTOR_MAX_RESPONSE_BYTES,
+    onOverflow: 'error',
   })
 }

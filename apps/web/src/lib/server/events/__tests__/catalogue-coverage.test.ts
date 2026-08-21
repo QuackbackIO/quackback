@@ -83,6 +83,7 @@ describe('event catalogue coverage', () => {
     'published',
     'replied',
     'handed_off',
+    'resolved',
     'csat_submitted',
     'csat_comment_added',
     'voted',

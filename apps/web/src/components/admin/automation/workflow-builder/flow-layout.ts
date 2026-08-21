@@ -21,29 +21,22 @@ import {
   BLOCK_STEP_LABELS,
   durationPhrase,
   frequencyCapSummary,
-  OPERATOR_LABELS,
   PATH_LETTERS,
   PRIORITY_LABELS,
   RATING_EMOJI,
   RATING_KEYS,
   TRIGGER_CHANNELS,
-  VALUELESS_OPERATORS,
   blockBodyPreview,
   collectDataSummary,
   collectReplySummary,
   conditionSummary,
-  conditionToDraft,
   countSteps,
   isBlockBodyEmpty,
-  isNeedsSetupRef,
-  resolveConditionField,
   sendWindowSummary,
   stepPaths,
   waitSummary,
-  type ActionType,
   type AttributeFieldDef,
   type PersonCompanyAttributeFieldDef,
-  type BlockStepKind,
   type EntityLabels,
   type FrequencyCap,
   type GraphAction,
@@ -55,6 +48,22 @@ import {
   type WorkflowTree,
 } from '../workflow-graph'
 import { truncate } from '@/lib/shared/utils/string'
+import { ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF } from '@/lib/shared/workflows/abandoned-auto-close'
+import {
+  ACTION_TONE,
+  assistantEscalatePhrase,
+  describeBranchPath,
+  named,
+  type ChipData,
+  type IconKey,
+  type RulePart,
+  type StepNodeData as ContentStepNodeData,
+  type StepSectionData,
+  type Tone,
+} from './step-content'
+
+export { ACTION_TONE, describeBranchPath }
+export type { ChipData, IconKey, RulePart, StepSectionData, Tone }
 
 // ---------------------------------------------------------------------------
 // Layout constants (pixel values, matching the design's reference layout)
@@ -88,45 +97,7 @@ function triggerCardHeight(sectionCount: number): number {
 // straight to <ReactFlow nodes=.../edges=.../>.
 // ---------------------------------------------------------------------------
 
-export type Tone = 'amber' | 'violet' | 'green' | 'blue' | 'pink'
-
-/** Icon lookup key: the trigger, a step kind, (for actions) the action type,
- *  or (for conversational blocks) the block kind. */
-export type IconKey = 'trigger' | 'condition' | 'branch' | 'wait' | ActionType | BlockStepKind
-
-export interface ChipData {
-  label: string
-  tone?: Tone
-}
-
-export interface StepSectionData {
-  label: string
-  chips: ChipData[]
-}
-
-export interface StepNodeData extends Record<string, unknown> {
-  stepId: string
-  eyebrow: string
-  title: string
-  icon: IconKey
-  tone: Tone
-  chips?: ChipData[]
-  meta?: string
-  sections?: StepSectionData[]
-  startTag?: boolean
-  warn: boolean
-  selected: boolean
-  /** False only for the trigger — every other step card can be removed. */
-  deletable: boolean
-  /** Branch cards only: steps nested in its paths, for the "delete this
-   *  branch?" confirmation copy. */
-  nestedCount?: number
-}
-
-export interface RulePart {
-  text: string
-  bold?: boolean
-}
+export interface StepNodeData extends ContentStepNodeData, Record<string, unknown> {}
 
 export interface RuleNodeData extends Record<string, unknown> {
   badge: string
@@ -209,6 +180,8 @@ export interface FlowLayoutInput {
   labels: EntityLabels
   stepIssues: ReadonlyMap<string, string>
   selectedId: string | null
+  /** Minutes until a silent Quinn park escalates (engine: 10, or auto-close waitMinutes). */
+  assistantEscalateMinutes?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -264,33 +237,6 @@ export function endNodeId(location: StepLocation): string {
 // Per-step card content (eyebrow/title/tone/chips/meta)
 // ---------------------------------------------------------------------------
 
-export const ACTION_TONE: Record<ActionType, Tone> = {
-  assign_agent: 'green',
-  assign_team: 'green',
-  add_tag: 'green',
-  remove_tag: 'green',
-  set_priority: 'green',
-  apply_sla: 'green',
-  set_attribute: 'green',
-  snooze: 'amber',
-  close: 'blue',
-  reopen: 'blue',
-  add_note: 'green',
-  set_ticket_status: 'green',
-  convert_to_ticket: 'blue',
-  send_webhook: 'green',
-}
-
-/** Ref -> display name, tolerant of an unset or needs-setup-template ref. */
-function named(
-  id: string,
-  lookup: ReadonlyMap<string, string> | undefined,
-  missing: string
-): string {
-  if (!id || isNeedsSetupRef(id)) return missing
-  return lookup?.get(id) ?? id
-}
-
 function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
   switch (action.type) {
     case 'assign_agent':
@@ -340,7 +286,7 @@ function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
 
 function buildStepNodeData(
   step: TreeStep,
-  ctx: Pick<FlowLayoutInput, 'labels' | 'stepIssues' | 'selectedId'>
+  ctx: Pick<FlowLayoutInput, 'labels' | 'stepIssues' | 'selectedId' | 'assistantEscalateMinutes'>
 ): StepNodeData {
   const base = {
     stepId: step.id,
@@ -443,11 +389,17 @@ function buildStepNodeData(
     case 'let_assistant_answer':
       return {
         ...base,
-        eyebrow: 'Message',
+        eyebrow: 'Step',
         title: BLOCK_STEP_LABELS.let_assistant_answer,
         icon: 'let_assistant_answer',
         tone: 'pink',
-        meta: 'Hands the turn to Quinn',
+        chips: [
+          {
+            label: `Escalates after ${assistantEscalatePhrase(ctx.assistantEscalateMinutes ?? ASSISTANT_WAIT_MINUTES_WHEN_AUTO_CLOSE_OFF)} if Quinn can't reply`,
+            tone: 'amber',
+            wrap: true,
+          },
+        ],
         nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
       }
     case 'reply_buttons':
@@ -541,82 +493,6 @@ function triggerSections(
     sections.push({ label: 'Send window', chips: [{ label: sendWindowSummary(sendWindow) }] })
   }
   return sections
-}
-
-/** Bold-highlighted rule-pill copy for one branch path's condition. */
-export function describeBranchPath(
-  condition: GraphCondition,
-  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
-  teams: ReadonlyMap<string, string> = new Map(),
-  personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  ticketTypes: ReadonlyMap<string, string> = new Map()
-): RulePart[] {
-  const draft = conditionToDraft(condition)
-  if (draft.kind === 'advanced') {
-    // Not flat, but possibly a RuleGroupBuilder OR-of-groups shape (or a
-    // truly opaque one) — conditionSummary already tells those apart instead
-    // of this pill hardcoding "Custom condition" for both.
-    return [
-      {
-        text: conditionSummary(
-          condition,
-          attributes,
-          teams,
-          personAttributes,
-          companyAttributes,
-          ticketTypes
-        ),
-      },
-    ]
-  }
-  if (draft.rules.length === 0) return [{ text: 'No conditions · matches everything' }]
-  if (draft.rules.length > 1) {
-    return [
-      {
-        text: conditionSummary(
-          condition,
-          attributes,
-          teams,
-          personAttributes,
-          companyAttributes,
-          ticketTypes
-        ),
-      },
-    ]
-  }
-
-  const rule = draft.rules[0]!
-  const meta = resolveConditionField(
-    rule.field,
-    attributes,
-    teams,
-    personAttributes,
-    companyAttributes,
-    ticketTypes
-  )
-  const op = OPERATOR_LABELS[rule.op]
-  if (VALUELESS_OPERATORS.has(rule.op)) {
-    return [{ text: 'If ' }, { text: meta.label, bold: true }, { text: ` ${op}` }]
-  }
-  let value = rule.value
-  if (meta.kind === 'choice') {
-    value = meta.options?.find((o) => o.value === rule.value)?.label ?? rule.value
-  } else if (meta.kind === 'boolean') {
-    value = rule.value === 'true' ? 'yes' : 'no'
-  } else if (meta.kind === 'list' && meta.options) {
-    const ids = rule.value
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    value = ids.map((id) => meta.options!.find((o) => o.value === id)?.label ?? id).join(', ')
-  }
-  return [
-    { text: 'If ' },
-    { text: meta.label, bold: true },
-    { text: ` ${op} ` },
-    { text: value || '…', bold: true },
-  ]
 }
 
 /** Rule-pill copy for one fan-out path, per kind: a branch path describes its

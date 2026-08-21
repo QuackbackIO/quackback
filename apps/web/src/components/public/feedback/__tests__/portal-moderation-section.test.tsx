@@ -75,11 +75,11 @@ describe('PortalModerationSection — render gate', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders the banner for a post.approve holder without duplicating the post as a card', async () => {
+  it('renders the banner and quarantined cards for a post.approve holder', async () => {
     mockList.mockResolvedValue(PENDING)
     renderSection(true)
-    expect(await screen.findByText(/waiting for review/i)).toBeInTheDocument()
-    expect(screen.queryByText('Dark mode please')).not.toBeInTheDocument()
+    expect(await screen.findByText(/waiting for approval/i)).toBeInTheDocument()
+    expect(screen.getByText('Dark mode please')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /open queue/i })).toBeInTheDocument()
   })
 

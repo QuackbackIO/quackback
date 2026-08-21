@@ -88,6 +88,15 @@ function ticketStatusChanged(id: string, previousStatus: string, newStatus: stri
 beforeEach(() => vi.clearAllMocks())
 
 describe('recordSlaFromEvent', () => {
+  it('does not settle first response on a service-authored agent message', async () => {
+    await recordSlaFromEvent({
+      ...messageCreated('conversation_1', 'agent'),
+      actor: { type: 'service' },
+    } as EventData)
+    expect(recordFirstResponse).not.toHaveBeenCalled()
+    expect(recordNextResponse).not.toHaveBeenCalled()
+  })
+
   it('settles first response then the armed next-response cycle on a teammate message, at the event time', async () => {
     await recordSlaFromEvent(messageCreated('conversation_1', 'agent'))
     expect(recordFirstResponse).toHaveBeenCalledWith('conversation_1', new Date(at))

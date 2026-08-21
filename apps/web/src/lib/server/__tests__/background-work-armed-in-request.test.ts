@@ -22,7 +22,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import * as ts from 'typescript'
+import * as ts from '@typescript/typescript6'
 
 const hoisted = vi.hoisted(() => ({
   fleetPasses: 0,

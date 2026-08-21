@@ -207,6 +207,43 @@ describe('redactSettingsForClient — server-only settings columns', () => {
   })
 })
 
+describe('redactSettingsForClient — the cloud column', () => {
+  // The signed projection is server-only enforcement and commercial state.
+  const CLOUD_ROW = {
+    name: 'Acme',
+    cloud: {
+      enabled: true,
+      projection: { version: 7, effectivePlan: 'scale' },
+    },
+    portalConfig: null,
+  }
+
+  it('strips cloud from a raw row', () => {
+    expect(redactSettingsForClient(CLOUD_ROW)).not.toHaveProperty('cloud')
+  })
+
+  it('strips cloud from a raw row riding on `.settings`', () => {
+    const result = redactSettingsForClient({
+      name: 'Acme',
+      portalConfig: null,
+      settings: { ...CLOUD_ROW },
+    })
+    expect(result.settings).not.toHaveProperty('cloud')
+  })
+
+  it('never leaks the billing projection into the serialized payload', () => {
+    const payload = JSON.stringify(
+      redactSettingsForClient({ name: 'Acme', portalConfig: null, settings: { ...CLOUD_ROW } })
+    )
+    expect(payload).not.toContain('effectivePlan')
+  })
+
+  it('leaves a row with no cloud column untouched', () => {
+    const row = { name: 'Acme', portalConfig: null }
+    expect(redactSettingsForClient(row)).toBe(row)
+  })
+})
+
 describe('redactSettingsForClient — SSR payload invariants', () => {
   it('the SSR payload string does not contain allowedDomains after redaction (object form)', () => {
     const row = { portalConfig: FULL_PORTAL_CONFIG, name: 'Acme' }

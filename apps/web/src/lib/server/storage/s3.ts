@@ -77,6 +77,7 @@ import {
   currentWorkspaceNamespace,
   SINGLE_WORKSPACE_NAMESPACE,
 } from '@/lib/server/workspaces/workspace-keyed'
+import { absolutizeOffHostAssetUrl } from './asset-url'
 import { composeNamespacedKey, workspaceNamespace } from './namespace'
 import { currentWorkspaceId } from './workspace-scope'
 
@@ -116,10 +117,8 @@ interface StoragePlacement {
   forcePathStyle: boolean
   publicUrl?: string
   /**
-   * Origin the `/api/storage` fallback URL is built from. Pinned to the
-   * workspace's canonical base URL, never derived from the request: contentJson
-   * stores ABSOLUTE image URLs, so an origin that followed whichever hostname
-   * the visitor happened to use would bake that hostname into stored content.
+   * Origin used when a leaf must absolutize a stored `/api/storage` ref
+   * (email, widget, OG). Browser PUTs and persisted refs stay relative.
    */
   originUrl: string
 }
@@ -673,14 +672,10 @@ export function verifyStorageReadToken(secret: string, key: string, sig: string 
   }
 }
 
-function buildPublicUrl(placement: StoragePlacement, key: string): string {
-  if (placement.publicUrl && isPublicStorageKey(key)) {
-    return `${placement.publicUrl.replace(/\/$/, '')}/${key}`
-  }
-
-  // Private objects always pass through the application with an unforgeable
-  // read capability, even when a public CDN endpoint is configured.
-  const base = `${placement.originUrl.replace(/\/$/, '')}/api/storage/${key}`
+function buildPublicUrl(_placement: StoragePlacement, key: string): string {
+  // Persist a host-independent ref. Friendly platform URLs and the request
+  // Host must not land in contentJson; leaves absolutize from the system host.
+  const base = `/api/storage/${key}`
   if (isPublicStorageKey(key)) return base
   // Only the private branch needs a secret, so a public asset URL still renders
   // on a workspace whose credential reference has no resolver. The private branch
@@ -704,8 +699,12 @@ export interface PresignedUploadUrl {
 }
 
 /**
- * Generate a presigned URL for uploading a file. When S3_PROXY is enabled,
- * returns a server-proxied URL instead of a direct presigned S3 URL.
+ * Mint a same-origin PUT target for a browser upload.
+ *
+ * The browser never talks to the object store. Workspace hosts have no CORS
+ * grant there, and a friendly URL rename must not change the stored ref or
+ * the upload path. Persist stays `/api/storage/<key>`; the PUT is the same
+ * path with a short-lived HMAC.
  *
  * @param key - Storage key (path within bucket), e.g., "changelog-images/abc123/image.jpg"
  * @param contentType - MIME type of the file, e.g., "image/jpeg"
@@ -716,18 +715,11 @@ export async function generatePresignedUploadUrl(
   contentType: string,
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
-  // `key` stays bare in everything that leaves here: the returned `key` is what
-  // the caller stores in the database, and `publicUrl` is built from it. Only
-  // the presigned URL names the object, and only the client composes that.
+  // Resolve the workspace first so a pooled call with no scope still refuses.
+  // The client is not used to presign: the browser PUTs to /api/storage.
+  await currentWorkspaceStorage()
   const publicUrl = buildPublicUrl(getStoragePlacement(), key)
-
-  if (config.s3Proxy) {
-    const uploadUrl = buildProxyUploadUrl(getStorageSigningSecret(), key, contentType, expiresIn)
-    return { uploadUrl, publicUrl, key }
-  }
-
-  const storage = await currentWorkspaceStorage()
-  const uploadUrl = await storage.presignPut(key, contentType, expiresIn)
+  const uploadUrl = buildProxyUploadUrl(getStorageSigningSecret(), key, contentType, expiresIn)
   return { uploadUrl, publicUrl, key }
 }
 
@@ -751,12 +743,9 @@ function buildProxyUploadUrl(
   contentType: string,
   expiresIn: number
 ): string {
-  const origin = getStoragePlacement().originUrl
-  if (!origin) throw new Error('BASE_URL must be set to use S3_PROXY upload')
   const exp = Date.now() + expiresIn * 1000
   const sig = proxyUploadSig(secret, key, contentType, exp)
-  const base = origin.replace(/\/$/, '')
-  return `${base}/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
+  return `/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
 }
 
 /**
@@ -944,23 +933,17 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
 
 /**
  * Get an email-safe URL for a storage key.
- * Email clients often don't follow redirects, so when there's no S3_PUBLIC_URL
- * this returns a proxy URL (?email=1) that streams bytes directly.
- * Returns null if the key is null/undefined or S3 is not configured.
+ *
+ * Persist is host-independent; this leaf absolutizes from the immutable
+ * system host and tags `?email=1` so mail clients receive bytes instead of
+ * following the storage route's 302.
  */
 export function getEmailSafeUrl(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
   if (!isPublicStorageKey(key) && !isS3Usable()) return null
 
-  const placement = getStoragePlacement()
-  const storageUrl = buildPublicUrl(placement, key)
-  if (placement.publicUrl && isPublicStorageKey(key)) return storageUrl
-
-  // Force proxy mode so email clients get bytes directly (no 302 redirect)
-  const url = new URL(storageUrl)
-  url.searchParams.set('email', '1')
-  return url.toString()
+  return absolutizeOffHostAssetUrl(buildPublicUrl(getStoragePlacement(), key), { email: true })
 }
 
 /**

@@ -40,7 +40,12 @@ vi.mock('@/lib/server/db', () => ({
   eq: (...args: unknown[]) => ({ op: 'eq', args }),
   and: (...args: unknown[]) => ({ op: 'and', args }),
   desc: (...args: unknown[]) => ({ op: 'desc', args }),
-  helpCenterRedirectRules: { path: 'path', targetType: 'target_type', targetId: 'target_id', id: 'id' },
+  helpCenterRedirectRules: {
+    path: 'path',
+    targetType: 'target_type',
+    targetId: 'target_id',
+    id: 'id',
+  },
   helpCenterArticles: { id: 'id', categoryId: 'category_id' },
   helpCenterCategories: { id: 'id' },
 }))
@@ -151,7 +156,7 @@ describe('createRedirectRule', () => {
     vi.mocked(db.insert).mockReturnValueOnce({
       values: vi.fn().mockReturnThis(),
       returning: vi.fn().mockRejectedValue({ code: '23505' }),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
     await expect(

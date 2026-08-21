@@ -136,10 +136,8 @@ describe('every command is namespaced', () => {
       nameFor('workspace-alpha', PUBLIC_KEY),
       nameFor('workspace-alpha', PUBLIC_KEY),
     ])
-    expect(presigned.map((c) => c.Key)).toEqual([
-      nameFor('workspace-alpha', PUBLIC_KEY),
-      nameFor('workspace-alpha', PUBLIC_KEY),
-    ])
+    // Uploads no longer presign a PUT. Reads still do.
+    expect(presigned.map((c) => c.Key)).toEqual([nameFor('workspace-alpha', PUBLIC_KEY)])
   })
 
   it('cannot collide two workspaces on one key in one bucket', async () => {
@@ -194,11 +192,11 @@ describe('the stored key stays namespace-free', () => {
     )
 
     expect(result.key).toBe(PUBLIC_KEY)
-    expect(result.publicUrl).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
+    expect(result.publicUrl).toBe(`/api/storage/${PUBLIC_KEY}`)
+    expect(result.uploadUrl.startsWith(`/api/storage/${PUBLIC_KEY}?`)).toBe(true)
     expect(result.publicUrl).not.toContain(`${WORKSPACE_NAMESPACE_ROOT}/`)
-    // …while the object it will be PUT to IS namespaced.
-    expect(presigned).toHaveLength(1)
-    expect(presigned[0]!.Key).toBe(nameFor('workspace-alpha', PUBLIC_KEY))
+    expect(result.uploadUrl).not.toContain(`${WORKSPACE_NAMESPACE_ROOT}/`)
+    expect(presigned).toHaveLength(0)
   })
 
   it('keeps isPublicStorageKey classifying on the stored key', async () => {
@@ -424,7 +422,7 @@ describe('token verification through the narrowed accessor', () => {
       () => generatePresignedUploadUrl(PUBLIC_KEY, 'image/png'),
       SHARED
     )
-    return new URL(uploadUrl).searchParams
+    return new URL(uploadUrl, 'https://workspace.test').searchParams
   }
 
   const verifyAs = (workspaceKey: string, params: URLSearchParams) =>

@@ -28,7 +28,7 @@ import {
   type ModerationState,
   type Database,
 } from '@/lib/server/db'
-// eslint-disable-next-line no-restricted-imports -- legitimate second createDb caller (see board-view-filter-parity.test.ts)
+// oxlint-disable-next-line no-restricted-imports -- legitimate second createDb caller (see board-view-filter-parity.test.ts)
 import { createDb } from '@quackback/db/client'
 import { canViewPost, postViewFilter } from '../posts'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'

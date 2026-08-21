@@ -1,6 +1,11 @@
 import { memo, useState, type ReactNode } from 'react'
-import { Link, useRouteContext } from '@tanstack/react-router'
-import type { ConversationDTO, ConversationPriority } from '@/lib/shared/conversation/types'
+import { useRouteContext } from '@tanstack/react-router'
+import type {
+  ConversationDTO,
+  ConversationPriority,
+  Channel,
+} from '@/lib/shared/conversation/types'
+import { listChannelDescriptors } from '@/lib/shared/channels'
 import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
 import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons/react/24/solid'
@@ -24,7 +29,7 @@ import {
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
+
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -33,9 +38,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
-import { useReadinessAction } from '@/lib/client/hooks/use-readiness-action'
+import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { FormattedMessage, useIntl } from 'react-intl'
 
 const TRIAGE_FACETS: readonly InboxTriageFacet[] = ['open', 'waiting', 'closed']
@@ -166,6 +171,8 @@ interface ConversationListColumnProps {
   ticketTypeFilter?: string
   onTicketTypeFilter?: (id: string | undefined) => void
   ticketTypeOptions?: Array<{ id: string; name: string; icon: string | null; color: string }>
+  channelFilter?: Channel
+  onChannelFilter?: (value: Channel | undefined) => void
   sort: ConversationSort
   onSort: (value: ConversationSort) => void
   loading: boolean
@@ -174,17 +181,6 @@ interface ConversationListColumnProps {
   items: InboxItemDTO[]
   selectedId: string | null
   onSelect: (id: string) => void
-  /** Bulk-select set (a checkbox per row), TypeIDs of either kind. Kept
-   *  visually quiet until at least one row is checked — see `selectionActive`. */
-  selectedIds: Set<string>
-  /** Toggle one row; `range` extends a contiguous range from the last-checked row
-   *  (shift-click), across mixed conversation/ticket rows. The parent owns the
-   *  ordered list, so it computes the range. */
-  onToggleSelect: (id: string, opts?: { range?: boolean }) => void
-  /** Select-all (in view) / clear-all toggle for the header checkbox. */
-  onToggleSelectAll: () => void
-  /** True once a selection exists — reveals the checkboxes + the select-all bar. */
-  selectionActive: boolean
 }
 
 /**
@@ -208,26 +204,22 @@ export function ConversationListColumn({
   ticketTypeFilter,
   onTicketTypeFilter,
   ticketTypeOptions,
+  channelFilter,
+  onChannelFilter,
   sort,
   onSort,
   loading,
   items,
   selectedId,
   onSelect,
-  selectedIds,
-  onToggleSelect,
-  onToggleSelectAll,
-  selectionActive,
 }: ConversationListColumnProps) {
   const intl = useIntl()
   const { userRole } = useRouteContext({ from: '__root__' })
-  const readinessAction = useReadinessAction()
+  const activationAction = useActivationAction('conversation_empty')
   const [composeOpen, setComposeOpen] = useState(false)
   // Whether the list is a search, which decides both the implicit sort and
   // whether the term-scored sort is offered at all.
   const searching = searchInput.trim().length > 0
-  const allSelected = items.length > 0 && items.every((it) => selectedIds.has(itemId(it)))
-  const someSelected = items.some((it) => selectedIds.has(itemId(it)))
   return (
     <div
       className={cn(
@@ -363,6 +355,43 @@ export function ConversationListColumn({
 
             {/* Registry-type filter (Phase 4) — the Tickets-section scopes
                 only; the route scopes the options to the view's category. */}
+            {onChannelFilter && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Filter by channel"
+                    className={cn(
+                      'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
+                      channelFilter
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-muted'
+                    )}
+                  >
+                    {channelFilter
+                      ? (listChannelDescriptors().find((d) => d.id === channelFilter)?.label ??
+                        'Channel')
+                      : 'Channel'}
+                    <ChevronDownIcon className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => onChannelFilter(undefined)}>
+                    Any channel
+                  </DropdownMenuItem>
+                  {listChannelDescriptors().map((d) => (
+                    <DropdownMenuItem
+                      key={d.id}
+                      onClick={() => onChannelFilter(d.id)}
+                      className={cn(d.id === channelFilter && 'text-primary')}
+                    >
+                      {d.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
             {ticketTypeOptions && onTicketTypeFilter && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -409,20 +438,6 @@ export function ConversationListColumn({
           </>
         )}
       </div>
-      {/* Progressive disclosure: the select-all + count bar only appears once a
-          selection exists (the per-row checkboxes are the entry point). */}
-      {selectionActive && (
-        <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5">
-          <Checkbox
-            checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-            onCheckedChange={() => onToggleSelectAll()}
-            aria-label="Select all items in view"
-          />
-          <span className="text-xs font-medium text-muted-foreground">
-            {selectedIds.size} selected
-          </span>
-        </div>
-      )}
       <ScrollArea className="min-h-0 flex-1">
         {loading ? (
           <ConversationListSkeleton />
@@ -434,9 +449,10 @@ export function ConversationListColumn({
             const isFiltered =
               searchInput.trim().length > 0 ||
               priorityFilter !== 'all' ||
+              !!channelFilter ||
               (facet !== 'all' && facet !== 'open')
             const isAllClear =
-              isMainConversationQueue && facet === 'open' && !isFiltered && !readinessAction
+              isMainConversationQueue && facet === 'open' && !isFiltered && !activationAction
             const emptyMsg = isFiltered
               ? intl.formatMessage({
                   id: 'inbox.empty.filtered.title',
@@ -476,10 +492,12 @@ export function ConversationListColumn({
                     </p>
                     {/* Widget settings are admin-only; members get the message
                         without a button they can't use. */}
-                    {userRole === 'admin' && readinessAction && (
-                      <Button size="sm" variant="outline" className="h-11 sm:h-9" asChild>
-                        <Link to={readinessAction.href}>{readinessAction.label}</Link>
-                      </Button>
+                    {userRole === 'admin' && activationAction && (
+                      <ActivationActionButton
+                        action={activationAction}
+                        surface="conversation_empty"
+                        className="h-11 sm:h-9"
+                      />
                     )}
                   </>
                 )}
@@ -489,21 +507,13 @@ export function ConversationListColumn({
         ) : (
           items.map((item) => {
             const id = itemId(item)
-            // `onSelect`/`onToggleSelect` are passed straight through (the
-            // SAME stable reference every row gets, id-taking) rather than
-            // wrapped in a per-row closure here — a fresh `() => onSelect(id)`
-            // built on every list render would give each `memo`'d row a new
-            // prop reference every time and defeat the memo (perf review).
             return item.kind === 'conversation' ? (
               <ConversationRow
                 key={id}
                 id={id}
                 item={item}
                 selected={selectedId === id}
-                checked={selectedIds.has(id)}
-                selectionActive={selectionActive}
                 onSelect={onSelect}
-                onToggleSelect={onToggleSelect}
               />
             ) : (
               <TicketRow
@@ -511,10 +521,7 @@ export function ConversationListColumn({
                 id={id}
                 item={item}
                 selected={selectedId === id}
-                checked={selectedIds.has(id)}
-                selectionActive={selectionActive}
                 onSelect={onSelect}
-                onToggleSelect={onToggleSelect}
               />
             )
           })
@@ -530,12 +537,6 @@ export function ConversationListColumn({
 function SkeletonRow() {
   return (
     <div className="flex w-full items-start border-b border-border/30">
-      {/* Matches RowShell's checkbox gutter (pl-3 + size-4 + pr-0.5), kept
-          empty/invisible since the real gutter is opacity-0 until hover or an
-          active selection. */}
-      <div className="flex items-center self-stretch pl-3 pr-0.5">
-        <div className="size-4 shrink-0" />
-      </div>
       <div className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-1.5 pr-3">
         <Skeleton className="size-8 shrink-0 rounded-full" />
         <div className="min-w-0 flex-1 space-y-1.5">
@@ -565,43 +566,15 @@ function ConversationListSkeleton() {
   )
 }
 
-/** Shared row chrome (checkbox + selection tint) for either row kind. */
-function RowShell({
-  checked,
-  selected,
-  selectionActive,
-  ariaLabel,
-  onToggleSelect,
-  children,
-}: {
-  checked: boolean
-  selected: boolean
-  selectionActive: boolean
-  ariaLabel: string
-  onToggleSelect: (range: boolean) => void
-  children: ReactNode
-}) {
+/** Shared row chrome for either row kind. */
+function RowShell({ selected, children }: { selected: boolean; children: ReactNode }) {
   return (
     <div
       className={cn(
         'group relative flex w-full items-start border-b border-border/30 transition-colors',
-        checked ? 'bg-primary/5' : selected ? 'bg-muted/60' : 'hover:bg-muted/30'
+        selected ? 'bg-muted/60' : 'hover:bg-muted/30'
       )}
     >
-      <div
-        className={cn(
-          'flex items-center self-stretch pl-3 pr-0.5 transition-opacity',
-          selectionActive || checked
-            ? 'opacity-100'
-            : 'opacity-0 focus-within:opacity-100 group-hover:opacity-100'
-        )}
-      >
-        <Checkbox
-          checked={checked}
-          onClick={(e) => onToggleSelect(e.shiftKey)}
-          aria-label={ariaLabel}
-        />
-      </div>
       {children}
     </div>
   )
@@ -645,31 +618,16 @@ export const ConversationRow = memo(function ConversationRow({
   item,
   id,
   selected,
-  checked,
-  selectionActive,
   onSelect,
-  onToggleSelect,
 }: {
   item: Extract<InboxItemDTO, { kind: 'conversation' }>
-  /** The row's own TypeID — `onSelect`/`onToggleSelect` are the SAME stable,
-   *  id-taking callbacks every row in the list gets (see the `.map()` call
-   *  site's comment); this row binds its own id when calling them. */
   id: string
   selected: boolean
-  checked: boolean
-  selectionActive: boolean
   onSelect: (id: string) => void
-  onToggleSelect: (id: string, opts?: { range?: boolean }) => void
 }) {
   const c = item.conversation
   return (
-    <RowShell
-      checked={checked}
-      selected={selected}
-      selectionActive={selectionActive}
-      ariaLabel={`Select conversation from ${c.visitor.displayName ?? 'Visitor'}`}
-      onToggleSelect={(range) => onToggleSelect(id, { range })}
-    >
+    <RowShell selected={selected}>
       {/* Rows keep a fixed anatomy (name / linked-ticket line / preview + time)
           so the list scans uniformly — the sometimes-present decorations
           (priority dot, SLA, channel, tags) live on the thread, not here. The
@@ -757,28 +715,16 @@ const TicketRow = memo(function TicketRow({
   item,
   id,
   selected,
-  checked,
-  selectionActive,
   onSelect,
-  onToggleSelect,
 }: {
   item: Extract<InboxItemDTO, { kind: 'ticket' }>
   id: string
   selected: boolean
-  checked: boolean
-  selectionActive: boolean
   onSelect: (id: string) => void
-  onToggleSelect: (id: string, opts?: { range?: boolean }) => void
 }) {
   const t = item.ticket
   return (
-    <RowShell
-      checked={checked}
-      selected={selected}
-      selectionActive={selectionActive}
-      ariaLabel={`Select ticket ${t.reference}`}
-      onToggleSelect={(range) => onToggleSelect(id, { range })}
-    >
+    <RowShell selected={selected}>
       {/* Same fixed anatomy as ConversationRow (title / ticket line /
           preview + time) so mixed lists scan as one column. */}
       <button

@@ -116,6 +116,13 @@ const PostSummarySchema = z.object({
  * Fetches the post title, content, and comments, then calls the LLM.
  */
 export async function generateAndSavePostSummary(postId: PostId): Promise<void> {
+  // Plan gate before the budget: whether summaries are included at all is a
+  // cheaper question than how much of the month's allowance is left, and a
+  // workspace without them should never pay the usage read. No-op on any
+  // install without a plan, which is every self-hosted one — see
+  // domains/settings/cloud/entitlements.ts.
+  const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  await requireEntitlement('aiInsights')
   await enforceAiTokenBudget()
 
   const model = getChatModel('summary')
@@ -213,9 +220,9 @@ const SWEEP_ABORT_AFTER_EMPTY_BATCHES = 2
  * changed, and processes them in batches until none remain. See #180 for why
  * the sweep needs an attempted-set, circuit breaker, and reentrancy guard.
  *
- * The reentrancy guard is keyed by workspace: a process-wide boolean would let
- * whichever workspace this fleet pass reached first suppress every other
- * workspace's sweep for as long as it runs.
+ * The reentrancy guard is keyed by workspace (`withWorkspaceSweepReentrancyGuard`):
+ * a process-wide boolean would let whichever workspace this fleet pass reached
+ * first suppress every other workspace's sweep for as long as it runs.
  */
 export async function refreshStaleSummaries(): Promise<void> {
   // Fast-path skip when AI is off OR the summary model is unset/disabled —

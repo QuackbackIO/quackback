@@ -219,12 +219,7 @@ export function isWorkspaceQuarantined(workspace: WorkspaceIdentity, now = Date.
   if (entry.revision !== workspace.revision) {
     quarantined.delete(workspace.workspaceKey)
     log.info(
-      {
-        workspaceKey: workspace.workspaceKey,
-        from: entry.revision,
-        to: workspace.revision,
-        code: entry.code,
-      },
+      { workspaceKey: workspace.workspaceKey, from: entry.revision, to: workspace.revision, code: entry.code },
       'quarantined workspace record changed — retrying it now'
     )
     return false

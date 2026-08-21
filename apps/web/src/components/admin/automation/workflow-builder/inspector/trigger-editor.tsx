@@ -334,7 +334,8 @@ export function TriggerEditor({
         />
         <p className="mt-1 text-[11px] text-muted-foreground">
           Limits this trigger to conversations, people, and companies matching these rules. No rules
-          runs for everyone.
+          runs for everyone. Use this for a deterministic gate; use guidance rules when the AI agent
+          should interpret the situation.
         </p>
         {audienceWarning && (
           <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-500">{audienceWarning}</p>

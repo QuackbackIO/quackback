@@ -42,6 +42,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
 import { workflowAbandonedAutoCloseSchema } from '@/lib/shared/workflows/abandoned-auto-close'
+import { workflowCloseSpamSchema } from '@/lib/shared/workflows/close-spam'
+import { defaultSlaPolicySchema } from '@/lib/shared/sla/default-policy'
 import { MAX_TRUSTED_SENDERS } from '@/lib/shared/trusted-senders'
 import { logger } from '@/lib/server/logger'
 
@@ -84,10 +86,16 @@ export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async
   await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const workspace = await getWorkspaceSettings()
+  // The shipped defaults, not a second set written out here. A form that showed
+  // `openSignup: false` while the server behaved as open is the disagreement
+  // that made this setting worth enforcing in the first place — see
+  // `DEFAULT_AUTH_CONFIG`. Only `password` differs, and deliberately: the admin
+  // form starts with team password sign-in unticked.
+  const { DEFAULT_AUTH_CONFIG } = await import('@/lib/server/domains/settings/settings.types')
   return (
     workspace?.authConfig ?? {
+      ...DEFAULT_AUTH_CONFIG,
       oauth: { google: true, github: true, password: false },
-      openSignup: false,
     }
   )
 })
@@ -317,12 +325,17 @@ const updateThemeSchema = z.object({
   brandingConfig: z.record(z.string(), z.unknown()),
 })
 
-const updatePortalConfigSchema = z.object({
+export const updatePortalConfigSchema = z.object({
   features: z
     .object({
       allowAnonymous: z.boolean().optional(),
     })
     .optional(),
+  // May a member of the public open an account on the portal? The portal's own
+  // answer, distinct from `authConfig.openSignup`, which answers for the team.
+  // A `z.object` strips what it does not name, so the key has to be here or the
+  // save is accepted and discarded — and the portal has no other writer.
+  openSignup: z.boolean().optional(),
   welcomeCard: z
     .object({
       enabled: z.boolean().optional(),
@@ -862,6 +875,25 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
     return await updateWidgetConfig(data)
   })
 
+export const configureWidgetForActivationFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ mode: z.enum(['messenger', 'feedback']) }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { configureWidgetForActivation } =
+      await import('@/lib/server/domains/settings/settings.widget')
+    const configured = await configureWidgetForActivation(data.mode)
+    const { emitPlgEvent } = await import('@/lib/server/plg-events')
+    await emitPlgEvent(
+      {
+        name: 'widget_configured',
+        outcome: data.mode === 'messenger' ? 'customer_support' : 'product_feedback',
+        artifactType: 'widget',
+      },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
+    )
+    return configured
+  })
+
 export const saveWidgetHeroImageKeyFn = createServerFn({ method: 'POST' })
   .validator(z.object({ key: z.string().min(1).max(512) }))
   .handler(async ({ data }) => {
@@ -997,6 +1029,46 @@ export const updateWorkflowAbandonedAutoCloseFn = createServerFn({ method: 'POST
     const { updateWorkflowAbandonedAutoCloseSettings } =
       await import('@/lib/server/domains/settings/settings.workflows')
     return await updateWorkflowAbandonedAutoCloseSettings(data)
+  })
+
+export const fetchWorkflowCloseSpamFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch workflow close-spam settings')
+  await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+  const { getWorkflowCloseSpamSettings } =
+    await import('@/lib/server/domains/settings/settings.workflows')
+  return await getWorkflowCloseSpamSettings()
+})
+
+export const updateWorkflowCloseSpamFn = createServerFn({ method: 'POST' })
+  .validator(workflowCloseSpamSchema)
+  .handler(async ({ data }) => {
+    log.info(data, 'update workflow close-spam settings')
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    const { updateWorkflowCloseSpamSettings } =
+      await import('@/lib/server/domains/settings/settings.workflows')
+    return await updateWorkflowCloseSpamSettings(data)
+  })
+
+// ============================================
+// Default SLA policy
+// ============================================
+
+export const fetchDefaultSlaPolicyFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch default SLA policy settings')
+  await requireAuth({ permission: PERMISSIONS.SLA_MANAGE })
+  const { getDefaultSlaPolicySettings } =
+    await import('@/lib/server/domains/settings/settings.sla-default')
+  return await getDefaultSlaPolicySettings()
+})
+
+export const updateDefaultSlaPolicyFn = createServerFn({ method: 'POST' })
+  .validator(defaultSlaPolicySchema)
+  .handler(async ({ data }) => {
+    log.info(data, 'update default SLA policy settings')
+    await requireAuth({ permission: PERMISSIONS.SLA_MANAGE })
+    const { updateDefaultSlaPolicySettings } =
+      await import('@/lib/server/domains/settings/settings.sla-default')
+    return await updateDefaultSlaPolicySettings(data)
   })
 
 // ============================================

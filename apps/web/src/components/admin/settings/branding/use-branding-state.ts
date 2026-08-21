@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from 'react'
-import { toast } from 'sonner'
 import {
   themePresets,
   primaryPresetIds,
@@ -310,9 +309,6 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
 
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
-    } catch (error) {
-      console.error('Failed to save theme:', error)
-      toast.error(error instanceof Error ? error.message : "Couldn't save branding. Try again.")
     } finally {
       setIsSaving(false)
     }

@@ -16,7 +16,7 @@ vi.mock('@/lib/server/content/ssrf-guard', async (importOriginal) => {
 })
 
 vi.mock('@/lib/server/storage/s3', () => ({
-  isS3Configured: vi.fn(() => true),
+  isS3Usable: vi.fn(() => true),
   uploadImageBuffer: vi.fn(),
 }))
 
@@ -27,10 +27,10 @@ vi.stubGlobal('fetch', fetchMock)
 
 import { rehostExternalImages } from '../rehost-images'
 import { safeFetch, SsrfError, ResponseTooLargeError } from '@/lib/server/content/ssrf-guard'
-import { isS3Configured, uploadImageBuffer } from '@/lib/server/storage/s3'
+import { isS3Usable, uploadImageBuffer } from "@/lib/server/storage/s3"
 
 const safeFetchMock = safeFetch as unknown as ReturnType<typeof vi.fn>
-const isS3ConfiguredMock = isS3Configured as unknown as ReturnType<typeof vi.fn>
+const isS3UsableMock = isS3Usable as unknown as ReturnType<typeof vi.fn>
 const uploadImageBufferMock = uploadImageBuffer as unknown as ReturnType<typeof vi.fn>
 
 // ---- Helpers ----
@@ -75,7 +75,7 @@ const JPEG_HEADER = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('fetch', fetchMock)
-  isS3ConfiguredMock.mockReturnValue(true)
+  isS3UsableMock.mockReturnValue(true)
   uploadImageBufferMock.mockImplementation(async (_buf, _mime, prefix) => ({
     url: `https://cdn.example.com/${prefix}/rehosted-${Math.random().toString(36).slice(2, 8)}.png`,
   }))
@@ -492,7 +492,7 @@ describe('rehostExternalImages — edge cases', () => {
   })
 
   it('returns input unchanged when S3 is not configured', async () => {
-    isS3ConfiguredMock.mockReturnValueOnce(false)
+    isS3UsableMock.mockReturnValueOnce(false)
     const input = docWithImages('https://external.example.com/img.png')
     const output = await rehostExternalImages(input, { contentType: 'post' })
     expect(output).toEqual(input)

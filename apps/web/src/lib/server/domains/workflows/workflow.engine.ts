@@ -248,6 +248,7 @@ async function applyPlanAndSettle(
   // that also parks (status 'waiting', waitKind 'input') stamps it onto the
   // InputWaitCursor below as the correlation key a customer's reply matches.
   let blockMessageId: string | null = null
+  let assistantDeclined = false
   // Once a non-idempotent action starts, a later failure must interrupt the
   // run instead of reverting to its old cursor and replaying customer-visible
   // work. Set before execution because an action may commit and then throw.
@@ -284,7 +285,15 @@ async function applyPlanAndSettle(
       : undefined
     for (const action of plan.actions) {
       try {
-        if (['send_block', 'add_note', 'record_csat', 'send_webhook'].includes(action.type)) {
+        if (
+          [
+            'send_block',
+            'add_note',
+            'record_csat',
+            'send_webhook',
+            'let_assistant_answer',
+          ].includes(action.type)
+        ) {
           sideEffectExecutedOnce = true
         }
         const actionActor =
@@ -301,6 +310,7 @@ async function applyPlanAndSettle(
           resolvedBlockDeps,
         })
         if (result.blockMessageId) blockMessageId = result.blockMessageId
+        if (result.assistantDeclined) assistantDeclined = true
       } catch (err) {
         log.error({ err, action: action.type, workflowId: workflow.id }, 'workflow action failed')
         await logRunEvent(run.id, workflow.id, subjectPrincipalId, `action_failed:${action.type}`)
@@ -330,6 +340,23 @@ async function applyPlanAndSettle(
     return interrupted ?? (await currentRun(run.id))
   }
 
+  if (
+    assistantDeclined &&
+    plan.status === 'waiting' &&
+    plan.waitKind === 'assistant' &&
+    plan.resumeNodeId
+  ) {
+    const next = walkWorkflow(
+      readGraph(workflow.graph),
+      { ...ctx, assistantOutcome: 'escalated' },
+      plan.resumeNodeId
+    )
+    return applyPlanAndSettle(run, workflow, next, conversationId, subjectPrincipalId, {
+      ...ctx,
+      assistantOutcome: 'escalated',
+    })
+  }
+
   if (plan.status === 'waiting' && (plan.waitKind === 'input' || plan.waitKind === 'assistant')) {
     // Interactive block / let_assistant_answer park: no BullMQ timer for
     // either — resumed by event-trigger.ts on a matching structured reply
@@ -346,14 +373,18 @@ async function applyPlanAndSettle(
     // expiry regardless of this setting. Read once, only for an 'input'
     // park, so an 'assistant' park never pays for a settings lookup it
     // can't use.
-    const expiresAt =
-      plan.waitKind === 'input'
-        ? await (async () => {
-            const autoClose = await getWorkflowAbandonedAutoCloseSettings()
-            if (!autoClose.enabled) return null
-            return new Date(Date.now() + autoClose.waitMinutes * 60_000).toISOString()
-          })()
-        : null
+    const expiresAt = await (async () => {
+      const autoClose = await getWorkflowAbandonedAutoCloseSettings()
+      if (!autoClose.enabled) {
+        // Assistant waits always get a default expiry so a declined/silent
+        // Quinn cannot hold the exclusive lock forever.
+        if (plan.waitKind === 'assistant') {
+          return new Date(Date.now() + 10 * 60_000).toISOString()
+        }
+        return null
+      }
+      return new Date(Date.now() + autoClose.waitMinutes * 60_000).toISOString()
+    })()
     const cursor: WaitCursor | InputWaitCursor =
       plan.waitKind === 'input'
         ? {
@@ -373,6 +404,7 @@ async function applyPlanAndSettle(
             waitSeconds: 0,
             waitSeq,
             waitStartedAt: new Date().toISOString(),
+            expiresAt,
           }
     const waiting = await settleRunning(run.id, {
       state: 'waiting',

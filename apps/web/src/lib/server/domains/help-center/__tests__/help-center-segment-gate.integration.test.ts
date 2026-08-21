@@ -28,7 +28,7 @@ vi.mock('../help-center-embedding.service', () => ({
 }))
 
 import { helpCenterArticles, helpCenterCategories, principal, type Database } from '@/lib/server/db'
-// eslint-disable-next-line no-restricted-imports -- legitimate createDb caller: this file owns the global db for its worker (see board-view-filter-parity.test.ts)
+// oxlint-disable-next-line no-restricted-imports -- legitimate createDb caller: this file owns the global db for its worker (see board-view-filter-parity.test.ts)
 import { createDb } from '@quackback/db/client'
 import {
   createId,

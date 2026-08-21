@@ -49,17 +49,7 @@ function item(c: ConversationDTO): Extract<InboxItemDTO, { kind: 'conversation' 
 }
 
 function renderRow(c: ConversationDTO) {
-  return render(
-    <ConversationRow
-      item={item(c)}
-      id={c.id}
-      selected={false}
-      checked={false}
-      selectionActive={false}
-      onSelect={() => {}}
-      onToggleSelect={() => {}}
-    />
-  )
+  return render(<ConversationRow item={item(c)} id={c.id} selected={false} onSelect={() => {}} />)
 }
 
 describe('ConversationRow assignee column', () => {

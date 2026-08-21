@@ -1,15 +1,9 @@
-import { Link, useRouteContext } from '@tanstack/react-router'
-import {
-  MagnifyingGlassIcon,
-  DocumentIcon,
-  SparklesIcon,
-  GlobeAltIcon,
-  ArrowRightIcon,
-} from '@heroicons/react/24/solid'
+import { useRouteContext } from '@tanstack/react-router'
+import { MagnifyingGlassIcon, DocumentIcon, SparklesIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/shared/empty-state'
-import { useReadinessAction } from '@/lib/client/hooks/use-readiness-action'
-import { FormattedMessage } from 'react-intl'
+import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
 
 interface InboxEmptyStateProps {
   type: 'no-posts' | 'no-results' | 'no-selection'
@@ -18,9 +12,7 @@ interface InboxEmptyStateProps {
 
 export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) {
   const { userRole } = useRouteContext({ from: '__root__' })
-  const readinessAction = useReadinessAction()
-  // Widget setup and the launch plan live behind admin-only settings;
-  // members get the share path only.
+  const activationAction = useActivationAction('feedback_empty')
   const isAdmin = userRole === 'admin'
 
   if (type === 'no-results') {
@@ -45,39 +37,16 @@ export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) 
       <EmptyState
         icon={SparklesIcon}
         title="No feedback yet"
-        description="Hear from customers on your site or share a public board."
+        description="Share your public board to start collecting customer ideas and votes."
         action={
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {isAdmin && readinessAction && (
-              <Button size="sm" className="h-11 sm:h-9" asChild>
-                <Link to={readinessAction.href}>
-                  <ArrowRightIcon className="h-3.5 w-3.5" />
-                  {readinessAction.label}
-                </Link>
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant={isAdmin && readinessAction ? 'outline' : 'default'}
+          isAdmin &&
+          activationAction && (
+            <ActivationActionButton
+              action={activationAction}
+              surface="feedback_empty"
               className="h-11 sm:h-9"
-              asChild
-            >
-              <Link to="/">
-                <GlobeAltIcon className="h-3.5 w-3.5" />
-                Share board
-              </Link>
-            </Button>
-            {isAdmin && (
-              <Button size="sm" variant="ghost" className="h-11 sm:h-9" asChild>
-                <Link to="/admin/getting-started">
-                  <FormattedMessage
-                    id="activation.action.viewPlan"
-                    defaultMessage="View launch plan"
-                  />
-                </Link>
-              </Button>
-            )}
-          </div>
+            />
+          )
         }
       />
     )

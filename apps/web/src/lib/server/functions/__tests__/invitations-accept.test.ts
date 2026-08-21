@@ -84,6 +84,7 @@ const hoisted = vi.hoisted(() => {
     mockSyncPrincipalProfileById: vi.fn(),
     mockRevokeMagicLinkTokens: vi.fn(),
     mockCacheDel: vi.fn(),
+    mockEnforceSeatLimit: vi.fn(),
   }
 })
 
@@ -126,6 +127,10 @@ vi.mock('@/lib/server/storage/s3', () => ({
 
 vi.mock('@/lib/server/cache', () => ({
   cacheDel: hoisted.mockCacheDel,
+}))
+
+vi.mock('@/lib/server/domains/principals/seat-limit', () => ({
+  enforceSeatLimit: hoisted.mockEnforceSeatLimit,
 }))
 
 // ---------------------------------------------------------------------------
@@ -186,6 +191,7 @@ beforeEach(async () => {
   hoisted.mockSyncPrincipalProfileById.mockResolvedValue(undefined)
   hoisted.mockRevokeMagicLinkTokens.mockResolvedValue(undefined)
   hoisted.mockCacheDel.mockResolvedValue(undefined)
+  hoisted.mockEnforceSeatLimit.mockResolvedValue(undefined)
 })
 
 // ---------------------------------------------------------------------------
@@ -471,5 +477,45 @@ describe('acceptInvitationFn — race + failure semantics', () => {
     expect(statusWrites('pending')).toHaveLength(0)
     expect(hoisted.mockRevokeMagicLinkTokens).not.toHaveBeenCalled()
     expect(hoisted.mockCacheDel).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Seat cap — accept, not only send
+// ---------------------------------------------------------------------------
+
+describe('acceptInvitationFn — seat cap', () => {
+  it('refuses a new seat at the cap before the invite is claimed', async () => {
+    hoisted.mockEnforceSeatLimit.mockRejectedValue(new Error('team seats'))
+
+    await expect(acceptHandler({ data: { invitationId: 'invite_1' } })).rejects.toThrow(
+      /team seats/i
+    )
+    expect(hoisted.mockTransaction).not.toHaveBeenCalled()
+    expect(hoisted.mockCreatePrincipal).not.toHaveBeenCalled()
+    expect(statusWrites('accepted')).toHaveLength(0)
+  })
+
+  it('does not re-check the cap when the invitee is already a seated teammate', async () => {
+    hoisted.mockDbQuery.principal.findFirst.mockResolvedValue({
+      id: 'principal_1',
+      role: 'member',
+    })
+
+    await acceptHandler({ data: { invitationId: 'invite_1' } })
+
+    expect(hoisted.mockEnforceSeatLimit).not.toHaveBeenCalled()
+    expect(statusWrites('accepted')).toHaveLength(1)
+  })
+
+  it('checks the cap when a portal user would become a teammate', async () => {
+    hoisted.mockDbQuery.principal.findFirst.mockResolvedValue({
+      id: 'principal_1',
+      role: 'user',
+    })
+
+    await acceptHandler({ data: { invitationId: 'invite_1' } })
+
+    expect(hoisted.mockEnforceSeatLimit).toHaveBeenCalledOnce()
   })
 })

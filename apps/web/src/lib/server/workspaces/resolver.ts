@@ -53,15 +53,14 @@ function missTtlMs(): number {
   return Math.min(config.workspaceRegistryTtlMs, 5_000)
 }
 
-function cachedLookup(map: Map<string, CacheEntry>, key: string): WorkspaceLookup | undefined {
-  const hit = map.get(key)
-  if (hit && hit.expiresAt > Date.now()) return hit.lookup
-  return undefined
-}
-
-function rememberLookup(map: Map<string, CacheEntry>, key: string, lookup: WorkspaceLookup): void {
-  const ttl = lookup.kind === 'ok' ? config.workspaceRegistryTtlMs : missTtlMs()
-  map.set(key, { lookup, expiresAt: Date.now() + ttl })
+export function invalidateWorkspaceCache(hostnameOrWorkspaceKey?: string): void {
+  if (!hostnameOrWorkspaceKey) {
+    byHostname.clear()
+    byWorkspaceKey.clear()
+    return
+  }
+  byHostname.delete(hostnameOrWorkspaceKey)
+  byWorkspaceKey.delete(hostnameOrWorkspaceKey)
 }
 
 /** Resolve a Host header to a registry lookup, cached. */
@@ -69,24 +68,28 @@ export async function lookupWorkspaceByHost(hostHeader: string | null): Promise<
   const hostname = normalizeHostHeader(hostHeader)
   if (hostname === null) return { kind: 'unknown_host', hostname: String(hostHeader ?? '') }
 
-  const cached = cachedLookup(byHostname, hostname)
-  if (cached) return cached
+  const now = Date.now()
+  const hit = byHostname.get(hostname)
+  if (hit && hit.expiresAt > now) return hit.lookup
 
   const lookup = await resolveWorkspaceByHostname(hostname)
-  rememberLookup(byHostname, hostname, lookup)
+  const ttl = lookup.kind === 'ok' ? config.workspaceRegistryTtlMs : missTtlMs()
+  byHostname.set(hostname, { lookup, expiresAt: now + ttl })
   if (lookup.kind === 'ok') {
-    rememberLookup(byWorkspaceKey, lookup.workspace.workspaceKey, lookup)
+    byWorkspaceKey.set(lookup.workspace.workspaceKey, { lookup, expiresAt: now + ttl })
   }
   return lookup
 }
 
 /** Resolve a workspace id to a registry lookup, cached. For background subsystems. */
 export async function lookupWorkspaceById(workspaceKey: string): Promise<WorkspaceLookup> {
-  const cached = cachedLookup(byWorkspaceKey, workspaceKey)
-  if (cached) return cached
+  const now = Date.now()
+  const hit = byWorkspaceKey.get(workspaceKey)
+  if (hit && hit.expiresAt > now) return hit.lookup
 
   const lookup = await resolveWorkspaceById(workspaceKey)
-  rememberLookup(byWorkspaceKey, workspaceKey, lookup)
+  const ttl = lookup.kind === 'ok' ? config.workspaceRegistryTtlMs : missTtlMs()
+  byWorkspaceKey.set(workspaceKey, { lookup, expiresAt: now + ttl })
   return lookup
 }
 
@@ -137,7 +140,7 @@ export async function acquireWorkspaceScope(
 /** Host header → scope, in one call. The request path's entry point. */
 export async function acquireScopeForHost(
   hostHeader: string | null,
-  origin: WorkspaceScopeOrigin
+  origin: WorkspaceScopeOrigin = 'request'
 ): Promise<WorkspaceAcquisition> {
   const lookup = await lookupWorkspaceByHost(hostHeader)
   if (lookup.kind !== 'ok') return lookup

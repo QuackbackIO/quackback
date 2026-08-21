@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
+import { getChannelDescriptor } from '@/lib/shared/channels'
 import { NewConversationDialog } from '@/components/admin/conversation/new-conversation-dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -356,10 +357,10 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                       ) : (
                         <span>Unassigned</span>
                       )}
-                      {c.channel !== 'messenger' ? (
-                        <ChannelBadge channel={c.channel} />
+                      {getChannelDescriptor(c.channel)?.surface === 'ours' ? (
+                        <span>· {getChannelDescriptor(c.channel)?.label ?? 'Messenger'}</span>
                       ) : (
-                        <span>· Messenger</span>
+                        <ChannelBadge channel={c.channel} />
                       )}
                       {c.csatRating != null && <span>· ★ {c.csatRating}/5</span>}
                     </div>

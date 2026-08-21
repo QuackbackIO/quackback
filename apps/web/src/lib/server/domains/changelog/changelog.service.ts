@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- notifyChangelogPublished builds the full email
+/* oxlint-disable max-lines -- notifyChangelogPublished builds the full email
    body payload alongside the existing claim/release writes */
 /**
  * Changelog Service - Core CRUD operations

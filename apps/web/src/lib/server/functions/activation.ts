@@ -20,7 +20,11 @@ import {
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { mutateSetupStateAtomic, acknowledgeActivationHandoff } from '@/lib/server/setup-state'
+import {
+  mutateSetupStateAtomic,
+  acknowledgeActivationHandoff,
+  applyDeferredLaunchStartingPoint,
+} from '@/lib/server/setup-state'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import {
@@ -31,15 +35,17 @@ import {
 import { parseJsonConfig } from '@/lib/server/domains/settings/settings.helpers'
 import { accessForPreset } from '@/lib/shared/schemas/boards'
 import { logger } from '@/lib/server/logger'
+import { emitPlgEvent } from '@/lib/server/plg-events'
 
 const log = logger.child({ component: 'activation' })
 
 const outcomeSchema = z.enum(ONBOARDING_OUTCOMES)
 const completeStartingPointSchema = z.object({ action: z.enum(['complete', 'defer']) })
+const markPublicBoardLinkCopiedSchema = z.object({ boardId: z.string().min(1) })
 
 const PRIMARY_TASK: Record<OnboardingOutcome, string> = {
   product_feedback: 'create-board',
-  customer_support: 'messenger',
+  customer_support: 'connect-messenger',
   help_center: 'help-article',
   internal: 'create-board',
 }
@@ -130,19 +136,38 @@ export const getStartingPointContextFn = createServerFn({ method: 'GET' }).handl
 /** Resolve the exact artifact shown on the one-time setup handoff. */
 export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-  const row = await db.query.settings.findFirst()
+  let row = await db.query.settings.findFirst()
   if (!row) throw new Error('Workspace is not set up yet')
-  const state = getSetupState(row.setupState)
+  let state = getSetupState(row.setupState)
+  if (
+    state?.useCase &&
+    (!state.steps.startingPoint || state.steps.startingPoint.source === 'managed')
+  ) {
+    const { state: next } = await mutateSetupStateAtomic((current) => ({
+      state: applyDeferredLaunchStartingPoint(current, current.useCase ?? state!.useCase!),
+      value: undefined,
+    }))
+    state = next
+    row = (await db.query.settings.findFirst()) ?? row
+  }
   const startingPoint = state?.steps.startingPoint
   if (!startingPoint) throw new Error('Choose a starting point first')
 
   let resourceLabel: string | null = null
+  let starterBoard: { id: string; slug: string; publicPath: string } | null = null
   if (startingPoint.resourceType === 'board' && startingPoint.resourceId) {
     const board = await db.query.boards.findFirst({
       where: and(eq(boards.id, startingPoint.resourceId as BoardId), isNull(boards.deletedAt)),
-      columns: { name: true },
+      columns: { id: true, name: true, slug: true, access: true },
     })
     resourceLabel = board?.name ?? null
+    if (board?.access.view === 'anonymous') {
+      starterBoard = {
+        id: board.id,
+        slug: board.slug,
+        publicPath: `/?board=${encodeURIComponent(board.slug)}`,
+      }
+    }
   } else if (startingPoint.resourceType === 'article' && startingPoint.resourceId) {
     const article = await db.query.helpCenterArticles.findFirst({
       where: and(
@@ -161,14 +186,53 @@ export const getActivationBridgeContextFn = createServerFn({ method: 'GET' }).ha
     workspaceSlug: row.slug,
     startingPoint,
     resourceLabel,
+    starterBoard,
   }
 })
+
+/** Record the first intentional distribution of a publicly viewable board. */
+export const markPublicBoardLinkCopiedFn = createServerFn({ method: 'POST' })
+  .validator(markPublicBoardLinkCopiedSchema)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
+    const { state, value } = await mutateSetupStateAtomic(async (current, _row, tx) => {
+      const board = await tx.query.boards.findFirst({
+        where: and(eq(boards.id, data.boardId as BoardId), isNull(boards.deletedAt)),
+        columns: { id: true, access: true },
+      })
+      if (!board) throw new Error('Board not found')
+      if (board.access.view !== 'anonymous') {
+        throw new Error('Only a publicly viewable board link can be marked as shared')
+      }
+      const copiedAt =
+        current.activationMilestones?.publicBoardLinkCopiedAt ?? new Date().toISOString()
+      return {
+        state: {
+          ...current,
+          activationMilestones: {
+            ...current.activationMilestones,
+            publicBoardLinkCopiedAt: copiedAt,
+          },
+        },
+        value: { boardId: board.id, copiedAt },
+      }
+    })
+    log.info(
+      { board_id: value.boardId, copied_at: state.activationMilestones?.publicBoardLinkCopiedAt },
+      'public board link copied'
+    )
+    await emitPlgEvent(
+      { name: 'board_link_copied', artifactType: 'board' },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
+    )
+    return value
+  })
 
 /** Change the activation goal without rewriting or deleting the setup artifact. */
 export const setActivationGoalFn = createServerFn({ method: 'POST' })
   .validator(z.object({ outcome: outcomeSchema }))
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { state } = await mutateSetupStateAtomic((current, row) => {
       if (isPathManaged('workspace.useCase', row.managedFieldPaths)) {
         throw new Error('Workspace goal is managed by your workspace admin')
@@ -178,12 +242,20 @@ export const setActivationGoalFn = createServerFn({ method: 'POST' })
         value: undefined,
       }
     })
+    await emitPlgEvent(
+      { name: 'onboarding_goal_saved', outcome: state.useCase! },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
+    )
     return { outcome: state.useCase! }
   })
 
 export interface CompleteStartingPointResult {
   startingPoint: StartingPointState
   workspace: { name: string; slug: string }
+}
+
+export function shouldStartTrialForStarter(resolution: StartingPointState['resolution']): boolean {
+  return resolution === 'created' || resolution === 'configured'
 }
 
 /**
@@ -197,7 +269,7 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
     const capacity = await boardCapacity()
     const now = new Date().toISOString()
 
-    const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
+    const { state, value } = await mutateSetupStateAtomic(async (current, row, tx) => {
       const outcome = current.useCase
       if (!outcome || !current.steps.workspace) throw new Error('Complete workspace setup first')
 
@@ -391,6 +463,46 @@ export const completeStartingPointFn = createServerFn({ method: 'POST' })
       },
       'starting point completed'
     )
+    const starterEvent = {
+      created: 'starter_created',
+      configured: 'starter_configured',
+      deferred: 'starter_deferred',
+      unavailable: 'starter_unavailable',
+    } as const
+    await emitPlgEvent(
+      {
+        name: starterEvent[value.startingPoint.resolution],
+        outcome: value.startingPoint.outcome,
+        artifactType: value.startingPoint.resourceType,
+      },
+      { workspaceId: auth.settings.id, principalId: auth.principal.id }
+    )
+
+    // The control plane owns trial eligibility and timestamps. Reporting is
+    // best effort so a temporary control-plane outage never blocks the user
+    // from entering the workspace they just configured. The stamped starter
+    // time makes every retry carry the same idempotency key and evidence.
+    const { starterTrialEvidence } = await import('@/lib/server/control-plane/starter-trial')
+    const evidence = starterTrialEvidence(state)
+    if (evidence) {
+      try {
+        const { reportTrialActivation } = await import('@/lib/server/control-plane/client')
+        const status = await reportTrialActivation(evidence)
+        if (status === 'started') {
+          await emitPlgEvent(
+            {
+              name: 'trial_started',
+              outcome: value.startingPoint.outcome,
+              artifactType: evidence.artifactType,
+            },
+            { workspaceId: auth.settings.id, principalId: auth.principal.id }
+          )
+        }
+      } catch (error) {
+        log.error({ err: error }, 'trial activation could not be reported; onboarding continues')
+      }
+    }
+
     return value
   })
 

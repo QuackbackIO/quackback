@@ -182,6 +182,7 @@ const claimMappingSchema = z.object({
     .object({
       map: z.array(z.object({ claimPath: z.string(), attributeKey: z.string() })).optional(),
       overrideExisting: z.boolean().optional(),
+      syncOnSignIn: z.boolean().optional(),
     })
     .optional(),
 })

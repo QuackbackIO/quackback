@@ -2,9 +2,10 @@
  * The fullscreen workflow builder (support platform §4.6): loads the
  * workflow, wires up the shared entity data (teammates/teams/tags/SLA
  * policies/attributes) once for the outline + canvas + inspector, and lays
- * out the three-panel shell — outline rail, canvas (or the JSON textarea),
- * inspector. All the editing state lives in useWorkflowBuilder; this
- * component just wires it to the panels.
+ * out the three-panel shell — outline rail, React Flow canvas (or the JSON
+ * textarea), inspector. The stored graph/tree domain is unchanged; the
+ * canvas is the visual editor for that tree. All editing state lives in
+ * useWorkflowBuilder; this component just wires it to the panels.
  */
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -20,7 +21,6 @@ import { JsonPanel } from './json-panel'
 import { InspectorPanel } from './inspector/inspector-panel'
 import { useWorkflowBuilder } from './use-workflow-builder'
 import { VersionHistorySheet } from './version-history-sheet'
-import { PreviewPanel } from './preview-panel'
 import type { FrequencyCap, GraphCondition, SendWindow } from '../workflow-graph'
 
 export function WorkflowBuilder({ workflowId }: { workflowId: string }) {
@@ -79,18 +79,11 @@ function WorkflowBuilderShell({ workflow }: { workflow: WorkflowDTO }) {
         outlineCollapsed={b.outlineCollapsed}
         onToggleOutline={b.toggleOutline}
         onOpenHistory={b.openHistorySheet}
-        onOpenPreview={b.openPreviewSheet}
       />
       <VersionHistorySheet
         workflowId={workflow.id}
         open={b.historySheetOpen}
         onOpenChange={(open) => (open ? b.openHistorySheet() : b.closeHistorySheet())}
-        dirty={b.dirty}
-      />
-      <PreviewPanel
-        workflowId={workflow.id}
-        open={b.previewSheetOpen}
-        onOpenChange={(open) => (open ? b.openPreviewSheet() : b.closePreviewSheet())}
         dirty={b.dirty}
       />
       <div className="flex min-h-0 flex-1">

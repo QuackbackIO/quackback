@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { useEffect } from 'react'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
-import { useBulkChangePostStatus } from '@/lib/client/mutations/posts'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,12 +8,11 @@ import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
 import { FeedbackRow } from './feedback-row'
-import { FeedbackBulkActionBar } from './feedback-bulk-action-bar'
 import type { PostListItem, PostStatusEntity, Board, PostTag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { PostId, PostStatusId } from '@quackback/ids'
+import type { PostId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
   posts: PostListItem[]
@@ -104,43 +101,6 @@ export function FeedbackTableView({
     externalValue: filters.search,
     onChange: (search) => onFiltersChange({ search }),
   })
-
-  // Multi-selection behind the bulk-action toolbar. Ids (not rows) so the
-  // selection survives pagination and filter changes; the toolbar clears it.
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<PostId>>(new Set())
-  const bulkChangeStatus = useBulkChangePostStatus()
-
-  const toggleSelected = (postId: PostId, selected: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (selected) {
-        next.add(postId)
-      } else {
-        next.delete(postId)
-      }
-      return next
-    })
-  }
-
-  const handleBulkStatus = (statusId: string) => {
-    const postIds = [...selectedIds]
-    bulkChangeStatus.mutate(
-      { postIds, statusId: statusId as PostStatusId },
-      {
-        onSuccess: (summary) => {
-          const ok = summary.succeeded.length
-          const fail = summary.failed.length
-          if (fail === 0) {
-            toast.success(`Status updated on ${ok} ${ok === 1 ? 'post' : 'posts'}`)
-          } else {
-            toast.warning(`${ok} updated, ${fail} failed`)
-          }
-          setSelectedIds(new Set())
-        },
-        onError: () => toast.error('Bulk status change failed'),
-      }
-    )
-  }
 
   const loadMoreRef = useInfiniteScroll({
     hasMore,
@@ -278,9 +238,6 @@ export function FeedbackTableView({
                 statuses={statuses}
                 duplicateCount={duplicateCountByPostId?.get(post.id)}
                 onClick={() => onNavigateToPost(post.id)}
-                selected={selectedIds.has(post.id)}
-                selectionActive={selectedIds.size > 0}
-                onSelectChange={(selected) => toggleSelected(post.id, selected)}
               />
             </div>
           ))}
@@ -303,17 +260,6 @@ export function FeedbackTableView({
             </Button>
           )}
         </div>
-      )}
-
-      {/* Bulk-action toolbar: floats above the list while a selection is active */}
-      {selectedIds.size > 0 && (
-        <FeedbackBulkActionBar
-          count={selectedIds.size}
-          statuses={statuses}
-          pending={bulkChangeStatus.isPending}
-          onClear={() => setSelectedIds(new Set())}
-          onChangeStatus={handleBulkStatus}
-        />
       )}
     </div>
   )

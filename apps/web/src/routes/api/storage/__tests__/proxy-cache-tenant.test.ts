@@ -23,10 +23,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import {
-  createWorkspaceScope,
-  runWithWorkspaceScope,
-} from '@/lib/server/workspaces/workspace-context'
+import { createWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
 import { SINGLE_WORKSPACE_NAMESPACE } from '@/lib/server/workspaces/workspace-keyed'
 import { proxyCacheKey } from '../$'
 

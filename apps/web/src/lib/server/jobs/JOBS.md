@@ -382,26 +382,29 @@ went stale the moment a queue moved.
 
 <!-- QUEUE-TABLE:START — generated from JOB_DEFINITIONS; do not hand-edit -->
 
-| queue                    | cron          | concurrency | maxAttempts | lease |
-| ------------------------ | ------------- | ----------- | ----------- | ----- |
-| `anon-sweep`             | `0 3 * * *`   | 1           | 3           | 60s   |
-| `page-view-partitions`   | `30 2 * * *`  | 1           | 3           | 60s   |
-| `sla-breach-sweep`       | `* * * * *`   | 1           | 3           | 60s   |
-| `snooze-sweep`           | `* * * * *`   | 1           | 3           | 60s   |
-| `workflow-sweep`         | `*/5 * * * *` | 1           | 3           | 60s   |
-| `workflow-retention`     | `0 4 * * *`   | 1           | 3           | 60s   |
-| `spam-retention`         | `0 5 * * *`   | 1           | 3           | 60s   |
-| `analytics`              | `0 * * * *`   | 1           | 3           | 60s   |
-| `events`                 | —             | 5           | 6           | 60s   |
-| `event-dispatch`         | —             | 5           | 10          | 60s   |
-| `segment-evaluation`     | dynamic       | 2           | 3           | 60s   |
-| `help-center-translate`  | —             | 1           | 3           | 120s  |
-| `email-imap`             | `* * * * *`   | 1           | 1           | 60s   |
-| `sending-domain-recheck` | `0 6 * * *`   | 1           | 3           | 60s   |
-| `workflow-dispatch`      | —             | 1           | 3           | 60s   |
-| `workflow-wait`          | —             | 4           | 3           | 60s   |
-| `import`                 | —             | 2           | 1           | 60s   |
-| `export`                 | —             | 1           | 1           | 60s   |
+| queue                    | cron           | concurrency | maxAttempts | lease |
+| ------------------------ | -------------- | ----------- | ----------- | ----- |
+| `anon-sweep`             | `0 3 * * *`    | 1           | 3           | 60s   |
+| `page-view-partitions`   | `30 2 * * *`   | 1           | 3           | 60s   |
+| `sla-breach-sweep`       | `* * * * *`    | 1           | 3           | 60s   |
+| `snooze-sweep`           | `* * * * *`    | 1           | 3           | 60s   |
+| `workflow-sweep`         | `*/5 * * * *`  | 1           | 3           | 60s   |
+| `workflow-retention`     | `0 4 * * *`    | 1           | 3           | 60s   |
+| `email-log-retention`    | `0 6 * * *`    | 1           | 3           | 60s   |
+| `spam-retention`         | `0 5 * * *`    | 1           | 3           | 60s   |
+| `sending-domain-recheck` | `20 6 * * *`   | 1           | 3           | 60s   |
+| `analytics`              | `0 * * * *`    | 1           | 3           | 60s   |
+| `events`                 | —              | 5           | 6           | 60s   |
+| `event-dispatch`         | —              | 5           | 10          | 60s   |
+| `segment-evaluation`     | dynamic        | 2           | 3           | 60s   |
+| `help-center-translate`  | —              | 1           | 3           | 120s  |
+| `email-imap`             | `* * * * *`    | 1           | 1           | 60s   |
+| `workflow-dispatch`      | —              | 1           | 3           | 60s   |
+| `workflow-wait`          | —              | 4           | 3           | 60s   |
+| `import`                 | —              | 2           | 1           | 60s   |
+| `export`                 | —              | 1           | 1           | 60s   |
+| `membership-sync`        | `*/15 * * * *` | 1           | 10          | 60s   |
+
 
 <!-- QUEUE-TABLE:END -->
 

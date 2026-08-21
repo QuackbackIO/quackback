@@ -215,12 +215,43 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
+    // Bounds what quarantined inbound mail can cost. Deliberately offset from
+    // the other daily sweeps rather than sharing 03:00 or 04:00: this one
+    // cascades across a conversation's whole child graph, so it is the last
+    // thing that should run concurrently with anon-sweep, which contends for
+    // the same rows from the other direction.
+    name: 'email-log-retention',
+    cron: '0 6 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/email/email-log.retention').then((m) => m.runEmailLogRetention),
+  },
+  {
     name: 'spam-retention',
     cron: '0 5 * * *',
     maxAttempts: 3,
     handler: () =>
       import('@/lib/server/domains/conversation/spam-retention-queue').then(
         (m) => m.runSpamRetention
+      ),
+  },
+  {
+    // Verification is a claim about the present that only a schedule can keep
+    // making. A customer's ownership record, DKIM CNAMEs or MAIL FROM MX can
+    // disappear at any time, and every one of those failures is silent at the
+    // provider: mail keeps leaving, less and less able to prove who sent it.
+    // This demotes the row, which drops the workspace back to the platform
+    // sender rather than letting it keep signing on one leg.
+    //
+    // Daily, and offset from the other daily sweeps: it is bounded by outbound
+    // DNS and provider calls rather than by rows, so it should not share a
+    // minute with the passes that are bounded by the database.
+    name: 'sending-domain-recheck',
+    cron: '20 6 * * *',
+    maxAttempts: 3,
+    handler: () =>
+      import('@/lib/server/domains/channel-accounts/sending-domain-recheck-queue').then(
+        (m) => m.runSendingDomainRecheck
       ),
   },
   {
@@ -308,19 +339,6 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
       ),
   },
   {
-    // Daily demotion safety net: re-ask both authorities about every
-    // customer-owned sending domain. Same cronEnabled shape as email-imap
-    // is unnecessary here — the sweep no-ops when nothing is configured,
-    // and a daily empty pass is cheaper than a gate query.
-    name: 'sending-domain-recheck',
-    cron: '0 6 * * *',
-    maxAttempts: 3,
-    handler: () =>
-      import('@/lib/server/domains/channel-accounts/sending-domain-recheck-queue').then(
-        (m) => m.runSendingDomainRecheck
-      ),
-  },
-  {
     // Was `{workflow-dispatch}`. `concurrency: 1` is a deliberate global FIFO,
     // not a throughput default — two events on one conversation (a reply then
     // a close) are two jobs, and only a serial queue keeps their dispatch in
@@ -371,6 +389,26 @@ export const JOB_DEFINITIONS: readonly JobDefinition[] = [
     failedRetentionMs: 14 * DAY_MS,
     handler: () =>
       import('@/lib/server/domains/export/export-queue').then((m) => m.runWorkspaceExport),
+  },
+  {
+    // Pushes this workspace's team seats to the control plane. Cloud-only
+    // work: the handler is a successful no-op without QUACKBACK_CONTROL_PLANE_URL.
+    // Roster writes enqueue under a stable key (in-flight coalesces; a spent
+    // row is cancelled first). The 15-minute cron is the missed-enqueue
+    // backstop and stays inert without a control-plane URL.
+    name: 'membership-sync',
+    cron: '*/15 * * * *',
+    concurrency: 1,
+    maxAttempts: 10,
+    retryBackoffMs: 15 * 60_000,
+    cronEnabled: () =>
+      import('@/lib/server/domains/principals/membership-sync-queue').then((m) =>
+        m.isControlPlaneConfigured()
+      ),
+    handler: () =>
+      import('@/lib/server/domains/principals/membership-sync-queue').then(
+        (m) => m.runMembershipSync
+      ),
   },
 ]
 

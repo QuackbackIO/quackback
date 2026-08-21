@@ -60,7 +60,7 @@ const AUTH = {
 }
 const ACTOR = { principalId: 'principal_agent1' }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const call = (data: any) => listInboxItemsFn({ data })
 
 beforeEach(() => {
@@ -124,6 +124,14 @@ describe('listInboxItemsSchema', () => {
   it('rejects a limit outside 1..100', () => {
     expect(() => listInboxItemsSchema.parse({ facet: 'all', limit: 0 })).toThrow()
     expect(() => listInboxItemsSchema.parse({ facet: 'all', limit: 101 })).toThrow()
+  })
+
+  it('accepts registered channel ids and rejects unknown ones', () => {
+    expect(listInboxItemsSchema.parse({ facet: 'open', channel: 'email' }).channel).toBe('email')
+    expect(listInboxItemsSchema.parse({ facet: 'open', channel: 'messenger' }).channel).toBe(
+      'messenger'
+    )
+    expect(() => listInboxItemsSchema.parse({ facet: 'open', channel: 'sms' })).toThrow()
   })
 })
 

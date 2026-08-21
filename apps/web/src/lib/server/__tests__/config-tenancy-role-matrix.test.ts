@@ -8,10 +8,10 @@
  * **no runnable pooled configuration at all**. Two guards, each correct alone,
  * jointly specifying an impossible system.
  *
- * It also contradicted the architecture it was implementing:
- * SAAS-HOSTING-STACK.md §1 says "the 'conductor' is not a new component — it is
- * `QUACKBACK_ROLE=worker`. One shared, always-warm worker tier runs the queues,
- * relay and sweeps for every workspace."
+ * It also contradicted the architecture it was implementing: the job tier
+ * must be allowed to boot under pooled tenancy. Cloud now runs that tier
+ * in the tenant-facing process (`QUACKBACK_ROLE=all` + scheduler). `worker`
+ * remains a valid role for leftover soak capacity and for optional scale-out.
  *
  * So the role is free again, and the refusal moved to the noun it was always
  * about. It first became a seam that would not construct a `Worker` under
@@ -85,10 +85,10 @@ async function boot(): Promise<{ refused: boolean; paths: string[] }> {
 const ROLES = ['web', 'worker', 'all', 'migrator', undefined] as const
 
 describe('every role boots under pooled tenancy', () => {
-  // The five-row matrix, asserted as PERMITTED. `worker` is the one that
-  // matters: the pooled job tier only runs there, so refusing it left the
-  // fleet with nothing that could drain a queue, run a sweep or hold the wake
-  // listener.
+  // The five-row matrix, asserted as PERMITTED. `all` and `worker` are the
+  // ones that matter: the pooled job tier only starts when shouldRunWorkers()
+  // is true, so refusing those roles left the fleet with nothing that could
+  // drain a queue.
   for (const role of ROLES) {
     it(`QUACKBACK_ROLE=${role ?? '(unset)'}`, async () => {
       usePooled()

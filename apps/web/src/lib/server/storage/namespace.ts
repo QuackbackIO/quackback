@@ -33,9 +33,9 @@
  * storing exactly that, and `w/<workspaceId>/` is added here and stripped
  * nowhere else. Two properties depend on it. `isPublicStorageKey` still
  * classifies on segment 0 of the *stored* key, so prefixing does not turn every
- * public asset private. And `contentJson`'s absolute URLs — every one of them
- * `${origin}/api/storage/${key}` — stay valid, which makes any future move of
- * the objects a copy rather than a content rewrite.
+ * public asset private. And `contentJson` stores host-independent
+ * `/api/storage/${key}` refs, which stay valid across a friendly URL rename
+ * and make any future move of the objects a copy rather than a content rewrite.
  *
  * ## Compose, then verify
  *

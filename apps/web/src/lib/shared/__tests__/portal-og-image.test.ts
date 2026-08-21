@@ -22,4 +22,19 @@ describe('resolvePortalOgImageUrl', () => {
     expect(resolvePortalOgImageUrl(null)).toBe('/logo.png')
     expect(resolvePortalOgImageUrl(undefined)).toBe('/logo.png')
   })
+
+  it('joins a relative fallback to the supplied origin', () => {
+    expect(
+      resolvePortalOgImageUrl({ ogImageUrl: null, logoUrl: null }, 'https://ws-abc.quackback.co.uk')
+    ).toBe('https://ws-abc.quackback.co.uk/logo.png')
+  })
+
+  it('keeps an already-absolute system-host OG URL', () => {
+    expect(
+      resolvePortalOgImageUrl(
+        { ogImageUrl: 'https://ws-abc.quackback.co.uk/api/storage/portal-og/og.png' },
+        'https://acme.quackback.co.uk'
+      )
+    ).toBe('https://ws-abc.quackback.co.uk/api/storage/portal-og/og.png')
+  })
 })

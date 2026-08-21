@@ -96,7 +96,7 @@ export interface RepointStep {
  * Loosely-typed drizzle table handle for the factories: the column set varies
  * per table, and the factories address columns by their TS key.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type RepointTable = any
 
 /** `principal_id` -> `principalId`: derive the drizzle TS key from the SQL name. */
@@ -512,8 +512,10 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'guidance rule authors are team members, never anonymous',
   'assistant_snippets.created_by_id':
     'snippet authors are team members with assistant.manage, never anonymous',
-  'assistant_actions.created_by_id':
-    'custom-action authors are team members with assistant.manage, never anonymous',
+  'connectors.created_by_principal_id':
+    'connector authors are team members with assistant.manage, never anonymous',
+  'agent_skills.created_by_principal_id':
+    'skill authors are team members with assistant.manage, never anonymous',
   'assistant_pending_actions.decided_by_id':
     'the agent who approves/rejects a pending action is a team member, never anonymous',
   'assistant_tool_calls.principal_id':

@@ -56,12 +56,11 @@ Edges (25):
 ## 3. Server domains (lib/server/domains)
 
 Nodes (48): activity, ai, analytics, api, api-keys, assistant, boards, changelog, channel-accounts, channels, comments, companies, company-attributes, conversation, conversation-attributes, conversation-views, embeddings, export, help-center, import, inbox, macros, merge-suggestions, moderation, notifications, office-hours, platform-credentials, post-tags, post-views, posts, principals, push-devices, roadmaps, roles, segments, sentiment, settings, sla, status, statuses, subscriptions, summary, teams, tickets, user-attributes, users, webhooks, workflows
-Edges (107):
+Edges (109):
 
 - analytics -> api
 - analytics -> assistant
 - analytics -> principals
-- analytics -> settings
 - analytics -> workflows
 - api -> api-keys
 - api -> settings
@@ -111,6 +110,7 @@ Edges (107):
 - conversation-attributes -> assistant
 - conversation-attributes -> conversation
 - conversation-attributes -> settings
+- conversation-attributes -> workflows
 - embeddings -> ai
 - embeddings -> merge-suggestions
 - export -> companies
@@ -121,6 +121,7 @@ Edges (107):
 - import -> principals
 - inbox -> conversation
 - inbox -> tickets
+- macros -> settings
 - macros -> workflows
 - merge-suggestions -> ai
 - merge-suggestions -> posts
@@ -140,6 +141,7 @@ Edges (107):
 - sentiment -> settings
 - settings -> ai
 - settings -> platform-credentials
+- settings -> sla
 - sla -> office-hours
 - sla -> settings
 - subscriptions -> changelog
@@ -172,3 +174,4 @@ Strongly connected components with more than one domain. A new entry here is a n
 
 - assistant <-> channel-accounts <-> channels <-> conversation <-> conversation-attributes <-> inbox <-> tickets <-> workflows
 - changelog <-> embeddings <-> merge-suggestions <-> posts <-> subscriptions
+- settings <-> sla

@@ -214,8 +214,8 @@ describe('getTicketCreatedEmailTargets', () => {
     // per-workspace databases. Passing no slug is what the pre-registry code did
     // and it mints nothing at all.
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
-    await withWorkspace('neon-t2', () => getTicketCreatedEmailTargets(createdEvent(), context))
-    expect(inboundTicketReplyToAddress).toHaveBeenCalledWith('ticket_1', mailSlugFor('neon-t2'))
+    await withWorkspace('ws-t2', () => getTicketCreatedEmailTargets(createdEvent(), context))
+    expect(inboundTicketReplyToAddress).toHaveBeenCalledWith('ticket_1', mailSlugFor('ws-t2'))
   })
 
   it('mints under the self-hosted label when no workspace scope is open', async () => {

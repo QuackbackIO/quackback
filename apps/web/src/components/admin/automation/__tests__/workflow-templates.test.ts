@@ -1,7 +1,6 @@
 /**
- * Every workflow template must produce a structurally valid graph (the same
- * schema the server re-validates on save) and a trigger type the workflows
- * manager actually knows how to group and label.
+ * Every workflow template must produce a structurally valid graph and a
+ * trigger the manager can label. Refs must be sentinels, never bare literals.
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -11,11 +10,19 @@ import {
 } from '@/lib/server/domains/workflows/workflow.schemas'
 import {
   collectStepIssues,
+  countSetupIssues,
   graphToTree,
   NEEDS_SETUP_PREFIX,
   TRIGGER_TYPES,
 } from '../workflow-graph'
-import { WORKFLOW_TEMPLATES, workflowTemplatesByCategory } from '../workflow-templates'
+import {
+  WORKFLOW_TEMPLATES,
+  assertTemplateRefsAreSentinels,
+  templateGalleryChips,
+  templateNeedsInboxAi,
+  templateNeedsQuinn,
+  workflowTemplatesByCategory,
+} from '../workflow-templates'
 
 describe('WORKFLOW_TEMPLATES', () => {
   it.each(WORKFLOW_TEMPLATES)('$id has a graph that passes workflowGraphSchema', (template) => {
@@ -25,11 +32,6 @@ describe('WORKFLOW_TEMPLATES', () => {
     )
   })
 
-  // Phase C, slice C-6: a parking block (reply_buttons/collect_data/
-  // collect_reply/request_csat/let_assistant_answer/disable_composer) is only
-  // legal in a customer_facing workflow (see workflow.schemas.ts's
-  // classRestrictedNodeIssue) — every shipped template must already satisfy
-  // this, since the server refuses to save one that doesn't.
   it.each(WORKFLOW_TEMPLATES)('$id passes the class-rule check for parking blocks', (template) => {
     const issue = classRestrictedNodeIssue(template.payload.graph, template.payload.class)
     expect(issue).toBeNull()
@@ -40,7 +42,7 @@ describe('WORKFLOW_TEMPLATES', () => {
   })
 
   it.each(WORKFLOW_TEMPLATES.filter((t) => t.payload.triggerSettings))(
-    '$id triggerSettings passes triggerSettingsSchema (the same schema createWorkflowFn validates against)',
+    '$id triggerSettings passes triggerSettingsSchema',
     (template) => {
       const result = triggerSettingsSchema.safeParse(template.payload.triggerSettings)
       expect(
@@ -50,12 +52,8 @@ describe('WORKFLOW_TEMPLATES', () => {
     }
   )
 
-  // Bumped from 8 by the Phase C, slice C-5 launch templates (front-door
-  // triage bot, AI-first support, post-resolution follow-up) — see
-  // PHASE-C-CONVERSATIONAL-UX-BRIEF.md §9.
-  it('has between 4 and 12 templates', () => {
-    expect(WORKFLOW_TEMPLATES.length).toBeGreaterThanOrEqual(4)
-    expect(WORKFLOW_TEMPLATES.length).toBeLessThanOrEqual(12)
+  it('has the 12 refined templates', () => {
+    expect(WORKFLOW_TEMPLATES).toHaveLength(12)
   })
 
   it('gives every template a unique id', () => {
@@ -71,15 +69,21 @@ describe('WORKFLOW_TEMPLATES', () => {
 
   it('filters templates by category', () => {
     const popular = workflowTemplatesByCategory('popular')
-    expect(popular.length).toBeGreaterThan(0)
-    for (const template of popular) {
-      expect(template.categories).toContain('popular')
+    expect(popular.map((t) => t.id)).toEqual([
+      'front-door-triage-bot',
+      'route-by-issue-type',
+      'after-hours-front-door',
+      'rescue-approaching-breaches',
+      'handoff-triage',
+    ])
+  })
+
+  it('never ships a workspace ref as a bare literal', () => {
+    for (const template of WORKFLOW_TEMPLATES) {
+      expect(assertTemplateRefsAreSentinels(template), template.id).toEqual([])
     }
   })
 
-  // Templates can't ship real team/policy ids, so they use needs-setup
-  // placeholders. Those must read as unresolved step issues — that's what
-  // drives the list's "Needs setup" badge and the builder's issues chip.
   it('flags needs-setup placeholder refs as step issues', () => {
     for (const template of WORKFLOW_TEMPLATES) {
       const graphJson = JSON.stringify(template.payload.graph)
@@ -95,217 +99,195 @@ describe('WORKFLOW_TEMPLATES', () => {
     }
   })
 
-  it('has at least one template that ships needing setup', () => {
-    const withPlaceholders = WORKFLOW_TEMPLATES.filter((t) =>
-      JSON.stringify(t.payload.graph).includes(NEEDS_SETUP_PREFIX)
+  it('dropped the keyword-tag template that used a bare tag id', () => {
+    expect(WORKFLOW_TEMPLATES.find((t) => t.id === 'tag-billing-keywords')).toBeUndefined()
+  })
+})
+
+describe('AI attribute routing templates', () => {
+  function leaves(condition: unknown): { field: string; op: string; value?: unknown }[] {
+    if (!condition || typeof condition !== 'object') return []
+    if ('field' in condition) return [condition as { field: string; op: string; value?: unknown }]
+    const group = condition as { all?: unknown[]; any?: unknown[] }
+    return [...(group.all ?? []), ...(group.any ?? [])].flatMap((c) => leaves(c))
+  }
+
+  function allConditions(template: (typeof WORKFLOW_TEMPLATES)[number]): unknown[] {
+    const conditions: unknown[] = []
+    for (const node of template.payload.graph.nodes) {
+      if (node.type === 'condition') conditions.push(node.condition)
+      if (node.type === 'branch') conditions.push(...node.branches.map((b) => b.condition))
+    }
+    return conditions
+  }
+
+  it('route-by-issue-type branches on issue_type with unset eq placeholders', () => {
+    const template = WORKFLOW_TEMPLATES.find((t) => t.id === 'route-by-issue-type')
+    expect(template).toBeDefined()
+    const attrLeaves = allConditions(template!)
+      .flatMap((c) => leaves(c))
+      .filter((l) => l.field === 'conversation.attr.issue_type')
+    expect(attrLeaves.length).toBe(2)
+    for (const leaf of attrLeaves) {
+      expect(leaf.op).toBe('eq')
+      expect(leaf.value).toBe('')
+    }
+    expect(template!.payload.triggerType).toBe('assistant.handed_off')
+    expect(template!.payload.class).toBe('background')
+    const tree = graphToTree(template!.payload.graph)
+    expect(tree.ok).toBe(true)
+    if (tree.ok) {
+      expect(countSetupIssues(tree.value, 'background').branchOptions).toBe(2)
+    }
+  })
+
+  it('handoff-triage has a sentiment lane and an escalation-reason lane', () => {
+    const template = WORKFLOW_TEMPLATES.find((t) => t.id === 'handoff-triage')
+    expect(template).toBeDefined()
+    const fields = allConditions(template!)
+      .flatMap((c) => leaves(c))
+      .map((l) => l.field)
+    expect(fields).toContain('conversation.attr.sentiment')
+    expect(fields).toContain('conversation.attr.assistant_escalation_reason')
+    expect(template!.payload.triggerType).toBe('assistant.handed_off')
+    expect(template!.payload.class).toBe('background')
+  })
+
+  it('prioritize-by-ai-urgency reacts to the urgency attribute', () => {
+    const template = WORKFLOW_TEMPLATES.find((t) => t.id === 'prioritize-by-ai-urgency')
+    expect(template).toBeDefined()
+    expect(template!.payload.triggerType).toBe('conversation.attribute_changed')
+    expect(template!.payload.class).toBe('background')
+    const attrLeaves = allConditions(template!)
+      .flatMap((c) => leaves(c))
+      .filter((l) => l.field === 'conversation.attr.urgency')
+    expect(attrLeaves).toEqual([{ field: 'conversation.attr.urgency', op: 'eq', value: '' }])
+  })
+})
+
+describe('conversational and new primitives', () => {
+  const byId = (id: string) => {
+    const t = WORKFLOW_TEMPLATES.find((tpl) => tpl.id === id)
+    expect(t, `missing template ${id}`).toBeDefined()
+    return t!
+  }
+
+  it('front-door-triage-bot converts the bug path to a ticket', () => {
+    const t = byId('front-door-triage-bot')
+    expect(t.categories).toEqual(expect.arrayContaining(['popular', 'customer_facing']))
+    expect(t.payload.class).toBe('customer_facing')
+    const convert = t.payload.graph.nodes.find(
+      (n) => n.type === 'action' && n.action.type === 'convert_to_ticket'
     )
-    expect(withPlaceholders.length).toBeGreaterThan(0)
+    expect(convert).toBeDefined()
+    expect(
+      t.payload.graph.edges.some((e) => e.from === 'collect_bug_area' && e.to === 'convert_bug')
+    ).toBe(true)
   })
 
-  // AI-ATTRIBUTES-PARITY-SPEC.md Phase 2 routing templates: option ids are
-  // minted per-workspace at random (packages/db/drizzle/0178_ai_attribute_detection.sql),
-  // so a branch/condition that decides on one can only ship unset -- an `eq`
-  // leaf with an empty value, the degraded placeholder the builder already
-  // renders as unresolved (ruleSummary's `value || '…'` fallback). These
-  // assertions pin that shape so a future template author doesn't
-  // accidentally hardcode an option id that will never exist in a real
-  // workspace.
-  describe('AI attribute routing templates', () => {
-    function leaves(condition: unknown): { field: string; op: string; value?: unknown }[] {
-      if (!condition || typeof condition !== 'object') return []
-      if ('field' in condition) return [condition as { field: string; op: string; value?: unknown }]
-      const group = condition as { all?: unknown[]; any?: unknown[] }
-      return [...(group.all ?? []), ...(group.any ?? [])].flatMap((c) => leaves(c))
-    }
-
-    function allConditions(template: (typeof WORKFLOW_TEMPLATES)[number]): unknown[] {
-      const conditions: unknown[] = []
-      for (const node of template.payload.graph.nodes) {
-        if (node.type === 'condition') conditions.push(node.condition)
-        if (node.type === 'branch') conditions.push(...node.branches.map((b) => b.condition))
-      }
-      return conditions
-    }
-
-    it('route-by-issue-type branches on conversation.attr.issue_type with unset eq placeholders', () => {
-      const template = WORKFLOW_TEMPLATES.find((t) => t.id === 'route-by-issue-type')
-      expect(template).toBeDefined()
-      const attrLeaves = allConditions(template!)
-        .flatMap((c) => leaves(c))
-        .filter((l) => l.field === 'conversation.attr.issue_type')
-      expect(attrLeaves.length).toBeGreaterThanOrEqual(2)
-      for (const leaf of attrLeaves) {
-        expect(leaf.op).toBe('eq')
-        expect(leaf.value).toBe('')
-      }
-      expect(template!.payload.triggerType).toBe('assistant.handed_off')
-      expect(template!.benefit.toLowerCase()).toContain('ai attribute detection')
-    })
-
-    it('escalate-frustrated-customers gates on conversation.attr.sentiment with an unset eq placeholder', () => {
-      const template = WORKFLOW_TEMPLATES.find((t) => t.id === 'escalate-frustrated-customers')
-      expect(template).toBeDefined()
-      const attrLeaves = allConditions(template!)
-        .flatMap((c) => leaves(c))
-        .filter((l) => l.field === 'conversation.attr.sentiment')
-      expect(attrLeaves).toEqual([{ field: 'conversation.attr.sentiment', op: 'eq', value: '' }])
-      expect(template!.payload.triggerType).toBe('assistant.handed_off')
-      expect(template!.benefit.toLowerCase()).toContain('ai attribute detection')
-    })
-  })
-
-  // Phase C, slice C-5 launch templates (PHASE-C-CONVERSATIONAL-UX-BRIEF.md
-  // §9): the conversational block layer's flagship templates. Every one uses
-  // at least one new block kind, and every needs-setup ref (team/policy/tag/
-  // attribute) must still demand setup through the same gate the pre-existing
-  // action refs use.
-  describe('conversational block launch templates', () => {
-    const byId = (id: string) => {
-      const t = WORKFLOW_TEMPLATES.find((tpl) => tpl.id === id)
-      expect(t, `missing template ${id}`).toBeDefined()
-      return t!
-    }
-
-    it('front-door-triage-bot is the hero card: popular + customer_facing, customer_facing class', () => {
-      const t = byId('front-door-triage-bot')
-      expect(t.categories).toEqual(expect.arrayContaining(['popular', 'customer_facing']))
-      expect(t.payload.class).toBe('customer_facing')
-      const kinds = t.payload.graph.nodes.map((n) => n.type)
-      for (const expected of [
-        'message',
-        'reply_buttons',
-        'let_assistant_answer',
-        'collect_data',
-        'show_reply_time',
-      ]) {
-        expect(kinds, `expected a ${expected} node`).toContain(expected)
-      }
-    })
-
-    it('ai-first-support hands the turn to Quinn with an honest escalation path', () => {
-      const t = byId('ai-first-support')
-      expect(t.categories).toContain('customer_facing')
-      const kinds = t.payload.graph.nodes.map((n) => n.type)
-      expect(kinds).toContain('let_assistant_answer')
-      expect(kinds).toContain('request_csat')
-      // The escalated edge off let_assistant_answer is present and labeled.
-      const escalatedEdge = t.payload.graph.edges.find(
-        (e) => e.branch === 'escalated' && e.from === 'quinn_answer'
-      )
-      expect(escalatedEdge).toBeDefined()
-    })
-
-    it('post-resolution-follow-up is customer_facing (Phase C, slice C-6): its request_csat parks the run, so only a customer_facing run is reachable to resume it', () => {
-      const t = byId('post-resolution-follow-up')
-      expect(t.payload.class).toBe('customer_facing')
-      expect(t.payload.graph.nodes.some((n) => n.type === 'request_csat')).toBe(true)
-    })
-
-    it('auto-close-idle stays background: it never uses a parking block kind', () => {
-      const t = byId('auto-close-idle')
-      expect(t.payload.class).toBe('background')
-      const parkingKinds = new Set([
-        'reply_buttons',
-        'collect_data',
-        'collect_reply',
-        'request_csat',
-        'let_assistant_answer',
-        'disable_composer',
-      ])
-      expect(t.payload.graph.nodes.some((n) => parkingKinds.has(n.type))).toBe(false)
-    })
-
-    it.each(['front-door-triage-bot', 'ai-first-support'])(
-      '%s: every needs-setup ref is flagged by the issues gate',
-      (id) => {
-        const t = byId(id)
-        const tree = graphToTree(t.payload.graph)
-        expect(tree.ok, tree.ok ? undefined : tree.error).toBe(true)
-        if (!tree.ok) return
-        const issues = collectStepIssues(tree.value)
-        expect(issues.size).toBeGreaterThan(0)
-      }
+  it('ai-first-support hands the turn to Quinn with an honest escalation path', () => {
+    const t = byId('ai-first-support')
+    expect(t.categories).toContain('customer_facing')
+    const kinds = t.payload.graph.nodes.map((n) => n.type)
+    expect(kinds).toContain('let_assistant_answer')
+    expect(kinds).toContain('request_csat')
+    const escalatedEdge = t.payload.graph.edges.find(
+      (e) => e.branch === 'escalated' && e.from === 'quinn_answer'
     )
+    expect(escalatedEdge).toBeDefined()
+  })
 
-    it('post-resolution-follow-up has no workspace refs to set up — ready to go live as-is', () => {
-      const t = byId('post-resolution-follow-up')
-      const tree = graphToTree(t.payload.graph)
-      expect(tree.ok, tree.ok ? undefined : tree.error).toBe(true)
-      if (!tree.ok) return
-      expect(collectStepIssues(tree.value).size).toBe(0)
-    })
+  it('post-resolution-follow-up is customer_facing because request_csat parks', () => {
+    const t = byId('post-resolution-follow-up')
+    expect(t.payload.class).toBe('customer_facing')
+    expect(t.payload.graph.nodes.some((n) => n.type === 'request_csat')).toBe(true)
+    const tree = graphToTree(t.payload.graph)
+    expect(tree.ok).toBe(true)
+    if (tree.ok) expect(collectStepIssues(tree.value).size).toBe(0)
+  })
 
-    it('auto-close-idle now includes the nudge message before closing', () => {
-      const t = byId('auto-close-idle')
-      expect(t.payload.graph.nodes.some((n) => n.type === 'message')).toBe(true)
-      expect(t.payload.graph.nodes.map((n) => n.type)).toContain('wait')
+  it('auto-close-idle uses the unresponsive-customer trigger', () => {
+    const t = byId('auto-close-idle')
+    expect(t.payload.class).toBe('background')
+    expect(t.payload.triggerType).toBe('conversation.customer_unresponsive')
+    expect(t.payload.triggerSettings?.inactivityMinutes).toBe(3 * 24 * 60)
+    expect(t.payload.graph.nodes.some((n) => n.type === 'message')).toBe(true)
+    expect(t.payload.graph.nodes.map((n) => n.type)).toContain('wait')
+  })
+
+  it('after-hours-front-door uses office hours, reply time, and email capture', () => {
+    const t = byId('after-hours-front-door')
+    expect(t.payload.class).toBe('customer_facing')
+    const kinds = t.payload.graph.nodes.map((n) => n.type)
+    expect(kinds).toContain('show_reply_time')
+    expect(kinds).toContain('collect_data')
+    const hours = t.payload.graph.nodes.find(
+      (n) => n.type === 'condition' && n.id === 'outside_hours'
+    )
+    expect(hours && hours.type === 'condition' && hours.condition).toEqual({
+      field: 'office_hours',
+      op: 'eq',
+      value: false,
     })
   })
 
-  // PHASE-C-CONVERSATIONAL-UX-BRIEF.md §9.5 / WORKFLOWS-GAP-ANALYSIS.md Phase T:
-  // the VIP concierge lane, unblocked once triggerSettings.audience and
-  // company.attr./person.attr. condition fields landed.
-  describe('vip-concierge-lane', () => {
-    const byId = (id: string) => {
-      const t = WORKFLOW_TEMPLATES.find((tpl) => tpl.id === id)
-      expect(t, `missing template ${id}`).toBeDefined()
-      return t!
-    }
+  it('rescue-approaching-breaches uses the native SLA trigger', () => {
+    const t = byId('rescue-approaching-breaches')
+    expect(t.payload.triggerType).toBe('sla.approaching_breach')
+    expect(t.payload.class).toBe('background')
+  })
 
-    it('is customer_facing, triggers on conversation.created, and is gallery-tagged Customer facing', () => {
-      const t = byId('vip-concierge-lane')
-      expect(t.payload.class).toBe('customer_facing')
-      expect(t.payload.triggerType).toBe('conversation.created')
-      expect(t.categories).toContain('customer_facing')
-    })
+  it('close-the-loop-ticket fires when a linked ticket closes', () => {
+    const t = byId('close-the-loop-ticket')
+    expect(t.payload.triggerType).toBe('ticket.status_changed')
+    expect(t.payload.triggerSettings?.ticketStatusCategory).toBe('closed')
+    expect(t.payload.graph.nodes.some((n) => n.type === 'message')).toBe(true)
+    expect(
+      t.payload.graph.nodes.some((n) => n.type === 'action' && n.action.type === 'close')
+    ).toBe(true)
+  })
 
-    it('ships an audience condition gating on company.attr.plan', () => {
-      const t = byId('vip-concierge-lane')
-      const audience = t.payload.triggerSettings?.audience as
-        | { field: string; op: string; value?: unknown }
-        | undefined
-      expect(audience).toBeDefined()
-      expect(audience?.field).toBe('company.attr.plan')
-      expect(audience?.op).toBe('eq')
-      // Unlike the AI-attribute routing templates' unset ('') placeholders,
-      // this ships a real-looking example value -- there is no needs-setup-
-      // style gate for an audience predicate (collectStepIssues never reads
-      // triggerSettings at all), so an empty value here would silently never
-      // surface as an unresolved issue. The step summary calls out that this
-      // is an example to adjust, not a sentinel.
-      expect(audience?.value).toBe('enterprise')
-      expect(t.stepsSummary.toLowerCase()).toContain('adjust')
-    })
+  it('route-by-keywords is the renamed no-AI fallback', () => {
+    const t = byId('route-by-keywords')
+    expect(t.title).toBe('Route by keywords')
+    expect(t.payload.triggerType).toBe('conversation.created')
+  })
+})
 
-    it('scopes the trigger to the messenger channel', () => {
-      const t = byId('vip-concierge-lane')
-      expect(t.payload.triggerSettings?.channels).toEqual(['messenger'])
-    })
+describe('vip-concierge-lane', () => {
+  const t = () => WORKFLOW_TEMPLATES.find((tpl) => tpl.id === 'vip-concierge-lane')!
 
-    it('graph sets priority high, applies SLA, assigns a team, then sends the concierge greeting', () => {
-      const t = byId('vip-concierge-lane')
-      const kinds = t.payload.graph.nodes.map((n) => n.type)
-      expect(kinds).toEqual(['trigger', 'action', 'action', 'action', 'message'])
-      const actions = t.payload.graph.nodes
-        .filter((n) => n.type === 'action')
-        .map(
-          (n) =>
-            (n as Extract<(typeof t.payload.graph.nodes)[number], { type: 'action' }>).action.type
-        )
-      expect(actions).toEqual(['set_priority', 'apply_sla', 'assign_team'])
-      const message = t.payload.graph.nodes.find((n) => n.type === 'message')
-      const text = JSON.stringify(message)
-      expect(text).toContain('{first_name|there}')
-      expect(text.toLowerCase()).toContain('priority line')
-    })
+  it('is customer_facing on conversation.created', () => {
+    expect(t().payload.class).toBe('customer_facing')
+    expect(t().payload.triggerType).toBe('conversation.created')
+    expect(t().categories).toContain('customer_facing')
+  })
 
-    it('every needs-setup ref (SLA policy, team) is flagged by the issues gate', () => {
-      const t = byId('vip-concierge-lane')
-      const tree = graphToTree(t.payload.graph)
-      expect(tree.ok, tree.ok ? undefined : tree.error).toBe(true)
-      if (!tree.ok) return
-      const issues = collectStepIssues(tree.value)
-      expect(issues.size).toBeGreaterThan(0)
-    })
+  it('ships an audience condition gating on company.attr.plan', () => {
+    const audience = t().payload.triggerSettings?.audience as
+      | { field: string; op: string; value?: unknown }
+      | undefined
+    expect(audience).toEqual({ field: 'company.attr.plan', op: 'eq', value: 'enterprise' })
+    expect(t().benefit.toLowerCase()).toContain('adjust')
+  })
+})
+
+describe('templateGalleryChips', () => {
+  it('hides Quinn/Inbox AI prereqs when the workspace already has them', () => {
+    const front = WORKFLOW_TEMPLATES.find((t) => t.id === 'front-door-triage-bot')!
+    expect(templateNeedsQuinn(front)).toBe(true)
+    const off = templateGalleryChips(front, { quinnOn: false, inboxAiOn: false })
+    expect(off.some((c) => c.label === 'Needs Quinn on')).toBe(true)
+    const on = templateGalleryChips(front, { quinnOn: true, inboxAiOn: true })
+    expect(on.some((c) => c.label === 'Needs Quinn on')).toBe(false)
+    expect(on.some((c) => c.label === 'Needs Inbox AI')).toBe(false)
+  })
+
+  it('marks route-by-issue-type as needing Inbox AI and 2 options', () => {
+    const t = WORKFLOW_TEMPLATES.find((tpl) => tpl.id === 'route-by-issue-type')!
+    expect(templateNeedsInboxAi(t)).toBe(true)
+    const chips = templateGalleryChips(t, { quinnOn: true, inboxAiOn: false })
+    expect(chips.some((c) => c.label === 'Needs Inbox AI')).toBe(true)
+    expect(chips.some((c) => c.label === '2 options to pick')).toBe(true)
   })
 })

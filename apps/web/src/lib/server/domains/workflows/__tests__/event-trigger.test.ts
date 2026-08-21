@@ -362,6 +362,8 @@ describe('DISPATCHABLE_TRIGGER_TYPES stays in sync with the switch', () => {
         })
       case 'assistant.handed_off':
         return withData(type, { conversationId: 'conversation_1', reason: 'low_confidence' })
+      case 'assistant.resolved':
+        return withData(type, { conversationId: 'conversation_1', outcome: 'resolved_confirmed' })
       case 'conversation.customer_unresponsive':
       case 'conversation.teammate_unresponsive':
         return withData(type, {

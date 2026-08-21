@@ -1,25 +1,24 @@
 /**
- * The step palette: shown in the inspector when a "+" connector is active
- * instead of a step. A search box filters by label; groups are SEND and
- * COLLECT (the 8 conversational block kinds, Phase C slice C-5) above the
- * pre-existing Logic (condition/branch/wait) and Actions (all 9 action
- * types) groups, per the design brief's §4/§5.12 — each icon tinted by the
- * same tone the canvas card for that step kind uses. Clicking an item
- * inserts that step at the active insertion point and selects it.
+ * The step palette: shown in the inspector when a "+" connector is active.
+ * Search filters by label. Groups are Send, Collect, Logic, and Actions;
+ * each icon uses the same tone as that step's card.
  */
 import { useState, type ComponentType } from 'react'
 import { ClockIcon, FunnelIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'
+import { MENU_LABEL, MENU_ROW } from '@/components/ui/menu'
 import { ACTION_ICONS, BLOCK_ICONS, TONE_TILE } from '../step-visuals'
-import { ACTION_TONE, type Tone } from '../flow-layout'
+import { ACTION_TONE, type Tone } from '../step-content'
 import {
   ACTION_LABELS,
   ACTION_TYPES,
   BLOCK_STEP_LABELS,
   COLLECT_BLOCK_KINDS,
+  PARKING_BLOCK_KINDS,
   SEND_BLOCK_KINDS,
   type ActionType,
   type BlockStepKind,
   type TreeStep,
+  type WorkflowClassValue,
 } from '../../workflow-graph'
 
 interface PaletteItem {
@@ -27,21 +26,34 @@ interface PaletteItem {
   icon: ComponentType<{ className?: string }>
   tone: Tone
   onSelect: () => void
+  disabled?: boolean
+  reason?: string
 }
 
 export function StepPalette({
   onInsert,
+  workflowClass = 'customer_facing',
 }: {
   onInsert: (kind: TreeStep['kind'], actionType?: ActionType) => void
+  workflowClass?: WorkflowClassValue
 }) {
   const [query, setQuery] = useState('')
 
-  const blockItem = (kind: BlockStepKind): PaletteItem => ({
-    label: BLOCK_STEP_LABELS[kind],
-    icon: BLOCK_ICONS[kind],
-    tone: 'pink',
-    onSelect: () => onInsert(kind),
-  })
+  const blockItem = (kind: BlockStepKind): PaletteItem => {
+    const parkingBlocked = workflowClass !== 'customer_facing' && PARKING_BLOCK_KINDS.has(kind)
+    return {
+      label: BLOCK_STEP_LABELS[kind],
+      icon: BLOCK_ICONS[kind],
+      tone: 'pink',
+      onSelect: () => {
+        if (!parkingBlocked) onInsert(kind)
+      },
+      disabled: parkingBlocked,
+      reason: parkingBlocked
+        ? "Customer-facing workflows only: a background run can't wait for the reply"
+        : undefined,
+    }
+  }
   const send: PaletteItem[] = SEND_BLOCK_KINDS.map(blockItem)
   const collect: PaletteItem[] = COLLECT_BLOCK_KINDS.map(blockItem)
   const logic: PaletteItem[] = [
@@ -97,23 +109,30 @@ export function StepPalette({
 function PaletteGroup({ label, items }: { label: string; items: PaletteItem[] }) {
   return (
     <div>
-      <div className="mb-1 px-1 text-[10.5px] font-semibold tracking-wide text-muted-foreground uppercase">
-        {label}
-      </div>
+      <div className={`mb-1 px-1 ${MENU_LABEL}`}>{label}</div>
       <div className="space-y-0.5">
         {items.map((item) => (
           <button
             key={item.label}
             type="button"
             onClick={item.onSelect}
-            className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left text-xs hover:bg-muted/60"
+            disabled={item.disabled}
+            title={item.reason}
+            className={`${MENU_ROW} w-full text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <span
               className={`flex size-6 shrink-0 items-center justify-center rounded-md ${TONE_TILE[item.tone]}`}
             >
               <item.icon className="size-3.5" />
             </span>
-            {item.label}
+            <span className="min-w-0 flex-1">
+              {item.label}
+              {item.reason && (
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                  {item.reason}
+                </span>
+              )}
+            </span>
           </button>
         ))}
       </div>

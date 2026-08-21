@@ -56,6 +56,7 @@ import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
 import { logger } from '@/lib/server/logger'
 import { listConversationAttributes } from './conversation-attribute.service'
 import { setConversationAttribute } from './set-attribute.service'
+import { maybeCloseConversationIfSpamClassified } from './close-if-spam'
 import type { ConversationAttribute } from './conversation-attribute.types'
 import {
   runClassificationCall,
@@ -236,6 +237,7 @@ export async function classifyConversationAttributes(
     const defsByKey = new Map(definitions.map((d) => [d.key, d]))
     const outcomes: ClassificationOutcome[] = []
     const appliedChanges: AppliedChange[] = []
+    const appliedForClose: { key: string; optionLabel: string }[] = []
 
     for (const raw of results) {
       const def = defsByKey.get(raw.key)
@@ -261,10 +263,12 @@ export async function classifyConversationAttributes(
           ? '(cleared)'
           : ((def.options ?? []).find((o) => o.id === optionId)?.label ?? optionId)
       appliedChanges.push({ label: def.label, optionLabel, reasoning })
+      appliedForClose.push({ key: def.key, optionLabel })
     }
 
     if (appliedChanges.length > 0) {
       await recordClassificationNote(conversationId, appliedChanges)
+      await maybeCloseConversationIfSpamClassified(conversationId, appliedForClose)
     }
 
     return outcomes

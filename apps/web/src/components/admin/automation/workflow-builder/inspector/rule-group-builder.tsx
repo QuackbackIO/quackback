@@ -27,7 +27,7 @@
  * Conversation attribute / Person attribute / Company attribute registries)
  * via workflow-graph.ts's STATIC_CONDITION_FIELD_GROUPS.
  */
-import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, SparklesIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +78,18 @@ import {
 
 const DEFAULT_ADVANCED_FALLBACK =
   "This condition nests groups the visual editor can't show. Use JSON mode to change it."
+
+function AiFieldBadge() {
+  return (
+    <span
+      aria-label="AI"
+      className="inline-flex items-center gap-0.5 rounded-md bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400"
+    >
+      <SparklesIcon className="size-2.5" aria-hidden />
+      AI
+    </span>
+  )
+}
 
 export function RuleGroupBuilder({
   subject,
@@ -317,6 +329,10 @@ function RuleRow({
     isPersonAttributeField(rule.field) ||
     isCompanyAttributeField(rule.field)
   const unknownAttributeKey = isDynamicAttributeField && meta.unresolved
+  const selectedAiAttribute = isAttributeField(rule.field)
+    ? attributeItems.find((d) => attributeFieldForKey(d.key) === rule.field)
+    : undefined
+  const showAiHint = Boolean(selectedAiAttribute?.aiDetect)
 
   const setField = (field: ConditionField) => {
     if (isAttributeField(field)) {
@@ -399,6 +415,7 @@ function RuleRow({
                 {attributeItems.map((d) => (
                   <SelectItem key={d.key} value={attributeFieldForKey(d.key)}>
                     {d.label}
+                    {d.aiDetect ? <AiFieldBadge /> : null}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -439,6 +456,11 @@ function RuleRow({
           <XMarkIcon className="size-3.5" />
         </button>
       </div>
+      {showAiHint && (
+        <p className="text-[11px] text-muted-foreground">
+          Classified by Quinn when conversations settle. Requires Inbox AI.
+        </p>
+      )}
       <div className="flex items-center gap-1.5">
         <Select value={rule.op} onValueChange={(op) => setOp(op as ConditionOperator)}>
           <SelectTrigger

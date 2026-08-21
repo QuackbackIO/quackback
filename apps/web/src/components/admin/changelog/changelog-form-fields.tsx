@@ -7,7 +7,7 @@ import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import type { JSONContent } from '@tiptap/react'
 
 interface ChangelogFormFieldsProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   form: UseFormReturn<any>
   contentJson: JSONContent | null
   onContentChange: (json: JSONContent, html: string, markdown: string) => void

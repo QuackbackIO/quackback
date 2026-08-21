@@ -1,8 +1,8 @@
 /**
- * Postgres-backed fixed-window rate limiter for API authentication, shared
- * across replicas. Built on the shared `utils/rate-bucket` primitive
- * so this limiter shares plumbing with the sign-in
- * limiters rather than re-implementing bucket bookkeeping.
+ * Fixed-window rate limiter for API authentication, shared across replicas
+ * because the buckets are rows. Built on the shared `utils/rate-bucket`
+ * primitive so this limiter shares plumbing with the sign-in limiters rather
+ * than re-implementing bucket bookkeeping.
  *
  * Forwarding headers are ignored unless TRUSTED_PROXY_HOPS is configured;
  * see getClientIp() below for the two resolution modes.
@@ -38,7 +38,7 @@ const rateLimitKey = (ip: string): string => `api:rl:${ip}`
  *
  * The counter is keyed by IP only (not mode), so import-mode and
  * normal-mode calls for the same IP share one count — only the cap
- * chosen per call differs. Fails open on store errors.
+ * chosen per call differs. Fails open on Redis errors.
  */
 export async function checkRateLimit(
   ip: string,
@@ -56,7 +56,7 @@ export async function checkRateLimit(
   const spec: RateBucketSpec = { key: rateLimitKey(ip), windowSeconds: WINDOW_SECONDS }
   const { count } = await incrementBucket(spec)
 
-  // Store error → fail open.
+  // Redis error → fail open.
   if (count === null) return { allowed: true, remaining: maxRequests }
 
   if (count > maxRequests) {

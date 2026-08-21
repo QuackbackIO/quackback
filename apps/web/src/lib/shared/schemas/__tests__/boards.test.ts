@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { accessForPreset } from '../boards'
+import { accessForPreset, normalizeBoardAccess } from '../boards'
 
 describe('accessForPreset', () => {
   it('public preset: view=anonymous, vote/comment/submit=authenticated, segments empty, moderation all inherit', () => {
@@ -22,6 +22,20 @@ describe('accessForPreset', () => {
     expect(a.vote).toBe('team')
     expect(a.comment).toBe('team')
     expect(a.submit).toBe('team')
+    expect(a.segments).toEqual({ view: [], vote: [], comment: [], submit: [] })
+    expect(a.moderation).toEqual({
+      anonPosts: 'inherit',
+      signedPosts: 'inherit',
+      comments: 'inherit',
+    })
+  })
+})
+
+describe('normalizeBoardAccess', () => {
+  it('fills leftover view+submit rows with inherit moderation', () => {
+    const a = normalizeBoardAccess({ view: 'anonymous', submit: 'authenticated' })
+    expect(a.vote).toBe('authenticated')
+    expect(a.comment).toBe('authenticated')
     expect(a.segments).toEqual({ view: [], vote: [], comment: [], submit: [] })
     expect(a.moderation).toEqual({
       anonPosts: 'inherit',

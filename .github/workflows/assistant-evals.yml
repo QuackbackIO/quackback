@@ -17,6 +17,9 @@ concurrency:
   group: assistant-evals-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   evals:
     # Run on dispatch/schedule always; on PRs only when the "evals" label is present.

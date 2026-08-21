@@ -17,6 +17,10 @@ export interface LaunchPermissions {
 export interface LaunchStatus {
   hasBoards: boolean
   hasPublicBoard?: boolean
+  publicBoardId?: string | null
+  publicBoardSlug?: string | null
+  publicBoardPath?: string | null
+  publicBoardLinkCopiedAt?: string | null
   hasInternalBoard?: boolean
   boardCount?: number
   maxBoards?: number | null
@@ -49,7 +53,8 @@ export type LaunchTaskHref =
   | '/admin/settings/members'
   | '/admin/settings/branding'
   | '/admin/settings/widget'
-  | '/admin/settings/conversations'
+  | '/admin/settings/widget/install'
+  | '/admin/settings/channels/messenger'
   | '/admin/settings/integrations'
   | '/admin/help-center'
   | '/admin/status'
@@ -147,9 +152,9 @@ export function buildLaunchTasks(
   const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
   const permissions = status.permissions ?? ALLOW_ALL
   const features = status.features ?? {
-    supportInbox: true,
-    helpCenter: true,
-    statusPage: true,
+    supportInbox: false,
+    helpCenter: false,
+    statusPage: false,
     integrations: true,
   }
   const hasGoalBoard =
@@ -175,34 +180,42 @@ export function buildLaunchTasks(
     actionLabel: 'Create board',
     completedLabel: 'View boards',
   }
-  const widgetInstalled: LaunchTaskInput = {
-    id: outcome === 'customer_support' ? 'install-messenger' : 'add-to-site',
-    title: outcome === 'customer_support' ? 'Install Messenger' : 'Share or install feedback',
-    description: status.hasWidgetEnabled
-      ? status.widgetLastSeenAt
-        ? `Installed on ${status.widgetOriginHost ?? 'your site'}.`
-        : 'Add the widget to your website so customers can reach you.'
-      : 'Set up the widget, then add it to your website.',
-    completed: status.hasWidgetInstalled === true,
-    canAct: permissions.settingsManage,
+  const distributionComplete =
+    Boolean(status.publicBoardLinkCopiedAt) ||
+    status.hasWidgetInstalled === true ||
+    status.hasFirstWin === true
+  const distributeFeedback: LaunchTaskInput = {
+    id: 'distribute-feedback',
+    title: 'Share your feedback board',
+    description: status.publicBoardLinkCopiedAt
+      ? 'Your public board link has been copied.'
+      : status.hasWidgetInstalled
+        ? `Your feedback widget was found on ${status.widgetOriginHost ?? 'your site'}.`
+        : 'Copy the public board link and share it with customers.',
+    completed: distributionComplete,
+    canAct: permissions.boardManage && hasGoalBoard,
+    unavailableReason: hasGoalBoard ? undefined : 'Create a public feedback board first.',
     classification: 'prerequisite',
-    href: '/admin/settings/widget',
-    actionLabel: 'Install widget',
-    completedLabel: 'View widget setup',
+    actionLabel: 'Copy board link',
+    completedLabel: 'Board distributed',
   }
-  const messenger: LaunchTaskInput = {
-    id: 'messenger',
-    title: 'Configure Messenger',
-    description: 'Choose how customers can start and continue conversations.',
-    completed: Boolean(status.hasMessengerEnabled),
+  const connectMessenger: LaunchTaskInput = {
+    id: 'connect-messenger',
+    title: 'Connect Messenger',
+    description: status.hasWidgetInstalled
+      ? `Messenger was found on ${status.widgetOriginHost ?? 'your site'}.`
+      : status.hasMessengerEnabled
+        ? 'Messenger is configured. Add the SDK to your website to connect it.'
+        : 'Enable Messenger and add the SDK to your website.',
+    completed: status.hasWidgetInstalled === true,
     canAct: permissions.settingsManage,
     unavailableReason: features.supportInbox
       ? undefined
       : 'Customer support is turned off for this workspace. Ask a workspace admin to enable it.',
     classification: 'prerequisite',
-    href: '/admin/settings/widget',
-    actionLabel: 'Configure',
-    completedLabel: 'Manage Messenger',
+    href: '/admin/settings/widget/install',
+    actionLabel: 'Connect Messenger',
+    completedLabel: 'View installation',
   }
   const helpDraft: LaunchTaskInput = {
     id: 'help-article',
@@ -224,7 +237,7 @@ export function buildLaunchTasks(
     description: 'Bring in someone to help respond, publish, or manage feedback.',
     completed: status.memberCount > 1,
     canAct: permissions.memberManage,
-    classification: 'prerequisite',
+    classification: outcome === 'internal' ? 'prerequisite' : 'polish',
     href: '/admin/settings/members',
     actionLabel: 'Invite teammate',
     completedLabel: 'Manage team',
@@ -273,7 +286,7 @@ export function buildLaunchTasks(
   let inputs: LaunchTaskInput[]
   switch (outcome) {
     case 'customer_support':
-      inputs = [messenger, widgetInstalled, invite, branding, integration, firstWin]
+      inputs = [connectMessenger, invite, branding, integration, firstWin]
       break
     case 'help_center':
       inputs = [helpDraft, invite, branding, firstWin]
@@ -283,7 +296,7 @@ export function buildLaunchTasks(
       break
     case 'product_feedback':
     default:
-      inputs = [board, widgetInstalled, invite, branding, integration, firstWin]
+      inputs = [board, distributeFeedback, invite, branding, integration, firstWin]
       break
   }
 

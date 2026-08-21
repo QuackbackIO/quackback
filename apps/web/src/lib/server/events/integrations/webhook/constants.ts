@@ -123,6 +123,11 @@ export const WEBHOOK_EVENT_CONFIG = [
     description: 'When the AI assistant hands a conversation to the team',
   },
   {
+    id: 'assistant.resolved',
+    label: 'Assistant Resolved',
+    description: 'When the AI assistant settles a conversation without handing off',
+  },
+  {
     id: 'conversation.note_mentioned',
     label: 'Note Mention',
     description: 'When an internal note @-mentions a teammate (private content — opt-in)',

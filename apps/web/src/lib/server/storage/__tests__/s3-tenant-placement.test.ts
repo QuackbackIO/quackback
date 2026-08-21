@@ -1,12 +1,9 @@
 /**
  * Storage placement under a workspace scope.
  *
- * `contentJson` stores ABSOLUTE image URLs, so the origin a public URL is built
- * from is baked permanently into post, changelog and article content. Under
- * pooling the process-wide `S3_PUBLIC_URL` / `BASE_URL` are the wrong source:
- * they belong to whichever install configured the environment, and the
- * request's own host belongs to whichever hostname the visitor happened to
- * use. The workspace record pins one origin; that is the one that must win.
+ * Persist stores host-independent `/api/storage/<key>` refs. Off-host leaves
+ * absolutize from the pinned system-host publicUrl, never from the friendly
+ * platform URL or the process-wide `S3_PUBLIC_URL` / `BASE_URL`.
  */
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 
@@ -68,12 +65,14 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 
 const {
   getPublicUrlOrNull,
+  getEmailSafeUrl,
   getStorageSigningSecret,
   isS3Configured,
   isS3Usable,
   StorageUnavailableError,
   uploadObject,
 } = await import('../s3')
+const { absolutizeOffHostAssetUrl } = await import('../asset-url')
 const { withWorkspace } = await import('@/lib/server/__tests__/workspace-scope')
 
 const BYTES = Buffer.from([1, 2, 3])
@@ -107,40 +106,71 @@ const NO_STORAGE = {
 } as const
 
 describe('public URLs', () => {
-  it('uses the workspace pinned publicUrl, not the environment CDN', () => {
+  it('persists a host-independent /api/storage ref, not the environment CDN', () => {
     const url = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY))
 
-    expect(url).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
+    expect(url).toBe(`/api/storage/${PUBLIC_KEY}`)
+    expect(url).not.toContain('env-cdn.example.net')
+    expect(url).not.toContain('assets-workspace-alpha')
+  })
+
+  it('keeps persist relative after a friendly URL rename', () => {
+    const url = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), {
+      storage: { publicUrl: 'https://ws-abc123.quackback.co.uk/api/storage' },
+      baseUrl: 'https://acme.quackback.co.uk',
+    })
+
+    expect(url).toBe(`/api/storage/${PUBLIC_KEY}`)
+    expect(url).not.toContain('acme.quackback.co.uk')
     expect(url).not.toContain('env-cdn.example.net')
   })
 
-  it('gives two workspaces different origins for the same key', () => {
+  it('absolutizes off-host leaves from the pinned system host after a rename', () => {
+    const url = withWorkspace(
+      'workspace-alpha',
+      () => absolutizeOffHostAssetUrl(`/api/storage/${PUBLIC_KEY}`),
+      {
+        storage: { publicUrl: 'https://ws-abc123.quackback.co.uk/api/storage' },
+        baseUrl: 'https://acme.quackback.co.uk',
+      }
+    )
+
+    expect(url).toBe(`https://ws-abc123.quackback.co.uk/api/storage/${PUBLIC_KEY}`)
+    expect(url).not.toContain('acme.quackback.co.uk')
+    expect(url).not.toContain('env-cdn.example.net')
+  })
+
+  it('gives two workspaces the same persist form for the same key', () => {
     const alpha = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY))
     const bravo = withWorkspace('workspace-bravo', () => getPublicUrlOrNull(PUBLIC_KEY))
 
-    expect(alpha).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
-    expect(bravo).toBe(`https://assets-workspace-bravo.example.com/${PUBLIC_KEY}`)
+    expect(alpha).toBe(`/api/storage/${PUBLIC_KEY}`)
+    expect(bravo).toBe(`/api/storage/${PUBLIC_KEY}`)
   })
 
-  it('falls back to the workspace base URL, never the environment BASE_URL', () => {
+  it('does not fall back to the environment BASE_URL for persist', () => {
     const url = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), {
       storage: { publicUrl: '' },
     })
 
-    expect(url).toBe(`https://workspace-alpha.example.com/api/storage/${PUBLIC_KEY}`)
+    expect(url).toBe(`/api/storage/${PUBLIC_KEY}`)
     expect(url).not.toContain('env-app.example.net')
   })
 
-  it('still uses the environment values with no workspace scope', () => {
-    expect(getPublicUrlOrNull(PUBLIC_KEY)).toBe(`https://env-cdn.example.net/${PUBLIC_KEY}`)
+  it('still persists a relative ref with no workspace scope', () => {
+    expect(getPublicUrlOrNull(PUBLIC_KEY)).toBe(`/api/storage/${PUBLIC_KEY}`)
   })
 
-  it('routes private keys through the workspace origin with a read capability', () => {
+  it('routes private keys through /api/storage with a read capability', () => {
     const url = withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PRIVATE_KEY), {
       secrets: SHARED_SECRET,
     })
 
-    expect(url).toContain(`https://workspace-alpha.example.com/api/storage/${PRIVATE_KEY}?read=`)
+    expect(url).toBe(
+      `/api/storage/${PRIVATE_KEY}?read=${new URL(url!, 'https://placeholder.invalid').searchParams.get('read')}`
+    )
+    expect(url).toContain(`/api/storage/${PRIVATE_KEY}?read=`)
+    expect(url).not.toContain('workspace-alpha.example.com')
   })
 
   it('signs a private key differently per workspace even on one shared secret', () => {
@@ -151,7 +181,8 @@ describe('public URLs', () => {
       secrets: SHARED_SECRET,
     })
 
-    const sigOf = (url: string | null) => new URL(url!).searchParams.get('read')
+    const sigOf = (url: string | null) =>
+      new URL(url!, 'https://placeholder.invalid').searchParams.get('read')
     expect(sigOf(alpha)).toBeTruthy()
     expect(sigOf(alpha)).not.toBe(sigOf(bravo))
   })
@@ -159,11 +190,23 @@ describe('public URLs', () => {
   it('leaves the unscoped read signature byte-identical to the historical one', () => {
     // HMAC-SHA256('env-secret-key', 'read|<key>') truncated to 32 hex chars —
     // the message as it stood before workspaces. These signatures are embedded in
-    // absolute URLs already written into stored content, so a changed message
-    // is a fleet of dead asset links, not a migration.
+    // stored refs already written into content, so a changed message is a fleet
+    // of dead asset links, not a migration.
     const url = getPublicUrlOrNull(PRIVATE_KEY)
 
-    expect(new URL(url!).searchParams.get('read')).toBe('e5d708d10b754b004667a83a235584f6')
+    expect(new URL(url!, 'https://placeholder.invalid').searchParams.get('read')).toBe(
+      'e5d708d10b754b004667a83a235584f6'
+    )
+  })
+
+  it('email-safe URLs absolutize from the system host and force the proxy hint', () => {
+    const url = withWorkspace('workspace-alpha', () => getEmailSafeUrl(PUBLIC_KEY), {
+      storage: { publicUrl: 'https://ws-abc123.quackback.co.uk/api/storage' },
+      baseUrl: 'https://acme.quackback.co.uk',
+    })
+
+    expect(url).toBe(`https://ws-abc123.quackback.co.uk/api/storage/${PUBLIC_KEY}?email=1`)
+    expect(url).not.toContain('acme.quackback.co.uk')
   })
 })
 
@@ -195,7 +238,7 @@ describe('placement', () => {
       withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), {
         secrets: NO_STORAGE,
       })
-    ).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
+    ).toBe(`/api/storage/${PUBLIC_KEY}`)
   })
 
   it('is NOT usable without resolved credentials, though the bucket is addressable', () => {
@@ -279,7 +322,7 @@ describe('credentials', () => {
       withWorkspace('workspace-alpha', () => getPublicUrlOrNull(PUBLIC_KEY), {
         secrets: NO_STORAGE,
       })
-    ).toBe(`https://assets-workspace-alpha.example.com/${PUBLIC_KEY}`)
+    ).toBe(`/api/storage/${PUBLIC_KEY}`)
   })
 
   it('still reads the environment keys with no workspace scope', () => {

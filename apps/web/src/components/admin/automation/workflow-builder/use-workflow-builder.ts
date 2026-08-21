@@ -4,7 +4,7 @@
  * the current selection (a node to edit, an insertion point to fill, or
  * nothing), dirty tracking, and the explicit Save / Set live / Pause actions.
  * One hook so the top bar, outline, canvas, and inspector all read and mutate
- * the same state instead of threading a dozen props between siblings.
+ * the same tree/graph domain instead of threading a dozen props between siblings.
  */
 import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'

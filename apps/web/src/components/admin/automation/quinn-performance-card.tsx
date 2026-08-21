@@ -2,9 +2,8 @@
  * Quinn performance headline: involvement,
  * resolution, and escalation rates over the last 30 days, the
  * confirmed-vs-assumed resolution split, and actions taken via tool calls.
- * Read-only reporting — always visible regardless of the assistantTools
- * flag; gated server-side on analytics.view like the rest of the analytics
- * surface.
+ * Read-only reporting — gated server-side on analytics.view like the rest
+ * of the analytics surface.
  */
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'

@@ -16,7 +16,7 @@ import type { JSONContent } from '@tiptap/react'
 import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 
 interface PostFormFieldsProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   form: UseFormReturn<any>
   boards: Board[]
   statuses: PostStatusEntity[]

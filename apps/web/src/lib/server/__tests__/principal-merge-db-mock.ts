@@ -43,7 +43,7 @@ export const mockTx: MockTx = {
 }
 
 // The transaction function just calls the callback with itself (same API)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export const mockTransaction: Mock = vi.fn(async (fn: any) => fn(mockTx))
 
 /** Reset the shared spies + operations log; call from beforeEach. */

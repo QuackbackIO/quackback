@@ -368,7 +368,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     tierLimits,
   ] = await Promise.all([
     db.query.boards.findMany({
-      columns: { id: true, access: true },
+      columns: { id: true, slug: true, access: true },
       where: isNull(boards.deletedAt),
     }),
     // Teammates only (admin/member) — portal role=user must not complete "invite"
@@ -414,7 +414,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     (widgetConfig.tabs?.messenger ?? false)
   const hasIntegration = Boolean(connectedIntegration)
   const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
-  const hasPublicBoard = orgBoards.some((board) => board.access.view !== 'team')
+  const publicBoard = orgBoards.find((board) => board.access.view === 'anonymous')
+  const hasPublicBoard = Boolean(publicBoard)
 
   log.debug(
     {
@@ -432,6 +433,10 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   return {
     hasBoards: orgBoards.length > 0,
     hasPublicBoard,
+    publicBoardId: publicBoard?.id ?? null,
+    publicBoardSlug: publicBoard?.slug ?? null,
+    publicBoardPath: publicBoard ? `/?board=${encodeURIComponent(publicBoard.slug)}` : null,
+    publicBoardLinkCopiedAt: setupState?.activationMilestones?.publicBoardLinkCopiedAt ?? null,
     hasInternalBoard,
     memberCount: humanMembers.length,
     hasBranding,

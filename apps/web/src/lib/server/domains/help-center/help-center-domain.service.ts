@@ -9,7 +9,7 @@
  */
 import { resolve4, resolve6 } from 'node:dns/promises'
 import { normalizeDomain } from '@/lib/server/auth/normalize-domain'
-import { ValidationError } from '@/lib/shared/errors'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import {
   getHelpCenterConfig,
@@ -74,13 +74,39 @@ export async function checkHelpCenterDomainStatus(domain: string): Promise<HelpC
  * Set (or clear) the configured domain. Changing the domain always resets
  * verification -- a new hostname has never passed the check.
  */
+export const HC_DOMAIN_CLOUD_MANAGED = 'HC_DOMAIN_CLOUD_MANAGED'
+
+async function refuseCloudLocalWriter(): Promise<void> {
+  const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const workspace = await getWorkspaceSettings()
+  const stored = (workspace?.settings as { cloud?: { enabled?: boolean } | null } | undefined)
+    ?.cloud
+  // Capability flag, not the resolved projection: a cloud workspace with a
+  // temporarily unreadable projection must still not use this writer.
+  if (stored?.enabled === true) {
+    throw new ForbiddenError(
+      HC_DOMAIN_CLOUD_MANAGED,
+      'Cloud workspaces cannot use the local reverse-proxy domain writer.'
+    )
+  }
+}
+
 export async function setHelpCenterDomain(
   domainInput: string | null
 ): Promise<HelpCenterDomainConfig> {
   if (domainInput === null || domainInput.trim() === '') {
+    // Clearing a domain is always allowed. Refusing it would strand a
+    // downgraded workspace on a domain it can no longer manage.
     const updated = await updateHelpCenterConfig({ domain: { domain: null, verifiedAt: null } })
     return updated.domain
   }
+  // Cloud identity owns custom hostnames. The local reverse-proxy writer is
+  // self-host only — even when the plan grants customDomain.
+  await refuseCloudLocalWriter()
+  // Plan gate. No-op on any install without a cloud config, which is every
+  // self-hosted one — see domains/settings/cloud/entitlements.ts.
+  const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  await requireEntitlement('customDomain')
   const normalized = normalizeDomain(domainInput)
   if (!normalized) {
     throw new ValidationError('HC_DOMAIN_INVALID', 'Must be a public FQDN (e.g. "help.acme.com")')
@@ -101,6 +127,7 @@ export async function verifyHelpCenterDomain(): Promise<{
   config: HelpCenterDomainConfig
   status: HelpCenterDomainStatus
 }> {
+  await refuseCloudLocalWriter()
   const current = await getHelpCenterConfig()
   const domain = current.domain?.domain
   if (!domain) {

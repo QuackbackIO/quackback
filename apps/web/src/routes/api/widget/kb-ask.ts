@@ -3,7 +3,7 @@
  * published help-center articles.
  *
  * Same public envelope as kb-search (feature gate + CORS *), plus the
- * helpCenterAiAnswers flag, a per-IP/session/workspace rate limit, and a
+ * help-center product, a per-IP/session/workspace rate limit, and a
  * query length cap. The session and workspace buckets stop a single anonymous
  * session (or a Host-header switcheroo) from burning unlimited AI budget
  * even while staying under the per-IP cap.
@@ -130,7 +130,7 @@ export async function handleKbAskProbe({
   request: Request
 }): Promise<Response> {
   const flags = await getFeatureFlags()
-  if (!flags.helpCenter || !flags.helpCenterAiAnswers) {
+  if (!flags.helpCenter) {
     return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
   }
   return Response.json({ data: { enabled: isAskAiConfigured() } }, { headers: widgetCorsHeaders() })
@@ -138,7 +138,7 @@ export async function handleKbAskProbe({
 
 export async function handleKbAsk({ request }: { request: Request }): Promise<Response> {
   const flags = await getFeatureFlags()
-  if (!flags.helpCenter || !flags.helpCenterAiAnswers) {
+  if (!flags.helpCenter) {
     return widgetJsonError(404, 'NOT_FOUND', 'Knowledge base not found')
   }
 

@@ -159,6 +159,12 @@ export type UserTagId = TypeId<'user_tag'>
 /** Company attribute definition ID - e.g., company_attr_01h455vb4pex5vsknk084sn02q */
 export type CompanyAttributeId = TypeId<'company_attr'>
 
+/** Billing provider webhook event ID - e.g., billing_event_01h455vb4pex5vsknk084sn02q */
+export type BillingEventId = TypeId<'billing_event'>
+
+/** Billing usage ledger row ID - e.g., billing_usage_01h455vb4pex5vsknk084sn02q */
+export type BillingUsageId = TypeId<'billing_usage'>
+
 // RBAC
 export type RoleId = TypeId<'role'>
 export type PermissionId = TypeId<'perm'>
@@ -199,8 +205,11 @@ export type AssistantGuidanceRuleId = TypeId<'assistant_guidance'>
 /** Assistant pending action ID - e.g., assistant_action_01h455vb4pex5vsknk084sn02q */
 export type AssistantPendingActionId = TypeId<'assistant_action'>
 
-/** Assistant custom action definition ID - e.g., assistant_custom_action_01h455vb4pex5vsknk084sn02q */
-export type AssistantCustomActionId = TypeId<'assistant_custom_action'>
+/** Remote MCP connector ID - e.g., connector_01h455vb4pex5vsknk084sn02q */
+export type ConnectorId = TypeId<'connector'>
+
+/** Agent skill (packaged procedure) ID - e.g., skill_01h455vb4pex5vsknk084sn02q */
+export type SkillId = TypeId<'skill'>
 
 /** Assistant tool-call audit ID - e.g., assistant_tool_call_01h455vb4pex5vsknk084sn02q */
 export type AssistantToolCallId = TypeId<'assistant_tool_call'>
@@ -431,11 +440,14 @@ export interface EntityIdMap {
   pipeline_log: PipelineLogId
   post_activity: PostActivityId
   page_view: PageViewId
+  billing_event: BillingEventId
+  billing_usage: BillingUsageId
   company: CompanyId
   assistant_involvement: AssistantInvolvementId
   assistant_guidance: AssistantGuidanceRuleId
   assistant_action: AssistantPendingActionId
-  assistant_custom_action: AssistantCustomActionId
+  connector: ConnectorId
+  skill: SkillId
   assistant_tool_call: AssistantToolCallId
   assistant_snippet: AssistantSnippetId
   assistant_document: AssistantDocumentId

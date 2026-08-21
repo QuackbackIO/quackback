@@ -79,7 +79,7 @@ export function InspectorPanel({
           title="Add a step"
           subtitle={describeInsertionContext(tree, selection.location, selection.index)}
         />
-        <StepPalette onInsert={onInsert} />
+        <StepPalette onInsert={onInsert} workflowClass={workflowClass} />
       </div>
     )
   }

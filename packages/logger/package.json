@@ -16,6 +16,6 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "pino": "^9"
+    "pino": "^10.3.1"
   }
 }

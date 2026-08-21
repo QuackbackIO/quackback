@@ -125,7 +125,7 @@ const AUTH = {
 // Opaque actor object — the service ops are mocked, so only identity matters.
 const ACTOR = { principalId: 'principal_agent1' }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const call = (data: any) => bulkUpdateConversationsFn({ data })
 
 beforeEach(() => {

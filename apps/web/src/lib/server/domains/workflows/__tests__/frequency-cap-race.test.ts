@@ -49,6 +49,7 @@ vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
 // parity.test.ts and db-test-fixture.ts's own pool do. `max: 5` covers the
 // two genuinely concurrent transactions this test races against each other.
 vi.mock('@/lib/server/db', async (importOriginal) => {
+  // oxlint-disable-next-line no-restricted-imports -- sanctioned test fixture, same as db-test-fixture.ts
   const { createDb } = await import('@quackback/db/client')
   const url = process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/quackback'
   return {

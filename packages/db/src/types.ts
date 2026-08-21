@@ -331,6 +331,11 @@ export type OutcomeTaskResolutions = Partial<
   Record<OnboardingOutcome, Record<string, LaunchTaskResolution>>
 >
 
+export interface ActivationMilestones {
+  /** A workspace admin copied a publicly viewable board's distribution link. */
+  publicBoardLinkCopiedAt?: string
+}
+
 export type SetupCompletionSource = 'wizard' | 'managed' | 'legacy'
 
 export interface SetupState {
@@ -348,6 +353,8 @@ export interface SetupState {
   activationHandoffSeenAt?: string
   /** Required tasks may be deferred; optional polish alone may be dismissed. */
   taskResolutions?: OutcomeTaskResolutions
+  /** Product-led activation signals that are not durable domain artifacts. */
+  activationMilestones?: ActivationMilestones
 }
 
 export const DEFAULT_SETUP_STATE: SetupState = {
@@ -457,6 +464,10 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
       value.completionSource === 'legacy'
         ? value.completionSource
         : undefined
+    const storedMilestones = isRecord(value.activationMilestones)
+      ? value.activationMilestones
+      : undefined
+    const publicBoardLinkCopiedAt = asIsoString(storedMilestones?.publicBoardLinkCopiedAt)
     return {
       version: 2,
       steps: {
@@ -471,6 +482,7 @@ export function normalizeSetupStateV2(value: unknown): SetupState | null {
         ? { activationHandoffSeenAt: value.activationHandoffSeenAt as string }
         : {}),
       ...(taskResolutions ? { taskResolutions } : {}),
+      ...(publicBoardLinkCopiedAt ? { activationMilestones: { publicBoardLinkCopiedAt } } : {}),
     }
   }
 

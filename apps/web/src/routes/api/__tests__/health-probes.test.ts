@@ -8,7 +8,7 @@ vi.mock('@/lib/server/db', () => ({
   getMigrationStatus: (...a: unknown[]) => getMigrationStatus(...a),
 }))
 
-// Background work is one tier now, not a registry of BullMQ workers.
+// Background work is the Postgres job tier.
 const getJobTierStatus = vi.fn()
 vi.mock('@/lib/server/jobs/tier', () => ({
   getJobTierStatus: (...a: unknown[]) => getJobTierStatus(...a),

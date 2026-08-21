@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PageHeader } from '@/components/shared/page-header'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
+import { ActivationActionButton } from '@/components/admin/activation-action-button'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { setLaunchTaskResolutionFn } from '@/lib/server/functions/admin'
 import { setActivationGoalFn } from '@/lib/server/functions/activation'
@@ -31,6 +32,7 @@ import {
 } from '@/lib/shared/launch-checklist'
 import { normalizeOnboardingOutcome, type OnboardingOutcome } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
+import { selectActivationAction } from '@/lib/shared/activation-action'
 
 export const Route = createFileRoute('/admin/getting-started')({
   loader: async ({ context }) => {
@@ -56,6 +58,14 @@ function GettingStartedPage() {
   const [goalDraft, setGoalDraft] = useState<OnboardingOutcome>(outcome)
   const changeGoalButtonRef = useRef<HTMLButtonElement>(null)
   const canManage = status.permissions.settingsManage
+  const nextAction = selectActivationAction({ surface: 'launch_plan', status })
+  const nextTask = nextAction
+    ? summary.tasks.find((task) =>
+        nextAction.id === 'copy-board-link'
+          ? task.id === 'distribute-feedback'
+          : task.id === nextAction.id
+      )
+    : undefined
 
   useEffect(() => setGoalDraft(outcome), [outcome])
 
@@ -210,6 +220,34 @@ function GettingStartedPage() {
           )}
         </section>
 
+        {nextAction && nextTask && (
+          <section
+            aria-labelledby="next-step-heading"
+            className="rounded-2xl border border-primary/25 bg-primary/5 p-6"
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-primary">
+              <FormattedMessage id="activation.nextStep.eyebrow" defaultMessage="Next step" />
+            </p>
+            <h2 id="next-step-heading" className="mt-2 text-lg font-semibold">
+              <FormattedMessage
+                id={`activation.task.${outcome}.${nextTask.id}.title`}
+                defaultMessage={nextTask.title}
+              />
+            </h2>
+            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+              <FormattedMessage
+                id={`activation.task.${outcome}.${nextTask.id}.description`}
+                defaultMessage={nextTask.description}
+              />
+            </p>
+            <ActivationActionButton
+              action={nextAction}
+              surface="launch_plan"
+              className="mt-5 h-11"
+            />
+          </section>
+        )}
+
         <section aria-labelledby="readiness-heading" className="space-y-4">
           <div className="flex items-end justify-between gap-4">
             <div>
@@ -254,33 +292,37 @@ function GettingStartedPage() {
             outcome={outcome}
             canManage={canManage}
             pending={resolutionMutation.isPending}
+            showLinks={false}
             onResolution={(taskId, resolution) => resolutionMutation.mutate({ taskId, resolution })}
           />
         </section>
 
         {polishTasks.length > 0 && (
-          <section aria-labelledby="polish-heading" className="space-y-3">
-            <div>
+          <details className="group rounded-xl border bg-card">
+            <summary className="cursor-pointer list-none px-5 py-4 marker:hidden">
               <h2 id="polish-heading" className="text-base font-semibold">
-                <FormattedMessage id="activation.polish.title" defaultMessage="Make it yours" />
+                <FormattedMessage id="activation.polish.title" defaultMessage="Optional polish" />
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
                 <FormattedMessage
                   id="activation.polish.description"
-                  defaultMessage="Optional ways to tailor Quackback for your brand and workflow."
+                  defaultMessage="Branding, teammates, and integrations can wait until the essentials are live."
                 />
               </p>
+            </summary>
+            <div className="border-t p-3">
+              <TaskList
+                tasks={polishTasks}
+                outcome={outcome}
+                canManage={canManage}
+                pending={resolutionMutation.isPending}
+                showLinks
+                onResolution={(taskId, resolution) =>
+                  resolutionMutation.mutate({ taskId, resolution })
+                }
+              />
             </div>
-            <TaskList
-              tasks={polishTasks}
-              outcome={outcome}
-              canManage={canManage}
-              pending={resolutionMutation.isPending}
-              onResolution={(taskId, resolution) =>
-                resolutionMutation.mutate({ taskId, resolution })
-              }
-            />
-          </section>
+          </details>
         )}
 
         {firstWinTask && (
@@ -366,12 +408,14 @@ function TaskList({
   outcome,
   canManage,
   pending,
+  showLinks,
   onResolution,
 }: {
   tasks: LaunchTask[]
   outcome: OnboardingOutcome
   canManage: boolean
   pending: boolean
+  showLinks: boolean
   onResolution: (taskId: string, resolution: 'deferred' | 'dismissed' | null) => void
 }) {
   return (
@@ -416,13 +460,8 @@ function TaskList({
                 />
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {!task.isDismissed && task.href && (
-                  <Button
-                    asChild
-                    size="sm"
-                    variant={task.isCompleted ? 'outline' : 'default'}
-                    className="h-11 sm:h-9"
-                  >
+                {showLinks && !task.isDismissed && task.href && (
+                  <Button asChild size="sm" variant="outline" className="h-11 sm:h-9">
                     <Link to={task.href}>
                       <FormattedMessage
                         id={`activation.task.${outcome}.${task.id}.${task.isCompleted ? 'completedAction' : 'action'}`}

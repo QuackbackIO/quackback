@@ -85,6 +85,7 @@ import {
   inboxNavKey,
   navFromSearch,
   normalizeTriageFacet,
+  normalizeInboxChannel,
   facetToStatusFilter,
   buildInboxListParams,
   usesUnifiedInboxList,
@@ -93,6 +94,7 @@ import {
   type InboxNavItem,
   type InboxSearch,
 } from '@/lib/client/conversation/inbox-scope'
+import type { Channel } from '@/lib/shared/channels'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
 import {
@@ -237,6 +239,7 @@ export const Route = createFileRoute('/admin/inbox')({
           ? search.ai
           : undefined,
       q: typeof search.q === 'string' && search.q ? search.q : undefined,
+      channel: normalizeInboxChannel(search.channel),
       // Carries the shared `?post=` modal target (the admin layout mounts the
       // modal) so clicking an embedded post in a conversation opens it without leaving the
       // inbox. Validated to a real post id; a junk value is dropped.
@@ -273,6 +276,7 @@ export const Route = createFileRoute('/admin/inbox')({
     ttype: search.ttype,
     ai: search.ai,
     q: search.q,
+    channel: search.channel,
     i: search.i,
     company: search.company,
   }),
@@ -315,7 +319,17 @@ export const Route = createFileRoute('/admin/inbox')({
       listPrefetch = warm(
         queryClient.ensureQueryData(
           inboxQueries.itemList(
-            buildInboxListParams(nav, facet, priority, search, company, sort, undefined, deps.ttype)
+            buildInboxListParams(
+              nav,
+              facet,
+              priority,
+              search,
+              company,
+              sort,
+              undefined,
+              deps.ttype,
+              deps.channel
+            )
           )
         )
       )
@@ -330,7 +344,8 @@ export const Route = createFileRoute('/admin/inbox')({
             company,
             sort,
             undefined,
-            deps.ai
+            deps.ai,
+            deps.channel
           )
         )
       )
@@ -445,6 +460,7 @@ function InboxPage() {
     priority: urlPriority,
     ttype: urlTicketType,
     q: urlQ,
+    channel: urlChannel,
     company: urlCompany,
     ai: urlAi,
     post: urlPost,
@@ -521,6 +537,10 @@ function InboxPage() {
   // the company filter's `i: undefined` behavior.
   const setTicketTypeFilter = useCallback(
     (id: string | undefined) => updateSearch({ ttype: id, i: undefined, m: undefined }),
+    [updateSearch]
+  )
+  const setChannelFilter = useCallback(
+    (channel: Channel | undefined) => updateSearch({ channel, i: undefined, m: undefined }),
     [updateSearch]
   )
   // Search is a live local input mirrored (debounced) into the URL `q`. It sits
@@ -756,6 +776,7 @@ function InboxPage() {
     aiBucket: nav.kind === 'view' && nav.view === 'quinn' ? urlAi : undefined,
     isSaved,
     streamConnected,
+    channel: urlChannel,
   })
 
   // Quinn-view sub-filter counts (only fetched while that view is open).
@@ -950,14 +971,6 @@ function InboxPage() {
     },
     [items]
   )
-
-  const toggleSelectAll = useCallback(() => {
-    setSelectedIds((prev) => {
-      const ids = items.map((it) => itemRefId(it))
-      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id))
-      return allSelected ? new Set() : new Set(ids)
-    })
-  }, [items])
 
   // Toast the bulk summary: a clean line on full success, a partial-failure count
   // otherwise. Verb is the past-tense action word ("Closed", "Snoozed", …).
@@ -1494,16 +1507,14 @@ function InboxPage() {
           ticketTypeFilter={urlTicketType}
           onTicketTypeFilter={setTicketTypeFilter}
           ticketTypeOptions={ticketTypeOptions}
+          channelFilter={urlChannel}
+          onChannelFilter={setChannelFilter}
           sort={sort}
           onSort={setSort}
           loading={listLoading}
           items={items}
           selectedId={selectedId}
           onSelect={setSelectedId}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          onToggleSelectAll={toggleSelectAll}
-          selectionActive={hasSelection}
         />
       )}
 

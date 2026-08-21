@@ -10,22 +10,30 @@
  * workflow's builder.
  */
 import { useState } from 'react'
+import { useIntl } from 'react-intl'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { useUpdateWorkflowAbandonedAutoClose } from '@/lib/client/mutations/settings'
+import {
+  useUpdateWorkflowAbandonedAutoClose,
+  useUpdateWorkflowCloseSpam,
+} from '@/lib/client/mutations/settings'
 import { ClampedIntInput } from './workflow-builder/inspector/shared'
 import {
   DEFAULT_WORKFLOW_ABANDONED_AUTO_CLOSE,
   type WorkflowAbandonedAutoCloseSettings,
 } from '@/lib/shared/workflows/abandoned-auto-close'
+import { DEFAULT_WORKFLOW_CLOSE_SPAM } from '@/lib/shared/workflows/close-spam'
 
 export function AbandonedJourneyAutoCloseCard() {
+  const intl = useIntl()
   const queryClient = useQueryClient()
   const query = useQuery(settingsQueries.workflowAbandonedAutoClose())
+  const closeSpamQuery = useQuery(settingsQueries.workflowCloseSpam())
   const update = useUpdateWorkflowAbandonedAutoClose()
+  const updateCloseSpam = useUpdateWorkflowCloseSpam()
   // Instant feedback while a save is in flight, same idiom as the office
   // hours page and AssistantBasicsCard: the control reflects the optimistic
   // value immediately and falls back to the last-saved one on failure.
@@ -46,6 +54,7 @@ export function AbandonedJourneyAutoCloseCard() {
   }
 
   const isBusy = update.isPending
+  const closeSpamEnabled = closeSpamQuery.data?.enabled ?? DEFAULT_WORKFLOW_CLOSE_SPAM.enabled
 
   return (
     <SettingsCard
@@ -118,6 +127,29 @@ export function AbandonedJourneyAutoCloseCard() {
             </div>
           </>
         )}
+
+        <div className="flex items-center justify-between py-1">
+          <div className="pr-4">
+            <Label htmlFor="close-spam-enabled" className="text-sm font-medium cursor-pointer">
+              {intl.formatMessage({
+                id: 'automation.workflows.closeSpam',
+                defaultMessage: 'Close spam',
+              })}
+            </Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.workflows.closeSpamHint',
+                defaultMessage: 'When Quinn classifies a conversation as spam',
+              })}
+            </p>
+          </div>
+          <Switch
+            id="close-spam-enabled"
+            checked={closeSpamEnabled}
+            onCheckedChange={(checked) => updateCloseSpam.mutate({ enabled: checked })}
+            disabled={updateCloseSpam.isPending}
+          />
+        </div>
       </div>
     </SettingsCard>
   )

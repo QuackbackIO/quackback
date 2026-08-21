@@ -5,6 +5,7 @@ import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-cat
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 
 const DEFAULT_TITLE = 'How can we help?'
 const DEFAULT_DESCRIPTION = 'Search our knowledge base or browse by category'
@@ -30,7 +31,10 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
       description: chrome?.homepageDescription || DEFAULT_DESCRIPTION,
       searchPlaceholder: chrome?.searchPlaceholder || undefined,
       workspaceName: settings?.name ?? 'Help Center',
-      logoUrl: settings?.brandingData?.logoUrl || '/logo.png',
+      logoUrl: resolvePortalOgImageUrl(
+        { logoUrl: settings?.brandingData?.logoUrl },
+        context.baseUrl
+      ),
     }
   },
   head: ({ loaderData }) => {

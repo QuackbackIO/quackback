@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useIntl } from 'react-intl'
-import { toast } from 'sonner'
 import { PlusIcon, TagIcon, UsersIcon, ViewColumnsIcon } from '@heroicons/react/24/solid'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
-import { useAssignUsersToSegment, useRemoveUsersFromSegment } from '@/lib/client/mutations'
 import { EmptyState } from '@/components/shared/empty-state'
 import { SearchInput } from '@/components/shared/search-input'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
@@ -28,12 +25,10 @@ import {
 } from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
 import { useUserTags } from '@/lib/client/hooks/use-user-tags'
-import { UsersBulkSegmentBar } from '@/components/admin/users/users-bulk-segment-bar'
 import { MobileSegmentSelector } from '@/components/admin/users/users-segment-nav'
 import type { PortalUserListItemView } from '@/lib/shared/types'
 import type { UsersFilters } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
-import type { PrincipalId, SegmentId } from '@quackback/ids'
 
 interface UsersListProps {
   users: PortalUserListItemView[]
@@ -55,8 +50,8 @@ interface UsersListProps {
   onClearSegments: () => void
   /** Opens the "New person" dialog; absent when the viewer can't manage people. */
   onNewPerson?: () => void
-  /** Gates bulk-selection checkboxes and the segment action bar, matching the per-user editor's admin-only gate. */
-  canManage: boolean
+  /** Kept so callers do not change; list rows no longer multi-select. */
+  canManage?: boolean
 }
 
 const SORT_OPTIONS = [
@@ -223,7 +218,6 @@ export function UsersList({
   onSelectSegment,
   onClearSegments,
   onNewPerson,
-  canManage,
 }: UsersListProps) {
   const intl = useIntl()
   const sort = filters.sort || 'newest'
@@ -246,88 +240,6 @@ export function UsersList({
     rootMargin: '0px',
     threshold: 0.1,
   })
-
-  // Bulk segment selection — lets an admin add/remove many users to/from a
-  // manual segment in one action instead of one navigate-open-popover cycle
-  // per person.
-  const [selectedIds, setSelectedIds] = useState<Set<PrincipalId>>(new Set())
-  const assignUsers = useAssignUsersToSegment()
-  const removeUsers = useRemoveUsersFromSegment()
-  const manualSegments = (segments ?? []).filter((s) => s.type === 'manual')
-
-  // selectedIds can outlive the rows it was checked against (a filter/segment-nav
-  // change narrows `users` without clearing selection, since UsersList stays
-  // mounted across that). Re-deriving the effective selection from the
-  // currently-visible rows on every render keeps both the displayed count and
-  // any bulk action scoped to what the admin can actually see right now.
-  const visibleSelectedIds = users
-    .filter((u) => selectedIds.has(u.principalId))
-    .map((u) => u.principalId)
-  const allLoadedSelected = users.length > 0 && visibleSelectedIds.length === users.length
-  const someLoadedSelected = visibleSelectedIds.length > 0
-
-  const toggleSelect = (principalId: PrincipalId) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(principalId)) {
-        next.delete(principalId)
-      } else {
-        next.add(principalId)
-      }
-      return next
-    })
-  }
-
-  const toggleSelectAll = () => {
-    setSelectedIds(allLoadedSelected ? new Set() : new Set(users.map((u) => u.principalId)))
-  }
-
-  const handleBulkAdd = async (segmentId: SegmentId) => {
-    const segment = manualSegments.find((s) => s.id === segmentId)
-    const principalIds = visibleSelectedIds
-    try {
-      const { assigned } = await assignUsers.mutateAsync({ segmentId, principalIds })
-      setSelectedIds(new Set())
-      toast.success(
-        `Added ${assigned} ${assigned === 1 ? 'person' : 'people'} to ${segment?.name ?? 'segment'}`
-      )
-    } catch {
-      toast.error(`Failed to add to ${segment?.name ?? 'segment'}`)
-    }
-  }
-
-  const handleBulkRemove = async (segmentId: SegmentId) => {
-    const segment = manualSegments.find((s) => s.id === segmentId)
-    const principalIds = visibleSelectedIds
-    try {
-      const { removed, removedPrincipalIds } = await removeUsers.mutateAsync({
-        segmentId,
-        principalIds,
-      })
-      setSelectedIds(new Set())
-      toast.success(
-        `Removed ${removed} ${removed === 1 ? 'person' : 'people'} from ${segment?.name ?? 'segment'}`,
-        {
-          action: {
-            label: 'Undo',
-            onClick: () =>
-              // Re-assign only the ids the server actually removed — the
-              // original selection can include users who were never members
-              // of this segment, and undo must not add them to one.
-              assignUsers.mutate(
-                { segmentId, principalIds: removedPrincipalIds },
-                {
-                  onError: () =>
-                    toast.error(`Failed to undo — ${segment?.name ?? 'segment'} was not restored`),
-                }
-              ),
-          },
-        }
-      )
-    } catch {
-      toast.error(`Failed to remove from ${segment?.name ?? 'segment'}`)
-    }
-  }
 
   // Keyboard navigation
   useEffect(() => {
@@ -452,33 +364,11 @@ export function UsersList({
         />
       </div>
 
-      {/* Count + select all */}
       <div className="mt-2 flex items-center gap-2">
-        {canManage && !isLoading && users.length > 0 && (
-          <Checkbox
-            checked={allLoadedSelected ? true : someLoadedSelected ? 'indeterminate' : false}
-            onCheckedChange={toggleSelectAll}
-            aria-label="Select all loaded users"
-          />
-        )}
         <span className="text-xs text-muted-foreground">
           {total} {total === 1 ? 'user' : 'users'}
         </span>
       </div>
-
-      {/* Bulk segment action bar — only when one or more visible rows are checked */}
-      {canManage && visibleSelectedIds.length > 0 && (
-        <div className="mt-2">
-          <UsersBulkSegmentBar
-            selectedCount={visibleSelectedIds.length}
-            manualSegments={manualSegments}
-            onAdd={handleBulkAdd}
-            onRemove={handleBulkRemove}
-            onClear={() => setSelectedIds(new Set())}
-            isPending={assignUsers.isPending || removeUsers.isPending}
-          />
-        </div>
-      )}
     </div>
   )
 
@@ -507,12 +397,11 @@ export function UsersList({
       {/* User List */}
       <div className="p-3">
         <div className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50">
-          {/* Column headers — kept in sync with each row's checkbox/avatar
+          {/* Column headers — kept in sync with each row's avatar
               spacer and the column-width constants in `user-card.tsx` so every
               label lands directly above the field it describes, giving the
               list a vertical lane to scan down instead of a stacked cell. */}
           <div className="flex items-center gap-3 border-b border-border/50 px-3 py-2">
-            {canManage && <div className="size-4 shrink-0" aria-hidden="true" />}
             <div className="h-8 w-8 shrink-0" aria-hidden="true" />
             <span className={cn('min-w-0 flex-1', MENU_LABEL)}>Name</span>
             <span className={cn(EMAIL_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Email</span>
@@ -537,9 +426,6 @@ export function UsersList({
                   user={user}
                   isSelected={user.principalId === selectedUserId}
                   onClick={() => onSelectUser(user.principalId)}
-                  canManage={canManage}
-                  checked={selectedIds.has(user.principalId)}
-                  onToggleCheck={() => toggleSelect(user.principalId)}
                   showCountry={showCountry}
                 />
               </div>

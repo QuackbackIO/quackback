@@ -1,9 +1,8 @@
-import { createFileRoute, useBlocker } from '@tanstack/react-router'
+import { createFileRoute, redirect, useBlocker } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { UserGroupIcon } from '@heroicons/react/24/solid'
 import { z } from 'zod'
-import { AssistantConfigChangelogCard } from '@/components/admin/automation/assistant-config-changelog-card'
 import {
   AssistantDirtyStateProvider,
   useAssistantDirtyState,
@@ -11,8 +10,7 @@ import {
 import { CopilotDeploymentCard } from '@/components/admin/automation/copilot-deployment-card'
 import { CopilotKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
-import { BuiltInActionsCard } from '@/components/admin/automation/builtin-actions-card'
-import { CustomActionsCard } from '@/components/admin/automation/custom-actions-card'
+
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { BackLink } from '@/components/ui/back-link'
@@ -22,16 +20,19 @@ import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
-const COPILOT_TABS = ['knowledge', 'guidance', 'actions', 'history'] as const
+const COPILOT_TABS = ['knowledge', 'guidance'] as const
 type CopilotTab = (typeof COPILOT_TABS)[number]
 
 const searchSchema = z.object({
-  tab: z.enum(COPILOT_TABS).optional(),
+  tab: z.enum([...COPILOT_TABS, 'actions']).optional(),
 })
 
 export const Route = createFileRoute('/admin/automation/copilot')({
   validateSearch: searchSchema,
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, search }) => {
+    if (search.tab === 'actions') {
+      throw redirect({ to: '/admin/automation/connectors' })
+    }
     const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
     if (!permissions.includes(PERMISSIONS.ASSISTANT_MANAGE)) {
       throw new Error('Access denied: requires assistant.manage')
@@ -62,7 +63,7 @@ function AssistantCopilotSettings() {
   const navigate = Route.useNavigate()
   const { dirtyTabs, hasUnsavedChanges } = useAssistantDirtyState()
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  const tab: CopilotTab = requestedTab
+  const tab: CopilotTab = requestedTab === 'actions' ? 'knowledge' : requestedTab
   const unsavedLabel = intl.formatMessage({
     id: 'automation.agent.tabs.unsaved',
     defaultMessage: 'Unsaved changes',
@@ -81,10 +82,6 @@ function AssistantCopilotSettings() {
     })
   }
 
-  function openTestAgent() {
-    void navigate({ to: '/admin/automation/test', search: { agent: 'copilot' } })
-  }
-
   return (
     <>
       <div className="max-w-3xl space-y-6">
@@ -94,38 +91,25 @@ function AssistantCopilotSettings() {
           </BackLink>
         </div>
 
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <UserGroupIcon className="size-4 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">
-                {intl.formatMessage({
-                  id: 'automation.copilot.title',
-                  defaultMessage: 'Quinn Copilot',
-                })}
-              </h1>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'automation.copilot.pageDescription',
-                  defaultMessage:
-                    'The teammate-facing agent. Answers questions and drafts replies in the inbox.',
-                })}
-              </p>
-            </div>
+        <header className="flex items-start gap-2.5">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <UserGroupIcon className="size-4 text-primary" />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 w-full sm:min-h-9 sm:w-auto"
-            onClick={openTestAgent}
-          >
-            {intl.formatMessage({
-              id: 'automation.agent.testSaved',
-              defaultMessage: 'Test saved settings',
-            })}
-          </Button>
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">
+              {intl.formatMessage({
+                id: 'automation.copilot.title',
+                defaultMessage: 'Quinn Copilot',
+              })}
+            </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.copilot.pageDescription',
+                defaultMessage:
+                  'The teammate-facing agent. Answers questions and drafts replies in the inbox.',
+              })}
+            </p>
+          </div>
         </header>
 
         {settingsQuery.isPending ? (
@@ -174,19 +158,6 @@ function AssistantCopilotSettings() {
                     })}
                     {dirtyTabs.has('guidance') && <UnsavedChangesIndicator label={unsavedLabel} />}
                   </TabsTrigger>
-                  <TabsTrigger value="actions">
-                    {intl.formatMessage({
-                      id: 'automation.agent.tabs.actions',
-                      defaultMessage: 'Actions',
-                    })}
-                    {dirtyTabs.has('actions') && <UnsavedChangesIndicator label={unsavedLabel} />}
-                  </TabsTrigger>
-                  <TabsTrigger value="history">
-                    {intl.formatMessage({
-                      id: 'automation.agent.tabs.history',
-                      defaultMessage: 'History',
-                    })}
-                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -219,23 +190,6 @@ function AssistantCopilotSettings() {
                   </p>
                 </div>
                 <GuidanceRulesCard agent="copilot" />
-              </TabsContent>
-
-              <TabsContent
-                value="actions"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
-                <BuiltInActionsCard agent="copilot" />
-                {flags?.assistantCustomActions && <CustomActionsCard agent="copilot" />}
-              </TabsContent>
-
-              <TabsContent
-                value="history"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
-                <AssistantConfigChangelogCard />
               </TabsContent>
             </Tabs>
           </>

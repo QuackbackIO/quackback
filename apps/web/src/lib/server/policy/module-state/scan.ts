@@ -51,18 +51,13 @@
  * The safety direction is right too: the failure mode of the mutation search
  * is a *false* site, which costs one ledger line, not a missed one.
  */
-import * as ts from 'typescript'
+import * as ts from '@typescript/typescript6'
 import { readFileSync } from 'node:fs'
 import { relative, sep, posix as posixPath } from 'node:path'
 import { walkSourceFiles } from '../source-files'
 
 export type SiteKind =
-  | 'binding'
-  | 'container'
-  | 'factory'
-  | 'instance'
-  | 'class-static'
-  | 'global-assign'
+  'binding' | 'container' | 'factory' | 'instance' | 'class-static' | 'global-assign'
 
 export interface StateSite {
   /** Path relative to the repo root, posix-normalized. */

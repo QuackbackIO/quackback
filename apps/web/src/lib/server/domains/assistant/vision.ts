@@ -9,9 +9,9 @@
  *   - vision-capable: the customer turn becomes a multi-part user message —
  *      a text part (the message text, or a placeholder for an image-only
  *      message) followed by one image part per image attachment. Image URLs
- *      from the upload pipeline are made absolute against the app base URL,
- *      since the provider fetches the URL itself (a relative `/api/storage/...`
- *      path is meaningless off-host).
+ *      from the upload pipeline are absolutized from the immutable system
+ *      host, since the provider fetches the URL itself (a relative
+ *      `/api/storage/...` path is meaningless off-host).
  *   - text-only: no image part is EVER emitted (a text-only endpoint would
  *      reject or silently drop them); the turn degrades to a textual
  *      `[image attached: name]` note so Quinn knows a screenshot exists and
@@ -20,7 +20,7 @@
  * Only customer turns carry images: Quinn's own replies and human teammate
  * turns never need their attachments re-grounded for the model.
  */
-import { config } from '@/lib/server/config'
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 
 /** Structural twin of the runtime's AssistantThreadMessage (avoiding the import cycle). */
@@ -51,7 +51,7 @@ function imageAttachments(attachments: ConversationAttachment[] | undefined) {
 
 /** Make an upload-pipeline URL absolute so the model provider can fetch it. */
 export function resolveImageUrl(url: string): string {
-  return new URL(url, config.baseUrl).toString()
+  return absolutizeOffHostAssetUrl(url)
 }
 
 /** Map thread turns to model messages, attaching customer images per the vision gate. */

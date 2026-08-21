@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, useBlocker } from '@tanstack/react-router'
+import { createFileRoute, redirect, useBlocker } from '@tanstack/react-router'
 import { useIntl } from 'react-intl'
 import { SparklesIcon } from '@heroicons/react/24/solid'
 import { z } from 'zod'
@@ -9,7 +9,6 @@ import {
   AssistantDeploymentCard,
   type WidgetAssistantDeployment,
 } from '@/components/admin/automation/assistant-deployment-card'
-import { AssistantConfigChangelogCard } from '@/components/admin/automation/assistant-config-changelog-card'
 import {
   AssistantDirtyStateProvider,
   useAssistantDirtyState,
@@ -18,8 +17,7 @@ import { AssistantIdentityCard } from '@/components/admin/automation/assistant-i
 import { AssistantVoiceCard } from '@/components/admin/automation/assistant-basics-card'
 import { AgentKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
-import { BuiltInActionsCard } from '@/components/admin/automation/builtin-actions-card'
-import { CustomActionsCard } from '@/components/admin/automation/custom-actions-card'
+
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { BackLink } from '@/components/ui/back-link'
@@ -29,16 +27,19 @@ import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
-const AGENT_TABS = ['basics', 'knowledge', 'guidance', 'actions', 'history'] as const
+const AGENT_TABS = ['basics', 'knowledge', 'guidance'] as const
 type AgentTab = (typeof AGENT_TABS)[number]
 
 const searchSchema = z.object({
-  tab: z.enum(AGENT_TABS).optional(),
+  tab: z.enum([...AGENT_TABS, 'actions']).optional(),
 })
 
 export const Route = createFileRoute('/admin/automation/agent')({
   validateSearch: searchSchema,
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, search }) => {
+    if (search.tab === 'actions') {
+      throw redirect({ to: '/admin/automation/connectors' })
+    }
     const permissions = (context as { permissions?: PermissionKey[] }).permissions ?? []
     if (!permissions.includes(PERMISSIONS.ASSISTANT_MANAGE)) {
       throw new Error('Access denied: requires assistant.manage')
@@ -69,7 +70,7 @@ function AssistantAgentSettings() {
   const navigate = Route.useNavigate()
   const { dirtyTabs, hasUnsavedChanges } = useAssistantDirtyState()
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  const tab: AgentTab = requestedTab
+  const tab: AgentTab = requestedTab === 'actions' ? 'basics' : requestedTab
   const initialDeployment = settings?.publicWidgetConfig?.messenger?.assistant
   const [deployment, setDeployment] = useState<WidgetAssistantDeployment>({
     enabled: initialDeployment?.enabled ?? true,
@@ -93,10 +94,6 @@ function AssistantAgentSettings() {
     })
   }
 
-  function openTestAgent() {
-    void navigate({ to: '/admin/automation/test' })
-  }
-
   return (
     <>
       <div className="max-w-3xl space-y-6">
@@ -106,38 +103,25 @@ function AssistantAgentSettings() {
           </BackLink>
         </div>
 
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <SparklesIcon className="size-4 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">
-                {intl.formatMessage({
-                  id: 'automation.agent.title',
-                  defaultMessage: 'Quinn Agent',
-                })}
-              </h1>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {intl.formatMessage({
-                  id: 'automation.agent.pageDescription',
-                  defaultMessage:
-                    'The customer-facing agent. Replies in Messenger and anywhere else Quinn speaks for you.',
-                })}
-              </p>
-            </div>
+        <header className="flex items-start gap-2.5">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <SparklesIcon className="size-4 text-primary" />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 w-full sm:min-h-9 sm:w-auto"
-            onClick={openTestAgent}
-          >
-            {intl.formatMessage({
-              id: 'automation.agent.testSaved',
-              defaultMessage: 'Test saved settings',
-            })}
-          </Button>
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">
+              {intl.formatMessage({
+                id: 'automation.agent.title',
+                defaultMessage: 'Quinn Agent',
+              })}
+            </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {intl.formatMessage({
+                id: 'automation.agent.pageDescription',
+                defaultMessage:
+                  'The customer-facing agent. Replies in Messenger and anywhere else Quinn speaks for you.',
+              })}
+            </p>
+          </div>
         </header>
 
         {settingsQuery.isPending ? (
@@ -197,19 +181,6 @@ function AssistantAgentSettings() {
                     })}
                     {dirtyTabs.has('guidance') && <UnsavedChangesIndicator label={unsavedLabel} />}
                   </TabsTrigger>
-                  <TabsTrigger value="actions">
-                    {intl.formatMessage({
-                      id: 'automation.agent.tabs.actions',
-                      defaultMessage: 'Actions',
-                    })}
-                    {dirtyTabs.has('actions') && <UnsavedChangesIndicator label={unsavedLabel} />}
-                  </TabsTrigger>
-                  <TabsTrigger value="history">
-                    {intl.formatMessage({
-                      id: 'automation.agent.tabs.history',
-                      defaultMessage: 'History',
-                    })}
-                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -252,23 +223,6 @@ function AssistantAgentSettings() {
                   </p>
                 </div>
                 <GuidanceRulesCard agent="agent" />
-              </TabsContent>
-
-              <TabsContent
-                value="actions"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
-                <BuiltInActionsCard agent="agent" />
-                {flags?.assistantCustomActions && <CustomActionsCard agent="agent" />}
-              </TabsContent>
-
-              <TabsContent
-                value="history"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
-                <AssistantConfigChangelogCard />
               </TabsContent>
             </Tabs>
           </>

@@ -227,7 +227,7 @@ export type WorkflowAction =
   // instead of replaying the same, increasingly stale, absolute instant).
   | { type: 'snooze'; untilIso: string | null }
   | { type: 'snooze'; seconds: number }
-  | { type: 'close' }
+  | { type: 'close'; lifecycle?: 'auto_closed' }
   // (SF4) The `close` action's counterpart: reopens a closed conversation via
   // the same setConversationStatus seam. Workflows-only for now — a macro's
   // own action catalogue (MacroAction, packages/db/src/schema/macros.ts) plus
@@ -272,6 +272,9 @@ export interface ActionResult {
    *  can stamp it onto the InputWaitCursor as blockMessageId when the plan
    *  parks right after. */
   blockMessageId?: ConversationMessageId
+  /** Set by `let_assistant_answer` when Quinn will not run (greet-only,
+   *  unconfigured, token budget, silence). The engine resumes escalated. */
+  assistantDeclined?: boolean
 }
 
 const label = (label: string | null): ActionResult => ({ label })
@@ -496,7 +499,13 @@ export async function applyAction(
       return label('snoozed')
     }
     case 'close':
-      await conversationService.setConversationStatus(conversationId, 'closed', actor, attribution)
+      await conversationService.setConversationStatus(
+        conversationId,
+        'closed',
+        actor,
+        attribution,
+        action.lifecycle === 'auto_closed' ? 'auto_closed' : 'closed'
+      )
       return label('closed')
     case 'reopen':
       // Same seam as 'close', target 'open' instead. setConversationStatus is
@@ -605,26 +614,25 @@ export async function applyAction(
       }
       return { label: `sent ${action.block.kind} block`, blockMessageId: messageId }
     }
-    case 'let_assistant_answer':
-      // Out-of-band, same seam a customer message's own turn uses
-      // (sendVisitorMessage -> runAssistantTurnForConversation) — dynamic
-      // import both because it's fire-and-forget (this action must not block
-      // the walk on an LLM turn) and to avoid a static domains/workflows ->
-      // domains/assistant edge: assistant.orchestrator.ts already imports
-      // FROM domains/workflows (workflow.service's
-      // getLiveWorkflowReferencedAttributeKeys), so a static edge back here
-      // would be a cycle. `instructions` (Phase C, slice C-6) rides along as
-      // an opts field folded into just this turn's prompt — see
-      // runAssistantTurnForConversation's doc.
-      void import('@/lib/server/domains/assistant/assistant.orchestrator')
-        .then((m) =>
-          m.runAssistantTurnForConversation(conversationId, {
-            surface: 'workflow_step',
-            stepInstructions: action.instructions,
-          })
-        )
+    case 'let_assistant_answer': {
+      // Preview is awaited so a decline can resume the escalated edge
+      // immediately. The LLM turn stays fire-and-forget (and the import
+      // stays dynamic) so a successful hand-off never blocks the walk.
+      const orchestrator = await import('@/lib/server/domains/assistant/assistant.orchestrator')
+      const eligibility = await orchestrator.previewAssistantTurnForConversation(conversationId, {
+        surface: 'workflow_step',
+      })
+      if (eligibility === 'declined') {
+        return { label: 'assistant declined', assistantDeclined: true }
+      }
+      void orchestrator
+        .runAssistantTurnForConversation(conversationId, {
+          surface: 'workflow_step',
+          stepInstructions: action.instructions,
+        })
         .catch((err) => log.warn({ err, conversationId }, 'let_assistant_answer turn failed'))
       return label('handed to assistant')
+    }
     case 'record_csat':
       // recordCsat requires the caller to BE the visitor (amendment 1); the
       // engine passes a visitor-scoped actor for this action specifically,

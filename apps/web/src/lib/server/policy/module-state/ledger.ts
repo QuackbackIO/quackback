@@ -273,6 +273,24 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'accuses changes.',
   },
   {
+    file: 'apps/web/src/lib/server/workspaces/resolver.ts',
+    name: 'byHostname',
+    category: 'workspace-scoped-key',
+    keyedBy: 'hostname',
+    reason:
+      'The Host to workspace lookup cache, keyed by hostname. This IS the resolution step, so its key is ' +
+      'the workspace discriminator rather than something needing one.',
+  },
+  {
+    file: 'apps/web/src/lib/server/workspaces/resolver.ts',
+    name: 'byWorkspaceKey',
+    category: 'workspace-scoped-key',
+    keyedBy: 'workspaceKey',
+    reason:
+      'The same records keyed by workspace id, for background scopes that already know which workspace they ' +
+      'want.',
+  },
+  {
     file: 'apps/web/src/routes/api/storage/$.ts',
     name: 'proxyCache',
     category: 'workspace-scoped-key',

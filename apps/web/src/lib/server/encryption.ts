@@ -49,7 +49,7 @@ const derivedKeys = new WorkspaceKeyedCache<Buffer>()
  *
  * Domain separation was already per-purpose; under pooling it must also be
  * per-workspace, or one process holds one key that opens every workspace's
- * integration tokens, webhook signing secrets and custom-action headers.
+ * integration tokens, webhook signing secrets and connector secrets.
  *
  * The single-workspace namespace derives the historical info string byte for
  * byte, and that is not a style choice: a self-hosted install's ciphertexts

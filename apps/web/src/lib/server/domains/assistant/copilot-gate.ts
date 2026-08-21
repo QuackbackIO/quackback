@@ -17,11 +17,6 @@
  *   wrap the throw shape: its parse and budget steps interleave the shared
  *   steps, so the two share `assertCopilotAvailable` and
  *   `resolveViewableItem` instead of one wrapping the other.
- *
- * sandbox.ts is deliberately NOT a caller: it has no conversation to assert
- * viewability against and gates on a different permission (`settings.manage`,
- * not `copilot.use`), so its shape genuinely differs rather than merely
- * duplicating these.
  */
 import type { z } from 'zod'
 import { chatParamsFromRequestBody } from '@tanstack/ai'
@@ -50,6 +45,7 @@ import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service
 import { NotFoundError } from '@/lib/shared/errors'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { EntitlementRequiredError } from '@/lib/server/errors/entitlement-error'
 import { errorResponse, forbiddenResponse } from '@/lib/server/domains/api/responses'
 
 /**
@@ -174,8 +170,7 @@ export interface CopilotAguiEnvelope {
 }
 
 export type CopilotAguiGateResult<T> =
-  | (CopilotGateOk<T> & { agui: CopilotAguiEnvelope })
-  | CopilotGateFailed
+  (CopilotGateOk<T> & { agui: CopilotAguiEnvelope }) | CopilotGateFailed
 
 /**
  * The Response-shaped gate for the AG-UI streaming routes: the body is an
@@ -213,6 +208,32 @@ export async function gateCopilotAguiRequest<
   } catch (err) {
     if (err instanceof CopilotUnavailableError) {
       return { ok: false, response: errorResponse(err.code, err.message, err.statusCode) }
+    }
+    throw err
+  }
+
+  // Plan gate before the budget: whether drafting help is included at all is a
+  // cheaper question than how much of the month's allowance is left, and its
+  // refusal is the one that can name the plan that would grant it. No-op on any
+  // install without a plan, which is every self-hosted one — see
+  // domains/settings/cloud/entitlements.ts.
+  try {
+    const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+    await requireEntitlement('aiDrafts')
+  } catch (err) {
+    if (err instanceof EntitlementRequiredError) {
+      // A distinct code from the numeric refusal below, so a client can tell
+      // "buy a bigger plan" apart from "you are over a count"; the details
+      // carry the plan the upgrade prompt needs.
+      return {
+        ok: false,
+        response: errorResponse(
+          'ENTITLEMENT_REQUIRED',
+          err.message,
+          err.statusCode,
+          err.toResponseBody()
+        ),
+      }
     }
     throw err
   }

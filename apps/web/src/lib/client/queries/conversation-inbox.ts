@@ -28,6 +28,7 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import type { Channel } from '@/lib/shared/channels'
 import {
   explicitConversationSort,
   type ConversationSort,
@@ -54,7 +55,8 @@ export const conversationInboxQueries = {
     customParams?: ConversationViewListParams,
     // Quinn-view sub-filter (Resolved / Escalated / Pending); only set on the
     // 'quinn' scope, so it leaves every other scope's key byte-identical.
-    aiBucket?: AiBucket
+    aiBucket?: AiBucket,
+    channel?: Channel
   ) => {
     const baseKey = conversationKeys.agentConversationList(
       inboxNavKey(nav),
@@ -71,6 +73,7 @@ export const conversationInboxQueries = {
     if (pinnedSort) key.push(`sort:${pinnedSort}`)
     if (companyId) key.push(companyId)
     if (aiBucket) key.push(`ai:${aiBucket}`)
+    if (channel) key.push(`channel:${channel}`)
     return queryOptions({
       queryKey: key,
       queryFn: () =>
@@ -83,7 +86,8 @@ export const conversationInboxQueries = {
             companyId,
             sort,
             customParams,
-            aiBucket
+            aiBucket,
+            channel
           ),
         }),
     })

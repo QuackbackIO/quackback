@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- updatePost handles all side-effects (status, tags, owner, mentions)
+/* oxlint-disable max-lines -- updatePost handles all side-effects (status, tags, owner, mentions)
  * in one function to avoid multiple DB round-trips; extraction would complicate transaction
  * semantics. announcePublishedPost was already split to post.announce.ts. */
 

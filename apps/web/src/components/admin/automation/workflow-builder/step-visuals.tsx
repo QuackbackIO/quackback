@@ -1,9 +1,9 @@
 /**
  * Shared step visuals used by the inspector (step palette, per-step editor
  * headers) and the confirm-delete dialog reused by the branch editor. Split
- * out from canvas.tsx so the inspector doesn't have to import the React Flow
- * canvas module just for an icon map — these are the flat, single-tint icons
- * used in inspector chrome, distinct from the canvas cards' per-tone tiles.
+ * out so the inspector doesn't have to import the step list just for an icon
+ * map — these are the flat, single-tint icons used in inspector chrome,
+ * distinct from the step cards' per-tone tiles.
  */
 import {
   AdjustmentsHorizontalIcon,
@@ -39,7 +39,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { ActionType, BlockStepKind } from '../workflow-graph'
-import type { Tone } from './flow-layout'
+import type { Tone } from './step-content'
 
 export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
   assign_agent: UserPlusIcon,
@@ -77,7 +77,7 @@ export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
 export const GATE_TINT = 'bg-amber-500/10 text-amber-600 dark:text-amber-500'
 export const STEP_TINT = 'bg-muted text-muted-foreground'
 
-/** Per-tone icon tile classes shared by the canvas cards and the step
+/** Per-tone icon tile classes shared by the step cards and the step
  *  palette, so a step's tone reads the same in both places. 'pink' is the
  *  conversational-block family (see BLOCK_ICONS) — a distinct visual
  *  treatment for customer-facing steps vs. the internal action/branch/wait

@@ -1,7 +1,7 @@
 /**
  * Server functions for SLA policies (support platform §4.6): the settings
  * page's CRUD + archive lifecycle over the shipped domain service, the picker
- * options feed for the workflow canvas, and the manual remove-SLA agent
+ * options feed for the workflow builder, and the manual remove-SLA agent
  * action. Management is gated on sla.manage; the picker and removal reuse the
  * conversation permissions agents already hold. Archive is blocked while any
  * LIVE workflow still applies the policy (the result lists them); update may

@@ -1,6 +1,7 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { WorkflowBuilder } from '@/components/admin/automation/workflow-builder/workflow-builder'
 import { workflowDetailQuery } from '@/lib/client/queries/workflows'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 // The trailing underscore on "automation_" escapes nesting under
@@ -9,7 +10,10 @@ import type { FeatureFlags } from '@/lib/shared/types/settings'
 // article editor.
 export const Route = createFileRoute('/admin/automation_/workflows/$workflowId')({
   loader: async ({ context, params }) => {
-    await context.queryClient.ensureQueryData(workflowDetailQuery(params.workflowId))
+    await Promise.all([
+      context.queryClient.ensureQueryData(workflowDetailQuery(params.workflowId)),
+      context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
+    ])
     return {}
   },
   component: WorkflowBuilderPage,

@@ -39,6 +39,8 @@ import {
   conversationMessages,
   posts,
   postStatuses,
+  connectors,
+  agentSkills,
 } from '@/lib/server/db'
 import { testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { DEFAULT_ASSISTANT_CONFIG, type AssistantConfig } from '@/lib/shared/assistant/config'
@@ -59,10 +61,11 @@ import type {
   SeedGuidance,
   SeedKbArticle,
   SeedStatusIncident,
-  SeedCustomAction,
+  SeedConnector,
+  SeedSkill,
   SeedTicketSummary,
 } from '../types'
-import { createCustomAction } from '@/lib/server/domains/assistant/custom-actions.service'
+import { slugifyConnectorName } from '@/lib/shared/assistant/connectors'
 
 function suffix(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -114,8 +117,8 @@ export async function applyScenarioSettings(config: ScenarioConfig = {}): Promis
   }
   const assistantConfig = buildScenarioAssistantConfig(config)
   const featureFlags = JSON.stringify({
-    assistantTools: config.assistantTools === true,
-    assistantCustomActions: config.customActions === true,
+    assistantConnectors: config.connectors === true,
+    assistantSkills: config.skills === true,
   })
   await testDb
     .update(settings)
@@ -309,29 +312,43 @@ export async function seedGuidanceRule(rule: SeedGuidance): Promise<void> {
   })
 }
 
-/**
- * Seed a custom-action definition via the service (so encryption/validation
- * match production). The url is a placeholder — Phase 5 scenarios assert on the
- * assembled tool set, never firing the request, so no host is contacted.
- */
-export async function seedCustomAction(action: SeedCustomAction): Promise<void> {
-  await createCustomAction(
-    {
-      name: action.name,
-      whenToUse: action.whenToUse ?? `Use the ${action.name} action when relevant.`,
-      request: {
-        method: 'GET',
-        url: action.url ?? 'https://example.test/eval-action',
-        headers: [],
-      },
-      variables: action.variables ?? [],
-      responseAllowlist: action.responseAllowlist ?? [],
-      responseCharLimit: 4000,
-      assignments: action.assignments,
-      enabled: action.enabled ?? true,
+export async function seedConnector(input: SeedConnector): Promise<void> {
+  const now = new Date().toISOString()
+  const tools = input.tools.map((tool) => ({
+    name: tool.name,
+    annotations: { readOnlyHint: tool.readOnly === true },
+    firstSeenAt: now,
+  }))
+  const overrides: Record<string, 'always' | 'approval' | 'never'> = {}
+  for (const tool of input.tools) {
+    if (tool.policy) overrides[tool.name] = tool.policy
+  }
+  await testDb.insert(connectors).values({
+    id: createId('connector'),
+    name: input.name,
+    slug: slugifyConnectorName(input.name),
+    url: 'https://example.test/mcp',
+    authMode: 'none',
+    status: 'connected',
+    tools,
+    toolPolicies: {
+      groupDefaults: { read: 'always', write: 'approval' },
+      tools: overrides,
     },
-    testDb
-  )
+    assignments: input.assignments,
+    enabled: input.enabled ?? true,
+  })
+}
+
+export async function seedSkill(input: SeedSkill): Promise<void> {
+  await testDb.insert(agentSkills).values({
+    id: createId('skill'),
+    name: input.name,
+    whenToUse: input.whenToUse,
+    instructions: input.instructions,
+    assignments: input.assignments,
+    enabled: input.enabled ?? true,
+  })
 }
 
 export async function seedBoard(board: SeedBoard): Promise<string> {
@@ -508,8 +525,11 @@ export async function seedFixtures(
   for (const attr of fixtures?.attributes ?? []) {
     await seedAttribute(attr)
   }
-  for (const action of fixtures?.customActions ?? []) {
-    await seedCustomAction(action)
+  for (const connector of fixtures?.connectors ?? []) {
+    await seedConnector(connector)
+  }
+  for (const skill of fixtures?.skills ?? []) {
+    await seedSkill(skill)
   }
   for (const board of fixtures?.boards ?? []) {
     await seedBoard(board)
@@ -522,8 +542,8 @@ export async function seedFixtures(
   // the runtime's conversation-scoped machinery (the zero-tool completion
   // guard, live write execution); scenarios that assert on writes (21/22) or
   // want the full guard set it via fixtures.withConversation. Answer/voice
-  // scenarios run the sandbox path (conversationId null) — the same isolation
-  // the admin Test agent uses — which keeps them off the (model-dependent)
+  // scenarios run the isolated path (conversationId null) — which keeps them
+  // off the (model-dependent)
   // zero-tool evaluator.
   const conversation =
     fixtures?.withConversation || fixtures?.conversationMessages?.length || opts.forceConversation

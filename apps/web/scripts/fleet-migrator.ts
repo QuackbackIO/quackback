@@ -213,7 +213,19 @@ async function main(): Promise<number> {
         `    ${r.tag}: replay=${r.verdict} (${r.statementCount} statements, ` +
           `${r.mutating.length} mutating, ${r.erroring.length} erroring)`
       )
-      for (const m of r.mutating) console.log(`        MUTATES L${m.line}: ${m.excerpt}`)
+      // A verdict a reviewer corrected reads as an unexplained refusal otherwise:
+      // the statements in the file really are replay-safe shapes, and what makes
+      // them dangerous is what a *later* migration did to the objects they name.
+      if (r.override) {
+        console.log(
+          `        REVIEWED OVERRIDE: shapes read ${r.shapeVerdict}, refused as ` +
+            `${r.override.verdict} — ${r.override.why}`
+        )
+      }
+      for (const m of r.mutating) {
+        if (m.line === 0) continue
+        console.log(`        MUTATES L${m.line}: ${m.excerpt}`)
+      }
     }
     if (refusal) console.log(`  WOULD REFUSE: ${refusal}`)
     return 0

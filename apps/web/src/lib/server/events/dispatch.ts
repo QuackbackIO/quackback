@@ -653,6 +653,18 @@ export async function dispatchAssistantHandedOff(
   })
 }
 
+export async function dispatchAssistantResolved(
+  actor: EventActor,
+  conversationId: string,
+  outcome: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'assistant.resolved',
+    data: { conversationId, outcome },
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Timer-driven workflow triggers (support platform §4.6): synthetic events
 // raised by workflow-sweep.ts's 5-minute tick or the SLA domain's deadline

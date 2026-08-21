@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 640 surfaces
+### Server functions (`requireAuth`) — 652 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -154,6 +154,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/domains/assistant/copilot-gate.ts`::gateCopilotAguiRequest | copilot.use |
 | `lib/server/functions/activation.ts`::getStartingPointContextFn | settings.manage |
 | `lib/server/functions/activation.ts`::getActivationBridgeContextFn | settings.manage |
+| `lib/server/functions/activation.ts`::markPublicBoardLinkCopiedFn | board.manage |
 | `lib/server/functions/activation.ts`::setActivationGoalFn | settings.manage |
 | `lib/server/functions/activation.ts`::completeStartingPointFn | settings.manage |
 | `lib/server/functions/activation.ts`::acknowledgeActivationHandoffFn | settings.manage |
@@ -209,13 +210,14 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | DYNAMIC (conversation.view | ticket.view | conversation.set_attributes | conversation.set_status | ticket.create | post.create | post.vote_on_behalf) |
 | `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | DYNAMIC (conversation.view | ticket.view) |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
-| `lib/server/functions/assistant-config-changelog.ts`::getAssistantConfigChangelogFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::listConnectorsFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::getConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::createConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::updateConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::refreshConnectorFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::startConnectorOAuthFn | assistant.manage |
+| `lib/server/functions/assistant-connectors.ts`::deleteConnectorFn | assistant.manage |
 | `lib/server/functions/assistant-copilot-analytics.ts`::getCopilotUsageMetricsFn | analytics.view |
-| `lib/server/functions/assistant-custom-actions.ts`::listCustomActionsFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::createCustomActionFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::updateCustomActionFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::deleteCustomActionFn | assistant.manage |
-| `lib/server/functions/assistant-custom-actions.ts`::testCustomActionFn | assistant.manage |
 | `lib/server/functions/assistant-documents.ts`::uploadAssistantDocumentFn | assistant.manage |
 | `lib/server/functions/assistant-documents.ts`::listAssistantDocumentsFn | assistant.manage |
 | `lib/server/functions/assistant-documents.ts`::deleteAssistantDocumentFn | assistant.manage |
@@ -235,6 +237,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-settings.ts`::updateAssistantCopilotKnowledgeFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantCopilotCapabilitiesFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateWidgetAssistantDeploymentFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::listSkillsFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::createSkillFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::updateSkillFn | assistant.manage |
+| `lib/server/functions/assistant-skills.ts`::deleteSkillFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::listSnippetsFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::createSnippetFn | assistant.manage |
 | `lib/server/functions/assistant-snippets.ts`::updateSnippetFn | assistant.manage |
@@ -551,6 +557,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::fetchWidgetConfig | settings.manage |
 | `lib/server/functions/settings.ts`::fetchWidgetSecret | settings.manage |
 | `lib/server/functions/settings.ts`::updateWidgetConfigFn | settings.manage |
+| `lib/server/functions/settings.ts`::configureWidgetForActivationFn | settings.manage |
 | `lib/server/functions/settings.ts`::saveWidgetHeroImageKeyFn | settings.manage |
 | `lib/server/functions/settings.ts`::deleteWidgetHeroImageFn | settings.manage |
 | `lib/server/functions/settings.ts`::regenerateWidgetSecretFn | settings.manage |
@@ -564,6 +571,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::updateChangelogSettingsFn | changelog.manage |
 | `lib/server/functions/settings.ts`::fetchWorkflowAbandonedAutoCloseFn | routing.manage |
 | `lib/server/functions/settings.ts`::updateWorkflowAbandonedAutoCloseFn | workflow.manage |
+| `lib/server/functions/settings.ts`::fetchWorkflowCloseSpamFn | routing.manage |
+| `lib/server/functions/settings.ts`::updateWorkflowCloseSpamFn | workflow.manage |
+| `lib/server/functions/settings.ts`::fetchDefaultSlaPolicyFn | sla.manage |
+| `lib/server/functions/settings.ts`::updateDefaultSlaPolicyFn | sla.manage |
 | `lib/server/functions/settings.ts`::getSpamFilterConfigFn | settings.manage |
 | `lib/server/functions/settings.ts`::updateSpamFilterConfigFn | settings.manage |
 | `lib/server/functions/settings.ts`::getEmailChannelStatusFn | settings.manage |
@@ -744,12 +755,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::previewWorkflowFn | routing.manage |
 | `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
+| `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 125 surfaces
+### Public REST API (`withApiKeyAuth`) — 124 surfaces
 
 | Surface | Enforces |
 | --- | --- |
-| `routes/api/admin/assistant/test.ts`::handleTestAgent | assistant.manage |
 | `routes/api/export.companies.ts`::GET | company.view |
 | `routes/api/export.users.ts`::handleExportUsers | people.view |
 | `routes/api/v1/apps/boards.ts`::GET | PUBLIC (any valid key) |
@@ -875,6 +886,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
 | `routes/api/widget/identify.ts`::POST | TEAM-ONLY |
 
+### Session-authenticated routes (`requireAuth`) — 1 surface
+
+| Surface | Enforces |
+| --- | --- |
+| `routes/api/plg-events.ts`::handlePlgEvent | END_USER (any authenticated) |
+
 ### SSE stream (inline gate) — 1 surface
 
 | Surface | Enforces |
@@ -944,7 +961,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-183 of 934 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+183 of 946 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1053,7 +1070,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/[.]well-known.oauth-protected-resource.ts`::GET | route |
 | `routes/[.]well-known.openid-configuration.ts`::GET | route |
 | `routes/api/admin/assistant/copilot.ts`::POST | route |
-| `routes/api/admin/assistant/sandbox.ts`::POST | route |
 | `routes/api/admin/assistant/transform.ts`::POST | route |
 | `routes/api/auth/$.ts`::GET | route |
 | `routes/api/auth/$.ts`::POST | route |
@@ -1127,6 +1143,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/hc/sitemap[.]xml.ts`::GET | route |
 | `routes/oauth/$integration/callback.ts`::GET | route |
 | `routes/oauth/$integration/connect.ts`::GET | route |
+| `routes/oauth/connector.callback.ts`::GET | route |
 | `routes/robots[.]txt.ts`::GET | route |
 | `routes/sitemap[.]xml.ts`::GET | route |
 | `routes/status/feed.ts`::GET | route |

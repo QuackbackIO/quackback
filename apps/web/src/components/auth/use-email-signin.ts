@@ -94,6 +94,10 @@ export function useEmailSignin({
       await onSuccess()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid or expired code')
+    } finally {
+      // Success has to clear this too. A host that stays mounted after sign-in
+      // (the onboarding account step) would otherwise spin forever, and the
+      // `if (loading) return` guard above would swallow every retry.
       setLoading(false)
     }
   }

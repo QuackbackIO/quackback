@@ -21,7 +21,6 @@ import {
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 export interface MetricTotal {
@@ -45,10 +44,6 @@ export const getVisitorAnalyticsData = createServerFn({ method: 'GET' })
   )
   .handler(async ({ data: { period, surface } }) => {
     await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
-
-    if (!(await isFeatureEnabled('visitorAnalytics'))) {
-      return { enabled: false as const }
-    }
 
     const days = VISITOR_PERIODS[period]
     const now = new Date()

@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
-import { db, and, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
+import { db, and, boards, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { deleteObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type {
   WidgetConfig,
@@ -27,36 +28,58 @@ import {
 const log = logger.child({ component: 'settings-widget' })
 export const WIDGET_OBSERVATION_THROTTLE_MS = 15 * 60 * 1000
 
-/**
- * Return a normalized external Origin hostname, or null for requests that must
- * not count as installation evidence. Origin is a browser-controlled header;
- * malformed, opaque, originless, same-host, and same-origin preview requests
- * are ignored.
- */
-export function externalWidgetOriginHostname(request: Request): string | null {
-  const originHeader = request.headers.get('origin')
-  if (!originHeader || originHeader === 'null' || originHeader.includes(',')) return null
-  if (request.headers.get('sec-fetch-site') === 'same-origin') return null
-
+function hostnameFromHttpUrl(raw: string, originShaped: boolean): string | null {
   try {
-    const origin = new URL(originHeader)
-    const endpoint = new URL(request.url)
-    if (
-      (origin.protocol !== 'http:' && origin.protocol !== 'https:') ||
-      origin.username ||
-      origin.password ||
-      origin.pathname !== '/' ||
-      origin.search ||
-      origin.hash
-    )
+    const url = new URL(raw)
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password)
       return null
-    const hostname = origin.hostname.toLowerCase().replace(/\.$/, '')
+    if (originShaped && (url.pathname !== '/' || url.search || url.hash)) return null
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, '')
     if (!hostname || hostname.length > 253) return null
-    if (hostname === endpoint.hostname.toLowerCase().replace(/\.$/, '')) return null
     return hostname
   } catch {
     return null
   }
+}
+
+function endpointHostname(request: Request): string | null {
+  const forwarded = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
+  if (forwarded && !forwarded.includes(',')) {
+    return hostnameFromHttpUrl(`http://${forwarded.trim()}`, false)
+  }
+  try {
+    return new URL(request.url).hostname.toLowerCase().replace(/\.$/, '') || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Return a normalized external hostname, or null for requests that must not
+ * count as installation evidence. Prefers Origin (fetch/XHR). Classic script
+ * tags often send no Origin, so Referer is the fallback — path/query/hash on
+ * Referer are ignored. Malformed, opaque, same-host, and same-origin preview
+ * requests are ignored.
+ */
+export function externalWidgetOriginHostname(request: Request): string | null {
+  if (request.headers.get('sec-fetch-site') === 'same-origin') return null
+
+  const originHeader = request.headers.get('origin')
+  const fromOrigin =
+    originHeader && originHeader !== 'null' && !originHeader.includes(',')
+      ? hostnameFromHttpUrl(originHeader, true)
+      : null
+  const refererHeader = request.headers.get('referer')
+  const hostname =
+    fromOrigin ??
+    (refererHeader && !refererHeader.includes(',')
+      ? hostnameFromHttpUrl(refererHeader, false)
+      : null)
+  if (!hostname) return null
+
+  const endpoint = endpointHostname(request)
+  if (!endpoint || hostname === endpoint) return null
+  return hostname
 }
 
 /**
@@ -77,7 +100,7 @@ export async function observeExternalWidgetRequest(
   const updated = await db
     .update(settings)
     .set({
-      widgetInstalledFirstSeenAt: sql`coalesce(${settings.widgetInstalledFirstSeenAt}, ${now})`,
+      widgetInstalledFirstSeenAt: sql`coalesce(${settings.widgetInstalledFirstSeenAt}, now())`,
       widgetInstalledLastSeenAt: now,
       widgetInstalledOriginHost: hostname,
     })
@@ -98,11 +121,14 @@ export async function observeExternalWidgetRequest(
 /**
  * Client-safe projection of the Home config: the stored S3 key is swapped for
  * its resolved public URL so clients never see (or depend on) raw keys.
+ * The widget iframe may run off this origin, so the hero is absolutized from
+ * the immutable system host.
  */
 export function publicHomeConfig(home: WidgetHomeConfig | undefined): WidgetHomeConfig | undefined {
   if (!home) return undefined
   const { heroImageKey, ...rest } = home
-  return { ...rest, heroImageUrl: getPublicUrlOrNull(heroImageKey) }
+  const stored = getPublicUrlOrNull(heroImageKey)
+  return { ...rest, heroImageUrl: stored ? absolutizeOffHostAssetUrl(stored) : stored }
 }
 
 /** Drop agent-only fields (routing) from a messenger config for public
@@ -124,7 +150,9 @@ export function publicMessengerConfig(
           enabled: messenger.assistant.enabled,
           respond: messenger.assistant.respond,
           name: identity.name,
-          avatarUrl: identity.avatarUrl,
+          avatarUrl: identity.avatarUrl
+            ? absolutizeOffHostAssetUrl(identity.avatarUrl)
+            : identity.avatarUrl,
         }
       : undefined,
   }
@@ -154,7 +182,12 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
   try {
     const org = await requireSettings()
     const existing = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
-    const updated = deepMerge(existing, input as Partial<WidgetConfig>)
+    const incoming = { ...input } as Partial<WidgetConfig>
+    if (incoming.messenger && 'routing' in incoming.messenger) {
+      const { routing: _routing, ...messenger } = incoming.messenger
+      incoming.messenger = messenger
+    }
+    const updated = deepMerge(existing, incoming)
     // The translations map replaces wholesale — deepMerge would union locale
     // keys, so a removed locale or a cleared field could never disappear.
     if (input.translations !== undefined) updated.translations = input.translations
@@ -168,6 +201,79 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
     log.error({ err: error }, 'update widget config failed')
     wrapDbError('update widget config', error)
   }
+}
+
+export type WidgetActivationMode = 'messenger' | 'feedback'
+
+export function widgetActivationConfig(
+  existing: WidgetConfig,
+  mode: WidgetActivationMode,
+  publicBoardSlug?: string
+): WidgetConfig {
+  if (mode === 'feedback' && !publicBoardSlug) {
+    throw new Error('Create a public feedback board before connecting the widget')
+  }
+  if (mode === 'messenger') {
+    return {
+      ...existing,
+      enabled: true,
+      tabs: { ...existing.tabs, messenger: true },
+      messenger: {
+        ...DEFAULT_MESSENGER_CONFIG,
+        ...existing.messenger,
+        enabled: true,
+      },
+    }
+  }
+  return {
+    ...existing,
+    enabled: true,
+    defaultBoard: publicBoardSlug,
+    tabs: { ...existing.tabs, feedback: true },
+  }
+}
+
+/** Enable the selected activation channel in one locked settings update. */
+export async function configureWidgetForActivation(mode: WidgetActivationMode): Promise<{
+  mode: WidgetActivationMode
+  config: WidgetConfig
+  boardId: string | null
+}> {
+  const result = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: settings.id,
+        widgetConfig: settings.widgetConfig,
+        featureFlags: settings.featureFlags,
+      })
+      .from(settings)
+      .limit(1)
+      .for('update')
+    if (!row) throw new Error('Settings not found')
+
+    const flags = resolveFeatureFlags(row.featureFlags)
+    if (mode === 'messenger' && !flags.supportInbox) {
+      throw new Error('Customer support is turned off for this workspace')
+    }
+
+    const publicBoard =
+      mode === 'feedback'
+        ? await tx.query.boards.findFirst({
+            where: and(isNull(boards.deletedAt), sql`${boards.access}->>'view' = 'anonymous'`),
+            columns: { id: true, slug: true, access: true },
+          })
+        : null
+    const usableBoard = publicBoard?.access.view === 'anonymous' ? publicBoard : null
+    const existing = parseJsonConfig(row.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const config = widgetActivationConfig(existing, mode, usableBoard?.slug)
+    await tx
+      .update(settings)
+      .set({ widgetConfig: JSON.stringify(config) })
+      .where(eq(settings.id, row.id))
+    return { mode, config, boardId: usableBoard?.id ?? null }
+  })
+  await invalidateSettingsCache()
+  return result
 }
 
 /** Update only the web-widget deployment flags; behavior config is never touched. */

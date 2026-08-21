@@ -77,7 +77,7 @@ for (const hostname of hostnames) {
 
   // The canary the control plane wrote is the only thing that says this key is
   // the key this database's ciphertext was written under.
-  let password: string
+  let password = ''
   try {
     password = await resolveWorkspacePassword(workspace)
   } catch (err) {

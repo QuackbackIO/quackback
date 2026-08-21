@@ -39,6 +39,10 @@ describe('getProcessRole', () => {
   })
 
   it('returns migrator for QUACKBACK_ROLE=migrator, and starts NO workers', () => {
+    // The reason `shouldRunWorkers` is an allowlist and not `!== 'web'`: the
+    // negative form answers "true" for every role added after it, so this role
+    // would have quietly booted the job tier's fifteen queues and six sweepers
+    // alongside a fleet migration.
     vi.stubEnv('QUACKBACK_ROLE', 'migrator')
     expect(getProcessRole()).toBe('migrator')
     expect(shouldRunWorkers()).toBe(false)
@@ -52,6 +56,14 @@ describe('getProcessRole', () => {
     }
   })
 
+  // The measured failure: `banana`, `MIGRATOR`, `Migrator` and `'migrator '`
+  // all returned 'all' and booted the Postgres job tier AND the sweepers. The
+  // allowlist was over the ProcessRole union rather than over the
+  // environment string, so a case typo missed every comparison and fell through
+  // to a default that starts everything.
+  // 'all ' and ' ' are deliberately NOT here: they trim to 'all' and to unset
+  // respectively, which are both legitimate. Including them was my own bad
+  // fixture and the suite caught it.
   it.each(['banana', 'MIGRATOR', 'Migrator', 'WEB', 'Worker', 'al l', 'web,worker'])(
     'fails CLOSED for QUACKBACK_ROLE=%j — never to the everything-role',
     (raw) => {

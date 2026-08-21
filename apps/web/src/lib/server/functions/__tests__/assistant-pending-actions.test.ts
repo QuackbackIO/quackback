@@ -93,7 +93,7 @@ function actorWith(permissions: string[]) {
   return { principalId: 'principal_agent1', role: 'member', permissions: new Set(permissions) }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const fetchPendingAction = (data: any) => getAssistantPendingActionFn({ data })
 
 const pendingRow = (overrides: Partial<Record<string, unknown>> = {}) =>

@@ -17,10 +17,6 @@ vi.mock('@/lib/server/storage/s3', () => ({
   MAX_FILE_SIZE,
 }))
 
-// Mutable so individual tests can flip s3Proxy to false
-const mockConfig = { s3Proxy: true }
-vi.mock('@/lib/server/config', () => ({ config: mockConfig }))
-
 const { handleProxyUpload } = await import('../$.js')
 
 const KEY = 'avatars/2024/01/abc123-photo.png'
@@ -49,7 +45,6 @@ function makeRequest(
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockConfig.s3Proxy = true
   mockIsS3Usable.mockReturnValue(true)
   mockGetStorageSigningSecret.mockReturnValue('test-secret')
   mockVerifyProxyUploadToken.mockReturnValue(true)
@@ -66,22 +61,6 @@ describe('PUT /api/storage/* (proxy upload)', () => {
     const res = await handleProxyUpload({ request: makeRequest() })
     expect(res.status).toBe(503)
     expect(await res.json()).toEqual({ error: 'Storage not configured' })
-  })
-
-  it('returns 403 when S3_PROXY is disabled', async () => {
-    mockConfig.s3Proxy = false
-    const res = await handleProxyUpload({ request: makeRequest() })
-    expect(res.status).toBe(403)
-  })
-
-  it('reports the proxy refusal even when storage is also unusable', async () => {
-    // Order matters: a deployment with proxy uploads off should say so rather
-    // than blaming the workspace's credentials, or an operator chases the wrong
-    // fault.
-    mockConfig.s3Proxy = false
-    mockIsS3Usable.mockReturnValue(false)
-    const res = await handleProxyUpload({ request: makeRequest() })
-    expect(res.status).toBe(403)
   })
 
   it('returns 400 when content-type is missing', async () => {

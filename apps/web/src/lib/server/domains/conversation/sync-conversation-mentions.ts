@@ -19,7 +19,7 @@
  * the watermark.
  */
 
-// Per eslint.config.js — app files import schema via @/lib/server/db, never
+// Per .oxlintrc.json — app files import schema via @/lib/server/db, never
 // directly from @quackback/db.
 import { db, conversationMessageMentions, principal, and, eq, inArray } from '@/lib/server/db'
 import { dispatchConversationNoteMentioned } from '@/lib/server/events/dispatch'

@@ -176,6 +176,7 @@ describe('resolveToolSpecs', () => {
       'search',
       'set_attribute',
       'share_post',
+      'use_skill',
     ])
   })
 

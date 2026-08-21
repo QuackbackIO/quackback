@@ -23,7 +23,7 @@ import { PgTable } from 'drizzle-orm/pg-core'
 // database client and its config for a test that touches no database. Reading
 // the names out of the source with a regex was the alternative, and that is the
 // approach that let `notifications` sit in the scan list unnoticed.
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import * as schema from '@quackback/db/schema'
 import { SCAN_TABLES, FIXTURE_TABLES } from '../db-scan'
 

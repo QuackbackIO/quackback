@@ -106,7 +106,7 @@ const AUTH = {
 const conversationId = createId('conversation') as ConversationId
 const ticketId = createId('ticket') as TicketId
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const call = (data: any) => setConversationAttributeValueFn({ data })
 
 beforeEach(() => {
@@ -206,9 +206,9 @@ describe('setConversationAttributeValueFn — ticket target', () => {
 })
 
 describe('createConversationAttributeFn / updateConversationAttributeFn — aiDetect/detectOnClose', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const createCall = (data: any) => createConversationAttributeFn({ data })
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const updateCall = (data: any) => updateConversationAttributeFn({ data })
 
   beforeEach(() => {

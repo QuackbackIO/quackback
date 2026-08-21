@@ -172,6 +172,41 @@ export async function loadWidgetMessages(locale: SupportedLocale): Promise<Recor
 }
 
 /**
+ * Key prefixes the onboarding wizard renders. Ids authored under
+ * `routes/onboarding` and `components/onboarding` live under `onboarding.`;
+ * `portal.auth.` joins them because the account step renders the shared
+ * sign-in form rather than a second copy of it, and those strings are
+ * already translated. A unit test (onboarding-message-coverage.test.ts)
+ * re-derives the ids from source and fails if one falls outside this list,
+ * so a new key can't silently render its English fallback.
+ */
+const ONBOARDING_MESSAGE_PREFIXES = ['onboarding.', 'portal.auth.'] as const
+
+/** The prefix allowlist as a plain string[], for tests and iteration. */
+export const ONBOARDING_MESSAGE_PREFIX_LIST: readonly string[] = ONBOARDING_MESSAGE_PREFIXES
+
+/**
+ * The onboarding wizard's slice of the message catalog, loaded in the
+ * `/onboarding` layout loader. Mirrors {@link loadPortalMessages} and
+ * {@link loadWidgetMessages}: the wizard renders only `onboarding.` ids, so
+ * seeding the whole (portal + admin + widget) catalog would add ~80KB to the
+ * SSR document of the first screen a new workspace ever sees. Slicing keeps
+ * that at the handful of keys the wizard can actually show, and the moment
+ * translated onboarding copy lands in the catalogs it is picked up here with no
+ * further change.
+ */
+export async function loadOnboardingMessages(
+  locale: SupportedLocale
+): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (ONBOARDING_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
+  }
+  return subset
+}
+
+/**
  * Key prefixes the portal surfaces render. Derived from the transitive import
  * closure of the `_portal` route tree plus the standalone `/auth/*` pages and
  * the portal access gate — every react-intl id reachable from those pages

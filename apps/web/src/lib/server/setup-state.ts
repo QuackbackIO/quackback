@@ -5,6 +5,7 @@ import {
   getSetupState,
   normalizeSetupStateV2,
   settings,
+  type OnboardingOutcome,
   type SetupState,
   type Transaction,
 } from '@/lib/server/db'
@@ -52,6 +53,44 @@ export async function mutateSetupStateAtomic<T>(
 
   await invalidateSettingsCache()
   return result
+}
+
+/**
+ * Finish the short wizard without creating a starter artifact. The use-case
+ * launch list owns that work, so the owner should land there — not on a
+ * second "create a board" confirmation.
+ */
+export function applyDeferredLaunchStartingPoint(
+  current: SetupState,
+  outcome: OnboardingOutcome,
+  now = new Date().toISOString()
+): SetupState {
+  const existing = current.steps.startingPoint
+  if (existing && existing.source !== 'managed') {
+    return {
+      ...current,
+      steps: { ...current.steps, workspace: true },
+      useCase: outcome,
+    }
+  }
+  return {
+    ...current,
+    steps: {
+      ...current.steps,
+      workspace: true,
+      startingPoint: {
+        outcome,
+        resourceType: 'none',
+        source: 'wizard',
+        resolution: 'deferred',
+        completedAt: now,
+      },
+    },
+    useCase: outcome,
+    completedAt: current.completedAt ?? now,
+    completionSource:
+      current.completionSource === 'managed' ? 'wizard' : (current.completionSource ?? 'wizard'),
+  }
 }
 
 /** Mark the activation handoff as acknowledged without disturbing other state. */

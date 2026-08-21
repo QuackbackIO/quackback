@@ -9,10 +9,11 @@
     "strict": true,
     "declaration": true,
     "declarationMap": true,
+    "emitDeclarationOnly": true,
     "skipLibCheck": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "ignoreDeprecations": "6.0"
+    "noUncheckedSideEffectImports": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "__tests__"]

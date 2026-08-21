@@ -34,7 +34,7 @@ describe('normalizeWelcomeCardInput', () => {
         content: [
           { type: 'paragraph', content: [{ type: 'text', text: 'safe' }] },
           // Disallowed node type — must be stripped.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          // oxlint-disable-next-line @typescript-eslint/no-explicit-any
           { type: 'rogueNode', attrs: { evil: 'true' } } as any,
         ],
       },
@@ -48,7 +48,7 @@ describe('normalizeWelcomeCardInput', () => {
 
   it('returns an empty doc when body sanitizes to nothing usable', () => {
     const out = normalizeWelcomeCardInput({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       body: { type: 'notDoc' } as any,
     })
     expect(out?.body).toEqual({ type: 'doc' })

@@ -257,13 +257,7 @@ export interface PortalAccessConfig {
  * external link.
  */
 export type PortalNavItemType =
-  | 'feedback'
-  | 'roadmap'
-  | 'changelog'
-  | 'help'
-  | 'support'
-  | 'status'
-  | 'link'
+  'feedback' | 'roadmap' | 'changelog' | 'help' | 'support' | 'status' | 'link'
 
 /** An ordered, admin-configurable tab in the portal top-nav. */
 export interface PortalNavItemConfig {
@@ -516,7 +510,8 @@ export interface MessengerConfig {
    * When true, a visitor cannot reply to a CLOSED conversation from the
    * Messenger — the send is refused instead of reopening the thread (support
    * platform §4.3). Default off (undefined = off), where a reply reopens. Email
-   * replies always reopen regardless; this applies to the Messenger only.
+   * replies always reopen regardless; this applies to the Messenger only
+   * (`reopenOnReply === 'configurable'` on the channel descriptor).
    */
   preventRepliesWhenClosed?: boolean
   /** AI-assistant display identity (client-safe). */
@@ -528,8 +523,11 @@ export interface MessengerConfig {
    * code writes it and it is not projected into the public widget config.
    */
   officeHours?: OfficeHoursConfig
-  /** Conversation routing: auto-assign new conversations to an active agent.
-   *  Agent-only; never projected into the public config. */
+  /**
+   * @deprecated Migration-only. Canonical routing now lives in the
+   * `settings.metadata` bag (`conversationRouting`). This field types the
+   * released stored config that the read-time fallback still honours.
+   */
   routing?: {
     enabled: boolean
     /** Only one strategy today: assign to an online agent. */
@@ -551,11 +549,7 @@ export type PublicMessengerConfig = Omit<
  * Future types (e.g. recent tickets) extend this union.
  */
 export type WidgetHomeCardType =
-  | 'feedback'
-  | 'new_conversation'
-  | 'article_search'
-  | 'latest_updates'
-  | 'link'
+  'feedback' | 'new_conversation' | 'article_search' | 'latest_updates' | 'link'
 
 /** Which visitors a Home card is shown to (visitor-vs-user content). */
 export type WidgetCardAudience = 'everyone' | 'anonymous' | 'identified'
@@ -959,7 +953,7 @@ export interface SettingsBrandingData {
  */
 export interface WorkspaceSettings {
   /** Raw settings record from database (opaque on client, typed on server) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   settings: Record<string, any>
   /** Workspace name */
   name: string
@@ -1005,7 +999,9 @@ export interface WorkspaceSettings {
 
 /**
  * Workspace product availability and experimental/in-development features.
- * Product flags default on; optional AI and analytics flags default off.
+ * Core products (Feedback & Roadmaps, Changelog) default on. Support, Help
+ * Center, Status, and Inbox AI default off until an operator or onboarding
+ * goal turns them on.
  */
 export interface FeatureFlags {
   /** Feedback boards, posts, voting, and roadmaps */
@@ -1014,34 +1010,23 @@ export interface FeatureFlags {
   changelog: boolean
   /** Help center knowledge base */
   helpCenter: boolean
-  /** AI answers with citations on help-center search surfaces */
-  helpCenterAiAnswers: boolean
   /** Support inbox: messenger widget channel + unified admin inbox. Also
    *  covers conversation niceties like external link preview cards. */
   supportInbox: boolean
   /** Support tickets: durable, trackable requests portal alongside conversations */
   supportTickets: boolean
-  /** Cookieless visitor + pageview analytics (portal and widget) */
-  visitorAnalytics: boolean
-  /** Durable first-party device id: connects visitors to leads and users
-   *  across visits. Subordinate to `visitorAnalytics` — rendered as a nested
-   *  sub-toggle in Labs and only effective when analytics is on. */
-  visitorDeviceTracking: boolean
   /** Teammate-facing AI in the inbox: Copilot's private Q&A tab,
    *  two-way conversation translation, and AI classification of
    *  ai_detect-enabled conversation attributes. Each capability keeps its
    *  own finer-grained controls (copilot.use permission, per-conversation
    *  translation, per-attribute opt-in). */
   inboxAi: boolean
-  /** What the AI assistant may DO: built-in actions such as closing
-   *  conversations and creating tickets. Every action has per-action
-   *  controls and approvals. */
-  assistantTools: boolean
-  /** Custom actions library (QUINN-TWO-AGENT-SPEC D6/Phase 5): admin-authored
-   *  HTTP actions the assistant can call, defined once and assigned per agent.
-   *  Off by default; gates dynamic registration of custom actions into the
-   *  toolset (built-in actions are unaffected). */
-  assistantCustomActions: boolean
+  /** Remote MCP connectors: a shared tool catalog mapped onto Agent and Copilot.
+   *  Off by default; gates the Connectors nav, discovery, and runtime wiring. */
+  assistantConnectors: boolean
+  /** Packaged procedures the agents pull on demand via use_skill.
+   *  Off by default; gates the Skills nav and catalogue injection. */
+  assistantSkills: boolean
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
@@ -1053,14 +1038,13 @@ export interface FeatureFlags {
  * absorbed it; `resolveFeatureFlags` ORs them in at read time so workspaces
  * who enabled a feature before the consolidation keep it without a
  * migration. `linkPreviews` is absent deliberately: it folded into
- * `supportInbox` (default on), and a stored `linkPreviews: true` must not
+ * `supportInbox` (now default off), and a stored `linkPreviews: true` must not
  * force a disabled inbox back on.
  */
 export const LEGACY_FLAG_MAP: Record<string, keyof FeatureFlags> = {
   assistantCopilot: 'inboxAi',
   inboxTranslation: 'inboxAi',
   aiAttributeDetection: 'inboxAi',
-  assistantActions: 'assistantTools',
 }
 
 /**
@@ -1088,34 +1072,61 @@ export function resolveFeatureFlags(storedJson: string | null | undefined): Feat
 }
 
 /**
- * Defaults for a multi-product workspace.
+ * Defaults for a new workspace.
  *
- * Product surfaces (Support, Help Center, Status, tickets, link previews)
- * default **on** so nav and admin shells show the full platform without a
- * Labs treasure-hunt. AI capabilities and anything that collects visitor
- * data stay **off** until an operator opts in — they need a configured
- * model and/or a privacy review (visitor analytics ships before its consent
- * gate, so it must not start collecting on upgrade).
+ * Feedback & Roadmaps plus Changelog match the historical core product.
+ * Support, Help Center, Status, and Inbox AI stay off until Settings →
+ * General or an onboarding goal turns them on. Connectors and Skills stay
+ * Labs opt-in.
  *
  * Existing workspaces with an explicit `featureFlags` JSON row keep stored
- * values; only missing keys and null rows pick up these defaults (merged in
- * settings.service).
+ * values. A one-time SQL stamp wrote today's previous all-on object onto
+ * null rows before this default flipped, so already-running installs do
+ * not lose surfaces. Only missing keys and new null rows pick up these
+ * defaults (merged in settings.service).
  */
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
-  // Products — on
   feedback: true,
   changelog: true,
-  helpCenter: true,
-  supportInbox: true,
-  supportTickets: true,
-  statusPage: true,
-  // AI / privacy-sensitive — opt-in
-  helpCenterAiAnswers: false,
-  visitorAnalytics: false,
-  visitorDeviceTracking: false,
+  helpCenter: false,
+  supportInbox: false,
+  supportTickets: false,
+  statusPage: false,
   inboxAi: false,
-  assistantTools: false,
-  assistantCustomActions: false,
+  assistantConnectors: false,
+  assistantSkills: false,
+}
+
+/** Onboarding outcomes that may turn extra products on. Kept local so this
+ *  file stays free of the db package. */
+export type FeatureFlagUseCase =
+  'product_feedback' | 'customer_support' | 'help_center' | 'internal'
+
+/** Flags to persist for a new workspace, or to merge on (never off) when
+ *  the operator picks a goal that needs a module. */
+export function featureFlagsForUseCase(useCase?: FeatureFlagUseCase | null): FeatureFlags {
+  const flags = { ...DEFAULT_FEATURE_FLAGS }
+  if (useCase === 'customer_support') {
+    flags.supportInbox = true
+    flags.supportTickets = true
+  } else if (useCase === 'help_center') {
+    flags.helpCenter = true
+  }
+  return flags
+}
+
+/** Turn on the modules a goal needs without turning anything else off. */
+export function enableFlagsForUseCase(
+  current: FeatureFlags,
+  useCase?: FeatureFlagUseCase | null
+): FeatureFlags {
+  const needed = featureFlagsForUseCase(useCase)
+  return {
+    ...current,
+    supportInbox: current.supportInbox || needed.supportInbox,
+    supportTickets: current.supportTickets || needed.supportTickets,
+    helpCenter: current.helpCenter || needed.helpCenter,
+  }
 }
 
 /**
@@ -1137,11 +1148,6 @@ export const FEATURE_FLAG_REGISTRY: Record<
     label: 'Help Center',
     description: 'Publish a searchable help center so customers can find answers on their own.',
   },
-  helpCenterAiAnswers: {
-    label: 'Help Center AI Answers',
-    description:
-      'Let customers ask a question and get an instant AI answer with citations, built only from your published help articles. Requires an AI model to be configured.',
-  },
   supportInbox: {
     label: 'Conversations',
     description:
@@ -1152,30 +1158,20 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       'Give customers a Tickets portal for durable, trackable support requests alongside conversations.',
   },
-  visitorAnalytics: {
-    label: 'Visitor Analytics',
-    description:
-      'Measure visitors and pageviews across your portal and widget without cookies or personal data.',
-  },
-  visitorDeviceTracking: {
-    label: 'Visitor Identity',
-    description:
-      'Remember returning visitors with a first-party device id so their activity connects to leads and users. Stores an identifier in the browser; check your privacy requirements before enabling.',
-  },
   inboxAi: {
     label: 'Inbox AI',
     description:
       'AI for your team inside the inbox: a private Copilot tab for asking questions about a conversation, two-way message translation, and automatic classification of conversation attributes you opt in. Requires an AI model to be configured; each capability has its own controls.',
   },
-  assistantTools: {
-    label: 'Assistant actions',
+  assistantConnectors: {
+    label: 'Connectors',
     description:
-      'Let the AI assistant take actions such as closing conversations or creating tickets. Actions have per-action controls and approvals.',
+      'Give the Agent and Copilot tools from remote MCP servers. One catalog, mapped onto each agent, with a permission dial per tool.',
   },
-  assistantCustomActions: {
-    label: 'Custom actions',
+  assistantSkills: {
+    label: 'Skills',
     description:
-      'Build your own actions from an HTTP request the assistant can call, define them once, and assign them to the Agent or Copilot. Scoped response access and audit logging keep them safe.',
+      'Packaged procedures that teach the agents how to use their tools. The catalogue is always visible; the body loads on demand.',
   },
   statusPage: {
     label: 'Status page',
@@ -1192,17 +1188,14 @@ export interface ProductDefinition {
   description: string
   featureFlags: readonly (keyof FeatureFlags)[]
   adminPath:
-    | '/admin/feedback'
-    | '/admin/inbox'
-    | '/admin/help-center'
-    | '/admin/changelog'
-    | '/admin/status'
+    '/admin/feedback' | '/admin/inbox' | '/admin/help-center' | '/admin/changelog' | '/admin/status'
 }
 
 /**
- * Workspace products shown on Settings > General. Support retains its two
- * persisted capability flags for compatibility, but the UI changes them as a
- * single product so workspaces no longer need to coordinate two Labs toggles.
+ * Workspace products shown on Settings > General. These are not Labs
+ * experiments. Support retains two persisted capability keys for
+ * compatibility; the UI changes them as one product. Help Center is the
+ * same kind of product as Changelog — a General toggle, never a Labs row.
  */
 export const PRODUCT_DEFINITIONS = [
   {
@@ -1278,6 +1271,23 @@ export function getFirstEnabledAdminProductPath(
 }
 
 /**
+ * Generally-available capability toggles on Settings → General. Not products
+ * (those have their own card) and not Labs. A coverage test pins every flag
+ * to exactly one of General products, this list, or Labs.
+ */
+export const GA_FEATURE_SECTIONS: Array<{
+  title: string
+  description: string
+  flags: LabSectionRow[]
+}> = [
+  {
+    title: 'AI',
+    description: 'Generally available inbox AI. Requires a configured model.',
+    flags: [{ key: 'inboxAi' }],
+  },
+]
+
+/**
  * Labs page layout: experimental flags grouped into sections, each rendered as
  * a card with a heading + high-level description. Product flags are surfaced
  * on General instead; a coverage test pins every flag to exactly one page. A
@@ -1298,17 +1308,6 @@ export const LAB_SECTIONS: Array<{
     title: 'AI',
     description:
       'Optional AI capabilities. Require a configured model; off by default until you opt in.',
-    flags: [
-      { key: 'helpCenterAiAnswers' },
-      { key: 'inboxAi' },
-      { key: 'assistantTools' },
-      { key: 'assistantCustomActions' },
-    ],
-  },
-  {
-    title: 'Privacy-sensitive',
-    description:
-      'Analytics about who visits your portal and widget. Review your privacy policy before enabling.',
-    flags: [{ key: 'visitorAnalytics', subFlags: ['visitorDeviceTracking'] }],
+    flags: [{ key: 'assistantConnectors' }, { key: 'assistantSkills' }],
   },
 ]

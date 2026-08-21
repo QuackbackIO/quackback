@@ -1,5 +1,7 @@
 import { db, settings, eq } from '@/lib/server/db'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
+import { featureFlagsForUseCase } from '@/lib/server/domains/settings/settings.types'
+import { getSetupState } from '@/lib/shared/db-types'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { generateId } from '@quackback/ids'
@@ -74,8 +76,16 @@ export function makeReconcileDeps(): ReconcileDeps {
           tierLimits: insert.tierLimits,
           managedFieldPaths: insert.managedFieldPaths,
           authConfigVersion: 1,
+          featureFlags: JSON.stringify(
+            featureFlagsForUseCase(getSetupState(insert.setupState ?? null)?.useCase)
+          ),
         })
         .onConflictDoNothing({ target: settings.slug })
+    },
+    applyTierLimits: async (limits) => {
+      const { writeTierLimits } = await import('@/lib/server/domains/settings/tier-limits.write')
+      const result = await writeTierLimits(limits as never, { writer: 'config' })
+      return result.changed
     },
     invalidateSettingsCache: async () => {
       await invalidateSettingsCache()

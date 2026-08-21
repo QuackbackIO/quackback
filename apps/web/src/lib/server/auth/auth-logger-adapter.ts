@@ -49,8 +49,22 @@ export function createAuthLogger(sink: LogSink, level: AuthLogLevel = 'info') {
     level,
     disableColors: true,
     log: (level: AuthLogLevel, message: string, ...args: unknown[]) => {
-      const write = sink[level] ?? sink.info
-      write({ args: redactLogArgs(args) }, message)
+      // Called as a METHOD on `sink`, never as a detached function. pino's
+      // `error`/`warn`/`info` read instance state off `this` (`msgPrefixSym`
+      // among others), so `const write = sink[level]; write(...)` throws
+      // `undefined is not an object (evaluating 'this[msgPrefixSym]')` — and
+      // because better-auth calls this from inside its request handling, that
+      // throw surfaces as an unhandled **HTTP 500 on a successful sign-in**.
+      //
+      // Observed live on the pooled fleet: `/api/auth/get-session` returned 200
+      // with no cookie and 500 with a *valid* session cookie, because only the
+      // success path logged anything.
+      //
+      // The existing suite could not catch it: its sink is a plain object of
+      // `vi.fn()`s, which do not care what `this` is. Bound below, and the new
+      // case supplies a sink that does.
+      const method = sink[level] ? level : 'info'
+      sink[method]({ args: redactLogArgs(args) }, message)
     },
   }
 }
