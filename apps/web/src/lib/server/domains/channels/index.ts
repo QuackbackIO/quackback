@@ -9,7 +9,6 @@ export type {
   AgentMessageDeliveryCtx,
   ChannelAdapter,
   CsatDeliveryCtx,
-  DeliveryTarget,
   LifecycleDeliveryCtx,
   LifecycleKind,
 } from './types'

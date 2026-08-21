@@ -1,4 +1,5 @@
 import { resolveConversationFrom } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { deliverAgentMessageOnChannel } from './deliver-agent-message'
 import type { ChannelAdapter } from './types'
 
 /**
@@ -8,26 +9,7 @@ import type { ChannelAdapter } from './types'
 export const emailAdapter: ChannelAdapter = {
   id: 'email',
 
-  async resolveDeliveryTarget() {
-    return { kind: 'email' }
-  },
-
-  async deliverAgentMessage(ctx) {
-    const { sendVisitorConversationEmail } =
-      await import('@/lib/server/domains/conversation/conversation.notify')
-    await sendVisitorConversationEmail({
-      conversationId: ctx.conversationId,
-      visitorPrincipalId: ctx.visitorPrincipalId,
-      recipient: ctx.recipient,
-      direction: ctx.direction,
-      senderName: ctx.agentName,
-      content: ctx.content,
-      contentJson: ctx.contentJson,
-      ctaUrl: ctx.ctaUrl,
-      ctx: { workspaceName: ctx.workspaceName, logoUrl: ctx.logoUrl },
-      channel: 'email',
-    })
-  },
+  deliverAgentMessage: (ctx) => deliverAgentMessageOnChannel('email', ctx),
 
   async deliverLifecycleEvent(kind, ctx) {
     const { notifyConversationClosed } =

@@ -34,6 +34,7 @@ import {
   formatNamedSendingAddress,
   resolveConversationFrom,
 } from '@/lib/server/domains/channel-accounts/channel-account.service'
+import { agentReplyDisplayName, assembleOutboundThreading } from '@quackback/email'
 import { getChannelDescriptor } from '@/lib/shared/channels'
 import { requireChannelAdapter } from '@/lib/server/domains/channels'
 import type { Conversation } from '@/lib/server/db'
@@ -109,12 +110,12 @@ async function outboundThreading(conversationId: ConversationId): Promise<{
   const messageId = mintOutboundMessageId(conversationId)
   if (!messageId) return {}
   const thread = await threadIdsForOutbound(conversationId)
-  const inReplyTo = thread.inbound.at(-1) ?? thread.outbound.at(-1)
-  return {
+  return assembleOutboundThreading({
     messageId,
-    inReplyTo,
-    references: thread.merged.length > 0 ? thread.merged : undefined,
-  }
+    outboundIds: thread.outbound,
+    inboundIds: thread.inbound,
+    mergedIds: thread.merged,
+  })
 }
 
 async function loadQuotedPreviousMessage(
@@ -393,22 +394,16 @@ export async function sendVisitorConversationEmail(opts: {
   // customer's own support address should not change identity on the way back.
   const resolvedFrom = (await resolveConversationFrom(opts.conversationId)) ?? undefined
   const fromDisplayName = correspondence
-    ? `${opts.senderName} (${opts.ctx.workspaceName})`
+    ? agentReplyDisplayName(opts.senderName, opts.ctx.workspaceName)
     : undefined
   const from =
     resolvedFrom && fromDisplayName
       ? formatNamedSendingAddress(resolvedFrom, fromDisplayName)
       : resolvedFrom
-  try {
-    const { enforceEmailBudget } = await import('@/lib/server/domains/settings/tier-enforce')
-    await enforceEmailBudget()
-  } catch (err) {
-    const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
-    if (err instanceof TierLimitError) {
-      log.warn({ conversation_id: opts.conversationId }, 'email budget exhausted; send skipped')
-      return
-    }
-    throw err
+  const { emailBudgetAvailable } = await import('@/lib/server/domains/settings/tier-enforce')
+  if (!(await emailBudgetAvailable())) {
+    log.warn({ conversation_id: opts.conversationId }, 'email budget exhausted; send skipped')
+    return
   }
   const { sendConversationMessageEmail } = await import('@quackback/email')
   const result = await sendWithRetry(opts.conversationId, () =>
@@ -523,17 +518,11 @@ export async function notifyAgentReply(opts: {
     const adapter = requireChannelAdapter(opts.channel)
     if (recipient) {
       await adapter.deliverAgentMessage({
-        conversation: {
-          id: opts.conversationId,
-          channel: opts.channel,
-          visitorPrincipalId: opts.visitorPrincipalId,
-        },
         conversationId: opts.conversationId,
         visitorPrincipalId: opts.visitorPrincipalId,
         content: opts.content,
         contentJson: opts.contentJson,
         agentName: opts.agentName,
-        capturedEmail: opts.capturedEmail,
         recipient,
         ctaUrl,
         workspaceName: ctx.workspaceName,
@@ -557,11 +546,6 @@ export async function notifyAgentReply(opts: {
       for (const participant of participants) {
         try {
           await adapter.deliverAgentMessage({
-            conversation: {
-              id: opts.conversationId,
-              channel: opts.channel,
-              visitorPrincipalId: participant.principalId,
-            },
             conversationId: opts.conversationId,
             visitorPrincipalId: participant.principalId,
             content: opts.content,
@@ -626,11 +610,6 @@ export async function notifyConversationStarted(opts: {
     const mailCtx = await loadConversationMailContext(opts.conversationId)
     const channel = mailCtx.channel ?? 'messenger'
     await requireChannelAdapter(channel).deliverAgentMessage({
-      conversation: {
-        id: opts.conversationId,
-        channel,
-        visitorPrincipalId: opts.visitorPrincipalId,
-      },
       conversationId: opts.conversationId,
       visitorPrincipalId: opts.visitorPrincipalId,
       content: opts.content,

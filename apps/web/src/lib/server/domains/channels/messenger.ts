@@ -1,3 +1,4 @@
+import { deliverAgentMessageOnChannel } from './deliver-agent-message'
 import type { ChannelAdapter } from './types'
 
 /**
@@ -7,26 +8,7 @@ import type { ChannelAdapter } from './types'
 export const messengerAdapter: ChannelAdapter = {
   id: 'messenger',
 
-  async resolveDeliveryTarget() {
-    return { kind: 'realtime' }
-  },
-
-  async deliverAgentMessage(ctx) {
-    const { sendVisitorConversationEmail } =
-      await import('@/lib/server/domains/conversation/conversation.notify')
-    await sendVisitorConversationEmail({
-      conversationId: ctx.conversationId,
-      visitorPrincipalId: ctx.visitorPrincipalId,
-      recipient: ctx.recipient,
-      direction: ctx.direction,
-      senderName: ctx.agentName,
-      content: ctx.content,
-      contentJson: ctx.contentJson,
-      ctaUrl: ctx.ctaUrl,
-      ctx: { workspaceName: ctx.workspaceName, logoUrl: ctx.logoUrl },
-      channel: 'messenger',
-    })
-  },
+  deliverAgentMessage: (ctx) => deliverAgentMessageOnChannel('messenger', ctx),
 
   async deliverLifecycleEvent() {
     // The widget already shows the system message. No mailbox to notify.

@@ -48,9 +48,6 @@ const hoisted = vi.hoisted(() => ({
 function fixtureAdapter(): ChannelAdapter {
   return {
     id: TEST_CHANNEL_ID,
-    async resolveDeliveryTarget() {
-      return { kind: 'none' }
-    },
     deliverAgentMessage: hoisted.deliverAgentMessage,
     deliverLifecycleEvent: hoisted.deliverLifecycleEvent,
     deliverCsatRequest: hoisted.deliverCsatRequest,
@@ -126,8 +123,7 @@ describe('channel extensibility exit test', () => {
     expect(getChannelAdapter(TEST_CHANNEL_ID)?.id).toBe(TEST_CHANNEL_ID)
     expect(listChannelAdapters().map((a) => a.id)).toContain(TEST_CHANNEL_ID)
 
-    const adapter = requireChannelAdapter(TEST_CHANNEL_ID)
-    expect(await adapter.resolveDeliveryTarget({} as never)).toEqual({ kind: 'none' })
+    requireChannelAdapter(TEST_CHANNEL_ID)
 
     const resolved = await resolveInboundConversation({
       lookupCorrelation: async () => conversationId,
