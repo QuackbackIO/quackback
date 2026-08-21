@@ -102,11 +102,6 @@ export function runnerConfig(): RunnerConfig {
   }
 }
 
-/** All queue names the tier will claim for. */
-export function activeQueueNames(): string[] {
-  return jobDefinitions().map((d) => d.name)
-}
-
 /**
  * Handler modules, imported once and memoised.
  *

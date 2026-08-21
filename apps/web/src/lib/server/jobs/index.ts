@@ -47,7 +47,6 @@ export {
 } from './definitions'
 
 export {
-  activeQueueNames,
   awaitPool,
   claimSpecsFor,
   createJobPool,

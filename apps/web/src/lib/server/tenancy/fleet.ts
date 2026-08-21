@@ -160,6 +160,3 @@ export async function withTenantScopeById<T>(
   }
   return runWithTenantScope(acquisition.scope, body)
 }
-
-/** Alias kept for the barrel's naming symmetry with `runFleetPass`. */
-export const withScopedTenants = runFleetPass

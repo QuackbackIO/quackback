@@ -77,6 +77,16 @@ export interface OpenRealtimeListenerInput {
   directUrl: string
   /** Resolved per connection, so a rotated credential is picked up on reconnect. */
   password?: () => Promise<string>
+  /**
+   * Prove the database this connection reached really is the tenant's, BEFORE
+   * anything is delivered. Runs on the listener's own connection; a throw
+   * closes the connection and fails the open. The pooled caller passes the
+   * pool cache's own assertion (`assertTenantDirectDatabase`) so the direct
+   * path cannot be weaker than the request path: without it, a registry
+   * record with a mispointed `directUrl` would read another database's
+   * `realtime_overflow` rows and deliver them to this tenant's streams.
+   */
+  verifyIdentity?: (sql: Sql) => Promise<void>
   /** Called with the raw NOTIFY payload for every delivered message. */
   onPayload: (payload: string) => void
   /** Label for logs — the tenant id, or 'single'. */
@@ -95,6 +105,15 @@ export async function openRealtimeListener(
     ...(input.password ? { password: input.password } : {}),
     onnotice: () => {},
   })
+
+  if (input.verifyIdentity) {
+    try {
+      await input.verifyIdentity(sql)
+    } catch (err) {
+      await sql.end({ timeout: 5 }).catch(() => {})
+      throw err
+    }
+  }
 
   const verifyWaiters = new Set<(payload: string) => void>()
 

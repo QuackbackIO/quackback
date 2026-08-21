@@ -255,10 +255,10 @@ async function resolvePassword(tenant: TenantDescriptor): Promise<string> {
  * stale password memoised would make the retry fail for a second, unrelated
  * reason.
  *
- * Shared by the request pool cache and by `openTenantDirectPool` below, so the
- * pooled and direct paths cannot disagree about whether a database really is the
- * tenant the registry named. A second copy of a fail-closed identity check is a
- * second copy that can drift open.
+ * Shared by the request pool cache and by `assertTenantDirectDatabase` below,
+ * so the pooled and direct paths cannot disagree about whether a database
+ * really is the tenant the registry named. A second copy of a fail-closed
+ * identity check is a second copy that can drift open.
  */
 async function verifyTenantDatabase(
   tenant: TenantDescriptor,
@@ -350,59 +350,26 @@ async function enforceCap(keepTenantId: string): Promise<void> {
 }
 
 /**
- * A tenant's own **direct** (session-mode) pool, outside this cache.
+ * The same fail-closed identity assertion, for a connection built OUTSIDE this
+ * cache.
  *
- * A `LISTEN`-holding consumer (the realtime bus) needs three things this cache
- * cannot give it: the *direct* endpoint (a transaction pooler accepts a
- * `LISTEN` and delivers nothing), a connection that is never evicted by
- * request-traffic LRU pressure, and a lifetime it controls. So it opens its
- * own — but through this module, because this is the layer that builds
- * `Database` handles and, more importantly, because the identity assertion
- * must be the *same* assertion. A second copy of a fail-closed identity check
- * is a second copy that can drift open.
+ * A `LISTEN`-holding consumer (the realtime bus) needs the *direct* endpoint
+ * (a transaction pooler accepts a `LISTEN` and delivers nothing), a connection
+ * that is never evicted by request-traffic LRU pressure, and a lifetime it
+ * controls — so it owns its connection. But the identity question is the same
+ * one this cache answers before serving a pool, and it must be the *same*
+ * assertion: a listener on a mispointed `directUrl` would read another
+ * tenant's `realtime_overflow` rows and deliver them to this tenant's streams,
+ * fail-open. A second copy of a fail-closed identity check is a second copy
+ * that can drift open, so this is a window onto the one implementation.
  *
- * Deliberately NOT registered in `pools`: this handle is not a request pool
- * and must not be handed to a request.
- *
- * Throws on refusal, exactly as `acquireTenantPool` does. The caller decides
- * what a refused tenant costs.
+ * Throws on refusal, exactly as `acquireTenantPool` does.
  */
-export interface DirectTenantPool {
-  sql: postgres.Sql
-  db: Database
-  secrets: ResolvedTenantSecrets
-  close(): Promise<void>
-}
-
-export async function openTenantDirectPool(
+export async function assertTenantDirectDatabase(
   tenant: TenantDescriptor,
-  opts: { max?: number } = {}
-): Promise<DirectTenantPool> {
-  const sql = postgres(tenant.database.directUrl, {
-    max: opts.max ?? 1,
-    // A listener that closes itself when idle is not a listener.
-    idle_timeout: 0,
-    connect_timeout: 15,
-    prepare: true,
-    password: () => resolvePassword(tenant),
-    onnotice: () => {},
-  })
-  try {
-    const secrets = await verifyTenantDatabase(tenant, sql)
-    return {
-      sql,
-      db: createDbFromSql(sql),
-      secrets,
-      close: () =>
-        sql
-          .end({ timeout: 5 })
-          .then(() => undefined)
-          .catch(() => undefined),
-    }
-  } catch (err) {
-    await sql.end({ timeout: 5 }).catch(() => {})
-    throw err
-  }
+  sql: postgres.Sql
+): Promise<void> {
+  await verifyTenantDatabase(tenant, sql)
 }
 
 /** Close and forget a tenant's pool. Idempotent. */
@@ -460,13 +427,4 @@ export async function closeAllTenantPools(): Promise<void> {
   }
   const ids = [...pools.keys()]
   for (const id of ids) await evict(id, 'shutdown')
-}
-
-/** Test seam: forget everything, including counters. */
-export async function __resetPoolCacheForTests(): Promise<void> {
-  await closeAllTenantPools()
-  stats.created = 0
-  stats.evicted = 0
-  stats.evictedByReason = {} as Record<EvictionReason, number>
-  stats.refusals = 0
 }

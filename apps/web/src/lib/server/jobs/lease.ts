@@ -49,11 +49,6 @@ export const REAP_TERMINAL_REASON = 'lease expired with no attempts remaining; n
 export interface LeaseClaimInput {
   /** Table holding the leased rows. A module constant, never input. */
   table: string
-  /**
-   * Extra predicate ANDed onto the three universal ones, for a consumer that
-   * narrows the claimable set beyond status, run_at and attempts.
-   */
-  where?: SQL
   limit: number
   /** How long the claim holds the row before the reaper may take it back. */
   leaseMs: number
@@ -117,36 +112,6 @@ function leaseStamp(table: string, lockedUntil: SQL, workerId: string, returning
     FROM claimable c
     WHERE j.id = c.id
     RETURNING ${returning}
-  `
-}
-
-/**
- * Claim up to `limit` runnable rows, in one short transaction.
- *
- * `FOR UPDATE SKIP LOCKED` inside the CTE is what makes two claimers take
- * disjoint sets rather than one blocking on the other; the row lock is released
- * the instant this statement's transaction commits, which is exactly why the
- * `locked_until` lease exists on top of it.
- */
-export function leaseClaimSql(input: LeaseClaimInput): SQL {
-  const table = sql.identifier(input.table)
-  const extra = input.where ? sql` AND (${input.where})` : sql``
-  return sql`
-    WITH claimable AS (
-      SELECT id
-      FROM ${table}
-      WHERE ${CLAIMABLE}
-        ${extra}
-      ORDER BY run_at, id
-      FOR UPDATE SKIP LOCKED
-      LIMIT ${input.limit}
-    )
-    ${leaseStamp(
-      input.table,
-      sql`now() + make_interval(secs => ${input.leaseMs / 1000})`,
-      input.workerId,
-      input.returning
-    )}
   `
 }
 

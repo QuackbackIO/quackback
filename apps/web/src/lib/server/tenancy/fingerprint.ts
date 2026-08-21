@@ -86,69 +86,13 @@ export type IdentityFailure =
   | 'secret_key_custody_unproven'
 
 /**
- * What each refusal code is actually an accusation about.
- *
- * `acquireTenantScope` funnels EVERY exception from pool checkout into one
- * `refused` variant with a `code`, and the caller used to treat that variant as
- * synonymous with a fingerprint refusal. It is not: a missing credential, an
- * unreachable compute or a misconfigured `MIN_SCHEMA_VERSION` all arrive there
- * too, and reporting one of those as a fingerprint failure pulls the alarm
- * reserved for a cross-tenant near-miss — the one an operator is trained to
- * read as a tenancy breach.
- *
- * Two subjects, not one. `database` codes mean the row in front of us belongs
- * to someone else; `key` codes mean the row may be exactly right while the key
- * we would encrypt under is not the one its stored ciphertext was written with.
- * `evaluateSecretKeyCanary` keeps that distinction deliberately, on the grounds
- * that the operator fix for the two is nothing alike, and collapsing them here
- * would undo it at the only place an operator reads.
+ * Two subjects run through these codes, and the refusal details keep them
+ * apart on purpose: the `settings_*`/`stamp_*`/`workspace_*` codes mean the
+ * row in front of us belongs to someone else, while the `secret_key_*` codes
+ * mean the row may be exactly right and the key we would encrypt under is not
+ * the one its stored ciphertext was written with. The operator fix for the two
+ * is nothing alike, so a message must never report one as the other.
  */
-const IDENTITY_FAILURE_SUBJECT = {
-  settings_row_missing: 'database',
-  settings_not_singleton: 'database',
-  stamp_missing: 'database',
-  stamp_tenant_mismatch: 'database',
-  workspace_id_mismatch: 'database',
-  stamp_source_conflict: 'database',
-  secret_key_canary_missing: 'key',
-  secret_key_canary_mismatch: 'key',
-  secret_key_stored_ciphertext_mismatch: 'key',
-  secret_key_custody_unproven: 'key',
-} as const satisfies Record<IdentityFailure, 'database' | 'key'>
-
-/**
- * The codes that mean "this is the wrong database", derived rather than
- * restated so the two lists cannot drift apart.
- *
- * `Record<IdentityFailure, …>` above is the compile-time gate: a new failure
- * code fails to compile until it is classified, and it cannot be classified
- * without someone deciding which alarm it belongs to. That is the property
- * worth keeping. A hand-maintained second list would let a new code be added
- * to the union and silently default to neither.
- */
-export const IDENTITY_FAILURE_CODES = Object.keys(IDENTITY_FAILURE_SUBJECT).filter(
-  (code) => IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'database'
-) as readonly IdentityFailure[]
-
-/** The codes that mean "the key and the database do not belong to each other". */
-export const KEY_CUSTODY_FAILURE_CODES = Object.keys(IDENTITY_FAILURE_SUBJECT).filter(
-  (code) => IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'key'
-) as readonly IdentityFailure[]
-
-/** True when a refusal code means the database failed its identity check. */
-export function isIdentityFailureCode(code: string): code is IdentityFailure {
-  return IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'database'
-}
-
-/**
- * True when a refusal code means the key and the database do not belong to each
- * other. Distinct from {@link isIdentityFailureCode} because the cross-tenant
- * alarm is trained on the other one, and the repair is a custody script rather
- * than a registry correction.
- */
-export function isKeyCustodyFailureCode(code: string): code is IdentityFailure {
-  return IDENTITY_FAILURE_SUBJECT[code as IdentityFailure] === 'key'
-}
 
 /**
  * The second question about a refusal: can retrying ever fix it?

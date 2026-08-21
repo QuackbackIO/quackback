@@ -48,7 +48,8 @@ import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { currentTenantNamespace } from '../tenancy/tenant-keyed'
 import { getTenantScope } from '../tenancy/tenant-context'
 import { isPooledTenancy } from '../tenancy/mode'
-import { resolveTenantPassword } from '../tenancy/pool-cache'
+import { assertTenantDirectDatabase, resolveTenantPassword } from '../tenancy/pool-cache'
+import type { Sql as PgSql } from 'postgres'
 import { openRealtimeListener, type RealtimeListener } from './pg-listener'
 import { logger } from '@/lib/server/logger'
 
@@ -177,7 +178,11 @@ function emit(handlers: Set<Handler>, message: string): void {
  * the registry's `directUrl` — the pooled URL would register the LISTEN and
  * deliver nothing.
  */
-async function directConnection(): Promise<{ url: string; password?: () => Promise<string> }> {
+async function directConnection(): Promise<{
+  url: string
+  password?: () => Promise<string>
+  verifyIdentity?: (sql: PgSql) => Promise<void>
+}> {
   if (!isPooledTenancy()) return { url: config.databaseUrl }
   const scope = getTenantScope()
   if (!scope) {
@@ -187,7 +192,14 @@ async function directConnection(): Promise<{ url: string; password?: () => Promi
     )
   }
   const tenant = scope.tenant
-  return { url: tenant.database.directUrl, password: () => resolveTenantPassword(tenant) }
+  return {
+    url: tenant.database.directUrl,
+    password: () => resolveTenantPassword(tenant),
+    // The pool cache's own fail-closed identity assertion, run on the listener
+    // connection before anything is delivered: the direct path must not be
+    // weaker than the request path it rides beside.
+    verifyIdentity: (sql) => assertTenantDirectDatabase(tenant, sql),
+  }
 }
 
 async function acquireConnection(namespace: string): Promise<TenantConnection> {
@@ -204,7 +216,7 @@ async function acquireConnection(namespace: string): Promise<TenantConnection> {
   }
 
   const promise = (async () => {
-    const { url, password } = await directConnection()
+    const { url, password, verifyIdentity } = await directConnection()
     // `dispatch` needs the listener to read overflow rows back on its own
     // connection, and the listener needs `onPayload` to construct. The box
     // closes the cycle without a partially-initialised binding.
@@ -212,6 +224,7 @@ async function acquireConnection(namespace: string): Promise<TenantConnection> {
     const listener = await openRealtimeListener({
       directUrl: url,
       password,
+      verifyIdentity,
       label: namespace,
       onPayload: (raw) => {
         if (box.listener) dispatch(namespace, box.listener, raw)
