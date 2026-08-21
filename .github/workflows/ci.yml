@@ -50,8 +50,8 @@ jobs:
       - run: bunx tsc --noEmit -p packages/email/tsconfig.json
 
   # Four shards on four-core runners. The ~1,300-file suite was ~8–9 min of
-  # wall clock on one job; splitting files plus isolate:false in vitest.config
-  # is what makes the unit gate finish in a couple of minutes.
+  # wall clock on one job; splitting files is what makes the unit gate finish
+  # in a couple of minutes.
   unit:
     name: test (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest

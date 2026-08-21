@@ -10,10 +10,6 @@ export default defineConfig({
     maxWorkers: process.env.CI ? 4 : undefined,
     fileParallelism: true,
     pool: 'forks',
-    isolate: false,
-    clearMocks: true,
-    mockReset: true,
-    restoreMocks: true,
     // The default 5s is too tight for a ~590-file suite run fully in parallel:
     // a test's first `await import()` of a heavy module graph pays that graph's
     // esbuild transform inside the timed body, and under CPU saturation that

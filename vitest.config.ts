@@ -7,19 +7,11 @@ export default defineConfig({
     environment: 'node',
     // GitHub-hosted ubuntu-latest is 4 vCPU. Default maxWorkers is ~50% of
     // cores, which leaves half the runner idle. Pin to 4 in CI; locally leave
-    // headroom for the rest of the machine.
+    // headroom for the rest of the machine. Isolation stays on: turning it
+    // off leaked vi.mock state across files (~200 failures on a shard).
     maxWorkers: process.env.CI ? 4 : undefined,
     fileParallelism: true,
     pool: 'forks',
-    // Default isolate reloads the whole module graph for every file (~1,300
-    // files). CI spent ~8 min of wall clock on import+setup, not assertions.
-    // vi.mock is still per-file; shared module cache is the win.
-    isolate: false,
-    clearMocks: true,
-    mockReset: true,
-    restoreMocks: true,
-    unstubEnvs: true,
-    unstubGlobals: true,
     // Many server tests do a first-time dynamic import() inside the test body
     // (the vi.mock factory pattern). Under parallel CPU contention that load
     // can exceed the 5s default — and a timeout firing mid-import() corrupts
