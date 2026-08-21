@@ -156,6 +156,22 @@ export interface InboxPostListResult {
 }
 
 /**
+ * Per-option counts for the admin inbox filter pane. Each map is keyed by the
+ * same id the filter UI uses (status slug, board/tag/segment id). Counts for
+ * a dimension omit that dimension's own filter so an unselected option shows
+ * how many posts would newly match if it were selected, given every other
+ * currently applied filter.
+ */
+export interface InboxFilterCounts {
+  statuses: Record<string, number>
+  boards: Record<string, number>
+  tags: Record<string, number>
+  segments: Record<string, number>
+  responded: { responded: number; unresponded: number }
+  deleted: number
+}
+
+/**
  * Post list item with board, tags, and comment count
  */
 export interface PostListItem extends Post {
