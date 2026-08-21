@@ -1,6 +1,5 @@
 /**
- * Real-time fan-out bus for conversations, on Postgres `LISTEN`/`NOTIFY`
- * (SAAS-HOSTING-STACK.md §7.4).
+ * Real-time fan-out bus for conversations, on Postgres `LISTEN`/`NOTIFY`.
  *
  * Postgres is the durable source of truth; this layer is fire-and-forget
  * delivery only. A message written on one app replica must reach an SSE
@@ -24,7 +23,7 @@
  * carries the row id. Steady state on a normal install is zero rows.
  *
  * **The subscriber connection is direct, and per tenant.** `LISTEN` through a
- * transaction-mode pooler registers and never delivers (§7.3, measured). See
+ * transaction-mode pooler registers and never delivers (measured). See
  * `pg-listener.ts` for the connection, and for why it is verified by a real
  * notify round trip rather than by reading `pg_listening_channels()`.
  *
@@ -219,6 +218,13 @@ async function acquireConnection(namespace: string): Promise<TenantConnection> {
       },
     })
     box.listener = listener
+    // Deliberately not awaited: the check exists to make a misconfigured DSN
+    // loud, not to gate the stream. A listener pointed at a transaction-mode
+    // pooler accepts the LISTEN and silently delivers nothing — verify() is
+    // the only check that catches it, and it must not delay the first stream.
+    void listener
+      .verify()
+      .catch((err) => log.warn({ err, namespace }, 'could not verify the realtime listener'))
     const conn: TenantConnection = { listener, refs: 0 }
     connections.set(namespace, conn)
     return conn

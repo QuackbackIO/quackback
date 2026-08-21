@@ -2,14 +2,13 @@
  * The realtime bus's receive side — `LISTEN quackback_realtime` on a
  * session-mode connection.
  *
- * The discipline here is `jobs/wake.ts`'s, and the reason is the same
- * measurement: through Neon's transaction-mode pooler a notify **never
- * arrives, at any concurrency — including a single client**, while
- * `pg_listening_channels()` reports the registration as held the whole time
- * (SAAS-HOSTING-STACK.md §7.3, measured 2026-08-08). So:
+ * `LISTEN` does not survive a transaction-mode pooler (pgbouncer included):
+ * the registration is accepted, nothing is ever delivered, and
+ * `pg_listening_channels()` reports the registration as held the whole time.
+ * Measured, at any concurrency — including a single client. So:
  *
  * 1. The connection is built from the tenant's **direct** DSN, never from the
- *    pool cache.
+ *    pool cache and never through the transaction pooler.
  * 2. A listener is only ever verified by round-tripping a real NOTIFY.
  *    `verify()` sends one from a *separate* connection and waits for it —
  *    nothing here asks the catalogue whether it is registered, and nothing
@@ -42,6 +41,13 @@ const log = logger.child({ component: 'realtime-listen' })
 
 /** The single NOTIFY channel per tenant database. */
 export const REALTIME_CHANNEL = 'quackback_realtime'
+
+/**
+ * `application_name` on every listener connection. Diagnostics, not behaviour:
+ * a connection that exists only to wait is otherwise indistinguishable in
+ * `pg_stat_activity` from one that is stuck.
+ */
+export const REALTIME_LISTENER_APPLICATION_NAME = 'quackback-realtime-listener'
 
 export interface RealtimeListener {
   /**
@@ -85,6 +91,7 @@ export async function openRealtimeListener(
     // A bus that closes itself when idle is not a bus.
     idle_timeout: 0,
     connect_timeout: 15,
+    connection: { application_name: REALTIME_LISTENER_APPLICATION_NAME },
     ...(input.password ? { password: input.password } : {}),
     onnotice: () => {},
   })
