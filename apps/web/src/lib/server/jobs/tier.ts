@@ -58,16 +58,13 @@ import {
   type RunnerConfig,
 } from './runner'
 import { getProcessScheduler, stopTenantScheduler } from './scheduler'
-import { onDurableWorkCommitted } from '@/lib/server/tenancy/after-commit'
+import { onDurableWorkCommitted, SINGLE_TENANT_ID } from '@/lib/server/tenancy/after-commit'
 import { convertRelayOwnedEvents } from '@/lib/server/events/event-dispatch-queue'
 
 const log = logger.child({ component: 'job-tier' })
 
 /** How often the pooled tier re-reads the tenant list from the control database. */
 const TENANT_REFRESH_MS = 60_000
-
-/** Sentinel tenant id for a single-tenant install. Never a real tenant id. */
-const SINGLE = '__single__'
 
 interface TenantLoop {
   tenantId: string
@@ -344,12 +341,12 @@ function errText(err: unknown): string {
 
 function startSingleTenantLoop(cfg: RunnerConfig): void {
   const loop = startLoop({
-    tenantId: SINGLE,
+    tenantId: SINGLE_TENANT_ID,
     config: cfg,
     tenant: null,
     scoped: (body) => body(),
   })
-  loops.set(SINGLE, loop)
+  loops.set(SINGLE_TENANT_ID, loop)
 }
 
 function startTenantLoop(tenant: TenantDescriptor, cfg: RunnerConfig): void {
@@ -496,15 +493,4 @@ export function signalTenant(tenantId: string): boolean {
   const scheduler = getProcessScheduler()
   if (scheduler) scheduler.signal(tenantId)
   return Boolean(loop || scheduler)
-}
-
-/**
- * Re-read the active tenant set and start any missing loops.
- */
-export function requestTenantLoopRefresh(): void {
-  if (!running) return
-  if (!config.isPooledTenancy) return
-  void refreshTenantLoops(runnerConfig()).catch((err) =>
-    log.error({ err }, 'job tier tenant refresh failed')
-  )
 }
