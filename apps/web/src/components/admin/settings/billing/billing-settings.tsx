@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
 import { formatUsd } from '@/lib/shared/format-usd'
+import { formatUsageLine } from '@/lib/shared/billing/plan-usage'
 import { MENU_LABEL } from '@/components/ui/menu'
 
 /** Workspace-local presentation of the control-plane billing projection. */
@@ -86,11 +87,8 @@ export function BillingPlansView(props: {
         <SettingsCard title="Usage" description="How much of this plan you are using.">
           <ul className="space-y-1.5 text-[13px]">
             {props.usage.map((line) => (
-              <li key={line.key} className="flex justify-between gap-3">
-                <span className="text-muted-foreground capitalize">{line.label}</span>
-                <span className="font-mono tabular-nums">
-                  {line.limit == null ? line.used : `${line.used} of ${line.limit}`}
-                </span>
+              <li key={line.key} className="font-mono tabular-nums">
+                {formatUsageLine(line)}
               </li>
             ))}
           </ul>
