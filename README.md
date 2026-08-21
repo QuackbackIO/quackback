@@ -90,7 +90,7 @@ See the [Contributing Guide](CONTRIBUTING.md) to get started.
 
 ### Local Development
 
-Prerequisites: [Bun](https://bun.sh/) v1.3.7+ and [Docker](https://docker.com/)
+Prerequisites: [Bun](https://bun.sh/) v1.4.0+ and [Docker](https://docker.com/)
 
 ```bash
 git clone https://github.com/QuackbackIO/quackback.git

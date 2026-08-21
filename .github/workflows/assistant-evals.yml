@@ -71,6 +71,8 @@ jobs:
       - name: Setup Bun
         if: steps.gate.outputs.run == 'true'
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
 
       - name: Install dependencies
         if: steps.gate.outputs.run == 'true'

@@ -165,7 +165,7 @@ pg_restore -d quackback quackback_backup.dump
 
 ### Prerequisites
 
-- **Bun** 1.3.3+
+- **Bun** 1.4.0+
 - **PostgreSQL** 17+
 - **Node.js** 20+ (for some dev tools)
 
