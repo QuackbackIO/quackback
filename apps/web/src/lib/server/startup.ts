@@ -225,6 +225,7 @@ function startBackgroundProcessing(): void {
     import('./domains/ai/usage-log'),
     import('./domains/assistant/tool-audit'),
     import('./domains/conversation/conversation-translation.service'),
+    import('./email/email-log.retention'),
     import('@/lib/server/sweep-lock'),
   ])
     .then(
@@ -235,6 +236,7 @@ function startBackgroundProcessing(): void {
         { cleanupExpiredLogs },
         { cleanupExpiredToolCalls, cleanupExpiredAssistantEvents },
         { cleanupExpiredMessageTranslations },
+        { runEmailLogRetention },
         { withSweepLock },
       ]) => {
         const runDailyAuditMaintenance = async () => {
@@ -266,6 +268,11 @@ function startBackgroundProcessing(): void {
               cleanupExpiredAssistantEvents(),
               cleanupExpiredMessageTranslations(),
             ]).catch((err) => log.error({ err }, 'logs retention cleanup failed'))
+          })
+          await withSweepLock('email_log_retention', ONE_HOUR, async () => {
+            await runEmailLogRetention().catch((err) =>
+              log.error({ err }, 'email log retention failed')
+            )
           })
         }
         setTimeout(() => {
