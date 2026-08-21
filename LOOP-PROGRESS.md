@@ -1,5 +1,18 @@
 # First-customer Loop Progress
 
+## 2026-08-21 — Visit Open handoff replay
+
+Not a faulty workspace. `inst_01m08w2feefzvvrnrw3xdx3ras`
+(`ws-d171adbc…`, Untitled, registry active) minted a one-use GET
+handoff; the second load (prefetch/remount/refresh) showed "sign-in
+link is no longer valid".
+
+App `b3363bec0`. Docker `32493787548` →
+`ghcr.io/quackbackio/quackback@sha256:0903b38d…`. Web `40a225ab`
+SUCCESS, digest matches, `us-east4-eqdc4a`. Open restores the OTT for
+its TTL so Visit always signs in. Tests 15/15. Did not mint a live
+handoff this fire.
+
 ## 2026-08-21 — workspace list looks visitable
 
 Customer-visible CP dashboard polish. Live rows are Slack-style
