@@ -50,11 +50,15 @@ vi.mock('@/lib/server/events/hook-context', () => ({
 }))
 
 // notify.ts imports this dynamically inside the email branches.
-vi.mock('@quackback/email', () => ({
-  sendConversationMessageEmail: (...a: [Record<string, unknown>]) =>
-    sendConversationMessageEmail(...a),
-  sendCsatRequestEmail: (...a: [Record<string, unknown>]) => sendCsatRequestEmail(...a),
-}))
+vi.mock('@quackback/email', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@quackback/email')>()
+  return {
+    ...actual,
+    sendConversationMessageEmail: (...a: [Record<string, unknown>]) =>
+      sendConversationMessageEmail(...a),
+    sendCsatRequestEmail: (...a: [Record<string, unknown>]) => sendCsatRequestEmail(...a),
+  }
+})
 
 // notifyCsatRequestEmail's mint import (moved here from action.executor.ts —
 // see the module doc's CSAT-over-email paragraph).
@@ -64,20 +68,12 @@ vi.mock('../csat-email-token', () => ({
 
 // Outbound-email persistence (threading map + channel identities). No-op here;
 // exercised in its own suite. Keeps notify's fire-and-forget path off the db.
-const priorOutboundMessageIds = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => [])
-const priorInboundEmailMessageIds = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => [])
 const threadIdsForOutbound = vi.fn<
   (...a: unknown[]) => Promise<{ inbound: string[]; outbound: string[]; merged: string[] }>
->(async () => {
-  const outbound = await priorOutboundMessageIds()
-  const inbound = await priorInboundEmailMessageIds()
-  return { inbound, outbound, merged: [...inbound, ...outbound] }
-})
+>(async () => ({ inbound: [], outbound: [], merged: [] }))
 const recordOutboundEmail = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 const recordEmailIdentity = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 vi.mock('../conversation.email-store', () => ({
-  priorOutboundMessageIds: (...a: unknown[]) => priorOutboundMessageIds(...a),
-  priorInboundEmailMessageIds: (...a: unknown[]) => priorInboundEmailMessageIds(...a),
   threadIdsForOutbound: (...a: unknown[]) => threadIdsForOutbound(...a),
   recordOutboundEmail: (...a: unknown[]) => recordOutboundEmail(...a),
   recordEmailIdentity: (...a: unknown[]) => recordEmailIdentity(...a),
@@ -934,7 +930,7 @@ describe('threading headers (P4.6 regression guard)', () => {
       isPrincipalOnline.mockResolvedValue(false)
       visitorRows = [{ type: 'user', email: 'account@x.com' }]
       // No prior outbound mails → nothing to reply to / reference.
-      priorOutboundMessageIds.mockResolvedValue([])
+      threadIdsForOutbound.mockResolvedValue({ inbound: [], outbound: [], merged: [] })
 
       await notifyAgentReply({
         conversationId,
@@ -959,7 +955,7 @@ describe('threading headers (P4.6 regression guard)', () => {
       isPrincipalOnline.mockResolvedValue(false)
       visitorRows = [{ type: 'user', email: 'account@x.com' }]
       const prior = ['c.1.aaa@tenaevexeo.resend.app', 'c.1.bbb@tenaevexeo.resend.app']
-      priorOutboundMessageIds.mockResolvedValue(prior)
+      threadIdsForOutbound.mockResolvedValue({ inbound: [], outbound: prior, merged: prior })
 
       await notifyAgentReply({
         conversationId,
@@ -998,8 +994,11 @@ describe('threading headers (P4.6 regression guard)', () => {
     it("puts the customer's inbound Message-ID in In-Reply-To and References", async () => {
       isPrincipalOnline.mockResolvedValue(false)
       visitorRows = [{ type: 'user', email: 'account@x.com' }]
-      priorOutboundMessageIds.mockResolvedValue(['c.1.aaa@tenaevexeo.resend.app'])
-      priorInboundEmailMessageIds.mockResolvedValue(['cust-inbound@mail.example'])
+      threadIdsForOutbound.mockResolvedValue({
+        inbound: ['cust-inbound@mail.example'],
+        outbound: ['c.1.aaa@tenaevexeo.resend.app'],
+        merged: ['cust-inbound@mail.example', 'c.1.aaa@tenaevexeo.resend.app'],
+      })
 
       await notifyAgentReply({
         conversationId,
@@ -1037,7 +1036,7 @@ describe('threading headers (P4.6 regression guard)', () => {
       beforeEach(() => {
         isPrincipalOnline.mockResolvedValue(false)
         visitorRows = [{ type: 'user', email: 'account@x.com' }]
-        priorOutboundMessageIds.mockResolvedValue([])
+        threadIdsForOutbound.mockResolvedValue({ inbound: [], outbound: [], merged: [] })
       })
 
       const reply = () =>

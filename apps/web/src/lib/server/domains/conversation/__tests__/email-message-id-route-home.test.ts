@@ -68,6 +68,7 @@ vi.mock('@/lib/server/db', () => {
     eq: (col: unknown, val: unknown) => ({ _t: 'eq', col, val }),
     inArray: (col: unknown, vals: unknown) => ({ _t: 'inArray', col, vals }),
     desc: (col: unknown) => ({ _t: 'desc', col }),
+    isNull: (col: unknown) => ({ _t: 'isNull', col }),
     sql: () => ({ _t: 'sql' }),
     channelIdentities: {},
     conversationOutboundEmails: {
@@ -75,14 +76,20 @@ vi.mock('@/lib/server/db', () => {
       conversationId: 'conversationOutboundEmails.conversationId',
       createdAt: 'conversationOutboundEmails.createdAt',
     },
+    conversationMessages: {
+      metadata: 'conversationMessages.metadata',
+      createdAt: 'conversationMessages.createdAt',
+      conversationId: 'conversationMessages.conversationId',
+      deletedAt: 'conversationMessages.deletedAt',
+    },
   }
 })
 
 import { parseMessageIdList } from '../conversation.email-inbound'
 import {
-  priorOutboundMessageIds,
   recordOutboundEmail,
   resolveConversationByMessageIds,
+  threadIdsForOutbound,
 } from '../conversation.email-store'
 import type { ConversationId } from '@quackback/ids'
 
@@ -203,7 +210,7 @@ describe('the chain the next mail carries', () => {
     await recordOutboundEmail(messageId, CONVERSATION)
 
     // What the notify path builds its threading headers from.
-    const prior = await priorOutboundMessageIds(CONVERSATION)
+    const prior = (await threadIdsForOutbound(CONVERSATION)).outbound
     expect(prior).toEqual([ASSIGNED])
 
     const { sentHeaders } = await sendOne('us-east-1', {

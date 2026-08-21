@@ -74,7 +74,6 @@ import {
   resolvePrincipalIdByEmail,
   recordOutboundEmail,
   recordEmailIdentity,
-  priorOutboundMessageIds,
   priorInboundEmailMessageIds,
   threadIdsForOutbound,
 } from '../conversation.email-store'
@@ -219,25 +218,6 @@ describe('recordEmailIdentity', () => {
       strings: ['', ' OR excluded.verified'],
       values: ['channelIdentities.verified'],
     })
-  })
-})
-
-describe('priorOutboundMessageIds', () => {
-  it('returns stored ids oldest-first (reversing the newest-first fetch)', async () => {
-    selectRows = [{ messageId: 'newest@d' }, { messageId: 'oldest@d' }]
-    const result = await priorOutboundMessageIds('conversation_abc' as never)
-    expect(result).toEqual(['oldest@d', 'newest@d'])
-  })
-
-  it('keeps a hostless id in the chain for the transport to finish', async () => {
-    // A hostless row is what a provider that assigns its own id reports, and it
-    // is the ordinary case on that rung rather than a legacy one. Dropping it
-    // here would empty the chain on exactly the rung the ids come from; the
-    // transport that reported the id is the one that knows the host its header
-    // carried, and it completes the token on the way out.
-    selectRows = [{ messageId: 'newest@d' }, { messageId: '0100018f-abc' }, { messageId: 'old@d' }]
-    const result = await priorOutboundMessageIds('conversation_abc' as never)
-    expect(result).toEqual(['old@d', '0100018f-abc', 'newest@d'])
   })
 })
 

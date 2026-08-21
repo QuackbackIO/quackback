@@ -94,29 +94,6 @@ export async function recordOutboundEmail(
 }
 
 /**
- * Prior outbound Message-IDs for a conversation, oldest first — the References
- * chain for the next outbound mail. Bounded so a long thread stays cheap.
- *
- * Returned in the stored form, hostless ids included. A hostless token is not a
- * legal `msg-id`, but it is the ordinary shape on the rung whose transport
- * assigns its own ids, and that transport is the one that knows the host its
- * header carried: it completes the token on the way out.
- */
-export async function priorOutboundMessageIds(
-  conversationId: ConversationId,
-  limit = 20
-): Promise<string[]> {
-  const rows = await db
-    .select({ messageId: conversationOutboundEmails.messageId })
-    .from(conversationOutboundEmails)
-    .where(eq(conversationOutboundEmails.conversationId, conversationId))
-    .orderBy(desc(conversationOutboundEmails.createdAt))
-    .limit(limit)
-  // Fetched newest-first for the LIMIT; return oldest-first for the header.
-  return rows.map((r) => r.messageId).reverse()
-}
-
-/**
  * Customer's inbound Message-IDs on this conversation (`metadata.emailMessageId`),
  * oldest first. Used so outbound In-Reply-To / References name the mail they
  * sent, not only the ones we sent.
