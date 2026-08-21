@@ -6,12 +6,12 @@ Regenerate with `bunx vitest run apps/web/src/lib/server/policy/migration-contra
 
 ## Summary
 
-Migrations scanned: 241. Migrations with destructive DDL: 32.
+Migrations scanned: 246. Migrations with destructive DDL: 33.
 
 | Kind | Occurrences |
 | --- | --- |
 | DROP COLUMN | 22 |
-| DROP TABLE | 18 |
+| DROP TABLE | 21 |
 | DROP CONSTRAINT | 9 |
 | RENAME COLUMN | 15 |
 | RENAME TO (table) | 13 |
@@ -55,6 +55,7 @@ Migrations scanned: 241. Migrations with destructive DDL: 32.
 | 0256_workspace_key_columns.sql | RENAME COLUMN kv_store.tenant_id -> workspace_key; RENAME COLUMN rate_bucket.tenant_id -> workspace_key; RENAME COLUMN kv_set_member.tenant_id -> workspace_key; RENAME COLUMN presence_stream.tenant_id -> workspace_key; RENAME COLUMN realtime_overflow.tenant_id -> workspace_key; RENAME COLUMN job_queue.tenant_id -> workspace_key; DROP COLUMN settings.cloud_tenant_id; RENAME COLUMN settings.cloud_tenant_id -> cloud_workspace_key | annotated (safe-after 0.13.1) |
 | 0259_channel_threads.sql | DROP CONSTRAINT channel_accounts.channel_accounts_channel_check; DROP CONSTRAINT channel_accounts.channel_accounts_role_check | annotated (safe-after 0.13.2) |
 | 0262_drop_assistant_custom_actions.sql | DROP TABLE assistant_actions | annotated (safe-after 0.13.2) |
+| 0267_drop_workspace_billing.sql | DROP TABLE billing_webhook_events; DROP TABLE billing_usage_events; DROP TABLE billing_subscription_state | annotated (safe-after 0.13.2) |
 
 ## Grandfathered (29)
 

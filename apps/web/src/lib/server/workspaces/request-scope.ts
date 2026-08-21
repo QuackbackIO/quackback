@@ -17,6 +17,7 @@
  * | Outcome | Status | Database touched |
  * | --- | --- | --- |
  * | `unknown_host` — no record claims this hostname | 404 | none |
+ * | `redirect` — obsolete friendly platform hostname | 308 for GET/HEAD, 409 otherwise | none |
  * | `suspended` — record exists, gated off | 403 + `reason` | none |
  * | `deleting` — teardown in flight | 410 | none |
  * | `invalid` — a record exists but fails the contract | 503, alert | none |
@@ -37,6 +38,7 @@ import {
 } from '@/lib/server/fleet/schema-floor'
 import { isIdentityFailureCode, isKeyCustodyFailureCode } from './fingerprint'
 import { acquireScopeForHost } from './resolver'
+import { requestWorkspaceHost } from './saas-edge-host'
 import { runWithWorkspaceScope } from './workspace-context'
 
 /** Cache-Control on every refusal: a routing decision must never be cached. */
@@ -68,6 +70,8 @@ function isFleetHealthPath(pathname: string): boolean {
   return pathname === '/api/health' || pathname.startsWith('/api/health/')
 }
 
+export { requestWorkspaceHost } from './saas-edge-host'
+
 export async function resolveWorkspaceAndContinue<T>({
   request,
   next,
@@ -79,7 +83,7 @@ export async function resolveWorkspaceAndContinue<T>({
 }): Promise<T | Response> {
   if (isFleetHealthPath(new URL(request.url).pathname)) return next()
 
-  const host = request.headers.get('host')
+  const host = requestWorkspaceHost(request)
   const acquisition = await acquireScopeForHost(host, 'request')
 
   switch (acquisition.kind) {
@@ -89,6 +93,37 @@ export async function resolveWorkspaceAndContinue<T>({
     case 'unknown_host':
       log.warn({ host: acquisition.hostname }, 'no workspace claims this hostname')
       return refusal(404, 'Unknown workspace')
+
+    case 'redirect': {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        log.warn(
+          {
+            workspaceKey: acquisition.workspaceKey,
+            host: acquisition.hostname,
+            method: request.method,
+          },
+          'unsafe request refused on obsolete workspace hostname'
+        )
+        return refusal(409, 'This workspace URL has changed. Reload from its current address.')
+      }
+      const target = new URL(request.url)
+      const canonical = new URL(acquisition.location)
+      target.protocol = canonical.protocol
+      target.hostname = canonical.hostname
+      target.port = ''
+      log.info(
+        {
+          workspaceKey: acquisition.workspaceKey,
+          from: acquisition.hostname,
+          to: canonical.hostname,
+        },
+        'redirecting obsolete workspace hostname'
+      )
+      return new Response(null, {
+        status: 308,
+        headers: { location: target.toString(), ...NO_STORE },
+      })
+    }
 
     case 'suspended':
       log.warn(

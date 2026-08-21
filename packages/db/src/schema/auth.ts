@@ -69,7 +69,8 @@ export interface StoredAssistantConfig {
   }
 }
 
-/** Storage-only shape for the narrow control-plane projection. */
+/** Storage-only shape for the narrow control-plane projection. A NULL cloud
+ * column is the default for every self-hosted workspace. */
 export interface StoredProjectedLimits {
   maxBoards: number | null
   maxPosts: number | null
@@ -82,7 +83,7 @@ export interface StoredProjectedLimits {
   apiRequestsPerMinute: number | null
 }
 
-/** Commercial state safe to project into a workspace database. */
+/** Commercial state safe to project from the control plane into a workspace. */
 export interface StoredBillingProjection {
   version: number
   effectivePlan: string
@@ -101,7 +102,26 @@ export interface StoredBillingProjection {
 
 export interface StoredCloudConfig {
   enabled: boolean
+  /** Signed, monotonic commercial state projected by the control plane. */
   projection?: StoredBillingProjection | null
+}
+
+export interface StoredCloudCustomDomain {
+  hostname: string
+  readiness: 'pending' | 'ready' | 'failed'
+  isPrimary: boolean
+  updatedAt: string
+}
+
+/** Customer-safe cloud identity; provider ids and validation secrets never cross. */
+export interface StoredCloudIdentityProjection {
+  version: number
+  displayName: string
+  canonicalOrigin: string
+  /** Friendly Quackback hostname, null until the owner chooses one. */
+  platformHostname: string | null
+  customDomains: StoredCloudCustomDomain[]
+  updatedAt: string
 }
 
 /**
@@ -453,6 +473,28 @@ export const settings = pgTable('settings', {
    * on).
    */
   tierLimits: text('tier_limits'),
+  /**
+   * Optional cloud configuration block (see {@link StoredCloudConfig}):
+   * A signed, versioned billing projection from the control plane. It contains
+   * only customer-safe UI and enforcement state, never provider references.
+   *
+   * NULL — the default, and the only value a self-hosted install ever has —
+   * means no cloud config, which resolves to `enabled: false`: no plan, no
+   * entitlement gating, no upsell.
+   *
+   * `tierLimits` above remains the persisted numeric baseline. Projected limits
+   * are overlaid at read time and are never written into that baseline.
+   */
+  cloud: jsonb('cloud').$type<StoredCloudConfig>(),
+  /**
+   * Local change token incremented whenever a newer projection is accepted.
+   * Projection monotonicity itself is enforced by `projection.version`.
+   */
+  cloudRevision: integer('cloud_revision').notNull().default(0),
+  /** Signed cloud identity projection. NULL on self-hosted installs. */
+  cloudIdentity: jsonb('cloud_identity').$type<StoredCloudIdentityProjection>(),
+  /** Local write token, deliberately separate from cloudRevision/billing. */
+  cloudIdentityRevision: integer('cloud_identity_revision').notNull().default(0),
   /**
    * JSON array of dot-paths whose values are managed by the
    * declarative config file (`/etc/quackback/config.yaml`). When a

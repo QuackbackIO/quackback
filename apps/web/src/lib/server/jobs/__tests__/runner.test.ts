@@ -233,9 +233,11 @@ describe('the schedule tick', () => {
     expect(bravoKeys).toEqual(expected)
 
     // Only one row per slot survives here because both schedulers write to the
-    // same test database; in production each tenant has its own. The rows prove
-    // the enqueue was attempted for every slot by both.
-    expect((await rowsFor(q)).map((r) => r.dedupe_key).sort()).toEqual(expected)
+    // same test database; in production each workspace has its own. The rows prove
+    // the enqueue was attempted for every slot by both. Sorted: which scheduler's
+    // insert wins each slot's race decides row order, and the claim is coverage,
+    // not order.
+    expect((await rowsFor(q)).map((r) => r.dedupe_key).sort()).toEqual([...expected].sort())
   })
 
   it('carries the definition maxAttempts onto the enqueued row', async () => {

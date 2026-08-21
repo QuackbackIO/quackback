@@ -27,6 +27,7 @@ describe('PublicPortalConfig.portalAccess', () => {
     // Verify the type carries widgetSignIn (build-time type assertion via satisfies)
     const cfg = {
       features: DEFAULT_PORTAL_CONFIG.features,
+      openSignup: true,
       portalAccess: { isPrivate: true, widgetSignIn: false },
     } satisfies PublicPortalConfig
     expect(cfg.portalAccess?.isPrivate).toBe(true)
@@ -36,6 +37,7 @@ describe('PublicPortalConfig.portalAccess', () => {
   it('portalAccess.widgetSignIn is boolean', () => {
     const cfg: PublicPortalConfig = {
       features: DEFAULT_PORTAL_CONFIG.features,
+      openSignup: true,
       portalAccess: { isPrivate: false, widgetSignIn: true },
     }
     expect(typeof cfg.portalAccess?.widgetSignIn).toBe('boolean')

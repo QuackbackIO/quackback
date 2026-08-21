@@ -15,12 +15,7 @@ import { Link } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { toast } from 'sonner'
-import {
-  ArrowTopRightOnSquareIcon,
-  LockClosedIcon,
-  PlusIcon,
-  ShieldCheckIcon,
-} from '@heroicons/react/24/solid'
+import { LockClosedIcon, PlusIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { IdpLogo } from '@/components/icons/idp-provider-icons'
@@ -32,6 +27,7 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
 import { RecoveryCodesSection } from '../sso/recovery-codes-section'
 import { isOnlyWorkingMethod } from './provider-shared'
+import { SsoUpgradeNotice } from './sso-upgrade-notice'
 
 export function IdentityProvidersSection({
   tierEnabled,
@@ -61,17 +57,7 @@ export function IdentityProvidersSection({
       }
     >
       {!tierEnabled ? (
-        <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Available on plans with the custom OIDC feature.
-          </p>
-          <Button asChild variant="outline" size="sm" className="mt-3">
-            <a href="https://www.quackback.io/pricing" target="_blank" rel="noopener noreferrer">
-              Upgrade plan
-              <ArrowTopRightOnSquareIcon className="ml-1.5 h-3.5 w-3.5" />
-            </a>
-          </Button>
-        </div>
+        <SsoUpgradeNotice />
       ) : providers.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-8 text-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">

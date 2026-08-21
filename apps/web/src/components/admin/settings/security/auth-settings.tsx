@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortalAuthTab } from './portal-auth-tab'
 import { SignInProvidersTab } from './sign-in-providers-tab'
 import { AuditLogPage } from './audit-log-page'
+import { UpgradeScreen } from '@/components/admin/upgrade'
 import type { AuthConfig, PortalConfig } from '@/lib/shared/types/settings'
 
 /**
@@ -31,6 +32,8 @@ interface AuthSettingsProps {
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
   /** Tier flag for portal custom OIDC — passed through to <SignInProvidersTab>. */
   customOidcProviderTier: boolean
+  /** When false the audit tab stays mounted as an upgrade notice, not a throwing list. */
+  auditEntitled: boolean
 }
 
 /**
@@ -47,6 +50,7 @@ export function AuthSettings({
   portalConfig,
   credentialStatus,
   customOidcProviderTier,
+  auditEntitled,
 }: AuthSettingsProps) {
   // No `from` — passes an absolute `to`, so binding the navigate hook
   // to a route would just append paths under TanStack Router's
@@ -88,7 +92,7 @@ export function AuthSettings({
       </TabsList>
 
       <TabsContent value="portal-access">
-        <PortalAuthTab portalConfig={portalConfig} />
+        <PortalAuthTab portalConfig={portalConfig} teamOpenSignup={teamAuthConfig.openSignup} />
       </TabsContent>
 
       <TabsContent value="sign-in">
@@ -100,7 +104,7 @@ export function AuthSettings({
       </TabsContent>
 
       <TabsContent value="audit-log">
-        <AuditLogPage />
+        {auditEntitled ? <AuditLogPage /> : <UpgradeScreen entitlement="auditLog" />}
       </TabsContent>
     </Tabs>
   )

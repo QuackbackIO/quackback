@@ -68,10 +68,12 @@ describe('buildNavSections', () => {
     expect(itemLabels(sections, 'Products')).not.toContain('Support')
   })
 
-  it('Support shows Messenger, Macros, Office Hours and SLA policies under supportInbox', () => {
+  it('Support shows Channels, Messenger, Email, Macros, Office Hours and SLA policies under supportInbox', () => {
     const sections = buildNavSections({ supportInbox: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
+      'Channels',
       'Messenger',
+      'Email',
       'Macros',
       'Office Hours',
       'SLA policies',
@@ -81,7 +83,9 @@ describe('buildNavSections', () => {
   it('Support shows ticket pages under supportTickets, after the inbox pages', () => {
     const sections = buildNavSections({ supportInbox: true, supportTickets: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
+      'Channels',
       'Messenger',
+      'Email',
       'Macros',
       'Office Hours',
       'SLA policies',
@@ -98,12 +102,13 @@ describe('buildNavSections', () => {
     ])
   })
 
-  it('Messenger points at the conversations URL (relabel, URL kept)', () => {
+  it('Channels and its pages live under Support, not Workspace', () => {
     const sections = buildNavSections({ supportInbox: true })
-    const messenger = groupKids(sections, 'Products', 'Support').find(
-      (k) => k.label === 'Messenger'
-    )!
-    expect(messenger.to).toBe('/admin/settings/conversations')
+    const kids = groupKids(sections, 'Products', 'Support')
+    expect(kids.find((k) => k.label === 'Channels')!.to).toBe('/admin/settings/channels')
+    expect(kids.find((k) => k.label === 'Messenger')!.to).toBe('/admin/settings/channels/messenger')
+    expect(kids.find((k) => k.label === 'Email')!.to).toBe('/admin/settings/channels/email')
+    expect(itemLabels(sections, 'Workspace')).not.toContain('Emails')
   })
 
   it('Help Center accordion appears only with the helpCenter flag', () => {
@@ -158,15 +163,9 @@ describe('buildNavSections', () => {
     expect(allLabels(sections)).not.toContain('Audit log')
   })
 
-  it('Workspace gains Emails (the email channel page) under supportInbox', () => {
+  it('Workspace does not list Emails once Channels owns that page', () => {
     const sections = buildNavSections({ supportInbox: true })
-    const workspace = itemLabels(sections, 'Workspace')
-    expect(workspace).toContain('Emails')
-    // Emails sits between Access & Security and Developers.
-    expect(workspace.indexOf('Emails')).toBe(workspace.indexOf('Access & Security') + 1)
-    const s = sections.find((x) => x.label === 'Workspace')!
-    const emails = s.items.find((i) => i.label === 'Emails')!
-    expect(!isNavGroup(emails) && emails.to).toBe('/admin/settings/channels')
+    expect(itemLabels(sections, 'Workspace')).not.toContain('Emails')
   })
 
   it('Members & Teams points at the merged members URL', () => {

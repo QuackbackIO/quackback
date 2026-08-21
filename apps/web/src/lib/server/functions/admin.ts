@@ -26,9 +26,9 @@ import {
   inArray,
 } from '@/lib/server/db'
 import {
-  ensurePrincipalForUser,
-  setPrincipalRole,
-} from '@/lib/server/domains/principals/principal.factory'
+  findHumanAdmin,
+  isOpenToBootstrapClaim,
+} from '@/lib/server/domains/principals/bootstrap-admin'
 import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
@@ -617,8 +617,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       const targetKey = (m as { targetKey?: string }).targetKey || 'default'
       const actionConfig = (m.actionConfig as Record<string, unknown>) || {}
       const channelId = (actionConfig.channelId || integrationConfig.channelId) as
-        | string
-        | undefined
+        string | undefined
 
       if (!channelId) continue
 
@@ -689,15 +688,21 @@ export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(asy
 })
 
 /**
- * Check onboarding state for the calling user
- * Returns member record, step, and whether boards exist
- * Note: This function is called during onboarding and may create member records
+ * Reports where the calling user stands in onboarding: their principal, the
+ * workspace's setup state, and whether somebody else already owns setup.
  *
- * The acting user is derived from the session, never from input: this fn
- * creates the bootstrap admin principal on the first-user path, so a
- * caller-supplied id would let anyone mint an admin for an arbitrary user.
- * Unauthenticated callers get the same empty state as pre-signup visitors
- * rather than a readout of the instance's setup progress.
+ * It reports and never writes. Every wizard loader calls it, so it runs on every
+ * page load — including one reached by typing the URL — and an earlier revision
+ * promoted the caller to admin right here, unlocked and outside a transaction.
+ * That made merely loading the page enough to become admin of a workspace with
+ * no human admin, and let two concurrent loads both observe an empty admin set.
+ * Promotion lives in exactly one place, `ensureBootstrapAdmin`, which the
+ * workspace step calls under the shared bootstrap lock when the caller has
+ * actually asked to set this workspace up.
+ *
+ * The acting user is derived from the session, never from input. Unauthenticated
+ * callers get the same empty state as pre-signup visitors rather than a readout
+ * of the instance's setup progress.
  */
 export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('check onboarding state')
@@ -708,49 +713,32 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
     log.debug('check onboarding state no user id')
     return {
       principalRecord: null,
+      setupClaimedByOther: false,
+      // Null rather than a plausible default: nobody asked, because there is no
+      // caller to route. A boolean here would be a fact nobody checked, and the
+      // wrong one is the one that lets someone through.
+      setupOpenToClaim: null,
       hasSettings: false,
       setupState: null,
       isOnboardingComplete: false,
     }
   }
 
-  // Check if user has a principal record
-  let principalRecord = await db.query.principal.findFirst({
+  const principalRecord = await db.query.principal.findFirst({
     where: eq(principal.userId, userId as UserId),
   })
 
-  if (!principalRecord) {
-    // Check if any human admin exists (exclude service principals)
-    const existingAdmin = await db.query.principal.findFirst({
-      where: and(eq(principal.role, 'admin'), eq(principal.type, 'user')),
-    })
+  // Whether this caller is shut out of setup: somebody who is not them already
+  // holds it. Every account is created with a principal, so presence alone says
+  // nothing — the role does. A caller with no principal on an unclaimed
+  // workspace is the first user and may still claim it at the workspace step.
+  const setupClaimedByOther = !isAdmin(principalRecord?.role) && !!(await findHumanAdmin(db))
 
-    if (existingAdmin) {
-      // Not first user - they need an invitation
-      log.debug({ needs_invitation: true }, 'check onboarding state')
-      return {
-        principalRecord: null,
-        needsInvitation: true,
-        hasSettings: false,
-        setupState: null,
-        isOnboardingComplete: false,
-      }
-    }
-
-    // First user - create admin principal record (race-safe).
-    const { principal: newPrincipal, created } = await ensurePrincipalForUser({
-      userId: userId as UserId,
-      role: 'admin',
-    })
-    // A concurrent lazy create may have seeded role 'user'; promote so the
-    // first user still lands as admin.
-    if (!created && !isAdmin(newPrincipal.role)) {
-      await setPrincipalRole({ userId: userId as UserId }, 'admin')
-      newPrincipal.role = 'admin'
-    }
-    principalRecord = newPrincipal
-    log.info({ principal_id: principalRecord.id }, 'created admin principal')
-  }
+  // The second half of the same question. A workspace a control plane created
+  // reads unclaimed until its owner arrives, and arriving is not how its admin
+  // is decided — so a caller who is not already one has nothing to finish here.
+  // Reported, never acted on: the promoter decides again under its own lock.
+  const setupOpenToClaim = await isOpenToBootstrapClaim(db)
 
   // Get settings to check setup state
   const currentSettings = await getSettings()
@@ -758,7 +746,12 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
   const isOnboardingComplete = checkComplete(setupState)
 
   log.debug(
-    { setup_state: setupState, is_complete: isOnboardingComplete },
+    {
+      setup_state: setupState,
+      is_complete: isOnboardingComplete,
+      claimed_by_other: setupClaimedByOther,
+      open_to_claim: setupOpenToClaim,
+    },
     'check onboarding state'
   )
   return {
@@ -769,7 +762,8 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
           role: principalRecord.role,
         }
       : null,
-    needsInvitation: false,
+    setupClaimedByOther,
+    setupOpenToClaim,
     hasSettings: !!currentSettings,
     setupState,
     isOnboardingComplete,

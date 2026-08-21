@@ -9,10 +9,17 @@ import { WorkflowsManager } from '@/components/admin/automation/workflows-manage
 
 export const Route = createFileRoute('/admin/automation/workflows')({
   loader: async ({ context }) => {
-    await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
-      context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
+    const { hasEntitlementFn } = await import('@/lib/server/functions/entitlement-status')
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const [, workflowsEntitled] = await Promise.all([
+      Promise.all([
+        context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
+        context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
+      ]),
+      hasEntitlementFn({ data: { key: 'workflows' } }),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
+    return { workflowsEntitled }
   },
   component: WorkflowsPageRoute,
 })
@@ -29,6 +36,7 @@ function WorkflowsPageRoute() {
 
 function WorkflowsPage() {
   const intl = useIntl()
+  const { workflowsEntitled } = Route.useLoaderData()
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="lg:hidden">
@@ -36,7 +44,7 @@ function WorkflowsPage() {
           {intl.formatMessage({ id: 'automation.nav.label', defaultMessage: 'AI & Automation' })}
         </BackLink>
       </div>
-      <WorkflowsManager>
+      <WorkflowsManager entitled={workflowsEntitled}>
         <WhoRepliesFirstCard />
       </WorkflowsManager>
       <AbandonedJourneyAutoCloseCard />

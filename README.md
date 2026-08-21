@@ -82,6 +82,10 @@ docker run -p 3000:3000 --env-file .env quackback
 
 Requires PostgreSQL. Set all variables in the canonical [runtime configuration table](docs/configuration.md). Migrations run automatically on startup.
 
+### About the cloud code in this repo
+
+Quackback's hosted service runs this same codebase, and the client side of that arrangement lives here: a default-off `cloud` settings block, plan and entitlement gating, and a control-plane client. On a self-hosted install none of it activates — an install with no cloud configuration is entitled to every feature, no upgrade prompts render, and no outbound requests are made. Disabling is the default; there is nothing to opt out of. This is stated here so you never have to discover it in the code first.
+
 ## Contributing
 
 See the [Contributing Guide](CONTRIBUTING.md) to get started.

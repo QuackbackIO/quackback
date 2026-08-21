@@ -35,7 +35,7 @@ const vendorDir = join(here, '..', 'vendor')
  * here too — which is the point.
  */
 const VENDORED = {
-  'contract.ts': '672c6a929a8991d05d4bb056c6fb2592110317cfcd0f2dc1f575c2d3c706c022',
+  'contract.ts': '84b46f322c054b884838376d54b884e84b14acfdcf587ab274b0ecb077992d68',
   // The mail slug vocabulary, which `contract.ts` imports and re-exports. It is
   // a separate module on the control plane so the edge mail Worker can apply the
   // same rule without pulling zod and the record schema into a workerd bundle;
@@ -112,7 +112,10 @@ describe('the vendored predicate is the one that runs', () => {
       { catalogName: null, catalogOid: null },
       {
         ...observed,
-        physical: { currentDatabase: null, catalogOid: null },
+        physical: {
+          currentDatabase: null,
+          catalogOid: null,
+        },
         stampSource: 'metadata',
         stampSourceConflict: null,
         secretCanary: null,

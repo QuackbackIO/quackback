@@ -22,7 +22,7 @@ export const PERMISSIONS = {
   SETTINGS_BRANDING: 'settings.branding', // theme, logos, custom CSS, workspace name
   SETTINGS_MODERATION: 'settings.moderation', // workspace moderation default
   SETTINGS_NOTIFICATIONS: 'settings.notifications', // RESERVED: no OSS surface yet
-  SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain', // RESERVED: cloud/CP gateway concern
+  SETTINGS_CUSTOM_DOMAIN: 'settings.custom_domain', // Settings → Domains (cloud identity gateway)
   BILLING_MANAGE: 'billing.manage', // cloud billing (Owner-only by default)
   ROLE_MANAGE: 'role.manage', // create / edit custom roles
   API_KEY_MANAGE: 'api_key.manage',

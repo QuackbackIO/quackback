@@ -20,6 +20,10 @@ const { upsertSpy } = vi.hoisted(() => ({
   upsertSpy: vi.fn(async (_args: { data: { id: string; enabled: boolean } }) => undefined),
 }))
 
+vi.mock('@/components/admin/upgrade', () => ({
+  UpgradeNotice: () => <p>Single sign-on is a Scale feature. Upgrade to Scale to enable it.</p>,
+}))
+
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
   useRouteContext: () => ({ managedFieldPaths: [] }),
@@ -179,6 +183,20 @@ describe('<IdentityProvidersSection>', () => {
     renderSection()
     // The old "no domains" filler is gone; button providers show no domain text.
     expect(screen.queryByText(/no domains/i)).toBeNull()
+  })
+})
+
+describe('plan gate', () => {
+  it('hides Add provider and names Scale when SSO is not entitled', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
+    render(
+      <QueryClientProvider client={qc}>
+        <IdentityProvidersSection tierEnabled={false} enabledMethodCount={5} />
+      </QueryClientProvider>
+    )
+    expect(screen.queryByRole('link', { name: /add provider/i })).toBeNull()
+    expect(screen.getByText(/Single sign-on is a Scale feature/)).toBeTruthy()
   })
 })
 

@@ -49,8 +49,7 @@ export interface WorkspaceDescriptor extends WorkspaceRecord {
 }
 
 export type WorkspaceLookup =
-  | { kind: 'ok'; workspace: WorkspaceDescriptor }
-  | Exclude<WorkspaceResolution, { kind: 'ok' }>
+  { kind: 'ok'; workspace: WorkspaceDescriptor } | Exclude<WorkspaceResolution, { kind: 'ok' }>
 
 interface RegistryRow {
   workspace_key: string
@@ -74,6 +73,8 @@ interface RegistryRow {
   revision: string | number
   pg_database_oid: string | number | null
   hostnames: string[]
+  requested_kind?: string
+  redirect_to_hostname?: string | null
 }
 
 let controlSql: postgres.Sql | null = null
@@ -221,7 +222,8 @@ export const SELECT_COLUMNS = `
   COALESCE(
     (SELECT array_agg(h2.hostname ORDER BY h2.hostname)
        FROM cp_workspace_hostnames h2
-      WHERE h2.workspace_key = r.workspace_key),
+      WHERE h2.workspace_key = r.workspace_key
+        AND h2.kind <> 'platform_redirect'),
     ARRAY[]::text[]
   ) AS hostnames
 `
@@ -259,7 +261,9 @@ export async function resolveWorkspaceByHostname(
 
   const rows = (await recordControlRead(
     sql.unsafe(
-      `SELECT ${SELECT_COLUMNS}
+      `SELECT ${SELECT_COLUMNS},
+              h.kind::text AS requested_kind,
+              h.redirect_to_hostname
        FROM cp_workspace_hostnames h
        JOIN cp_workspace_registry r ON r.workspace_key = h.workspace_key
       WHERE h.hostname = $1
@@ -330,6 +334,22 @@ export async function listActiveWorkspaces(sql: postgres.Sql = getControlSql()):
  * corruption.
  */
 export function interpretRow(row: RegistryRow, hostname: string): WorkspaceLookup {
+  if (row.requested_kind === 'platform_redirect') {
+    if (!row.redirect_to_hostname) {
+      return {
+        kind: 'invalid',
+        workspaceKey: row.workspace_key,
+        hostname,
+        problems: ['redirect-only hostname has no destination'],
+      }
+    }
+    return {
+      kind: 'redirect',
+      workspaceKey: row.workspace_key,
+      hostname,
+      location: `https://${row.redirect_to_hostname}`,
+    }
+  }
   if (row.state === 'suspended') {
     return {
       kind: 'suspended',

@@ -31,13 +31,19 @@ export const Route = createFileRoute('/admin/settings/developers')({
     const { queryClient } = context
     // All three tabs are preloaded so switching tabs never round-trips
     // for data — every payload is small and admin-only.
-    await Promise.all([
-      queryClient.ensureQueryData(adminQueries.apiKeys()),
-      queryClient.ensureQueryData(adminQueries.webhooks()),
-      queryClient.ensureQueryData(settingsQueries.developerConfig()),
+    const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const [, entitlements] = await Promise.all([
+      Promise.all([
+        queryClient.ensureQueryData(adminQueries.apiKeys()),
+        queryClient.ensureQueryData(adminQueries.webhooks()),
+        queryClient.ensureQueryData(settingsQueries.developerConfig()),
+      ]),
+      listEntitlementsFn(),
+      ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
 
-    return {}
+    return { webhooksEntitled: entitlements.webhooks, mcpEntitled: entitlements.mcpServer }
   },
   component: ApiPage,
 })
@@ -52,6 +58,7 @@ function ApiPage() {
   const developerConfigQuery = useSuspenseQuery(settingsQueries.developerConfig())
 
   const { baseUrl } = useRouteContext({ from: '__root__' })
+  const { webhooksEntitled, mcpEntitled } = Route.useLoaderData()
   const apiBaseUrl = baseUrl ? `${baseUrl}/api/v1` : '/api/v1'
   const mcpEndpointUrl = baseUrl ? `${baseUrl}/api/mcp` : '/api/mcp'
 
@@ -110,7 +117,7 @@ function ApiPage() {
             title="Configured Webhooks"
             description="Webhooks receive HTTP POST requests when events happen in your workspace."
           >
-            <WebhooksSettings webhooks={webhooksQuery.data} />
+            <WebhooksSettings webhooks={webhooksQuery.data} entitled={webhooksEntitled} />
           </SettingsCard>
           <WebhookVerificationGuide />
         </TabsContent>
@@ -121,6 +128,7 @@ function ApiPage() {
             description="Enable or disable the MCP endpoint for AI integrations."
           >
             <McpServerSettings
+              entitled={mcpEntitled}
               initialEnabled={developerConfigQuery.data.mcpEnabled}
               initialDynamicRegistrationEnabled={
                 developerConfigQuery.data.oauthDynamicClientRegistrationEnabled

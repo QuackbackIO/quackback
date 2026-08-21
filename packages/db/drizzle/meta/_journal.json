@@ -1688,6 +1688,41 @@
       "when": 1785700000021,
       "tag": "0263_core_product_flag_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "7",
+      "when": 1785700000022,
+      "tag": "0264_settings_cloud",
+      "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "7",
+      "when": 1785700000023,
+      "tag": "0265_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 243,
+      "version": "7",
+      "when": 1785700000024,
+      "tag": "0266_settings_cloud_secret_canary",
+      "breakpoints": true
+    },
+    {
+      "idx": 244,
+      "version": "7",
+      "when": 1785700000025,
+      "tag": "0267_drop_workspace_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 245,
+      "version": "7",
+      "when": 1785700000026,
+      "tag": "0268_cloud_identity_projection",
+      "breakpoints": true
     }
   ]
 }

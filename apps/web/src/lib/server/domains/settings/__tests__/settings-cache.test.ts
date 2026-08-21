@@ -160,7 +160,23 @@ describe('getWorkspaceSettings', () => {
     const cached = {
       name: 'Cached Workspace',
       slug: 'cached',
-      settings: makeSettingsRow({ name: 'Cached Workspace' }),
+      settings: makeSettingsRow({
+        name: 'Cached Workspace',
+        setupState: JSON.stringify({
+          version: 2,
+          steps: {
+            core: true,
+            workspace: true,
+            startingPoint: {
+              outcome: 'product_feedback',
+              resourceType: 'none',
+              source: 'managed',
+              resolution: 'configured',
+              completedAt: '2026-08-13T00:00:00.000Z',
+            },
+          },
+        }),
+      }),
     }
     mockCacheGet.mockResolvedValue(cached)
 
@@ -169,6 +185,37 @@ describe('getWorkspaceSettings', () => {
     expect(result).toEqual(cached)
     expect(mockCacheGet).toHaveBeenCalledWith('settings:workspace')
     expect(mockFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('ignores a cache hit whose setup is still unfinished, so a bootstrap stamp is visible', async () => {
+    mockCacheGet.mockResolvedValue({
+      name: 'Cached Workspace',
+      slug: 'cached',
+      settings: makeSettingsRow({ name: 'Cached Workspace', setupState: null }),
+    })
+    mockFindFirst.mockResolvedValue(
+      makeSettingsRow({
+        setupState: JSON.stringify({
+          version: 2,
+          steps: {
+            core: true,
+            workspace: true,
+            startingPoint: {
+              outcome: 'product_feedback',
+              resourceType: 'none',
+              source: 'managed',
+              resolution: 'configured',
+              completedAt: '2026-08-13T00:00:00.000Z',
+            },
+          },
+        }),
+      })
+    )
+
+    const result = await getWorkspaceSettings()
+
+    expect(mockFindFirst).toHaveBeenCalled()
+    expect(result?.settings.setupState).toContain('"version":2')
   })
 
   it('queries DB and caches result on cache miss', async () => {

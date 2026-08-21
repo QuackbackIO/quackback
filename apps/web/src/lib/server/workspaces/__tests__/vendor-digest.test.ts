@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest'
 const VENDOR_DIR = join(import.meta.dirname, '..', 'vendor')
 
 const EXPECTED: Record<string, string> = {
-  'contract.ts': '672c6a929a8991d05d4bb056c6fb2592110317cfcd0f2dc1f575c2d3c706c022',
+  'contract.ts': '84b46f322c054b884838376d54b884e84b14acfdcf587ab274b0ecb077992d68',
   'fleet-secrets.ts': '8c2337ea138a5185fac7244829220360000bd6df12d53ddc1f7502be97505e4a',
   'mail-slug-pattern.ts': 'f64fdfdcc164bae1a58656e8335042a9620c85d802e5bc8c7018fbfe5e2fb310',
   'secret-ref.ts': '4f4cba2a5fdc4d3d690bd655367fab31a5fb5daad4a5791931edaa674fa1b902',

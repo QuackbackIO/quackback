@@ -63,6 +63,8 @@ import {
 } from './workflow-graph'
 import { WorkflowTemplateGallery } from './workflow-template-gallery'
 import type { WorkflowTemplate } from './workflow-templates'
+import { UpgradeModal } from '@/components/admin/upgrade'
+import { isPlanRefusal } from '@/lib/shared/describe-upgrade'
 import { WorkflowRunsSheet } from './workflow-runs-sheet'
 import { cn } from '@/lib/shared/utils'
 import { PageHeader } from '@/components/shared/page-header'
@@ -225,8 +227,10 @@ export function workflowStepSummary(graph: unknown): string {
 }
 
 export function WorkflowsManager({
+  entitled = true,
   children,
 }: {
+  entitled?: boolean
   children?: ReactNode
 }) {
   const intl = useIntl()
@@ -246,13 +250,15 @@ export function WorkflowsManager({
   const [statusFilter, setStatusFilter] = useState<'any' | StatusValue>('any')
   const [typeFilter, setTypeFilter] = useState<'any' | (typeof CLASSES)[number]['value']>('any')
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [deleting, setDeleting] = useState<WorkflowDTO | null>(null)
   const [runsWorkflow, setRunsWorkflow] = useState<WorkflowDTO | null>(null)
 
-  // On source this refuses into the upgrade modal when the plan lacks
-  // workflows; the commercial layer lands with the billing catalogue phase,
-  // and an unconfigured install is entitled to everything.
   const refuseOr = (run: () => void) => {
+    if (!entitled) {
+      setUpgradeOpen(true)
+      return
+    }
     run()
   }
 
@@ -308,7 +314,10 @@ export function WorkflowsManager({
         },
         {
           onSuccess: (wf) => goToBuilder(wf.id),
-          onError: () => toast.error('Could not create the workflow'),
+          onError: (error) => {
+            if (isPlanRefusal(error)) setUpgradeOpen(true)
+            else toast.error('Could not create the workflow')
+          },
         }
       )
     })
@@ -319,7 +328,10 @@ export function WorkflowsManager({
     refuseOr(() => {
       create.mutate(template.payload, {
         onSuccess: (wf) => goToBuilder(wf.id),
-        onError: () => toast.error('Could not create the workflow from this template'),
+        onError: (error) => {
+          if (isPlanRefusal(error)) setUpgradeOpen(true)
+          else toast.error('Could not create the workflow from this template')
+        },
       })
     })
   }
@@ -576,6 +588,7 @@ export function WorkflowsManager({
         onOpenChange={setGalleryOpen}
         onSelect={createFromTemplate}
       />
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} entitlement="workflows" />
 
       {deleting && (
         <ConfirmDialog

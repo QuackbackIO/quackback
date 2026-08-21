@@ -25,6 +25,8 @@ import {
   SignalIcon,
   BellIcon,
   BuildingOfficeIcon,
+  CreditCardIcon,
+  GlobeAltIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
@@ -40,6 +42,8 @@ interface NavItem {
 interface NavGroup {
   label: string
   icon: typeof Cog6ToothIcon
+  /** When set, the group label is also a page (Channels hub). */
+  to?: string
   kids: NavItem[]
 }
 
@@ -59,8 +63,17 @@ export function isNavGroup(entry: NavEntry): entry is NavGroup {
  * ITEMS (or whole product accordions), never sections, so the sidebar layout
  * does not reflow when a flag flips. AI & Automation lives outside settings
  * entirely, as its own main-nav area at /admin/automation (M5).
+ *
+ * @param billingEnabled Whether this workspace has a valid billing projection
+ *   configured. Not a feature flag — a flag answers "has the admin turned it
+ *   on", and this answers "does this deployment sell anything". False on
+ *   every self-hosted install, which is why the Billing row is absent there.
  */
-export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
+export function buildNavSections(
+  flags?: Partial<FeatureFlags>,
+  billingEnabled = false,
+  cloudEnabled = false
+): NavSection[] {
   const products: NavEntry[] = []
 
   if (isProductEnabled(flags, 'feedback')) {
@@ -80,10 +93,16 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
     ...(flags?.supportInbox
       ? [
           {
-            label: 'Messenger',
-            to: '/admin/settings/conversations',
+            label: 'Channels',
+            to: '/admin/settings/channels',
             icon: ChatBubbleLeftRightIcon,
           },
+          {
+            label: 'Messenger',
+            to: '/admin/settings/channels/messenger',
+            icon: ChatBubbleLeftRightIcon,
+          },
+          { label: 'Email', to: '/admin/settings/channels/email', icon: EnvelopeIcon },
           { label: 'Macros', to: '/admin/settings/macros', icon: DocumentDuplicateIcon },
           { label: 'Office Hours', to: '/admin/settings/office-hours', icon: ClockIcon },
           { label: 'SLA policies', to: '/admin/settings/sla', icon: ShieldCheckIcon },
@@ -134,6 +153,9 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
       label: 'Workspace',
       items: [
         { label: 'General', to: '/admin/settings/general', icon: Cog6ToothIcon },
+        ...(cloudEnabled
+          ? [{ label: 'Domains', to: '/admin/settings/domains', icon: GlobeAltIcon }]
+          : []),
         { label: 'Notifications', to: '/admin/settings/notifications', icon: BellIcon },
         { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
         { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
@@ -143,11 +165,11 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
           to: '/admin/settings/security/authentication',
           icon: ShieldCheckIcon,
         },
-        ...(flags?.supportInbox
-          ? [{ label: 'Emails', to: '/admin/settings/channels', icon: EnvelopeIcon }]
-          : []),
         { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
         { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+        ...(billingEnabled
+          ? [{ label: 'Plan & billing', to: '/admin/settings/billing', icon: CreditCardIcon }]
+          : []),
         { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
       ],
     },
@@ -173,10 +195,13 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
 
 export function SettingsNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { settings } = useRouteContext({ from: '__root__' })
+  const { settings, billingEnabled, cloudEnabled } = useRouteContext({ from: '__root__' })
   const flags = settings?.featureFlags as FeatureFlags | undefined
 
-  const navSections = useMemo(() => buildNavSections(flags), [flags])
+  const navSections = useMemo(
+    () => buildNavSections(flags, billingEnabled, cloudEnabled),
+    [flags, billingEnabled, cloudEnabled]
+  )
 
   return (
     <div className="space-y-2">
@@ -294,7 +319,9 @@ function NavLink({
   pathname: string
   tabbable: boolean
 }) {
-  const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
+  const isActive =
+    pathname === item.to ||
+    (item.to !== '/admin/settings/channels' && pathname.startsWith(`${item.to}/`))
   const Icon = item.icon
 
   return (

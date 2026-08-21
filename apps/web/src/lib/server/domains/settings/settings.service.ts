@@ -16,6 +16,7 @@ import {
   type AssistantCopilotCapabilities,
 } from '@/lib/shared/assistant/config'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
+import { absolutizeOffHostAssetUrl } from '@/lib/server/storage/asset-url'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
 import type {
@@ -46,7 +47,9 @@ import {
   DEFAULT_HELP_CENTER_CONFIG,
   resolveFeatureFlags,
 } from './settings.types'
+import { signupOpenFor } from '@/lib/shared/signup-open'
 import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
+import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { resolveChangelogSettings } from './settings.changelog'
 import { resolveStatusSettings } from './settings.status'
 import {
@@ -62,6 +65,11 @@ import {
 } from './settings.helpers'
 
 const log = logger.child({ component: 'settings' })
+
+function offHostPublicUrl(key: string | null | undefined): string | null {
+  const stored = getPublicUrlOrNull(key)
+  return stored ? absolutizeOffHostAssetUrl(stored) : stored
+}
 
 async function getConfiguredAuthTypes(): Promise<Set<string>> {
   const { getConfiguredIntegrationTypes } =
@@ -636,9 +644,12 @@ export async function updateDeveloperConfig(
 ): Promise<DeveloperConfig> {
   log.info('update developer config')
   try {
-    // Tier gate: refuse mcpEnabled=true when mcpServer feature is off.
-    // No-op in OSS. Disabling MCP is always allowed (no upgrade required).
+    // Plan first (names Growth), then the operator-cap overlay. Disabling MCP
+    // stays open so a downgraded workspace can turn the endpoint off.
     if (input.mcpEnabled === true) {
+      const { requireEntitlement } =
+        await import('@/lib/server/domains/settings/cloud/entitlements')
+      await requireEntitlement('mcpServer')
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
       await assertTierFeature('mcpServer', 'MCP server')
     }
@@ -811,7 +822,9 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 
     const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
+    const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     return {
+      openSignup: signupOpenFor({ authConfig, portalConfig }, 'portal'),
       features: {
         allowAnonymous: portalConfig.features.allowAnonymous,
         allowEditAfterEngagement: portalConfig.features.allowEditAfterEngagement,
@@ -838,13 +851,21 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
   try {
     const cached = await cacheGet<WorkspaceSettings>(CACHE_KEYS.WORKSPACE_SETTINGS)
     if (cached) {
-      log.debug('tenant settings cache hit')
-      // The same repair resolveFeatureFlags applies. This path returns flags
-      // that were resolved when the entry was written, so an entry from before
-      // that rule existed still carries feedback:false and would keep the
-      // portal dark for the hour the entry has left to live.
-      if (cached.featureFlags) cached.featureFlags.feedback = true
-      return cached
+      const rawSetup = (cached.settings as { setupState?: string | null } | undefined)?.setupState
+      // A request during provision can cache settings before bootstrap stamps
+      // setup_state. That row lives an hour. Trusting it keeps a finished
+      // workspace on the OSS wizard. An incomplete cache is the only hit we
+      // refuse: once setup is complete it is mutated through this service,
+      // which already busts the key.
+      if (isOnboardingComplete(getSetupState(rawSetup ?? null))) {
+        log.debug('workspace settings cache hit')
+        // The same repair resolveFeatureFlags applies. This path returns flags
+        // that were resolved when the entry was written, so an entry from
+        // before that rule existed still carries feedback:false and would keep
+        // the portal dark for the hour the entry has left to live.
+        if (cached.featureFlags) cached.featureFlags.feedback = true
+        return cached
+      }
     }
 
     const org = await db.query.settings.findFirst()
@@ -882,10 +903,10 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
-      logoUrl: getPublicUrlOrNull(org.logoKey),
+      logoUrl: offHostPublicUrl(org.logoKey),
       faviconUrl: getPublicUrlOrNull(org.faviconKey),
       headerLogoUrl: getPublicUrlOrNull(org.headerLogoKey),
-      ogImageUrl: getPublicUrlOrNull(org.portalOgImageKey),
+      ogImageUrl: offHostPublicUrl(org.portalOgImageKey),
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,
     }
@@ -910,6 +931,7 @@ export async function getWorkspaceSettings(): Promise<WorkspaceSettings | null> 
       publicPortalConfig: (() => {
         const welcome = publicWelcomeCard(portalConfig.welcomeCard)
         return {
+          openSignup: signupOpenFor({ authConfig, portalConfig }, 'portal'),
           features: portalConfig.features,
           ...(portalOidcProviders.length > 0 && { oidcProviders: portalOidcProviders }),
           ...(welcome && { welcomeCard: welcome }),

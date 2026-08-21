@@ -64,7 +64,7 @@ export const WORKSPACE_REGISTRY_CONTRACT_VERSION = 1
 /** Serving state. Gated before a database connection is spent. */
 export type WorkspaceState = 'active' | 'suspended' | 'deleting'
 
-export type WorkspaceHostnameKind = 'subdomain' | 'custom'
+export type WorkspaceHostnameKind = 'system' | 'platform' | 'platform_redirect' | 'custom'
 
 /** One bucket per workspace (SAAS-HOSTING-STACK.md §9). */
 export type WorkspaceStorage = {
@@ -214,6 +214,7 @@ export type WorkspaceRecord = {
 export type WorkspaceResolution =
   | { kind: 'ok'; workspace: WorkspaceRecord }
   | { kind: 'unknown_host'; hostname: string }
+  | { kind: 'redirect'; workspaceKey: string; hostname: string; location: string }
   | { kind: 'suspended'; workspaceKey: string; hostname: string; reason: string }
   | { kind: 'deleting'; workspaceKey: string; hostname: string }
   /**
@@ -276,7 +277,7 @@ export function fieldRefSchema(field: SecretRefField) {
     .string()
     .refine(
       (ref) => isSecretRefAllowedFor(field, ref),
-      `not a well-formed secret reference this record's ${field} field may name`
+      `not a well-formed secret reference this record's ${field} field may name`,
     )
 }
 
@@ -302,21 +303,15 @@ export const workspaceRecordSchema = z.object({
     baseUrl: z.string().url(),
   }),
   database: z.object({
-    pooledUrl: z
-      .string()
-      .regex(DSN_RE, 'pooled DSN must be scheme://role@host/db with no password'),
-    directUrl: z
-      .string()
-      .regex(DSN_RE, 'direct DSN must be scheme://role@host/db with no password'),
+    pooledUrl: z.string().regex(DSN_RE, 'pooled DSN must be scheme://role@host/db with no password'),
+    directUrl: z.string().regex(DSN_RE, 'direct DSN must be scheme://role@host/db with no password'),
     name: z.string().min(1),
     role: z.string().min(1),
     credentialRef: fieldRefSchema('database'),
   }),
   fingerprint: z.object({
     expectedWorkspaceKey: z.string().min(1),
-    expectedSelfReportedWorkspaceId: z
-      .string()
-      .regex(UUID_RE, 'workspace id must be the settings.id UUID'),
+    expectedSelfReportedWorkspaceId: z.string().regex(UUID_RE, 'workspace id must be the settings.id UUID'),
     stampedAt: z.string().min(1),
   }),
   secrets: z.object({ appSecretsRef: fieldRefSchema('appSecrets') }),
@@ -343,7 +338,7 @@ export const workspaceRecordSchema = z.object({
 function workspaceNamedBySecretRef(
   ref: SecretRef,
   workspaceKey: string,
-  purpose: 'app-secrets' | 'storage' | 'db'
+  purpose: 'app-secrets' | 'storage' | 'db',
 ): string | null {
   let parsed: ParsedSecretRef
   try {
@@ -375,7 +370,7 @@ export function checkWorkspaceRecordInvariants(record: WorkspaceRecord): string[
   if (record.contractVersion !== WORKSPACE_REGISTRY_CONTRACT_VERSION) {
     problems.push(
       `contract_version ${record.contractVersion} is not implemented by this reader ` +
-        `(expects ${WORKSPACE_REGISTRY_CONTRACT_VERSION})`
+      `(expects ${WORKSPACE_REGISTRY_CONTRACT_VERSION})`,
     )
   }
 
@@ -421,38 +416,27 @@ export function checkWorkspaceRecordInvariants(record: WorkspaceRecord): string[
     problems.push('base URL does not parse')
   }
   if (baseHost !== null && baseHost !== record.routing.primaryHostname) {
-    problems.push(
-      `base URL host ${baseHost} does not match primary hostname ${record.routing.primaryHostname}`
-    )
+    problems.push(`base URL host ${baseHost} does not match primary hostname ${record.routing.primaryHostname}`)
   }
 
   if (record.database.pooledUrl === record.database.directUrl) {
-    problems.push(
-      'pooled and direct endpoints are identical — session-mode consumers would run through the pooler'
-    )
+    problems.push('pooled and direct endpoints are identical — session-mode consumers would run through the pooler')
   }
   if (record.database.directUrl.includes('-pooler.')) {
     problems.push('direct endpoint points at a pooler host — LISTEN would be silently dropped')
   }
 
-  for (const [label, dsn] of [
-    ['pooled', record.database.pooledUrl],
-    ['direct', record.database.directUrl],
-  ] as const) {
+  for (const [label, dsn] of [['pooled', record.database.pooledUrl], ['direct', record.database.directUrl]] as const) {
     const parsed = parseDsnParts(dsn)
     if (!parsed) {
       problems.push(`${label} DSN does not parse`)
       continue
     }
     if (parsed.role !== record.database.role) {
-      problems.push(
-        `${label} DSN role ${parsed.role} does not match dbRole ${record.database.role}`
-      )
+      problems.push(`${label} DSN role ${parsed.role} does not match dbRole ${record.database.role}`)
     }
     if (parsed.database !== record.database.name) {
-      problems.push(
-        `${label} DSN database ${parsed.database} does not match dbName ${record.database.name}`
-      )
+      problems.push(`${label} DSN database ${parsed.database} does not match dbName ${record.database.name}`)
     }
   }
 
@@ -465,7 +449,7 @@ export function checkWorkspaceRecordInvariants(record: WorkspaceRecord): string[
 
 /** `scheme://role@host[:port]/db[?params]`, password-less. */
 export function parseDsnParts(
-  dsn: string
+  dsn: string,
 ): { role: string; host: string; database: string } | null {
   if (!DSN_RE.test(dsn)) return null
   const afterScheme = dsn.slice(dsn.indexOf('://') + 3)
@@ -484,7 +468,7 @@ export function parseDsnParts(
  * refused — never a partially-valid record.
  */
 export function validateWorkspaceRecord(
-  input: unknown
+  input: unknown,
 ): { ok: true; record: WorkspaceRecord } | { ok: false; problems: string[] } {
   const parsed = workspaceRecordSchema.safeParse(input)
   if (!parsed.success) {
@@ -584,7 +568,7 @@ export type FingerprintFailure =
  */
 export function evaluateFingerprint(
   expected: WorkspaceFingerprintExpectation,
-  observed: ObservedFingerprint
+  observed: ObservedFingerprint,
 ): FingerprintVerdict {
   if (observed.settingsRowCount === 0) {
     return {

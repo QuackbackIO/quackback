@@ -9,7 +9,6 @@ import { ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { AuthSettings, type AuthTab } from '@/components/admin/settings/security/auth-settings'
-import { rangeToFromIso } from '@/components/admin/settings/security/audit-log-page'
 
 const searchSchema = z.object({
   // The Access & Security page splits by CONCERN, not by surface:
@@ -35,25 +34,25 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     assertRoutePermission(context.permissions, PERMISSIONS.AUTH_MANAGE)
 
     const { queryClient } = context
-    // Both tabs are loaded up front so switching tabs doesn't trigger
-    // a server round-trip. Auth config + portal config + provider
-    // credential status are cheap (settings cache hits).
-    await Promise.all([
-      queryClient.ensureQueryData(settingsQueries.authConfig()),
-      queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
-      queryClient.ensureQueryData(settingsQueries.portalConfig()),
-      queryClient.ensureQueryData(adminQueries.authProviderStatus()),
-      // Prefetch for <IdentityProvidersSection> (Sign-in tab) which suspends.
-      queryClient.ensureQueryData(settingsQueries.identityProviders()),
-      // Prefetch for <RecoveryCodesSection> (Sign-in tab) which suspends.
-      queryClient.ensureQueryData(adminQueries.recoveryCodes()),
-      // Prefetch the audit tab's default view (same defaults as <AuditLogPage>).
-      queryClient.ensureQueryData(
-        adminQueries.auditEvents({ from: rangeToFromIso('30d'), limit: 200 })
-      ),
+    // Auth + SSO reads are cheap and never 402. The audit feed is a Scale
+    // entitlement: prefetching it here took down Portal access and Sign-in
+    // on every other plan. The audit tab loads that query only when entitled.
+    const { listEntitlementsFn } = await import('@/lib/server/functions/entitlement-status')
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const [, entitlements] = await Promise.all([
+      Promise.all([
+        queryClient.ensureQueryData(settingsQueries.authConfig()),
+        queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
+        queryClient.ensureQueryData(settingsQueries.portalConfig()),
+        queryClient.ensureQueryData(adminQueries.authProviderStatus()),
+        queryClient.ensureQueryData(settingsQueries.identityProviders()),
+        queryClient.ensureQueryData(adminQueries.recoveryCodes()),
+      ]),
+      listEntitlementsFn(),
+      ensureBillingCatalogue(queryClient, context.billingEnabled),
     ])
 
-    return {}
+    return { ssoEntitled: entitlements.sso, auditEntitled: entitlements.auditLog }
   },
   component: AuthenticationPage,
 })
@@ -66,12 +65,7 @@ function AuthenticationPage() {
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const credentialStatusQuery = useSuspenseQuery(adminQueries.authProviderStatus())
 
-  // Tier flag from the root context (already populated by BootstrapData
-  // for every admin route).
-  const ctx = Route.useRouteContext()
-  const customOidcProviderTier =
-    (ctx as { tierLimits?: { features?: { customOidcProvider?: boolean } } }).tierLimits?.features
-      ?.customOidcProvider !== false
+  const { ssoEntitled, auditEntitled } = Route.useLoaderData()
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -88,7 +82,8 @@ function AuthenticationPage() {
         teamAuthConfig={authConfigQuery.data}
         portalConfig={portalConfigQuery.data}
         credentialStatus={credentialStatusQuery.data}
-        customOidcProviderTier={customOidcProviderTier}
+        customOidcProviderTier={ssoEntitled}
+        auditEntitled={auditEntitled}
       />
     </div>
   )

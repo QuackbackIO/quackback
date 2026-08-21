@@ -17,14 +17,12 @@ import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
 import { activeSecretKey } from '@/lib/server/secret-key'
 import { logger } from '@/lib/server/logger'
-import {
-  getCurrentWorkspace,
-  getWorkspaceScope,
-  runWithWorkspaceScope,
-} from '@/lib/server/workspaces/workspace-context'
+import { getWorkspaceScope, runWithWorkspaceScope } from '@/lib/server/workspaces/workspace-context'
 import { WorkspaceKeyedCache } from '@/lib/server/workspaces/workspace-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
+import { guardBetterAuthUserCreation } from './signup-policy'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
+import { workspaceAuthTrustedOrigins } from './trusted-origins'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -78,9 +76,13 @@ export const storeMagicLinkToken = (email: string, token: string) =>
 /**
  * OTP purposes the plugin issues.
  *
- * Only sign-in codes are stashed: they are the one purpose whose code has to
- * survive the callback, because `requestEmailSignin` combines it with a magic
- * link in a single email. Everything else is sent from the callback itself.
+ * Only sign-in codes are stashed, and stashing them is how they are SWALLOWED.
+ * `/email-otp/send-verification-otp` is mounted publicly, so a sign-in code can
+ * be minted through it by anyone; it must not go out under the verify-address
+ * template, and throwing would turn a routed endpoint into a 500. So it lands
+ * here instead and expires with the stash's own sweep. `requestEmailSignin`
+ * does not drain it: it mints its own code through the path-less endpoint, for
+ * the rate-limit reason set out there, and composes the email itself.
  *
  * The key still carries the purpose. Two purposes can be live for one address
  * at the same moment, so an address-only key would let the second overwrite the
@@ -364,26 +366,12 @@ async function createAuth() {
   // `secure` flag below follow the hostname the request arrived on.
   const baseURL = config.baseUrl
 
-  // Origin allowlist. better-auth rejects an auth-protected POST whose Origin
-  // is absent from this list — closed but invisibly, which is why §8 calls
-  // TRUSTED_ORIGINS load-bearing.
-  //
-  // Under pooled tenancy the list is the workspace's own hostnames and nothing
-  // else. The process-wide TRUSTED_ORIGINS is a fleet value: honouring it here
-  // would make one workspace's origin trusted on every other workspace, which is a
-  // cross-workspace weakening of exactly the check that exists to prevent one.
-  const currentWorkspace = getCurrentWorkspace()
-  const trustedOrigins = currentWorkspace
-    ? [
-        baseURL,
-        ...currentWorkspace.routing.hostnames.map((h) => `${new URL(baseURL).protocol}//${h}`),
-      ]
-    : [
-        baseURL,
-        ...(process.env.TRUSTED_ORIGINS?.split(',')
-          .map((s) => s.trim())
-          .filter(Boolean) ?? []),
-      ]
+  // Origin allowlist. Better Auth rejects an auth POST whose Origin is
+  // absent. The list is the documented per-request callback
+  // (trustedOrigins: async (request) => …) so a custom host added after
+  // the first request is trusted without an auth_config_version bump.
+  // The callback reads the request-scoped registry record — it does not
+  // fetch on every request.
 
   // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
   // to keep the createAuth() module-loading dependency graph clean.
@@ -445,11 +433,8 @@ async function createAuth() {
     // Base URL for auth callbacks and redirects
     baseURL,
 
-    // Trusted origins for CORS/CSRF protection. Built above: TRUSTED_ORIGINS
-    // (comma-separated) adds extra origins on a single-workspace install — useful
-    // for dev/test where BASE_URL differs from the browser origin (e.g. ngrok +
-    // localhost) — and a pooled workspace gets its own hostnames instead.
-    trustedOrigins,
+    // https://better-auth.com/docs/reference/security#dynamic-origin-list
+    trustedOrigins: async (request) => workspaceAuthTrustedOrigins(request),
 
     // Tell Better-Auth about non-standard columns on `user` so the
     // OAuth `mapProfileToUser` return shape is allowed through and
@@ -562,6 +547,17 @@ async function createAuth() {
     databaseHooks: {
       user: {
         create: {
+          /**
+           * `openSignup`'s backstop: the last point every Better-Auth account
+           * creation passes through, whatever endpoint asked for it.
+           *
+           * The per-endpoint gates in `hooks.ts` and `email-signin.ts` exist
+           * because they can refuse cheaply and name the reason. This exists
+           * because those gates are a list, and a list is only as good as
+           * whoever last added a sign-up path to it. Password, magic link,
+           * one-time code, social and OIDC all funnel here.
+           */
+          before: guardBetterAuthUserCreation,
           after: async (user) => {
             // Cast user.id to the branded TypeID type for database operations
             const userId = user.id as ReturnType<typeof generateId<'user'>>
@@ -626,9 +622,10 @@ async function createAuth() {
 
       emailOTP({
         async sendVerificationOTP({ email, otp, type }) {
-          // Sign-in codes are stashed and drained by `requestEmailSignin`,
-          // which combines them with a magic link in one email. Every other
-          // purpose has no such caller, so it is sent from here.
+          // Sign-in codes are never sent from here: this app composes the code
+          // and a magic link into one email of its own. Reaching this branch
+          // means the routed endpoint was called directly, so the code is
+          // stashed to expire rather than mailed under the wrong template.
           if (type === 'sign-in') {
             storeOTP('sign-in', email, otp)
             return

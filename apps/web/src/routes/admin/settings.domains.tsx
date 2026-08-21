@@ -1,0 +1,237 @@
+import { useState } from 'react'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
+import { useMutation } from '@tanstack/react-query'
+import { createFileRoute, useRouteContext, useRouter } from '@tanstack/react-router'
+import { GlobeAltIcon } from '@heroicons/react/24/solid'
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { BackLink } from '@/components/ui/back-link'
+import { PageHeader } from '@/components/shared/page-header'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { UpgradeNotice } from '@/components/admin/upgrade'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  getCloudCustomDomainsFn,
+  hasCustomDomainEntitlementFn,
+  mutateCloudCustomDomainFn,
+} from '@/lib/server/functions/cloud-identity'
+import type { CustomDomainInstruction } from '@/lib/server/control-plane/client'
+
+export const Route = createFileRoute('/admin/settings/domains')({
+  loader: async ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_CUSTOM_DOMAIN)
+    const { cloudEnabled } = context
+    if (!cloudEnabled)
+      return { allowed: false, entitled: false, domains: [] as CustomDomainInstruction[] }
+    const { ensureBillingCatalogue } = await import('@/lib/client/queries/billing')
+    const [entitled, domains] = await Promise.all([
+      hasCustomDomainEntitlementFn(),
+      getCloudCustomDomainsFn().catch(() => [] as CustomDomainInstruction[]),
+      ensureBillingCatalogue(context.queryClient, context.billingEnabled),
+    ])
+    return { allowed: true, entitled, domains }
+  },
+  component: DomainsSettingsPage,
+})
+
+function DomainsSettingsPage() {
+  const { cloudEnabled } = useRouteContext({ from: '__root__' })
+  const { allowed, entitled, domains: initialDomains } = Route.useLoaderData()
+  const [domains, setDomains] = useState(initialDomains)
+  const [hostname, setHostname] = useState('')
+  const router = useRouter()
+
+  const mutation = useMutation({
+    mutationFn: (input: {
+      action: 'add' | 'refresh' | 'makePrimary' | 'remove'
+      hostname: string
+    }) => mutateCloudCustomDomainFn({ data: input }),
+    onSuccess: async (result) => {
+      if (result.transferToken) {
+        const target = new URL('/auth/origin-transfer', result.projection.canonicalOrigin)
+        target.searchParams.set('ott', result.transferToken)
+        target.searchParams.set('returnTo', '/admin/settings/domains')
+        window.location.assign(target)
+        return
+      }
+      toast.success('Domain updated')
+      const next = await getCloudCustomDomainsFn().catch(() => domains)
+      setDomains(next)
+      setHostname('')
+      await router.invalidate()
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Could not update that domain.')
+    },
+  })
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
+      <PageHeader
+        icon={GlobeAltIcon}
+        title="Domains"
+        description="Your own hostname for this workspace"
+      />
+      {!cloudEnabled || !allowed ? (
+        <p className="text-sm text-muted-foreground">
+          Custom domains are available only in a Quackback Cloud workspace.
+        </p>
+      ) : (
+        <DomainsCard
+          entitled={entitled}
+          domains={domains}
+          hostname={hostname}
+          pending={mutation.isPending}
+          error={mutation.error}
+          onHostnameChange={setHostname}
+          onAdd={() => mutation.mutate({ action: 'add', hostname })}
+          onRefresh={(value) => mutation.mutate({ action: 'refresh', hostname: value })}
+          onMakePrimary={(value) => mutation.mutate({ action: 'makePrimary', hostname: value })}
+          onRemove={(value) => mutation.mutate({ action: 'remove', hostname: value })}
+        />
+      )}
+    </div>
+  )
+}
+
+const READINESS_LABEL = {
+  pending: 'Waiting for DNS',
+  ready: 'Ready',
+  failed: 'Needs attention',
+} as const
+
+export function DomainsCard(props: {
+  entitled: boolean
+  domains: CustomDomainInstruction[]
+  hostname: string
+  pending: boolean
+  error: Error | null
+  onHostnameChange: (value: string) => void
+  onAdd: () => void
+  onRefresh: (hostname: string) => void
+  onMakePrimary: (hostname: string) => void
+  onRemove: (hostname: string) => void
+}) {
+  return (
+    <SettingsCard
+      title="Custom domain"
+      description="Point a hostname you own at this workspace. Traffic goes through Quackback Cloud."
+    >
+      {!props.entitled ? (
+        <UpgradeNotice entitlement="customDomain" />
+      ) : (
+        <form
+          className="max-w-xl space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            props.onAdd()
+          }}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="custom-hostname" className="text-xs text-muted-foreground">
+              Hostname
+            </Label>
+            <Input
+              id="custom-hostname"
+              value={props.hostname}
+              onChange={(event) => props.onHostnameChange(event.target.value)}
+              placeholder="feedback.example.com"
+              autoCapitalize="none"
+              autoCorrect="off"
+              disabled={props.pending}
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={props.pending || !props.hostname.trim()}>
+            Add domain
+          </Button>
+        </form>
+      )}
+
+      {props.error && (
+        <p role="alert" className="mt-4 text-sm text-destructive">
+          {props.error.message}
+        </p>
+      )}
+
+      {props.domains.length > 0 && (
+        <ul className="mt-6 divide-y divide-border/50">
+          {props.domains.map((domain) => (
+            <li key={domain.hostname} className="space-y-3 py-4 first:pt-0 last:pb-0">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <p className="truncate text-sm font-medium">{domain.hostname}</p>
+                  <Badge
+                    size="sm"
+                    shape="pill"
+                    variant={
+                      domain.readiness === 'ready'
+                        ? 'secondary'
+                        : domain.readiness === 'failed'
+                          ? 'destructive'
+                          : 'outline'
+                    }
+                  >
+                    {domain.isPrimary ? 'Primary · ' : ''}
+                    {READINESS_LABEL[domain.readiness]}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={props.pending}
+                    onClick={() => props.onRefresh(domain.hostname)}
+                  >
+                    Check status
+                  </Button>
+                  {domain.readiness === 'ready' && !domain.isPrimary && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={props.pending}
+                      onClick={() => props.onMakePrimary(domain.hostname)}
+                    >
+                      Make primary
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={props.pending}
+                    onClick={() => props.onRemove(domain.hostname)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+              {domain.readiness !== 'ready' && (
+                <div className="rounded-md bg-muted/30 px-3 py-2 text-[13px]">
+                  <p className="text-muted-foreground">
+                    Add a CNAME from <span className="font-mono">{domain.hostname}</span> to{' '}
+                    <span className="font-mono">{domain.cnameTarget}</span>.
+                  </p>
+                  {domain.ownershipTxt && (
+                    <p className="mt-1 text-muted-foreground">
+                      And a TXT record at{' '}
+                      <span className="font-mono">{domain.ownershipTxt.name}</span> with{' '}
+                      <span className="font-mono">{domain.ownershipTxt.value}</span>.
+                    </p>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingsCard>
+  )
+}
